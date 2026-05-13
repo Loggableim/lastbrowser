@@ -1,0 +1,9 @@
+{
+  "welcome_enabled": true,
+  "welcome_channel": 1459357082485522628,
+  "level_enabled": true,
+  "xp_per_message": 15,
+  "auto_mod_enabled": true,
+  "spam_threshold": 5,
+  "spam_timeout_minutes": 10
+}

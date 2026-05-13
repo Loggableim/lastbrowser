@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LastBrowser</title>
+<link rel="stylesheet" href="src/renderer/styles/main.css">
+</head>
+<body>
+  <div id="app" class="dark">
+    <!-- ═══════ Workspace Sidebar (outer left) ═══════ -->
+    <aside id="workspaceSidebar" class="workspace-sidebar">
+      <div class="ws-header" id="wsHeader">
+        <div class="ws-logo">
+          <svg viewBox="0 0 32 32" width="20" height="20" fill="none">
+            <rect x="4" y="2" width="7" height="20" rx="3" fill="#7C6FF0" opacity="0.85"/>
+            <rect x="4" y="15" width="20" height="7" rx="3" fill="#60A5FA" opacity="0.7"/>
+          </svg>
+        </div>
+        <span class="ws-brand">LAST</span>
+      </div>
+      <div class="ws-list" id="wsList">
+        <!-- Workspace icons rendered by JS -->
+      </div>
+      <div class="ws-footer">
+        <button class="ws-add" id="wsAddBtn" title="New Workspace">+</button>
+        <button class="ws-settings" id="settingsBtn" title="Settings">⚙</button>
+      </div>
+    </aside>
+
+    <!-- ═══════ Nav Sidebar (Sidekick-style integrated) ═══════ -->
+    <aside id="navSidebar" class="nav-sidebar">
+      <div class="nav-header">
+        <div class="nav-logo">
+          <svg viewBox="0 0 32 32" width="18" height="18" fill="none">
+            <rect x="5" y="3" width="6" height="18" rx="2.5" fill="#7C6FF0" opacity="0.8"/>
+            <rect x="5" y="15" width="18" height="6" rx="2.5" fill="#60A5FA" opacity="0.6"/>
+          </svg>
+        </div>
+      </div>
+      <div class="nav-list" id="navList">
+        <button class="nav-item active" data-route="chat" title="Chat">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button class="nav-item" data-route="tasks" title="Tasks / Kanban">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </button>
+        <button class="nav-item" data-route="agents" title="Agents">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </button>
+        <button class="nav-item" data-route="workspaces" title="Browser">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </button>
+        <button class="nav-item" data-route="kanban" title="Kanban">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
+        </button>
+        <button class="nav-item" data-route="memory" title="Memory">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </button>
+        <button class="nav-item" data-route="skills" title="Skills">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        </button>
+        <button class="nav-item" data-route="logs" title="Logs">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </button>
+        <button class="nav-item" data-route="settings" title="Settings">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+      </div>
+      <div class="nav-footer">
+        <div class="nav-status" id="navStatusDot" title="Server status"></div>
+      </div>
+    </aside>
+
+    <!-- ═══════ App Sidebar (inner left) ═══════ -->
+    <aside id="appSidebar" class="app-sidebar">
+      <div class="app-search" id="appSearch">
+        <input type="text" id="searchInput" placeholder="Search apps..." />
+        <button id="addAppBtn" class="app-add-btn" title="Add App (Sidekick)">+</button>
+      </div>
+      <div class="app-list" id="appList">
+        <!-- Pinned apps rendered by JS -->
+      </div>
+      <div class="app-actions">
+        <button id="focusBtn" class="action-btn" title="Focus Mode">⏱</button>
+        <button id="compactBtn" class="action-btn" title="Compact Mode">🔲</button>
+        <button id="saveSessionBtn" class="action-btn" title="Save Session">💾</button>
+        <button id="sleepAllBtn" class="action-btn" title="Sleep Inactive">💤</button>
+      </div>
+    </aside>
+
+    <!-- ═══════ Tab Bar (vertical tabs) ═══════ -->
+    <nav id="tabBar" class="tab-bar">
+      <div class="tab-list" id="tabList">
+        <!-- Tabs rendered by JS -->
+      </div>
+      <button class="tab-new" id="newTabBtn" title="New Tab (Ctrl+T)">+</button>
+    </nav>
+
+    <!-- ═══════ Main Content Area ═══════ -->
+    <main id="contentArea" class="content-area">
+      <div class="content-toolbar" id="contentToolbar">
+        <div class="nav-buttons">
+          <button id="navBack" class="nav-btn" disabled>◀</button>
+          <button id="navForward" class="nav-btn" disabled>▶</button>
+          <button id="navReload" class="nav-btn">⟳</button>
+        </div>
+        <div class="url-bar" id="urlBar">
+          <input type="text" id="urlInput" placeholder="Enter URL or search..." />
+        </div>
+        <div class="toolbar-actions">
+          <button id="paletteBtn" class="tool-btn" title="Command Palette (Ctrl+K)">🔍</button>
+          <button id="notifBtn" class="tool-btn" title="Notifications">🔔</button>
+          <span id="notifBadge" class="notif-badge hidden">0</span>
+        </div>
+      </div>
+      <div class="content-viewport" id="contentViewport">
+        <!-- WebContentsView area or embedded pages -->
+        <div class="welcome-screen" id="welcomeScreen">
+        <div class="welcome-icon">
+          <svg viewBox="0 0 64 64" width="56" height="56" fill="none">
+            <rect x="16" y="8" width="12" height="36" rx="4" fill="#7C6FF0" opacity="0.5"/>
+            <rect x="16" y="32" width="36" height="12" rx="4" fill="#60A5FA" opacity="0.4"/>
+          </svg>
+        </div>
+          <h1>LastBrowser</h1>
+          <p>The last browser you'll ever need. Open an app or create a tab to get started.</p>
+          <div class="welcome-shortcuts">
+            <div><kbd>Ctrl+K</kbd> Command Palette</div>
+            <div><kbd>Ctrl+T</kbd> New Tab</div>
+            <div><kbd>Ctrl+B</kbd> Toggle Sidebar</div>
+            <div><kbd>Ctrl+S</kbd> Compact Mode</div>
+          </div>
+          <div class="welcome-actions">
+            <button class="btn btn-primary welcome-add-app" id="welcomeAddAppBtn">+ Add App</button>
+            <button class="btn btn-secondary welcome-session" id="welcomeSessionBtn">💾 Sessions</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ═══════ Split View Overlay ═══════ -->
+    <div id="splitOverlay" class="split-overlay hidden">
+      <div class="split-container" id="splitContainer">
+        <!-- Split panels rendered by JS -->
+      </div>
+    </div>
+
+    <!-- ═══════ Command Palette Overlay ═══════ -->
+    <div id="paletteOverlay" class="palette-overlay hidden">
+      <div class="palette-dialog">
+        <div class="palette-header">
+          <input type="text" id="paletteInput" placeholder="Search workspaces, apps, tabs, commands..." autofocus />
+        </div>
+        <div class="palette-results" id="paletteResults">
+          <!-- Results rendered by JS -->
+        </div>
+        <div class="palette-footer">
+          <span>↑↓ Navigate</span>
+          <span>↵ Execute</span>
+          <span>Esc Close</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ Notification Center Overlay ═══════ -->
+    <div id="notifOverlay" class="notif-overlay hidden">
+      <div class="notif-dialog">
+        <div class="notif-header">
+          <h3>Notifications</h3>
+          <button id="notifClearAll" class="notif-action">Clear All</button>
+        </div>
+        <div class="notif-list" id="notifList">
+          <!-- Notifications rendered by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ Focus Mode Indicator ═══════ -->
+    <div id="focusIndicator" class="focus-indicator hidden">
+      <span id="focusTimer">25:00</span>
+      <span id="focusLabel">Focus</span>
+      <button id="focusStopBtn" class="focus-stop">✕</button>
+    </div>
+
+    <!-- ═══════ Session Panel (mit Agent Integration) ═══════ -->
+    <div id="sessionPanel" class="session-panel hidden">
+      <div class="session-panel-header">
+        <div class="session-panel-title">
+          <span class="session-panel-icon">💾</span>
+          <h3>Sessions & Agents</h3>
+        </div>
+        <div class="session-panel-toolbar">
+          <button id="saveSessionPanelBtn" class="btn btn-primary btn-sm">Save Current</button>
+          <label class="auto-save-toggle" title="Auto-save tabs every 5 min">
+            <input type="checkbox" id="sessionAutoSave" />
+            <span>Auto</span>
+          </label>
+          <button id="sessionPanelClose" class="dialog-close">✕</button>
+        </div>
+      </div>
+      <div class="session-panel-body">
+        <!-- Session List -->
+        <div class="session-list" id="sessionList">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </div>
+    <div id="kanbanPanel" class="kanban-panel hidden">
+      <div class="kanban-header">
+        <h3 id="kanbanTitle">Kanban Board</h3>
+        <button id="kanbanClose" class="kanban-close">✕</button>
+      </div>
+      <div class="kanban-board" id="kanbanBoard">
+        <!-- Columns and cards rendered by JS -->
+      </div>
+    </div>
+
+    <!-- ═══════ Cron Jobs Panel ═══════ -->
+    <div id="cronPanel" class="session-panel hidden">
+      <div class="session-panel-header">
+        <div class="session-panel-title">
+          <span class="session-panel-icon">⏰</span>
+          <h3>Cron Jobs</h3>
+        </div>
+        <div class="session-panel-toolbar">
+          <button id="addCronBtn" class="btn btn-primary btn-sm">+ New Job</button>
+          <button id="cronPanelClose" class="dialog-close">✕</button>
+        </div>
+      </div>
+      <div class="session-panel-body">
+        <div class="cron-list" id="cronList">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ Add/Edit Cron Dialog ═══════ -->
+    <div id="cronDialogOverlay" class="dialog-overlay hidden">
+      <div class="dialog-window" id="cronDialog">
+        <div class="dialog-header">
+          <h3 id="cronDialogTitle">New Cron Job</h3>
+          <button id="cronDialogClose" class="dialog-close">✕</button>
+        </div>
+        <div class="dialog-body">
+          <div class="form-group">
+            <label for="cronName">Name</label>
+            <input type="text" id="cronName" placeholder="e.g. Daily Backup, Health Check" />
+          </div>
+          <div class="form-group">
+            <label for="cronSchedule">Schedule (cron expression)</label>
+            <input type="text" id="cronSchedule" placeholder="0 3 * * *" value="0 3 * * *" />
+            <div class="cron-presets" id="cronPresets">
+              <span data-schedule="*/5 * * * *">Every 5 min</span>
+              <span data-schedule="*/30 * * * *">30 min</span>
+              <span data-schedule="0 * * * *">Hourly</span>
+              <span data-schedule="0 */6 * * *">6 hours</span>
+              <span data-schedule="0 3 * * *">Daily 3am</span>
+              <span data-schedule="0 9 * * 1">Mon 9am</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="cronTaskType">Task Type</label>
+            <select id="cronTaskType" class="form-select">
+              <option value="maintenance">Maintenance</option>
+              <option value="backup">Backup</option>
+              <option value="health_check">Health Check</option>
+              <option value="review">Review</option>
+              <option value="cleanup">Cleanup</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="cronMaxRetries">Max Retries</label>
+            <input type="number" id="cronMaxRetries" class="form-input setting-input-sm" value="3" min="0" max="10" />
+          </div>
+          <div class="form-group">
+            <label class="toggle-row">
+              <input type="checkbox" id="cronEnabled" checked />
+              <span>Enabled</span>
+            </label>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button id="cronDialogCancel" class="btn btn-secondary">Cancel</button>
+          <button id="cronDialogSave" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ Worker/Task Queue Panel ═══════ -->
+    <div id="workerPanel" class="session-panel hidden">
+      <div class="session-panel-header">
+        <div class="session-panel-title">
+          <span class="session-panel-icon">⚙</span>
+          <h3>Worker Queue</h3>
+        </div>
+        <div class="session-panel-toolbar">
+          <div class="worker-filters" id="workerFilters">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="queued">⏳</button>
+            <button class="filter-btn" data-filter="running">▶</button>
+            <button class="filter-btn" data-filter="completed">✅</button>
+            <button class="filter-btn" data-filter="failed">❌</button>
+            <button class="filter-btn" data-filter="retrying">🔄</button>
+          </div>
+          <button id="workerPanelClose" class="dialog-close">✕</button>
+        </div>
+      </div>
+      <div class="session-panel-body">
+        <div class="worker-summary" id="workerSummary"></div>
+        <div class="worker-list" id="workerList"></div>
+      </div>
+    </div>
+
+    <!-- ═══════ Skills Panel ═══════ -->
+    <div id="skillsPanel" class="session-panel hidden">
+      <div class="session-panel-header">
+        <div class="session-panel-title">
+          <span class="session-panel-icon">🧩</span>
+          <h3>Skills</h3>
+        </div>
+        <div class="session-panel-toolbar">
+          <button id="skillsRefreshBtn" class="btn btn-secondary btn-sm">⟳ Refresh</button>
+          <button id="skillsPanelClose" class="dialog-close">✕</button>
+        </div>
+      </div>
+      <div class="session-panel-body">
+        <div class="skills-filter-bar">
+          <input type="text" id="skillsSearch" placeholder="Search skills..." class="form-input" style="flex:1;font-size:12px;padding:5px 8px" />
+        </div>
+        <div class="skills-list" id="skillsList"></div>
+      </div>
+    </div>
+
+    <!-- ═══════ Memory Browser Panel ═══════ -->
+    <div id="memoryPanel" class="session-panel hidden">
+      <div class="session-panel-header">
+        <div class="session-panel-title">
+          <span class="session-panel-icon">🧠</span>
+          <h3>Memory</h3>
+        </div>
+        <div class="session-panel-toolbar">
+          <button id="memoryRefreshBtn" class="btn btn-secondary btn-sm">⟳ Refresh</button>
+          <button id="memoryPanelClose" class="dialog-close">✕</button>
+        </div>
+      </div>
+      <div class="session-panel-body">
+        <div class="skills-filter-bar">
+          <input type="text" id="memorySearch" placeholder="Search memory..." class="form-input" style="flex:1;font-size:12px;padding:5px 8px" />
+        </div>
+        <div class="memory-list" id="memoryList"></div>
+      </div>
+    </div>
+
+    <!-- ═══════ System Logs Viewer ═══════ -->
+    <div id="logsPanel" class="session-panel hidden">
+      <div class="session-panel-header">
+        <div class="session-panel-title">
+          <span class="session-panel-icon">📋</span>
+          <h3>System Logs</h3>
+        </div>
+        <div class="session-panel-toolbar">
+          <div class="worker-filters" id="logsFilters">
+            <button class="filter-btn active" data-severity="all">All</button>
+            <button class="filter-btn" data-severity="info">INFO</button>
+            <button class="filter-btn" data-severity="warn">WARN</button>
+            <button class="filter-btn" data-severity="error">ERROR</button>
+          </div>
+          <button id="logsAutoScroll" class="btn btn-secondary btn-sm" style="font-size:10px">⬇ Auto</button>
+          <button id="logsClearBtn" class="btn btn-secondary btn-sm">Clear</button>
+          <button id="logsPanelClose" class="dialog-close">✕</button>
+        </div>
+      </div>
+      <div class="session-panel-body" style="padding:0">
+        <div class="logs-container" id="logsContainer"></div>
+      </div>
+    </div>
+
+    <!-- ═══════ Add Account Dialog (Wavebox Multi-Account) ═══════ -->
+    <div id="addAccountOverlay" class="dialog-overlay hidden">
+      <div class="dialog-window dialog-window-lg" id="addAccountDialog">
+        <div class="dialog-header">
+          <h3 id="addAcctDialogTitle">Add Account</h3>
+          <button id="addAccountCloseBtn" class="dialog-close">✕</button>
+        </div>
+        <div class="dialog-body add-account-body">
+          <div class="add-acct-left">
+            <!-- App Presets -->
+            <div class="form-group">
+              <label>App</label>
+              <div class="preset-grid" id="presetGrid">
+                <!-- Rendered by JS -->
+              </div>
+            </div>
+          </div>
+          <div class="add-acct-right">
+            <div class="form-group">
+              <label for="addAcctName">Account Name</label>
+              <input type="text" id="addAcctName" placeholder="e.g. Privat, Arbeit, Main" />
+            </div>
+            <div class="form-group">
+              <label for="addAcctUrl">URL (optional)</label>
+              <input type="text" id="addAcctUrl" placeholder="Auto-filled from app preset" />
+            </div>
+            <div class="form-group">
+              <label>Color</label>
+              <div class="color-presets" id="colorPresets">
+                <span data-color="#6366f1" style="background:#6366f1" class="selected"></span>
+                <span data-color="#EA4335" style="background:#EA4335"></span>
+                <span data-color="#34A853" style="background:#34A853"></span>
+                <span data-color="#FBBC04" style="background:#FBBC04"></span>
+                <span data-color="#4285F4" style="background:#4285F4"></span>
+                <span data-color="#5865F2" style="background:#5865F2"></span>
+                <span data-color="#FF0000" style="background:#FF0000"></span>
+                <span data-color="#10A37F" style="background:#10A37F"></span>
+                <span data-color="#E4405F" style="background:#E4405F"></span>
+                <span data-color="#333333" style="background:#333333"></span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Workspace</label>
+              <select id="addAcctWorkspace" class="form-select"></select>
+            </div>
+            <div class="form-group">
+              <label class="toggle-row">
+                <input type="checkbox" id="addAcctAgentControl" />
+                <span>Enable Agent Control</span>
+              </label>
+              <label class="toggle-row">
+                <input type="checkbox" id="addAcctNotifications" checked />
+                <span>Notifications</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button id="addAccountCancelBtn" class="btn btn-secondary">Cancel</button>
+          <button id="addAccountSubmitBtn" class="btn btn-primary">Add Account</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ Settings Panel ═══════ -->
+  <div id="settingsOverlay" class="dialog-overlay hidden">
+    <div class="dialog-window dialog-window-lg" id="settingsDialog">
+      <div class="dialog-header">
+        <h3>Settings</h3>
+        <button id="settingsCloseBtn" class="dialog-close">✕</button>
+      </div>
+      <div class="dialog-body settings-body">
+        <div class="settings-tabs" id="settingsTabs">
+          <button class="settings-tab active" data-tab="general">General</button>
+          <button class="settings-tab" data-tab="focus">Focus</button>
+          <button class="settings-tab" data-tab="saver">Saver</button>
+          <button class="settings-tab" data-tab="privacy">Privacy</button>
+          <button class="settings-tab" data-tab="backup">Backup</button>
+          <button class="settings-tab" data-tab="about">About</button>
+        </div>
+        <div class="settings-content">
+          <!-- General -->
+          <div class="settings-pane active" id="settingsGeneral">
+            <div class="settings-section">
+              <h4 class="settings-section-title">Appearance</h4>
+              <div class="setting-row">
+                <div class="setting-info"><label>Theme</label><span class="setting-desc">Dark or light mode</span></div>
+                <select id="setTheme" class="form-select setting-input">
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                </select>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><label>Tab Position</label><span class="setting-desc">Left side or top</span></div>
+                <select id="setTabPosition" class="form-select setting-input">
+                  <option value="left">Left</option>
+                  <option value="top">Top</option>
+                </select>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><label>Compact Mode</label><span class="setting-desc">Minimal UI, more content space</span></div>
+                <label class="toggle"><input type="checkbox" id="setCompactMode" /><span class="toggle-slider"></span></label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><label>Show Favicons</label><span class="setting-desc">Display website favicons in tabs</span></div>
+                <label class="toggle"><input type="checkbox" id="setShowFavicons" checked /><span class="toggle-slider"></span></label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><label>Language</label><span class="setting-desc">UI language</span></div>
+                <select id="setLanguage" class="form-select setting-input">
+                  <option value="en">English</option>
+                  <option value="de">Deutsch</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Focus -->
+          <div class="settings-pane" id="settingsFocus">
+            <div class="settings-section">
+              <h4 class="settings-section-title">Focus Mode</h4>
+              <div class="setting-row">
+                <div class="setting-info"><label>Pomodoro Duration</label><span class="setting-desc">Minutes per focus session</span></div>
+                <input type="number" id="setPomodoroDuration" class="form-input setting-input-sm" min="5" max="120" value="25" />
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><label>Auto-Enable Focus</label><span class="setting-desc">Start focus mode at workspace switch</span></div>
+                <label class="toggle"><input type="checkbox" id="setFocusAuto" /><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Saver -->
+          <div class="settings-pane" id="settingsSaver">
+            <div class="settings-section">
+              <h4 class="settings-section-title">Resource Saver</h4>
+              <div class="setting-row">
+                <div class="setting-info"><label>Enable Tab Suspension</label><span class="setting-desc">Freeze inactive tabs to save memory</span></div>
+                <label class="toggle"><input type="checkbox" id="setResourceSaver" checked /><span class="toggle-slider"></span></label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><label>Suspend Timeout</label><span class="setting-desc">Minutes of inactivity before suspend</span></div>
+                <input type="number" id="setSuspendTimeout" class="form-input setting-input-sm" min="1" max="480" value="30" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Privacy -->
+          <div class="settings-pane" id="settingsPrivacy">
+            <div class="settings-section">
+              <h4 class="settings-section-title">Privacy & Security</h4>
+              <div class="setting-row">
+                <div class="setting-info"><label>Ad Blocking</label><span class="setting-desc">Block trackers and ads across all pages</span></div>
+                <label class="toggle"><input type="checkbox" id="setAdblock" /><span class="toggle-slider"></span></label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><label>Cookie Control</label><span class="setting-desc">How cookies are handled</span></div>
+                <select id="setCookieControl" class="form-select setting-input">
+                  <option value="allow_all">Allow All</option>
+                  <option value="block_third_party">Block Third Party</option>
+                  <option value="block_all">Block All</option>
+                </select>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><label>Telemetry</label><span class="setting-desc">Send anonymous usage data</span></div>
+                <label class="toggle"><input type="checkbox" id="setTelemetry" /><span class="toggle-slider"></span></label>
+              </div>
+              <div class="settings-actions">
+                <button id="clearCacheBtn" class="btn btn-secondary">Clear Cache</button>
+                <button id="clearCookiesBtn" class="btn btn-secondary">Clear Cookies</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Backup -->
+          <div class="settings-pane" id="settingsBackup">
+            <div class="settings-section">
+              <h4 class="settings-section-title">Backup & Restore</h4>
+              <div class="setting-row">
+                <div class="setting-info"><label>Auto-Backup Interval</label><span class="setting-desc">Hours between automatic backups</span></div>
+                <input type="number" id="setBackupInterval" class="form-input setting-input-sm" min="0" max="168" value="24" />
+              </div>
+              <div class="settings-actions">
+                <button id="createBackupBtn" class="btn btn-primary">Create Backup Now</button>
+              </div>
+              <div class="settings-section">
+                <h4 class="settings-section-title">Saved Backups</h4>
+                <div id="backupList" class="backup-list">
+                  <div class="setting-desc" style="padding:12px 0">Loading backups...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- About -->
+          <div class="settings-pane" id="settingsAbout">
+            <div class="settings-section about-section">
+              <div class="about-logo">
+                <svg viewBox="0 0 32 32" width="32" height="32" fill="none">
+                  <rect x="5" y="3" width="6" height="18" rx="2.5" fill="#7C6FF0" opacity="0.8"/>
+                  <rect x="5" y="15" width="18" height="6" rx="2.5" fill="#60A5FA" opacity="0.6"/>
+                </svg>
+              </div>
+              <h2>LastBrowser</h2>
+              <p class="about-desc">AI-native workspace browser<br>The last browser you'll ever need.</p>
+              <table class="about-table">
+                <tr><td>Version</td><td id="aboutVersion">—</td></tr>
+                <tr><td>Electron</td><td id="aboutElectron">—</td></tr>
+                <tr><td>Node.js</td><td id="aboutNode">—</td></tr>
+                <tr><td>Chrome</td><td id="aboutChrome">—</td></tr>
+                <tr><td>Data Dir</td><td id="aboutDataDir" class="about-path">—</td></tr>
+              </table>
+              <p class="about-copy">Copyright © 2026 Pup Cid</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button id="settingsResetBtn" class="btn btn-secondary" style="margin-right:auto">Reset to Defaults</button>
+        <button id="settingsDoneBtn" class="btn btn-primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="src/renderer/app.js"></script>
+</body>
+</html>

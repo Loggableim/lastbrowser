@@ -1,0 +1,13 @@
+{
+  "name": "lastbrowser-workspace",
+  "private": true,
+  "description": "LastBrowser — Root workspace convenience scripts",
+  "scripts": {
+    "desktop:start": "cd native && npm start",
+    "desktop:dev": "cd native && npm run dev",
+    "desktop:build": "cd native && npm run build",
+    "desktop:build:dir": "cd native && npm run build:dir",
+    "desktop:dist": "cd native && npm run dist",
+    "icons": "python native/scripts/generate-icons.py"
+  }
+}

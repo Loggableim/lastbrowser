@@ -1,0 +1,86 @@
+# ── Hermes Desktop — GitHub Actions Workflow ─────────────────────────────────
+# Builds the native Windows Electron app and uploads the installer as an
+# artifact. On version tags (v*), also creates a GitHub Release.
+#
+# ## Pipeline stages:
+#   1. Generate app icons (Python + Pillow)
+#   2. Install Node deps + Electron
+#   3. Build the Electron app (electron-builder)
+#   4. Upload installer as artifact / release
+# ────────────────────────────────────────────────────────────────────────────
+
+name: Build Desktop App (Windows)
+
+on:
+  push:
+    branches: [master]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: native
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install Python deps (icons)
+        run: |
+          pip install pillow
+
+      - name: Generate app icons
+        run: |
+          python scripts/generate-icons.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: native/package-lock.json
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build Electron app (dir)
+        run: npm run build:dir
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifact (installer)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hermes-Desktop-Windows
+          path: native/dist/
+          retention-days: 7
+
+      # ── Release (on version tag) ───────────────────────────────────────
+      - name: Build installer for release
+        if: github.ref_type == 'tag'
+        run: npm run dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            native/dist/*.exe
+            native/dist/*.msi
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

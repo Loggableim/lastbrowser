@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Features — LastBrowser Docs</title>
+<meta name="description" content="Complete feature documentation of LastBrowser — the productivity workspace browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#080810;color:#D4D4E0;line-height:1.6;-webkit-font-smoothing:antialiased}code,pre{font-family:'JetBrains Mono',monospace}.bg-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(124,111,240,0.02)1px,transparent 1px),linear-gradient(90deg,rgba(124,111,240,0.02)1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}.container{max-width:820px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(8,8,16,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid rgba(124,111,240,0.08)}nav .container{max-width:1120px;display:flex;align-items:center;justify-content:space-between;height:60px}.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:#EAEAEF;font-weight:700;font-size:16px;flex-shrink:0}.nav-logo svg{width:28px;height:28px;flex-shrink:0}.nav-links{display:flex;align-items:center;gap:24px}.nav-links a{text-decoration:none;color:#8888A0;font-size:13px;font-weight:500;transition:color 0.2s}.nav-links a:hover{color:#C4C4D8}.nav-cta{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#7C6FF0,#5B4FCC);color:#fff!important;padding:8px 18px;border-radius:8px;font-weight:600;font-size:13px!important}
+.breadcrumb{display:flex;align-items:center;gap:8px;font-size:13px;color:#686888;padding-top:80px;padding-bottom:0}.breadcrumb a{color:#8888A0;text-decoration:none}.breadcrumb a:hover{color:#C4C4D8}
+.doc-page{padding:32px 0 80px}.doc-page h1{font-size:34px;font-weight:700;color:#EAEAEF;letter-spacing:-1px;margin:24px 0 8px}.doc-page .subtitle{font-size:16px;color:#686888;margin-bottom:36px;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.05)}.doc-page h2{font-size:22px;font-weight:600;color:#EAEAEF;margin:36px 0 12px}.doc-page h3{font-size:17px;font-weight:600;color:#D4D4E0;margin:24px 0 8px}.doc-page p,.doc-page li{font-size:14.5px;color:#8888A0;line-height:1.8}.doc-page ul,.doc-page ol{padding-left:20px;margin:12px 0}.doc-page li{margin-bottom:6px}.doc-page strong,.doc-page b{color:#C4C4D8}.doc-page a{color:#A78BFA;text-decoration:none}.doc-page a:hover{text-decoration:underline}.doc-page code{background:rgba(124,111,240,0.08);padding:2px 6px;border-radius:4px;font-size:13px;color:#A78BFA}.doc-page pre{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:10px;padding:16px;overflow-x:auto;margin:16px 0;font-size:13px;color:#C4C4D8;line-height:1.6}.doc-page hr{border:none;border-top:1px solid rgba(255,255,255,0.05);margin:32px 0}.doc-page .feature-list{list-style:none;padding:0}.doc-page .feature-list li{padding:12px 16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:8px;margin-bottom:10px}.doc-page .feature-list li strong{color:#A78BFA;display:block;font-size:15px;margin-bottom:4px}.doc-page .feature-list li span{color:#8888A0;font-size:13.5px}.doc-page .note{background:rgba(124,111,240,0.06);border:1px solid rgba(124,111,240,0.12);border-radius:10px;padding:14px 18px;margin:16px 0;font-size:13.5px;color:#A78BFA}
+.doc-page .toc{border:1px solid rgba(255,255,255,0.05);border-radius:12px;padding:20px 24px;margin:24px 0;background:rgba(255,255,255,0.015)}.doc-page .toc h3{margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;color:#686888}.doc-page .toc ol{margin:0}.doc-page .toc a{color:#8888A0;font-size:14px}.doc-page .toc a:hover{color:#C4C4D8}
+.doc-page .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:500;margin-left:6px;vertical-align:middle}.tag-new{background:rgba(74,222,128,0.1);color:#4ADE80;border:1px solid rgba(74,222,128,0.2)}.tag-pro{background:rgba(124,111,240,0.1);color:#A78BFA;border:1px solid rgba(124,111,240,0.2)}.tag-core{background:rgba(96,165,250,0.1);color:#60A5FA;border:1px solid rgba(96,165,250,0.2)}.tag-wip{background:rgba(251,191,36,0.1);color:#FBBF24;border:1px solid rgba(251,191,36,0.2)}
+footer{border-top:1px solid rgba(255,255,255,0.04);padding:36px 0;margin-top:40px}footer .container{max-width:1120px;display:flex;align-items:center;justify-content:space-between}footer p{font-size:13px;color:#686888}footer a{color:#8888A0;text-decoration:none;font-size:13px}footer a:hover{color:#C4C4D8}footer .footer-links{display:flex;gap:24px}
+@media(max-width:640px){.doc-page h1{font-size:26px}footer .container{flex-direction:column;gap:16px;text-align:center}}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<nav><div class="container"><a href="/" class="nav-logo"><svg viewBox="0 0 64 64" fill="none"><defs><linearGradient id="nlg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7C6FF0"/><stop offset="100%" stop-color="#5B4FCC"/></linearGradient></defs><rect x="12" y="12" width="40" height="40" rx="10" fill="url(#nlg)" opacity="0.15"/><rect x="18" y="14" width="12" height="36" rx="4" fill="url(#nlg)"/><rect x="18" y="38" width="36" height="12" rx="4" fill="#60A5FA"/><rect x="30" y="14" width="18" height="4" rx="2" fill="#A78BFA" opacity="0.5"/></svg>LastBrowser</a><div class="nav-links"><a href="/">Home</a><a href="/docs/guide.html">Guide</a><a href="/docs/architecture.html">Architecture</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a><a href="/docs/guide.html" class="nav-cta">Get Started</a></div></div></nav>
+
+<div class="container"><div class="breadcrumb"><a href="/">Home</a> <span>›</span> <a href="/docs/guide.html">Docs</a> <span>›</span> <span>Features</span></div></div>
+
+<section class="doc-page">
+<div class="container">
+
+<h1>LastBrowser Feature Reference</h1>
+<p class="subtitle">Complete documentation of every feature in LastBrowser v0.2.0. Each feature is tagged: <span class="tag tag-core">Core</span> <span class="tag tag-pro">Productivity</span> <span class="tag tag-new">New</span> <span class="tag tag-wip">In Progress</span></p>
+
+<div class="toc"><h3>Feature Index</h3>
+<ol>
+<li><a href="#workspaces">Workspaces</a></li>
+<li><a href="#tabs">Vertical Tabs</a></li>
+<li><a href="#sidebar">Sidebar & Navigation</a></li>
+<li><a href="#agents">AI Agent System</a></li>
+<li><a href="#kanban">Kanban Boards</a></li>
+<li><a href="#splitview">Split View</a></li>
+<li><a href="#focus">Focus Mode</a></li>
+<li><a href="#palette">Command Palette</a></li>
+<li><a href="#apps">App Shortcuts</a></li>
+<li><a href="#privacy">Privacy & Security</a></li>
+<li><a href="#resources">Resource Saver</a></li>
+<li><a href="#themes">Theme & Appearance</a></li>
+<li><a href="#tray">System Tray</a></li>
+<li><a href="#update">Auto-Update</a></li>
+</ol></div>
+
+<h2 id="workspaces">Workspaces <span class="tag tag-core">Core</span></h2>
+<p>Workspaces are the foundation of LastBrowser's organization system. Each workspace has completely isolated state — its own tabs, pinned apps, cookies, kanban boards, and settings.</p>
+<ul>
+<li><strong>Session Isolation:</strong> Each workspace gets a unique Electron session partition (<code>persist:workspace_&lt;id&gt;</code>). Cookies, localStorage, and cache are fully separated.</li>
+<li><strong>Instant Switching:</strong> Switch between workspaces without losing state. Inactive workspaces are paused to save memory.</li>
+<li><strong>Export/Import:</strong> Export your entire workspace configuration (tabs, apps, board state) as JSON. Import on another machine.</li>
+<li><strong>Customization:</strong> Each workspace can have its own name, emoji icon, accent color, and tab grouping.</li>
+</ul>
+<p><strong>Use cases:</strong> Separate work and personal browsing. Create a workspace per project/client. Keep different AI agent configurations per workspace.</p>
+
+<h2 id="tabs">Vertical Tabs <span class="tag tag-core">Core</span></h2>
+<p>LastBrowser uses vertical tabs (tree-style) by default — maximising horizontal space for content while keeping tabs readable and organized.</p>
+<ul>
+<li><strong>Tab Management:</strong> Create, close, duplicate, move between workspaces, restore from history.</li>
+<li><strong>Pin Tabs:</strong> Pin frequently used tabs. Pinned tabs are persistent and take minimal space.</li>
+<li><strong>Tab Suspension:</strong> Inactive tabs can be suspended (memory discarded) after a configurable timeout. ~50MB saved per suspended tab.</li>
+<li><strong>Close History:</strong> Last 50 closed tabs are saved per workspace. <code>Ctrl+Shift+T</code> to restore.</li>
+<li><strong>Navigation:</strong> Back, forward, reload, URL navigation, favicon tracking, and title updates.</li>
+<li><strong>Mute/Unmute:</strong> Per-tab audio control.</li>
+<li><strong>Zoom:</strong> Per-tab zoom level (persistent across sessions).</li>
+</ul>
+
+<h2 id="sidebar">Sidebar & Navigation <span class="tag tag-core">Core</span></h2>
+<p>The sidebar provides one-click access to all major features. It's always visible (unless hidden via <code>Ctrl+B</code>).</p>
+<ul>
+<li><strong>Panel Navigation:</strong> Chat, Kanban, Agents, Browser, Memory, Skills, Settings — each with its own icon and shortcut (<code>Ctrl+1-8</code>).</li>
+<li><strong>Workspace Switcher:</strong> Quick switch between workspaces with icons and status indicators.</li>
+<li><strong>Status Footer:</strong> Live server connection status (online/offline/restarting) with dot indicator.</li>
+<li><strong>Quick Actions:</strong> Open in external browser, restart server, quit app.</li>
+<li><strong>Pinned Apps:</strong> Your pinned web apps are accessible from the sidebar (see <a href="#apps">App Shortcuts</a>).</li>
+</ul>
+
+<h2 id="agents">AI Agent System <span class="tag tag-pro">Productivity</span></h2>
+<p>LastBrowser includes a sophisticated multi-agent system integrated directly into the browser interface. Each agent can be configured independently and assigned to tabs or tasks.</p>
+<ul>
+<li><strong>Multiple Agents:</strong> Create any number of agents with different configurations.</li>
+<li><strong>Provider-Agnostic:</strong> Supports any model provider — OpenAI, Anthropic, DeepSeek, OpenRouter, Google, or custom endpoints.</li>
+<li><strong>Role System:</strong> Each agent has a role (Worker, Orchestrator, Supervisor, Researcher, Coder, Writer) that defines its behavior.</li>
+<li><strong>Agent Dashboard:</strong> Real-time stats — total tasks, tokens used, success rate, enabled/disabled status.</li>
+<li><strong>Tab Integration:</strong> Assign agents to tabs. Agents can navigate, click, type, scroll, take screenshots, and extract content from assigned tabs.</li>
+<li><strong>Concurrent Tasks:</strong> Configure max concurrent tasks per agent. Workers run independently.</li>
+<li><strong>System Prompts:</strong> Custom system prompts for each agent to control behavior and output format.</li>
+</ul>
+
+<pre>// Example agent configuration
+{
+  name: "Code Reviewer",
+  model: "deepseek-v4-flash",
+  provider: "opencode-go",
+  role: "reviewer",
+  maxTokens: 8000,
+  temperature: 0.3,
+  enabled: true,
+  maxConcurrentTasks: 2
+}</pre>
+
+<h2 id="kanban">Kanban Boards <span class="tag tag-pro">Productivity</span></h2>
+<p>A full kanban project management system built into the browser. No separate app needed.</p>
+<ul>
+<li><strong>Boards:</strong> Create multiple boards per workspace. Each board has its own columns and cards.</li>
+<li><strong>Columns:</strong> Default column set: Inbox → Todo → Planned → In Progress → Waiting → Review → Testing → Done → Archived. Each with a distinct color.</li>
+<li><strong>Cards:</strong> Each card has a title, description, assignee, labels, due date, checklist items, and comments.</li>
+<li><strong>WIP Limits:</strong> Set Work-In-Progress limits per column to prevent bottlenecks.</li>
+<li><strong>Drag & Drop:</strong> Cards can be reordered within columns and moved between columns.</li>
+<li><strong>Workspace-Scoped:</strong> Boards are isolated per workspace, matching the workspace's data partition.</li>
+</ul>
+<p><strong>Column colors by status:</strong> Inbox (#6b7280), Todo (#3b82f6), Planned (#8b5cf6), In Progress (#f59e0b), Waiting (#f97316), Review (#ec4899), Testing (#14b8a6), Done (#22c55e), Archived (#6b7280).</p>
+
+<h2 id="splitview">Split View <span class="tag tag-pro">Productivity</span></h2>
+<p>View two tabs side-by-side in a split layout. Perfect for comparison, research, or keeping your AI agent visible while working.</p>
+<ul>
+<li><strong>Layout Modes:</strong> 50/50 split (default), customizable panel sizes.</li>
+<li><strong>Panel Management:</strong> Add panels to the split, remove panels, reorder positions.</li>
+<li><strong>Active Tracking:</strong> Each panel tracks its active state, tab, and size independently.</li>
+<li><strong>Workspace-Scoped:</strong> Split view configuration is stored per workspace.</li>
+</ul>
+
+<h2 id="focus">Focus Mode <span class="tag tag-pro">Productivity</span></h2>
+<p>Built-in Pomodoro-based focus system with automatic distraction blocking:</p>
+<ul>
+<li><strong>Timer Presets:</strong> Pomodoro (25m), Focus 50 (50m), Focus 90 (90m), Short Break (5m), Long Break (15m). Custom durations also supported.</li>
+<li><strong>Distraction Blocking:</strong> When active: notifications muted, badges hidden, sounds muted.</li>
+<li><strong>Timer State:</strong> Running/paused/stopped states with elapsed time tracking. Active session ID for IPC communication.</li>
+<li><strong>Settings Integration:</strong> Focus mode syncs with the global settings manager. When you exit focus, all distractions are re-enabled.</li>
+</ul>
+
+<h2 id="palette">Command Palette <span class="tag tag-core">Core</span></h2>
+<p>Press <code>Ctrl+K</code> to open the command palette — a fuzzy search across everything in LastBrowser.</p>
+<ul>
+<li><strong>Search Scope:</strong> Workspaces, tabs (by title/URL), commands, settings, apps, tasks, and sessions.</li>
+<li><strong>Fuzzy Matching:</strong> Smart scoring — exact matches score highest, followed by prefix, substring, and character-by-character fuzzy matching.</li>
+<li><strong>Quick Actions:</strong> Toggle focus mode, compact mode, mute all, toggle sidebar, open DevTools — all from the palette.</li>
+<li><strong>Navigation:</strong> Switch workspaces, activate tabs, open apps, run commands — all without touching the mouse.</li>
+</ul>
+
+<h2 id="apps">App Shortcuts <span class="tag tag-pro">Productivity</span></h2>
+<p>Pin your most-used web apps to the sidebar for quick access:</p>
+<ul>
+<li><strong>Pinned Apps:</strong> Create shortcuts for Slack, Gmail, Notion, GitHub, Jira, or any web app.</li>
+<li><strong>Multiple Accounts:</strong> Add multiple accounts per app definition, each with its own isolated session (cookies, login state).</li>
+<li><strong>Categories:</strong> Organize apps by workspace.</li>
+<li><strong>Mute & Suspend:</strong> Mute audio per app, suspend/resume to save resources.</li>
+<li><strong>Badge Support:</strong> App badges show notification counts (coming soon).</li>
+<li><strong>Cache Control:</strong> Clear cache per app or globally.</li>
+</ul>
+
+<h2 id="privacy">Privacy & Security <span class="tag tag-core">Core</span></h2>
+<ul>
+<li><strong>Ad Blocking:</strong> Built-in adblock with configurable filter lists. Toggle on/off from settings.</li>
+<li><strong>Cookie Control:</strong> Allow all, block third-party cookies, or block all.</li>
+<li><strong>Cache Clearing:</strong> Clear cache and storage data per app or globally. Supports all session partitions.</li>
+<li><strong>Telemetry:</strong> Optional telemetry (off by default). Toggle in settings.</li>
+<li><strong>Session Isolation:</strong> Workspace and app session partitions prevent cross-site tracking.</li>
+</ul>
+
+<h2 id="resources">Resource Saver <span class="tag tag-core">Core</span></h2>
+<p>Automatically manages memory by suspending inactive tabs:</p>
+<ul>
+<li><strong>Auto-Suspend:</strong> Suspend tabs after N minutes of inactivity (default: 30).</li>
+<li><strong>Exceptions:</strong> Add URL patterns to the exception list to keep specific tabs always active.</li>
+<li><strong>Memory Stats:</strong> Dashboard shows total tabs, active/suspended count, and estimated memory saved (~50MB per suspended tab).</li>
+<li><strong>Manual Control:</strong> Sleep/wake individual apps, or suspend all inactive tabs at once.</li>
+</ul>
+
+<h2 id="themes">Theme & Appearance <span class="tag tag-core">Core</span></h2>
+<ul>
+<li><strong>Dark Theme:</strong> Deep dark background (#0A0A12, #0D0D1A, #1A1A2E) with purple (#7C6FF0) and blue (#60A5FA) accents.</li>
+<li><strong>Compact Mode:</strong> Minimize chrome for more content area. Hides sidebar elements.</li>
+<li><strong>Customizable:</strong> Workspace-level accent color. Per-workspace icon.</li>
+<li><strong>Typography:</strong> Inter for UI, JetBrains Mono for code. Carefully tuned font sizes and spacing.</li>
+</ul>
+
+<h2 id="tray">System Tray <span class="tag tag-core">Core</span></h2>
+<ul>
+<li><strong>Minimize to Tray:</strong> Close button minimizes to tray instead of quitting (configurable).</li>
+<li><strong>Quick Menu:</strong> Right-click tray icon for quick actions: Show Window, Restart Server, Quit.</li>
+<li><strong>Status:</strong> Server status indicator in the tray context menu.</li>
+<li><strong>Background Operation:</strong> The app and its Python backend continue running in the background.</li>
+</ul>
+
+<h2 id="update">Auto-Update <span class="tag tag-core">Core</span></h2>
+<ul>
+<li><strong>GitHub Releases:</strong> Updates are distributed via GitHub Releases using electron-updater.</li>
+<li><strong>Automatic:</strong> Checks for updates on startup. Downloads and installs in the background.</li>
+<li><strong>Release Channel:</strong> Configured for the <code>Loggableim/lastbrowser</code> repository.</li>
+<li><strong>Manual Check:</strong> Check for updates via Settings panel or tray menu.</li>
+</ul>
+
+<hr>
+<p style="text-align:center;color:#686888;font-size:13px;margin-top:32px"><a href="/docs/architecture.html">Next: Architecture →</a></p>
+
+</div>
+</section>
+
+<footer><div class="container"><p>&copy; 2026 Pup Cid &mdash; MIT License</p><div class="footer-links"><a href="/">Home</a><a href="/docs/guide.html">Guide</a><a href="/docs/architecture.html">Architecture</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a></div></div></footer>
+</body>
+</html>

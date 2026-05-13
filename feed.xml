@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+  <title>LastBrowser Blog</title>
+  <link>https://lastbrowser.pawsunited.info/blog.html</link>
+  <description>Development updates and news for LastBrowser — the open-source productivity workspace browser.</description>
+  <language>en</language>
+  <atom:link href="https://lastbrowser.pawsunited.info/feed.xml" rel="self" type="application/rss+xml"/>
+  <lastBuildDate>Wed, 13 May 2026 12:00:00 +0000</lastBuildDate>
+
+  <item>
+    <title>New Website: PWA, Dark Theme, Docs Search</title>
+    <link>https://lastbrowser.pawsunited.info/blog.html</link>
+    <description>The LastBrowser website got a massive overhaul — PWA support, mobile nav, Fuse.js search, self-hosted fonts, and more.</description>
+    <pubDate>Wed, 13 May 2026 12:00:00 +0000</pubDate>
+    <guid>https://lastbrowser.pawsunited.info/blog.html#website-v3</guid>
+  </item>
+
+  <item>
+    <title>LastBrowser v0.2.0 Released</title>
+    <link>https://lastbrowser.pawsunited.info/blog.html</link>
+    <description>Major update with v2 architecture, multi-agent system, kanban boards, split view, focus mode, and command palette.</description>
+    <pubDate>Wed, 13 May 2026 10:00:00 +0000</pubDate>
+    <guid>https://lastbrowser.pawsunited.info/blog.html#v020</guid>
+  </item>
+
+  <item>
+    <title>LastBrowser: A New Open-Source Browser</title>
+    <link>https://lastbrowser.pawsunited.info/blog.html</link>
+    <description>Introducing LastBrowser — an Electron-based productivity workspace browser, open source under MIT.</description>
+    <pubDate>Tue, 01 Apr 2026 00:00:00 +0000</pubDate>
+    <guid>https://lastbrowser.pawsunited.info/blog.html#project-start</guid>
+  </item>
+</channel>
+</rss>

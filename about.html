@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About — LastBrowser</title>
+<meta name="description" content="The story behind LastBrowser — an open-source productivity workspace browser built on Electron and Hermes WebUI.">
+<meta property="og:title" content="About LastBrowser">
+<meta property="og:description" content="The story behind the last browser you'll ever need.">
+<link rel="canonical" href="https://lastbrowser.pawsunited.info/about.html">
+<link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="bg-grid"></div>
+<nav><div class="container"><a href="/" class="nav-logo"><svg viewBox="0 0 64 64" fill="none"><defs><linearGradient id="nlg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7C6FF0"/><stop offset="100%" stop-color="#5B4FCC"/></linearGradient></defs><rect x="12" y="12" width="40" height="40" rx="10" fill="url(#nlg)" opacity="0.15"/><rect x="18" y="14" width="12" height="36" rx="4" fill="url(#nlg)"/><rect x="18" y="38" width="36" height="12" rx="4" fill="#60A5FA"/><rect x="30" y="14" width="18" height="4" rx="2" fill="#A78BFA" opacity="0.5"/></svg>LastBrowser</a><div class="nav-links"><a href="/">Home</a><a href="/download.html">Download</a><a href="/docs/guide.html">Guide</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a><a href="/download.html" class="nav-cta">Download</a></div></div></nav>
+<div class="container"><div class="breadcrumb"><a href="/">Home</a> <span>›</span> <span>About</span></div></div>
+
+<section class="doc-page"><div class="container">
+
+<h1>About LastBrowser</h1>
+<p class="subtitle">The story, philosophy, and technology behind "the last browser you'll ever need."</p>
+
+<h2>Why Another Browser?</h2>
+<p>Modern browsers are incredibly powerful, but they're built for the <em>general web</em> — not for <em>getting work done</em>. Tab overload, constant notifications, and the friction between tools breaks focus. Productivity browsers like Wavebox and Sidekick solved this, but they're proprietary and expensive.</p>
+<p>LastBrowser was born from a simple idea: <strong>what if your browser was also your workspace, your AI assistant, and your task manager — all open source?</strong></p>
+
+<h2>Origin Story</h2>
+<p>LastBrowser started as "Hermes Desktop" — a lightweight Electron wrapper around the <a href="https://hermes-agent.nousresearch.com/" target="_blank" rel="noopener">Hermes WebUI</a>, an open-source AI agent interface. The wrapper added a system tray, sidebar, and native Windows integration.</p>
+<p>As development progressed, it evolved into something much bigger: a full workspace browser with vertical tabs, isolated workspaces, AI agents, kanban boards, split view, focus mode, and a command palette. The project was renamed to <strong>LastBrowser</strong> in May 2026 with the v0.2.0 release.</p>
+
+<h2>Philosophy</h2>
+<div class="note">"The last browser you'll ever need." — Not because it's the only browser, but because it adapts to how you work.</div>
+<ul>
+<li><strong>Open Source First:</strong> MIT licensed. No telemetry by default. No paid tiers. Your data stays on your machine.</li>
+<li><strong>AI-Native:</strong> AI agents aren't an add-on — they're built into the browser's DNA. Agents can browse tabs, automate tasks, and work alongside you.</li>
+<li><strong>Productivity Over Polish:</strong> Features first, aesthetics second. Dark theme, keyboard-first navigation, minimal chrome.</li>
+<li><strong>Self-Hosted:</strong> You control your data, your agents, your workspace. No cloud dependency.</li>
+</ul>
+
+<h2>Technology</h2>
+<p>LastBrowser is built on three layers:</p>
+<table style="width:100%;border-collapse:collapse;margin:16px 0">
+<tr style="border-bottom:1px solid rgba(255,255,255,0.05)"><td style="padding:8px 12px"><strong>Electron v35</strong></td><td style="padding:8px 12px;color:#8888A0">Native shell — window management, system tray, auto-update</td></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,0.05)"><td style="padding:8px 12px"><strong>Node.js + IPC</strong></td><td style="padding:8px 12px;color:#8888A0">Main process with 21 modules, ~150 IPC channels, SQLite storage</td></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,0.05)"><td style="padding:8px 12px"><strong>Hermes WebUI</strong></td><td style="padding:8px 12px;color:#8888A0">Python AI agent backend — multi-provider, streaming, memory, skills</td></tr>
+</table>
+
+<h2>Who Made This?</h2>
+<p>LastBrowser is built by <strong>Pup Cid</strong> (also known as Cid), an independent developer focused on AI tooling and productivity software. The project is developed openly on <a href="https://github.com/Loggableim/lastbrowser">GitHub</a> — contributions, issues, and feature requests are always welcome.</p>
+
+<h2>License</h2>
+<p>LastBrowser is released under the <strong>MIT License</strong>. You can freely use, modify, and distribute it. The full license text is available in the <a href="https://github.com/Loggableim/lastbrowser/blob/main/LICENSE">GitHub repository</a>.</p>
+
+<hr>
+<p style="text-align:center;font-size:13px;color:#686888"><a href="/roadmap.html">View Roadmap →</a> · <a href="/docs/guide.html">Get Started →</a></p>
+</div></section>
+
+<footer><div class="container"><p>&copy; 2026 Pup Cid &mdash; MIT License</p><div class="footer-links"><a href="/">Home</a><a href="/about.html">About</a><a href="/download.html">Download</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a></div></div></footer>
+</body>
+</html>

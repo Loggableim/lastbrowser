@@ -46,9 +46,18 @@
       <a href="/download.html" class="nav-cta">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download
       </a>
+      <button class="mobile-toggle" onclick="document.getElementById('mobileMenu').classList.toggle('open')" aria-label="Menu"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
     </div>
   </div>
-</nav>
+ </nav>
+<div class="mobile-overlay" id="mobileMenu">
+  <a href="#features">Features</a>
+  <a href="#screenshots">Screenshots</a>
+  <a href="/download.html">Download</a>
+  <a href="/docs/guide.html">Docs</a>
+  <a href="https://github.com/Loggableim/lastbrowser" target="_blank">GitHub</a>
+  <a href="/download.html" class="nav-cta">Download</a>
+</div>
 
 <!-- Hero -->
 <section class="hero">
@@ -95,21 +104,21 @@
 <!-- Features -->
 <section class="section" id="features">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header reveal">
       <div class="section-label">Features</div>
       <h2>Everything you need.</h2>
       <p class="section-subtitle">Inspired by Wavebox, Sidekick, and Zen Browser — open source, extensible, AI-native.</p>
     </div>
     <div class="features-grid features-grid-3">
-      <div class="feature-card"><div class="feature-icon">📑</div><h3>Vertical Tabs</h3><p>Tree-style tabs with drag-and-drop grouping, search, pinning, tab suspension, and close-history (restore last 50 closed tabs).</p></div>
-      <div class="feature-card"><div class="feature-icon">🤖</div><h3>AI Agents</h3><p>Multi-agent system with any model/provider. Agents navigate tabs, click, type, scroll, screenshot, and extract content. Custom roles &amp; prompts.</p></div>
-      <div class="feature-card"><div class="feature-icon">⌨️</div><h3>Command Palette</h3><p>Ctrl+K fuzzy search across workspaces, tabs, commands, settings, apps, tasks. No mouse needed.</p></div>
-      <div class="feature-card"><div class="feature-icon">🪟</div><h3>Split View</h3><p>Side-by-side panels. Compare docs, monitor dashboards, or keep your AI visible while browsing.</p></div>
-      <div class="feature-card"><div class="feature-icon">📋</div><h3>Kanban Boards</h3><p>Full kanban with boards, columns, cards, WIP limits, drag-and-drop, and color-coded statuses.</p></div>
-      <div class="feature-card"><div class="feature-icon">🎯</div><h3>Focus Mode</h3><p>Pomodoro timer (25/50/90 min) with distraction blocking, notification muting, and timer overlay.</p></div>
-      <div class="feature-card"><div class="feature-icon">📦</div><h3>Workspaces</h3><p>Isolated session partitions — each workspace has its own tabs, apps, cookies, and boards. Switch instantly.</p></div>
-      <div class="feature-card"><div class="feature-icon">🧩</div><h3>App Shortcuts</h3><p>Pin web apps with isolated accounts per app. Perfect for Slack, Gmail, Notion, GitHub.</p></div>
-      <div class="feature-card"><div class="feature-icon">🔄</div><h3>Auto-Update</h3><p>Automatic updates via GitHub Releases. Always on the latest version.</p></div>
+      <div class="feature-card reveal reveal-delay-1"><div class="feature-icon">📑</div><h3>Vertical Tabs</h3><p>Tree-style tabs with drag-and-drop grouping, search, pinning, tab suspension, and close-history (restore last 50 closed tabs).</p></div>
+      <div class="feature-card reveal reveal-delay-2"><div class="feature-icon">🤖</div><h3>AI Agents</h3><p>Multi-agent system with any model/provider. Agents navigate tabs, click, type, scroll, screenshot, and extract content. Custom roles &amp; prompts.</p></div>
+      <div class="feature-card reveal reveal-delay-3"><div class="feature-icon">⌨️</div><h3>Command Palette</h3><p>Ctrl+K fuzzy search across workspaces, tabs, commands, settings, apps, tasks. No mouse needed.</p></div>
+      <div class="feature-card reveal reveal-delay-1"><div class="feature-icon">🪟</div><h3>Split View</h3><p>Side-by-side panels. Compare docs, monitor dashboards, or keep your AI visible while browsing.</p></div>
+      <div class="feature-card reveal reveal-delay-2"><div class="feature-icon">📋</div><h3>Kanban Boards</h3><p>Full kanban with boards, columns, cards, WIP limits, drag-and-drop, and color-coded statuses.</p></div>
+      <div class="feature-card reveal reveal-delay-3"><div class="feature-icon">🎯</div><h3>Focus Mode</h3><p>Pomodoro timer (25/50/90 min) with distraction blocking, notification muting, and timer overlay.</p></div>
+      <div class="feature-card reveal reveal-delay-1"><div class="feature-icon">📦</div><h3>Workspaces</h3><p>Isolated session partitions — each workspace has its own tabs, apps, cookies, and boards. Switch instantly.</p></div>
+      <div class="feature-card reveal reveal-delay-2"><div class="feature-icon">🧩</div><h3>App Shortcuts</h3><p>Pin web apps with isolated accounts per app. Perfect for Slack, Gmail, Notion, GitHub.</p></div>
+      <div class="feature-card reveal reveal-delay-3"><div class="feature-icon">🔄</div><h3>Auto-Update</h3><p>Automatic updates via GitHub Releases. Always on the latest version.</p></div>
     </div>
   </div>
 </section>
@@ -117,13 +126,13 @@
 <!-- Screenshots with detailed SVG mockups -->
 <section class="section section-alt" id="screenshots">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header reveal">
       <div class="section-label">Screenshots</div>
       <h2>See it in action.</h2>
       <p class="section-subtitle">The LastBrowser interface — designed for productivity.</p>
     </div>
     <div class="screenshots">
-      <div class="screenshot-card">
+      <div class="screenshot-card reveal reveal-delay-1">
         <div class="screenshot-preview">
           <div class="sc-window">
             <div class="sc-header"><span class="sc-dot"></span><span class="sc-dot"></span><span class="sc-dot"></span></div>
@@ -132,19 +141,19 @@
         </div>
         <div class="screenshot-info"><h4>Main Interface</h4><p>Vertical sidebar navigation, multi-panel layout, dark theme with purple/blue accents.</p><span class="tag">Dark Theme</span><span class="tag">Sidebar</span></div>
       </div>
-      <div class="screenshot-card">
+      <div class="screenshot-card reveal reveal-delay-2">
         <div class="screenshot-preview">
           <div class="sc-window"><div class="sc-header"><span class="sc-dot"></span><span class="sc-dot"></span><span class="sc-dot"></span></div><div class="sc-split"><div class="sc-pane"><div class="sc-bar w60 accent"></div><div class="sc-bar w80"></div><div class="sc-bar w40"></div></div><div class="sc-pane"><div class="sc-bar w80 blue"></div><div class="sc-bar w60"></div><div class="sc-bar w40"></div></div></div></div>
         </div>
         <div class="screenshot-info"><h4>Split View</h4><p>Two panels side-by-side with independent navigation and resizable divider.</p><span class="tag">Multi-tasking</span></div>
       </div>
-      <div class="screenshot-card">
+      <div class="screenshot-card reveal reveal-delay-3">
         <div class="screenshot-preview">
           <div class="sc-window"><div class="sc-header"><span class="sc-dot"></span><span class="sc-dot"></span><span class="sc-dot"></span></div><div class="sc-kanban"><div class="sc-col"><div class="sc-card highlight"></div><div class="sc-card"></div></div><div class="sc-col"><div class="sc-card"></div><div class="sc-card highlight"></div><div class="sc-card"></div></div><div class="sc-col"><div class="sc-card"></div></div><div class="sc-col"><div class="sc-card highlight"></div><div class="sc-card"></div></div></div></div>
         </div>
         <div class="screenshot-info"><h4>Kanban Board</h4><p>Drag-and-drop task management with color-coded columns and WIP limits.</p><span class="tag">Project Management</span></div>
       </div>
-      <div class="screenshot-card">
+      <div class="screenshot-card reveal reveal-delay-1">
         <div class="screenshot-preview">
           <div class="sc-window"><div class="sc-header"><span class="sc-dot"></span><span class="sc-dot"></span><span class="sc-dot"></span></div><div class="sc-chat"><div class="sc-msg agent">Hello! I'm your AI agent. Ready to help.<div class="sc-msg-bar w60"></div></div><div class="sc-msg user">Show me open PRs<div class="sc-msg-bar w80"></div></div><div class="sc-msg agent">Found 3 open PRs needing review...<div class="sc-msg-bar w80"></div></div></div></div>
         </div>
@@ -155,7 +164,7 @@
 </section>
 
 <!-- Features Comparison -->
-<section class="section" id="comparison">
+<section class="section reveal" id="comparison">
   <div class="container">
     <div class="section-header">
       <div class="section-label">Comparison</div>
@@ -180,9 +189,9 @@
 </section>
 
 <!-- Design Section -->
-<section class="section section-alt">
+<section class="section section-alt reveal">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header reveal">
       <div class="section-label">Design</div>
       <h2>Beautiful by default.</h2>
       <p class="section-subtitle">Dark theme with carefully chosen colors and typography.</p>
@@ -195,9 +204,9 @@
 </section>
 
 <!-- Tech Stack -->
-<section class="section" id="tech">
+<section class="section reveal" id="tech">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header reveal">
       <div class="section-label">Tech Stack</div>
       <h2>Modern foundation.</h2>
       <p class="section-subtitle">Built on battle-tested technologies.</p>
@@ -241,7 +250,7 @@
       <a href="/docs/faq.html">FAQ</a>
     </div>
   </div>
-</footer>
+</div></footer>
 
 <!-- GitHub Stars live fetch -->
 <script>
@@ -254,5 +263,13 @@
   } catch(e){ /* ignore */ }
 })();
 </script>
+<button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Scroll to top">
+<svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+</button>
+<script>window.addEventListener('scroll',function(){document.getElementById('scrollTop').classList.toggle('visible',window.scrollY>300)});</script>
+<script>
+if(window.IntersectionObserver){
+document.querySelectorAll('.reveal').forEach(function(el){new IntersectionObserver(function(e){if(e[0].isIntersecting){e[0].target.classList.add('active');}},{threshold:0.1}).observe(el);});
+}</script>
 </body>
 </html>

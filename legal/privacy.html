@@ -11,7 +11,10 @@
 </head>
 <body>
 <div class="bg-grid"></div>
-<nav><div class="container"><a href="/" class="nav-logo"><svg viewBox="0 0 64 64" fill="none"><defs><linearGradient id="nlg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7C6FF0"/><stop offset="100%" stop-color="#5B4FCC"/></linearGradient></defs><rect x="12" y="12" width="40" height="40" rx="10" fill="url(#nlg)" opacity="0.15"/><rect x="18" y="14" width="12" height="36" rx="4" fill="url(#nlg)"/><rect x="18" y="38" width="36" height="12" rx="4" fill="#60A5FA"/><rect x="30" y="14" width="18" height="4" rx="2" fill="#A78BFA" opacity="0.5"/></svg>LastBrowser</a><div class="nav-links"><a href="/">Home</a><a href="/download.html">Download</a><a href="/docs/guide.html">Guide</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a></div></div></nav>
+<nav><div class="container"><a href="/" class="nav-logo"><svg viewBox="0 0 64 64" fill="none"><defs><linearGradient id="nlg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7C6FF0"/><stop offset="100%" stop-color="#5B4FCC"/></linearGradient></defs><rect x="12" y="12" width="40" height="40" rx="10" fill="url(#nlg)" opacity="0.15"/><rect x="18" y="14" width="12" height="36" rx="4" fill="url(#nlg)"/><rect x="18" y="38" width="36" height="12" rx="4" fill="#60A5FA"/><rect x="30" y="14" width="18" height="4" rx="2" fill="#A78BFA" opacity="0.5"/></svg>LastBrowser</a><div class="nav-links"><a href="/">Home</a><a href="/download.html">Download</a><a href="/docs/guide.html">Guide</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a><button class="mobile-toggle" onclick="document.getElementById('mobileMenu').classList.toggle('open')" aria-label="Menu">
+<svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="mobile-overlay" id="mobileMenu"></div></div></nav>
 <div class="container"><div class="breadcrumb"><a href="/">Home</a> <span>›</span> <span>Privacy Policy</span></div></div>
 
 <section class="doc-page"><div class="container">
@@ -74,6 +77,10 @@
 <p style="text-align:center;font-size:13px;color:#686888">Also read: <a href="/legal/imprint.html">Imprint</a></p>
 
 </div></section>
-<footer><div class="container"><p>&copy; 2026 Pup Cid &mdash; MIT License</p><div class="footer-links"><a href="/">Home</a><a href="/legal/privacy.html">Privacy</a><a href="/legal/imprint.html">Imprint</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a></div></div></footer>
+<footer><div class="container"><p>&copy; 2026 Pup Cid &mdash; MIT License</p><div class="footer-links"><a href="/">Home</a><a href="/legal/privacy.html">Privacy</a><a href="/legal/imprint.html">Imprint</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a></div></div></div></footer>
+<button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Scroll to top">
+<svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+</button>
+<script>window.addEventListener('scroll',function(){document.getElementById('scrollTop').classList.toggle('visible',window.scrollY>300)});</script>
 </body>
 </html>

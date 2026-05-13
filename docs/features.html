@@ -14,11 +14,19 @@
 </head>
 <body>
 <div class="bg-grid"></div>
-<nav><div class="container"><a href="/" class="nav-logo"><svg viewBox="0 0 64 64" fill="none"><defs><linearGradient id="nlg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7C6FF0"/><stop offset="100%" stop-color="#5B4FCC"/></linearGradient></defs><rect x="12" y="12" width="40" height="40" rx="10" fill="url(#nlg)" opacity="0.15"/><rect x="18" y="14" width="12" height="36" rx="4" fill="url(#nlg)"/><rect x="18" y="38" width="36" height="12" rx="4" fill="#60A5FA"/><rect x="30" y="14" width="18" height="4" rx="2" fill="#A78BFA" opacity="0.5"/></svg>LastBrowser</a><div class="nav-links"><a href="/">Home</a><a href="/docs/guide.html">Guide</a><a href="/docs/architecture.html">Architecture</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a><a href="/docs/guide.html" class="nav-cta">Get Started</a></div></div></nav>
+<nav><div class="container"><a href="/" class="nav-logo"><svg viewBox="0 0 64 64" fill="none"><defs><linearGradient id="nlg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7C6FF0"/><stop offset="100%" stop-color="#5B4FCC"/></linearGradient></defs><rect x="12" y="12" width="40" height="40" rx="10" fill="url(#nlg)" opacity="0.15"/><rect x="18" y="14" width="12" height="36" rx="4" fill="url(#nlg)"/><rect x="18" y="38" width="36" height="12" rx="4" fill="#60A5FA"/><rect x="30" y="14" width="18" height="4" rx="2" fill="#A78BFA" opacity="0.5"/></svg>LastBrowser</a><div class="nav-links"><a href="/">Home</a><a href="/docs/guide.html">Guide</a><a href="/docs/architecture.html">Architecture</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a><a href="/docs/guide.html" class="nav-cta">Get Started</a><button class="mobile-toggle" onclick="document.getElementById('mobileMenu').classList.toggle('open')" aria-label="Menu">
+<svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="mobile-overlay" id="mobileMenu"></div></div></nav>
 <div class="container"><div class="breadcrumb"><a href="/">Home</a> <span>›</span> <a href="/docs/guide.html">Docs</a> <span>›</span> <span>Features</span></div></div>
 <section class="doc-page"><div class="container">
 <h1>LastBrowser Feature Reference</h1>
 <p class="subtitle">Complete documentation of every feature in LastBrowser v0.2.0. Tags: <span class="tag tag-core">Core</span> <span class="tag tag-pro">Productivity</span></p>
+<div class="doc-search">
+<svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+<input type="text" id="docSearch" placeholder="Search docs..." autocomplete="off">
+<div class="doc-search-results" id="docSearchResults"></div>
+</div>
 <div class="toc"><h3>Feature Index</h3><ol><li><a href="#workspaces">Workspaces</a></li><li><a href="#tabs">Vertical Tabs</a></li><li><a href="#sidebar">Sidebar</a></li><li><a href="#agents">AI Agents</a></li><li><a href="#kanban">Kanban Boards</a></li><li><a href="#splitview">Split View</a></li><li><a href="#focus">Focus Mode</a></li><li><a href="#palette">Command Palette</a></li><li><a href="#apps">App Shortcuts</a></li><li><a href="#privacy">Privacy</a></li><li><a href="#resources">Resource Saver</a></li><li><a href="#themes">Themes</a></li><li><a href="#tray">System Tray</a></li><li><a href="#update">Auto-Update</a></li></ol></div>
 <h2 id="workspaces">Workspaces <span class="tag tag-core">Core</span></h2><p>Each workspace has isolated Electron session partitions (<code>persist:workspace_&lt;id&gt;</code>) — cookies, localStorage, and cache are fully separated. Instant switch, export/import as JSON, custom name/icon/color per workspace. Use cases: work vs personal, per-project isolation, different AI agent configs.</p>
 <h2 id="tabs">Vertical Tabs <span class="tag tag-core">Core</span></h2><p>Tree-style vertical tabs maximize horizontal space. Features: create/close/duplicate/move tabs, pinning, auto-suspend (memory discard after inactivity ~50MB saved per tab), close history (last 50), back/forward/reload, per-tab mute and zoom, favicon tracking.</p>
@@ -36,6 +44,30 @@
 <h2 id="update">Auto-Update <span class="tag tag-core">Core</span></h2><p>Automatic updates via GitHub Releases (electron-updater). Checks on startup, downloads in background. Configured for <code>Loggableim/lastbrowser</code>.</p>
 <hr><p style="text-align:center;font-size:13px;margin-top:32px"><a href="/docs/architecture.html">Next: Architecture →</a></p>
 </div></section>
-<footer><div class="container"><p>&copy; 2026 Pup Cid &mdash; MIT License</p><div class="footer-links"><a href="/">Home</a><a href="/docs/guide.html">Guide</a><a href="/docs/architecture.html">Architecture</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a></div></div></footer>
+<footer><div class="container"><p>&copy; 2026 Pup Cid &mdash; MIT License</p><div class="footer-links"><a href="/">Home</a><a href="/docs/guide.html">Guide</a><a href="/docs/architecture.html">Architecture</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a></div></div></div></footer>
+<button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Scroll to top">
+<svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+</button>
+<script>window.addEventListener('scroll',function(){document.getElementById('scrollTop').classList.toggle('visible',window.scrollY>300)});</script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+<script>
+(function(){
+var input=document.getElementById('docSearch');
+var results=document.getElementById('docSearchResults');
+if(!input)return;
+var headings=[];
+document.querySelectorAll('h2[id],h3[id]').forEach(function(h){headings.push({id:h.id,text:h.textContent.trim(),tag:h.tagName});});
+var fuse=new Fuse(headings,{keys:['text'],threshold:0.3});
+input.addEventListener('input',function(){
+var val=input.value.trim();
+if(val.length<2){results.classList.remove('show');return;}
+var matches=fuse.search(val);
+if(matches.length===0){results.classList.remove('show');return;}
+results.innerHTML=matches.map(function(m){return '<a href="#'+m.item.id+'"><span class="result-title">'+(m.item.tag==='H2'?'📄 ':'📌 ')+m.item.text+'</span></a>';}).join('');
+results.classList.add('show');
+});
+document.addEventListener('click',function(e){if(!e.target.closest('.doc-search'))results.classList.remove('show');});
+})();
+</script>
 </body>
 </html>

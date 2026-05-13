@@ -107,6 +107,14 @@
     <a href="/download.html">Download</a>
     <a href="/docs/faq.html">FAQ</a>
   </div>
-</div></footer>
+</div></div></footer>
+<button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Scroll to top">
+<svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+</button>
+<script>window.addEventListener('scroll',function(){document.getElementById('scrollTop').classList.toggle('visible',window.scrollY>300)});</script>
+<script>
+if(window.IntersectionObserver){
+document.querySelectorAll('.reveal').forEach(function(el){new IntersectionObserver(function(e){if(e[0].isIntersecting){e[0].target.classList.add('active');}},{threshold:0.1}).observe(el);});
+}</script>
 </body>
 </html>

@@ -191,7 +191,39 @@ pre:hover .copy-btn{opacity:1}.copy-btn:hover{background:rgba(124,111,240,0.2)}.
 .fade-in-1{animation-delay:0.1s}.fade-in-2{animation-delay:0.2s}.fade-in-3{animation-delay:0.3s}.fade-in-4{animation-delay:0.4s}
 @keyframes fadeIn{to{opacity:1;transform:translateY(0)}}
 
-/* ── Spinner ──────────────────────────────────────────────────────── */
+/* ── Scroll Reveal ────────────────────────────────────────────────── */
+.reveal{opacity:0;transform:translateY(30px);transition:opacity 0.7s ease,transform 0.7s ease}
+.reveal.active{opacity:1;transform:translateY(0)}
+.reveal-delay-1{transition-delay:0.1s}.reveal-delay-2{transition-delay:0.2s}.reveal-delay-3{transition-delay:0.3s}
+
+/* ── Scroll-to-Top Button ─────────────────────────────────────────── */
+.scroll-top{position:fixed;bottom:24px;right:24px;width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#7C6FF0,#5B4FCC);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:all 0.3s ease;z-index:999;box-shadow:0 4px 16px rgba(124,111,240,0.25)}
+.scroll-top.visible{opacity:1;pointer-events:auto}.scroll-top:hover{transform:translateY(-3px);box-shadow:0 6px 24px rgba(124,111,240,0.4)}
+.scroll-top svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── Mobile Nav ──────────────────────────────────────────────────── */
+.mobile-toggle{display:none;background:none;border:none;color:#8888A0;cursor:pointer;padding:4px;transition:color 0.2s;z-index:101}
+.mobile-toggle:hover{color:#C4C4D8}
+.mobile-toggle svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.mobile-overlay{position:fixed;inset:0;background:rgba(8,8,16,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;opacity:0;pointer-events:none;transition:opacity 0.3s ease}
+.mobile-overlay.open{opacity:1;pointer-events:auto}
+.mobile-overlay a{color:#8888A0;font-size:22px;font-weight:500;text-decoration:none;padding:12px 24px;transition:color 0.2s}
+.mobile-overlay a:hover{color:#EAEAEF}
+.mobile-overlay .nav-cta{margin-top:16px;font-size:16px!important;padding:14px 28px!important}
+
+/* ── Fuse.js Doc Search ──────────────────────────────────────────────── */
+.doc-search{position:relative;margin:0 0 24px;max-width:400px}
+.doc-search input{width:100%;padding:10px 14px 10px 38px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;color:#D4D4E0;font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s}
+.doc-search input:focus{border-color:rgba(124,111,240,0.3);background:rgba(124,111,240,0.03)}
+.doc-search input::placeholder{color:#686888}
+.doc-search .search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#686888;pointer-events:none}
+.doc-search-results{position:absolute;top:100%;left:0;right:0;background:#11111E;border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-top:4px;max-height:300px;overflow-y:auto;display:none;z-index:50}
+.doc-search-results.show{display:block}
+.doc-search-results a{display:block;padding:10px 14px;color:#8888A0;text-decoration:none;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.03);transition:background 0.15s}
+.doc-search-results a:last-child{border-bottom:none}
+.doc-search-results a:hover{background:rgba(124,111,240,0.06);color:#C4C4D8}
+.doc-search-results .result-title{color:#C4C4D8;font-weight:500;font-size:13px}
+.doc-search-results .result-context{color:#686888;font-size:11px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(124,111,240,0.2);border-top-color:#7C6FF0;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(124,111,240,0.1);border:1px solid rgba(124,111,240,0.15);padding:4px 14px;border-radius:20px;font-size:13px;color:#A78BFA;margin-bottom:20px}
@@ -216,5 +248,5 @@ footer a:hover{color:#C4C4D8}footer .footer-links{display:flex;gap:24px}
 
 /* ── Responsive ───────────────────────────────────────────────────── */
 @media(max-width:1024px){.hero-visual{display:none}.features-grid-3{grid-template-columns:repeat(2,1fr)}.screenshots{grid-template-columns:1fr}.comparison-table{font-size:12px}.comparison-table th,.comparison-table td{padding:8px}}
-@media(max-width:768px){.features-grid-3,.features-grid-2{grid-template-columns:1fr}.hero-stats{flex-direction:column;gap:16px}.theme-showcase{grid-template-columns:1fr}.download-cards{grid-template-columns:1fr}footer .container{flex-direction:column;gap:16px;text-align:center}.section{padding:60px 0}.nav-links a:not(.nav-cta):not(.dropdown):not(.lang-switch){display:none}.comparison-table{font-size:11px}.comparison-table th,.comparison-table td{padding:6px 4px}}
+@media(max-width:768px){.features-grid-3,.features-grid-2{grid-template-columns:1fr}.hero-stats{flex-direction:column;gap:16px}.theme-showcase{grid-template-columns:1fr}.download-cards{grid-template-columns:1fr}footer .container{flex-direction:column;gap:16px;text-align:center}.section{padding:60px 0}.mobile-toggle{display:block}.nav-links a:not(.nav-cta):not(.lang-switch):not(.mobile-toggle){display:none}.comparison-table{font-size:11px}.comparison-table th,.comparison-table td{padding:6px 4px}}
 @media(max-width:640px){.doc-page h1{font-size:26px}.download-hero h1{font-size:28px}}

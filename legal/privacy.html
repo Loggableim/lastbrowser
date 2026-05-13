@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — LastBrowser</title>
+<link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
+<meta name="description" content="LastBrowser privacy policy — what data is collected, how it's used, and your rights.">
+<link rel="canonical" href="https://lastbrowser.pawsunited.info/legal/privacy.html">
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="bg-grid"></div>
+<nav><div class="container"><a href="/" class="nav-logo"><svg viewBox="0 0 64 64" fill="none"><defs><linearGradient id="nlg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7C6FF0"/><stop offset="100%" stop-color="#5B4FCC"/></linearGradient></defs><rect x="12" y="12" width="40" height="40" rx="10" fill="url(#nlg)" opacity="0.15"/><rect x="18" y="14" width="12" height="36" rx="4" fill="url(#nlg)"/><rect x="18" y="38" width="36" height="12" rx="4" fill="#60A5FA"/><rect x="30" y="14" width="18" height="4" rx="2" fill="#A78BFA" opacity="0.5"/></svg>LastBrowser</a><div class="nav-links"><a href="/">Home</a><a href="/download.html">Download</a><a href="/docs/guide.html">Guide</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a></div></div></nav>
+<div class="container"><div class="breadcrumb"><a href="/">Home</a> <span>›</span> <span>Privacy Policy</span></div></div>
+
+<section class="doc-page"><div class="container">
+
+<h1>Privacy Policy</h1>
+<p class="subtitle">Last updated: May 13, 2026. LastBrowser is designed with privacy in mind. This policy explains what data is collected, how it's used, and your rights.</p>
+
+<div class="note">LastBrowser is open-source software (MIT license). You can verify all privacy-related code in the <a href="https://github.com/Loggableim/lastbrowser">source repository</a>.</div>
+
+<h2>TL;DR</h2>
+<p>LastBrowser is a local-first application. Your browsing data, tabs, workspaces, and settings are stored <strong>locally on your machine</strong>. No data is sent to external servers unless you explicitly configure an AI model provider API key.</p>
+
+<h2>1. Data We Collect</h2>
+<p><strong>We collect no data by default.</strong> LastBrowser runs entirely on your machine. The only data that exists is what you create:</p>
+<ul>
+<li><strong>Local storage:</strong> Tabs, workspaces, settings, kanban boards, agents, and sessions are stored in a local SQLite database at <code>%APPDATA%/LastBrowser/</code> on Windows. Nothing is uploaded anywhere.</li>
+<li><strong>Cookies:</strong> Website cookies are stored in Electron session partitions on your local disk, exactly like a normal browser. You can clear them at any time via Settings → Privacy.</li>
+<li><strong>Cache:</strong> Website cache files are stored locally and can be cleared per app or globally.</li>
+</ul>
+
+<h2>2. AI Agent Data</h2>
+<p>The AI agent system is optional and opt-in. If you configure an AI agent:</p>
+<ul>
+<li><strong>Prompts and responses</strong> are sent to the AI model provider you configured (e.g., OpenAI, Anthropic, DeepSeek, OpenRouter).</li>
+<li>We do <strong>not</strong> proxy, log, or store your prompts on any intermediary server.</li>
+<li>Your API key is stored locally in the app's settings database and never transmitted to anyone except the provider you selected.</li>
+<li>Each provider has its own privacy policy governing how they handle your data.</li>
+</ul>
+
+<h2>3. Telemetry</h2>
+<p>LastBrowser has an optional telemetry feature that is <strong>disabled by default</strong>. If enabled, it collects:</p>
+<ul>
+<li>App version and operating system</li>
+<li>Feature usage statistics (anonymous, no personal identifiers)</li>
+</ul>
+<p>You can enable or disable telemetry at any time via Settings → Privacy.</p>
+
+<h2>4. Third-Party Services</h2>
+<p>The LastBrowser website uses the following third-party services:</p>
+<ul>
+<li><strong>GitHub API</strong> — The download page fetches the latest release version from <code>api.github.com/repos/Loggableim/lastbrowser</code>. No personal data is sent.</li>
+<li><strong>Google Fonts</strong> — Font files are loaded from Google Fonts CDN. See <a href="https://policies.google.com/privacy">Google's Privacy Policy</a> for details. We plan to self-host fonts in a future update.</li>
+</ul>
+
+<h2>5. Updates</h2>
+<p>LastBrowser checks for updates via GitHub Releases (<code>api.github.com</code>) on startup. This sends: app version, OS, Electron version. No personal identifiers.</p>
+
+<h2>6. Your Rights</h2>
+<ul>
+<li><strong>Right to know:</strong> This document explains what data exists and where.</li>
+<li><strong>Right to delete:</strong> All local data can be deleted via Settings → Privacy → Clear All Data, or by uninstalling the application.</li>
+<li><strong>Right to portability:</strong> Workspace data can be exported as JSON via the workspace manager.</li>
+<li><strong>Right to opt out:</strong> Telemetry is off by default. AI agent usage is opt-in.</li>
+</ul>
+
+<h2>7. Contact</h2>
+<p>For privacy-related questions, open an issue on <a href="https://github.com/Loggableim/lastbrowser/issues">GitHub</a> or contact the maintainer via the <a href="/legal/imprint.html">Imprint</a>.</p>
+
+<hr>
+<p style="text-align:center;font-size:13px;color:#686888">Also read: <a href="/legal/imprint.html">Imprint</a></p>
+
+</div></section>
+<footer><div class="container"><p>&copy; 2026 Pup Cid &mdash; MIT License</p><div class="footer-links"><a href="/">Home</a><a href="/legal/privacy.html">Privacy</a><a href="/legal/imprint.html">Imprint</a><a href="https://github.com/Loggableim/lastbrowser">GitHub</a></div></div></footer>
+</body>
+</html>

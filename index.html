@@ -46,6 +46,9 @@
       <a href="/download.html">Download</a>
       <a href="/blog.html">Blog</a>
       <a href="https://github.com/Loggableim/lastbrowser" target="_blank">GitHub</a>
+      <div class="dropdown">EN<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        <div class="dropdown-menu"><a href="/">English</a><a href="/de/">Deutsch</a><a href="/fr/">Français</a><a href="/es/">Español</a></div>
+      </div>
       <a href="/download.html" class="nav-cta">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download
       </a>
@@ -61,6 +64,12 @@
   <a href="/docs/guide.html">Docs</a>
   <a href="https://github.com/Loggableim/lastbrowser" target="_blank">GitHub</a>
   <a href="/download.html" class="nav-cta">Download</a>
+  <div style="margin-top:20px;display:flex;gap:10px">
+    <a href="/" style="font-size:14px;color:#7C6FF0">EN</a>
+    <a href="/de/" style="font-size:14px;color:#8888A0">DE</a>
+    <a href="/fr/" style="font-size:14px;color:#8888A0">FR</a>
+    <a href="/es/" style="font-size:14px;color:#8888A0">ES</a>
+  </div>
 </div>
 
 <!-- Hero -->
@@ -178,30 +187,30 @@
       <p class="section-subtitle">LastBrowser vs other productivity browsers — open source, AI-native, and free.</p>
     </div>
     <table class="comparison-table">
-      <tr><th>Feature</th><th>LastBrowser</th><th>Wavebox</th><th>Sidekick</th><th>Zen Browser</th></tr>
-      <tr><td>Price</td><td class="check" style="color:#4ADE80">Free (MIT)</td><td class="cross">$9/mo+</td><td class="cross">$12/mo+</td><td class="check" style="color:#4ADE80">Free</td></tr>
-      <tr><td>Open Source</td><td class="check" style="color:#4ADE80">✓ MIT</td><td class="cross">✗ Proprietary</td><td class="cross">✗ Proprietary</td><td class="check" style="color:#4ADE80">✓ MPL</td></tr>
+      <tr><th>Feature</th><th>LastBrowser</th><th>Wavebox</th><th>Arc</th><th>Zen Browser</th></tr>
+      <tr><td>Price</td><td class="check" style="color:#4ADE80">Free (MIT)</td><td class="cross">$9/mo+</td><td class="check" style="color:#4ADE80">Free</td><td class="check" style="color:#4ADE80">Free</td></tr>
+      <tr><td>Open Source</td><td class="check" style="color:#4ADE80">✓ MIT</td><td class="cross">✗ Closed</td><td class="cross">✗ Closed</td><td class="check" style="color:#4ADE80">✓ MPL</td></tr>
+      <tr><td>AI Agents</td><td class="check">✓ Built-in</td><td class="cross">✗</td><td class="partial">◐ Arc Max</td><td class="cross">✗</td></tr>
       <tr><td>Vertical Tabs</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td></tr>
-      <tr><td>AI Agents</td><td class="check">✓ Built-in</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
       <tr><td>Command Palette</td><td class="check">✓ Ctrl+K</td><td class="check">✓</td><td class="check">✓</td><td class="partial">◐ Limited</td></tr>
       <tr><td>Kanban Boards</td><td class="check">✓ Built-in</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
       <tr><td>Split View</td><td class="check">✓</td><td class="check">✓</td><td class="cross">✗</td><td class="check">✓</td></tr>
       <tr><td>Focus Mode</td><td class="check">✓ Pomodoro</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
       <tr><td>Workspace Isolation</td><td class="check">✓ Sessions</td><td class="check">✓</td><td class="check">✓</td><td class="partial">◐ Containers</td></tr>
       <tr><td>App Shortcuts</td><td class="check">✓ Multi-account</td><td class="check">✓</td><td class="check">✓</td><td class="cross">✗</td></tr>
-      <tr><td>Works On</td><td>Windows</td><td>Win/Mac/Linux</td><td>Windows/Mac</td><td>Win/Mac/Linux</td></tr>
+      <tr><td>Works On</td><td><strong>Windows</strong></td><td>Win/Mac/Linux</td><td>Mac (Win beta)</td><td>Win/Mac/Linux</td></tr>
     </table>
 
     <!-- Mobile Compact View -->
     <div class="compact-comparison" id="compactCompare">
-      <div class="compact-header"><span></span><span>LB</span><span>WB</span><span>SK</span><span>ZN</span></div>
-      <div class="compact-row"><span class="feature">Price</span><div class="values"><span class="val val-yes">Free</span><span class="val val-no">$9+</span><span class="val val-no">$12+</span><span class="val val-yes">Free</span></div></div>
+      <div class="compact-header"><span></span><span>LB</span><span>WB</span><span>Arc</span><span>ZN</span></div>
+      <div class="compact-row"><span class="feature">Price</span><div class="values"><span class="val val-yes">Free</span><span class="val val-no">$9+</span><span class="val val-yes">Free</span><span class="val val-yes">Free</span></div></div>
       <div class="compact-row"><span class="feature">Open Source</span><div class="values"><span class="val val-yes">✓</span><span class="val val-no">✗</span><span class="val val-no">✗</span><span class="val val-yes">✓</span></div></div>
-      <div class="compact-row"><span class="feature">AI Agents</span><div class="values"><span class="val val-yes">✓</span><span class="val val-no">✗</span><span class="val val-no">✗</span><span class="val val-no">✗</span></div></div>
-      <div class="compact-row"><span class="feature">Kanban Boards</span><div class="values"><span class="val val-yes">✓</span><span class="val val-no">✗</span><span class="val val-no">✗</span><span class="val val-no">✗</span></div></div>
+      <div class="compact-row"><span class="feature">AI Agents</span><div class="values"><span class="val val-yes">✓</span><span class="val val-no">✗</span><span class="val val-partial">◐</span><span class="val val-no">✗</span></div></div>
+      <div class="compact-row"><span class="feature">Kanban</span><div class="values"><span class="val val-yes">✓</span><span class="val val-no">✗</span><span class="val val-no">✗</span><span class="val val-no">✗</span></div></div>
       <div class="compact-row"><span class="feature">Focus Mode</span><div class="values"><span class="val val-yes">✓</span><span class="val val-no">✗</span><span class="val val-no">✗</span><span class="val val-no">✗</span></div></div>
       <div class="compact-row"><span class="feature">Split View</span><div class="values"><span class="val val-yes">✓</span><span class="val val-yes">✓</span><span class="val val-no">✗</span><span class="val val-yes">✓</span></div></div>
-      <div class="compact-row"><span class="feature">Cost</span><div class="values"><span class="val-val val-yes">MIT</span><span class="val val-no">$9+</span><span class="val val-no">$12+</span><span class="val val-yes">Free</span></div></div>
+      <div class="compact-row"><span class="feature">Works On</span><div class="values"><span class="val-val val-yes">Win</span><span class="val val-yes">All</span><span class="val val-partial">Mac</span><span class="val val-yes">All</span></div></div>
     </div>
   </div>
 </section>

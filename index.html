@@ -7,7 +7,9 @@
 <meta name="description" content="LastBrowser is an open-source, Electron-based productivity workspace browser. Vertical tabs, AI agents, command palette, split view, kanban, and more. Inspired by Wavebox, Sidekick &amp; Zen.">
 <meta name="keywords" content="browser, electron, workspace, productivity, vertical tabs, ai agents, open source, windows">
 <meta name="author" content="Pup Cid">
+<link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#7C6FF0">
 <link rel="canonical" href="https://lastbrowser.pawsunited.info/">
 <!-- Open Graph -->
 <meta property="og:title" content="LastBrowser — Productivity Workspace Browser">
@@ -42,6 +44,7 @@
       <a href="#features">Features</a>
       <a href="#screenshots">Screenshots</a>
       <a href="/download.html">Download</a>
+      <a href="/blog.html">Blog</a>
       <a href="https://github.com/Loggableim/lastbrowser" target="_blank">GitHub</a>
       <a href="/download.html" class="nav-cta">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download
@@ -54,6 +57,7 @@
   <a href="#features">Features</a>
   <a href="#screenshots">Screenshots</a>
   <a href="/download.html">Download</a>
+  <a href="/blog.html">Blog</a>
   <a href="/docs/guide.html">Docs</a>
   <a href="https://github.com/Loggableim/lastbrowser" target="_blank">GitHub</a>
   <a href="/download.html" class="nav-cta">Download</a>
@@ -76,6 +80,8 @@
         <div class="hero-stat"><div class="hero-stat-value">MIT</div><div class="hero-stat-label">Open source</div></div>
         <div class="hero-stat"><div class="hero-stat-value">Electron</div><div class="hero-stat-label">Cross-platform</div></div>
         <div class="hero-stat"><div class="hero-stat-value" id="heroStars">—</div><div class="hero-stat-label">GitHub Stars</div></div>
+        <div class="hero-stat"><div class="hero-stat-value" id="heroForks">—</div><div class="hero-stat-label">Forks</div></div>
+        <div class="hero-stat"><div class="hero-stat-value" id="heroUpdated">—</div><div class="hero-stat-label">Last Updated</div></div>
       </div>
     </div>
     <div class="hero-visual fade-in fade-in-2">
@@ -246,6 +252,7 @@
       <a href="https://github.com/Loggableim/lastbrowser">GitHub</a>
       <a href="/docs/guide.html">Docs</a>
       <a href="/download.html">Download</a>
+      <a href="/blog.html">Blog</a>
       <a href="/changelog.html">Changelog</a>
       <a href="/docs/faq.html">FAQ</a>
     </div>
@@ -255,12 +262,23 @@
 <!-- GitHub Stars live fetch -->
 <script>
 (async function(){
+  let starsEl = document.getElementById('heroStars');
+  let forksEl = document.getElementById('heroForks');
+  let updatedEl = document.getElementById('heroUpdated');
   try {
     let r = await fetch('https://api.github.com/repos/Loggableim/lastbrowser');
     let d = await r.json();
-    let stars = d.stargazers_count;
-    if (stars !== undefined) document.getElementById('heroStars').textContent = stars;
-  } catch(e){ /* ignore */ }
+    if (starsEl && d.stargazers_count !== undefined) starsEl.textContent = d.stargazers_count;
+    if (forksEl && d.forks_count !== undefined) forksEl.textContent = d.forks_count;
+    if (updatedEl && d.updated_at) {
+      let days = Math.floor((Date.now() - new Date(d.updated_at)) / 86400000);
+      updatedEl.textContent = days === 0 ? 'Today' : days + 'd ago';
+    }
+  } catch(e) { /* ignore */ }
+  // Register Service Worker
+  if ('serviceWorker' in navigator) {
+    try { navigator.serviceWorker.register('/sw.js'); } catch(e) {}
+  }
 })();
 </script>
 <button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Scroll to top">

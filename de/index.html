@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LastBrowser — Produktivitäts-Workspace-Browser</title>
+<meta name="description" content="LastBrowser ist ein Open-Source-Electron-Produktivitätsbrowser. Vertikale Tabs, KI-Agenten, Command Palette, Split View, Kanban und mehr.">
+<meta property="og:title" content="LastBrowser — Produktivitäts-Workspace-Browser">
+<meta property="og:description" content="Der letzte Browser, den du je brauchen wirst. Open-Source-Electron-Workspace-Browser mit KI-Agenten, vertikalen Tabs, Kanban und Split View.">
+<meta property="og:url" content="https://lastbrowser.pawsunited.info/de/">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://lastbrowser.pawsunited.info/og-image.svg">
+<link rel="canonical" href="https://lastbrowser.pawsunited.info/de/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.pawsunited.info/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.pawsunited.info/de/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#080810;color:#D4D4E0;line-height:1.6;-webkit-font-smoothing:antialiased}.bg-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(124,111,240,0.03)1px,transparent 1px),linear-gradient(90deg,rgba(124,111,240,0.03)1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}.bg-glow{position:fixed;top:-30%;right:-20%;width:800px;height:800px;background:radial-gradient(circle,rgba(124,111,240,0.08)0%,transparent 70%);pointer-events:none;z-index:0}.bg-glow-2{position:fixed;bottom:-20%;left:-15%;width:600px;height:600px;background:radial-gradient(circle,rgba(96,165,250,0.06)0%,transparent 70%);pointer-events:none;z-index:0}.container{max-width:1120px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(8,8,16,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid rgba(124,111,240,0.08)}nav .container{display:flex;align-items:center;justify-content:space-between;height:60px}.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:#EAEAEF;font-weight:700;font-size:16px;flex-shrink:0}.nav-logo svg{width:28px;height:28px;flex-shrink:0}.nav-links{display:flex;align-items:center;gap:24px}.nav-links a{text-decoration:none;color:#8888A0;font-size:13px;font-weight:500;transition:color 0.2s;white-space:nowrap}.nav-links a:hover{color:#C4C4D8}.nav-links .lang-switch{background:rgba(124,111,240,0.1);color:#A78BFA!important;padding:4px 10px;border-radius:6px;font-size:12px}.nav-cta{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#7C6FF0,#5B4FCC);color:#fff!important;padding:8px 16px;border-radius:8px;font-weight:600;font-size:13px!important;transition:transform 0.15s,box-shadow 0.15s}.nav-cta:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(124,111,240,0.3)}
+.hero{min-height:100vh;display:flex;align-items:center;padding:120px 0 80px;position:relative}.hero-content{max-width:680px}.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(124,111,240,0.1);border:1px solid rgba(124,111,240,0.2);padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;color:#A78BFA;margin-bottom:20px}.hero h1{font-size:clamp(36px,6vw,64px);font-weight:800;line-height:1.08;letter-spacing:-2px;color:#EAEAEF;margin-bottom:16px}.hero h1 .accent{background:linear-gradient(135deg,#7C6FF0,#60A5FA);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}.hero p{font-size:17px;color:#8888A0;line-height:1.7;max-width:560px;margin-bottom:32px}.hero-actions{display:flex;gap:14px;flex-wrap:wrap}.btn-primary{display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#7C6FF0,#5B4FCC);color:#fff;text-decoration:none;padding:13px 26px;border-radius:10px;font-weight:600;font-size:15px;transition:transform 0.15s,box-shadow 0.15s}.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(124,111,240,0.35)}.btn-secondary{display:inline-flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#C4C4D8;text-decoration:none;padding:13px 26px;border-radius:10px;font-weight:600;font-size:15px;transition:all 0.15s}.btn-secondary:hover{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15)}.hero-stats{display:flex;gap:40px;margin-top:40px;padding-top:28px;border-top:1px solid rgba(255,255,255,0.05)}.hero-stat{text-align:left}.hero-stat-value{font-size:22px;font-weight:700;color:#EAEAEF}.hero-stat-label{font-size:13px;color:#686888;margin-top:2px}
+.section{padding:90px 0}.section-header{text-align:center;margin-bottom:56px}.section-label{display:inline-block;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#7C6FF0;margin-bottom:12px}.section h2{font-size:clamp(26px,3.5vw,38px);font-weight:700;color:#EAEAEF;letter-spacing:-1px;margin-bottom:14px}.section-subtitle{font-size:16px;color:#686888;max-width:540px;margin:0 auto}.section-alt{background:linear-gradient(180deg,transparent,rgba(124,111,240,0.02)50%,transparent)}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.feature-card{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:26px;transition:border-color 0.2s,background 0.2s}.feature-card:hover{border-color:rgba(124,111,240,0.2);background:rgba(124,111,240,0.03)}.feature-icon{width:40px;height:40px;background:rgba(124,111,240,0.1);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:14px}.feature-card h3{font-size:16px;font-weight:600;color:#EAEAEF;margin-bottom:6px}.feature-card p{font-size:13.5px;color:#686888;line-height:1.7}
+.tech-grid{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:32px}.tech-item{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);padding:10px 18px;border-radius:10px;font-size:13px;color:#8888A0}.tech-item strong{color:#C4C4D8}
+.cta-section{text-align:center;padding:100px 0}.cta-section h2{font-size:clamp(24px,3vw,34px);font-weight:700;color:#EAEAEF;letter-spacing:-1px;margin-bottom:12px}.cta-section p{font-size:15px;color:#686888;max-width:520px;margin:0 auto 28px}.cta-links{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+footer{border-top:1px solid rgba(255,255,255,0.04);padding:36px 0}footer .container{display:flex;align-items:center;justify-content:space-between}footer p{font-size:13px;color:#686888}footer a{color:#8888A0;text-decoration:none;font-size:13px}footer a:hover{color:#C4C4D8}footer .footer-links{display:flex;gap:24px}
+@media(max-width:1024px){.hero-visual{display:none}.features-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:768px){.features-grid{grid-template-columns:1fr}.hero-stats{flex-direction:column;gap:16px}footer .container{flex-direction:column;gap:16px;text-align:center}.section{padding:60px 0}.nav-links a:not(.nav-cta):not(.lang-switch){display:none}}
+.fade-in{opacity:0;transform:translateY(20px);animation:fadeIn 0.6s ease forwards}.fade-in-1{animation-delay:0.1s}.fade-in-2{animation-delay:0.2s}.fade-in-3{animation-delay:0.3s}.fade-in-4{animation-delay:0.4s}@keyframes fadeIn{to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div><div class="bg-glow"></div><div class="bg-glow-2"></div>
+
+<nav><div class="container">
+  <a href="/de/" class="nav-logo">
+    <svg viewBox="0 0 64 64" fill="none"><defs><linearGradient id="nlg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7C6FF0"/><stop offset="100%" stop-color="#5B4FCC"/></linearGradient></defs><rect x="12" y="12" width="40" height="40" rx="10" fill="url(#nlg)" opacity="0.15"/><rect x="18" y="14" width="12" height="36" rx="4" fill="url(#nlg)"/><rect x="18" y="38" width="36" height="12" rx="4" fill="#60A5FA"/><rect x="30" y="14" width="18" height="4" rx="2" fill="#A78BFA" opacity="0.5"/></svg>LastBrowser
+  </a>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="https://github.com/Loggableim/lastbrowser" target="_blank">GitHub</a>
+    <a href="/" class="lang-switch">EN</a>
+    <a href="/download.html" class="nav-cta">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download
+    </a>
+  </div>
+</div></nav>
+
+<section class="hero"><div class="container">
+  <div class="hero-content">
+    <div class="hero-badge fade-in">✦ Open Source &mdash; MIT &mdash; Electron v35</div>
+    <h1 class="fade-in fade-in-1">Der <span class="accent">letzte Browser</span>,<br>den du je brauchen wirst.</h1>
+    <p class="fade-in fade-in-2">Ein Produktivitäts-Workspace-Browser, der deinen KI-Agenten, deine Tabs, deine Aufgaben und deine Werkzeuge in einer dunklen, modernen Oberfläche vereint. Inspiriert von Wavebox, Sidekick &amp; Zen.</p>
+    <div class="hero-actions fade-in fade-in-3">
+      <a href="/download.html" class="btn-primary"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Für Windows herunterladen</a>
+      <a href="https://github.com/Loggableim/lastbrowser" target="_blank" class="btn-secondary">Quellcode ansehen</a>
+      <a href="/docs/guide.html" class="btn-secondary">Zum Guide</a>
+    </div>
+    <div class="hero-stats fade-in fade-in-4">
+      <div class="hero-stat"><div class="hero-stat-value">v0.2.0</div><div class="hero-stat-label">Aktuelle Version</div></div>
+      <div class="hero-stat"><div class="hero-stat-value">MIT</div><div class="hero-stat-label">Open Source</div></div>
+      <div class="hero-stat"><div class="hero-stat-value">Electron</div><div class="hero-stat-label">Plattformübergreifend</div></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="section" id="features"><div class="container">
+  <div class="section-header">
+    <div class="section-label">Features</div>
+    <h2>Alles, was du brauchst.</h2>
+    <p class="section-subtitle">Inspiriert von Wavebox, Sidekick und Zen Browser &mdash; Open Source, erweiterbar, KI-nativ.</p>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card"><div class="feature-icon">📑</div><h3>Vertikale Tabs</h3><p>Tree-Style-Tabs mit Drag-and-Drop, Suche, Anheften, Tab-Suspend und Schließen-Verlauf (die letzten 50 Tabs wiederherstellbar).</p></div>
+    <div class="feature-card"><div class="feature-icon">🤖</div><h3>KI-Agenten</h3><p>Multi-Agenten-System mit beliebigen Modellen/Providern. Agenten navigieren Tabs, klicken, tippen, scrollen, machen Screenshots und extrahieren Inhalte.</p></div>
+    <div class="feature-card"><div class="feature-icon">⌨️</div><h3>Befehlspalette</h3><p>Strg+K für Fuzzy-Suche über Workspaces, Tabs, Befehle, Einstellungen und Aufgaben. Ganz ohne Maus.</p></div>
+    <div class="feature-card"><div class="feature-icon">🪟</div><h3>Split View</h3><p>Zwei Fenster nebeneinander. Dokumente vergleichen, Dashboards überwachen oder den KI-Assistenten sichtbar halten.</p></div>
+    <div class="feature-card"><div class="feature-icon">📋</div><h3>Kanban-Boards</h3><p>Vollständiges Kanban-System mit Boards, Spalten, Karten, WIP-Limits und farbcodierten Status.</p></div>
+    <div class="feature-card"><div class="feature-icon">🎯</div><h3>Fokus-Modus</h3><p>Pomodoro-Timer (25/50/90 Min.) mit Ablenkungsblockade, Benachrichtigungsstummschaltung und Timer-Overlay.</p></div>
+    <div class="feature-card"><div class="feature-icon">📦</div><h3>Workspaces</h3><p>Isolierte Sitzungspartitionen &mdash; jeder Workspace hat eigene Tabs, Apps, Cookies und Boards. Sofort umschaltbar.</p></div>
+    <div class="feature-card"><div class="feature-icon">🧩</div><h3>App-Verknüpfungen</h3><p>Web-Apps anheften mit isolierten Konten pro App. Perfekt für Slack, Gmail, Notion, GitHub.</p></div>
+    <div class="feature-card"><div class="feature-icon">🔄</div><h3>Auto-Update</h3><p>Automatische Updates über GitHub Releases. Immer die neueste Version.</p></div>
+  </div>
+</div></section>
+
+<section class="section section-alt"><div class="container">
+  <div class="section-header">
+    <div class="section-label">Tech-Stack</div>
+    <h2>Moderne Basis.</h2>
+    <p class="section-subtitle">Gebaut auf bewährten Technologien für Performance, Sicherheit und Entwicklererfahrung.</p>
+  </div>
+  <div class="tech-grid">
+    <div class="tech-item"><strong>Electron</strong> v35</div>
+    <div class="tech-item"><strong>Node.js</strong> Laufzeit</div>
+    <div class="tech-item"><strong>Python</strong> Backend</div>
+    <div class="tech-item"><strong>NSIS</strong> Installer</div>
+    <div class="tech-item"><strong>electron-builder</strong> v25</div>
+    <div class="tech-item"><strong>electron-updater</strong></div>
+    <div class="tech-item"><strong>SQLite</strong> (sql.js)</div>
+    <div class="tech-item"><strong>GitHub</strong> Actions CI</div>
+  </div>
+</div></section>
+
+<section class="cta-section"><div class="container">
+  <div class="section-label">Loslegen</div>
+  <h2>Bereit für den letzten Browser?</h2>
+  <p>Open Source, MIT-lizenziert, für Produktivität gebaut. Lade die neueste Version herunter oder baue sie selbst.</p>
+  <div class="cta-links">
+    <a href="/download.html" class="btn-primary"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Jetzt herunterladen</a>
+    <a href="https://github.com/Loggableim/lastbrowser" target="_blank" class="btn-secondary">Quellcode</a>
+    <a href="/docs/guide.html" class="btn-secondary">Zum Handbuch</a>
+  </div>
+</div></section>
+
+<footer><div class="container">
+  <p>&copy; 2026 <a href="https://github.com/Loggableim">Pup Cid</a> &mdash; MIT-Lizenz</p>
+  <div class="footer-links">
+    <a href="/">English</a>
+    <a href="https://github.com/Loggableim/lastbrowser">GitHub</a>
+    <a href="/download.html">Download</a>
+    <a href="/docs/faq.html">FAQ</a>
+  </div>
+</div></footer>
+</body>
+</html>

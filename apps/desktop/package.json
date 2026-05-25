@@ -1,0 +1,101 @@
+{
+  "name": "@lastbrowser/desktop",
+  "version": "0.1.3",
+  "private": true,
+  "type": "module",
+  "description": "Lastbrowser Electron desktop shell.",
+  "author": "Lastbrowser",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev": "npm run build:main && vite --host 127.0.0.1",
+    "start": "electron dist/main/main.js",
+    "start:dev": "node electron-dev.mjs",
+    "prepare:python": "node scripts/prepare-python-runtime.mjs",
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "package:win": "npm run prepare:python && npm run build && electron-builder --win nsis portable",
+    "package:win:publish": "npm run prepare:python && npm run build && electron-builder --win nsis portable --publish always"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron-is-dev": "^3.0.1",
+    "electron-updater": "^6.8.3",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vite": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "electron": "37.10.3",
+    "electron-builder": "^26.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "build": {
+    "appId": "com.lastbrowser.desktop",
+    "productName": "Lastbrowser",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../../services",
+        "to": "services",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/.pytest_cache/**"
+        ]
+      },
+      {
+        "from": "../../brand",
+        "to": "brand"
+      },
+      {
+        "from": "runtime/python",
+        "to": "runtime/python"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "artifactName": "Lastbrowser-${version}-${arch}-setup.${ext}",
+      "include": "build/installer.nsh",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Lastbrowser"
+    },
+    "portable": {
+      "artifactName": "Lastbrowser-${version}-${arch}-portable.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Loggableim",
+        "repo": "lastbrowser",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+export const brandAssets = {
+  logo: './lastbrowser-logo.png',
+  appIcon256: './app-icon-256.png',
+  favicon32: './favicon-32.png',
+  sidekickAvatar: './sidekick-avatar.png',
+  sidebarIcons: {
+    chat: './sidebar-icons/01-chat-modern-popart.png',
+    tasks: './sidebar-icons/02-tasks-modern-popart.png',
+    kanban: './sidebar-icons/03-kanban-modern-popart.png',
+    skills: './sidebar-icons/04-skills-modern-popart.png',
+    agents: './sidebar-icons/05-agents-modern-popart.png',
+    memory: './sidebar-icons/06-memory-modern-popart.png',
+    workspaces: './sidebar-icons/07-spaces-modern-popart.png',
+    profiles: './sidebar-icons/08-agent-profiles-modern-popart.png',
+    todos: './sidebar-icons/09-todos-modern-popart.png',
+    insights: './sidebar-icons/10-insights-modern-popart.png',
+    logs: './sidebar-icons/11-logs-modern-popart.png',
+    gmail: './sidebar-icons/12-mail-modern-popart.png',
+    browser: './sidebar-icons/13-browser-modern-popart.png',
+    discord: './sidebar-icons/14-discord-modern-popart.png',
+    appstore: './sidebar-icons/15-appstore-modern-popart.png',
+    settings: './sidebar-icons/16-settings-modern-popart.png',
+    search: './sidebar-icons/17-search-modern-popart.png',
+    plus: './sidebar-icons/18-plus-modern-popart.png',
+    filter: './sidebar-icons/19-filter-modern-popart.png',
+    folder: './sidebar-icons/25-folder-modern-popart.png',
+    spark: './sidebar-icons/23-spark-modern-popart.png',
+    sidekick: './sidebar-icons/30-sidekick-modern-popart.png'
+  }
+} as const;

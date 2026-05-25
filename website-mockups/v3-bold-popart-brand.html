@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lastbrowser – Bold Pop-Art | Variante 3</title>
+<style>
+  :root {
+    --nearBlack: #070A12;
+    --midnight: #07111F;
+    --surface: #101827;
+    --panel: #0E1628;
+    --stroke: #2A3550;
+    --text: #F7FAFF;
+    --muted: #AAB4C6;
+    --electricBlue: #2563FF;
+    --cyan: #00E5FF;
+    --magenta: #FF2D8F;
+    --purple: #8A3FFC;
+    --orange: #FF8A00;
+    --yellow: #FFC800;
+    --green: #7CFF6B;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--nearBlack);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  /* ── POP-ART DECORATIVE ELEMENTS ── */
+  .squiggle {
+    position: fixed; pointer-events: none; z-index: 0;
+    font-size: 120px; opacity: 0.06; font-weight: 900;
+    line-height: 1; user-select: none;
+  }
+  .squiggle.tl { top: 40px; left: -20px; color: var(--magenta); transform: rotate(-15deg); }
+  .squiggle.tr { top: 80px; right: 60px; color: var(--cyan); font-size: 80px; }
+  .squiggle.bl { bottom: 200px; left: 80px; color: var(--yellow); }
+  .squiggle.br { bottom: 60px; right: -40px; color: var(--purple); transform: rotate(10deg); }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 32px; position: relative; z-index: 1; }
+
+  /* ── NAV ── */
+  nav {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 32px; max-width: 1200px; margin: 0 auto;
+    position: relative; z-index: 10;
+  }
+  nav .logo {
+    display: flex; align-items: center;
+    gap: 0; text-decoration: none;
+  }
+  nav .logo .lb-glyph {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 42px; height: 42px;
+    background: linear-gradient(135deg, var(--electricBlue), var(--magenta));
+    border-radius: 12px; font-size: 20px; font-weight: 900; color: #fff;
+    margin-right: 10px; position: relative;
+  }
+  nav .logo .lb-glyph::after {
+    content: '✦'; position: absolute; top: -8px; right: -8px;
+    font-size: 12px; color: var(--yellow);
+  }
+  nav .logo-text {
+    font-size: 22px; font-weight: 800; letter-spacing: -0.5px;
+    background: linear-gradient(90deg, var(--electricBlue), var(--cyan), var(--magenta));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  nav .links { display: flex; gap: 24px; align-items: center; }
+  nav .links a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; transition: color .2s; position: relative; }
+  nav .links a:hover { color: var(--text); }
+  nav .links a::after {
+    content: ''; position: absolute; bottom: -3px; left: 0; width: 0; height: 2px;
+    background: var(--magenta); transition: width .2s; border-radius: 2px;
+  }
+  nav .links a:hover::after { width: 100%; }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--magenta), var(--purple));
+    color: #fff; border: none; padding: 12px 28px; border-radius: 14px;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    text-decoration: none; display: inline-block;
+    transition: transform .2s, box-shadow .2s;
+    position: relative;
+  }
+  .btn-primary:hover { transform: scale(1.04); box-shadow: 0 8px 40px rgba(255,45,143,0.3); }
+  .btn-ghost {
+    background: transparent; color: var(--text);
+    border: 2px solid var(--stroke); padding: 12px 28px; border-radius: 14px;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    text-decoration: none; display: inline-block;
+    transition: border .2s;
+  }
+  .btn-ghost:hover { border-color: var(--magenta); }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 60px 0 40px;
+    position: relative;
+  }
+  .hero .hero-inner {
+    display: flex; align-items: center; gap: 60px;
+  }
+  .hero-text { flex: 1; }
+  .hero .badge-row {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px;
+  }
+  .hero .badge {
+    display: inline-block;
+    padding: 6px 14px; border-radius: 100px; font-size: 12px; font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .hero .badge.blue { background: rgba(37,99,255,0.12); color: var(--electricBlue); border: 1px solid rgba(37,99,255,0.2); }
+  .hero .badge.pink { background: rgba(255,45,143,0.12); color: var(--magenta); border: 1px solid rgba(255,45,143,0.2); }
+  .hero .badge.cyan { background: rgba(0,229,255,0.08); color: var(--cyan); border: 1px solid rgba(0,229,255,0.2); }
+  .hero .badge.yellow { background: rgba(255,200,0,0.1); color: var(--yellow); border: 1px solid rgba(255,200,0,0.2); }
+  .hero h1 {
+    font-size: 60px; font-weight: 900; line-height: 1.05;
+    letter-spacing: -2px; margin-bottom: 24px;
+  }
+  .hero h1 .grad {
+    background: linear-gradient(135deg, var(--electricBlue), var(--cyan));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .hero h1 .grad-pink {
+    background: linear-gradient(135deg, var(--magenta), var(--purple));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .hero h1 .grad-yellow {
+    background: linear-gradient(135deg, var(--yellow), var(--orange));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .hero p {
+    font-size: 18px; color: var(--muted); margin-bottom: 36px;
+    max-width: 480px; line-height: 1.7;
+  }
+  .hero .actions { display: flex; gap: 12px; }
+  .hero .btn-ghost { border-color: var(--stroke); }
+
+  /* Hero Mascot */
+  .hero-mascot {
+    flex: 1; display: flex; justify-content: center; align-items: center;
+    position: relative;
+  }
+  .hero-mascot .mascot-glow {
+    position: absolute; width: 300px; height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(138,63,252,0.15), rgba(37,99,255,0.08), transparent);
+    animation: pulse-glow 4s ease-in-out infinite;
+  }
+  @keyframes pulse-glow {
+    0%, 100% { transform: scale(1); opacity: 0.6; }
+    50% { transform: scale(1.2); opacity: 1; }
+  }
+  .hero-mascot .mascot-box {
+    position: relative;
+    width: 260px; height: 260px;
+    background: linear-gradient(145deg, var(--surface), var(--panel));
+    border: 2px solid var(--stroke); border-radius: 40px;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    transform: rotate(-3deg);
+    transition: transform .3s;
+  }
+  .hero-mascot .mascot-box:hover { transform: rotate(0deg) scale(1.02); }
+  .hero-mascot .mascot-face {
+    width: 100px; height: 100px; background: #fff;
+    border-radius: 50%; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 40px rgba(0,229,255,0.15);
+  }
+  .hero-mascot .mascot-face .inner-face {
+    width: 80px; height: 80px; background: #111;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center; gap: 12px;
+  }
+  .hero-mascot .mascot-face .eye {
+    width: 18px; height: 16px; background: var(--cyan);
+    border-radius: 4px;
+  }
+  .hero-mascot .mascot-face .mouth {
+    width: 20px; height: 6px; background: var(--cyan);
+    border-radius: 0 0 10px 10px; margin-top: 6px;
+  }
+  .hero-mascot .mascot-arms {
+    display: flex; gap: 80px; margin-top: -10px;
+  }
+  .hero-mascot .mascot-arms span {
+    width: 30px; height: 16px; background: #fff;
+    border-radius: 20px; opacity: 0.8;
+  }
+  .hero-mascot .sparkles {
+    position: absolute; font-size: 20px;
+  }
+  .hero-mascot .sparkles.s1 { top: -10px; right: -10px; color: var(--yellow); }
+  .hero-mascot .sparkles.s2 { bottom: 10px; left: -15px; color: var(--magenta); }
+
+  /* ── MARQUEE BANNER ── */
+  .marquee {
+    padding: 20px 0; border-top: 2px solid var(--stroke);
+    border-bottom: 2px solid var(--stroke);
+    overflow: hidden; margin-top: 60px;
+  }
+  .marquee-track {
+    display: flex; gap: 48px; animation: scroll 20s linear infinite;
+    width: max-content;
+  }
+  .marquee-track span {
+    white-space: nowrap; font-size: 14px; font-weight: 600;
+    color: var(--muted); letter-spacing: 1px; text-transform: uppercase;
+  }
+  .marquee-track span:nth-child(3n) { color: var(--magenta); }
+  .marquee-track span:nth-child(5n) { color: var(--cyan); }
+  .marquee-track span:nth-child(7n) { color: var(--yellow); }
+  @keyframes scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* ── FEATURES GRID (POP-ART STYLE) ── */
+  .features { padding: 80px 0; }
+  .features h2 {
+    font-size: 44px; font-weight: 900; text-align: center;
+    letter-spacing: -1px; margin-bottom: 50px;
+    position: relative;
+  }
+  .features h2::after {
+    content: '✦'; position: absolute; right: -30px; top: -10px;
+    font-size: 24px; color: var(--magenta);
+  }
+  .feature-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+  }
+  .feature-card {
+    border: 2px solid var(--stroke); border-radius: 24px;
+    padding: 28px; transition: all .25s;
+    position: relative; overflow: hidden;
+  }
+  .feature-card::before {
+    content: ''; position: absolute; inset: 0; opacity: 0;
+    transition: opacity .25s; border-radius: 24px;
+  }
+  .feature-card:nth-child(1) { border-color: rgba(37,99,255,0.3); }
+  .feature-card:nth-child(1):hover { border-color: var(--electricBlue); }
+  .feature-card:nth-child(2) { border-color: rgba(0,229,255,0.3); }
+  .feature-card:nth-child(2):hover { border-color: var(--cyan); }
+  .feature-card:nth-child(3) { border-color: rgba(255,45,143,0.3); }
+  .feature-card:nth-child(3):hover { border-color: var(--magenta); }
+  .feature-card:nth-child(4) { border-color: rgba(138,63,252,0.3); }
+  .feature-card:nth-child(4):hover { border-color: var(--purple); }
+  .feature-card:nth-child(5) { border-color: rgba(255,138,0,0.3); }
+  .feature-card:nth-child(5):hover { border-color: var(--orange); }
+  .feature-card:nth-child(6) { border-color: rgba(255,200,0,0.3); }
+  .feature-card:nth-child(6):hover { border-color: var(--yellow); }
+  .feature-card:hover { transform: translateY(-6px) scale(1.01); }
+  .feature-card .num {
+    font-size: 48px; font-weight: 900; line-height: 1;
+    margin-bottom: 16px; opacity: 0.15;
+  }
+  .feature-card:nth-child(1) .num { color: var(--electricBlue); }
+  .feature-card:nth-child(2) .num { color: var(--cyan); }
+  .feature-card:nth-child(3) .num { color: var(--magenta); }
+  .feature-card:nth-child(4) .num { color: var(--purple); }
+  .feature-card:nth-child(5) .num { color: var(--orange); }
+  .feature-card:nth-child(6) .num { color: var(--yellow); }
+  .feature-card h3 { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+  .feature-card p { color: var(--muted); font-size: 14px; line-height: 1.7; }
+  .feature-card .emoji-badge {
+    display: inline-block; margin-top: 14px;
+    padding: 4px 12px; border-radius: 100px;
+    font-size: 12px; font-weight: 600;
+  }
+  .feature-card:nth-child(1) .emoji-badge { background: rgba(37,99,255,0.1); color: var(--electricBlue); }
+  .feature-card:nth-child(2) .emoji-badge { background: rgba(0,229,255,0.08); color: var(--cyan); }
+  .feature-card:nth-child(3) .emoji-badge { background: rgba(255,45,143,0.1); color: var(--magenta); }
+  .feature-card:nth-child(4) .emoji-badge { background: rgba(138,63,252,0.1); color: var(--purple); }
+  .feature-card:nth-child(5) .emoji-badge { background: rgba(255,138,0,0.1); color: var(--orange); }
+  .feature-card:nth-child(6) .emoji-badge { background: rgba(255,200,0,0.1); color: var(--yellow); }
+
+  /* ── DOWNLOAD STRIP ── */
+  .download-strip {
+    padding: 60px 0;
+    background: linear-gradient(90deg, rgba(37,99,255,0.06), rgba(255,45,143,0.06), rgba(138,63,252,0.06));
+    border-top: 2px solid var(--stroke); border-bottom: 2px solid var(--stroke);
+    text-align: center;
+  }
+  .download-strip h2 { font-size: 36px; font-weight: 800; margin-bottom: 12px; }
+  .download-strip p { color: var(--muted); margin-bottom: 28px; }
+  .download-strip .os-badges { display: flex; justify-content: center; gap: 12px; margin-top: 24px; }
+  .download-strip .os-badge {
+    padding: 6px 16px; background: var(--surface); border: 1px solid var(--stroke);
+    border-radius: 100px; font-size: 13px; color: var(--muted); font-weight: 500;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    padding: 40px 0;
+    display: flex; justify-content: space-between; align-items: center;
+    color: var(--muted); font-size: 14px;
+    position: relative; z-index: 1;
+  }
+  footer .links { display: flex; gap: 24px; }
+  footer a { color: var(--muted); text-decoration: none; transition: color .2s; }
+  footer a:hover { color: var(--magenta); }
+
+  @media (max-width: 900px) {
+    .hero .hero-inner { flex-direction: column; }
+    .hero h1 { font-size: 36px; }
+    .hero-mascot .mascot-box { width: 200px; height: 200px; }
+    .feature-grid { grid-template-columns: 1fr; }
+    .squiggle { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="squiggle tl">✦</div>
+<div class="squiggle tr">⬡</div>
+<div class="squiggle bl">⬠</div>
+<div class="squiggle br">✦</div>
+
+<nav>
+  <a href="#" class="logo">
+    <span class="lb-glyph">LB</span>
+    <span class="logo-text">lastbrowser</span>
+  </a>
+  <div class="links">
+    <a href="#">Features</a>
+    <a href="#">Download</a>
+    <a href="#">Docs</a>
+    <a href="#">Community</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="container">
+    <div class="hero-inner">
+      <div class="hero-text">
+        <div class="badge-row">
+          <span class="badge blue">🤖 AI-Native</span>
+          <span class="badge pink">✨ Modern Pop-Art</span>
+          <span class="badge cyan">🪟 Windows-First</span>
+          <span class="badge yellow">🧠 Sidekick</span>
+        </div>
+        <h1>
+          <span class="grad">Meet the</span><br>
+          <span class="grad-pink">friendliest</span><br>
+          <span class="grad-yellow">browser ever</span>
+        </h1>
+        <p>Lastbrowser is a browser with a personality. Sidekick isn't just an AI — it's your companion in every tab, with skills, memory, and style.</p>
+        <div class="actions">
+          <a href="#" class="btn-primary">Download for Windows</a>
+          <a href="#" class="btn-ghost">✦ Explore the vibe</a>
+        </div>
+      </div>
+      <div class="hero-mascot">
+        <div class="mascot-glow"></div>
+        <div class="mascot-box">
+          <div class="sparkles s1">✦</div>
+          <div class="sparkles s2">✦</div>
+          <div class="mascot-face">
+            <div class="inner-face">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+                <div style="display:flex;gap:14px">
+                  <div class="eye"></div>
+                  <div class="eye"></div>
+                </div>
+                <div class="mouth"></div>
+              </div>
+            </div>
+          </div>
+          <div class="mascot-arms">
+            <span></span><span></span>
+          </div>
+          <div style="margin-top:8px;font-size:13px;font-weight:600;color:var(--cyan)">
+            Sidekick
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="marquee">
+  <div class="marquee-track">
+    <span>✦ AI-Native Browser</span>
+    <span>✦ Friendly Futuristic</span>
+    <span>✦ Modern Pop-Art</span>
+    <span>✦ Sidekick Companion</span>
+    <span>✦ Built for Windows</span>
+    <span>✦ 60+ Skills</span>
+    <span>✦ Privacy First</span>
+    <span>✦ AI-Native Browser</span>
+    <span>✦ Friendly Futuristic</span>
+    <span>✦ Modern Pop-Art</span>
+    <span>✦ Sidekick Companion</span>
+    <span>✦ Built for Windows</span>
+    <span>✦ 60+ Skills</span>
+    <span>✦ Privacy First</span>
+  </div>
+</div>
+
+<section class="features">
+  <div class="container">
+    <h2>What makes us different</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="num">01</div>
+        <h3>🤖 Sidekick AI</h3>
+        <p>A companion that thinks with you. Chat, automate, research, and create — all from the sidebar, across every tab.</p>
+        <span class="emoji-badge">100% local-ready</span>
+      </div>
+      <div class="feature-card">
+        <div class="num">02</div>
+        <h3>🎨 Pop-Art Design</h3>
+        <p>Bold colors, playful shapes, and a personality that shines through every pixel. Browsing should feel good.</p>
+        <span class="emoji-badge">Vibrant & friendly</span>
+      </div>
+      <div class="feature-card">
+        <div class="num">03</div>
+        <h3>🧩 Skill Ecosystem</h3>
+        <p>60+ built-in skills — from code analysis to image generation to research. Extend Sidekick with one click.</p>
+        <span class="emoji-badge">Open store</span>
+      </div>
+      <div class="feature-card">
+        <div class="num">04</div>
+        <h3>🛡️ Privacy</h3>
+        <p>Your data stays yours. Use local models or your own API keys. No cloud tracking, no data mining.</p>
+        <span class="emoji-badge">No telemetry</span>
+      </div>
+      <div class="feature-card">
+        <div class="num">05</div>
+        <h3>📦 Spaces</h3>
+        <p>Organize agents, memory, and tools into named Spaces. Work, play, research — each with its own context.</p>
+        <span class="emoji-badge">Isolated by design</span>
+      </div>
+      <div class="feature-card">
+        <div class="num">06</div>
+        <h3>⚡ Windows Native</h3>
+        <p>Deep integration with Windows — native installer, system tray, file access, and a silky smooth experience.</p>
+        <span class="emoji-badge">Portable & setup</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="download-strip">
+  <div class="container">
+    <h2>It's ready. ✦</h2>
+    <p>Download Lastbrowser v0.1.3 for Windows and meet Sidekick.</p>
+    <a href="#" class="btn-primary">Download Now →</a>
+    <div class="os-badges">
+      <span class="os-badge">🪟 Windows 10+</span>
+      <span class="os-badge">📦 Portable available</span>
+      <span class="os-badge">🔄 Auto-updates</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div>© 2026 Lastbrowser</div>
+  <div class="links">
+    <a href="#">✦ GitHub</a>
+    <a href="#">✦ Privacy</a>
+    <a href="#">✦ Docs</a>
+    <a href="#">✦ Discord</a>
+  </div>
+</footer>
+
+</body>
+</html>

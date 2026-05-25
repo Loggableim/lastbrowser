@@ -1,0 +1,16 @@
+:root {
+  --lb-nearBlack: #070A12;
+  --lb-midnight: #07111F;
+  --lb-surface: #101827;
+  --lb-panel: #0E1628;
+  --lb-stroke: #2A3550;
+  --lb-text: #F7FAFF;
+  --lb-muted: #AAB4C6;
+  --lb-electricBlue: #2563FF;
+  --lb-cyan: #00E5FF;
+  --lb-magenta: #FF2D8F;
+  --lb-purple: #8A3FFC;
+  --lb-orange: #FF8A00;
+  --lb-yellow: #FFC800;
+  --lb-green: #7CFF6B;
+}

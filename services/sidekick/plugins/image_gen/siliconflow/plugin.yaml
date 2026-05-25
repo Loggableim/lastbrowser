@@ -1,0 +1,5 @@
+name: siliconflow
+version: 1.0.0
+description: "SiliconFlow image generation — FLUX models, Qwen-Image, and more via siliconflow.com. OpenAI-compatible API, cheapest FLUX.1-schnell model."
+author: NousResearch
+kind: backend

@@ -1,0 +1,266 @@
+/* ------------------------------------------------------------------ */
+/*  Drag & Drop — Shared Styles                                       */
+/*  Drop indicators, drag ghosts, snap animations and reduced-motion   */
+/*  fallbacks. Imported once in `web/src/index.css` or per-component.  */
+/* ------------------------------------------------------------------ */
+
+/* =============================== */
+/*  Drop Zone                       */
+/* =============================== */
+
+.drop-zone {
+  position: relative;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Pseudo-element indicator inside drop zones */
+.drop-zone::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 1;
+}
+
+/* ---- Channel reorder variant ---- */
+.drop-zone--between::before {
+  inset: auto 0 0 0;
+  height: 3px;
+  background: var(--accent, var(--midground-base, #ffe6cb));
+  border-radius: 2px;
+}
+
+/* ---- Role / member variant ---- */
+.drop-zone--overlay::before {
+  inset: 0;
+  border: 2px dashed var(--accent, var(--midground-base, #ffe6cb));
+  background: color-mix(
+    in srgb,
+    var(--accent, var(--midground-base, #ffe6cb)) 8%,
+    transparent
+  );
+}
+
+/* ---- Active state (someone is dragging over this zone) ---- */
+.drop-zone.drag-over::before {
+  opacity: 1;
+}
+
+.drop-zone.drag-over {
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--accent, var(--midground-base, #ffe6cb)) 40%, transparent);
+}
+
+/* =============================== */
+/*  Drag Ghost                      */
+/* =============================== */
+
+.drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 99999;
+  opacity: 0.75;
+  transform: rotate(2deg) scale(1.05);
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.35));
+  will-change: transform, left, top;
+  /* Ensure the ghost doesn't capture pointer events */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* =============================== */
+/*  Drop Indicator (line variant)   */
+/* =============================== */
+
+.drop-indicator {
+  position: absolute;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent, var(--midground-base, #ffe6cb));
+  z-index: 10;
+  pointer-events: none;
+  animation: pulse-border 0.8s ease-in-out infinite;
+}
+
+.drop-indicator--top {
+  top: -2px;
+  left: 8px;
+  right: 8px;
+}
+
+.drop-indicator--bottom {
+  bottom: -2px;
+  left: 8px;
+  right: 8px;
+}
+
+/* =============================== */
+/*  Drag source item (while being  */
+/*  dragged)                        */
+/* =============================== */
+
+.dragging-source {
+  opacity: 0.3;
+  transition: opacity 0.12s ease;
+}
+
+/* =============================== */
+/*  Animations                     */
+/* =============================== */
+
+@keyframes pulse-border {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1.6);
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    translate: 0;
+  }
+  10%,
+  50%,
+  90% {
+    translate: -3px;
+  }
+  30%,
+  70% {
+    translate: 3px;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes success-pulse {
+  0% {
+    box-shadow: 0 0 0 0
+      color-mix(in srgb, #22c55e 60%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 8px
+      color-mix(in srgb, #22c55e 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0
+      color-mix(in srgb, #22c55e 0%, transparent);
+  }
+}
+
+/* Utility classes for JS-driven animations */
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.2s ease-out;
+}
+
+.animate-success-pulse {
+  animation: success-pulse 0.6s ease-out;
+}
+
+/* =============================== */
+/*  Invalid drop target             */
+/* =============================== */
+
+.drop-zone.drag-over-invalid {
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, #ef4444 40%, transparent);
+}
+
+.drop-zone.drag-over-invalid::before {
+  border-color: #ef4444;
+  background: color-mix(in srgb, #ef4444 6%, transparent);
+}
+
+/* =============================== */
+/*  prefers-reduced-motion          */
+/* =============================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .drag-ghost {
+    transition: none;
+    animation: none;
+  }
+
+  .drop-indicator {
+    animation: none;
+  }
+
+  .drop-zone {
+    transition: none;
+  }
+
+  .drop-zone::before {
+    transition: none;
+  }
+
+  .animate-shake,
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-success-pulse {
+    animation: none;
+  }
+
+  @keyframes none {
+    /* suppress all keyframes */
+  }
+
+  /* Keep visual feedback but remove animation */
+  .drag-over::before {
+    opacity: 1;
+  }
+
+  .drop-indicator {
+    opacity: 0.6;
+  }
+}
+
+/* =============================== */
+/*  Drag-over glow variants        */
+/* =============================== */
+
+/* File drop overlay */
+.drop-zone--file.drag-over {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  background: color-mix(
+    in srgb,
+    var(--accent, var(--midground-base, #ffe6cb)) 10%,
+    transparent
+  );
+  box-shadow: 0 0 30px
+    color-mix(in srgb, var(--accent, var(--midground-base, #ffe6cb)) 20%, transparent);
+}

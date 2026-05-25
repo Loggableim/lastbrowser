@@ -10,6 +10,13 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     load: () => ipcRenderer.invoke('lastbrowser:setup:load'),
     save: (state: unknown) => ipcRenderer.invoke('lastbrowser:setup:save', state)
   },
+  browser: {
+    onOpenTab: (callback: (url: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url);
+      ipcRenderer.on('lastbrowser:browser:openTab', listener);
+      return () => ipcRenderer.removeListener('lastbrowser:browser:openTab', listener);
+    }
+  },
   sidekick: {
     onboardingStatus: () => ipcRenderer.invoke('lastbrowser:sidekick:onboardingStatus'),
     applyCloudSetup: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:applyCloudSetup', request),

@@ -146,6 +146,9 @@ declare global {
         load: () => Promise<LastbrowserSetupState>;
         save: (state: LastbrowserSetupState) => Promise<LastbrowserSetupState>;
       };
+      browser: {
+        onOpenTab: (callback: (url: string) => void) => () => void;
+      };
       sidekick: {
         onboardingStatus: () => Promise<Record<string, unknown>>;
         applyCloudSetup: (request: { provider: string; model: string; apiKey?: string }) => Promise<Record<string, unknown>>;

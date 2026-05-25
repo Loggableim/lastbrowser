@@ -39,6 +39,7 @@ import {
   Settings,
   Sparkles,
   Square,
+  Star,
   StopCircle,
   Trash2,
   UserCircle,
@@ -46,6 +47,16 @@ import {
   X
 } from 'lucide-react';
 import { hideWebviewScrollbars } from './browser-view.js';
+import {
+  bookmarkFromTab,
+  isBookmarkableUrl,
+  isBookmarked,
+  loadBookmarks,
+  removeBookmark,
+  saveBookmarks,
+  upsertBookmark
+} from './bookmarks.js';
+import type { BrowserBookmark } from './bookmarks.js';
 import {
   BrowserTab,
   aiBrowserHomeUrl,
@@ -202,6 +213,7 @@ function panelForContextItem(item: string): LastbrowserPanelId | null {
 
 export function App(): JSX.Element {
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createInitialTab()]);
+  const [bookmarks, setBookmarks] = useState<BrowserBookmark[]>(() => loadBookmarks(window.localStorage));
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
   const [addressValue, setAddressValue] = useState(() => (
     isAiBrowserHomeUrl(tabs[0].url) ? '' : tabs[0].url
@@ -253,6 +265,8 @@ export function App(): JSX.Element {
     }
   ]);
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) || tabs[0], [activeTabId, tabs]);
+  const activeBookmarkable = isBookmarkableUrl(activeTab.url);
+  const activeBookmarked = useMemo(() => isBookmarked(bookmarks, activeTab.url), [activeTab.url, bookmarks]);
   const activeTabIdRef = useRef(activeTabId);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const setupRequired = isFirstRunRequired(setupState, onboardingStatus);
@@ -265,6 +279,14 @@ export function App(): JSX.Element {
   useEffect(() => {
     setAddressValue(isAiBrowserHomeUrl(activeTab.url) ? '' : activeTab.url);
   }, [activeTab.id, activeTab.url]);
+
+  useEffect(() => {
+    saveBookmarks(window.localStorage, bookmarks);
+  }, [bookmarks]);
+
+  useEffect(() => {
+    return window.lastbrowser.browser.onOpenTab((url) => addTab(url));
+  }, []);
 
   useEffect(() => {
     saveActivePanel(undefined, activePanel);
@@ -486,6 +508,19 @@ export function App(): JSX.Element {
     activeTabIdRef.current = next.id;
     setActiveTabId(next.id);
     setActivePanel('browser');
+  }
+
+  function toggleActiveBookmark(): void {
+    if (!activeBookmarkable) return;
+    setBookmarks((current) => (
+      activeBookmarked
+        ? removeBookmark(current, activeTab.url)
+        : upsertBookmark(current, bookmarkFromTab(activeTab))
+    ));
+  }
+
+  function removeBookmarkItem(bookmark: BrowserBookmark): void {
+    setBookmarks((current) => removeBookmark(current, bookmark.url));
   }
 
   function closeTab(tabId: string): void {
@@ -899,30 +934,50 @@ export function App(): JSX.Element {
         onCloseTab={closeTab}
         onNewTab={() => addTab()}
       />
-      <header className="topbar">
-        <div className="traffic-actions">
-          <button type="button" aria-label="Back" onClick={() => webviewRef.current?.goBack()}><ChevronLeft size={17} /></button>
-          <button type="button" aria-label="Forward" onClick={() => webviewRef.current?.goForward()}><ChevronRight size={17} /></button>
-          <button type="button" aria-label="Reload" onClick={() => webviewRef.current?.reload()}><RefreshCw size={16} /></button>
-        </div>
-        <form className="addressbar" onSubmit={submitNavigation}>
-          <Globe2 size={16} />
-          <input value={addressValue} onChange={(event) => setAddressValue(event.target.value)} aria-label="Address or search" />
-          <button type="submit" aria-label="Navigate"><Search size={16} /></button>
-        </form>
-        <SpaceSelector
-          activePath={activeSpacePath}
-          error={spacesError}
-          spaces={spaces}
-          onOpenSpaces={() => setActivePanel('workspaces')}
-          onSelect={(path) => setActiveSpacePath(path)}
+      <div className="browser-chrome">
+        <header className="topbar">
+          <div className="traffic-actions">
+            <button type="button" aria-label="Back" onClick={() => webviewRef.current?.goBack()}><ChevronLeft size={17} /></button>
+            <button type="button" aria-label="Forward" onClick={() => webviewRef.current?.goForward()}><ChevronRight size={17} /></button>
+            <button type="button" aria-label="Reload" onClick={() => webviewRef.current?.reload()}><RefreshCw size={16} /></button>
+          </div>
+          <form className="addressbar" onSubmit={submitNavigation}>
+            <Globe2 size={16} />
+            <input value={addressValue} onChange={(event) => setAddressValue(event.target.value)} aria-label="Address or search" />
+            <button
+              type="button"
+              className={`bookmark-star ${activeBookmarked ? 'active' : ''}`}
+              aria-label={activeBookmarked ? 'Remove bookmark' : 'Add bookmark'}
+              aria-pressed={activeBookmarked}
+              disabled={!activeBookmarkable}
+              onClick={toggleActiveBookmark}
+            >
+              <Star size={15} fill={activeBookmarked ? 'currentColor' : 'none'} />
+            </button>
+            <button type="submit" aria-label="Navigate"><Search size={16} /></button>
+          </form>
+          <SpaceSelector
+            activePath={activeSpacePath}
+            error={spacesError}
+            spaces={spaces}
+            onOpenSpaces={() => setActivePanel('workspaces')}
+            onSelect={(path) => setActiveSpacePath(path)}
+          />
+          <div className={`runtime-pill ${status?.sidekick === 'ready' ? 'ready' : 'starting'}`}>
+            <span className="status-dot" />
+            <span>{status?.sidekick === 'ready' ? 'sidekick online' : 'sidekick starting'}</span>
+          </div>
+          <UpdatePill status={updateStatus} />
+        </header>
+        <BookmarkBar
+          activeBookmarkable={activeBookmarkable}
+          activeBookmarked={activeBookmarked}
+          bookmarks={bookmarks}
+          onNavigate={navigate}
+          onRemove={removeBookmarkItem}
+          onToggleActive={toggleActiveBookmark}
         />
-        <div className={`runtime-pill ${status?.sidekick === 'ready' ? 'ready' : 'starting'}`}>
-          <span className="status-dot" />
-          <span>{status?.sidekick === 'ready' ? 'sidekick online' : 'sidekick starting'}</span>
-        </div>
-        <UpdatePill status={updateStatus} />
-      </header>
+      </div>
 
       <main className={`workspace ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${contextSidebarCollapsed ? 'context-collapsed' : ''} ${workspacePanelCollapsed ? 'workspace-collapsed' : ''}`}>
         <ShellRail
@@ -1028,6 +1083,61 @@ export function App(): JSX.Element {
         )}
       </main>
     </div>
+  );
+}
+
+function BookmarkBar({
+  activeBookmarkable,
+  activeBookmarked,
+  bookmarks,
+  onNavigate,
+  onRemove,
+  onToggleActive
+}: {
+  activeBookmarkable: boolean;
+  activeBookmarked: boolean;
+  bookmarks: BrowserBookmark[];
+  onNavigate: (url: string) => void;
+  onRemove: (bookmark: BrowserBookmark) => void;
+  onToggleActive: () => void;
+}): JSX.Element {
+  return (
+    <nav className="bookmark-bar" aria-label="Bookmarks">
+      <div className="bookmark-list">
+        {bookmarks.map((bookmark) => (
+          <div key={bookmark.id} className="bookmark-item">
+            <button
+              type="button"
+              className="bookmark-open"
+              title={bookmark.url}
+              onClick={() => onNavigate(bookmark.url)}
+            >
+              <Star size={13} fill="currentColor" />
+              <span>{bookmark.title}</span>
+            </button>
+            <button
+              type="button"
+              className="bookmark-remove"
+              aria-label={`Remove ${bookmark.title}`}
+              onClick={() => onRemove(bookmark)}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ))}
+        {!bookmarks.length && <span className="bookmark-empty">No bookmarks yet</span>}
+      </div>
+      <button
+        type="button"
+        className={`bookmark-add ${activeBookmarked ? 'active' : ''}`}
+        disabled={!activeBookmarkable}
+        aria-label={activeBookmarked ? 'Remove bookmark' : 'Add bookmark'}
+        aria-pressed={activeBookmarked}
+        onClick={onToggleActive}
+      >
+        <Star size={14} fill={activeBookmarked ? 'currentColor' : 'none'} />
+      </button>
+    </nav>
   );
 }
 

@@ -28,6 +28,7 @@ describe('browser shell layout', () => {
     const contextCollapsed = cssBlock(css, '.workspace.context-collapsed');
 
     expect(appShell).toContain('grid-template-rows: 34px auto minmax(0, 1fr)');
+    expect(workspace).toContain('grid-template-rows: minmax(0, 1fr)');
     expect(workspace).toContain('height: 100%');
     expect(workspace).toContain('grid-template-columns: 168px 280px minmax(0, 1fr) 320px');
     expect(workspace).toContain('overflow: hidden');

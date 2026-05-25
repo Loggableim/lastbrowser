@@ -1890,7 +1890,7 @@ def _setup_telegram():
         if not re.match(r"^\d+:[A-Za-z0-9_-]{30,}$", token):
             print_error(
                 "Invalid token format. Expected: <numeric_id>:<alphanumeric_hash> "
-                "(e.g., 123456789:ABCdefGHI-jklMNOpqrSTUvwxYZ)"
+                "(e.g., 123456789:<bot-token-secret>)"
             )
             continue
         break

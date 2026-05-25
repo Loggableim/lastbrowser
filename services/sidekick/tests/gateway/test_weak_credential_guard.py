@@ -69,8 +69,10 @@ class TestPlatformTokenPlaceholderGuard:
 
     def test_accepts_real_token(self, caplog):
         """A real-looking bot token should pass validation."""
+        token_id = "7123456789"
+        token_secret = "AAHdqTcvCH1vGWJxfSeOfSAs0K5PALDsaw"
         config = _make_gateway_config(
-            Platform.TELEGRAM, "7123456789:AAHdqTcvCH1vGWJxfSeOfSAs0K5PALDsaw"
+            Platform.TELEGRAM, f"{token_id}:{token_secret}"
         )
         with caplog.at_level(logging.ERROR):
             _validate_and_return(config)

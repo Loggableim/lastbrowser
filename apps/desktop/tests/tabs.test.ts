@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { aiBrowserHomeUrl, createInitialTab, isAiBrowserHomeUrl, normalizeNavigationInput, renameTab } from '../src/renderer/tabs.js';
+import {
+  aiBrowserHomeUrl,
+  createInitialTab,
+  isAiBrowserHomeUrl,
+  normalizeNavigationInput,
+  renameTab,
+  updateTabTitle,
+  updateTabUrl
+} from '../src/renderer/tabs.js';
 
 describe('browser tabs', () => {
   it('normalizes plain input as search and URLs as navigations', () => {
@@ -28,5 +36,19 @@ describe('browser tabs', () => {
 
     expect(renamed.title).toBe('Example Domain');
     expect(original.title).toBe('New tab');
+  });
+
+  it('updates navigation and title events only on the owning tab', () => {
+    const oldWebTab = createInitialTab('https://google.com');
+    const newNativeTab = createInitialTab();
+    const tabs = [oldWebTab, newNativeTab];
+
+    const navigated = updateTabUrl(tabs, oldWebTab.id, 'https://google.com/search?q=sidekick');
+    const titled = updateTabTitle(navigated, oldWebTab.id, 'Google Search');
+
+    expect(titled.find((tab) => tab.id === oldWebTab.id)?.url).toBe('https://google.com/search?q=sidekick');
+    expect(titled.find((tab) => tab.id === oldWebTab.id)?.title).toBe('Google Search');
+    expect(titled.find((tab) => tab.id === newNativeTab.id)?.url).toBe(aiBrowserHomeUrl);
+    expect(titled.find((tab) => tab.id === newNativeTab.id)?.title).toBe('New tab');
   });
 });

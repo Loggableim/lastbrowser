@@ -35,3 +35,11 @@ export function renameTab(tab: BrowserTab, title: string): BrowserTab {
     title: title.trim() || 'New tab'
   };
 }
+
+export function updateTabUrl(tabs: BrowserTab[], tabId: string, url: string): BrowserTab[] {
+  return tabs.map((tab) => (tab.id === tabId ? { ...tab, url } : tab));
+}
+
+export function updateTabTitle(tabs: BrowserTab[], tabId: string, title: string): BrowserTab[] {
+  return tabs.map((tab) => (tab.id === tabId ? renameTab(tab, title) : tab));
+}

@@ -45,7 +45,16 @@ import {
   Users,
   X
 } from 'lucide-react';
-import { BrowserTab, aiBrowserHomeUrl, createInitialTab, isAiBrowserHomeUrl, normalizeNavigationInput, renameTab } from './tabs.js';
+import { hideWebviewScrollbars } from './browser-view.js';
+import {
+  BrowserTab,
+  aiBrowserHomeUrl,
+  createInitialTab,
+  isAiBrowserHomeUrl,
+  normalizeNavigationInput,
+  updateTabTitle,
+  updateTabUrl
+} from './tabs.js';
 import { brandAssets } from './brand.js';
 import {
   SidekickActionId,
@@ -177,7 +186,9 @@ const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = {
 export function App(): JSX.Element {
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createInitialTab()]);
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
-  const [addressValue, setAddressValue] = useState(tabs[0].url);
+  const [addressValue, setAddressValue] = useState(() => (
+    isAiBrowserHomeUrl(tabs[0].url) ? '' : tabs[0].url
+  ));
   const [activePanel, setActivePanel] = useState<LastbrowserPanelId>(() => loadInitialPanel());
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => (
     loadBooleanPreference(undefined, leftSidebarCollapsedStorageKey, false)
@@ -225,8 +236,13 @@ export function App(): JSX.Element {
     }
   ]);
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) || tabs[0], [activeTabId, tabs]);
+  const activeTabIdRef = useRef(activeTabId);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const setupRequired = isFirstRunRequired(setupState, onboardingStatus);
+
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
 
   useEffect(() => {
     setAddressValue(isAiBrowserHomeUrl(activeTab.url) ? '' : activeTab.url);
@@ -437,7 +453,7 @@ export function App(): JSX.Element {
 
   function navigate(url: string): void {
     const normalized = normalizeNavigationInput(url);
-    setTabs((current) => current.map((tab) => (tab.id === activeTab.id ? { ...tab, url: normalized } : tab)));
+    setTabs((current) => updateTabUrl(current, activeTab.id, normalized));
     setActivePanel('browser');
   }
 
@@ -449,6 +465,7 @@ export function App(): JSX.Element {
   function addTab(url = aiBrowserHomeUrl): void {
     const next = createInitialTab(url);
     setTabs((current) => [...current, next]);
+    activeTabIdRef.current = next.id;
     setActiveTabId(next.id);
     setActivePanel('browser');
   }
@@ -459,17 +476,21 @@ export function App(): JSX.Element {
     const nextTabs = tabs.filter((tab) => tab.id !== tabId);
     setTabs(nextTabs);
     if (activeTabId === tabId) {
-      setActiveTabId(nextTabs[Math.max(0, index - 1)].id);
+      const nextActiveId = nextTabs[Math.max(0, index - 1)].id;
+      activeTabIdRef.current = nextActiveId;
+      setActiveTabId(nextActiveId);
     }
   }
 
-  function updateTitle(title: string): void {
-    setTabs((current) => current.map((tab) => (tab.id === activeTab.id ? renameTab(tab, title) : tab)));
+  function updateTitle(tabId: string, title: string): void {
+    setTabs((current) => updateTabTitle(current, tabId, title));
   }
 
-  function updateUrl(url: string): void {
-    setTabs((current) => current.map((tab) => (tab.id === activeTab.id ? { ...tab, url } : tab)));
-    setAddressValue(url);
+  function updateUrl(tabId: string, url: string): void {
+    setTabs((current) => updateTabUrl(current, tabId, url));
+    if (activeTabIdRef.current === tabId) {
+      setAddressValue(isAiBrowserHomeUrl(url) ? '' : url);
+    }
   }
 
   async function completeSetup(form: SetupForm): Promise<void> {
@@ -853,6 +874,7 @@ export function App(): JSX.Element {
         tabs={tabs}
         activeTabId={activeTab.id}
         onActivateTab={(tabId) => {
+          activeTabIdRef.current = tabId;
           setActiveTabId(tabId);
           setActivePanel('browser');
         }}
@@ -936,13 +958,14 @@ export function App(): JSX.Element {
           onCreateSession={() => void createNativeSession()}
           onAddSpace={(path, name) => void addSpaceNative(path, name)}
           onMoveSpace={(space, direction) => void moveSpaceNative(space, direction)}
-          onNavigate={updateUrl}
+          onNavigate={navigate}
+          onWebviewNavigate={updateUrl}
+          onWebviewTitle={updateTitle}
           onRemoveSpace={(space) => void removeSpaceNative(space)}
           onRenameSpace={(space) => void renameSpaceNative(space)}
           onSelectSpace={setActiveSpacePath}
           onSendChat={(message) => void startNativeChat(message)}
           onStopChat={() => void stopNativeChat()}
-          onTitle={updateTitle}
         />
         <WorkspacePanel
           activeSessionId={activeSessionId}
@@ -1389,12 +1412,13 @@ function BrowserMain({
   onCreateSession,
   onMoveSpace,
   onNavigate,
+  onWebviewNavigate,
+  onWebviewTitle,
   onRemoveSpace,
   onRenameSpace,
   onSelectSpace,
   onSendChat,
   onStopChat,
-  onTitle
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -1419,12 +1443,13 @@ function BrowserMain({
   onCreateSession: () => void;
   onMoveSpace: (space: SpaceSummary, direction: -1 | 1) => void;
   onNavigate: (url: string) => void;
+  onWebviewNavigate: (tabId: string, url: string) => void;
+  onWebviewTitle: (tabId: string, title: string) => void;
   onRemoveSpace: (space: SpaceSummary) => void;
   onRenameSpace: (space: SpaceSummary) => void;
   onSelectSpace: (path: string) => void;
   onSendChat: (message: string) => void;
   onStopChat: () => void;
-  onTitle: (title: string) => void;
 }): JSX.Element {
   if (activePanel === 'chat') {
     return (
@@ -1524,9 +1549,10 @@ function BrowserMain({
         className="browser-view"
         partition="persist:lastbrowser-main"
         allowpopups="false"
-        onDidNavigate={(event) => onNavigate(event.url)}
-        onDidNavigateInPage={(event) => onNavigate(event.url)}
-        onPageTitleUpdated={(event) => onTitle(event.title)}
+        onDomReady={(event) => void hideWebviewScrollbars(event.currentTarget)}
+        onDidNavigate={(event) => onWebviewNavigate(activeTab.id, event.url)}
+        onDidNavigateInPage={(event) => onWebviewNavigate(activeTab.id, event.url)}
+        onPageTitleUpdated={(event) => onWebviewTitle(activeTab.id, event.title)}
       />
     </section>
   );

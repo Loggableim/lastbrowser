@@ -27,6 +27,7 @@ import {
   Users
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
+import { canCallSidekickApi } from '../runtime-readiness.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
@@ -64,7 +65,7 @@ function useApiState(loader: () => Promise<AnyRecord>, deps: React.DependencyLis
 }
 
 function isReady(serviceStatus: ServiceStatus | null): boolean {
-  return serviceStatus?.sidekick === 'ready' && serviceStatus?.webuiHealth === 'ready';
+  return canCallSidekickApi(serviceStatus);
 }
 
 function arrayFrom(payload: AnyRecord | null, keys: string[]): AnyRecord[] {

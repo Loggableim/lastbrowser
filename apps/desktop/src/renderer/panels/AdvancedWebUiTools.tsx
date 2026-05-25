@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, Play, ShieldAlert } from 'lucide-react';
 import type { LastbrowserPanelId } from '../shell-state.js';
+import { canCallSidekickApi } from '../runtime-readiness.js';
 import { endpointGroupsForPanel } from '../webui-endpoints.js';
 import type { WebuiEndpointAction } from '../webui-endpoints.js';
 
@@ -37,7 +38,7 @@ export function AdvancedWebUiTools({
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
-  const ready = serviceStatus?.sidekick === 'ready' && serviceStatus?.webuiHealth === 'ready';
+  const ready = canCallSidekickApi(serviceStatus);
 
   useEffect(() => {
     setSelectedId(actions[0]?.id || '');

@@ -2,6 +2,7 @@ import React, { FormEvent, useMemo, useState } from 'react';
 import { ExternalLink, Globe2, Loader2, Search, Sparkles } from 'lucide-react';
 import { AiBrowserBrief, buildAiBrowserPrompt, parseAiBrowserResponse } from '../ai-browser.js';
 import { brandAssets } from '../brand.js';
+import { canCallSidekickApi } from '../runtime-readiness.js';
 import { normalizeNavigationInput } from '../tabs.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 
@@ -20,7 +21,7 @@ export function NativeAiBrowserMain({
   serviceStatus: ServiceStatus | null;
   onNavigate: (url: string) => void;
 }): JSX.Element {
-  const ready = serviceStatus?.sidekick === 'ready' && serviceStatus?.webuiHealth === 'ready';
+  const ready = canCallSidekickApi(serviceStatus);
   const [query, setQuery] = useState('');
   const [brief, setBrief] = useState<AiBrowserBrief | null>(null);
   const [loading, setLoading] = useState(false);

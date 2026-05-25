@@ -35,10 +35,20 @@ describe('browser shell layout', () => {
     expect(browserPane).toContain('height: 100%');
     expect(browserPane).toContain('overflow: hidden');
     expect(aiBrowserMain).toContain('overflow: auto');
-    expect(browserCanvas).toContain('background: #ffffff');
+    expect(browserCanvas).toContain('background: #07111f');
     expect(browserView).toContain('position: absolute');
     expect(browserView).toContain('inset: 0');
     expect(browserView).toContain('height: 100%');
+  });
+
+  it('binds webview navigation and title events to the tab that owns the webview', () => {
+    const source = readRendererFile('App.tsx');
+
+    expect(source).toContain('function updateUrl(tabId: string, url: string): void');
+    expect(source).toContain('function updateTitle(tabId: string, title: string): void');
+    expect(source).toContain('onWebviewNavigate(activeTab.id, event.url)');
+    expect(source).toContain('onWebviewTitle(activeTab.id, event.title)');
+    expect(source).toContain('hideWebviewScrollbars(event.currentTarget)');
   });
 
   it('renders rail, context sidebar, central browser, and workspace panel together', () => {

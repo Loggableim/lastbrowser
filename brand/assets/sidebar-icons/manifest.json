@@ -1,0 +1,362 @@
+[
+  {
+    "batch": 1,
+    "name": "01-chat-modern-popart",
+    "source": "neon_chat_bubble_with_sparkle_effect.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 1,
+    "name": "02-tasks-modern-popart",
+    "source": "neon_checklist_app_icon_design.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 1,
+    "name": "03-kanban-modern-popart",
+    "source": "modern_neon_kanban_board_icon.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 1,
+    "name": "04-skills-modern-popart",
+    "source": "neon_layered_app_icon_design.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 1,
+    "name": "05-agents-modern-popart",
+    "source": "neon_avatar_with_dynamic_accents.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 1,
+    "name": "06-memory-modern-popart",
+    "source": "neon_brain_with_lightning_bolt_icon.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 1,
+    "name": "07-spaces-modern-popart",
+    "source": "neon_folder_with_glowing_accent.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 1,
+    "name": "08-agent-profiles-modern-popart",
+    "source": "neon_profile_icon_with_dynamic_accents.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 1,
+    "name": "09-todos-modern-popart",
+    "source": "glossy_neon_to_do_list_icon.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 1,
+    "name": "10-insights-modern-popart",
+    "source": "neon_bar_chart_with_glowing_accents.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 2,
+    "name": "11-logs-modern-popart",
+    "source": "neon_document_icon_with_sparkle_effect.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 2,
+    "name": "12-mail-modern-popart",
+    "source": "neon_envelope_with_notification_badge.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 2,
+    "name": "13-browser-modern-popart",
+    "source": "neon_globe_app_icon_design.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 2,
+    "name": "14-discord-modern-popart",
+    "source": "futuristic_robot_icon_with_sparkle_accent.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 2,
+    "name": "15-appstore-modern-popart",
+    "source": "neon_star_with_halftone_accents.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 2,
+    "name": "16-settings-modern-popart",
+    "source": "neon_gear_with_pop_art_accents.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 2,
+    "name": "17-search-modern-popart",
+    "source": "neon_magnifying_glass_app_icon.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 2,
+    "name": "18-plus-modern-popart",
+    "source": "neon_plus_sign_with_glowing_accents.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 2,
+    "name": "19-filter-modern-popart",
+    "source": "neon_funnel_filter_app_icon.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 2,
+    "name": "20-upload-modern-popart",
+    "source": "neon_upload_icon_with_pop_art_accents.png",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 3,
+    "name": "21-download-modern-popart",
+    "source": "lastbrowser_sidebar_icons_style03_batch3.zip",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 3,
+    "name": "22-favorite-modern-popart",
+    "source": "lastbrowser_sidebar_icons_style03_batch3.zip",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 3,
+    "name": "23-spark-modern-popart",
+    "source": "lastbrowser_sidebar_icons_style03_batch3.zip",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 3,
+    "name": "24-shield-modern-popart",
+    "source": "lastbrowser_sidebar_icons_style03_batch3.zip",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 3,
+    "name": "25-folder-modern-popart",
+    "source": "lastbrowser_sidebar_icons_style03_batch3.zip",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 3,
+    "name": "26-cloud-modern-popart",
+    "source": "lastbrowser_sidebar_icons_style03_batch3.zip",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 3,
+    "name": "27-power-modern-popart",
+    "source": "lastbrowser_sidebar_icons_style03_batch3.zip",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 3,
+    "name": "28-user-modern-popart",
+    "source": "lastbrowser_sidebar_icons_style03_batch3.zip",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 3,
+    "name": "29-love-modern-popart",
+    "source": "lastbrowser_sidebar_icons_style03_batch3.zip",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  },
+  {
+    "batch": 3,
+    "name": "30-sidekick-modern-popart",
+    "source": "lastbrowser_sidebar_icons_style03_batch3.zip",
+    "sizes": [
+      512,
+      256,
+      128,
+      64,
+      32
+    ]
+  }
+]

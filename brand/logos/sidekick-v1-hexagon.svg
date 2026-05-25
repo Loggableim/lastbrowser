@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+  </defs>
+  <!-- Hexagon – Tech, AI, modern -->
+  <path d="M16 2l11 6.5v13L16 28 5 21.5v-13z" fill="url(#g)"/>
+  <!-- Inner circle – der "Kern", der Sidekick immer zur Stelle ist -->
+  <circle cx="16" cy="16" r="4.5" fill="#fff" opacity="0.92"/>
+  <!-- Kleiner Akzentpunkt -->
+  <circle cx="16" cy="12.5" r="1.5" fill="#fff" opacity="0.5"/>
+</svg>

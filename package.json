@@ -1,13 +1,17 @@
 {
-  "name": "lastbrowser-workspace",
+  "name": "lastbrowser",
+  "version": "0.1.3",
   "private": true,
-  "description": "LastBrowser — Root workspace convenience scripts",
+  "description": "Lastbrowser desktop browser shell with Sidekick integration.",
   "scripts": {
-    "desktop:start": "cd native && npm start",
-    "desktop:dev": "cd native && npm run dev",
-    "desktop:build": "cd native && npm run build",
-    "desktop:build:dir": "cd native && npm run build:dir",
-    "desktop:dist": "cd native && npm run dist",
-    "icons": "python native/scripts/generate-icons.py"
-  }
+    "dev": "npm --workspace apps/desktop run dev",
+    "build": "npm --workspace apps/desktop run build",
+    "test": "npm --workspace apps/desktop run test",
+    "test:run": "npm --workspace apps/desktop run test:run",
+    "package:win": "npm --workspace apps/desktop run package:win",
+    "release:win": "npm --workspace apps/desktop run package:win:publish"
+  },
+  "workspaces": [
+    "apps/desktop"
+  ]
 }

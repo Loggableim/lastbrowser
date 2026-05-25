@@ -36,9 +36,12 @@ describe('browser shell layout', () => {
     expect(browserPane).toContain('display: flex');
     expect(browserPane).toContain('height: 100%');
     expect(browserPane).toContain('overflow: hidden');
-    expect(browserPageMain).toContain('display: grid');
-    expect(browserPageMain).toContain('grid-template-rows: minmax(0, 1fr)');
-    expect(browserWebviewFrame).toContain('height: 100%');
+    expect(browserPageMain).toContain('display: flex');
+    expect(browserPageMain).toContain('flex-direction: column');
+    expect(browserPageMain).toContain('flex: 1 1 auto');
+    expect(browserPageMain).toContain('min-height: 0');
+    expect(browserWebviewFrame).toContain('flex: 1 1 auto');
+    expect(browserWebviewFrame).toContain('min-height: 0');
     expect(browserWebviewFrame).toContain('overflow: hidden');
     expect(aiBrowserMain).toContain('overflow: auto');
     expect(browserCanvas).toContain('background: #07111f');

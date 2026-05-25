@@ -566,6 +566,7 @@ button:disabled {
 .workspace {
   position: relative;
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   grid-template-columns: 168px 280px minmax(0, 1fr) 320px;
   height: 100%;
   min-height: 0;

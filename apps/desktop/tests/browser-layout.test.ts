@@ -16,6 +16,7 @@ function cssBlock(css: string, selector: string): string {
 describe('browser shell layout', () => {
   it('uses the WebUI-style shell grid with expanded CD navigation', () => {
     const css = readRendererFile('styles.css');
+    const appShell = cssBlock(css, '.app-shell');
     const workspace = cssBlock(css, '.workspace');
     const browserPane = cssBlock(css, '.browser-main');
     const browserView = cssBlock(css, '.browser-view');
@@ -26,7 +27,8 @@ describe('browser shell layout', () => {
     const railCollapsed = cssBlock(css, '.workspace.left-collapsed');
     const contextCollapsed = cssBlock(css, '.workspace.context-collapsed');
 
-    expect(workspace).toContain('height: calc(100vh - 86px)');
+    expect(appShell).toContain('grid-template-rows: 34px auto minmax(0, 1fr)');
+    expect(workspace).toContain('height: 100%');
     expect(workspace).toContain('grid-template-columns: 168px 280px minmax(0, 1fr) 320px');
     expect(workspace).toContain('overflow: hidden');
     expect(railCollapsed).toContain('grid-template-columns: 48px 280px minmax(0, 1fr) 320px');
@@ -56,6 +58,19 @@ describe('browser shell layout', () => {
     expect(source).toContain('className="browser-main browser-page-main"');
     expect(source).toContain('<div className="browser-webview-frame">');
     expect(source).toContain('style={{ width: \'100%\', height: \'100%\' }}');
+  });
+
+  it('renders native bookmark controls in the browser chrome', () => {
+    const source = readRendererFile('App.tsx');
+    const css = readRendererFile('styles.css');
+
+    expect(source).toContain('<BookmarkBar');
+    expect(source).toContain('toggleActiveBookmark');
+    expect(source).toContain('bookmarks={bookmarks}');
+    expect(source).toContain('onRemove={removeBookmarkItem}');
+    expect(css).toContain('.bookmark-bar');
+    expect(css).toContain('.bookmark-item');
+    expect(css).toContain('.bookmark-star.active');
   });
 
   it('binds webview navigation and title events to the tab that owns the webview', () => {

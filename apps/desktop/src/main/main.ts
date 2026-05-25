@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, Menu, shell } from 'electron';
 import { moduleDirname } from './module-path.js';
 import { SidecarServices, appResourcesDir, resolveServiceLayout } from './services.js';
 import { loadSetupState, saveSetupState } from './setup-store.js';
@@ -136,6 +136,7 @@ import {
 import { registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
+import { registerBrowserContextMenu } from './browser-context-menu.js';
 
 const mainDir = moduleDirname(import.meta.url);
 let mainWindow: BrowserWindow | null = null;
@@ -144,11 +145,6 @@ const agentWorkspaceStreams = new Map<string, AbortController>();
 
 function createWindow(): void {
   mainWindow = new BrowserWindow(createMainWindowOptions(mainDir));
-
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
-  });
 
   const rendererUrl = process.env.LASTBROWSER_RENDERER_URL;
   if (rendererUrl) {
@@ -384,6 +380,13 @@ function requireWebuiUrl(): string {
 app.setName('Lastbrowser');
 app.whenReady().then(() => {
   installBrowserChrome(Menu);
+  registerBrowserContextMenu({
+    app,
+    Menu,
+    clipboard,
+    shell,
+    getWindow: () => mainWindow
+  });
   services = new SidecarServices(resolveServiceLayout(appResourcesDir()));
   void services.start();
   registerIpc();

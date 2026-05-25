@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lastbrowser – Navy Glass / Product UI | Variante 1 (CD-konform)</title>
+<style>
+  /* ═══════════════════════════════════════════
+     CD KONFORM — Variante 1: Navy Glass / Product UI
+     Brand Guide Regeln:
+     • Dunkle, ruhige Flächen dominieren
+     • Akzente sparsam (nur aktiv, AI, Hover, Status)
+     • Navy Glass Oberflächen (surface, panel, stroke)
+     • Active State = gelb (--yellow) + Glow + dunkle Kachel
+     • Inter (Body), Outfit/Inter (Headlines)
+     • Icons brauchen Luft/Clearspace
+     • Nicht auf unruhige Hintergründe
+     ═══════════════════════════════════════════ */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --nearBlack: #070A12;
+    --midnight: #07111F;
+    --surface: #101827;
+    --panel: #0E1628;
+    --stroke: #2A3550;
+    --text: #F7FAFF;
+    --muted: #AAB4C6;
+    --electricBlue: #2563FF;
+    --cyan: #00E5FF;
+    --magenta: #FF2D8F;
+    --purple: #8A3FFC;
+    --orange: #FF8A00;
+    --yellow: #FFC800;
+    --green: #7CFF6B;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--nearBlack);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 { font-family: 'Outfit', 'Inter', sans-serif; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
+
+  /* ═══ GLASS SURFACE ═══ */
+  .glass-panel {
+    background: var(--surface);
+    border: 1px solid var(--stroke);
+    border-radius: 16px;
+  }
+
+  /* ═══ NAV ═══ */
+  nav {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 20px 32px; max-width: 1200px; margin: 0 auto;
+  }
+  nav .logo {
+    display: flex; align-items: center; gap: 12px;
+    text-decoration: none;
+  }
+  nav .logo .lb-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--electricBlue), var(--purple));
+    border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 16px;
+    color: #fff;
+  }
+  nav .logo .lb-text {
+    font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 700;
+    color: var(--text); letter-spacing: -0.3px;
+  }
+  nav .links { display: flex; gap: 32px; align-items: center; }
+  nav .links a {
+    color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500;
+    transition: color .2s;
+  }
+  nav .links a:hover { color: var(--text); }
+  .btn-primary {
+    background: var(--electricBlue); color: #fff; border: none;
+    padding: 10px 24px; border-radius: 10px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: background .2s; text-decoration: none; display: inline-block;
+  }
+  .btn-primary:hover { background: #1d56e0; }
+
+  /* ═══ HERO — ruhig, dunkel, mit Sidebar-Vorschau ═══ */
+  .hero {
+    padding: 80px 0 60px;
+    position: relative;
+  }
+  .hero .hero-grid {
+    display: flex; gap: 60px; align-items: flex-start;
+  }
+  .hero-text { flex: 1; padding-top: 20px; }
+  .hero .label {
+    display: inline-block;
+    background: rgba(37,99,255,0.1); border: 1px solid rgba(37,99,255,0.2);
+    color: var(--electricBlue); padding: 5px 14px; border-radius: 100px;
+    font-size: 12px; font-weight: 600; margin-bottom: 24px;
+  }
+  .hero h1 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 56px; font-weight: 800; line-height: 1.05;
+    letter-spacing: -1.5px; margin-bottom: 20px;
+  }
+  .hero h1 .highlight {
+    color: var(--yellow);
+  }
+  .hero p {
+    color: var(--muted); font-size: 17px; max-width: 440px;
+    line-height: 1.7; margin-bottom: 32px;
+  }
+
+  /* ═══ SIDEBAR MOCKUP — exakt nach Brand Guide Seite 8 ═══ */
+  .sidebar-mockup {
+    flex: 0 0 280px;
+    background: var(--panel);
+    border: 1px solid var(--stroke);
+    border-radius: 16px;
+    padding: 16px;
+    position: relative;
+  }
+  .sidebar-mockup::before {
+    content: 'Sidebar'; position: absolute; top: -28px; left: 0;
+    font-size: 11px; color: var(--muted); font-weight: 500;
+    letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .sidebar-mockup .sb-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px; margin-bottom: 8px;
+  }
+  .sidebar-mockup .sb-header h4 {
+    font-size: 15px; font-weight: 600; color: var(--text);
+  }
+  .sidebar-mockup .sb-header .badge {
+    background: var(--magenta); color: #fff; font-size: 11px; font-weight: 700;
+    padding: 1px 8px; border-radius: 100px;
+  }
+  .sidebar-mockup .sb-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border-radius: 10px;
+    font-size: 13px; color: var(--muted); font-weight: 500;
+    transition: all .15s; cursor: default;
+  }
+  .sidebar-mockup .sb-item .sb-icon {
+    width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; opacity: 0.7;
+  }
+  /* Active State = gelb + Glow + dunkle Kachel — BRAND GUIDE REGEL */
+  .sidebar-mockup .sb-item.active {
+    background: var(--surface);
+    box-shadow: 0 0 20px rgba(255,200,0,0.06);
+    color: var(--yellow);
+    font-weight: 600;
+  }
+  .sidebar-mockup .sb-item.active .sb-icon { opacity: 1; }
+  .sidebar-mockup .sb-item .sb-icon.blue { background: rgba(37,99,255,0.15); color: var(--electricBlue); }
+  .sidebar-mockup .sb-item .sb-icon.cyan { background: rgba(0,229,255,0.12); color: var(--cyan); }
+  .sidebar-mockup .sb-item .sb-icon.purple { background: rgba(138,63,252,0.12); color: var(--purple); }
+  .sidebar-mockup .sb-item .sb-icon.magenta { background: rgba(255,45,143,0.1); color: var(--magenta); }
+  .sidebar-mockup .sb-item .sb-icon.orange { background: rgba(255,138,0,0.12); color: var(--orange); }
+  .sidebar-mockup .sb-item .sb-icon.green { background: rgba(124,255,107,0.1); color: var(--green); }
+  .sidebar-mockup .sb-divider {
+    height: 1px; background: var(--stroke); margin: 6px 10px;
+  }
+
+  /* ═══ FEATURES — Navy Glass Cards ═══ */
+  .features {
+    padding: 80px 0;
+    border-top: 1px solid var(--stroke);
+  }
+  .features h2 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 36px; font-weight: 700; letter-spacing: -0.5px;
+    margin-bottom: 12px;
+  }
+  .features .subtitle { color: var(--muted); font-size: 16px; margin-bottom: 48px; }
+  .feature-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+  }
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--stroke);
+    border-radius: 16px; padding: 28px;
+    transition: border-color .25s;
+    position: relative;
+  }
+  .feature-card:hover { border-color: var(--electricBlue); }
+  .feature-card .fc-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 18px; font-size: 18px;
+  }
+  .feature-card:nth-child(1) .fc-icon { background: rgba(37,99,255,0.1); color: var(--electricBlue); }
+  .feature-card:nth-child(2) .fc-icon { background: rgba(0,229,255,0.08); color: var(--cyan); }
+  .feature-card:nth-child(3) .fc-icon { background: rgba(138,63,252,0.1); color: var(--purple); }
+  .feature-card:nth-child(4) .fc-icon { background: rgba(255,45,143,0.08); color: var(--magenta); }
+  .feature-card:nth-child(5) .fc-icon { background: rgba(255,200,0,0.1); color: var(--yellow); }
+  .feature-card:nth-child(6) .fc-icon { background: rgba(124,255,107,0.08); color: var(--green); }
+  .feature-card h3 { font-size: 18px; font-weight: 600; margin-bottom: 10px; }
+  .feature-card p { color: var(--muted); font-size: 14px; line-height: 1.65; }
+  .feature-card .tag {
+    display: inline-block; margin-top: 14px;
+    font-size: 11px; font-weight: 600; padding: 3px 10px;
+    border-radius: 100px; letter-spacing: 0.3px;
+  }
+  .feature-card:nth-child(1) .tag { background: rgba(37,99,255,0.08); color: var(--electricBlue); }
+  .feature-card:nth-child(2) .tag { background: rgba(0,229,255,0.06); color: var(--cyan); }
+  .feature-card:nth-child(3) .tag { background: rgba(138,63,252,0.08); color: var(--purple); }
+  .feature-card:nth-child(4) .tag { background: rgba(255,45,143,0.06); color: var(--magenta); }
+  .feature-card:nth-child(5) .tag { background: rgba(255,200,0,0.08); color: var(--yellow); }
+  .feature-card:nth-child(6) .tag { background: rgba(124,255,107,0.06); color: var(--green); }
+
+  /* ═══ ACTIVE STATE DEMO — nach Brand Guide: Gelb, Glow, dunkle Kachel ═══ */
+  .state-demo {
+    padding: 60px 0; border-bottom: 1px solid var(--stroke);
+  }
+  .state-demo .state-grid {
+    display: flex; gap: 32px; align-items: center;
+  }
+  .state-demo .state-visual {
+    flex: 1; display: flex; gap: 16px; align-items: center;
+    background: var(--surface); border: 1px solid var(--stroke);
+    border-radius: 16px; padding: 24px 32px;
+  }
+  .state-demo .state-item {
+    padding: 10px 18px; border-radius: 10px;
+    font-size: 14px; font-weight: 500; color: var(--muted);
+    transition: all .2s;
+  }
+  .state-demo .state-item.active {
+    /* BRAND GUIDE: Active = yellow + glow + dark tile */
+    background: var(--surface);
+    box-shadow: 0 0 24px rgba(255,200,0,0.08);
+    color: var(--yellow);
+    font-weight: 600;
+  }
+  .state-demo .state-caption {
+    flex: 0 0 260px;
+  }
+  .state-demo .state-caption h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  .state-demo .state-caption p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .state-demo .state-caption .rule {
+    display: inline-block; background: rgba(255,200,0,0.08); color: var(--yellow);
+    padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-top: 8px;
+    border: 1px solid rgba(255,200,0,0.15);
+  }
+
+  /* ═══ CTA ═══ */
+  .cta-section {
+    padding: 80px 0; text-align: center;
+  }
+  .cta-section h2 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 40px; font-weight: 700; letter-spacing: -1px;
+    margin-bottom: 12px;
+  }
+  .cta-section p { color: var(--muted); font-size: 16px; margin-bottom: 28px; }
+
+  /* ═══ FOOTER ═══ */
+  footer {
+    padding: 32px 0; border-top: 1px solid var(--stroke);
+    display: flex; justify-content: space-between; align-items: center;
+    color: var(--muted); font-size: 13px;
+  }
+  footer .links { display: flex; gap: 24px; }
+  footer a { color: var(--muted); text-decoration: none; transition: color .2s; }
+  footer a:hover { color: var(--text); }
+
+  @media (max-width: 900px) {
+    .hero .hero-grid { flex-direction: column-reverse; }
+    .hero h1 { font-size: 36px; }
+    .sidebar-mockup { flex: none; width: 100%; }
+    .feature-grid { grid-template-columns: 1fr; }
+    .state-demo .state-grid { flex-direction: column; }
+    .state-demo .state-caption { flex: none; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="logo">
+    <span class="lb-icon">LB</span>
+    <span class="lb-text">lastbrowser</span>
+  </a>
+  <div class="links">
+    <a href="#">Features</a>
+    <a href="#">Download</a>
+    <a href="#">Docs</a>
+    <a href="#" class="btn-primary">Download</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="container">
+    <div class="hero-grid">
+      <div class="hero-text">
+        <div class="label">v0.1.3 — Now available</div>
+        <h1>
+          The browser with<br>
+          <span class="highlight">Sidekick</span>
+        </h1>
+        <p>Lastbrowser is a Windows-first browser with an AI-native companion built directly into the browsing experience — not a plugin, the browser itself.</p>
+        <a href="#" class="btn-primary">Download for Windows →</a>
+      </div>
+
+      <!-- Sidebar Mockup nach BRAND GUIDE SEITE 8 -->
+      <div class="sidebar-mockup">
+        <div class="sb-header">
+          <h4>Navigation</h4>
+          <span class="badge">9+</span>
+        </div>
+        <!-- Brand Guide: Active = yellow + glow -->
+        <div class="sb-item active">
+          <span class="sb-icon blue">💬</span> Chat
+        </div>
+        <div class="sb-item">
+          <span class="sb-icon cyan">☑</span> Tasks
+        </div>
+        <div class="sb-item">
+          <span class="sb-icon purple">⬡</span> Kanban
+        </div>
+        <div class="sb-divider"></div>
+        <div class="sb-item">
+          <span class="sb-icon green">⊞</span> Spaces
+        </div>
+        <div class="sb-item">
+          <span class="sb-icon magenta">◎</span> Agents
+        </div>
+        <div class="sb-item">
+          <span class="sb-icon orange">◈</span> Skills
+        </div>
+        <div class="sb-divider"></div>
+        <div class="sb-item">
+          <span class="sb-icon blue">⊡</span> Browser
+        </div>
+        <div class="sb-item">
+          <span class="sb-icon purple">⚙</span> Settings
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="container">
+    <h2>Designed around AI</h2>
+    <p class="subtitle">Calm, dark surfaces. Color only where it matters.</p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="fc-icon">🧠</div>
+        <h3>AI-Native Sidebar</h3>
+        <p>Sidekick lives in your sidebar — ready to summarize, research, or execute across all tabs.</p>
+        <span class="tag">Always available</span>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">◈</div>
+        <h3>Agent Spaces</h3>
+        <p>Each Space has its own agents, memory, and tools — isolated, focused, powerful.</p>
+        <span class="tag">Isolated by design</span>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">🛡</div>
+        <h3>Privacy First</h3>
+        <p>AI runs locally or through your own API keys. No cloud tracking, no data mining.</p>
+        <span class="tag">No telemetry</span>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">✦</div>
+        <h3>Modern Pop-Art UI</h3>
+        <p>Vibrant accents on dark navy glass. Colorful where it counts, calm everywhere else.</p>
+        <span class="tag">Brand-guided</span>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">⊞</div>
+        <h3>Skill Ecosystem</h3>
+        <p>60+ built-in skills. Extend Sidekick with code analysis, image gen, research, and more.</p>
+        <span class="tag">Extensible</span>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon">🪟</div>
+        <h3>Windows-First</h3>
+        <p>Deep Windows integration — native installer, system tray, file access, smooth perf.</p>
+        <span class="tag">Portable & setup</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Active State Demo — Brand Guide Seite 8: yellow + glow + dark tile -->
+<section class="state-demo">
+  <div class="container">
+    <div class="state-grid">
+      <div class="state-visual">
+        <span class="state-item">Inbox</span>
+        <span class="state-item active">Chat</span>
+        <span class="state-item">Tasks</span>
+        <span class="state-item">Spaces</span>
+        <span class="state-item">Settings</span>
+      </div>
+      <div class="state-caption">
+        <h3>Active State nach Brand Guide</h3>
+        <p>Gelber Text + subtiler Glow + dunkle Kachel. Akzente sparsam — nur wo wirklich aktiv.</p>
+        <span class="rule">—yellow + glow + dark tile</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-section">
+  <div class="container">
+    <h2>Ready to browse with Sidekick?</h2>
+    <p>Download Lastbrowser v0.1.3 for Windows. Free during beta.</p>
+    <a href="#" class="btn-primary">Download for Windows →</a>
+  </div>
+</section>
+
+<footer>
+  <div>© 2026 Lastbrowser</div>
+  <div class="links">
+    <a href="#">GitHub</a>
+    <a href="#">Privacy</a>
+    <a href="#">Docs</a>
+  </div>
+</footer>
+
+</body>
+</html>

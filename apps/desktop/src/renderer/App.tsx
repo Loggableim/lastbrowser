@@ -90,6 +90,7 @@ import {
   saveBooleanPreference,
   workspacePanelCollapsedStorageKey
 } from './shell-state.js';
+import { canCallSidekickApi } from './runtime-readiness.js';
 import { AdvancedWebUiTools } from './panels/AdvancedWebUiTools.js';
 import { NativeAiBrowserMain } from './panels/NativeAiBrowserMain.js';
 import {
@@ -183,6 +184,22 @@ const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = {
   browser: ['AI Search', 'Brief', 'Sources', 'Automation tools']
 };
 
+function panelForContextItem(item: string): LastbrowserPanelId | null {
+  const label = item.toLowerCase();
+  if (['spaces', 'active workspace', 'files'].includes(label)) return 'workspaces';
+  if (['scheduled jobs', 'active', 'paused', 'history'].includes(label)) return 'tasks';
+  if (['board', 'triage', 'running', 'done'].includes(label)) return 'kanban';
+  if (['pending', 'in progress', 'completed'].includes(label)) return 'todos';
+  if (['usage', 'models', 'cost', 'llm wiki'].includes(label)) return 'insights';
+  if (['agent', 'webui', 'errors', 'gateway'].includes(label)) return 'logs';
+  if (['accounts', 'inbox', 'ai actions'].includes(label)) return 'gmail';
+  if (['guild', 'channels', 'members', 'moderation'].includes(label)) return 'discord';
+  if (['home', 'categories', 'my apps', 'sdk', 'submit'].includes(label)) return 'appstore';
+  if (['conversation', 'appearance', 'preferences', 'providers', 'plugins', 'system'].includes(label)) return 'settings';
+  if (['ai search', 'brief', 'sources', 'automation tools'].includes(label)) return 'browser';
+  return null;
+}
+
 export function App(): JSX.Element {
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createInitialTab()]);
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
@@ -239,6 +256,7 @@ export function App(): JSX.Element {
   const activeTabIdRef = useRef(activeTabId);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const setupRequired = isFirstRunRequired(setupState, onboardingStatus);
+  const sidekickApiReady = canCallSidekickApi(status);
 
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
@@ -324,7 +342,7 @@ export function App(): JSX.Element {
   }, []);
 
   const refreshSessions = useCallback(async (): Promise<void> => {
-    if (status?.sidekick !== 'ready' || status?.webuiHealth !== 'ready') return;
+    if (!sidekickApiReady) return;
     try {
       const result = await window.lastbrowser.sidekick.listSessions();
       const nextSessions = Array.isArray(result.sessions) ? result.sessions : [];
@@ -338,10 +356,10 @@ export function App(): JSX.Element {
       const message = error instanceof Error ? error.message : String(error);
       setSessionError(isTransientSidekickFetchError(message) ? '' : message);
     }
-  }, [status?.sidekick, status?.webuiHealth]);
+  }, [sidekickApiReady]);
 
   const refreshSpaces = useCallback(async (): Promise<void> => {
-    if (status?.sidekick !== 'ready' || status?.webuiHealth !== 'ready') return;
+    if (!sidekickApiReady) return;
     try {
       const result = await window.lastbrowser.sidekick.listSpaces();
       const nextSpaces = Array.isArray(result.workspaces) ? result.workspaces : [];
@@ -355,13 +373,13 @@ export function App(): JSX.Element {
       const message = error instanceof Error ? error.message : String(error);
       setSpacesError(isTransientSidekickFetchError(message) ? '' : message);
     }
-  }, [status?.sidekick, status?.webuiHealth]);
+  }, [sidekickApiReady]);
 
   const loadActiveSession = useCallback(async (
     sessionId: string,
     options: { loadDraft?: boolean; showLoading?: boolean } = {}
   ): Promise<DesktopSessionDetail | null> => {
-    if (status?.sidekick !== 'ready' || status?.webuiHealth !== 'ready' || !sessionId) return null;
+    if (!sidekickApiReady || !sessionId) return null;
     if (options.showLoading !== false) setActiveSessionLoading(true);
     try {
       const [sessionResult, draftResult] = await Promise.all([
@@ -388,10 +406,10 @@ export function App(): JSX.Element {
     } finally {
       if (options.showLoading !== false) setActiveSessionLoading(false);
     }
-  }, [status?.sidekick, status?.webuiHealth]);
+  }, [sidekickApiReady]);
 
   useEffect(() => {
-    if (status?.sidekick !== 'ready') return undefined;
+    if (!sidekickApiReady) return undefined;
     void refreshSessions();
     void refreshSpaces();
     const timer = window.setInterval(() => void refreshSessions(), 5000);
@@ -400,7 +418,7 @@ export function App(): JSX.Element {
       window.clearInterval(timer);
       window.clearInterval(spaceTimer);
     };
-  }, [refreshSessions, refreshSpaces, status?.sidekick]);
+  }, [refreshSessions, refreshSpaces, sidekickApiReady]);
 
   useEffect(() => {
     if (!activeSessionId) {
@@ -417,12 +435,12 @@ export function App(): JSX.Element {
   }, [activeSessionId, loadActiveSession]);
 
   useEffect(() => {
-    if (!activeSessionId || status?.sidekick !== 'ready' || status?.webuiHealth !== 'ready') return undefined;
+    if (!activeSessionId || !sidekickApiReady) return undefined;
     const timer = window.setTimeout(() => {
       void window.lastbrowser.sidekick.saveDraft({ sessionId: activeSessionId, text: composerText, files: [] }).catch(() => null);
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [activeSessionId, composerText, status?.sidekick, status?.webuiHealth]);
+  }, [activeSessionId, composerText, sidekickApiReady]);
 
   const refreshWorkspace = useCallback(async (pathOverride?: string): Promise<void> => {
     if (status?.sidekick !== 'ready' || !activeSessionId || workspacePanelCollapsed) return;
@@ -925,6 +943,7 @@ export function App(): JSX.Element {
           sessionError={sessionError}
           onAction={runSidekickAction}
           onNewSession={() => void createNativeSession()}
+          onPanel={setActivePanel}
           onDeleteSession={(session) => void deleteNativeSession(session)}
           onDuplicateSession={(session) => void duplicateNativeSession(session)}
           onRenameSession={(session) => void renameNativeSession(session)}
@@ -1244,6 +1263,7 @@ function ContextSidebar({
   sessionError,
   onAction,
   onNewSession,
+  onPanel,
   onDeleteSession,
   onDuplicateSession,
   onRenameSession,
@@ -1262,6 +1282,7 @@ function ContextSidebar({
   sessionError: string;
   onAction: (action: SidekickActionId) => Promise<void>;
   onNewSession: () => void;
+  onPanel: (panel: LastbrowserPanelId) => void;
   onDeleteSession: (session: DesktopSessionSummary) => void;
   onDuplicateSession: (session: DesktopSessionSummary) => void;
   onRenameSession: (session: DesktopSessionSummary) => void;
@@ -1277,6 +1298,21 @@ function ContextSidebar({
   const recentMessages = messages.slice(-3);
   const showSessionTools = activePanel === 'chat' || activePanel === 'browser';
   const contextItems = panelContextItems[activePanel] || [];
+  const [activeContextItem, setActiveContextItem] = useState(contextItems[0] || '');
+
+  useEffect(() => {
+    setActiveContextItem(contextItems[0] || '');
+  }, [activePanel, contextItems]);
+
+  function handleContextItem(item: string): void {
+    setActiveContextItem(item);
+    if (item === 'New chat' || item === 'Chat sessions') {
+      onNewSession();
+      return;
+    }
+    const targetPanel = panelForContextItem(item);
+    if (targetPanel) onPanel(targetPanel);
+  }
 
   if (collapsed) {
     return (
@@ -1375,8 +1411,14 @@ function ContextSidebar({
             )}
           </div>
           <div className="context-section-list">
-            {contextItems.map((item, index) => (
-              <button key={item} type="button" className={index === 0 ? 'active' : ''}>
+            {contextItems.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={item === activeContextItem ? 'active' : ''}
+                aria-pressed={item === activeContextItem}
+                onClick={() => handleContextItem(item)}
+              >
                 <img src={brandAssets.sidebarIcons[activePanel]} alt="" />
                 <span>{item}</span>
               </button>
@@ -1527,7 +1569,7 @@ function BrowserMain({
   }
 
   return (
-    <section className="browser-main">
+    <section className="browser-main browser-page-main">
       <div className="browser-action-strip" aria-label="Sidekick page actions">
         <button type="button" onClick={() => void onAction('summarize-page')} disabled={busy}>
           <Sparkles size={14} />
@@ -1542,18 +1584,21 @@ function BrowserMain({
           <span>Research</span>
         </button>
       </div>
-      <webview
-        key={activeTab.id}
-        ref={webviewRef}
-        src={activeTab.url}
-        className="browser-view"
-        partition="persist:lastbrowser-main"
-        allowpopups="false"
-        onDomReady={(event) => void hideWebviewScrollbars(event.currentTarget)}
-        onDidNavigate={(event) => onWebviewNavigate(activeTab.id, event.url)}
-        onDidNavigateInPage={(event) => onWebviewNavigate(activeTab.id, event.url)}
-        onPageTitleUpdated={(event) => onWebviewTitle(activeTab.id, event.title)}
-      />
+      <div className="browser-webview-frame">
+        <webview
+          key={activeTab.id}
+          ref={webviewRef}
+          src={activeTab.url}
+          className="browser-view"
+          style={{ width: '100%', height: '100%' }}
+          partition="persist:lastbrowser-main"
+          allowpopups="false"
+          onDomReady={(event) => void hideWebviewScrollbars(event.currentTarget)}
+          onDidNavigate={(event) => onWebviewNavigate(activeTab.id, event.url)}
+          onDidNavigateInPage={(event) => onWebviewNavigate(activeTab.id, event.url)}
+          onPageTitleUpdated={(event) => onWebviewTitle(activeTab.id, event.title)}
+        />
+      </div>
     </section>
   );
 }
@@ -1596,7 +1641,7 @@ function NativeChatMain({
   onStop: () => void;
 }): JSX.Element {
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
-  const ready = serviceStatus?.sidekick === 'ready' && serviceStatus?.webuiHealth === 'ready';
+  const ready = canCallSidekickApi(serviceStatus);
   const model = activeSession?.model || setupModel || 'default';
   const profile = activeSession?.profile || 'default';
   const workspace = activeSession?.workspace || activeSpacePath || 'default';
@@ -1820,7 +1865,7 @@ function NativeSpacesMain({
 }): JSX.Element {
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
-  const ready = serviceStatus?.sidekick === 'ready' && serviceStatus?.webuiHealth === 'ready';
+  const ready = canCallSidekickApi(serviceStatus);
 
   function submit(event: FormEvent): void {
     event.preventDefault();
@@ -1887,7 +1932,7 @@ function NativeSpacesMain({
 }
 
 function NativeTasksMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
-  const ready = serviceStatus?.sidekick === 'ready' && serviceStatus?.webuiHealth === 'ready';
+  const ready = canCallSidekickApi(serviceStatus);
   const [jobs, setJobs] = useState<CronJobSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -2048,7 +2093,7 @@ function NativeKanbanMain({
   activeSpacePath: string;
   serviceStatus: ServiceStatus | null;
 }): JSX.Element {
-  const ready = serviceStatus?.sidekick === 'ready' && serviceStatus?.webuiHealth === 'ready';
+  const ready = canCallSidekickApi(serviceStatus);
   const [board, setBoard] = useState<KanbanBoardResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

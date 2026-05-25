@@ -19,6 +19,8 @@ describe('browser shell layout', () => {
     const workspace = cssBlock(css, '.workspace');
     const browserPane = cssBlock(css, '.browser-main');
     const browserView = cssBlock(css, '.browser-view');
+    const browserPageMain = cssBlock(css, '.browser-page-main');
+    const browserWebviewFrame = cssBlock(css, '.browser-webview-frame');
     const aiBrowserMain = cssBlock(css, '.ai-browser-main');
     const browserCanvas = cssBlock(css, '.panel-browser .browser-main');
     const railCollapsed = cssBlock(css, '.workspace.left-collapsed');
@@ -34,11 +36,23 @@ describe('browser shell layout', () => {
     expect(browserPane).toContain('display: flex');
     expect(browserPane).toContain('height: 100%');
     expect(browserPane).toContain('overflow: hidden');
+    expect(browserPageMain).toContain('display: grid');
+    expect(browserPageMain).toContain('grid-template-rows: minmax(0, 1fr)');
+    expect(browserWebviewFrame).toContain('height: 100%');
+    expect(browserWebviewFrame).toContain('overflow: hidden');
     expect(aiBrowserMain).toContain('overflow: auto');
     expect(browserCanvas).toContain('background: #07111f');
     expect(browserView).toContain('position: absolute');
     expect(browserView).toContain('inset: 0');
     expect(browserView).toContain('height: 100%');
+  });
+
+  it('renders visited websites inside a full-height browser webview frame', () => {
+    const source = readRendererFile('App.tsx');
+
+    expect(source).toContain('className="browser-main browser-page-main"');
+    expect(source).toContain('<div className="browser-webview-frame">');
+    expect(source).toContain('style={{ width: \'100%\', height: \'100%\' }}');
   });
 
   it('binds webview navigation and title events to the tab that owns the webview', () => {
@@ -56,6 +70,7 @@ describe('browser shell layout', () => {
 
     expect(source).toContain('<ShellRail');
     expect(source).toContain('<ContextSidebar');
+    expect(source).toContain('onPanel={setActivePanel}');
     expect(source).toContain('contextSidebarCollapsed');
     expect(source).toContain('<BrowserMain');
     expect(source).toContain('<NativeAiBrowserMain');
@@ -95,6 +110,16 @@ describe('browser shell layout', () => {
     expect(source).not.toContain('is queued for native migration after Chat, Workspace/Spaces, Tasks, Kanban and Todos');
     expect(source).toContain('{setupRequired && (');
     expect(source).toContain('<FirstRunSetupPane');
+  });
+
+  it('wires context-sidebar section buttons instead of rendering dead controls', () => {
+    const source = readRendererFile('App.tsx');
+
+    expect(source).toContain('function panelForContextItem');
+    expect(source).toContain('function handleContextItem(item: string): void');
+    expect(source).toContain('onClick={() => handleContextItem(item)}');
+    expect(source).toContain('aria-pressed={item === activeContextItem}');
+    expect(source).not.toContain("className={index === 0 ? 'active' : ''}");
   });
 
   it('renders native workspace and spaces controls instead of placeholder panels', () => {

@@ -74,6 +74,40 @@ describe('browser shell layout', () => {
     expect(css).toContain('.bookmark-star.active');
   });
 
+  it('keeps chat developer tools and raw prompts behind an explicit toggle', () => {
+    const source = readRendererFile('App.tsx');
+    const helper = readRendererFile('chat-display.ts');
+    const css = readRendererFile('styles.css');
+
+    expect(source).toContain('showDeveloperTools');
+    expect(source).toContain('showDeveloperTools && (');
+    expect(source).toContain('partitionChatMessages');
+    expect(source).toContain('chat-developer-panel');
+    expect(source).toContain('ChatMessageBody');
+    expect(source).toContain('AdvancedWebUiTools panel="chat" serviceStatus={serviceStatus} compact');
+    expect(helper).toContain('summarizeInternalPrompt');
+    expect(helper).toContain('describeChatContent');
+    expect(helper).toContain('isInternalPromptText');
+    expect(css).toContain('.chat-structured-header');
+    expect(css).toContain('.chat-developer-panel');
+  });
+
+  it('only shows Gmail and Discord in the rail after the appstore marks them installed', () => {
+    const source = readRendererFile('App.tsx');
+    const shellState = readRendererFile('shell-state.ts');
+    const appstore = readRendererFile('panels/NativeRestPanels.tsx');
+
+    expect(source).toContain('installedSidebarApps');
+    expect(source).toContain('setInstalledSidebarApps');
+    expect(source).toContain('isInstalledSidebarApp(panel.id, installedSidebarApps)');
+    expect(source).toContain('onInstalledSidebarApp');
+    expect(source).toContain('onUninstalledSidebarApp');
+    expect(shellState).toContain('installedSidebarAppsStorageKey');
+    expect(shellState).toContain('loadInstalledSidebarApps');
+    expect(shellState).toContain('saveInstalledSidebarApps');
+    expect(appstore).toContain('sidebarAppPanelForApp');
+  });
+
   it('binds webview navigation and title events to the tab that owns the webview', () => {
     const source = readRendererFile('App.tsx');
 
@@ -169,6 +203,9 @@ describe('browser shell layout', () => {
     expect(source).toContain('getKanbanBoard');
     expect(source).toContain('createKanbanTask');
     expect(source).toContain('extractTodosFromSession');
+    expect(source).toContain('<NativeTasksMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeKanbanMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeTodosMain activeContextItem={activeContextItem}');
     expect(css).toContain('.tasks-main');
     expect(css).toContain('.kanban-main');
     expect(css).toContain('.todos-main');
@@ -212,6 +249,15 @@ describe('browser shell layout', () => {
     expect(source).toContain("case 'profiles'");
     expect(source).toContain("case 'memory'");
     expect(source).toContain("case 'settings'");
+    expect(source).toContain('<NativeSkillsMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeAgentsMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeProfilesMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeMemoryMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeLogsMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeGmailMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeDiscordMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeAppstoreMain');
+    expect(source).toContain('<NativeSettingsMain activeContextItem={activeContextItem}');
     expect(restPanels).toContain('agent-terminal');
     expect(restPanels).toContain('memory-editor');
     expect(restPanels).toContain('skill-linked-files');

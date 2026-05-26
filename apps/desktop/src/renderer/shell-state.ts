@@ -87,6 +87,7 @@ type PanelStorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 export const activePanelStorageKey = 'lastbrowser.activePanel';
 export const leftSidebarCollapsedStorageKey = 'lastbrowser.leftSidebarCollapsed';
 export const workspacePanelCollapsedStorageKey = 'lastbrowser.workspacePanelCollapsed';
+export const installedSidebarAppsStorageKey = 'lastbrowser.installedSidebarApps';
 
 export const lastbrowserPanels: LastbrowserPanel[] = [
   { id: 'chat', label: 'Chat', tooltip: 'Chat' },
@@ -108,6 +109,7 @@ export const lastbrowserPanels: LastbrowserPanel[] = [
 ];
 
 const panelIds = new Set(lastbrowserPanels.map((panel) => panel.id));
+const appPanels = new Set<LastbrowserPanelId>(['gmail', 'discord']);
 
 function defaultStorage(): PanelStorageLike | undefined {
   return typeof globalThis.localStorage === 'undefined' ? undefined : globalThis.localStorage;
@@ -117,6 +119,48 @@ export function normalizePanelId(value: unknown): LastbrowserPanelId {
   return typeof value === 'string' && panelIds.has(value as LastbrowserPanelId)
     ? (value as LastbrowserPanelId)
     : 'browser';
+}
+
+export function isSidebarAppPanel(panel: LastbrowserPanelId): boolean {
+  return appPanels.has(panel);
+}
+
+export function loadInstalledSidebarApps(storage: PanelStorageLike | undefined = defaultStorage()): LastbrowserPanelId[] {
+  if (!storage) {
+    return [];
+  }
+
+  try {
+    const raw = storage.getItem(installedSidebarAppsStorageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return Array.from(new Set(parsed.filter((value): value is LastbrowserPanelId => (
+      typeof value === 'string' && appPanels.has(value as LastbrowserPanelId)
+    ))));
+  } catch {
+    return [];
+  }
+}
+
+export function saveInstalledSidebarApps(
+  storage: PanelStorageLike | undefined = defaultStorage(),
+  panels: LastbrowserPanelId[]
+): void {
+  if (!storage) {
+    return;
+  }
+
+  try {
+    const uniquePanels = Array.from(new Set(panels.filter((panel) => appPanels.has(panel))));
+    storage.setItem(installedSidebarAppsStorageKey, JSON.stringify(uniquePanels));
+  } catch {
+    // Ignore unavailable storage, for example in restricted renderer contexts.
+  }
+}
+
+export function isInstalledSidebarApp(panel: LastbrowserPanelId, installedPanels: LastbrowserPanelId[] = []): boolean {
+  return !appPanels.has(panel) || installedPanels.includes(panel);
 }
 
 export function loadInitialPanel(storage: PanelStorageLike | undefined = defaultStorage()): LastbrowserPanelId {

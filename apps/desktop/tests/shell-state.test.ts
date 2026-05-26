@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   lastbrowserPanels,
+  isInstalledSidebarApp,
   loadInitialPanel,
+  loadInstalledSidebarApps,
   normalizePanelId,
   saveActivePanel
 } from '../src/renderer/shell-state.js';
@@ -60,5 +62,20 @@ describe('Lastbrowser shell state', () => {
     saveActivePanel(storage, 'workspaces');
 
     expect(storage.getItem('lastbrowser.activePanel')).toBe('workspaces');
+  });
+
+  it('keeps gmail and discord hidden until installed through the appstore', () => {
+    const storage = new MemoryStorage();
+
+    expect(loadInstalledSidebarApps(storage)).toEqual([]);
+    expect(isInstalledSidebarApp('chat', [])).toBe(true);
+    expect(isInstalledSidebarApp('gmail', [])).toBe(false);
+    expect(isInstalledSidebarApp('discord', [])).toBe(false);
+
+    storage.setItem('lastbrowser.installedSidebarApps', JSON.stringify(['gmail', 'discord', 'gmail', 'browser']));
+
+    expect(loadInstalledSidebarApps(storage)).toEqual(['gmail', 'discord']);
+    expect(isInstalledSidebarApp('gmail', ['gmail'])).toBe(true);
+    expect(isInstalledSidebarApp('discord', ['gmail'])).toBe(false);
   });
 });

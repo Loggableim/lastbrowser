@@ -160,11 +160,12 @@ function EmptyState({ icon, label }: { icon: React.ReactNode; label: string }): 
   );
 }
 
-export function NativeSkillsMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
+export function NativeSkillsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const ready = isReady(serviceStatus);
   const skillsState = useApiState(() => window.lastbrowser.sidekick.listSkills(), [ready], ready);
   const skills = arrayFrom(skillsState.data, ['skills', 'items', 'files']);
   const [query, setQuery] = useState('');
+  const [section, setSection] = useState(activeContextItem || 'Library');
   const [selectedName, setSelectedName] = useState('');
   const [selectedFile, setSelectedFile] = useState('');
   const [content, setContent] = useState('');
@@ -174,6 +175,16 @@ export function NativeSkillsMain({ serviceStatus }: { serviceStatus: ServiceStat
   const linkedFiles = isRecord(selectedSkill?.linked_files)
     ? Object.keys(selectedSkill.linked_files)
     : arrayFrom(isRecord(selectedSkill?.linked_files) ? selectedSkill.linked_files : null, ['files']).map(idOf);
+
+  useEffect(() => {
+    setSection(activeContextItem || 'Library');
+  }, [activeContextItem]);
+
+  const visibleSkills = section === 'Create skill'
+    ? filtered.slice(0, 1)
+    : section === 'Linked files' && selectedSkill
+      ? [selectedSkill]
+      : filtered;
 
   useEffect(() => {
     if (!selectedName && filtered[0]) setSelectedName(text(filtered[0].name || idOf(filtered[0])));
@@ -222,23 +233,28 @@ export function NativeSkillsMain({ serviceStatus }: { serviceStatus: ServiceStat
     <section className="browser-main native-rest-main skills-main">
       <NativeHeader icon={<Sparkles size={21} />} title="Skills" kicker="Native Skills" detail="Skill library, linked files and SKILL.md editing through the local Sidekick API." loading={skillsState.loading} ready={ready} onRefresh={skillsState.refresh} />
       <AdvancedWebUiTools panel="skills" serviceStatus={serviceStatus} compact />
+      <div className="native-card-actions insights-tabs">
+        {['Library', 'Editor', 'Linked files', 'Create skill'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        ))}
+      </div>
       <div className="native-rest-split">
         <aside className="integration-list">
           <div className="native-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search skills..." /></div>
           <button type="button" className="new-session-button" onClick={() => void createSkill()} disabled={!ready}><Plus size={15} />New skill</button>
-          {filtered.map((skill) => (
+          {visibleSkills.map((skill) => (
             <button key={idOf(skill)} type="button" className={`integration-row ${idOf(skill) === selectedName ? 'active' : ''}`} onClick={() => { setSelectedName(text(skill.name || idOf(skill))); setSelectedFile(''); }}>
               <img src={brandAssets.sidebarIcons.skills} alt="" />
               <span>{titleOf(skill, idOf(skill))}</span>
               <small>{text(skill.path || skill.category || skill.source)}</small>
             </button>
           ))}
-          {!filtered.length && <EmptyState icon={<Sparkles size={22} />} label={ready ? 'No skills found.' : 'Sidekick is starting.'} />}
+          {!visibleSkills.length && <EmptyState icon={<Sparkles size={22} />} label={ready ? 'No skills found.' : 'Sidekick is starting.'} />}
         </aside>
         <main className="native-rest-editor">
           <ErrorLine error={skillsState.error || editorError} />
           <div className="native-rest-editor-head">
-            <strong>{selectedFile || selectedName || 'Select a skill'}</strong>
+            <strong>{section}: {selectedFile || selectedName || 'Select a skill'}</strong>
             <div className="native-card-actions">
               <button type="button" onClick={() => void save()} disabled={!ready || !selectedName || Boolean(selectedFile)}><Save size={13} /><span>Save SKILL.md</span></button>
               <button type="button" className="danger" onClick={() => void removeSkill()} disabled={!ready || !selectedName}><Trash2 size={13} /><span>Delete</span></button>
@@ -260,7 +276,7 @@ export function NativeSkillsMain({ serviceStatus }: { serviceStatus: ServiceStat
   );
 }
 
-export function NativeAgentsMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
+export function NativeAgentsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const ready = isReady(serviceStatus);
   const agentsState = useApiState(() => window.lastbrowser.sidekick.listAgents(), [ready], ready);
   const currentState = useApiState(() => window.lastbrowser.sidekick.getCurrentAgent(), [ready], ready);
@@ -280,11 +296,16 @@ export function NativeAgentsMain({ serviceStatus }: { serviceStatus: ServiceStat
   const [command, setCommand] = useState('');
   const [events, setEvents] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const [section, setSection] = useState(activeContextItem || 'Dashboard');
   const selectedAgent = agents.find((agent) => idOf(agent) === selectedSlug) || agents[0] || null;
 
   useEffect(() => {
     if (!selectedSlug && selectedAgent) setSelectedSlug(idOf(selectedAgent));
   }, [selectedAgent, selectedSlug]);
+
+  useEffect(() => {
+    setSection(activeContextItem || 'Dashboard');
+  }, [activeContextItem]);
 
   const refreshAgentSessions = useCallback(async (): Promise<void> => {
     if (!ready || !selectedSlug) return;
@@ -394,6 +415,23 @@ export function NativeAgentsMain({ serviceStatus }: { serviceStatus: ServiceStat
     <section className="browser-main native-rest-main agents-main">
       <NativeHeader icon={<Bot size={21} />} title="Agents" kicker="Native Agents" detail="Dashboard, CRUD, sessions, agent chat and workspace terminal without a WebUI embed." loading={agentsState.loading} ready={ready} onRefresh={agentsState.refresh} />
       <AdvancedWebUiTools panel="agents" serviceStatus={serviceStatus} compact />
+      <div className="native-card-actions insights-tabs">
+        {['Dashboard', 'Agents', 'Chat sessions', 'Workspace terminal', 'Create agent'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        ))}
+      </div>
+      <section className="native-work-card detail-json-card">
+        <header><strong>{section}</strong></header>
+        <pre>{jsonPreview({
+          agentCount: agents.length,
+          sessionCount: sessions.length,
+          activeAgent: selectedAgent ? titleOf(selectedAgent) : null,
+          activeSessionId,
+          currentAgent: currentState.data ? titleOf(currentState.data) : null,
+          splash: splashState.data,
+          stats: statsState.data
+        })}</pre>
+      </section>
       <div className="agent-dashboard">
         <aside className="integration-list">
           <div className="native-card-actions">
@@ -415,9 +453,10 @@ export function NativeAgentsMain({ serviceStatus }: { serviceStatus: ServiceStat
           ))}
           {!agents.length && <EmptyState icon={<Bot size={22} />} label={ready ? 'No agents configured.' : 'Sidekick is starting.'} />}
         </aside>
-        <main className="agent-main-grid">
+        <main className={`agent-main-grid ${section.toLowerCase().replace(/\s+/g, '-')}`}>
           <ErrorLine error={agentsState.error || statsState.error || activitiesState.error || profilesState.error || workspacesState.error || error} />
-          <section className="native-work-card agent-detail-card">
+          {(section === 'Dashboard' || section === 'Agents' || section === 'Create agent') && (
+            <section className="native-work-card agent-detail-card">
             <header>
               <h2>{selectedAgent ? titleOf(selectedAgent) : 'Select an agent'}</h2>
               <button type="button" onClick={() => void saveSelectedProfile()} disabled={!ready || !selectedSlug}><Save size={13} />Profile</button>
@@ -429,8 +468,10 @@ export function NativeAgentsMain({ serviceStatus }: { serviceStatus: ServiceStat
             <div className="compact-list">
               {arrayFrom(activitiesState.data, ['activities', 'items']).slice(0, 5).map((activity) => <article key={idOf(activity)}><strong>{titleOf(activity, 'Activity')}</strong><span>{text(activity.message || activity.detail || activity.type)}</span></article>)}
             </div>
-          </section>
-          <section className="native-work-card agent-chat-card">
+            </section>
+          )}
+          {(section === 'Dashboard' || section === 'Chat sessions') && (
+            <section className="native-work-card agent-chat-card">
             <header><strong>Agent Chat</strong><button type="button" onClick={() => void refreshAgentSessions()} disabled={!ready}><RefreshCw size={13} /></button></header>
             <select value={selectedSessionId} onChange={(event) => setSelectedSessionId(event.target.value)}>
               {sessions.map((session) => <option key={idOf(session)} value={idOf(session)}>{titleOf(session, idOf(session))}</option>)}
@@ -444,7 +485,9 @@ export function NativeAgentsMain({ serviceStatus }: { serviceStatus: ServiceStat
             </div>
             <pre>{jsonPreview({ profiles: profilesState.data, workspaces: workspacesState.data })}</pre>
           </section>
-          <section className="native-work-card agent-terminal">
+          )}
+          {(section === 'Dashboard' || section === 'Workspace terminal') && (
+            <section className="native-work-card agent-terminal">
             <header>
               <strong>Workspace Terminal</strong>
               <div className="native-card-actions">
@@ -458,22 +501,28 @@ export function NativeAgentsMain({ serviceStatus }: { serviceStatus: ServiceStat
             </form>
             <pre>{events.length ? events.join('\n') : 'Terminal events will appear here.'}</pre>
           </section>
+          )}
         </main>
       </div>
     </section>
   );
 }
 
-export function NativeProfilesMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
+export function NativeProfilesMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const ready = isReady(serviceStatus);
   const state = useApiState(() => window.lastbrowser.sidekick.listProfiles(), [ready], ready);
   const profiles = arrayFrom(state.data, ['profiles', 'items']);
   const [selected, setSelected] = useState('');
+  const [section, setSection] = useState(activeContextItem || 'Profiles');
   const current = profiles.find((profile) => idOf(profile) === selected) || profiles[0] || null;
 
   useEffect(() => {
     if (!selected && current) setSelected(idOf(current));
   }, [current, selected]);
+
+  useEffect(() => {
+    setSection(activeContextItem || 'Profiles');
+  }, [activeContextItem]);
 
   async function create(): Promise<void> {
     const name = window.prompt('Profile name', 'default');
@@ -501,6 +550,11 @@ export function NativeProfilesMain({ serviceStatus }: { serviceStatus: ServiceSt
     <section className="browser-main native-rest-main profiles-main">
       <NativeHeader icon={<Users size={21} />} title="Agent Profiles" kicker="Profiles" detail="Profile selection, defaults, gateway/model/workspace display and basic profile management." loading={state.loading} ready={ready} onRefresh={state.refresh} />
       <AdvancedWebUiTools panel="profiles" serviceStatus={serviceStatus} compact />
+      <div className="native-card-actions insights-tabs">
+        {['Profiles', 'Active profile', 'Gateway', 'Model defaults'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        ))}
+      </div>
       <div className="native-rest-split">
         <aside className="integration-list">
           <button type="button" className="new-session-button" onClick={() => void create()} disabled={!ready}><Plus size={15} />New profile</button>
@@ -516,13 +570,21 @@ export function NativeProfilesMain({ serviceStatus }: { serviceStatus: ServiceSt
           <ErrorLine error={state.error} />
           <section className="native-work-card detail-json-card">
             <header>
-              <strong>{current ? titleOf(current) : 'No profile selected'}</strong>
+              <strong>{section}: {current ? titleOf(current) : 'No profile selected'}</strong>
               <div className="native-card-actions">
                 <button type="button" onClick={() => void activate()} disabled={!ready || !selected}><CheckCircle2 size={13} /><span>Activate</span></button>
                 <button type="button" className="danger" onClick={() => void remove()} disabled={!ready || !selected}><Trash2 size={13} /><span>Delete</span></button>
               </div>
             </header>
-            <pre>{jsonPreview(current || state.data || {})}</pre>
+            <pre>{jsonPreview(
+              section === 'Gateway'
+                ? { gateway: current?.gateway || current?.provider || state.data?.gateway || state.data?.provider || current }
+                : section === 'Model defaults'
+                  ? { model: current?.model || state.data?.default_model, defaults: current?.defaults || state.data?.defaults || state.data }
+                  : section === 'Active profile'
+                    ? { active: current, current: state.data?.current || state.data?.active || current }
+                    : current || state.data || {}
+            )}</pre>
           </section>
         </main>
       </div>
@@ -530,17 +592,23 @@ export function NativeProfilesMain({ serviceStatus }: { serviceStatus: ServiceSt
   );
 }
 
-export function NativeMemoryMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
+export function NativeMemoryMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const ready = isReady(serviceStatus);
   const memoryState = useApiState(() => window.lastbrowser.sidekick.getMemory(), [ready], ready);
   const superState = useApiState(() => window.lastbrowser.sidekick.getSupermemoryStatus(), [ready], ready);
   const docsState = useApiState(() => window.lastbrowser.sidekick.listSupermemoryDocuments(), [ready], ready);
-  const [section, setSection] = useState('memory');
+  const [section, setSection] = useState((activeContextItem || 'Core memory').toLowerCase().includes('user') ? 'user' : 'memory');
+  const [focus, setFocus] = useState(activeContextItem || 'Core memory');
   const [draft, setDraft] = useState('');
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<AnyRecord[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<AnyRecord | null>(null);
   const [documentDetail, setDocumentDetail] = useState<AnyRecord | null>(null);
+
+  useEffect(() => {
+    setFocus(activeContextItem || 'Core memory');
+    setSection((activeContextItem || 'Core memory').toLowerCase().includes('user') ? 'user' : 'memory');
+  }, [activeContextItem]);
 
   useEffect(() => {
     if (!memoryState.data) return;
@@ -588,7 +656,45 @@ export function NativeMemoryMain({ serviceStatus }: { serviceStatus: ServiceStat
       <NativeHeader icon={<Brain size={21} />} title="Memory" kicker="Memory" detail="Core memory sections, Supermemory status/list/search and hybrid search in native UI." loading={memoryState.loading} ready={ready} onRefresh={memoryState.refresh} />
       <AdvancedWebUiTools panel="memory" serviceStatus={serviceStatus} compact />
       <ErrorLine error={memoryState.error || superState.error || docsState.error} />
+      <div className="native-card-actions insights-tabs">
+        {['Core memory', 'User facts', 'Supermemory', 'Hybrid search'].map((item) => (
+          <button
+            key={item}
+            type="button"
+            className={item === focus ? 'active' : ''}
+            onClick={() => {
+              setFocus(item);
+              setSection(item === 'User facts' ? 'user' : 'memory');
+            }}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
       <div className="memory-grid">
+        {(focus === 'Supermemory' || focus === 'Hybrid search') && (
+          <section className="native-work-card memory-super">
+            <header>
+              <strong>{focus}</strong>
+              <div className="native-card-actions">
+                <button type="button" onClick={() => void addDocument()} disabled={!ready}><Plus size={13} />Add</button>
+                <button type="button" className="danger" onClick={() => void forgetDocument()} disabled={!ready || !selectedDocument}><Trash2 size={13} />Forget</button>
+              </div>
+            </header>
+            <pre>{jsonPreview(superState.data || {})}</pre>
+            <div className="native-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search memory..." /></div>
+            <div className="native-card-actions">
+              <button type="button" onClick={() => void runSearch('super')} disabled={!ready || !search.trim()}><Search size={13} /><span>Super Search</span></button>
+              <button type="button" onClick={() => void runSearch('hybrid')} disabled={!ready || !search.trim()}><Sparkles size={13} /><span>Hybrid Search</span></button>
+            </div>
+            <div className="compact-list">
+              {[...results, ...arrayFrom(docsState.data, ['documents', 'items']).slice(0, results.length ? 0 : 8)].map((item) => (
+                <article key={idOf(item)} className={idOf(item) === idOf(selectedDocument || {}) ? 'active' : ''} onClick={() => void openDocument(item)}><strong>{titleOf(item)}</strong><span>{text(item.content || item.text || item.id)}</span></article>
+              ))}
+            </div>
+            <pre>{documentDetail ? jsonPreview(documentDetail) : 'Select a Supermemory document to inspect the full payload.'}</pre>
+          </section>
+        )}
         <section className="native-work-card memory-editor">
           <header>
             <div className="settings-section-nav">
@@ -598,63 +704,101 @@ export function NativeMemoryMain({ serviceStatus }: { serviceStatus: ServiceStat
           </header>
           <textarea value={draft} onChange={(event) => setDraft(event.target.value)} />
         </section>
-        <section className="native-work-card memory-super">
-          <header>
-            <strong>Supermemory</strong>
+        {!(focus === 'Supermemory' || focus === 'Hybrid search') && (
+          <section className="native-work-card memory-super">
+            <header>
+              <strong>Supermemory</strong>
+              <div className="native-card-actions">
+                <button type="button" onClick={() => void addDocument()} disabled={!ready}><Plus size={13} />Add</button>
+                <button type="button" className="danger" onClick={() => void forgetDocument()} disabled={!ready || !selectedDocument}><Trash2 size={13} />Forget</button>
+              </div>
+            </header>
+            <pre>{jsonPreview(superState.data || {})}</pre>
+            <div className="native-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search memory..." /></div>
             <div className="native-card-actions">
-              <button type="button" onClick={() => void addDocument()} disabled={!ready}><Plus size={13} />Add</button>
-              <button type="button" className="danger" onClick={() => void forgetDocument()} disabled={!ready || !selectedDocument}><Trash2 size={13} />Forget</button>
+              <button type="button" onClick={() => void runSearch('super')} disabled={!ready || !search.trim()}><Search size={13} /><span>Super Search</span></button>
+              <button type="button" onClick={() => void runSearch('hybrid')} disabled={!ready || !search.trim()}><Sparkles size={13} /><span>Hybrid Search</span></button>
             </div>
-          </header>
-          <pre>{jsonPreview(superState.data || {})}</pre>
-          <div className="native-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search memory..." /></div>
-          <div className="native-card-actions">
-            <button type="button" onClick={() => void runSearch('super')} disabled={!ready || !search.trim()}><Search size={13} /><span>Super Search</span></button>
-            <button type="button" onClick={() => void runSearch('hybrid')} disabled={!ready || !search.trim()}><Sparkles size={13} /><span>Hybrid Search</span></button>
-          </div>
-          <div className="compact-list">
-            {[...results, ...arrayFrom(docsState.data, ['documents', 'items']).slice(0, results.length ? 0 : 8)].map((item) => (
-              <article key={idOf(item)} className={idOf(item) === idOf(selectedDocument || {}) ? 'active' : ''} onClick={() => void openDocument(item)}><strong>{titleOf(item)}</strong><span>{text(item.content || item.text || item.id)}</span></article>
-            ))}
-          </div>
-          <pre>{documentDetail ? jsonPreview(documentDetail) : 'Select a Supermemory document to inspect the full payload.'}</pre>
-        </section>
+            <div className="compact-list">
+              {[...results, ...arrayFrom(docsState.data, ['documents', 'items']).slice(0, results.length ? 0 : 8)].map((item) => (
+                <article key={idOf(item)} className={idOf(item) === idOf(selectedDocument || {}) ? 'active' : ''} onClick={() => void openDocument(item)}><strong>{titleOf(item)}</strong><span>{text(item.content || item.text || item.id)}</span></article>
+              ))}
+            </div>
+            <pre>{documentDetail ? jsonPreview(documentDetail) : 'Select a Supermemory document to inspect the full payload.'}</pre>
+          </section>
+        )}
       </div>
     </section>
   );
 }
 
-export function NativeInsightsMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
+export function NativeInsightsMain({
+  serviceStatus,
+  activeContextItem
+}: {
+  serviceStatus: ServiceStatus | null;
+  activeContextItem: string;
+}): JSX.Element {
   const ready = isReady(serviceStatus);
   const [days, setDays] = useState(14);
+  const [section, setSection] = useState(activeContextItem || 'Usage');
   const insights = useApiState(() => window.lastbrowser.sidekick.getInsights({ days }), [ready, days], ready);
   const wiki = useApiState(() => window.lastbrowser.sidekick.getWikiStatus(), [ready], ready);
-  const metricEntries = Object.entries(insights.data || {}).filter(([, value]) => typeof value === 'number' || typeof value === 'string').slice(0, 10);
+  const normalizedSection = section.toLowerCase();
+  const metricEntries = Object.entries(insights.data || {})
+    .filter(([key, value]) => {
+      if (typeof value !== 'number' && typeof value !== 'string') return false;
+      if (normalizedSection === 'models') return /model|provider/i.test(key);
+      if (normalizedSection === 'cost') return /cost|token|usage|bill/i.test(key);
+      return true;
+    })
+    .slice(0, 10);
+
+  useEffect(() => {
+    setSection(activeContextItem || 'Usage');
+  }, [activeContextItem]);
 
   return (
     <section className="browser-main native-rest-main insights-main">
       <NativeHeader icon={<Gauge size={21} />} title="Insights" kicker="Observability" detail="Activity, token/cost/model metrics and LLM wiki status from the existing backend." loading={insights.loading} ready={ready} onRefresh={insights.refresh} />
       <AdvancedWebUiTools panel="insights" serviceStatus={serviceStatus} compact />
+      <div className="native-card-actions insights-tabs">
+        {['Usage', 'Models', 'Cost', 'LLM wiki'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        ))}
+      </div>
       <div className="native-card-actions"><select value={days} onChange={(event) => setDays(Number(event.target.value))}>{[7, 14, 30, 90].map((value) => <option key={value} value={value}>{value} days</option>)}</select></div>
       <ErrorLine error={insights.error || wiki.error} />
       <div className="metric-grid">
         {metricEntries.map(([key, value]) => <article key={key} className="native-work-card metric-card"><span>{key}</span><strong>{String(value)}</strong></article>)}
         {!metricEntries.length && <EmptyState icon={<Gauge size={24} />} label={ready ? 'No metrics yet.' : 'Sidekick is starting.'} />}
       </div>
-      <section className="native-work-card detail-json-card"><header><strong>LLM Wiki Status</strong></header><pre>{jsonPreview(wiki.data || {})}</pre></section>
+      {normalizedSection === 'llm wiki' || normalizedSection === 'wiki' ? (
+        <section className="native-work-card detail-json-card"><header><strong>LLM Wiki Status</strong></header><pre>{jsonPreview(wiki.data || {})}</pre></section>
+      ) : (
+        <section className="native-work-card detail-json-card"><header><strong>{section}</strong></header><pre>{jsonPreview(normalizedSection === 'models' ? { models: insights.data?.models || insights.data?.model_stats || insights.data?.providers || {} } : normalizedSection === 'cost' ? { cost: insights.data?.cost || insights.data?.billing || insights.data?.usage || {} } : insights.data || {})}</pre></section>
+      )}
     </section>
   );
 }
 
-export function NativeLogsMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
+export function NativeLogsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const ready = isReady(serviceStatus);
   const [file, setFile] = useState('agent');
   const [tail, setTail] = useState(200);
   const [severity, setSeverity] = useState('');
   const [wrap, setWrap] = useState(true);
   const [auto, setAuto] = useState(false);
+  const [section, setSection] = useState(activeContextItem || 'Agent');
   const logs = useApiState(() => window.lastbrowser.sidekick.getLogs({ file, tail }), [ready, file, tail], ready);
   const lines = text(logs.data?.text || logs.data?.logs || logs.data?.content).split(/\r?\n/).filter((line) => !severity || line.toLowerCase().includes(severity.toLowerCase()));
+
+  useEffect(() => {
+    const nextSection = activeContextItem || 'Agent';
+    setSection(nextSection);
+    const nextFile = nextSection === 'WebUI' ? 'webui' : nextSection === 'Errors' ? 'errors' : nextSection === 'Gateway' ? 'gateway' : 'agent';
+    setFile(nextFile);
+  }, [activeContextItem]);
 
   useEffect(() => {
     if (!auto) return;
@@ -666,6 +810,11 @@ export function NativeLogsMain({ serviceStatus }: { serviceStatus: ServiceStatus
     <section className="browser-main native-rest-main logs-main">
       <NativeHeader icon={<FileText size={21} />} title="Logs" kicker="Observability" detail="Log file selection, tail size, severity filter, wrap and auto-refresh." loading={logs.loading} ready={ready} onRefresh={logs.refresh} />
       <AdvancedWebUiTools panel="logs" serviceStatus={serviceStatus} compact />
+      <div className="native-card-actions insights-tabs">
+        {['Agent', 'WebUI', 'Errors', 'Gateway'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => { setSection(item); setFile(item === 'WebUI' ? 'webui' : item === 'Errors' ? 'errors' : item === 'Gateway' ? 'gateway' : 'agent'); }}>{item}</button>
+        ))}
+      </div>
       <div className="log-toolbar native-work-card">
         <select value={file} onChange={(event) => setFile(event.target.value)}>{['agent', 'webui', 'errors', 'gateway'].map((item) => <option key={item}>{item}</option>)}</select>
         <select value={tail} onChange={(event) => setTail(Number(event.target.value))}>{[100, 200, 500, 1000].map((item) => <option key={item} value={item}>{item}</option>)}</select>
@@ -679,12 +828,13 @@ export function NativeLogsMain({ serviceStatus }: { serviceStatus: ServiceStatus
   );
 }
 
-export function NativeGmailMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
+export function NativeGmailMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const ready = isReady(serviceStatus);
   const accounts = useApiState(() => window.lastbrowser.sidekick.listGmailAccounts(), [ready], ready);
   const folders = useApiState(() => window.lastbrowser.sidekick.listGmailFolders(), [ready], ready);
   const [folder, setFolder] = useState('inbox');
   const [query, setQuery] = useState('');
+  const [section, setSection] = useState(activeContextItem || 'Inbox');
   const messages = useApiState(() => query.trim()
     ? window.lastbrowser.sidekick.searchGmailMessages({ query, max: 25 })
     : window.lastbrowser.sidekick.listGmailMessages({ folder, max: 25 }), [ready, folder, query], ready);
@@ -692,6 +842,22 @@ export function NativeGmailMain({ serviceStatus }: { serviceStatus: ServiceStatu
   const [detail, setDetail] = useState<AnyRecord | null>(null);
   const [compose, setCompose] = useState({ to: '', subject: '', body: '' });
   const mailItems = arrayFrom(messages.data, ['messages', 'threads', 'items']);
+
+  useEffect(() => {
+    const nextSection = activeContextItem || 'Inbox';
+    setSection(nextSection);
+    if (nextSection === 'Accounts') {
+      setFolder('inbox');
+      setQuery('');
+    }
+    if (nextSection === 'Search') {
+      setQuery((current) => current || '');
+    }
+    if (nextSection === 'Inbox') {
+      setQuery('');
+      setFolder('inbox');
+    }
+  }, [activeContextItem]);
 
   async function openMessage(item: AnyRecord): Promise<void> {
     setSelected(item);
@@ -735,20 +901,26 @@ export function NativeGmailMain({ serviceStatus }: { serviceStatus: ServiceStatu
     <section className="browser-main native-rest-main gmail-main">
       <NativeHeader icon={<Mail size={21} />} title="Gmail" kicker="Mail" detail="Accounts, folders, search, thread readout and AI actions with native controls." loading={messages.loading} ready={ready} onRefresh={messages.refresh} />
       <AdvancedWebUiTools panel="gmail" serviceStatus={serviceStatus} compact />
+      <div className="native-card-actions insights-tabs">
+        {['Accounts', 'Inbox', 'Search', 'AI actions'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        ))}
+      </div>
       <div className="native-rest-split">
         <aside className="integration-list">
           <div className="native-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Gmail..." /></div>
           <select value={folder} onChange={(event) => setFolder(event.target.value)}>
             {['inbox', ...arrayFrom(folders.data, ['folders', 'labels']).map((item) => titleOf(item))].map((item) => <option key={item}>{item}</option>)}
           </select>
-          {mailItems.map((item) => <button key={idOf(item)} type="button" className="integration-row" onClick={() => void openMessage(item)}><Inbox size={18} /><span>{titleOf(item, 'Message')}</span><small>{text(item.from || item.sender || item.date)}</small></button>)}
-          {!mailItems.length && <EmptyState icon={<Mail size={22} />} label={ready ? 'No mail loaded.' : 'Sidekick is starting.'} />}
+          {section !== 'Accounts' && mailItems.map((item) => <button key={idOf(item)} type="button" className="integration-row" onClick={() => void openMessage(item)}><Inbox size={18} /><span>{titleOf(item, 'Message')}</span><small>{text(item.from || item.sender || item.date)}</small></button>)}
+          {!mailItems.length && section !== 'Accounts' && <EmptyState icon={<Mail size={22} />} label={ready ? 'No mail loaded.' : 'Sidekick is starting.'} />}
+          {section === 'Accounts' && <EmptyState icon={<Mail size={22} />} label={ready ? 'Accounts overview selected.' : 'Sidekick is starting.'} />}
         </aside>
         <main className="native-rest-detail">
           <ErrorLine error={accounts.error || folders.error || messages.error} />
           <section className="native-work-card detail-json-card">
             <header>
-              <strong>{selected ? titleOf(selected, 'Selected message') : 'Gmail detail'}</strong>
+              <strong>{section}: {selected ? titleOf(selected, 'Selected message') : 'Gmail detail'}</strong>
               <div className="native-card-actions">
                 <button type="button" onClick={() => void aiAction('summary')} disabled={!selected}><Sparkles size={13} /><span>Summary</span></button>
                 <button type="button" onClick={() => void aiAction('draft')} disabled={!selected}><Edit3 size={13} /><span>Draft</span></button>
@@ -757,7 +929,7 @@ export function NativeGmailMain({ serviceStatus }: { serviceStatus: ServiceStatu
                 <button type="button" className="danger" onClick={() => void deleteSelected()} disabled={!selected}><Trash2 size={13} /><span>Delete</span></button>
               </div>
             </header>
-            <pre>{jsonPreview(detail || accounts.data || {})}</pre>
+            <pre>{jsonPreview(section === 'Accounts' ? accounts.data || {} : section === 'Search' ? { query, results: messages.data || {} } : detail || accounts.data || {})}</pre>
           </section>
           <form className="native-work-card gmail-compose" onSubmit={(event) => void sendCompose(event)}>
             <header><strong>Compose</strong><button type="submit" disabled={!ready || !compose.to.trim() || !compose.body.trim()}><Send size={13} />Send</button></header>
@@ -771,7 +943,7 @@ export function NativeGmailMain({ serviceStatus }: { serviceStatus: ServiceStatu
   );
 }
 
-export function NativeDiscordMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
+export function NativeDiscordMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const ready = isReady(serviceStatus);
   const guild = useApiState(() => window.lastbrowser.sidekick.getDiscordGuild(), [ready], ready);
   const channels = useApiState(() => window.lastbrowser.sidekick.listDiscordChannels(), [ready], ready);
@@ -785,6 +957,7 @@ export function NativeDiscordMain({ serviceStatus }: { serviceStatus: ServiceSta
   const [memberQuery, setMemberQuery] = useState('');
   const [purgeAmount, setPurgeAmount] = useState(10);
   const [selectedMember, setSelectedMember] = useState<AnyRecord | null>(null);
+  const [section, setSection] = useState(activeContextItem || 'Guild');
   const members = useApiState(() => window.lastbrowser.sidekick.listDiscordMembers({ query: memberQuery }), [ready, memberQuery], ready);
   const messages = useApiState(() => channelId ? window.lastbrowser.sidekick.listDiscordMessages({ channelId, limit: 50 }) : Promise.resolve({}), [ready, channelId], ready && Boolean(channelId));
   const treeChannels = arrayFrom(channelTree.data, ['uncategorized', 'channels', 'items']);
@@ -794,6 +967,10 @@ export function NativeDiscordMain({ serviceStatus }: { serviceStatus: ServiceSta
   useEffect(() => {
     if (!channelId && channelItems[0]) setChannelId(idOf(channelItems[0]));
   }, [channelId, channelItems]);
+
+  useEffect(() => {
+    setSection(activeContextItem || 'Guild');
+  }, [activeContextItem]);
 
   async function send(event: FormEvent): Promise<void> {
     event.preventDefault();
@@ -832,64 +1009,113 @@ export function NativeDiscordMain({ serviceStatus }: { serviceStatus: ServiceSta
     <section className="browser-main native-rest-main discord-main">
       <NativeHeader icon={<Users size={21} />} title="Discord" kicker="Community" detail="Guild, channels, members, messages and moderation actions in native UI." loading={channels.loading} ready={ready} onRefresh={channels.refresh} />
       <AdvancedWebUiTools panel="discord" serviceStatus={serviceStatus} compact />
+      <div className="native-card-actions insights-tabs">
+        {['Guild', 'Channels', 'Members', 'Moderation'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        ))}
+      </div>
       <div className="discord-grid">
-        <aside className="integration-list">
-          {channelItems.map((channel) => <button key={idOf(channel)} type="button" className={`integration-row ${idOf(channel) === channelId ? 'active' : ''}`} onClick={() => setChannelId(idOf(channel))}><MessageSquare size={17} /><span>{titleOf(channel)}</span><small>{idOf(channel)}</small></button>)}
-        </aside>
+        {section !== 'Members' && (
+          <aside className="integration-list">
+            {channelItems.map((channel) => <button key={idOf(channel)} type="button" className={`integration-row ${idOf(channel) === channelId ? 'active' : ''}`} onClick={() => setChannelId(idOf(channel))}><MessageSquare size={17} /><span>{titleOf(channel)}</span><small>{idOf(channel)}</small></button>)}
+          </aside>
+        )}
         <main className="native-work-card discord-messages">
           <ErrorLine error={guild.error || channels.error || channelTree.error || roles.error || stats.error || botInfo.error || warns.error || messages.error} />
           <header>
-            <strong>{channelId || 'Channel'}</strong>
+            <strong>{section}: {channelId || 'Channel'}</strong>
             <div className="native-card-actions discord-moderation">
               <input type="number" value={purgeAmount} min={1} max={100} onChange={(event) => setPurgeAmount(Number(event.target.value))} />
               <button type="button" className="danger" onClick={() => void purgeChannel()} disabled={!ready || !channelId}><Trash2 size={13} />Purge</button>
               <button type="button" onClick={() => void saveModerationConfig()} disabled={!ready}><Save size={13} />Config</button>
             </div>
           </header>
-          <pre>{jsonPreview({ guild: guild.data, stats: stats.data, bot: botInfo.data, roles: roles.data })}</pre>
-          <div className="compact-list">{arrayFrom(messages.data, ['messages', 'items']).map((item) => <article key={idOf(item)}><strong>{text(item.author || item.username || item.user)}</strong><span>{text(item.content || item.message)}</span></article>)}</div>
-          <form className="inline-form" onSubmit={(event) => void send(event)}>
-            <input value={messageText} onChange={(event) => setMessageText(event.target.value)} placeholder="Send message..." />
-            <button type="submit" disabled={!ready || !channelId || !messageText.trim()}><Send size={14} /></button>
-          </form>
+          <pre>{jsonPreview(section === 'Guild' ? { guild: guild.data, stats: stats.data, bot: botInfo.data, roles: roles.data } : section === 'Moderation' ? { selectedMember, warns: warns.data } : { channelId, messages: messages.data, roles: roles.data })}</pre>
+          {section !== 'Guild' && section !== 'Moderation' && (
+            <>
+              <div className="compact-list">{arrayFrom(messages.data, ['messages', 'items']).map((item) => <article key={idOf(item)}><strong>{text(item.author || item.username || item.user)}</strong><span>{text(item.content || item.message)}</span></article>)}</div>
+              <form className="inline-form" onSubmit={(event) => void send(event)}>
+                <input value={messageText} onChange={(event) => setMessageText(event.target.value)} placeholder="Send message..." />
+                <button type="submit" disabled={!ready || !channelId || !messageText.trim()}><Send size={14} /></button>
+              </form>
+            </>
+          )}
         </main>
-        <aside className="native-work-card discord-members">
-          <div className="native-search"><Search size={14} /><input value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} placeholder="Search members..." /></div>
-          {arrayFrom(members.data, ['members', 'items']).map((member) => (
-            <article key={idOf(member)} className={idOf(member) === idOf(selectedMember || {}) ? 'active' : ''} onClick={() => setSelectedMember(member)}>
-              <strong>{titleOf(member, idOf(member))}</strong>
-              <div className="native-card-actions">
-                <button type="button" onClick={() => void moderate('warn')}><Shield size={13} />Warn</button>
-                <button type="button" onClick={() => void moderate('timeout')}><Terminal size={13} />Timeout</button>
-                <button type="button" onClick={() => void moderate('kick')}>Kick</button>
-                <button type="button" onClick={() => void moderate('ban')}>Ban</button>
-                <button type="button" onClick={() => void moderate('untimeout')}>Untimeout</button>
-                <button type="button" onClick={() => void moderate('unban')}>Unban</button>
-              </div>
-            </article>
-          ))}
-          <pre>{jsonPreview({ selectedMember, warns: warns.data })}</pre>
-        </aside>
+        {section !== 'Guild' && (
+          <aside className="native-work-card discord-members">
+            <div className="native-search"><Search size={14} /><input value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} placeholder="Search members..." /></div>
+            {arrayFrom(members.data, ['members', 'items']).map((member) => (
+              <article key={idOf(member)} className={idOf(member) === idOf(selectedMember || {}) ? 'active' : ''} onClick={() => setSelectedMember(member)}>
+                <strong>{titleOf(member, idOf(member))}</strong>
+                <div className="native-card-actions">
+                  <button type="button" onClick={() => void moderate('warn')}><Shield size={13} />Warn</button>
+                  <button type="button" onClick={() => void moderate('timeout')}><Terminal size={13} />Timeout</button>
+                  <button type="button" onClick={() => void moderate('kick')}>Kick</button>
+                  <button type="button" onClick={() => void moderate('ban')}>Ban</button>
+                  <button type="button" onClick={() => void moderate('untimeout')}>Untimeout</button>
+                  <button type="button" onClick={() => void moderate('unban')}>Unban</button>
+                </div>
+              </article>
+            ))}
+            <pre>{jsonPreview({ section, selectedMember, warns: warns.data })}</pre>
+          </aside>
+        )}
       </div>
     </section>
   );
 }
 
-export function NativeAppstoreMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
+type SidebarAppPanel = 'gmail' | 'discord';
+
+function sidebarAppPanelForApp(app: AnyRecord): SidebarAppPanel | null {
+  const candidate = text(app.id || app.app_id || app.slug || app.name || app.title || app.panel || '').toLowerCase();
+  if (candidate.includes('gmail') || candidate.includes('mail')) return 'gmail';
+  if (candidate.includes('discord')) return 'discord';
+  return null;
+}
+
+export function NativeAppstoreMain({
+  activeContextItem,
+  serviceStatus,
+  onInstalledSidebarApp,
+  onUninstalledSidebarApp
+}: {
+  activeContextItem: string;
+  serviceStatus: ServiceStatus | null;
+  onInstalledSidebarApp: (panel: SidebarAppPanel) => void;
+  onUninstalledSidebarApp: (panel: SidebarAppPanel) => void;
+}): JSX.Element {
   const ready = isReady(serviceStatus);
   const [category, setCategory] = useState('');
+  const [section, setSection] = useState(activeContextItem || 'Home');
   const appsState = useApiState(() => window.lastbrowser.sidekick.listAppstore({ category }), [ready, category], ready);
   const updates = useApiState(() => window.lastbrowser.sidekick.getAppstoreUpdates(), [ready], ready);
   const sdk = useApiState(() => window.lastbrowser.sidekick.getAppstoreSdk(), [ready], ready);
   const apps = arrayFrom(appsState.data, ['apps', 'items', 'packages']);
 
+  useEffect(() => {
+    const nextSection = activeContextItem || 'Home';
+    setSection(nextSection);
+    setCategory(
+      nextSection === 'Home' || nextSection === 'SDK' ? '' :
+      nextSection === 'Categories' ? 'browser' :
+      nextSection === 'My apps' ? 'community' :
+      nextSection === 'Submit' ? 'productivity' :
+      ''
+    );
+  }, [activeContextItem]);
+
   async function install(app: AnyRecord): Promise<void> {
     await window.lastbrowser.sidekick.installAppstoreApp({ appId: idOf(app) });
+    const sidebarPanel = sidebarAppPanelForApp(app);
+    if (sidebarPanel) onInstalledSidebarApp(sidebarPanel);
     await appsState.refresh();
   }
 
   async function uninstall(app: AnyRecord): Promise<void> {
     await window.lastbrowser.sidekick.uninstallAppstoreApp({ appId: idOf(app) });
+    const sidebarPanel = sidebarAppPanelForApp(app);
+    if (sidebarPanel) onUninstalledSidebarApp(sidebarPanel);
     await appsState.refresh();
   }
 
@@ -897,11 +1123,20 @@ export function NativeAppstoreMain({ serviceStatus }: { serviceStatus: ServiceSt
     <section className="browser-main native-rest-main appstore-main">
       <NativeHeader icon={<Package size={21} />} title="Appstore" kicker="Extensions" detail="Native home/category/my apps/sdk/submit surface backed by the appstore endpoints." loading={appsState.loading} ready={ready} onRefresh={appsState.refresh} />
       <AdvancedWebUiTools panel="appstore" serviceStatus={serviceStatus} compact />
+      <div className="native-card-actions insights-tabs">
+        {['Home', 'Categories', 'My apps', 'SDK', 'Submit'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        ))}
+      </div>
       <div className="native-card-actions">
         {['', 'browser', 'ai', 'productivity', 'community'].map((item) => <button key={item || 'all'} type="button" className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item || 'Home'}</button>)}
         <button type="button" onClick={() => window.lastbrowser.sidekick.updateAllAppstore()} disabled={!ready}><Download size={13} />Update all</button>
       </div>
       <ErrorLine error={appsState.error || updates.error || sdk.error} />
+      <section className="native-work-card detail-json-card">
+        <header><strong>{section}</strong></header>
+        <pre>{jsonPreview({ category, appCount: apps.length, sdk: sdk.data, updates: updates.data })}</pre>
+      </section>
       <div className="app-grid-native">
         {apps.map((app) => (
           <article key={idOf(app)} className="native-work-card app-card-native">
@@ -921,7 +1156,7 @@ export function NativeAppstoreMain({ serviceStatus }: { serviceStatus: ServiceSt
   );
 }
 
-export function NativeSettingsMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
+export function NativeSettingsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const ready = isReady(serviceStatus);
   const state = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
   const [section, setSection] = useState('conversation');
@@ -935,6 +1170,12 @@ export function NativeSettingsMain({ serviceStatus }: { serviceStatus: ServiceSt
     plugins: ['plugins', 'enabled_plugins', 'gmail', 'discord'],
     system: ['check_for_updates', 'workspace_root', 'debug', 'password_enabled']
   };
+
+  useEffect(() => {
+    const normalized = activeContextItem.trim().toLowerCase();
+    const match = Object.keys(sectionKeys).find((key) => key === normalized || key.toLowerCase() === normalized);
+    if (match) setSection(match);
+  }, [activeContextItem]);
 
   useEffect(() => {
     const scoped = Object.fromEntries((sectionKeys[section] || []).map((key) => [key, settings[key]]));

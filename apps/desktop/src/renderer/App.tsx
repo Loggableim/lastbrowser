@@ -94,14 +94,18 @@ import {
   WorkspaceFilePreview,
   WorkspaceTreeEntry,
   lastbrowserPanels,
+  isInstalledSidebarApp,
   leftSidebarCollapsedStorageKey,
+  loadInstalledSidebarApps,
   loadBooleanPreference,
   loadInitialPanel,
   saveActivePanel,
   saveBooleanPreference,
+  saveInstalledSidebarApps,
   workspacePanelCollapsedStorageKey
 } from './shell-state.js';
 import { canCallSidekickApi } from './runtime-readiness.js';
+import { describeChatContent, partitionChatMessages } from './chat-display.js';
 import { AdvancedWebUiTools } from './panels/AdvancedWebUiTools.js';
 import { NativeAiBrowserMain } from './panels/NativeAiBrowserMain.js';
 import {
@@ -219,6 +223,7 @@ export function App(): JSX.Element {
     isAiBrowserHomeUrl(tabs[0].url) ? '' : tabs[0].url
   ));
   const [activePanel, setActivePanel] = useState<LastbrowserPanelId>(() => loadInitialPanel());
+  const [installedSidebarApps, setInstalledSidebarApps] = useState<LastbrowserPanelId[]>(() => loadInstalledSidebarApps(window.localStorage));
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => (
     loadBooleanPreference(undefined, leftSidebarCollapsedStorageKey, false)
   ));
@@ -226,6 +231,7 @@ export function App(): JSX.Element {
   const [workspacePanelCollapsed, setWorkspacePanelCollapsed] = useState(() => (
     loadBooleanPreference(undefined, workspacePanelCollapsedStorageKey, false)
   ));
+  const [activeContextItem, setActiveContextItem] = useState('');
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [setupState, setSetupState] = useState<SetupState>(defaultSetupState);
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null);
@@ -290,6 +296,21 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     saveActivePanel(undefined, activePanel);
+  }, [activePanel]);
+
+  useEffect(() => {
+    saveInstalledSidebarApps(undefined, installedSidebarApps);
+  }, [installedSidebarApps]);
+
+  useEffect(() => {
+    if (isInstalledSidebarApp(activePanel, installedSidebarApps)) return;
+    if (activePanel === 'gmail' || activePanel === 'discord') {
+      setActivePanel('browser');
+    }
+  }, [activePanel, installedSidebarApps]);
+
+  useEffect(() => {
+    setActiveContextItem(panelContextItems[activePanel]?.[0] || '');
   }, [activePanel]);
 
   useEffect(() => {
@@ -983,6 +1004,7 @@ export function App(): JSX.Element {
         <ShellRail
           activePanel={activePanel}
           leftCollapsed={leftSidebarCollapsed}
+          installedSidebarApps={installedSidebarApps}
           onPanel={setActivePanel}
           onToggleLeft={() => setLeftSidebarCollapsed((current) => !current)}
         />
@@ -991,6 +1013,7 @@ export function App(): JSX.Element {
           activeSessionId={activeSessionId}
           busy={sidekickBusy}
           collapsed={contextSidebarCollapsed}
+          activeContextItem={activeContextItem}
           messages={messages}
           search={sessionSearch}
           sessions={sessions}
@@ -1007,6 +1030,7 @@ export function App(): JSX.Element {
             setActiveSessionId(sessionId);
             setActivePanel('chat');
           }}
+          onContextItemChange={setActiveContextItem}
           onToggleCollapse={() => setContextSidebarCollapsed((current) => !current)}
         />
         <BrowserMain
@@ -1025,6 +1049,7 @@ export function App(): JSX.Element {
           setupModel={setupState.model}
           spaces={spaces}
           activeSpacePath={activeSpacePath}
+          activeContextItem={activeContextItem}
           webviewRef={webviewRef}
           onAction={runSidekickAction}
           onComposerMode={setComposerMode}
@@ -1033,6 +1058,8 @@ export function App(): JSX.Element {
           onAddSpace={(path, name) => void addSpaceNative(path, name)}
           onMoveSpace={(space, direction) => void moveSpaceNative(space, direction)}
           onNavigate={navigate}
+          onInstalledSidebarApp={(panel) => setInstalledSidebarApps((current) => Array.from(new Set([...current, panel])))}
+          onUninstalledSidebarApp={(panel) => setInstalledSidebarApps((current) => current.filter((item) => item !== panel))}
           onWebviewNavigate={updateUrl}
           onWebviewTitle={updateTitle}
           onRemoveSpace={(space) => void removeSpaceNative(space)}
@@ -1314,15 +1341,17 @@ function WindowControls(): JSX.Element {
 function ShellRail({
   activePanel,
   leftCollapsed,
+  installedSidebarApps,
   onPanel,
   onToggleLeft
 }: {
   activePanel: LastbrowserPanelId;
   leftCollapsed: boolean;
+  installedSidebarApps: LastbrowserPanelId[];
   onPanel: (panel: LastbrowserPanelId) => void;
   onToggleLeft: () => void;
 }): JSX.Element {
-  const visiblePanels = lastbrowserPanels.filter((panel) => panel.id !== 'settings');
+  const visiblePanels = lastbrowserPanels.filter((panel) => panel.id !== 'settings' && isInstalledSidebarApp(panel.id, installedSidebarApps));
   const settingsPanel = lastbrowserPanels.find((panel) => panel.id === 'settings') || lastbrowserPanels[lastbrowserPanels.length - 1];
 
   return (
@@ -1366,6 +1395,7 @@ function ContextSidebar({
   activeSessionId,
   busy,
   collapsed,
+  activeContextItem,
   messages,
   search,
   sessions,
@@ -1379,12 +1409,14 @@ function ContextSidebar({
   onRenameSession,
   onSearch,
   onSelectSession,
+  onContextItemChange,
   onToggleCollapse
 }: {
   activePanel: LastbrowserPanelId;
   activeSessionId: string | null;
   busy: boolean;
   collapsed: boolean;
+  activeContextItem: string;
   messages: SidekickMessage[];
   search: string;
   sessions: DesktopSessionSummary[];
@@ -1398,6 +1430,7 @@ function ContextSidebar({
   onRenameSession: (session: DesktopSessionSummary) => void;
   onSearch: (value: string) => void;
   onSelectSession: (sessionId: string) => void;
+  onContextItemChange: (item: string) => void;
   onToggleCollapse: () => void;
 }): JSX.Element {
   const panel = lastbrowserPanels.find((item) => item.id === activePanel) || lastbrowserPanels[0];
@@ -1408,14 +1441,14 @@ function ContextSidebar({
   const recentMessages = messages.slice(-3);
   const showSessionTools = activePanel === 'chat' || activePanel === 'browser';
   const contextItems = panelContextItems[activePanel] || [];
-  const [activeContextItem, setActiveContextItem] = useState(contextItems[0] || '');
+  const activeContextItemDefault = contextItems[0] || '';
 
   useEffect(() => {
-    setActiveContextItem(contextItems[0] || '');
-  }, [activePanel, contextItems]);
+    onContextItemChange(activeContextItemDefault);
+  }, [activeContextItemDefault, onContextItemChange]);
 
   function handleContextItem(item: string): void {
-    setActiveContextItem(item);
+    onContextItemChange(item);
     if (item === 'New chat' || item === 'Chat sessions') {
       onNewSession();
       return;
@@ -1549,6 +1582,7 @@ function BrowserMain({
   chatError,
   chatMessages,
   chatRunState,
+  activeContextItem,
   composerMode,
   composerText,
   serviceStatus,
@@ -1564,6 +1598,8 @@ function BrowserMain({
   onCreateSession,
   onMoveSpace,
   onNavigate,
+  onInstalledSidebarApp,
+  onUninstalledSidebarApp,
   onWebviewNavigate,
   onWebviewTitle,
   onRemoveSpace,
@@ -1580,6 +1616,7 @@ function BrowserMain({
   chatError: string;
   chatMessages: DesktopChatMessage[];
   chatRunState: ChatRunState;
+  activeContextItem: string;
   composerMode: ComposerMode;
   composerText: string;
   serviceStatus: ServiceStatus | null;
@@ -1595,6 +1632,8 @@ function BrowserMain({
   onCreateSession: () => void;
   onMoveSpace: (space: SpaceSummary, direction: -1 | 1) => void;
   onNavigate: (url: string) => void;
+  onInstalledSidebarApp: (panel: LastbrowserPanelId) => void;
+  onUninstalledSidebarApp: (panel: LastbrowserPanelId) => void;
   onWebviewNavigate: (tabId: string, url: string) => void;
   onWebviewTitle: (tabId: string, title: string) => void;
   onRemoveSpace: (space: SpaceSummary) => void;
@@ -1633,6 +1672,7 @@ function BrowserMain({
         return (
           <NativeSpacesMain
             activeSpacePath={activeSpacePath}
+            activeContextItem={activeContextItem}
             error=""
             serviceStatus={serviceStatus}
             spaces={spaces}
@@ -1644,31 +1684,38 @@ function BrowserMain({
           />
         );
       case 'tasks':
-        return <NativeTasksMain serviceStatus={serviceStatus} />;
+        return <NativeTasksMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
       case 'kanban':
-        return <NativeKanbanMain activeSpacePath={activeSpacePath} serviceStatus={serviceStatus} />;
+        return <NativeKanbanMain activeContextItem={activeContextItem} activeSpacePath={activeSpacePath} serviceStatus={serviceStatus} />;
       case 'todos':
-        return <NativeTodosMain activeSession={activeSession} messages={chatMessages} serviceStatus={serviceStatus} />;
+        return <NativeTodosMain activeContextItem={activeContextItem} activeSession={activeSession} messages={chatMessages} serviceStatus={serviceStatus} />;
       case 'skills':
-        return <NativeSkillsMain serviceStatus={serviceStatus} />;
+        return <NativeSkillsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
       case 'agents':
-        return <NativeAgentsMain serviceStatus={serviceStatus} />;
+        return <NativeAgentsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
       case 'profiles':
-        return <NativeProfilesMain serviceStatus={serviceStatus} />;
+        return <NativeProfilesMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
       case 'memory':
-        return <NativeMemoryMain serviceStatus={serviceStatus} />;
+        return <NativeMemoryMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
       case 'insights':
-        return <NativeInsightsMain serviceStatus={serviceStatus} />;
+        return <NativeInsightsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
       case 'logs':
-        return <NativeLogsMain serviceStatus={serviceStatus} />;
+        return <NativeLogsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
       case 'gmail':
-        return <NativeGmailMain serviceStatus={serviceStatus} />;
+        return <NativeGmailMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
       case 'discord':
-        return <NativeDiscordMain serviceStatus={serviceStatus} />;
+        return <NativeDiscordMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
       case 'appstore':
-        return <NativeAppstoreMain serviceStatus={serviceStatus} />;
+        return (
+          <NativeAppstoreMain
+            activeContextItem={activeContextItem}
+            serviceStatus={serviceStatus}
+            onInstalledSidebarApp={onInstalledSidebarApp}
+            onUninstalledSidebarApp={onUninstalledSidebarApp}
+          />
+        );
       case 'settings':
-        return <NativeSettingsMain serviceStatus={serviceStatus} />;
+        return <NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
       default:
         return <NativeChatMain activeSession={activeSession} activeSessionId={activeSessionId} busy={busy} chatError={chatError} messages={chatMessages} runState={chatRunState} composerMode={composerMode} composerText={composerText} serviceStatus={serviceStatus} sessionLoading={sessionLoading} setupModel={setupModel} activeSpacePath={activeSpacePath} onComposerMode={onComposerMode} onComposerText={onComposerText} onCreateSession={onCreateSession} onSend={onSendChat} onStop={onStopChat} />;
     }
@@ -1752,6 +1799,11 @@ function NativeChatMain({
 }): JSX.Element {
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
   const ready = canCallSidekickApi(serviceStatus);
+  const [showDeveloperTools, setShowDeveloperTools] = useState(false);
+  const { visible: visibleMessages, developer: developerMessages } = useMemo(
+    () => partitionChatMessages(messages),
+    [messages]
+  );
   const model = activeSession?.model || setupModel || 'default';
   const profile = activeSession?.profile || 'default';
   const workspace = activeSession?.workspace || activeSpacePath || 'default';
@@ -1766,21 +1818,33 @@ function NativeChatMain({
             <h1>{activeSession ? sessionTitle(activeSession) : 'Sidekick'}</h1>
           </div>
         </div>
-        <div className={`native-chat-status ${ready ? 'ready' : 'starting'}`}>
-          <span className={ready ? 'status-dot ready' : 'status-dot'} />
-          <span>{ready ? 'Online' : 'Starting'}</span>
+        <div className="native-chat-header-actions">
+          <button
+            type="button"
+            className={`secondary-action compact developer-toggle ${showDeveloperTools ? 'active' : ''}`}
+            onClick={() => setShowDeveloperTools((current) => !current)}
+          >
+            {showDeveloperTools ? <Eye size={14} /> : <EyeOff size={14} />}
+            <span>Developer</span>
+          </button>
+          <div className={`native-chat-status ${ready ? 'ready' : 'starting'}`}>
+            <span className={ready ? 'status-dot ready' : 'status-dot'} />
+            <span>{ready ? 'Online' : 'Starting'}</span>
+          </div>
         </div>
       </div>
       <ChatTranscript
         activeSession={activeSession}
         error={chatError}
+        developerMessages={developerMessages}
         loading={sessionLoading}
-        messages={messages}
+        messages={visibleMessages}
         pendingUserMessage={activeSession?.pending_user_message || ''}
         ready={ready}
+        showDeveloperTools={showDeveloperTools}
         onCreateSession={onCreateSession}
+        serviceStatus={serviceStatus}
       />
-      <AdvancedWebUiTools panel="chat" serviceStatus={serviceStatus} compact />
       <ChatComposer
         busy={busy || running}
         mode={composerMode}
@@ -1802,19 +1866,25 @@ function NativeChatMain({
 function ChatTranscript({
   activeSession,
   error,
+  developerMessages,
   loading,
   messages,
   pendingUserMessage,
   ready,
-  onCreateSession
+  showDeveloperTools,
+  onCreateSession,
+  serviceStatus
 }: {
   activeSession: DesktopSessionDetail | null;
   error: string;
+  developerMessages: DesktopChatMessage[];
   loading: boolean;
   messages: DesktopChatMessage[];
   pendingUserMessage: string;
   ready: boolean;
+  showDeveloperTools: boolean;
   onCreateSession: () => void;
+  serviceStatus: ServiceStatus | null;
 }): JSX.Element {
   if (loading) {
     return (
@@ -1852,7 +1922,7 @@ function ChatTranscript({
               <strong>{message.role === 'user' ? 'You' : message.role === 'system' ? 'System' : 'Sidekick'}</strong>
               {message.pending && <Loader2 size={13} className="spin" />}
             </div>
-            <p>{String(message.content || '').trim() || '...'}</p>
+            <ChatMessageBody content={String(message.content || '')} />
           </div>
         </article>
       ))}
@@ -1861,12 +1931,131 @@ function ChatTranscript({
           <div className="message-avatar"><UserCircle size={17} /></div>
           <div className="message-body">
             <div className="message-meta"><strong>You</strong><Loader2 size={13} className="spin" /></div>
-            <p>{pendingUserMessage}</p>
+            <ChatMessageBody content={pendingUserMessage} />
           </div>
         </article>
       )}
+      {showDeveloperTools && (
+        <section className="chat-developer-panel native-work-card">
+          <div className="chat-developer-header">
+            <div>
+              <strong>Developer trace</strong>
+              <span>{developerMessages.length} hidden messages</span>
+            </div>
+            <span>Hidden by default</span>
+          </div>
+          <div className="chat-developer-messages">
+            {developerMessages.length ? developerMessages.map((message, index) => (
+              <article key={`dev-${message.role || 'message'}-${index}`} className={`chat-developer-message ${message.role || 'assistant'}`}>
+                <div className="message-meta">
+                  <strong>{message.role || 'message'}</strong>
+                </div>
+                <pre>{String(message.content || '').trim() || '...'}</pre>
+              </article>
+            )) : (
+              <div className="chat-developer-empty">No hidden prompts or tool messages.</div>
+            )}
+          </div>
+          <AdvancedWebUiTools panel="chat" serviceStatus={serviceStatus} compact />
+        </section>
+      )}
     </div>
   );
+}
+
+function ChatMessageBody({ content }: { content: string }): JSX.Element {
+  const view = useMemo(() => describeChatContent(content), [content]);
+
+  switch (view.kind) {
+    case 'empty':
+      return <p>...</p>;
+    case 'text':
+      return <p>{view.text}</p>;
+    case 'html':
+      return (
+        <div className="chat-structured chat-html-structured">
+          <div className="chat-structured-header">
+            <strong>HTML response</strong>
+            <span>{view.title || 'Markup payload'}</span>
+          </div>
+          <div className="chat-html-preview">
+            <div className="chat-html-preview-chip">{view.title || 'HTML'}</div>
+            <pre>{view.snippet}</pre>
+          </div>
+          <details className="chat-structured-raw">
+            <summary>Show raw HTML</summary>
+            <pre>{view.raw}</pre>
+          </details>
+        </div>
+      );
+    case 'research':
+      return (
+        <div className="chat-structured chat-research-structured">
+          <div className="chat-structured-header">
+            <strong>{view.summary}</strong>
+            <span>{view.results.length} results</span>
+          </div>
+          {view.keyPoints.length > 0 && (
+            <div className="chat-chip-row">
+              {view.keyPoints.map((point, index) => <span key={`${point}-${index}`}>{point}</span>)}
+            </div>
+          )}
+          {view.results.length > 0 && (
+            <div className="chat-result-list">
+              {view.results.map((result, index) => (
+                <article key={`${result.title}-${index}`} className="chat-result-card">
+                  <div className="chat-result-card-head">
+                    <strong>{result.title}</strong>
+                    {result.source && <span>{result.source}</span>}
+                  </div>
+                  {result.url && (
+                    <a href={result.url} target="_blank" rel="noreferrer">
+                      {result.url}
+                    </a>
+                  )}
+                  {result.snippet && <p>{result.snippet}</p>}
+                </article>
+              ))}
+            </div>
+          )}
+          {view.nextSteps.length > 0 && (
+            <div className="chat-next-steps">
+              <strong>Next steps</strong>
+              <ul>
+                {view.nextSteps.map((step, index) => <li key={`${step}-${index}`}>{step}</li>)}
+              </ul>
+            </div>
+          )}
+          <details className="chat-structured-raw">
+            <summary>Show raw JSON</summary>
+            <pre>{view.raw}</pre>
+          </details>
+        </div>
+      );
+    case 'json':
+      return (
+        <div className="chat-structured chat-json-structured">
+          <div className="chat-structured-header">
+            <strong>JSON response</strong>
+            <span>{view.entries.length} fields</span>
+          </div>
+          <dl className="chat-json-grid">
+            {view.entries.map((entry) => (
+              <React.Fragment key={entry.key}>
+                <dt>{entry.key}</dt>
+                <dd>{entry.value || '-'}</dd>
+              </React.Fragment>
+            ))}
+          </dl>
+          <details className="chat-structured-raw">
+            <summary>Show raw JSON</summary>
+            <pre>{view.raw}</pre>
+          </details>
+        </div>
+      );
+    default:
+      return <p>{content.trim()}</p>;
+  }
 }
 
 function ChatComposer({
@@ -1954,6 +2143,7 @@ function ChatComposer({
 
 function NativeSpacesMain({
   activeSpacePath,
+  activeContextItem,
   error,
   serviceStatus,
   spaces,
@@ -1964,6 +2154,7 @@ function NativeSpacesMain({
   onSelectSpace
 }: {
   activeSpacePath: string;
+  activeContextItem: string;
   error: string;
   serviceStatus: ServiceStatus | null;
   spaces: SpaceSummary[];
@@ -1975,7 +2166,12 @@ function NativeSpacesMain({
 }): JSX.Element {
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
+  const [section, setSection] = useState(activeContextItem || 'Spaces');
   const ready = canCallSidekickApi(serviceStatus);
+
+  useEffect(() => {
+    setSection(activeContextItem || 'Spaces');
+  }, [activeContextItem]);
 
   function submit(event: FormEvent): void {
     event.preventDefault();
@@ -1991,13 +2187,33 @@ function NativeSpacesMain({
         <div>
           <span className="eyebrow">Spaces</span>
           <h1>Workspaces</h1>
-          <p>Neue Sessions starten im aktiven Space. Die rechte Workspace-Leiste bleibt an die aktive Session gebunden.</p>
+          <p>{section === 'Active workspace' ? 'Aktiver Space und Session-Bindung im Fokus.' : section === 'Files' ? 'Spaces steuern den aktiven Workspace und die Datei-Leiste rechts.' : 'Neue Sessions starten im aktiven Space. Die rechte Workspace-Leiste bleibt an die aktive Session gebunden.'}</p>
         </div>
         <div className={`native-chat-status ${ready ? 'ready' : 'starting'}`}>
           <span className={ready ? 'status-dot ready' : 'status-dot'} />
           <span>{ready ? 'Online' : 'Starting'}</span>
         </div>
       </div>
+      <div className="native-card-actions insights-tabs">
+        {['Spaces', 'Active workspace', 'Files', 'New chat'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        ))}
+      </div>
+      <section className="native-work-card detail-json-card">
+        <header><strong>{section}</strong></header>
+        <pre>{jsonPreview({
+          activeSpacePath,
+          spaceCount: spaces.length,
+          activeSpace: spaces.find((space) => space.path === activeSpacePath) || null,
+          hint: section === 'New chat'
+            ? 'Create a new chat in the selected space from the chat panel.'
+            : section === 'Files'
+              ? 'Use the workspace panel on the right to browse files for the active session.'
+              : section === 'Active workspace'
+                ? 'The active workspace binds new sessions to the current space.'
+                : 'Spaces are the top-level workspace selector.'
+        })}</pre>
+      </section>
       <form className="space-create-form" onSubmit={submit}>
         <label>
           <span>Name</span>
@@ -2041,7 +2257,13 @@ function NativeSpacesMain({
   );
 }
 
-function NativeTasksMain({ serviceStatus }: { serviceStatus: ServiceStatus | null }): JSX.Element {
+function NativeTasksMain({
+  activeContextItem,
+  serviceStatus
+}: {
+  activeContextItem: string;
+  serviceStatus: ServiceStatus | null;
+}): JSX.Element {
   const ready = canCallSidekickApi(serviceStatus);
   const [jobs, setJobs] = useState<CronJobSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -2049,6 +2271,7 @@ function NativeTasksMain({ serviceStatus }: { serviceStatus: ServiceStatus | nul
   const [name, setName] = useState('');
   const [schedule, setSchedule] = useState('0 9 * * *');
   const [prompt, setPrompt] = useState('');
+  const [section, setSection] = useState(activeContextItem || 'Scheduled jobs');
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!ready) return;
@@ -2067,6 +2290,17 @@ function NativeTasksMain({ serviceStatus }: { serviceStatus: ServiceStatus | nul
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    setSection(activeContextItem || 'Scheduled jobs');
+  }, [activeContextItem]);
+
+  const visibleJobs = jobs.filter((job) => {
+    const paused = job.enabled === false || job.state === 'paused';
+    if (section === 'Active') return !paused;
+    if (section === 'Paused') return paused;
+    return true;
+  });
 
   async function createJob(event: FormEvent): Promise<void> {
     event.preventDefault();
@@ -2127,7 +2361,7 @@ function NativeTasksMain({ serviceStatus }: { serviceStatus: ServiceStatus | nul
       <header className="native-work-header">
         <div>
           <span className="eyebrow">Tasks</span>
-          <h1>Scheduled jobs</h1>
+          <h1>{section}</h1>
           <p>Native port of the WebUI Tasks panel. Jobs use the existing Sidekick cron backend.</p>
         </div>
         <button type="button" className="secondary-action compact" onClick={() => void refresh()} disabled={!ready || loading}>
@@ -2135,6 +2369,11 @@ function NativeTasksMain({ serviceStatus }: { serviceStatus: ServiceStatus | nul
           <span>Refresh</span>
         </button>
       </header>
+      <div className="native-card-actions insights-tabs">
+        {['Scheduled jobs', 'Active', 'Paused', 'History'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        ))}
+      </div>
       <form className="native-work-card native-task-form" onSubmit={(event) => void createJob(event)}>
         <label>
           <span>Name</span>
@@ -2156,7 +2395,7 @@ function NativeTasksMain({ serviceStatus }: { serviceStatus: ServiceStatus | nul
       {error && <div className="workspace-error">{error}</div>}
       <AdvancedWebUiTools panel="tasks" serviceStatus={serviceStatus} compact />
       <div className="native-work-grid">
-        {jobs.map((job) => {
+        {visibleJobs.map((job) => {
           const paused = job.enabled === false || job.state === 'paused';
           return (
             <article key={job.id} className="native-work-card task-card">
@@ -2185,7 +2424,7 @@ function NativeTasksMain({ serviceStatus }: { serviceStatus: ServiceStatus | nul
             </article>
           );
         })}
-        {!jobs.length && (
+        {!visibleJobs.length && (
           <div className="native-work-empty">
             <CalendarDays size={28} />
             <span>{ready ? 'No scheduled jobs yet.' : 'Sidekick runtime is starting.'}</span>
@@ -2197,9 +2436,11 @@ function NativeTasksMain({ serviceStatus }: { serviceStatus: ServiceStatus | nul
 }
 
 function NativeKanbanMain({
+  activeContextItem,
   activeSpacePath,
   serviceStatus
 }: {
+  activeContextItem: string;
   activeSpacePath: string;
   serviceStatus: ServiceStatus | null;
 }): JSX.Element {
@@ -2210,6 +2451,7 @@ function NativeKanbanMain({
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [status, setStatus] = useState('todo');
+  const [section, setSection] = useState(activeContextItem || 'Board');
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!ready) return;
@@ -2229,9 +2471,16 @@ function NativeKanbanMain({
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    setSection(activeContextItem || 'Board');
+  }, [activeContextItem]);
+
   const columns = board?.columns?.length
     ? board.columns
     : ['triage', 'todo', 'ready', 'running', 'blocked', 'done'].map((name) => ({ name, tasks: [] }));
+  const visibleColumns = section === 'Board'
+    ? columns
+    : columns.filter((column) => kanbanColumnLabel(column.name).toLowerCase() === section.toLowerCase() || column.name.toLowerCase() === section.toLowerCase());
 
   async function createTask(event: FormEvent): Promise<void> {
     event.preventDefault();
@@ -2265,7 +2514,7 @@ function NativeKanbanMain({
       <header className="native-work-header">
         <div>
           <span className="eyebrow">Kanban</span>
-          <h1>Board</h1>
+          <h1>{section}</h1>
           <p>{activeSpacePath ? workspaceLabel(activeSpacePath) : 'Default workspace'} · native board view backed by `/api/kanban`.</p>
         </div>
         <button type="button" className="secondary-action compact" onClick={() => void refresh()} disabled={!ready || loading}>
@@ -2273,6 +2522,11 @@ function NativeKanbanMain({
           <span>Refresh</span>
         </button>
       </header>
+      <div className="native-card-actions insights-tabs">
+        {['Board', 'Triage', 'Running', 'Done'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        ))}
+      </div>
       <form className="native-work-card kanban-task-form" onSubmit={(event) => void createTask(event)}>
         <label>
           <span>Title</span>
@@ -2296,7 +2550,7 @@ function NativeKanbanMain({
       {error && <div className="workspace-error">{error}</div>}
       <AdvancedWebUiTools panel="kanban" serviceStatus={serviceStatus} compact />
       <div className="native-kanban-board">
-        {columns.map((column) => (
+        {visibleColumns.map((column) => (
           <section key={column.name} className="native-kanban-column">
             <header>
               <span>{kanbanColumnLabel(column.name)}</span>
@@ -2328,25 +2582,32 @@ function NativeKanbanMain({
 }
 
 function NativeTodosMain({
+  activeContextItem,
   activeSession,
   messages,
   serviceStatus
 }: {
+  activeContextItem: string;
   activeSession: DesktopSessionDetail | null;
   messages: DesktopChatMessage[];
   serviceStatus: ServiceStatus | null;
 }): JSX.Element {
+  const [section, setSection] = useState(activeContextItem || 'Pending');
   const todos = extractTodosFromSession(activeSession, messages);
   const pending = todos.filter((todo) => normalizeTodoStatus(todo.status) === 'pending');
   const inProgress = todos.filter((todo) => normalizeTodoStatus(todo.status) === 'in_progress');
   const completed = todos.filter((todo) => ['completed', 'cancelled'].includes(normalizeTodoStatus(todo.status)));
+  useEffect(() => {
+    setSection(activeContextItem || 'Pending');
+  }, [activeContextItem]);
+  const visibleTodos = section === 'In progress' ? inProgress : section === 'Completed / cancelled' ? completed : pending;
 
   return (
     <section className="browser-main native-work-main todos-main">
       <header className="native-work-header">
         <div>
           <span className="eyebrow">Todos</span>
-          <h1>Session todos</h1>
+          <h1>{section}</h1>
           <p>Native view of the latest todo state emitted in the active Sidekick session.</p>
         </div>
         <div className="todo-metrics">
@@ -2355,10 +2616,13 @@ function NativeTodosMain({
           <span><strong>{completed.length}</strong> done</span>
         </div>
       </header>
+      <div className="native-card-actions insights-tabs">
+        {['Pending', 'In progress', 'Completed / cancelled'].map((item) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        ))}
+      </div>
       <div className="todos-columns-native">
-        <TodoColumn title="Pending" todos={pending} />
-        <TodoColumn title="In progress" todos={inProgress} />
-        <TodoColumn title="Completed / cancelled" todos={completed} />
+        <TodoColumn title={section} todos={visibleTodos} />
       </div>
       <AdvancedWebUiTools panel="todos" serviceStatus={serviceStatus} compact />
       {!todos.length && (
@@ -3064,3 +3328,4 @@ function formatBytes(size: number): string {
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
+

@@ -40,8 +40,8 @@ describe('Lastbrowser shell state', () => {
       'appstore',
       'settings'
     ]);
-    expect(lastbrowserPanels.find((panel) => panel.id === 'browser')?.label).toBe('AI Browser');
-    expect(lastbrowserPanels.find((panel) => panel.id === 'browser')?.tooltip).toBe('AI Browser');
+    expect(lastbrowserPanels.find((panel) => panel.id === 'browser')?.label).toBe('AI Search');
+    expect(lastbrowserPanels.find((panel) => panel.id === 'browser')?.tooltip).toBe('AI Search');
   });
 
   it('uses browser as the default panel and rejects stale localStorage values', () => {

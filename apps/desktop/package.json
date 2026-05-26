@@ -1,6 +1,6 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "type": "module",
   "description": "Lastbrowser Electron desktop shell.",
@@ -11,13 +11,14 @@
     "start": "electron dist/main/main.js",
     "start:dev": "node electron-dev.mjs",
     "prepare:python": "node scripts/prepare-python-runtime.mjs",
+    "build:installer-assets": "python scripts/generate-installer-assets.py",
     "build": "npm run build:main && npm run build:renderer",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
     "test": "vitest",
     "test:run": "vitest run",
-    "package:win": "npm run prepare:python && npm run build && electron-builder --win nsis portable",
-    "package:win:publish": "npm run prepare:python && npm run build && electron-builder --win nsis portable --publish always"
+    "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
+    "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish always"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

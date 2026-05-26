@@ -1,3 +1,6 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { resolve, relative, sep } from 'node:path';
+
 export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
 export type WebuiRequestMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -117,6 +120,19 @@ export type CreateSessionRequest = {
 export type WorkspaceRequest = {
   sessionId: string;
   path?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+type LocalSkillRecord = {
+  name: string;
+  description?: string;
+  category?: string;
+  path: string;
+  source: 'bundled';
+  linked_files: Record<string, true>;
 };
 
 export type WorkspaceWriteRequest = WorkspaceRequest & {
@@ -1017,8 +1033,140 @@ export function updateKanbanTask(
   }, fetchImpl);
 }
 
+export type DispatchRunRequest = {
+  dryRun?: boolean;
+};
+
+export function runDispatchOnce(
+  webuiUrl: string,
+  request: DispatchRunRequest = {},
+  fetchImpl: FetchLike = fetch
+): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/dispatch/run', {
+    method: 'POST',
+    body: JSON.stringify({ dry_run: Boolean(request.dryRun) })
+  }, fetchImpl);
+}
+
+export function getActiveDispatches(
+  webuiUrl: string,
+  fetchImpl: FetchLike = fetch
+): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/dispatch/active', {}, fetchImpl);
+}
+
+function getLocalSkillsRoots(): string[] {
+  const roots = [
+    resolve(process.resourcesPath || '', 'services', 'sidekick', 'skills'),
+    resolve(process.resourcesPath || '', 'services', 'sidekick', 'optional-skills'),
+    resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'skills'),
+    resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'optional-skills'),
+    resolve(process.cwd(), 'services', 'sidekick', 'skills'),
+    resolve(process.cwd(), 'services', 'sidekick', 'optional-skills')
+  ];
+  return Array.from(new Set(roots.filter((root) => root && existsSync(root))));
+}
+
+function parseSkillFrontmatter(markdown: string): { name?: string; description?: string } {
+  if (!markdown.startsWith('---')) return {};
+  const end = markdown.indexOf('\n---', 3);
+  if (end < 0) return {};
+  const frontmatter = markdown.slice(3, end).split(/\r?\n/);
+  const result: { name?: string; description?: string } = {};
+  for (const line of frontmatter) {
+    const match = line.match(/^\s*(name|description)\s*:\s*(.+?)\s*$/i);
+    if (!match) continue;
+    const key = match[1].toLowerCase() as 'name' | 'description';
+    const value = match[2].replace(/^['"]|['"]$/g, '').trim();
+    if (value) result[key] = value;
+  }
+  return result;
+}
+
+function collectSkillFiles(dir: string, baseDir: string, out: Record<string, true> = {}): Record<string, true> {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const fullPath = resolve(dir, entry.name);
+    if (entry.isDirectory()) {
+      collectSkillFiles(fullPath, baseDir, out);
+      continue;
+    }
+    if (entry.name === 'SKILL.md') continue;
+    const rel = relative(baseDir, fullPath).split(sep).join('/');
+    out[rel] = true;
+  }
+  return out;
+}
+
+function listLocalSkills(): LocalSkillRecord[] {
+  const skills: LocalSkillRecord[] = [];
+  for (const root of getLocalSkillsRoots()) {
+    const stack = [root];
+    while (stack.length) {
+      const current = stack.pop()!;
+      for (const entry of readdirSync(current, { withFileTypes: true })) {
+        if (entry.name.startsWith('.') && entry.name !== '.archive') continue;
+        const fullPath = resolve(current, entry.name);
+        if (!entry.isDirectory()) continue;
+        const skillMd = resolve(fullPath, 'SKILL.md');
+        if (existsSync(skillMd)) {
+          const content = readFileSync(skillMd, 'utf8');
+          const frontmatter = parseSkillFrontmatter(content);
+          const rel = relative(root, fullPath).split(sep).filter(Boolean);
+          const category = rel.length > 1 ? rel[0] : undefined;
+          const name = frontmatter.name || entry.name;
+          skills.push({
+            name,
+            description: frontmatter.description || content.split(/\r?\n/).find((line) => line.trim().length > 0 && !line.startsWith('---') && !line.startsWith('#'))?.trim() || '',
+            category,
+            path: fullPath,
+            source: 'bundled',
+            linked_files: collectSkillFiles(fullPath, fullPath)
+          });
+        }
+        stack.push(fullPath);
+      }
+    }
+  }
+  const seen = new Set<string>();
+  return skills.filter((skill) => {
+    const key = skill.path.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function resolveLocalSkillDir(request: SkillPathRequest): string | null {
+  const candidateNames = [request.path, request.name].filter(Boolean).map((value) => String(value).trim()).filter(Boolean);
+  if (!candidateNames.length) return null;
+  const skills = listLocalSkills();
+  for (const candidate of candidateNames) {
+    const normalized = candidate.replace(/\\/g, '/').toLowerCase();
+    const match = skills.find((skill) => {
+      const skillPath = skill.path.replace(/\\/g, '/').toLowerCase();
+      return skill.name.toLowerCase() === normalized
+        || skillPath === normalized
+        || skillPath.endsWith(`/${normalized}`)
+        || skillPath.endsWith(normalized);
+    });
+    if (match) return match.path;
+  }
+  return null;
+}
+
 export function listSkills(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
-  return jsonRequest(webuiUrl, '/api/skills', {}, fetchImpl);
+  return jsonRequest(webuiUrl, '/api/skills', {}, fetchImpl).then((payload) => {
+    const record = isRecord(payload) ? payload : {};
+    const skills = Array.isArray(record.skills) ? record.skills : [];
+    if (skills.length) return record;
+    const localSkills = listLocalSkills();
+    return localSkills.length ? { ...record, skills: localSkills, source: 'bundled' } : record;
+  }).catch(() => {
+    const localSkills = listLocalSkills();
+    if (localSkills.length) return { skills: localSkills, source: 'bundled' };
+    throw new Error('Unable to load skills from WebUI or local bundled catalog.');
+  });
 }
 
 export function getSkillContent(
@@ -1031,7 +1179,42 @@ export function getSkillContent(
     `/api/skills/content${queryString({ path: request.path, name: request.name, file: request.file })}`,
     {},
     fetchImpl
-  );
+  ).then((payload) => {
+    const record = isRecord(payload) ? payload : {};
+    const content = String(record.content || record.text || '');
+    if (content.trim()) return record;
+    const localSkillDir = resolveLocalSkillDir(request);
+    if (!localSkillDir) return record;
+    const skillFile = request.file ? resolve(localSkillDir, request.file) : resolve(localSkillDir, 'SKILL.md');
+    const relativePath = request.file ? request.file.replace(/\\/g, '/') : 'SKILL.md';
+    if (relativePath.split('/').includes('..')) return record;
+    const normalizedSkillDir = resolve(localSkillDir);
+    if (relative(normalizedSkillDir, skillFile).startsWith('..')) return record;
+    if (!existsSync(skillFile)) return record;
+    return {
+      ...record,
+      name: request.name || request.path || localSkillDir.split(/[\\/]/).pop(),
+      path: localSkillDir,
+      content: readFileSync(skillFile, 'utf8'),
+      linked_files: collectSkillFiles(localSkillDir, localSkillDir),
+      source: 'bundled',
+      file: relativePath
+    };
+  }).catch(() => {
+    const localSkillDir = resolveLocalSkillDir(request);
+    if (!localSkillDir) throw new Error(`Skill '${request.name || request.path || request.file || ''}' not found.`);
+    const skillFile = request.file ? resolve(localSkillDir, request.file) : resolve(localSkillDir, 'SKILL.md');
+    if (relative(resolve(localSkillDir), skillFile).startsWith('..')) throw new Error('Invalid skill file path.');
+    if (!existsSync(skillFile)) throw new Error('Skill file not found.');
+    return {
+      name: request.name || request.path || localSkillDir.split(/[\\/]/).pop(),
+      path: localSkillDir,
+      content: readFileSync(skillFile, 'utf8'),
+      linked_files: collectSkillFiles(localSkillDir, localSkillDir),
+      source: 'bundled',
+      file: request.file || 'SKILL.md'
+    };
+  });
 }
 
 export function saveSkill(

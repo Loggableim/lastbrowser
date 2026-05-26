@@ -160,6 +160,180 @@ function EmptyState({ icon, label }: { icon: React.ReactNode; label: string }): 
   );
 }
 
+type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'plugins' | 'system';
+
+type SettingsSectionMeta = {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+};
+
+const SETTINGS_SKINS = [
+  { key: 'default', name: 'Default', colors: ['#FFD700', '#FFBF00', '#CD7F32'] },
+  { key: 'ares', name: 'Ares', colors: ['#FF4444', '#CC3333', '#992222'] },
+  { key: 'mono', name: 'Mono', colors: ['#CCCCCC', '#999999', '#666666'] },
+  { key: 'slate', name: 'Slate', colors: ['#334155', '#475569', '#64748b'] },
+  { key: 'poseidon', name: 'Poseidon', colors: ['#0EA5E9', '#0284C7', '#0369A1'] },
+  { key: 'sisyphus', name: 'Sisyphus', colors: ['#A78BFA', '#8B5CF6', '#7C3AED'] },
+  { key: 'charizard', name: 'Charizard', colors: ['#FB923C', '#F97316', '#EA580C'] },
+  { key: 'sienna', name: 'Sienna', colors: ['#D97757', '#C06A49', '#9A523A'] },
+  { key: 'matrix', name: 'Matrix', colors: ['#00FF41', '#00DD33', '#55CC55'] }
+] as const;
+
+const SETTINGS_LANGUAGES = [
+  { value: 'auto', label: 'System / Auto' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'en', label: 'English' },
+  { value: 'it', label: 'Italiano' },
+  { value: 'es', label: 'Español' },
+  { value: 'fr', label: 'Français' },
+  { value: 'pt-BR', label: 'Português (Brasil)' }
+] as const;
+
+const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> = {
+  conversation: {
+    title: 'Conversation',
+    description: 'Default model, send key and assistant identity.',
+    icon: <MessageSquare size={16} />
+  },
+  appearance: {
+    title: 'Appearance',
+    description: 'Theme, skin, font sizing and message layout.',
+    icon: <Sparkles size={16} />
+  },
+  preferences: {
+    title: 'Preferences',
+    description: 'Language, notifications and chat behavior.',
+    icon: <Gauge size={16} />
+  },
+  providers: {
+    title: 'Providers',
+    description: 'Provider defaults and model routing settings.',
+    icon: <Brain size={16} />
+  },
+  plugins: {
+    title: 'Plugins',
+    description: 'Installed app integrations and plugin inventory.',
+    icon: <Package size={16} />
+  },
+  system: {
+    title: 'System',
+    description: 'Access control, auth, update checks and diagnostics.',
+    icon: <Shield size={16} />
+  }
+};
+
+function SettingsCard({
+  title,
+  description,
+  action,
+  children
+}: {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <section className="settings-card native-work-card">
+      <header className="settings-card-header">
+        <div>
+          <strong>{title}</strong>
+          {description && <p>{description}</p>}
+        </div>
+        {action}
+      </header>
+      <div className="settings-card-body">{children}</div>
+    </section>
+  );
+}
+
+function SettingsField({
+  label,
+  description,
+  children
+}: {
+  label: string;
+  description?: string;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <label className="settings-field">
+      <span>{label}</span>
+      {children}
+      {description && <small>{description}</small>}
+    </label>
+  );
+}
+
+function SettingsToggle({
+  label,
+  description,
+  checked,
+  onChange,
+  disabled
+}: {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}): JSX.Element {
+  return (
+    <label className="settings-toggle-card">
+      <span className="settings-toggle-card-main">
+        <span>{label}</span>
+        {description && <small>{description}</small>}
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </label>
+  );
+}
+
+function settingsText(value: unknown, fallback = ''): string {
+  return value === undefined || value === null ? fallback : String(value);
+}
+
+function settingsBoolean(value: unknown, fallback = false): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return fallback;
+    return ['1', 'true', 'yes', 'on'].includes(normalized);
+  }
+  return fallback;
+}
+
+function settingsCsv(value: unknown): string {
+  if (Array.isArray(value)) return value.map((item) => settingsText(item).trim()).filter(Boolean).join(', ');
+  return settingsText(value);
+}
+
+function parseSettingsCsv(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function cleanSettingsPayload(payload: AnyRecord): AnyRecord {
+  const next = { ...payload };
+  delete next.auth_enabled;
+  delete next.logged_in;
+  delete next.auth_just_enabled;
+  delete next.password_env_var;
+  delete next.webui_version;
+  delete next.agent_version;
+  delete next.success;
+  return next;
+}
+
 export function NativeSkillsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const ready = isReady(serviceStatus);
   const skillsState = useApiState(() => window.lastbrowser.sidekick.listSkills(), [ready], ready);
@@ -170,6 +344,7 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
   const [selectedFile, setSelectedFile] = useState('');
   const [content, setContent] = useState('');
   const [editorError, setEditorError] = useState('');
+  const bundledCatalog = text(skillsState.data?.source) === 'bundled';
   const filtered = skills.filter((skill) => jsonPreview(skill).toLowerCase().includes(query.toLowerCase()));
   const selectedSkill = filtered.find((skill) => idOf(skill) === selectedName || text(skill.name) === selectedName) || filtered[0] || null;
   const linkedFiles = isRecord(selectedSkill?.linked_files)
@@ -233,6 +408,7 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
     <section className="browser-main native-rest-main skills-main">
       <NativeHeader icon={<Sparkles size={21} />} title="Skills" kicker="Native Skills" detail="Skill library, linked files and SKILL.md editing through the local Sidekick API." loading={skillsState.loading} ready={ready} onRefresh={skillsState.refresh} />
       <AdvancedWebUiTools panel="skills" serviceStatus={serviceStatus} compact />
+      {bundledCatalog && <section className="native-work-card detail-json-card"><header><strong>Bundled catalog</strong></header><pre>{'Showing the built-in skill catalog from the bundled Lastbrowser resources.\nEditing is read-only until the active profile exposes a writable skills directory.'}</pre></section>}
       <div className="native-card-actions insights-tabs">
         {['Library', 'Editor', 'Linked files', 'Create skill'].map((item) => (
           <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
@@ -256,8 +432,8 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
           <div className="native-rest-editor-head">
             <strong>{section}: {selectedFile || selectedName || 'Select a skill'}</strong>
             <div className="native-card-actions">
-              <button type="button" onClick={() => void save()} disabled={!ready || !selectedName || Boolean(selectedFile)}><Save size={13} /><span>Save SKILL.md</span></button>
-              <button type="button" className="danger" onClick={() => void removeSkill()} disabled={!ready || !selectedName}><Trash2 size={13} /><span>Delete</span></button>
+              <button type="button" onClick={() => void save()} disabled={!ready || !selectedName || Boolean(selectedFile) || bundledCatalog}><Save size={13} /><span>Save SKILL.md</span></button>
+              <button type="button" className="danger" onClick={() => void removeSkill()} disabled={!ready || !selectedName || bundledCatalog}><Trash2 size={13} /><span>Delete</span></button>
             </div>
           </div>
           <div className="skill-linked-files">
@@ -515,6 +691,7 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
   const [selected, setSelected] = useState('');
   const [section, setSection] = useState(activeContextItem || 'Profiles');
   const current = profiles.find((profile) => idOf(profile) === selected) || profiles[0] || null;
+  const activeProfile = current || profiles[0] || null;
 
   useEffect(() => {
     if (!selected && current) setSelected(idOf(current));
@@ -555,6 +732,21 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
           <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
         ))}
       </div>
+      <section className="native-work-card detail-json-card">
+        <header><strong>{section}</strong></header>
+        <pre>{jsonPreview({
+          profileCount: profiles.length,
+          activeProfile: activeProfile ? titleOf(activeProfile) : null,
+          section,
+          hint: section === 'Gateway'
+            ? 'Gateway settings and provider bindings for the active profile.'
+            : section === 'Model defaults'
+              ? 'Default model and fallback model data.'
+              : section === 'Active profile'
+                ? 'The selected profile that will be applied to the session.'
+                : 'Browse and manage agent profiles.'
+        })}</pre>
+      </section>
       <div className="native-rest-split">
         <aside className="integration-list">
           <button type="button" className="new-session-button" onClick={() => void create()} disabled={!ready}><Plus size={15} />New profile</button>
@@ -1074,6 +1266,34 @@ function sidebarAppPanelForApp(app: AnyRecord): SidebarAppPanel | null {
   return null;
 }
 
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => text(entry).trim()).filter(Boolean);
+}
+
+function normalizeAppstoreRecord(app: AnyRecord): AnyRecord {
+  const installed = isRecord(app.status) ? app.status : {};
+  return {
+    ...app,
+    id: text(app.id || app.app_id || app.slug || app.name || app.title || app.key),
+    key: text(app.key || app.slug || app.id || app.app_id || app.name || app.title),
+    name: text(app.name || app.title || app.label || app.slug || app.id || app.app_id, 'Untitled'),
+    category: text(app.category || app.cat || app.group || 'general'),
+    developer: text(app.developer || app.dev || app.author || app.publisher || 'Community'),
+    description: text(app.description || app.summary || app.desc || ''),
+    fullDescription: text(app.fullDesc || app.full_description || app.description || app.desc || ''),
+    version: text(app.version || app.ver || installed.version_installed || installed.version || '?'),
+    size: text(app.size || app.bytes || '—'),
+    icon: text(app.icon || '🛍️'),
+    tags: stringArray(app.tags),
+    screenshots: stringArray(app.screenshots),
+    installed: Boolean(installed.installed),
+    updateAvailable: Boolean(app.update_available),
+    settingsUrl: text(app.settings_url || ''),
+    status: isRecord(app.status) ? app.status : null
+  };
+}
+
 export function NativeAppstoreMain({
   activeContextItem,
   serviceStatus,
@@ -1086,169 +1306,853 @@ export function NativeAppstoreMain({
   onUninstalledSidebarApp: (panel: SidebarAppPanel) => void;
 }): JSX.Element {
   const ready = isReady(serviceStatus);
-  const [category, setCategory] = useState('');
   const [section, setSection] = useState(activeContextItem || 'Home');
-  const appsState = useApiState(() => window.lastbrowser.sidekick.listAppstore({ category }), [ready, category], ready);
+  const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedAppId, setSelectedAppId] = useState('');
+  const [submitManifest, setSubmitManifest] = useState(JSON.stringify({
+    key: 'my_plugin',
+    name: 'My Plugin',
+    icon: '🧩',
+    cat: 'Developer Tools',
+    dev: 'Your Name',
+    version: '0.1.0',
+    description: 'Kurze Beschreibung der Integration.',
+    setup_steps: []
+  }, null, 2));
+  const [submitStatus, setSubmitStatus] = useState('');
+  const appsState = useApiState(() => window.lastbrowser.sidekick.listAppstore({}), [ready], ready);
   const updates = useApiState(() => window.lastbrowser.sidekick.getAppstoreUpdates(), [ready], ready);
   const sdk = useApiState(() => window.lastbrowser.sidekick.getAppstoreSdk(), [ready], ready);
-  const apps = arrayFrom(appsState.data, ['apps', 'items', 'packages']);
+  const apps = useMemo(() => arrayFrom(appsState.data, ['apps', 'items', 'packages']).map(normalizeAppstoreRecord), [appsState.data]);
+
+  const categories = useMemo(() => {
+    const buckets = new Map<string, { key: string; label: string; count: number }>();
+    for (const app of apps) {
+      const key = text(app.category || 'general').toLowerCase();
+      const label = text(app.category || 'General');
+      const current = buckets.get(key) || { key, label, count: 0 };
+      current.count += 1;
+      buckets.set(key, current);
+    }
+    return Array.from(buckets.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [apps]);
+
+  const installedApps = useMemo(() => apps.filter((app) => app.installed), [apps]);
+  const featuredApps = useMemo(() => apps.filter((app) => Boolean((app.featured || app.pinned || app.recommended) as boolean)), [apps]);
+  const recentApps = useMemo(() => apps.filter((app) => app.installed).slice(0, 6), [apps]);
+  const filteredApps = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return apps.filter((app) => {
+      const matchesCategory = !selectedCategory || text(app.category).toLowerCase() === selectedCategory.toLowerCase();
+      const matchesSection = section === 'My apps' ? app.installed : true;
+      const haystack = [
+        app.name,
+        app.description,
+        app.fullDescription,
+        app.developer,
+        app.category,
+        app.tags.join(' ')
+      ].join(' ').toLowerCase();
+      const matchesSearch = !query || haystack.includes(query);
+      return matchesCategory && matchesSection && matchesSearch;
+    });
+  }, [apps, search, section, selectedCategory]);
+  const selectedApp = useMemo(() => (
+    apps.find((app) => app.id === selectedAppId)
+    || filteredApps[0]
+    || apps[0]
+    || null
+  ), [apps, filteredApps, selectedAppId]);
 
   useEffect(() => {
     const nextSection = activeContextItem || 'Home';
     setSection(nextSection);
-    setCategory(
-      nextSection === 'Home' || nextSection === 'SDK' ? '' :
-      nextSection === 'Categories' ? 'browser' :
-      nextSection === 'My apps' ? 'community' :
-      nextSection === 'Submit' ? 'productivity' :
-      ''
-    );
+    setSelectedCategory('');
   }, [activeContextItem]);
+
+  useEffect(() => {
+    if (!selectedAppId && selectedApp) setSelectedAppId(selectedApp.id);
+  }, [selectedApp, selectedAppId]);
+
+  async function refreshAll(): Promise<void> {
+    await Promise.all([appsState.refresh(), updates.refresh(), sdk.refresh()]);
+  }
 
   async function install(app: AnyRecord): Promise<void> {
     await window.lastbrowser.sidekick.installAppstoreApp({ appId: idOf(app) });
     const sidebarPanel = sidebarAppPanelForApp(app);
     if (sidebarPanel) onInstalledSidebarApp(sidebarPanel);
-    await appsState.refresh();
+    await refreshAll();
   }
 
   async function uninstall(app: AnyRecord): Promise<void> {
     await window.lastbrowser.sidekick.uninstallAppstoreApp({ appId: idOf(app) });
     const sidebarPanel = sidebarAppPanelForApp(app);
     if (sidebarPanel) onUninstalledSidebarApp(sidebarPanel);
-    await appsState.refresh();
+    await refreshAll();
+  }
+
+  async function submitAppstoreManifest(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    setSubmitStatus('');
+    try {
+      const manifest = JSON.parse(submitManifest || '{}') as Record<string, unknown>;
+      const response = await window.lastbrowser.sidekick.submitAppstoreApp({ manifest });
+      setSubmitStatus(text(response.message || response.status || 'Manifest submitted.'));
+      await refreshAll();
+    } catch (error) {
+      setSubmitStatus(error instanceof Error ? error.message : String(error));
+    }
   }
 
   return (
     <section className="browser-main native-rest-main appstore-main">
       <NativeHeader icon={<Package size={21} />} title="Appstore" kicker="Extensions" detail="Native home/category/my apps/sdk/submit surface backed by the appstore endpoints." loading={appsState.loading} ready={ready} onRefresh={appsState.refresh} />
-      <AdvancedWebUiTools panel="appstore" serviceStatus={serviceStatus} compact />
       <div className="native-card-actions insights-tabs">
         {['Home', 'Categories', 'My apps', 'SDK', 'Submit'].map((item) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => {
+            setSection(item);
+            if (item !== 'Categories') setSelectedCategory('');
+          }}>{item}</button>
         ))}
-      </div>
-      <div className="native-card-actions">
-        {['', 'browser', 'ai', 'productivity', 'community'].map((item) => <button key={item || 'all'} type="button" className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item || 'Home'}</button>)}
-        <button type="button" onClick={() => window.lastbrowser.sidekick.updateAllAppstore()} disabled={!ready}><Download size={13} />Update all</button>
+        <button type="button" onClick={() => void window.lastbrowser.sidekick.updateAllAppstore()} disabled={!ready}><Download size={13} />Update all</button>
       </div>
       <ErrorLine error={appsState.error || updates.error || sdk.error} />
-      <section className="native-work-card detail-json-card">
-        <header><strong>{section}</strong></header>
-        <pre>{jsonPreview({ category, appCount: apps.length, sdk: sdk.data, updates: updates.data })}</pre>
-      </section>
-      <div className="app-grid-native">
-        {apps.map((app) => (
-          <article key={idOf(app)} className="native-work-card app-card-native">
-            <img src={brandAssets.sidebarIcons.appstore} alt="" />
-            <strong>{titleOf(app)}</strong>
-            <span>{text(app.description || app.summary || app.category)}</span>
-            <div className="native-card-actions">
-              <button type="button" onClick={() => void install(app)} disabled={!ready}><Plus size={13} />Install</button>
-              <button type="button" className="danger" onClick={() => void uninstall(app)} disabled={!ready}><Trash2 size={13} />Remove</button>
-            </div>
-          </article>
-        ))}
-        {!apps.length && <EmptyState icon={<Grid2X2 size={24} />} label={ready ? 'No apps returned by backend.' : 'Sidekick is starting.'} />}
+      <div className="native-rest-split">
+        <aside className="integration-list">
+          <div className="native-search">
+            <Search size={14} />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search apps..." />
+          </div>
+          <div className="native-card-actions" style={{ padding: 0 }}>
+            {categories.map((categoryItem) => (
+              <button
+                key={categoryItem.key}
+                type="button"
+                className={selectedCategory === categoryItem.key ? 'active' : ''}
+                onClick={() => setSelectedCategory((current) => current === categoryItem.key ? '' : categoryItem.key)}
+              >
+                {categoryItem.label} <span style={{ opacity: .65 }}>({categoryItem.count})</span>
+              </button>
+            ))}
+          </div>
+          <div className="compact-list">
+            {(section === 'My apps' ? installedApps : filteredApps).map((app) => (
+              <article key={app.id} className={app.id === selectedAppId ? 'active' : ''} onClick={() => setSelectedAppId(app.id)}>
+                <strong>{app.icon} {app.name}</strong>
+                <span>{app.description || app.category || 'Appstore item'}</span>
+              </article>
+            ))}
+            {!filteredApps.length && <EmptyState icon={<Grid2X2 size={24} />} label={ready ? 'No apps returned by backend.' : 'Sidekick is starting.'} />}
+          </div>
+        </aside>
+        <main className="native-rest-detail">
+          {section === 'Home' && (
+            <>
+              <section className="native-work-card detail-json-card">
+                <header><strong>Home</strong></header>
+                <pre>{jsonPreview({
+                  totalApps: apps.length,
+                  installedApps: installedApps.length,
+                  categories: categories.map((categoryItem) => `${categoryItem.label} (${categoryItem.count})`),
+                  updates: updates.data
+                })}</pre>
+              </section>
+              <section className="native-work-card detail-json-card">
+                <header><strong>Featured</strong></header>
+                <pre>{jsonPreview(featuredApps.slice(0, 6).map((app) => ({ name: app.name, category: app.category, version: app.version, installed: app.installed })))}</pre>
+              </section>
+              <section className="native-work-card detail-json-card">
+                <header><strong>Recently installed</strong></header>
+                <pre>{jsonPreview(recentApps.slice(0, 6).map((app) => ({ name: app.name, category: app.category, version: app.version })))}</pre>
+              </section>
+            </>
+          )}
+          {section === 'Categories' && (
+            <section className="native-work-card detail-json-card">
+              <header><strong>Categories</strong></header>
+              <pre>{jsonPreview(categories)}</pre>
+            </section>
+          )}
+          {section === 'My apps' && (
+            <section className="native-work-card detail-json-card">
+              <header><strong>My apps</strong></header>
+              <pre>{jsonPreview(installedApps.map((app) => ({ name: app.name, version: app.version, category: app.category, updateAvailable: app.updateAvailable })))}</pre>
+            </section>
+          )}
+          {section === 'SDK' && (
+            <section className="native-work-card detail-json-card">
+              <header><strong>SDK / Updates</strong></header>
+              <pre>{jsonPreview({ sdk: sdk.data, updates: updates.data })}</pre>
+            </section>
+          )}
+          {section === 'Submit' && (
+            <form className="native-work-card detail-json-card" onSubmit={(event) => void submitAppstoreManifest(event)}>
+              <header>
+                <strong>Submit app</strong>
+                <button type="submit" className="primary-action compact" disabled={!ready}><Send size={13} /><span>Submit</span></button>
+              </header>
+              <textarea className="code-editor" value={submitManifest} onChange={(event) => setSubmitManifest(event.target.value)} />
+              {submitStatus && <div className="workspace-error">{submitStatus}</div>}
+            </form>
+          )}
+          {selectedApp && (
+            <section className="native-work-card detail-json-card">
+              <header>
+                <strong>{selectedApp.icon} {selectedApp.name}</strong>
+                <div className="native-card-actions">
+                  <button type="button" onClick={() => void install(selectedApp)} disabled={!ready || selectedApp.installed}><Plus size={13} />Install</button>
+                  <button type="button" className="danger" onClick={() => void uninstall(selectedApp)} disabled={!ready || !selectedApp.installed}><Trash2 size={13} />Remove</button>
+                </div>
+              </header>
+              <pre>{jsonPreview({
+                category: selectedApp.category,
+                developer: selectedApp.developer,
+                version: selectedApp.version,
+                size: selectedApp.size,
+                installed: selectedApp.installed,
+                updateAvailable: selectedApp.updateAvailable,
+                description: selectedApp.fullDescription || selectedApp.description,
+                tags: selectedApp.tags,
+                screenshots: selectedApp.screenshots
+              })}</pre>
+            </section>
+          )}
+          {!selectedApp && <EmptyState icon={<Package size={24} />} label={ready ? 'Select an app to see details.' : 'Sidekick is starting.'} />}
+        </main>
       </div>
-      <section className="native-work-card detail-json-card"><header><strong>SDK / Updates</strong></header><pre>{jsonPreview({ sdk: sdk.data, updates: updates.data })}</pre></section>
     </section>
   );
 }
 
 export function NativeSettingsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const ready = isReady(serviceStatus);
-  const state = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
-  const [section, setSection] = useState('conversation');
-  const [draft, setDraft] = useState('{}');
-  const settings = isRecord(state.data?.settings) ? state.data.settings : (state.data || {});
-  const sectionKeys: Record<string, string[]> = {
-    conversation: ['send_key', 'chat_mode', 'composer_mode', 'default_model', 'profile', 'bot_name'],
-    appearance: ['theme', 'skin', 'font_size', 'sidebar_density', 'show_thinking'],
-    preferences: ['language', 'notifications', 'sound', 'show_token_usage', 'busy_input_mode'],
-    providers: ['provider', 'model_provider', 'gateway', 'api_redact_enabled', 'openai_codex_enabled'],
-    plugins: ['plugins', 'enabled_plugins', 'gmail', 'discord'],
-    system: ['check_for_updates', 'workspace_root', 'debug', 'password_enabled']
-  };
+  const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
+  const modelsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' }), [ready], ready);
+  const authState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/auth/status' }), [ready], ready);
+  const pluginsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/plugins' }), [ready], ready);
+  const updatesState = useApiState(() => window.lastbrowser.updates.status(), [], true);
+  const [section, setSection] = useState<SettingsSectionId>('conversation');
+  const [draft, setDraft] = useState<AnyRecord>({});
+  const [passwordDraft, setPasswordDraft] = useState('');
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const settings = isRecord(settingsState.data?.settings) ? settingsState.data.settings : (settingsState.data || {});
+  const authEnabled = settingsBoolean(authState.data?.auth_enabled, false);
+  const loggedIn = settingsBoolean(authState.data?.logged_in, false);
+  const passwordEnvLocked = settingsBoolean(settings.password_env_var, false);
+  const modelGroups = arrayFrom(modelsState.data, ['groups']);
+  const activeProvider = settingsText(modelsState.data?.active_provider, settingsText(settings.provider || settings.model_provider));
+  const defaultModel = settingsText(draft.default_model ?? settings.default_model ?? modelsState.data?.default_model, '');
+  const webuiVersion = settingsText(settings.webui_version, 'not detected');
+  const agentVersion = settingsText(settings.agent_version, 'not detected');
+  const updateState = settingsText(updatesState.data?.state, 'idle');
+  const updateCurrentVersion = settingsText(updatesState.data?.currentVersion, '');
+  const updateAvailableVersion = settingsText(updatesState.data?.availableVersion, '');
+  const updateMessage = settingsText(updatesState.data?.message, '');
+  const pluginList = arrayFrom(pluginsState.data, ['plugins', 'items']);
 
   useEffect(() => {
     const normalized = activeContextItem.trim().toLowerCase();
-    const match = Object.keys(sectionKeys).find((key) => key === normalized || key.toLowerCase() === normalized);
+    const match = (Object.keys(SETTINGS_SECTIONS) as SettingsSectionId[]).find((key) => key === normalized);
     if (match) setSection(match);
   }, [activeContextItem]);
 
   useEffect(() => {
-    const scoped = Object.fromEntries((sectionKeys[section] || []).map((key) => [key, settings[key]]));
-    setDraft(JSON.stringify(scoped, null, 2));
-  }, [section, settings]);
-
-  async function save(): Promise<void> {
-    const patch = JSON.parse(draft || '{}') as AnyRecord;
-    await window.lastbrowser.sidekick.saveSettings({ settings: { ...settings, ...patch } });
-    await state.refresh();
-  }
+    if (settingsState.loading) return;
+    setDraft(cleanSettingsPayload(settings));
+    setPasswordDraft('');
+    setDirty(false);
+  }, [settingsState.data, settingsState.loading]);
 
   function updateDraftField(key: string, value: unknown): void {
-    let current: AnyRecord = {};
-    try {
-      current = JSON.parse(draft || '{}') as AnyRecord;
-    } catch {
-      current = {};
-    }
-    setDraft(JSON.stringify({ ...current, [key]: value }, null, 2));
+    setDraft((current) => ({ ...current, [key]: value }));
+    setDirty(true);
   }
+
+  function updateDraftToggle(key: string, value: boolean): void {
+    updateDraftField(key, value);
+  }
+
+  function restoreDraft(): void {
+    setDraft(cleanSettingsPayload(settings));
+    setPasswordDraft('');
+    setDirty(false);
+  }
+
+  async function save(): Promise<void> {
+    if (!ready || saving) return;
+    setSaving(true);
+    try {
+      const payload = cleanSettingsPayload({
+        ...settings,
+        ...draft
+      });
+      payload.bot_name = settingsText(payload.bot_name, 'Hermes').trim() || 'Hermes';
+      if (passwordDraft.trim()) {
+        payload._set_password = passwordDraft.trim();
+      }
+      payload.language = settingsText(payload.language, 'en');
+      payload.theme = settingsText(payload.theme, 'dark');
+      payload.skin = settingsText(payload.skin, 'default');
+      payload.font_size = settingsText(payload.font_size, 'default');
+      payload.send_key = settingsText(payload.send_key, 'enter');
+      payload.busy_input_mode = ['queue', 'interrupt', 'steer'].includes(settingsText(payload.busy_input_mode)) ? payload.busy_input_mode : 'queue';
+      payload.sidebar_density = settingsText(payload.sidebar_density, 'compact') === 'detailed' ? 'detailed' : 'compact';
+      payload.auto_title_refresh_every = ['0', '5', '10', '20'].includes(settingsText(payload.auto_title_refresh_every)) ? settingsText(payload.auto_title_refresh_every) : '0';
+      payload.session_jump_buttons = settingsBoolean(payload.session_jump_buttons, false);
+      payload.session_endless_scroll = settingsBoolean(payload.session_endless_scroll, false);
+      payload.show_token_usage = settingsBoolean(payload.show_token_usage, false);
+      payload.show_tps = settingsBoolean(payload.show_tps, false);
+      payload.show_cli_sessions = settingsBoolean(payload.show_cli_sessions, false);
+      payload.sync_to_insights = settingsBoolean(payload.sync_to_insights, false);
+      payload.check_for_updates = settingsBoolean(payload.check_for_updates, true);
+      payload.sound_enabled = settingsBoolean(payload.sound_enabled, true);
+      payload.notifications_enabled = settingsBoolean(payload.notifications_enabled, true);
+      payload.simplified_tool_calling = settingsBoolean(payload.simplified_tool_calling, true);
+      payload.api_redact_enabled = settingsBoolean(payload.api_redact_enabled, true);
+      payload.openai_codex_enabled = settingsBoolean(payload.openai_codex_enabled, false);
+      payload.show_thinking = settingsBoolean(payload.show_thinking, false);
+      payload.debug = settingsBoolean(payload.debug, false);
+      payload.enabled_plugins = parseSettingsCsv(settingsCsv(payload.enabled_plugins));
+      payload.plugins = parseSettingsCsv(settingsCsv(payload.plugins));
+      await window.lastbrowser.sidekick.saveSettings({ settings: payload });
+      setDirty(false);
+      setPasswordDraft('');
+      await settingsState.refresh();
+      await authState.refresh();
+    } catch (error) {
+      showToast(`Settings save failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function disableAuth(): Promise<void> {
+    if (!ready || saving) return;
+    if (!window.confirm('Disable authentication for this instance?')) return;
+    setSaving(true);
+    try {
+      await window.lastbrowser.sidekick.saveSettings({ settings: { _clear_password: true } });
+      setPasswordDraft('');
+      await settingsState.refresh();
+      await authState.refresh();
+    } catch (error) {
+      showToast(`Disable auth failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function signOut(): Promise<void> {
+    if (!ready) return;
+    try {
+      await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/auth/logout', body: {} });
+      await authState.refresh();
+    } catch (error) {
+      showToast(`Sign out failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function checkUpdates(): Promise<void> {
+    await updatesState.refresh();
+    try {
+      await window.lastbrowser.updates.check();
+      await updatesState.refresh();
+    } catch (error) {
+      showToast(`Update check failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  function renderModelOptions(): JSX.Element {
+    if (!modelGroups.length) {
+      return <input value={defaultModel} onChange={(event) => updateDraftField('default_model', event.target.value)} placeholder="model-id" />;
+    }
+    const hasCurrentModel = modelGroups.some((group) => {
+      const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
+      return models.some((model) => settingsText(model.id || model.name || model.label) === defaultModel);
+    });
+    return (
+      <select value={defaultModel} onChange={(event) => updateDraftField('default_model', event.target.value)}>
+        {!defaultModel && <option value="">Server default</option>}
+        {defaultModel && !hasCurrentModel && <option value={defaultModel}>{defaultModel}</option>}
+        {modelGroups.map((group) => {
+          const providerLabel = settingsText(group.provider || group.provider_id || 'Provider');
+          const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
+          return (
+            <optgroup key={`${providerLabel}-${settingsText(group.provider_id, providerLabel)}`} label={providerLabel}>
+              {models.map((model) => (
+                <option key={settingsText(model.id || model.name || model.label)} value={settingsText(model.id || model.name || model.label)}>
+                  {settingsText(model.label || model.name || model.id)}
+                </option>
+              ))}
+            </optgroup>
+          );
+        })}
+      </select>
+    );
+  }
+
+  function renderPluginsList(): JSX.Element {
+    if (pluginsState.loading) {
+      return <EmptyState icon={<Loader2 size={16} className="spin" />} label="Loading plugins…" />;
+    }
+    if (pluginsState.error) {
+      return <div className="workspace-error">{pluginsState.error}</div>;
+    }
+    const plugins = pluginList;
+    if (!plugins.length) {
+      return <EmptyState icon={<Package size={16} />} label="No plugins are visible yet." />;
+    }
+    return (
+      <div className="compact-list settings-plugin-list">
+        {plugins.map((plugin) => {
+          const enabled = plugin && plugin.enabled !== false;
+          const hooks = Array.isArray(plugin?.hooks) ? plugin.hooks : [];
+          return (
+            <article key={idOf(plugin)}>
+              <strong>{titleOf(plugin, 'Unnamed plugin')}</strong>
+              <span>{settingsText(plugin.key || plugin.id || 'plugin')}{plugin.version ? ` · v${settingsText(plugin.version)}` : ''}</span>
+              <span>{settingsText(plugin.description, 'No description provided.')}</span>
+              <div className="plugin-hook-list">
+                {hooks.length ? hooks.map((hook) => <span key={`${idOf(plugin)}-${settingsText(hook)}`} className="plugin-hook-badge">{settingsText(hook)}</span>) : <span className="plugin-hook-empty">No registered lifecycle hooks</span>}
+              </div>
+              <span className={`provider-card-badge ${enabled ? '' : 'plugin-card-badge-disabled'}`}>{enabled ? 'Enabled' : 'Disabled'}</span>
+            </article>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const sectionList = Object.entries(SETTINGS_SECTIONS) as Array<[SettingsSectionId, SettingsSectionMeta]>;
+  const updateAvailable = updateState === 'available';
 
   return (
     <section className="browser-main native-rest-main settings-main">
-      <NativeHeader icon={<Settings size={21} />} title="Settings" kicker="System" detail="Conversation, appearance, preferences, providers, plugins and system settings." loading={state.loading} ready={ready} onRefresh={state.refresh} />
-      <AdvancedWebUiTools panel="settings" serviceStatus={serviceStatus} compact />
-      <ErrorLine error={state.error} />
+      <NativeHeader
+        icon={<Settings size={21} />}
+        title="Settings"
+        kicker="System"
+        detail="Conversation, appearance, preferences, providers, plugins and system settings."
+        loading={settingsState.loading}
+        ready={ready}
+        onRefresh={settingsState.refresh}
+      />
+      <ErrorLine error={settingsState.error || modelsState.error || authState.error || pluginsState.error} />
+
       <div className="settings-native-grid">
         <nav className="settings-section-nav native-work-card">
-          {Object.keys(sectionKeys).map((item) => <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>)}
+          {sectionList.map(([key, meta]) => (
+            <button key={key} type="button" className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}>
+              <span className="settings-section-button-icon">{meta.icon}</span>
+              <span className="settings-section-button-text">
+                <strong>{meta.title}</strong>
+                <small>{meta.description}</small>
+              </span>
+            </button>
+          ))}
         </nav>
-        <main className="native-work-card settings-editor">
-          <header><strong>{section}</strong><button type="button" onClick={() => void save()} disabled={!ready}><Save size={13} />Save</button></header>
-          <div className="settings-field-grid">
-            {(sectionKeys[section] || []).map((key) => {
-              let value: unknown = settings[key];
-              try {
-                value = (JSON.parse(draft || '{}') as AnyRecord)[key] ?? value;
-              } catch {
-                value = settings[key];
-              }
-              if (typeof value === 'boolean' || key.startsWith('show_') || key.endsWith('_enabled') || key === 'debug') {
-                return (
-                  <label key={key} className="settings-toggle">
-                    <input type="checkbox" checked={Boolean(value)} onChange={(event) => updateDraftField(key, event.target.checked)} />
-                    <span>{key}</span>
-                  </label>
-                );
-              }
-              if (key === 'theme' || key === 'send_key' || key === 'chat_mode' || key === 'composer_mode') {
-                const options = key === 'theme'
-                  ? ['dark', 'light', 'system']
-                  : key === 'send_key'
-                    ? ['enter', 'ctrl_enter', 'shift_enter']
-                    : ['chat', 'plan', 'action'];
-                return (
-                  <label key={key}>
-                    <span>{key}</span>
-                    <select value={text(value)} onChange={(event) => updateDraftField(key, event.target.value)}>
-                      {options.map((option) => <option key={option} value={option}>{option}</option>)}
+
+        <main className="native-work-card settings-editor settings-panel-scroll">
+          <header className="settings-editor-head">
+            <div>
+              <strong>{SETTINGS_SECTIONS[section].title}</strong>
+              <span>{SETTINGS_SECTIONS[section].description}</span>
+            </div>
+            <div className="settings-editor-actions">
+              <span className={`native-rest-pill ${dirty ? '' : 'ready'}`}>
+                <span className={`status-dot ${dirty ? '' : 'ready'}`} />
+                {dirty ? 'Unsaved' : 'Saved'}
+              </span>
+              <button type="button" className="secondary-action compact" onClick={() => void restoreDraft()} disabled={!ready || !dirty}>
+                <RefreshCw size={15} />
+                <span>Reset</span>
+              </button>
+              <button type="button" className="secondary-action compact" onClick={() => void save()} disabled={!ready || saving || !dirty}>
+                {saving ? <Loader2 size={15} className="spin" /> : <Save size={15} />}
+                <span>Save</span>
+              </button>
+            </div>
+          </header>
+
+          <div className="settings-panel-stack">
+            {section === 'conversation' && (
+              <>
+                <SettingsCard
+                  title="Conversation defaults"
+                  description="Model routing and composer behavior for new conversations."
+                  action={<span className="settings-badge">Provider: {activeProvider || '—'}</span>}
+                >
+                  <div className="settings-field-grid">
+                    <SettingsField label="Default model" description="Used for new conversations. Existing conversations keep their model.">
+                      {renderModelOptions()}
+                    </SettingsField>
+                    <SettingsField label="Send key" description="Choose how Enter behaves in the composer.">
+                      <select value={settingsText(draft.send_key ?? settings.send_key, 'enter')} onChange={(event) => updateDraftField('send_key', event.target.value)}>
+                        <option value="enter">Enter (Shift+Enter for newline)</option>
+                        <option value="ctrl+enter">Ctrl+Enter (Enter for newline)</option>
+                      </select>
+                    </SettingsField>
+                    <SettingsField label="Chat mode" description="Default mode used when opening a new chat.">
+                      <select value={settingsText(draft.chat_mode ?? settings.chat_mode, 'chat')} onChange={(event) => updateDraftField('chat_mode', event.target.value)}>
+                        <option value="chat">Chat</option>
+                        <option value="plan">Plan</option>
+                        <option value="action">Action</option>
+                      </select>
+                    </SettingsField>
+                    <SettingsField label="Composer mode" description="Default action on the composer toolbar.">
+                      <select value={settingsText(draft.composer_mode ?? settings.composer_mode, 'action')} onChange={(event) => updateDraftField('composer_mode', event.target.value)}>
+                        <option value="action">Action</option>
+                        <option value="plan">Plan</option>
+                        <option value="chat">Chat</option>
+                      </select>
+                    </SettingsField>
+                    <SettingsField label="Profile" description="Profile used for new sessions.">
+                      <input value={settingsText(draft.profile ?? settings.profile, '')} onChange={(event) => updateDraftField('profile', event.target.value)} placeholder="default" />
+                    </SettingsField>
+                    <SettingsField label="Assistant name" description="Display name across the UI.">
+                      <input value={settingsText(draft.bot_name ?? settings.bot_name, 'Hermes')} onChange={(event) => updateDraftField('bot_name', event.target.value)} placeholder="Hermes" />
+                    </SettingsField>
+                  </div>
+                </SettingsCard>
+              </>
+            )}
+
+            {section === 'appearance' && (
+              <>
+                <SettingsCard title="Theme" description="Pick the visual theme and skin family.">
+                  <div className="settings-theme-grid">
+                    <button type="button" className={settingsText(draft.theme ?? settings.theme, 'dark') === 'dark' ? 'settings-theme-btn active' : 'settings-theme-btn'} onClick={() => updateDraftField('theme', 'dark')}>
+                      <span className="settings-theme-preview settings-theme-preview-dark" />
+                      <strong>Dark</strong>
+                    </button>
+                    <button type="button" className={settingsText(draft.theme ?? settings.theme, 'dark') === 'light' ? 'settings-theme-btn active' : 'settings-theme-btn'} onClick={() => updateDraftField('theme', 'light')}>
+                      <span className="settings-theme-preview settings-theme-preview-light" />
+                      <strong>Light</strong>
+                    </button>
+                    <button type="button" className={settingsText(draft.theme ?? settings.theme, 'dark') === 'system' ? 'settings-theme-btn active' : 'settings-theme-btn'} onClick={() => updateDraftField('theme', 'system')}>
+                      <span className="settings-theme-preview settings-theme-preview-system" />
+                      <strong>System</strong>
+                    </button>
+                  </div>
+                </SettingsCard>
+
+                <SettingsCard title="Skins and type" description="Accent skin and readable font scaling.">
+                  <div className="settings-skin-grid">
+                    {SETTINGS_SKINS.map((skin) => (
+                      <button
+                        key={skin.key}
+                        type="button"
+                        className={settingsText(draft.skin ?? settings.skin, 'default').toLowerCase() === skin.key ? 'settings-skin-btn active' : 'settings-skin-btn'}
+                        onClick={() => updateDraftField('skin', skin.key)}
+                      >
+                        <div className="settings-skin-dots">
+                          {skin.colors.map((color) => <span key={color} style={{ background: color }} />)}
+                        </div>
+                        <strong>{skin.name}</strong>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="settings-size-grid">
+                    {[
+                      ['small', 'Small'],
+                      ['default', 'Default'],
+                      ['large', 'Large']
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={settingsText(draft.font_size ?? settings.font_size, 'default') === value ? 'settings-size-btn active' : 'settings-size-btn'}
+                        onClick={() => updateDraftField('font_size', value)}
+                      >
+                        <span>Aa</span>
+                        <strong>{label}</strong>
+                      </button>
+                    ))}
+                  </div>
+                  <SettingsField label="Syntax theme" description="Code block theme for transcript and previews.">
+                    <select value={settingsText(draft.syntax_theme ?? settings.syntax_theme, '')} onChange={(event) => updateDraftField('syntax_theme', event.target.value)}>
+                      <option value="">Default</option>
+                      <option value="tomorrow-night">Tomorrow Night</option>
+                      <option value="one-dark">One Dark</option>
+                      <option value="github-light">GitHub Light</option>
                     </select>
-                  </label>
-                );
-              }
-              return (
-                <label key={key}>
-                  <span>{key}</span>
-                  <input value={text(value)} onChange={(event) => updateDraftField(key, event.target.value)} />
-                </label>
-              );
-            })}
+                  </SettingsField>
+                </SettingsCard>
+
+                <SettingsCard title="Session view" description="Defaults that affect the left sidebar and transcript layout.">
+                  <div className="settings-field-grid">
+                    <SettingsToggle
+                      label="Keep file tree open"
+                      description="Show the workspace file tree by default in chat."
+                      checked={settingsBoolean(draft.workspace_panel_open ?? settings.workspace_panel_open, true)}
+                      onChange={(value) => updateDraftToggle('workspace_panel_open', value)}
+                    />
+                    <SettingsToggle
+                      label="Show session jump buttons"
+                      description="Display floating start/end buttons in long sessions."
+                      checked={settingsBoolean(draft.session_jump_buttons ?? settings.session_jump_buttons, false)}
+                      onChange={(value) => updateDraftToggle('session_jump_buttons', value)}
+                    />
+                    <SettingsToggle
+                      label="Infinite scroll history"
+                      description="Load older messages automatically when scrolling upward."
+                      checked={settingsBoolean(draft.session_endless_scroll ?? settings.session_endless_scroll, false)}
+                      onChange={(value) => updateDraftToggle('session_endless_scroll', value)}
+                    />
+                  </div>
+                </SettingsCard>
+              </>
+            )}
+
+            {section === 'preferences' && (
+              <>
+                <SettingsCard title="Defaults" description="Language and chat behavior.">
+                  <div className="settings-field-grid">
+                    <SettingsField label="Language" description="User-facing UI language.">
+                      <select value={settingsText(draft.language ?? settings.language, 'en')} onChange={(event) => updateDraftField('language', event.target.value)}>
+                        {SETTINGS_LANGUAGES.map((language) => (
+                          <option key={language.value} value={language.value}>{language.label}</option>
+                        ))}
+                      </select>
+                    </SettingsField>
+                    <SettingsField label="Sidebar density" description="How much metadata the sidebar shows.">
+                      <select value={settingsText(draft.sidebar_density ?? settings.sidebar_density, 'compact') === 'detailed' ? 'detailed' : 'compact'} onChange={(event) => updateDraftField('sidebar_density', event.target.value)}>
+                        <option value="compact">Compact</option>
+                        <option value="detailed">Detailed</option>
+                      </select>
+                    </SettingsField>
+                    <SettingsField label="Busy input mode" description="What happens when you send a message mid-run.">
+                      <select value={settingsText(draft.busy_input_mode ?? settings.busy_input_mode, 'queue')} onChange={(event) => updateDraftField('busy_input_mode', event.target.value)}>
+                        <option value="queue">Queue follow-up</option>
+                        <option value="interrupt">Interrupt current turn</option>
+                        <option value="steer">Steer mid-turn</option>
+                      </select>
+                    </SettingsField>
+                    <SettingsField label="Adaptive title refresh" description="How often the session title should be regenerated.">
+                      <select value={settingsText(draft.auto_title_refresh_every ?? settings.auto_title_refresh_every, '0')} onChange={(event) => updateDraftField('auto_title_refresh_every', event.target.value)}>
+                        <option value="0">Off</option>
+                        <option value="5">Every 5 exchanges</option>
+                        <option value="10">Every 10 exchanges</option>
+                        <option value="20">Every 20 exchanges</option>
+                      </select>
+                    </SettingsField>
+                  </div>
+                </SettingsCard>
+
+                <SettingsCard title="Notifications and activity" description="Background visibility and response signaling.">
+                  <div className="settings-field-grid">
+                    <SettingsToggle
+                      label="Notification sound"
+                      description="Play a sound when a response completes."
+                      checked={settingsBoolean(draft.sound_enabled ?? settings.sound_enabled, true)}
+                      onChange={(value) => updateDraftToggle('sound_enabled', value)}
+                    />
+                    <SettingsToggle
+                      label="Browser notifications"
+                      description="Show desktop notifications while the tab is in the background."
+                      checked={settingsBoolean(draft.notifications_enabled ?? settings.notifications_enabled, true)}
+                      onChange={(value) => updateDraftToggle('notifications_enabled', value)}
+                    />
+                    <SettingsToggle
+                      label="Show token usage"
+                      description="Display token counts under assistant replies."
+                      checked={settingsBoolean(draft.show_token_usage ?? settings.show_token_usage, false)}
+                      onChange={(value) => updateDraftToggle('show_token_usage', value)}
+                    />
+                    <SettingsToggle
+                      label="Show token speed (TPS)"
+                      description="Display streaming tokens per second."
+                      checked={settingsBoolean(draft.show_tps ?? settings.show_tps, false)}
+                      onChange={(value) => updateDraftToggle('show_tps', value)}
+                    />
+                    <SettingsToggle
+                      label="Compact tool activity"
+                      description="Group thinking and tool calls into one collapsed activity section."
+                      checked={settingsBoolean(draft.simplified_tool_calling ?? settings.simplified_tool_calling, true)}
+                      onChange={(value) => updateDraftToggle('simplified_tool_calling', value)}
+                    />
+                    <SettingsToggle
+                      label="Show reasoning"
+                      description="Display the assistant's reasoning summaries when available."
+                      checked={settingsBoolean(draft.show_thinking ?? settings.show_thinking, false)}
+                      onChange={(value) => updateDraftToggle('show_thinking', value)}
+                    />
+                    <SettingsToggle
+                      label="Show non-WebUI sessions"
+                      description="Surface CLI, Telegram, Discord and Slack sessions in the list."
+                      checked={settingsBoolean(draft.show_cli_sessions ?? settings.show_cli_sessions, false)}
+                      onChange={(value) => updateDraftToggle('show_cli_sessions', value)}
+                    />
+                    <SettingsToggle
+                      label="Sync usage to insights"
+                      description="Mirror browser session usage into the insights store."
+                      checked={settingsBoolean(draft.sync_to_insights ?? settings.sync_to_insights, false)}
+                      onChange={(value) => updateDraftToggle('sync_to_insights', value)}
+                    />
+                    <SettingsToggle
+                      label="Check for updates"
+                      description="Show update banners and keep the local release feed current."
+                      checked={settingsBoolean(draft.check_for_updates ?? settings.check_for_updates, true)}
+                      onChange={(value) => updateDraftToggle('check_for_updates', value)}
+                    />
+                  </div>
+                </SettingsCard>
+              </>
+            )}
+
+            {section === 'providers' && (
+              <>
+                <SettingsCard
+                  title="Provider defaults"
+                  description="Provider routing and API redaction."
+                  action={<span className="settings-badge">{activeProvider || 'No active provider'}</span>}
+                >
+                  <div className="settings-field-grid">
+                    <SettingsField label="Provider" description="Top-level provider identifier.">
+                      <input value={settingsText(draft.provider ?? settings.provider, '')} onChange={(event) => updateDraftField('provider', event.target.value)} placeholder="openai-codex" />
+                    </SettingsField>
+                    <SettingsField label="Model provider" description="Provider family used for model resolution.">
+                      <input value={settingsText(draft.model_provider ?? settings.model_provider, '')} onChange={(event) => updateDraftField('model_provider', event.target.value)} placeholder="openai-codex" />
+                    </SettingsField>
+                    <SettingsField label="Gateway" description="Optional gateway / proxy identifier.">
+                      <input value={settingsText(draft.gateway ?? settings.gateway, '')} onChange={(event) => updateDraftField('gateway', event.target.value)} placeholder="default" />
+                    </SettingsField>
+                    <SettingsField label="OpenAI Codex" description="Enable Codex-specific provider handling.">
+                      <select value={settingsBoolean(draft.openai_codex_enabled ?? settings.openai_codex_enabled, false) ? 'true' : 'false'} onChange={(event) => updateDraftField('openai_codex_enabled', event.target.value === 'true')}>
+                        <option value="false">Disabled</option>
+                        <option value="true">Enabled</option>
+                      </select>
+                    </SettingsField>
+                    <SettingsField label="API redaction" description="Hide sensitive data in API responses.">
+                      <select value={settingsBoolean(draft.api_redact_enabled ?? settings.api_redact_enabled, true) ? 'true' : 'false'} onChange={(event) => updateDraftField('api_redact_enabled', event.target.value === 'true')}>
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled</option>
+                      </select>
+                    </SettingsField>
+                  </div>
+                </SettingsCard>
+
+                <SettingsCard title="Model catalog" description="Live `/api/models` payload mirrored from the backend.">
+                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label="Loading models…" />}
+                  {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
+                  {!modelsState.loading && !modelsState.error && (
+                    <div className="settings-model-summary">
+                      <span className="settings-badge">Default: {settingsText(modelsState.data?.default_model, '—')}</span>
+                      <span className="settings-badge">Active provider: {activeProvider || '—'}</span>
+                      <span className="settings-badge">Groups: {modelGroups.length}</span>
+                    </div>
+                  )}
+                </SettingsCard>
+              </>
+            )}
+
+            {section === 'plugins' && (
+              <>
+                <SettingsCard title="Connected apps" description="Installed app integrations and their current visibility.">
+                  <div className="settings-field-grid">
+                    <SettingsToggle
+                      label="Gmail visible in sidebar"
+                      description="Shown only when installed from the appstore."
+                      checked={settingsBoolean(draft.gmail ?? settings.gmail, false)}
+                      onChange={(value) => updateDraftToggle('gmail', value)}
+                    />
+                    <SettingsToggle
+                      label="Discord visible in sidebar"
+                      description="Shown only when installed from the appstore."
+                      checked={settingsBoolean(draft.discord ?? settings.discord, false)}
+                      onChange={(value) => updateDraftToggle('discord', value)}
+                    />
+                    <SettingsField label="Enabled plugins" description="Comma-separated plugin keys.">
+                      <input value={settingsCsv(draft.enabled_plugins ?? settings.enabled_plugins)} onChange={(event) => updateDraftField('enabled_plugins', event.target.value)} placeholder="gmail,discord" />
+                    </SettingsField>
+                  </div>
+                </SettingsCard>
+
+                <SettingsCard title="Installed plugin inventory" description="What the backend currently exposes.">
+                  {renderPluginsList()}
+                </SettingsCard>
+              </>
+            )}
+
+            {section === 'system' && (
+              <>
+                <SettingsCard
+                  title="Access and updates"
+                  description="Authentication, password control and package updates."
+                  action={
+                    <div className="settings-system-badges">
+                      <span className="settings-badge">WebUI: {webuiVersion}</span>
+                      <span className="settings-badge">Agent: {agentVersion}</span>
+                    </div>
+                  }
+                >
+                  <div className="settings-field-grid">
+                    <SettingsField label="Access password" description="Leave blank to keep the current password.">
+                      <input
+                        type="password"
+                        value={passwordDraft}
+                        disabled={passwordEnvLocked}
+                        onChange={(event) => {
+                          setPasswordDraft(event.target.value);
+                          setDirty(true);
+                        }}
+                        placeholder={passwordEnvLocked ? 'Locked by env var' : 'Enter new password…'}
+                      />
+                    </SettingsField>
+                    <SettingsField label="Workspace root" description="Default workspace path for this install.">
+                      <input value={settingsText(draft.workspace_root ?? settings.workspace_root, '')} onChange={(event) => updateDraftField('workspace_root', event.target.value)} placeholder={settingsText(serviceStatus?.runtimeDir, '')} />
+                    </SettingsField>
+                    <SettingsToggle
+                      label="Debug mode"
+                      description="Enable verbose diagnostics in the desktop shell."
+                      checked={settingsBoolean(draft.debug ?? settings.debug, false)}
+                      onChange={(value) => updateDraftToggle('debug', value)}
+                    />
+                    <SettingsToggle
+                      label="Auth enabled"
+                      description={authEnabled ? 'Authentication is currently active.' : 'Authentication is currently disabled.'}
+                      checked={authEnabled}
+                      onChange={() => void 0}
+                      disabled
+                    />
+                  </div>
+                  {passwordEnvLocked && (
+                    <div className="settings-env-lock">
+                      The HERMES_WEBUI_PASSWORD environment variable is set and overrides this password field.
+                    </div>
+                  )}
+                  <div className="settings-system-actions">
+                    <button type="button" className="secondary-action compact" onClick={() => void checkUpdates()} disabled={!ready || updatesState.loading}>
+                      {updatesState.loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
+                      <span>Check updates</span>
+                    </button>
+                    <button type="button" className="secondary-action compact" onClick={() => void signOut()} disabled={!ready || !loggedIn}>
+                      <Shield size={15} />
+                      <span>Sign out</span>
+                    </button>
+                    <button type="button" className="secondary-action compact" onClick={() => void disableAuth()} disabled={!ready || !authEnabled || passwordEnvLocked}>
+                      <Trash2 size={15} />
+                      <span>Disable auth</span>
+                    </button>
+                  </div>
+                  <div className="settings-system-status">
+                    <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>Update state: {updateState}</span>
+                    {updateCurrentVersion && <span className="settings-badge">Current: {updateCurrentVersion}</span>}
+                    {updateAvailableVersion && <span className="settings-badge">Available: {updateAvailableVersion}</span>}
+                    {updateMessage && <span className="settings-badge">{updateMessage}</span>}
+                  </div>
+                </SettingsCard>
+
+                <SettingsCard title="Developer API tools" description="Useful while bridging remaining WebUI endpoints.">
+                  <AdvancedWebUiTools panel="settings" serviceStatus={serviceStatus} compact />
+                </SettingsCard>
+              </>
+            )}
           </div>
-          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} />
         </main>
       </div>
     </section>

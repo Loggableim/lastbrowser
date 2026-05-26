@@ -23,6 +23,7 @@ describe('browser shell layout', () => {
     const browserPageMain = cssBlock(css, '.browser-page-main');
     const browserWebviewFrame = cssBlock(css, '.browser-webview-frame');
     const aiBrowserMain = cssBlock(css, '.ai-browser-main');
+    const browserStartPage = cssBlock(css, '.browser-start-page');
     const browserCanvas = cssBlock(css, '.panel-browser .browser-main');
     const railCollapsed = cssBlock(css, '.workspace.left-collapsed');
     const contextCollapsed = cssBlock(css, '.workspace.context-collapsed');
@@ -47,6 +48,8 @@ describe('browser shell layout', () => {
     expect(browserWebviewFrame).toContain('min-height: 0');
     expect(browserWebviewFrame).toContain('overflow: hidden');
     expect(aiBrowserMain).toContain('overflow: auto');
+    expect(browserStartPage).toContain('overflow: auto');
+    expect(browserStartPage).toContain('background');
     expect(browserCanvas).toContain('background: #07111f');
     expect(browserView).toContain('position: absolute');
     expect(browserView).toContain('inset: 0');
@@ -126,7 +129,7 @@ describe('browser shell layout', () => {
     expect(source).toContain('onPanel={setActivePanel}');
     expect(source).toContain('contextSidebarCollapsed');
     expect(source).toContain('<BrowserMain');
-    expect(source).toContain('<NativeAiBrowserMain');
+    expect(source).toContain('<NativeBrowserStartPage');
     expect(source).toContain('<WorkspacePanel');
     expect(source).toContain('<SpaceSelector');
     expect(source).toContain('<NativeChatMain');

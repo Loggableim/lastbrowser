@@ -258,6 +258,8 @@ declare global {
           tenant?: string;
           priority?: number | string;
         }) => Promise<{ task?: KanbanTaskSummary; [key: string]: unknown }>;
+        runDispatchOnce: (request?: { dryRun?: boolean }) => Promise<Record<string, unknown>>;
+        getActiveDispatches: () => Promise<Record<string, unknown>>;
         listSkills: () => Promise<Record<string, unknown>>;
         getSkillContent: (request: { path?: string; name?: string; file?: string }) => Promise<Record<string, unknown>>;
         saveSkill: (request: { path?: string; name?: string; category?: string; content: string }) => Promise<Record<string, unknown>>;

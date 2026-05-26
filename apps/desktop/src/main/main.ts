@@ -53,6 +53,7 @@ import {
   getDiscordStats,
   getDiscordWarns,
   getInsights,
+  getActiveDispatches,
   getKanbanBoard,
   getLogs,
   getMemory,
@@ -97,6 +98,7 @@ import {
   renameWorkspaceEntry,
   reorderSpaces,
   renameSession,
+  runDispatchOnce,
   resumeCron,
   runCron,
   saveSettings,
@@ -214,6 +216,8 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:getKanbanBoard', (_event, request) => getKanbanBoard(requireWebuiUrl(), request || {}));
   ipcMain.handle('lastbrowser:sidekick:createKanbanTask', (_event, request) => createKanbanTask(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:updateKanbanTask', (_event, request) => updateKanbanTask(requireWebuiUrl(), request));
+  ipcMain.handle('lastbrowser:sidekick:runDispatchOnce', (_event, request) => runDispatchOnce(requireWebuiUrl(), request || {}));
+  ipcMain.handle('lastbrowser:sidekick:getActiveDispatches', () => getActiveDispatches(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:listSkills', () => listSkills(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:getSkillContent', (_event, request) => getSkillContent(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:saveSkill', (_event, request) => saveSkill(requireWebuiUrl(), request));

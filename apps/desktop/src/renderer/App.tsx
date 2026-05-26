@@ -1410,6 +1410,7 @@ export function App(): JSX.Element {
           browserMode={browserMode}
           browserLoadError={browserLoadError}
           visitedSites={visitedSites}
+          browserFrameRef={browserFrameRef}
           activeContextItem={activeContextItem}
           webviewRef={webviewRef}
           onAction={runSidekickAction}
@@ -2016,6 +2017,7 @@ function BrowserMain({
   activeSpacePath,
   browserLoadError,
   visitedSites,
+  browserFrameRef,
   webviewRef,
   onAction,
   onAddSpace,
@@ -2056,6 +2058,7 @@ function BrowserMain({
   activeSpacePath: string;
   browserLoadError: string;
   visitedSites: BrowserVisit[];
+  browserFrameRef: React.MutableRefObject<HTMLDivElement | null>;
   webviewRef: React.MutableRefObject<Electron.WebviewTag | null>;
   onAction: (action: SidekickActionId) => Promise<void>;
   onAddSpace: (path: string, name: string) => void;

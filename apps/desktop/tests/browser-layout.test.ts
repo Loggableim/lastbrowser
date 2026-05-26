@@ -27,30 +27,37 @@ describe('browser shell layout', () => {
     const browserCanvas = cssBlock(css, '.panel-browser .browser-main');
     const railCollapsed = cssBlock(css, '.workspace.left-collapsed');
     const contextCollapsed = cssBlock(css, '.workspace.context-collapsed');
+    const sidebarHandle = cssBlock(css, '.sidebar-resize-handle');
 
     expect(appShell).toContain('grid-template-rows: 34px auto minmax(0, 1fr)');
     expect(workspace).toContain('grid-template-rows: minmax(0, 1fr)');
     expect(workspace).toContain('height: 100%');
-    expect(workspace).toContain('grid-template-columns: 168px 280px minmax(0, 1fr) 320px');
+    expect(workspace).toContain('--left-rail-width: 168px');
+    expect(workspace).toContain('--context-sidebar-width: 280px');
+    expect(workspace).toContain('--workspace-panel-width: 320px');
+    expect(workspace).toContain('grid-template-columns: var(--left-rail-width) var(--context-sidebar-width) minmax(0, 1fr) var(--workspace-panel-width)');
     expect(workspace).toContain('overflow: hidden');
-    expect(railCollapsed).toContain('grid-template-columns: 48px 280px minmax(0, 1fr) 320px');
-    expect(contextCollapsed).toContain('grid-template-columns: 168px 44px minmax(0, 1fr) 320px');
+    expect(railCollapsed).toContain('--left-rail-width: 48px');
+    expect(contextCollapsed).toContain('--context-sidebar-width: 44px');
     expect(css).not.toContain('.workspace.with-sidekick');
     expect(css).not.toContain('410px');
     expect(browserPane).toContain('display: flex');
     expect(browserPane).toContain('height: 100%');
     expect(browserPane).toContain('overflow: hidden');
-    expect(browserPageMain).toContain('display: flex');
-    expect(browserPageMain).toContain('flex-direction: column');
-    expect(browserPageMain).toContain('flex: 1 1 auto');
+    expect(browserPageMain).toContain('display: grid');
+    expect(browserPageMain).toContain('grid-template-rows: auto minmax(0, 1fr)');
     expect(browserPageMain).toContain('min-height: 0');
-    expect(browserWebviewFrame).toContain('flex: 1 1 auto');
+    expect(browserPageMain).toContain('height: 100%');
+    expect(browserPageMain).toContain('padding: 12px');
+    expect(browserWebviewFrame).toContain('position: relative');
     expect(browserWebviewFrame).toContain('min-height: 0');
     expect(browserWebviewFrame).toContain('overflow: hidden');
     expect(aiBrowserMain).toContain('overflow: auto');
     expect(browserStartPage).toContain('overflow: auto');
     expect(browserStartPage).toContain('background');
     expect(browserCanvas).toContain('background: #07111f');
+    expect(sidebarHandle).toContain('position: absolute');
+    expect(sidebarHandle).toContain('cursor: col-resize');
     expect(browserView).toContain('position: absolute');
     expect(browserView).toContain('inset: 0');
     expect(browserView).toContain('height: 100%');
@@ -60,7 +67,7 @@ describe('browser shell layout', () => {
     const source = readRendererFile('App.tsx');
 
     expect(source).toContain('className="browser-main browser-page-main"');
-    expect(source).toContain('<div className="browser-webview-frame">');
+    expect(source).toContain('className="browser-webview-frame"');
     expect(source).toContain('style={{ width: \'100%\', height: \'100%\' }}');
   });
 
@@ -154,6 +161,8 @@ describe('browser shell layout', () => {
     expect(source).toContain('<WorkspaceBreadcrumb');
     expect(source).toContain('<WorkspacePreview');
     expect(source).toContain('<AdvancedWebUiTools');
+    expect(source).toContain('onResizeStart={(event) => beginSidebarResize(\'context\', event)}');
+    expect(source).toContain('onResizeStart={(event) => beginSidebarResize(\'workspace\', event)}');
     expect(source).not.toContain('<WebUiPanelMain');
     expect(source).not.toContain('webuiPanelScript');
     expect(source).not.toContain('webui-panel-view');
@@ -166,6 +175,9 @@ describe('browser shell layout', () => {
     expect(source).not.toContain('is queued for native migration after Chat, Workspace/Spaces, Tasks, Kanban and Todos');
     expect(source).toContain('{setupRequired && (');
     expect(source).toContain('<FirstRunSetupPane');
+    expect(source).toContain('style={{');
+    expect(source).toContain('--context-sidebar-width');
+    expect(source).toContain('--workspace-panel-width');
   });
 
   it('wires context-sidebar section buttons instead of rendering dead controls', () => {

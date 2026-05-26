@@ -199,6 +199,58 @@ describe('sidekick api client', () => {
     expect(payload.source).toBe('bundled');
   });
 
+  it('saves categorized skills through the WebUI skill endpoint', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ ok: true, name: 'demo-skill', path: '/skills/demo-skill/SKILL.md' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    };
+
+    await saveSkill('http://127.0.0.1:8787', {
+      name: 'demo-skill',
+      category: 'general',
+      content: '# Demo skill\n'
+    }, fetchImpl);
+
+    expect(calls[0].url).toBe('http://127.0.0.1:8787/api/skills/save');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      name: 'demo-skill',
+      category: 'general',
+      content: '# Demo skill\n'
+    });
+  });
+
+  it('saves settings using the raw settings payload expected by the backend', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ ok: true, theme: 'light', skin: 'poseidon' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    };
+
+    await saveSettings('http://127.0.0.1:8787', {
+      settings: {
+        theme: 'light',
+        skin: 'poseidon',
+        show_token_usage: true
+      }
+    }, fetchImpl);
+
+    expect(calls[0].url).toBe('http://127.0.0.1:8787/api/settings');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      theme: 'light',
+      skin: 'poseidon',
+      show_token_usage: true
+    });
+  });
+
   it('exposes the dispatcher endpoints used by Tasks and Kanban', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = async (url: string | URL, init?: RequestInit) => {

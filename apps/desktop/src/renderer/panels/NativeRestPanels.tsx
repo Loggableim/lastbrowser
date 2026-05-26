@@ -24,7 +24,8 @@ import {
   Sparkles,
   Terminal,
   Trash2,
-  Users
+  Users,
+  X
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import { canCallSidekickApi } from '../runtime-readiness.js';
@@ -93,6 +94,41 @@ function titleOf(item: AnyRecord, fallback = 'Untitled'): string {
 
 function idOf(item: AnyRecord): string {
   return text(item.slug || item.id || item.name || item.path || titleOf(item));
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatCompactNumber(value: unknown, fallback = '—'): string {
+  const parsed = toNumber(value, Number.NaN);
+  if (!Number.isFinite(parsed)) return fallback;
+  try {
+    return new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(parsed);
+  } catch {
+    return String(parsed);
+  }
+}
+
+function formatMoney(value: unknown, fallback = '—'): string {
+  const parsed = toNumber(value, Number.NaN);
+  if (!Number.isFinite(parsed)) return fallback;
+  if (parsed === 0) return '$0';
+  return `$${parsed.toFixed(parsed < 1 ? 4 : 2)}`;
+}
+
+function percentValue(part: unknown, total: unknown): string {
+  const whole = toNumber(total, 0);
+  if (!whole) return '0%';
+  const ratio = Math.max(0, Math.min(100, Math.round((toNumber(part, 0) / whole) * 100)));
+  return `${ratio}%`;
+}
+
+function appstoreSettingType(value: unknown): 'checkbox' | 'number' | 'text' {
+  if (typeof value === 'boolean') return 'checkbox';
+  if (typeof value === 'number') return 'number';
+  return 'text';
 }
 
 export function jsonPreview(value: unknown): string {
@@ -315,6 +351,16 @@ function settingsCsv(value: unknown): string {
   return settingsText(value);
 }
 
+function normalizeAppearanceTheme(value: string): 'light' | 'dark' | 'system' {
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'light' || normalized === 'system' ? normalized : 'dark';
+}
+
+function normalizeAppearanceSkin(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  return normalized || 'default';
+}
+
 function parseSettingsCsv(value: string): string[] {
   return value
     .split(',')
@@ -334,18 +380,43 @@ function cleanSettingsPayload(payload: AnyRecord): AnyRecord {
   return next;
 }
 
+function applyDesktopAppearancePreview(themeValue: string, skinValue: string): void {
+  if (typeof document === 'undefined') return;
+  const theme = normalizeAppearanceTheme(themeValue);
+  const resolvedTheme = theme === 'system'
+    ? (window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+    : theme;
+  const skin = normalizeAppearanceSkin(skinValue);
+  const root = document.documentElement;
+  root.dataset.theme = resolvedTheme;
+  root.dataset.themeMode = theme;
+  root.dataset.skin = skin;
+  root.classList.toggle('theme-light', resolvedTheme === 'light');
+  root.classList.toggle('theme-dark', resolvedTheme !== 'light');
+  root.classList.toggle('theme-system', theme === 'system');
+  root.style.colorScheme = resolvedTheme;
+}
+
 export function NativeSkillsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const ready = isReady(serviceStatus);
   const skillsState = useApiState(() => window.lastbrowser.sidekick.listSkills(), [ready], ready);
   const skills = arrayFrom(skillsState.data, ['skills', 'items', 'files']);
+  const skillCategories = arrayFrom(skillsState.data, ['categories']).map((item) => text(item)).filter(Boolean);
   const [query, setQuery] = useState('');
   const [section, setSection] = useState(activeContextItem || 'Library');
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedName, setSelectedName] = useState('');
   const [selectedFile, setSelectedFile] = useState('');
+  const [skillCategoryDraft, setSkillCategoryDraft] = useState('');
   const [content, setContent] = useState('');
   const [editorError, setEditorError] = useState('');
   const bundledCatalog = text(skillsState.data?.source) === 'bundled';
-  const filtered = skills.filter((skill) => jsonPreview(skill).toLowerCase().includes(query.toLowerCase()));
+  const filtered = skills.filter((skill) => {
+    const haystack = jsonPreview(skill).toLowerCase();
+    const category = text(skill.category).toLowerCase();
+    const matchesCategory = !selectedCategory || category === selectedCategory.toLowerCase();
+    return matchesCategory && haystack.includes(query.toLowerCase());
+  });
   const selectedSkill = filtered.find((skill) => idOf(skill) === selectedName || text(skill.name) === selectedName) || filtered[0] || null;
   const linkedFiles = isRecord(selectedSkill?.linked_files)
     ? Object.keys(selectedSkill.linked_files)
@@ -355,6 +426,10 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
     setSection(activeContextItem || 'Library');
   }, [activeContextItem]);
 
+  useEffect(() => {
+    setSkillCategoryDraft(text(selectedSkill?.category));
+  }, [selectedSkill?.category, selectedSkill?.name, selectedSkill?.path]);
+
   const visibleSkills = section === 'Create skill'
     ? filtered.slice(0, 1)
     : section === 'Linked files' && selectedSkill
@@ -362,7 +437,11 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
       : filtered;
 
   useEffect(() => {
-    if (!selectedName && filtered[0]) setSelectedName(text(filtered[0].name || idOf(filtered[0])));
+    if (!filtered.length) return;
+    const currentMatches = filtered.some((skill) => idOf(skill) === selectedName || text(skill.name) === selectedName);
+    if (!currentMatches) {
+      setSelectedName(text(filtered[0].name || idOf(filtered[0])));
+    }
   }, [filtered, selectedName]);
 
   useEffect(() => {
@@ -380,8 +459,8 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
     if (!selectedName) return;
     await window.lastbrowser.sidekick.saveSkill({
       name: selectedName,
-      category: text(selectedSkill?.category),
-      path: text(selectedSkill?.path) || undefined,
+      category: skillCategoryDraft.trim() || text(selectedSkill?.category),
+      path: selectedSkill && text(selectedSkill?.source) === 'bundled' ? undefined : text(selectedSkill?.path) || undefined,
       content
     });
     await skillsState.refresh();
@@ -392,6 +471,7 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
     if (!name?.trim()) return;
     setSelectedName(name.trim());
     setSelectedFile('');
+    setSkillCategoryDraft('');
     setContent('# New Skill\n\nDescribe when Sidekick should use this skill.\n');
   }
 
@@ -408,12 +488,22 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
     <section className="browser-main native-rest-main skills-main">
       <NativeHeader icon={<Sparkles size={21} />} title="Skills" kicker="Native Skills" detail="Skill library, linked files and SKILL.md editing through the local Sidekick API." loading={skillsState.loading} ready={ready} onRefresh={skillsState.refresh} />
       <AdvancedWebUiTools panel="skills" serviceStatus={serviceStatus} compact />
-      {bundledCatalog && <section className="native-work-card detail-json-card"><header><strong>Bundled catalog</strong></header><pre>{'Showing the built-in skill catalog from the bundled Lastbrowser resources.\nEditing is read-only until the active profile exposes a writable skills directory.'}</pre></section>}
+      {bundledCatalog && <section className="native-work-card detail-json-card"><header><strong>Bundled catalog</strong></header><pre>{'Showing the built-in skill catalog from the bundled Lastbrowser resources.\nEdits and new skills will be saved to the active profile skills directory.'}</pre></section>}
       <div className="native-card-actions insights-tabs">
         {['Library', 'Editor', 'Linked files', 'Create skill'].map((item) => (
           <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
         ))}
       </div>
+      {skillCategories.length > 0 && (
+        <div className="native-card-actions insights-tabs skill-category-tabs">
+          <button type="button" className={!selectedCategory ? 'active' : ''} onClick={() => setSelectedCategory('')}>All</button>
+          {skillCategories.map((category) => (
+            <button key={category} type="button" className={selectedCategory === category ? 'active' : ''} onClick={() => setSelectedCategory((current) => current === category ? '' : category)}>
+              {category}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="native-rest-split">
         <aside className="integration-list">
           <div className="native-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search skills..." /></div>
@@ -432,9 +522,15 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
           <div className="native-rest-editor-head">
             <strong>{section}: {selectedFile || selectedName || 'Select a skill'}</strong>
             <div className="native-card-actions">
-              <button type="button" onClick={() => void save()} disabled={!ready || !selectedName || Boolean(selectedFile) || bundledCatalog}><Save size={13} /><span>Save SKILL.md</span></button>
-              <button type="button" className="danger" onClick={() => void removeSkill()} disabled={!ready || !selectedName || bundledCatalog}><Trash2 size={13} /><span>Delete</span></button>
+              <button type="button" onClick={() => void save()} disabled={!ready || !selectedName || Boolean(selectedFile)}><Save size={13} /><span>Save SKILL.md</span></button>
+              <button type="button" className="danger" onClick={() => void removeSkill()} disabled={!ready || !selectedName || text(selectedSkill?.source) === 'bundled'}><Trash2 size={13} /><span>Delete</span></button>
             </div>
+          </div>
+          <div className="settings-field-grid">
+            <label className="settings-field">
+              <span>Category</span>
+              <input value={skillCategoryDraft} onChange={(event) => setSkillCategoryDraft(event.target.value)} placeholder="general" />
+            </label>
           </div>
           <div className="skill-linked-files">
             <button type="button" className={!selectedFile ? 'active' : ''} onClick={() => setSelectedFile('')}>SKILL.md</button>
@@ -474,6 +570,18 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
   const [error, setError] = useState('');
   const [section, setSection] = useState(activeContextItem || 'Dashboard');
   const selectedAgent = agents.find((agent) => idOf(agent) === selectedSlug) || agents[0] || null;
+  const currentAgentId = currentState.data ? idOf(currentState.data) : '';
+  const currentAgentTitle = currentState.data ? titleOf(currentState.data) : 'No active agent';
+  const selectedSession = sessions.find((session) => idOf(session) === selectedSessionId) || null;
+  const dashboardCards = [
+    { label: 'Agents', value: formatCompactNumber(agents.length) },
+    { label: 'Sessions', value: formatCompactNumber(sessions.length) },
+    { label: 'Current', value: currentAgentTitle },
+    { label: 'Splash', value: text(splashState.data?.status || splashState.data?.state || 'setup') }
+  ];
+  const profileItems = arrayFrom(profilesState.data, ['profiles', 'items']);
+  const workspaceItems = arrayFrom(workspacesState.data, ['workspaces', 'items']);
+  const activityItems = arrayFrom(activitiesState.data, ['activities', 'items']);
 
   useEffect(() => {
     if (!selectedSlug && selectedAgent) setSelectedSlug(idOf(selectedAgent));
@@ -597,16 +705,21 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
         ))}
       </div>
       <section className="native-work-card detail-json-card">
-        <header><strong>{section}</strong></header>
-        <pre>{jsonPreview({
-          agentCount: agents.length,
-          sessionCount: sessions.length,
-          activeAgent: selectedAgent ? titleOf(selectedAgent) : null,
-          activeSessionId,
-          currentAgent: currentState.data ? titleOf(currentState.data) : null,
-          splash: splashState.data,
-          stats: statsState.data
-        })}</pre>
+        <header>
+          <strong>{section}</strong>
+          <div className="native-card-actions">
+            <button type="button" onClick={() => void refreshAgentSessions()} disabled={!ready}><RefreshCw size={13} /><span>Sessions</span></button>
+            <button type="button" onClick={() => void agentsState.refresh()} disabled={!ready}><RefreshCw size={13} /><span>Agents</span></button>
+          </div>
+        </header>
+        <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+          {dashboardCards.map((card) => (
+            <article key={card.label} className="metric-card">
+              <span>{card.label}</span>
+              <strong>{card.value}</strong>
+            </article>
+          ))}
+        </div>
       </section>
       <div className="agent-dashboard">
         <aside className="integration-list">
@@ -624,7 +737,7 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
             <button key={idOf(agent)} type="button" className={`integration-row ${idOf(agent) === selectedSlug ? 'active' : ''}`} onClick={() => setSelectedSlug(idOf(agent))}>
               <img src={brandAssets.sidebarIcons.agents} alt="" />
               <span>{titleOf(agent)}</span>
-              <small>{idOf(agent)} {currentState.data && idOf(currentState.data) === idOf(agent) ? 'active' : ''}</small>
+              <small>{idOf(agent)} {currentAgentId === idOf(agent) ? 'active' : ''}</small>
             </button>
           ))}
           {!agents.length && <EmptyState icon={<Bot size={22} />} label={ready ? 'No agents configured.' : 'Sidekick is starting.'} />}
@@ -640,9 +753,21 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
             <div className="agent-stat-strip">
               {Object.entries(statsState.data || {}).slice(0, 4).map(([key, value]) => <span key={key}><strong>{String(value)}</strong>{key}</span>)}
             </div>
-            <pre>{jsonPreview({ detail: agentDetail || selectedAgent, memory: agentMemory, soul: agentSoul })}</pre>
+            <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+              {[
+                { label: 'Selected agent', value: selectedAgent ? titleOf(selectedAgent) : 'None' },
+                { label: 'Selected session', value: selectedSession ? titleOf(selectedSession, selectedSessionId) : 'No session' },
+                { label: 'Memory', value: text(agentMemory.status || agentMemory.summary || 'available') },
+                { label: 'Soul', value: text(agentSoul.status || agentSoul.summary || 'available') }
+              ].map((card) => (
+                <article key={card.label} className="metric-card">
+                  <span>{card.label}</span>
+                  <strong>{card.value}</strong>
+                </article>
+              ))}
+            </div>
             <div className="compact-list">
-              {arrayFrom(activitiesState.data, ['activities', 'items']).slice(0, 5).map((activity) => <article key={idOf(activity)}><strong>{titleOf(activity, 'Activity')}</strong><span>{text(activity.message || activity.detail || activity.type)}</span></article>)}
+              {activityItems.slice(0, 5).map((activity) => <article key={idOf(activity)}><strong>{titleOf(activity, 'Activity')}</strong><span>{text(activity.message || activity.detail || activity.type)}</span></article>)}
             </div>
             </section>
           )}
@@ -659,7 +784,18 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
             <div className="agent-session-list">
               {sessions.map((session) => <button key={idOf(session)} type="button" onClick={() => setSelectedSessionId(idOf(session))}>{titleOf(session, idOf(session))}</button>)}
             </div>
-            <pre>{jsonPreview({ profiles: profilesState.data, workspaces: workspacesState.data })}</pre>
+            <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+              {[
+                { label: 'Profiles', value: formatCompactNumber(profileItems.length) },
+                { label: 'Workspaces', value: formatCompactNumber(workspaceItems.length) },
+                { label: 'Selected session', value: selectedSession ? titleOf(selectedSession, selectedSessionId) : 'No session' }
+              ].map((card) => (
+                <article key={card.label} className="metric-card">
+                  <span>{card.label}</span>
+                  <strong>{card.value}</strong>
+                </article>
+              ))}
+            </div>
           </section>
           )}
           {(section === 'Dashboard' || section === 'Workspace terminal') && (
@@ -937,7 +1073,9 @@ export function NativeInsightsMain({
   const insights = useApiState(() => window.lastbrowser.sidekick.getInsights({ days }), [ready, days], ready);
   const wiki = useApiState(() => window.lastbrowser.sidekick.getWikiStatus(), [ready], ready);
   const normalizedSection = section.toLowerCase();
-  const metricEntries = Object.entries(insights.data || {})
+  const insightData = isRecord(insights.data) ? insights.data : {};
+  const wikiData = isRecord(wiki.data) ? wiki.data : {};
+  const metricEntries = Object.entries(insightData)
     .filter(([key, value]) => {
       if (typeof value !== 'number' && typeof value !== 'string') return false;
       if (normalizedSection === 'models') return /model|provider/i.test(key);
@@ -945,6 +1083,22 @@ export function NativeInsightsMain({
       return true;
     })
     .slice(0, 10);
+  const dailyRows = arrayFrom(insightData, ['daily', 'daily_rows', 'daily_usage', 'activity_by_day', 'by_day']);
+  const modelRows = arrayFrom(insightData, ['models', 'model_stats', 'provider_models']);
+  const hourRows = arrayFrom(insightData, ['hours', 'by_hour', 'hourly', 'activity_by_hour']);
+  const systemHealth = isRecord(insightData.system) ? insightData.system : isRecord(insightData.health) ? insightData.health : null;
+  const overviewCards = [
+    { label: 'Sessions', value: formatCompactNumber(insightData.total_sessions || insightData.sessions) },
+    { label: 'Messages', value: formatCompactNumber(insightData.total_messages || insightData.messages) },
+    { label: 'Tokens', value: formatCompactNumber(insightData.total_tokens || insightData.tokens) },
+    { label: 'Cost', value: formatMoney(insightData.total_cost || insightData.cost) }
+  ];
+  const tokenBreakdown = [
+    { label: 'Input', value: formatCompactNumber(insightData.total_input_tokens || insightData.input_tokens) },
+    { label: 'Output', value: formatCompactNumber(insightData.total_output_tokens || insightData.output_tokens) },
+    { label: 'Average / session', value: formatCompactNumber(insightData.average_tokens_per_session || insightData.avg_tokens_per_session) },
+    { label: 'Weekly total', value: formatCompactNumber(insightData.weekly_tokens || insightData.period_tokens) }
+  ];
 
   useEffect(() => {
     setSection(activeContextItem || 'Usage');
@@ -959,17 +1113,146 @@ export function NativeInsightsMain({
           <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
         ))}
       </div>
-      <div className="native-card-actions"><select value={days} onChange={(event) => setDays(Number(event.target.value))}>{[7, 14, 30, 90].map((value) => <option key={value} value={value}>{value} days</option>)}</select></div>
-      <ErrorLine error={insights.error || wiki.error} />
-      <div className="metric-grid">
-        {metricEntries.map(([key, value]) => <article key={key} className="native-work-card metric-card"><span>{key}</span><strong>{String(value)}</strong></article>)}
-        {!metricEntries.length && <EmptyState icon={<Gauge size={24} />} label={ready ? 'No metrics yet.' : 'Sidekick is starting.'} />}
+      <div className="native-card-actions">
+        <select value={days} onChange={(event) => setDays(Number(event.target.value))}>{[7, 14, 30, 90].map((value) => <option key={value} value={value}>{value} days</option>)}</select>
       </div>
-      {normalizedSection === 'llm wiki' || normalizedSection === 'wiki' ? (
-        <section className="native-work-card detail-json-card"><header><strong>LLM Wiki Status</strong></header><pre>{jsonPreview(wiki.data || {})}</pre></section>
-      ) : (
-        <section className="native-work-card detail-json-card"><header><strong>{section}</strong></header><pre>{jsonPreview(normalizedSection === 'models' ? { models: insights.data?.models || insights.data?.model_stats || insights.data?.providers || {} } : normalizedSection === 'cost' ? { cost: insights.data?.cost || insights.data?.billing || insights.data?.usage || {} } : insights.data || {})}</pre></section>
-      )}
+      <ErrorLine error={insights.error || wiki.error} />
+      <div className="insights-panel-grid">
+        <aside className="insights-panel-column">
+          <section className="native-work-card detail-json-card">
+            <header><strong>Overview</strong></header>
+            <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+              {overviewCards.map((card) => (
+                <article key={card.label} className="metric-card">
+                  <span>{card.label}</span>
+                  <strong>{card.value}</strong>
+                </article>
+              ))}
+            </div>
+          </section>
+          <section className="native-work-card detail-json-card">
+            <header><strong>System health</strong></header>
+            {systemHealth ? (
+              <div className="compact-list">
+                {Object.entries(systemHealth)
+                  .filter(([, value]) => typeof value === 'number' || typeof value === 'string')
+                  .slice(0, 6)
+                  .map(([key, value]) => (
+                    <article key={key}>
+                      <strong>{key}</strong>
+                      <span>{String(value)}</span>
+                    </article>
+                  ))}
+              </div>
+            ) : (
+              <EmptyState icon={<Gauge size={24} />} label={ready ? 'No system health data.' : 'Sidekick is starting.'} />
+            )}
+          </section>
+          <section className="native-work-card detail-json-card">
+            <header><strong>LLM Wiki Status</strong></header>
+            <div className="compact-list">
+            {Object.entries(wikiData)
+                .filter(([, value]) => typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean')
+                .slice(0, 6)
+                .map(([key, value]) => (
+                  <article key={key}>
+                    <strong>{key}</strong>
+                    <span>{String(value)}</span>
+                  </article>
+                ))}
+            </div>
+          </section>
+        </aside>
+        <main className="insights-panel-column">
+          <section className="native-work-card detail-json-card">
+            <header><strong>{section}</strong></header>
+            <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))' }}>
+              {metricEntries.map(([key, value]) => (
+                <article key={key} className="metric-card">
+                  <span>{key}</span>
+                  <strong>{String(value)}</strong>
+                </article>
+              ))}
+              {!metricEntries.length && <EmptyState icon={<Gauge size={24} />} label={ready ? 'No metrics yet.' : 'Sidekick is starting.'} />}
+            </div>
+          </section>
+          <div className="insights-card-row">
+            <section className="native-work-card detail-json-card">
+              <header><strong>Daily tokens</strong></header>
+              {dailyRows.length ? (
+                <div className="insights-bar-list">
+                  {dailyRows.slice(0, 8).map((row, index) => {
+                    const input = toNumber(row.input_tokens || row.input || row.tokens_in || row.tokens_input);
+                    const output = toNumber(row.output_tokens || row.output || row.tokens_out || row.tokens_output);
+                    const total = Math.max(input + output, toNumber(row.total_tokens || row.tokens || 0));
+                    return (
+                      <article key={idOf(row) || `${index}`} className="insights-bar-row">
+                        <span className="insights-bar-label">{text(row.date || row.day || row.label || `Day ${index + 1}`)}</span>
+                        <div className="insights-bar-track">
+                          <div className="insights-bar-fill insights-bar-output" style={{ width: percentValue(output, total) }} />
+                          <div className="insights-bar-fill insights-bar-input" style={{ width: percentValue(input, total) }} />
+                        </div>
+                        <span className="insights-bar-value">{formatCompactNumber(total)}</span>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState icon={<Gauge size={24} />} label={ready ? 'No daily usage data.' : 'Sidekick is starting.'} />
+              )}
+            </section>
+            <section className="native-work-card detail-json-card">
+              <header><strong>Models</strong></header>
+              {modelRows.length ? (
+                <div className="insights-model-list">
+                  {modelRows.slice(0, 8).map((row) => (
+                    <article key={idOf(row)} className="insights-model-row">
+                      <strong>{titleOf(row, 'Model')}</strong>
+                      <span>{formatCompactNumber(row.sessions || row.usage || row.requests)} sessions</span>
+                      <span>{formatCompactNumber(row.total_tokens || row.tokens || row.input_tokens || row.output_tokens)} tokens</span>
+                      <span>{formatMoney(row.cost || row.total_cost || row.usage_cost)}</span>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState icon={<Gauge size={24} />} label={ready ? 'No model data.' : 'Sidekick is starting.'} />
+              )}
+            </section>
+          </div>
+          <section className="native-work-card detail-json-card">
+            <header><strong>Token breakdown</strong></header>
+            <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))' }}>
+              {tokenBreakdown.map((card) => (
+                <article key={card.label} className="metric-card">
+                  <span>{card.label}</span>
+                  <strong>{card.value}</strong>
+                </article>
+              ))}
+            </div>
+            {normalizedSection === 'cost' ? (
+              <pre>{jsonPreview(insightData.cost || insightData.billing || insightData.usage || {})}</pre>
+            ) : null}
+          </section>
+          <section className="native-work-card detail-json-card">
+            <header><strong>Activity by hour</strong></header>
+            {hourRows.length ? (
+              <div className="insights-bar-list">
+                {hourRows.slice(0, 8).map((row, index) => (
+                  <article key={idOf(row) || `${index}`} className="insights-bar-row">
+                    <span className="insights-bar-label">{text(row.hour ?? row.time ?? row.label ?? index).padStart(2, '0')}</span>
+                    <div className="insights-bar-track">
+                      <div className="insights-bar-fill insights-bar-input" style={{ width: percentValue(row.sessions || row.count || row.total || 0, hourRows.reduce((max, item) => Math.max(max, toNumber(item.sessions || item.count || item.total || 0)), 0)) }} />
+                    </div>
+                    <span className="insights-bar-value">{formatCompactNumber(row.sessions || row.count || row.total || 0)}</span>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <EmptyState icon={<Gauge size={24} />} label={ready ? 'No hourly activity data.' : 'Sidekick is starting.'} />
+            )}
+          </section>
+        </main>
+      </div>
     </section>
   );
 }
@@ -1321,6 +1604,11 @@ export function NativeAppstoreMain({
     setup_steps: []
   }, null, 2));
   const [submitStatus, setSubmitStatus] = useState('');
+  const [settingsApp, setSettingsApp] = useState<AnyRecord | null>(null);
+  const [settingsDraft, setSettingsDraft] = useState<AnyRecord>({});
+  const [settingsError, setSettingsError] = useState('');
+  const [settingsStatus, setSettingsStatus] = useState('');
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const appsState = useApiState(() => window.lastbrowser.sidekick.listAppstore({}), [ready], ready);
   const updates = useApiState(() => window.lastbrowser.sidekick.getAppstoreUpdates(), [ready], ready);
   const sdk = useApiState(() => window.lastbrowser.sidekick.getAppstoreSdk(), [ready], ready);
@@ -1341,6 +1629,8 @@ export function NativeAppstoreMain({
   const installedApps = useMemo(() => apps.filter((app) => app.installed), [apps]);
   const featuredApps = useMemo(() => apps.filter((app) => Boolean((app.featured || app.pinned || app.recommended) as boolean)), [apps]);
   const recentApps = useMemo(() => apps.filter((app) => app.installed).slice(0, 6), [apps]);
+  const updateCount = useMemo(() => apps.filter((app) => app.updateAvailable).length, [apps]);
+  const sidebarAppApps = useMemo(() => installedApps.filter((app) => sidebarAppPanelForApp(app)), [installedApps]);
   const filteredApps = useMemo(() => {
     const query = search.trim().toLowerCase();
     return apps.filter((app) => {
@@ -1364,6 +1654,12 @@ export function NativeAppstoreMain({
     || apps[0]
     || null
   ), [apps, filteredApps, selectedAppId]);
+  const appstoreOverview = [
+    { label: 'Catalog', value: formatCompactNumber(apps.length) },
+    { label: 'Installed', value: formatCompactNumber(installedApps.length) },
+    { label: 'Updates', value: formatCompactNumber(updateCount) },
+    { label: 'Sidebar apps', value: formatCompactNumber(sidebarAppApps.length) }
+  ];
 
   useEffect(() => {
     const nextSection = activeContextItem || 'Home';
@@ -1393,6 +1689,64 @@ export function NativeAppstoreMain({
     await refreshAll();
   }
 
+  async function openSettings(app: AnyRecord): Promise<void> {
+    const settingsUrl = text(app.settingsUrl || app.settings_url || '');
+    if (!settingsUrl) {
+      setSettingsError('This app does not expose a settings endpoint.');
+      setSettingsApp(app);
+      setSettingsDraft({});
+      setSettingsStatus('');
+      return;
+    }
+
+    setSettingsApp(app);
+    setSettingsDraft({});
+    setSettingsError('');
+    setSettingsStatus('Loading settings...');
+    try {
+      const payload = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: settingsUrl });
+      setSettingsDraft(isRecord(payload) ? payload : {});
+      setSettingsStatus('Ready');
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : String(error));
+      setSettingsStatus('');
+    }
+  }
+
+  async function saveSettings(): Promise<void> {
+    if (!settingsApp || settingsSaving) return;
+    const settingsUrl = text(settingsApp.settingsUrl || settingsApp.settings_url || '');
+    if (!settingsUrl) {
+      setSettingsError('This app does not expose a settings endpoint.');
+      return;
+    }
+
+    setSettingsSaving(true);
+    setSettingsError('');
+    setSettingsStatus('Saving...');
+    try {
+      const response = await window.lastbrowser.sidekick.requestWebui({
+        method: 'POST',
+        path: settingsUrl,
+        body: settingsDraft
+      });
+      setSettingsStatus(text(response.message || response.status || 'Saved'));
+      await refreshAll();
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : String(error));
+      setSettingsStatus('');
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  function closeSettings(): void {
+    setSettingsApp(null);
+    setSettingsDraft({});
+    setSettingsError('');
+    setSettingsStatus('');
+  }
+
   async function submitAppstoreManifest(event: FormEvent): Promise<void> {
     event.preventDefault();
     setSubmitStatus('');
@@ -1419,12 +1773,23 @@ export function NativeAppstoreMain({
         <button type="button" onClick={() => void window.lastbrowser.sidekick.updateAllAppstore()} disabled={!ready}><Download size={13} />Update all</button>
       </div>
       <ErrorLine error={appsState.error || updates.error || sdk.error} />
-      <div className="native-rest-split">
-        <aside className="integration-list">
+      <div className="appstore-panel-grid">
+        <aside className="integration-list appstore-sidebar">
           <div className="native-search">
             <Search size={14} />
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search apps..." />
           </div>
+          <section className="native-work-card detail-json-card appstore-summary-card">
+            <header><strong>Catalog</strong></header>
+            <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}>
+              {appstoreOverview.map((card) => (
+                <article key={card.label} className="metric-card">
+                  <span>{card.label}</span>
+                  <strong>{card.value}</strong>
+                </article>
+              ))}
+            </div>
+          </section>
           <div className="native-card-actions" style={{ padding: 0 }}>
             {categories.map((categoryItem) => (
               <button
@@ -1447,45 +1812,109 @@ export function NativeAppstoreMain({
             {!filteredApps.length && <EmptyState icon={<Grid2X2 size={24} />} label={ready ? 'No apps returned by backend.' : 'Sidekick is starting.'} />}
           </div>
         </aside>
-        <main className="native-rest-detail">
+        <main className="native-rest-detail appstore-main-column">
           {section === 'Home' && (
-            <>
+            <div className="appstore-home-grid">
               <section className="native-work-card detail-json-card">
                 <header><strong>Home</strong></header>
-                <pre>{jsonPreview({
-                  totalApps: apps.length,
-                  installedApps: installedApps.length,
-                  categories: categories.map((categoryItem) => `${categoryItem.label} (${categoryItem.count})`),
-                  updates: updates.data
-                })}</pre>
+                <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+                  {appstoreOverview.map((card) => (
+                    <article key={card.label} className="metric-card">
+                      <span>{card.label}</span>
+                      <strong>{card.value}</strong>
+                    </article>
+                  ))}
+                </div>
+                <div className="appstore-badge-row">
+                  {categories.slice(0, 4).map((categoryItem) => (
+                    <button key={categoryItem.key} type="button" className={selectedCategory === categoryItem.key ? 'active' : ''} onClick={() => setSelectedCategory(categoryItem.key)}>
+                      {categoryItem.label}
+                    </button>
+                  ))}
+                </div>
               </section>
               <section className="native-work-card detail-json-card">
                 <header><strong>Featured</strong></header>
-                <pre>{jsonPreview(featuredApps.slice(0, 6).map((app) => ({ name: app.name, category: app.category, version: app.version, installed: app.installed })))}</pre>
+                <div className="app-grid-native appstore-feature-grid">
+                  {(featuredApps.length ? featuredApps : filteredApps).slice(0, 6).map((app) => (
+                    <article key={app.id} className={`app-card-native ${app.id === selectedAppId ? 'active' : ''}`} onClick={() => setSelectedAppId(app.id)}>
+                      <strong>{app.icon} {app.name}</strong>
+                      <span>{app.description || app.category || 'Recommended app'}</span>
+                      <div className="app-card-actions">
+                        <button type="button" onClick={(event) => { event.stopPropagation(); void install(app); }} disabled={!ready || app.installed}><Plus size={13} />Install</button>
+                        {app.settingsUrl && <button type="button" onClick={(event) => { event.stopPropagation(); void openSettings(app); }}><Settings size={13} />Settings</button>}
+                        <button type="button" className="danger" onClick={(event) => { event.stopPropagation(); void uninstall(app); }} disabled={!ready || !app.installed}><Trash2 size={13} />Remove</button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
               </section>
               <section className="native-work-card detail-json-card">
                 <header><strong>Recently installed</strong></header>
-                <pre>{jsonPreview(recentApps.slice(0, 6).map((app) => ({ name: app.name, category: app.category, version: app.version })))}</pre>
+                <div className="app-grid-native">
+                  {recentApps.slice(0, 6).map((app) => (
+                    <article key={app.id} className={`app-card-native ${app.id === selectedAppId ? 'active' : ''}`} onClick={() => setSelectedAppId(app.id)}>
+                      <strong>{app.icon} {app.name}</strong>
+                      <span>{app.version} · {app.category || 'Appstore item'}</span>
+                    </article>
+                  ))}
+                </div>
               </section>
-            </>
+            </div>
           )}
           {section === 'Categories' && (
             <section className="native-work-card detail-json-card">
               <header><strong>Categories</strong></header>
-              <pre>{jsonPreview(categories)}</pre>
+              <div className="app-grid-native">
+                {categories.map((categoryItem) => (
+                  <article key={categoryItem.key} className={`app-card-native ${selectedCategory === categoryItem.key ? 'active' : ''}`} onClick={() => setSelectedCategory((current) => current === categoryItem.key ? '' : categoryItem.key)}>
+                    <strong>{categoryItem.label}</strong>
+                    <span>{categoryItem.count} apps</span>
+                  </article>
+                ))}
+              </div>
             </section>
           )}
           {section === 'My apps' && (
             <section className="native-work-card detail-json-card">
               <header><strong>My apps</strong></header>
-              <pre>{jsonPreview(installedApps.map((app) => ({ name: app.name, version: app.version, category: app.category, updateAvailable: app.updateAvailable })))}</pre>
+              <div className="app-grid-native">
+                {installedApps.map((app) => (
+                  <article key={app.id} className={`app-card-native ${app.id === selectedAppId ? 'active' : ''}`} onClick={() => setSelectedAppId(app.id)}>
+                    <strong>{app.icon} {app.name}</strong>
+                    <span>{app.version} · {app.category || 'Installed app'}</span>
+                    <div className="app-card-actions">
+                      <button type="button" onClick={(event) => { event.stopPropagation(); void install(app); }} disabled={!ready || app.installed}><Plus size={13} />Install</button>
+                      {app.settingsUrl && <button type="button" onClick={(event) => { event.stopPropagation(); void openSettings(app); }}><Settings size={13} />Settings</button>}
+                      <button type="button" className="danger" onClick={(event) => { event.stopPropagation(); void uninstall(app); }} disabled={!ready || !app.installed}><Trash2 size={13} />Remove</button>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </section>
           )}
           {section === 'SDK' && (
-            <section className="native-work-card detail-json-card">
-              <header><strong>SDK / Updates</strong></header>
-              <pre>{jsonPreview({ sdk: sdk.data, updates: updates.data })}</pre>
-            </section>
+            <div className="appstore-home-grid">
+              <section className="native-work-card detail-json-card">
+                <header><strong>SDK / Updates</strong></header>
+                <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+                  {[
+                    { label: 'SDK entries', value: formatCompactNumber(arrayFrom(sdk.data, ['items', 'entries', 'tools']).length || Object.keys(sdk.data || {}).length) },
+                    { label: 'Installed apps', value: formatCompactNumber(installedApps.length) },
+                    { label: 'Updates available', value: formatCompactNumber(updateCount) }
+                  ].map((card) => (
+                    <article key={card.label} className="metric-card">
+                      <span>{card.label}</span>
+                      <strong>{card.value}</strong>
+                    </article>
+                  ))}
+                </div>
+              </section>
+              <section className="native-work-card detail-json-card">
+                <header><strong>SDK payload</strong></header>
+                <pre>{jsonPreview({ sdk: sdk.data, updates: updates.data })}</pre>
+              </section>
+            </div>
           )}
           {section === 'Submit' && (
             <form className="native-work-card detail-json-card" onSubmit={(event) => void submitAppstoreManifest(event)}>
@@ -1503,25 +1932,77 @@ export function NativeAppstoreMain({
                 <strong>{selectedApp.icon} {selectedApp.name}</strong>
                 <div className="native-card-actions">
                   <button type="button" onClick={() => void install(selectedApp)} disabled={!ready || selectedApp.installed}><Plus size={13} />Install</button>
+                  {selectedApp.settingsUrl && <button type="button" onClick={() => void openSettings(selectedApp)}><Settings size={13} />Settings</button>}
                   <button type="button" className="danger" onClick={() => void uninstall(selectedApp)} disabled={!ready || !selectedApp.installed}><Trash2 size={13} />Remove</button>
                 </div>
               </header>
-              <pre>{jsonPreview({
-                category: selectedApp.category,
-                developer: selectedApp.developer,
-                version: selectedApp.version,
-                size: selectedApp.size,
-                installed: selectedApp.installed,
-                updateAvailable: selectedApp.updateAvailable,
-                description: selectedApp.fullDescription || selectedApp.description,
-                tags: selectedApp.tags,
-                screenshots: selectedApp.screenshots
-              })}</pre>
+              <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+                {[
+                  { label: 'Category', value: selectedApp.category || 'General' },
+                  { label: 'Developer', value: selectedApp.developer || 'Unknown' },
+                  { label: 'Version', value: selectedApp.version || '—' },
+                  { label: 'Installed', value: selectedApp.installed ? 'Yes' : 'No' },
+                  { label: 'Updates', value: selectedApp.updateAvailable ? 'Available' : 'Up to date' }
+                ].map((card) => (
+                  <article key={card.label} className="metric-card">
+                    <span>{card.label}</span>
+                    <strong>{card.value}</strong>
+                  </article>
+                ))}
+              </div>
+              <div className="compact-list">
+                <article>
+                  <strong>Description</strong>
+                  <span>{selectedApp.fullDescription || selectedApp.description || 'No description available.'}</span>
+                </article>
+                <article>
+                  <strong>Tags</strong>
+                  <span>{selectedApp.tags.length ? selectedApp.tags.join(', ') : 'No tags'}</span>
+                </article>
+                <article>
+                  <strong>Screenshots</strong>
+                  <span>{selectedApp.screenshots.length ? selectedApp.screenshots.slice(0, 3).join(', ') : 'No screenshots'}</span>
+                </article>
+              </div>
             </section>
           )}
           {!selectedApp && <EmptyState icon={<Package size={24} />} label={ready ? 'Select an app to see details.' : 'Sidekick is starting.'} />}
         </main>
       </div>
+      {settingsApp && (
+        <div className="appstore-settings-overlay" role="dialog" aria-modal="true" onClick={() => closeSettings()}>
+          <div className="appstore-settings-modal native-work-card detail-json-card" onClick={(event) => event.stopPropagation()}>
+            <header>
+              <strong>{text(settingsApp.icon || '⚙️')} {titleOf(settingsApp)}</strong>
+              <button type="button" onClick={() => closeSettings()}><X size={13} /><span>Close</span></button>
+            </header>
+            {settingsStatus && <div className="workspace-error">{settingsStatus}</div>}
+            {settingsError && <div className="workspace-error">{settingsError}</div>}
+            {Object.keys(settingsDraft).length ? (
+              <div className="settings-field-grid">
+                {Object.entries(settingsDraft).map(([key, value]) => (
+                  <label key={key} className="settings-toggle">
+                    <span>{key.replace(/_/g, ' ')}</span>
+                    {appstoreSettingType(value) === 'checkbox' ? (
+                      <input type="checkbox" checked={Boolean(value)} onChange={(event) => setSettingsDraft((current) => ({ ...current, [key]: event.target.checked }))} />
+                    ) : appstoreSettingType(value) === 'number' ? (
+                      <input type="number" value={String(value)} onChange={(event) => setSettingsDraft((current) => ({ ...current, [key]: event.target.value === '' ? 0 : Number(event.target.value) }))} />
+                    ) : (
+                      <input type="text" value={String(value)} onChange={(event) => setSettingsDraft((current) => ({ ...current, [key]: event.target.value }))} />
+                    )}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <EmptyState icon={<Package size={24} />} label={settingsError || 'No settings returned by backend.'} />
+            )}
+            <div className="native-card-actions" style={{ justifyContent: 'flex-end' }}>
+              <button type="button" className="danger" onClick={() => closeSettings()}><Trash2 size={13} /><span>Cancel</span></button>
+              <button type="button" onClick={() => void saveSettings()} disabled={!ready || settingsSaving || !settingsApp}><Save size={13} /><span>{settingsSaving ? 'Saving...' : 'Save'}</span></button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -1566,6 +2047,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
     setPasswordDraft('');
     setDirty(false);
   }, [settingsState.data, settingsState.loading]);
+
+  useEffect(() => {
+    applyDesktopAppearancePreview(
+      settingsText(draft.theme ?? settings.theme, 'dark'),
+      settingsText(draft.skin ?? settings.skin, 'default')
+    );
+  }, [draft.skin, draft.theme, settings.skin, settings.theme]);
 
   function updateDraftField(key: string, value: unknown): void {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -1619,6 +2107,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
       payload.enabled_plugins = parseSettingsCsv(settingsCsv(payload.enabled_plugins));
       payload.plugins = parseSettingsCsv(settingsCsv(payload.plugins));
       await window.lastbrowser.sidekick.saveSettings({ settings: payload });
+      window.dispatchEvent(new CustomEvent('lastbrowser:settings-changed', { detail: payload }));
       setDirty(false);
       setPasswordDraft('');
       await settingsState.refresh();
@@ -1636,6 +2125,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
     setSaving(true);
     try {
       await window.lastbrowser.sidekick.saveSettings({ settings: { _clear_password: true } });
+      window.dispatchEvent(new CustomEvent('lastbrowser:settings-changed', { detail: { _clear_password: true } }));
       setPasswordDraft('');
       await settingsState.refresh();
       await authState.refresh();

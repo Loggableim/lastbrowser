@@ -138,6 +138,68 @@ type CronJobSummary = Awaited<ReturnType<typeof window.lastbrowser.sidekick.list
 type KanbanBoardResponse = Awaited<ReturnType<typeof window.lastbrowser.sidekick.getKanbanBoard>>;
 type KanbanColumnSummary = NonNullable<KanbanBoardResponse['columns']>[number];
 type KanbanTaskSummary = NonNullable<KanbanColumnSummary['tasks']>[number];
+type DesktopSettingsRecord = Record<string, unknown>;
+const desktopSettingsStorageKey = 'lastbrowser.desktopSettings.v1';
+
+function isRecord(value: unknown): value is DesktopSettingsRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function extractDesktopSettings(payload: unknown): DesktopSettingsRecord {
+  if (!isRecord(payload)) return {};
+  if (isRecord(payload.settings)) return payload.settings;
+  return payload;
+}
+
+function loadDesktopSettingsFromStorage(): DesktopSettingsRecord | null {
+  try {
+    const raw = window.localStorage.getItem(desktopSettingsStorageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDesktopSettingsToStorage(settings: DesktopSettingsRecord | null): void {
+  try {
+    if (!settings || !Object.keys(settings).length) {
+      window.localStorage.removeItem(desktopSettingsStorageKey);
+      return;
+    }
+    window.localStorage.setItem(desktopSettingsStorageKey, JSON.stringify(settings));
+  } catch {
+    // Ignore persistence failures in restricted renderer contexts.
+  }
+}
+
+function normalizeAppearanceTheme(value: string): 'light' | 'dark' | 'system' {
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'light' || normalized === 'system' ? normalized : 'dark';
+}
+
+function normalizeAppearanceSkin(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  return normalized || 'default';
+}
+
+function applyDesktopAppearance(settings: DesktopSettingsRecord | null): void {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  const theme = normalizeAppearanceTheme(String(settings?.theme || 'dark'));
+  const resolvedTheme = theme === 'system'
+    ? (window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+    : theme;
+  const skin = normalizeAppearanceSkin(String(settings?.skin || 'default'));
+  root.dataset.theme = resolvedTheme;
+  root.dataset.themeMode = theme;
+  root.dataset.skin = skin;
+  root.classList.toggle('theme-light', resolvedTheme === 'light');
+  root.classList.toggle('theme-dark', resolvedTheme !== 'light');
+  root.classList.toggle('theme-system', theme === 'system');
+  root.style.colorScheme = resolvedTheme;
+}
 
 type SidekickMessage = {
   id: string;
@@ -287,6 +349,7 @@ export function App(): JSX.Element {
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createInitialTab(browserStartUrl)]);
   const [bookmarks, setBookmarks] = useState<BrowserBookmark[]>(() => loadBookmarks(window.localStorage));
   const [visitedSites, setVisitedSites] = useState<BrowserVisit[]>(() => loadVisitedSites(window.localStorage));
+  const [desktopSettings, setDesktopSettings] = useState<Record<string, unknown> | null>(() => loadDesktopSettingsFromStorage());
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
   const [addressValue, setAddressValue] = useState(() => (
     isAiBrowserHomeUrl(tabs[0].url) ? '' : tabs[0].url
@@ -310,6 +373,7 @@ export function App(): JSX.Element {
   const [browserMode, setBrowserMode] = useState<'home' | 'search' | 'web'>(() => (
     isAiBrowserHomeUrl(tabs[0].url) ? 'home' : 'web'
   ));
+  const [browserLoadError, setBrowserLoadError] = useState('');
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [setupState, setSetupState] = useState<SetupState>(defaultSetupState);
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null);
@@ -353,6 +417,7 @@ export function App(): JSX.Element {
   const activeBookmarkable = isBookmarkableUrl(activeTab.url);
   const activeBookmarked = useMemo(() => isBookmarked(bookmarks, activeTab.url), [activeTab.url, bookmarks]);
   const activeTabIdRef = useRef(activeTabId);
+  const browserFrameRef = useRef<HTMLDivElement | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const resizeStateRef = useRef<SidebarResizeState | null>(null);
   const contextSidebarWidthRef = useRef(contextSidebarWidth);
@@ -362,6 +427,54 @@ export function App(): JSX.Element {
   const leftSidebarCollapsedRef = useRef(leftSidebarCollapsed);
   const setupRequired = isFirstRunRequired(setupState, onboardingStatus);
   const sidekickApiReady = canCallSidekickApi(status);
+
+  useEffect(() => {
+    if (!sidekickApiReady) return undefined;
+    let alive = true;
+    void window.lastbrowser.sidekick.getSettings()
+      .then((payload) => {
+        if (!alive) return;
+        setDesktopSettings((current) => {
+          const serverSettings = extractDesktopSettings(payload);
+          const storedSettings = loadDesktopSettingsFromStorage();
+          const nextSettings = {
+            ...serverSettings,
+            ...(storedSettings || current || {})
+          };
+          saveDesktopSettingsToStorage(nextSettings);
+          return nextSettings;
+        });
+      })
+      .catch(() => {
+        if (!alive) return;
+        setDesktopSettings((current) => current || loadDesktopSettingsFromStorage());
+      });
+    const handleSettingsChanged = (event: Event) => {
+      const custom = event as CustomEvent<{ settings?: Record<string, unknown> } | Record<string, unknown>>;
+      const nextSettings = isRecord(custom.detail) && isRecord((custom.detail as Record<string, unknown>).settings)
+        ? (custom.detail as Record<string, unknown>).settings
+        : isRecord(custom.detail) ? custom.detail as Record<string, unknown> : null;
+      if (nextSettings && Object.keys(nextSettings).some((key) => !key.startsWith('_'))) {
+        setDesktopSettings((current) => {
+          const merged = {
+            ...(current || {}),
+            ...nextSettings
+          };
+          saveDesktopSettingsToStorage(merged);
+          return merged;
+        });
+      }
+    };
+    window.addEventListener('lastbrowser:settings-changed', handleSettingsChanged);
+    return () => {
+      alive = false;
+      window.removeEventListener('lastbrowser:settings-changed', handleSettingsChanged);
+    };
+  }, [sidekickApiReady]);
+
+  useEffect(() => {
+    applyDesktopAppearance(desktopSettings);
+  }, [desktopSettings]);
 
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
@@ -638,6 +751,7 @@ export function App(): JSX.Element {
     const normalized = normalizeNavigationInput(url);
     setTabs((current) => updateTabUrl(current, activeTab.id, normalized));
     setBrowserMode(isAiBrowserHomeUrl(normalized) ? 'home' : 'web');
+    setBrowserLoadError('');
     setActivePanel('browser');
   }
 
@@ -650,6 +764,7 @@ export function App(): JSX.Element {
     const next = createInitialTab(url);
     setTabs((current) => [...current, next]);
     setBrowserMode(isAiBrowserHomeUrl(url) ? 'home' : 'web');
+    setBrowserLoadError('');
     activeTabIdRef.current = next.id;
     setActiveTabId(next.id);
     setActivePanel('browser');
@@ -692,6 +807,7 @@ export function App(): JSX.Element {
     setTabs((current) => updateTabUrl(current, tabId, url));
     if (activeTabIdRef.current === tabId) {
       setAddressValue(isAiBrowserHomeUrl(url) ? '' : url);
+      setBrowserLoadError('');
     }
     if (activePanel === 'browser' && activeTabIdRef.current === tabId) {
       setBrowserMode(isAiBrowserHomeUrl(url) ? 'home' : 'web');
@@ -1292,6 +1408,7 @@ export function App(): JSX.Element {
           spaces={spaces}
           activeSpacePath={activeSpacePath}
           browserMode={browserMode}
+          browserLoadError={browserLoadError}
           visitedSites={visitedSites}
           activeContextItem={activeContextItem}
           webviewRef={webviewRef}
@@ -1311,6 +1428,8 @@ export function App(): JSX.Element {
           onSelectSpace={setActiveSpacePath}
           onSendChat={(message) => void startNativeChat(message)}
           onStopChat={() => void stopNativeChat()}
+          onClearBrowserError={() => setBrowserLoadError('')}
+          onSetBrowserError={setBrowserLoadError}
         />
         <WorkspacePanel
           activeSessionId={activeSessionId}
@@ -1895,6 +2014,7 @@ function BrowserMain({
   setupModel,
   spaces,
   activeSpacePath,
+  browserLoadError,
   visitedSites,
   webviewRef,
   onAction,
@@ -1913,6 +2033,8 @@ function BrowserMain({
   onSelectSpace,
   onSendChat,
   onStopChat,
+  onClearBrowserError,
+  onSetBrowserError,
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -1932,6 +2054,7 @@ function BrowserMain({
   setupModel: string;
   spaces: SpaceSummary[];
   activeSpacePath: string;
+  browserLoadError: string;
   visitedSites: BrowserVisit[];
   webviewRef: React.MutableRefObject<Electron.WebviewTag | null>;
   onAction: (action: SidekickActionId) => Promise<void>;
@@ -1950,6 +2073,8 @@ function BrowserMain({
   onSelectSpace: (path: string) => void;
   onSendChat: (message: string) => void;
   onStopChat: () => void;
+  onClearBrowserError: () => void;
+  onSetBrowserError: (error: string) => void;
 }): JSX.Element {
   if (activePanel === 'chat') {
     return (
@@ -2071,17 +2196,28 @@ function BrowserMain({
         </button>
       </div>
       <div className="browser-webview-frame" ref={browserFrameRef}>
+        {browserLoadError && (
+          <div className="browser-load-error" role="alert">
+            <AlertTriangle size={16} />
+            <span>{browserLoadError}</span>
+          </div>
+        )}
         <webview
           key={activeTab.id}
           ref={webviewRef}
           src={activeTab.url}
           className="browser-view"
-          style={{ width: '100%', height: '100%' }}
+          style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, position: 'absolute', inset: 0 }}
           partition="persist:lastbrowser-main"
           allowpopups="false"
+          onDidStartLoading={() => onClearBrowserError()}
           onDomReady={(event) => {
             void hideWebviewScrollbars(event.currentTarget);
             void annotateWebviewViewport(event.currentTarget);
+          }}
+          onDidFailLoad={(event) => {
+            if (!event.isMainFrame || event.errorCode === -3) return;
+            onSetBrowserError(`${event.errorCode}: ${event.errorDescription}`);
           }}
           onDidNavigate={(event) => onWebviewNavigate(activeTab.id, event.url)}
           onDidNavigateInPage={(event) => onWebviewNavigate(activeTab.id, event.url)}

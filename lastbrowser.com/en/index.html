@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lastbrowser – Open Beta for Windows with Sidekick AI</title>
-<meta name="description" content="Lastbrowser is a Windows browser in Open Beta with Sidekick in the sidebar, clear navigation, direct downloads, and product-focused docs.">
-<meta property="og:title" content="Lastbrowser – Open Beta for Windows with Sidekick AI">
-<meta property="og:description" content="The browser for people who work in the browser. Direct downloads, sidebar, Spaces, and docs — on lastbrowser.com.">
+<title>Lastbrowser – the Windows browser with Sidekick</title>
+<meta name="description" content="Lastbrowser is a ready-to-use Windows browser with Sidekick in the sidebar, direct downloads, clear release information, and practical documentation.">
+<meta property="og:title" content="Lastbrowser – the Windows browser with Sidekick">
+<meta property="og:description" content="The browser for everyday work: direct downloads, sidebar, Spaces, and release information on lastbrowser.com.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="/assets/app-icons/lastbrowser-app-icon-512.png">
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
@@ -33,6 +33,40 @@ body { margin:0; color:var(--text); background:
   linear-gradient(180deg, #060913 0%, #070B14 45%, #05070D 100%);
   font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif; overflow-x:hidden; }
 body::before { content:""; position:fixed; inset:0; pointer-events:none; opacity:.72; background-image: radial-gradient(circle, rgba(0,229,255,.028) 1px, transparent 1px); background-size: 24px 24px; }
+
+body::after { content:""; position:fixed; right:-12vw; bottom:-10vh; width:34vw; height:34vw; pointer-events:none; background: radial-gradient(circle, rgba(37,99,255,.12), rgba(37,99,255,.03) 35%, transparent 68%); filter: blur(12px); opacity:.7; animation: driftGlow 18s ease-in-out infinite alternate; }
+@keyframes driftGlow { from { transform: translate3d(0,0,0) scale(1); } to { transform: translate3d(-20px,-14px,0) scale(1.04); } }
+.hero-eyebrow { display:inline-flex; align-items:center; gap:10px; margin:0 0 14px; padding:8px 12px; border-radius:999px; border:1px solid rgba(42,53,80,.86); background: rgba(16,24,39,.72); color:#d8e0ef; font-size:12px; letter-spacing:.14em; text-transform:uppercase; font-weight:800; }
+.release-strip { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 18px; }
+.release-strip span { display:inline-flex; align-items:center; gap:8px; padding:9px 12px; border-radius:999px; border:1px solid rgba(42,53,80,.88); background: rgba(12,18,32,.82); color:#d0daea; font-size:12px; font-weight:700; letter-spacing:.02em; transition: transform .22s ease, border-color .22s ease, background .22s ease, box-shadow .22s ease; }
+.release-strip span:hover, .badge:hover, .mini-chip:hover { transform: translateY(-1px); border-color: rgba(37,99,255,.5); background: rgba(16,24,39,.94); box-shadow: 0 10px 24px rgba(0,0,0,.16); }
+.hero-metrics { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:12px; margin-top:20px; }
+.metric { padding:14px 15px; border-radius:18px; background: linear-gradient(180deg, rgba(16,24,39,.82), rgba(10,16,29,.86)); border:1px solid rgba(42,53,80,.88); box-shadow:0 14px 36px rgba(0,0,0,.18); backdrop-filter: blur(14px); transition: transform .24s ease, border-color .24s ease, box-shadow .24s ease; }
+.metric:hover { transform: translateY(-2px); border-color: rgba(37,99,255,.38); box-shadow:0 18px 42px rgba(0,0,0,.24); }
+.metric strong { display:block; font-family: Outfit, Inter, sans-serif; font-size:18px; letter-spacing:-.03em; color: var(--text); }
+.metric span { display:block; margin-top:4px; color:var(--muted); font-size:12px; line-height:1.5; }
+.links > a { position:relative; }
+.links > a::after { content:""; position:absolute; left:0; right:0; bottom:-7px; height:1.5px; background: linear-gradient(90deg, var(--cyan), var(--purple)); transform: scaleX(0); transform-origin:left; transition: transform .22s ease; }
+.links > a:hover::after { transform: scaleX(1); }
+.btn, .card, .visual-card, .side-item, .badge, .mini-chip { will-change: transform; }
+.card, .visual-card { transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease, background .28s ease; }
+.card:hover, .visual-card:hover { transform: translateY(-4px); box-shadow: 0 26px 72px rgba(0,0,0,.34); border-color: rgba(72,93,128,.95); }
+.visual-card:hover::after { opacity:.8; }
+.side-item { transition: transform .22s ease, background .22s ease, color .22s ease, box-shadow .22s ease; }
+.side-item:hover { transform: translateX(2px); background: rgba(16,24,39,.94); color: var(--text); }
+.btn { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease, filter .2s ease; }
+.btn:active { transform: translateY(0); }
+.btn-ghost:hover { background: rgba(16,24,39,.94); border-color: rgba(72,93,128,.9); }
+.logo img { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+.logo:hover img { transform: rotate(-2deg) scale(1.03); box-shadow:0 16px 36px rgba(0,0,0,.32); }
+.logo-card, .browser-card { animation: heroFloat 10s ease-in-out infinite; }
+.browser-card { animation-delay: -2.5s; }
+@keyframes heroFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior:auto; }
+  *, *::before, *::after { animation:none !important; transition:none !important; }
+}
+
 a { color:inherit; }
 .container { width:min(1180px, calc(100% - 40px)); margin:0 auto; }
 nav { position:sticky; top:0; z-index:40; backdrop-filter: blur(18px); background: rgba(7,10,18,.74); border-bottom: 1px solid rgba(42,53,80,.62); }
@@ -46,8 +80,9 @@ nav .inner { display:flex; align-items:center; justify-content:space-between; ga
 .links > a:hover { color:var(--text); }
 .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:13px 17px; border-radius:14px; text-decoration:none; font-weight:700; border:1px solid transparent; transition:.2s transform, .2s box-shadow, .2s border-color, .2s background; }
 .btn:hover { transform: translateY(-1px); }
-.btn-primary { color:#fff; background: linear-gradient(135deg, var(--electricBlue), var(--purple)); box-shadow:0 16px 34px rgba(37,99,255,.22); }
+.btn-primary { color:#fff; background: linear-gradient(135deg, var(--electricBlue), var(--purple)); box-shadow:0 16px 34px rgba(37,99,255,.22), inset 0 1px 0 rgba(255,255,255,.10); }
 .btn-ghost { color:var(--text); background: rgba(16,24,39,.82); border-color: var(--stroke); }
+.btn-primary:hover { box-shadow:0 18px 38px rgba(37,99,255,.28), inset 0 1px 0 rgba(255,255,255,.14); }
 .badge-strip { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:24px; }
 .badge { display:inline-flex; align-items:center; gap:8px; padding:9px 12px; border-radius:999px; background: rgba(16,24,39,.78); border:1px solid var(--stroke); color:var(--muted); font-size:13px; box-shadow:0 8px 20px rgba(0,0,0,.12); }
 .badge.blue { color:#dbe7ff; border-color: rgba(37,99,255,.42); }
@@ -63,11 +98,12 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
 .hero-visual { display:grid; gap:14px; }
 .visual-card, .card { background: linear-gradient(180deg, rgba(16,24,39,.95), rgba(11,18,32,.92)); border:1px solid rgba(42,53,80,.88); border-radius:22px; box-shadow:0 22px 60px rgba(0,0,0,.26); }
 .visual-card { overflow:hidden; position:relative; }
+.visual-card::before { content:""; position:absolute; inset:0; border-radius:22px; padding:1px; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0) 28%, rgba(37,99,255,.18)); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events:none; }
 .visual-card::after { content:""; position:absolute; inset:-30% -10% auto auto; width:240px; height:240px; border-radius:50%; background: radial-gradient(circle, rgba(255,45,143,.13), transparent 58%); pointer-events:none; }
-.logo-card { padding:24px; }
+.logo-card { padding:24px; display:grid; gap:14px; }
 .logo-card img { width:min(100%, 360px); height:auto; display:block; }
-.assist { display:flex; align-items:center; gap:10px; margin-top:16px; color:var(--text); font-weight:700; }
-.assist small { display:block; color:var(--muted); font-weight:500; }
+.assist { display:flex; align-items:flex-start; gap:10px; margin-top:0; color:var(--text); font-weight:700; line-height:1.35; }
+.assist small { display:block; color:var(--muted); font-weight:500; margin-top:2px; }
 .browser-card { padding:16px; }
 .browser-top { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
 .dots { display:flex; gap:7px; }
@@ -139,12 +175,12 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
       <img src="assets/app-icons/nav-icon.ico" alt="Lastbrowser">
       <div>
         <strong>Lastbrowser</strong>
-        <span>Open Beta · Windows browser</span>
+        <span>Open Beta · Windows browser · Release 0.1.3</span>
       </div>
     </a>
     <div class="links">
       <a href="#features">Features</a>
-      <a href="#docs">Docs</a>
+      <a href="#docs">Documentation</a>
       <a href="#download">Download</a>
       <div class="lang-switcher">
         <span class="current">EN <span class="arrow">▼</span></span>
@@ -166,23 +202,30 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
   <div class="container">
     <div class="h-inner">
       <div class="hero-text">
+        <div class="hero-eyebrow">Release 0.1.3 · Open Beta</div>
         <div class="badge-strip">
           <span class="badge blue">v0.1.3 · Open Beta</span>
           <span class="badge cyan">Windows 10/11</span>
-          <span class="badge yellow">Sidekick integrated</span>
+          <span class="badge yellow">Sidekick in the sidebar</span>
         </div>
-        <h1>The browser that <span class="grad-blue">works with you</span>.</h1>
-        <p class="lead">Lastbrowser combines fast browsing with Sidekick in the sidebar. Read pages, ask questions, write, organize, and download files — all in one window, without losing your flow.</p>
+        <div class="release-strip"><span>Open Beta</span><span>Version 0.1.3</span><span>Setup &amp; Portable</span></div>
+        <h1>The browser that <span class="grad-blue">helps you work</span>.</h1>
+        <p class="lead">Lastbrowser combines fast browsing with Sidekick in the sidebar. Research, write, organize tasks, and download files — directly in the browser, without switching between tools.</p>
         <div class="actions">
-          <a href="#download" class="btn btn-primary">Download for Windows</a>
-          <a href="#docs" class="btn btn-ghost">Docs</a>
+          <a href="#download" class="btn btn-primary">Download Setup</a>
+          <a href="#docs" class="btn btn-ghost">Release info</a>
         </div>
-        <div class="hero-note">Direct downloads on <strong>lastbrowser.com</strong> · Setup &amp; Portable · update feed on the same domain</div>
+        <div class="hero-metrics">
+          <div class="metric"><strong>01</strong><span>setup.exe</span></div>
+          <div class="metric"><strong>02</strong><span>portable.exe</span></div>
+          <div class="metric"><strong>03</strong><span>latest.yml</span></div>
+        </div>
+        <div class="hero-note">Direct downloads from <strong>lastbrowser.com</strong> · Setup &amp; Portable · release information on the same domain</div>
       </div>
       <div class="hero-visual">
         <div class="visual-card logo-card">
           <img src="assets/logos/lastbrowser-logo-transparent.png" alt="Lastbrowser Logo">
-          <div class="assist">✦ assisted by Sidekick<small>Product logo in the release hero; Sidekick supports the workflow.</small></div>
+          <div class="assist">✦ assisted by Sidekick<small>The product logo in the hero — clear, direct, and ready for release.</small></div>
         </div>
         <div class="visual-card browser-card">
           <div class="browser-top">
@@ -201,12 +244,12 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
             </div>
             <div class="content">
               <h3>Summarize. Ask. Act.</h3>
-              <p>Sidekick keeps up with the page, gives you summaries, and helps you move forward without jumping into other tabs.</p>
+              <p>Sidekick follows along with the page, gives you summaries, and helps you move forward without jumping to another tab.</p>
               <div class="ask-panel">
                 <img src="assets/sidekick/sidekick-mascot-256.png" alt="Sidekick">
                 <div>
                   <div class="q">“Summarize this page in 3 points.”</div>
-                  <div class="a">“Absolutely — I’ll show you the key takeaways, highlight open questions, and create a task right away if you want.”</div>
+                  <div class="a">“Of course — I’ll show you the key takeaways, point out open questions, and create a task right away if you want.”</div>
                 </div>
               </div>
               <div class="version-line">
@@ -225,27 +268,27 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
 <section class="section" id="features">
   <div class="container">
     <h2>What's included</h2>
-    <p class="intro">Everything you need in a productive browser is visible on the page and built into the product: Chat, Tasks, Skills, Spaces, Memory, and the classic browser flow.</p>
+    <p class="intro">Lastbrowser puts the essential work tools directly in the sidebar — no detours, no extra windows.</p>
     <div class="feature-grid">
       <article class="card feature-card">
         <div class="icon"><img src="assets/sidebar-icons/png-32/01-chat-modern-popart.png" alt="Chat without tab hopping"></div>
         <h3>Chat without tab hopping</h3>
-        <p>Ask questions, understand content, draft text, and review decisions — right next to the page.</p>
+        <p>Ask questions, understand content, draft text, and review decisions — right beside the page.</p>
       </article>
       <article class="card feature-card">
-        <div class="icon"><img src="assets/sidebar-icons/png-32/02-tasks-modern-popart.png" alt="Keep tasks in sight"></div>
-        <h3>Keep Tasks in sight</h3>
-        <p>Create tasks from context, prioritize them, and leave them open until they are done.</p>
+        <div class="icon"><img src="assets/sidebar-icons/png-32/02-tasks-modern-popart.png" alt="Keep Tasks in view"></div>
+        <h3>Keep Tasks in view</h3>
+        <p>Create tasks from context, prioritize them, and keep them open until they are done.</p>
       </article>
       <article class="card feature-card">
         <div class="icon"><img src="assets/sidebar-icons/png-32/04-skills-modern-popart.png" alt="Launch Skills instantly"></div>
         <h3>Launch Skills instantly</h3>
-        <p>The built-in workflows for research, writing, analysis, and more are ready when you are.</p>
+        <p>The built-in workflows for research, writing, analysis, and more are ready to use immediately.</p>
       </article>
       <article class="card feature-card">
         <div class="icon"><img src="assets/sidebar-icons/png-32/07-spaces-modern-popart.png" alt="Spaces for projects"></div>
         <h3>Spaces for projects</h3>
-        <p>Each project gets its own space with cleanly separated context.</p>
+        <p>Every project gets its own space with neatly separated context.</p>
       </article>
       <article class="card feature-card">
         <div class="icon"><img src="assets/sidebar-icons/png-32/06-memory-modern-popart.png" alt="Keep context"></div>
@@ -264,7 +307,7 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
 <section class="section">
   <div class="container">
     <h2>How you work with it</h2>
-    <p class="intro">A short, clean flow: install, launch, keep working in the sidebar. No demo copy — just a real setup for everyday use.</p>
+    <p class="intro">Three steps for everyday use: install, use Sidekick, and keep projects cleanly separated in Spaces.</p>
     <div class="process-grid">
       <article class="card process-card">
         <div class="step">01</div>
@@ -279,7 +322,7 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
       <article class="card process-card">
         <div class="step">03</div>
         <h3>Work with Spaces</h3>
-        <p>Keep projects separated cleanly so research, tasks, and history never get mixed up.</p>
+        <p>Keep projects cleanly separated so research, tasks, and history never get mixed up.</p>
       </article>
     </div>
   </div>
@@ -287,12 +330,12 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
 
 <section class="section" id="docs">
   <div class="container">
-    <h2>Docs</h2>
-    <p class="intro">The key release information is documented right here. That way nobody has to bounce between the website, the README, and the release page.</p>
+    <h2>Release information</h2>
+    <p class="intro">The key release information is documented right here — short, clear, and without needing to jump to another page.</p>
     <div class="docs-grid">
       <article class="card docs-item">
         <h3>Download</h3>
-        <ul class="docs-list"><li>The download is served directly via lastbrowser.com — no GitHub page in between.</li><li>Use <strong>Setup</strong> if you want the classic installation with update integration.</li><li>Use <strong>Portable</strong> if you want to start Lastbrowser without installing it.</li></ul>
+        <ul class="docs-list"><li>The download is served directly via lastbrowser.com.</li><li>Use <strong>Setup</strong> if you want the classic installation with update integration.</li><li>Use <strong>Portable</strong> if you want to start Lastbrowser without installing it.</li></ul>
       </article>
       <article class="card docs-item">
         <h3>Updates</h3>
@@ -315,11 +358,11 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
     <div class="release">
       <div class="card download-panel">
         <div class="kicker">Open Beta · Release 0.1.3</div>
-        <h2>Get Lastbrowser</h2>
-        <p class="intro">Direct download from lastbrowser.com — no GitHub page in between. Choose Setup for installation or Portable for a fast start.</p>
+        <h2>Download Lastbrowser</h2>
+        <p class="intro">Direct download from lastbrowser.com. Choose Setup for installation or Portable for a fast start.</p>
         <div class="actions">
-          <a href="/downloads/setup.exe" class="btn btn-primary">Download Setup</a>
-          <a href="/downloads/portable.exe" class="btn btn-ghost">Download Portable</a>
+          <a href="/downloads/setup.exe" class="btn btn-primary">Download Setup directly</a>
+          <a href="/downloads/portable.exe" class="btn btn-ghost">Download Portable directly</a>
         </div>
         <div class="version-line">
           <span class="mini-chip">Version 0.1.3</span>
@@ -329,11 +372,11 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
         </div>
       </div>
       <div class="card links-box">
-        <h3>Release info</h3>
+        <h3>Release information</h3>
         <ul>
-          <li>Setup and Portable come directly from this domain.</li>
-          <li>The update feed is available at <code>/downloads/latest.yml</code>.</li>
-          <li>The website doesn't showcase the release notes — it delivers the product.</li>
+          <li>Both files are delivered directly from this domain.</li>
+          <li>The update manifest is available at <code>/downloads/latest.yml</code>.</li>
+          <li>That keeps the release flow easy to follow and well documented.</li>
         </ul>
       </div>
     </div>
@@ -344,7 +387,7 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
   <div class="container footer-row">
     <div>© 2026 Lastbrowser · Open Beta · Version 0.1.3</div>
     <div class="footer-row" style="gap:16px;">
-      <a href="#docs">Docs</a>
+      <a href="#docs">Release information</a>
       <a href="#download">Download</a>
       <a href="/downloads/latest.yml">latest.yml</a>
       <a href="https://github.com/Loggableim/lastbrowser" target="_blank" rel="noopener">GitHub</a>

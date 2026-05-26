@@ -8,7 +8,7 @@ function readRendererFile(fileName: string): string {
 
 function cssBlock(css: string, selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = css.match(new RegExp(`${escaped}\\s*\\{([\\s\\S]*?)\\}`));
+  const match = css.match(new RegExp(`(?:^|\\n)\\s*${escaped}\\s*\\{([\\s\\S]*?)\\n\\}`, 'm'));
   if (!match) throw new Error(`Missing CSS block for ${selector}`);
   return match[1];
 }
@@ -20,8 +20,8 @@ describe('browser shell layout', () => {
     const workspace = cssBlock(css, '.workspace');
     const browserPane = cssBlock(css, '.browser-main');
     const browserView = cssBlock(css, '.browser-view');
-    const browserPageMain = cssBlock(css, '.browser-page-main');
-    const browserWebviewFrame = cssBlock(css, '.browser-webview-frame');
+    const browserPageMain = cssBlock(css, '.browser-main.browser-page-main');
+    const browserWebviewFrame = cssBlock(css, '.browser-main.browser-page-main > .browser-webview-frame');
     const aiBrowserMain = cssBlock(css, '.ai-browser-main');
     const browserStartPage = cssBlock(css, '.browser-start-page');
     const browserCanvas = cssBlock(css, '.panel-browser .browser-main');
@@ -44,14 +44,13 @@ describe('browser shell layout', () => {
     expect(browserPane).toContain('display: flex');
     expect(browserPane).toContain('height: 100%');
     expect(browserPane).toContain('overflow: hidden');
-    expect(browserPageMain).toContain('display: flex');
-    expect(browserPageMain).toContain('flex-direction: column');
+    expect(browserPageMain).toContain('display: grid');
+    expect(browserPageMain).toContain('grid-template-rows: auto minmax(0, 1fr)');
     expect(browserPageMain).toContain('min-height: 0');
     expect(browserPageMain).toContain('height: 100%');
     expect(browserPageMain).toContain('padding: 12px');
     expect(browserWebviewFrame).toContain('position: relative');
-    expect(browserWebviewFrame).toContain('display: flex');
-    expect(browserWebviewFrame).toContain('flex: 1 1 auto');
+    expect(browserWebviewFrame).toContain('display: block');
     expect(browserWebviewFrame).toContain('min-height: 0');
     expect(browserWebviewFrame).toContain('overflow: hidden');
     expect(aiBrowserMain).toContain('overflow: auto');
@@ -60,8 +59,8 @@ describe('browser shell layout', () => {
     expect(browserCanvas).toContain('background: #07111f');
     expect(sidebarHandle).toContain('position: absolute');
     expect(sidebarHandle).toContain('cursor: col-resize');
-    expect(browserView).toContain('position: relative');
-    expect(browserView).toContain('flex: 1 1 auto');
+    expect(browserView).toContain('position: absolute');
+    expect(browserView).toContain('inset: 0');
     expect(browserView).toContain('height: 100%');
   });
 
@@ -70,7 +69,8 @@ describe('browser shell layout', () => {
 
     expect(source).toContain('className="browser-main browser-page-main"');
     expect(source).toContain('className="browser-webview-frame"');
-    expect(source).toContain('style={{ width: \'100%\', height: \'100%\' }}');
+    expect(source).toContain('onDidStartLoading={() => onClearBrowserError()}');
+    expect(source).toContain('onDidFailLoad={(event) => {');
   });
 
   it('renders native bookmark controls in the browser chrome', () => {
@@ -237,6 +237,7 @@ describe('browser shell layout', () => {
     [
       'listSkills',
       'getSkillContent({ name:',
+      'saveSkill({',
       'listAgents',
       'getAgentStats',
       'getAgentActivities',
@@ -278,18 +279,28 @@ describe('browser shell layout', () => {
     expect(restPanels).toContain('agent-terminal');
     expect(restPanels).toContain('memory-editor');
     expect(restPanels).toContain('skill-linked-files');
+    expect(restPanels).toContain('skillCategoryDraft');
     expect(restPanels).toContain('gmail-compose');
     expect(restPanels).toContain('discord-moderation');
+    expect(restPanels).toContain('lastbrowser:settings-changed');
+    expect(restPanels).toContain('appstore-panel-grid');
+    expect(restPanels).toContain('insights-panel-grid');
     expect(restPanels).toContain('settings-field-grid');
     expect(restPanels).toContain('settings-section-nav');
+    expect(restPanels).toContain('applyDesktopAppearancePreview(');
     expect(restPanels).toContain('<AdvancedWebUiTools');
     expect(restPanels).toContain("panel=\"agents\"");
     expect(restPanels).toContain("panel=\"settings\"");
+    expect(restPanels).not.toContain('activeSessionId');
     expect(css).toContain('.native-rest-main');
     expect(css).toContain('.agent-terminal');
     expect(css).toContain('.integration-list');
     expect(css).toContain('.settings-field-grid');
+    expect(css).toContain('.appstore-panel-grid');
+    expect(css).toContain('.insights-panel-grid');
     expect(css).toContain('.discord-moderation');
     expect(css).toContain('.advanced-webui-tools');
+    expect(css).toContain('.browser-load-error');
+    expect(css).toContain('html.theme-light .app-shell');
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "lastbrowser",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "private": true,
   "description": "Lastbrowser desktop browser shell with Sidekick integration.",
   "scripts": {

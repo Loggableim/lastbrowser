@@ -67,7 +67,7 @@ export function NativeAiBrowserMain({
         <div className="ai-browser-title">
           <img src={brandAssets.icon} alt="" />
           <div>
-            <span className="eyebrow">AI Browser</span>
+            <span className="eyebrow">AI Search</span>
             <h1>Search briefing</h1>
           </div>
         </div>
@@ -143,7 +143,7 @@ export function NativeAiBrowserMain({
       ) : (
         <div className="ai-browser-empty">
           <img src={brandAssets.sidekickAvatar} alt="" />
-          <h2>AI Browser</h2>
+          <h2>AI Search</h2>
           <p>Sidekick turns a search into a compact brief with sources, key points and next steps.</p>
         </div>
       )}

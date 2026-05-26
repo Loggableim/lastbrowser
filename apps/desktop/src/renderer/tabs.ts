@@ -2,9 +2,11 @@ export type BrowserTab = {
   id: string;
   title: string;
   url: string;
+  pinned?: boolean;
 };
 
-export const aiBrowserHomeUrl = 'lastbrowser://ai-browser';
+export const browserStartUrl = 'lastbrowser://start';
+export const aiBrowserHomeUrl = browserStartUrl;
 
 let tabCounter = 0;
 
@@ -17,7 +19,11 @@ export function normalizeNavigationInput(raw: string): string {
 }
 
 export function isAiBrowserHomeUrl(url: string): boolean {
-  return url === aiBrowserHomeUrl;
+  return url === browserStartUrl;
+}
+
+export function isBrowserStartUrl(url: string): boolean {
+  return url === browserStartUrl;
 }
 
 export function createInitialTab(url = aiBrowserHomeUrl): BrowserTab {
@@ -25,7 +31,8 @@ export function createInitialTab(url = aiBrowserHomeUrl): BrowserTab {
   return {
     id: `tab-${Date.now()}-${tabCounter}`,
     title: 'New tab',
-    url
+    url,
+    pinned: false
   };
 }
 
@@ -42,4 +49,30 @@ export function updateTabUrl(tabs: BrowserTab[], tabId: string, url: string): Br
 
 export function updateTabTitle(tabs: BrowserTab[], tabId: string, title: string): BrowserTab[] {
   return tabs.map((tab) => (tab.id === tabId ? renameTab(tab, title) : tab));
+}
+
+export function togglePinnedTab(tabs: BrowserTab[], tabId: string): BrowserTab[] {
+  const next = tabs.map((tab) => (
+    tab.id === tabId ? { ...tab, pinned: !tab.pinned } : tab
+  ));
+  return sortTabsByPinned(next);
+}
+
+export function reorderTabs(tabs: BrowserTab[], fromTabId: string, toTabId: string): BrowserTab[] {
+  const fromIndex = tabs.findIndex((tab) => tab.id === fromTabId);
+  const toIndex = tabs.findIndex((tab) => tab.id === toTabId);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return tabs;
+  const next = [...tabs];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return sortTabsByPinned(next);
+}
+
+export function sortTabsByPinned(tabs: BrowserTab[]): BrowserTab[] {
+  return [...tabs].sort((left, right) => {
+    const leftPinned = Boolean(left.pinned);
+    const rightPinned = Boolean(right.pinned);
+    if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
+    return 0;
+  });
 }

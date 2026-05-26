@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     getKanbanBoard: (request?: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:getKanbanBoard', request),
     createKanbanTask: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:createKanbanTask', request),
     updateKanbanTask: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:updateKanbanTask', request),
+    runDispatchOnce: (request?: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:runDispatchOnce', request),
+    getActiveDispatches: () => ipcRenderer.invoke('lastbrowser:sidekick:getActiveDispatches'),
     listSkills: () => ipcRenderer.invoke('lastbrowser:sidekick:listSkills'),
     getSkillContent: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:getSkillContent', request),
     saveSkill: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:saveSkill', request),

@@ -6,7 +6,7 @@ describe('AI Browser search brief', () => {
     const prompt = buildAiBrowserPrompt('best local llm for windows');
 
     expect(prompt).toContain('best local llm for windows');
-    expect(prompt).toContain('AI Browser');
+    expect(prompt).toContain('AI Search');
     expect(prompt).toContain('summary');
     expect(prompt).toContain('results');
     expect(prompt).toContain('JSON');

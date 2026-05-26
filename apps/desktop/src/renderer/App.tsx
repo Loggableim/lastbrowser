@@ -29,6 +29,7 @@ import {
   Mail,
   MessageSquare,
   Minus,
+  AlertTriangle,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -59,14 +60,17 @@ import {
 import type { BrowserBookmark } from './bookmarks.js';
 import {
   BrowserTab,
-  aiBrowserHomeUrl,
+  browserStartUrl,
   createInitialTab,
   isAiBrowserHomeUrl,
+  reorderTabs,
   normalizeNavigationInput,
   updateTabTitle,
-  updateTabUrl
+  updateTabUrl,
+  togglePinnedTab
 } from './tabs.js';
 import { brandAssets } from './brand.js';
+import { loadVisitedSites, recordVisit, saveVisitedSites, type BrowserVisit } from './history.js';
 import {
   SidekickActionId,
   buildSidekickPrompt,
@@ -107,6 +111,7 @@ import {
 import { canCallSidekickApi } from './runtime-readiness.js';
 import { describeChatContent, partitionChatMessages } from './chat-display.js';
 import { AdvancedWebUiTools } from './panels/AdvancedWebUiTools.js';
+import { NativeBrowserStartPage } from './panels/NativeBrowserStartPage.js';
 import { NativeAiBrowserMain } from './panels/NativeAiBrowserMain.js';
 import {
   NativeAgentsMain,
@@ -162,6 +167,45 @@ type TodoItem = {
 
 const idleCodexOAuth: CodexOAuthState = { status: 'idle' };
 
+class PanelErrorBoundary extends React.Component<
+  { panel: LastbrowserPanelId; children: React.ReactNode },
+  { error: string | null }
+> {
+  constructor(props: { panel: LastbrowserPanelId; children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): { error: string } {
+    return { error: error.message };
+  }
+
+  componentDidCatch(error: Error): void {
+    console.error('Panel render failed', this.props.panel, error);
+  }
+
+  render(): JSX.Element {
+    if (this.state.error) {
+      return (
+        <section className="browser-main native-rest-main panel-error-main">
+          <header className="native-rest-header">
+            <div className="native-rest-title">
+              <div className="native-rest-icon"><AlertTriangle size={21} /></div>
+              <div>
+                <span className="eyebrow">Panel error</span>
+                <h1>{this.props.panel}</h1>
+                <p>{this.state.error}</p>
+              </div>
+            </div>
+          </header>
+        </section>
+      );
+    }
+
+    return <>{this.props.children}</>;
+  }
+}
+
 const panelIcons: Record<LastbrowserPanelId, React.ComponentType<{ size?: number; strokeWidth?: number }>> = {
   chat: MessageSquare,
   tasks: CalendarDays,
@@ -206,7 +250,7 @@ function panelForContextItem(item: string): LastbrowserPanelId | null {
   if (['board', 'triage', 'running', 'done'].includes(label)) return 'kanban';
   if (['pending', 'in progress', 'completed'].includes(label)) return 'todos';
   if (['usage', 'models', 'cost', 'llm wiki'].includes(label)) return 'insights';
-  if (['agent', 'webui', 'errors', 'gateway'].includes(label)) return 'logs';
+  if (['agent', 'webui', 'errors'].includes(label)) return 'logs';
   if (['accounts', 'inbox', 'ai actions'].includes(label)) return 'gmail';
   if (['guild', 'channels', 'members', 'moderation'].includes(label)) return 'discord';
   if (['home', 'categories', 'my apps', 'sdk', 'submit'].includes(label)) return 'appstore';
@@ -216,8 +260,9 @@ function panelForContextItem(item: string): LastbrowserPanelId | null {
 }
 
 export function App(): JSX.Element {
-  const [tabs, setTabs] = useState<BrowserTab[]>(() => [createInitialTab()]);
+  const [tabs, setTabs] = useState<BrowserTab[]>(() => [createInitialTab(browserStartUrl)]);
   const [bookmarks, setBookmarks] = useState<BrowserBookmark[]>(() => loadBookmarks(window.localStorage));
+  const [visitedSites, setVisitedSites] = useState<BrowserVisit[]>(() => loadVisitedSites(window.localStorage));
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
   const [addressValue, setAddressValue] = useState(() => (
     isAiBrowserHomeUrl(tabs[0].url) ? '' : tabs[0].url
@@ -232,6 +277,9 @@ export function App(): JSX.Element {
     loadBooleanPreference(undefined, workspacePanelCollapsedStorageKey, false)
   ));
   const [activeContextItem, setActiveContextItem] = useState('');
+  const [browserMode, setBrowserMode] = useState<'home' | 'search' | 'web'>(() => (
+    isAiBrowserHomeUrl(tabs[0].url) ? 'home' : 'web'
+  ));
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [setupState, setSetupState] = useState<SetupState>(defaultSetupState);
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null);
@@ -248,6 +296,7 @@ export function App(): JSX.Element {
   const [chatError, setChatError] = useState('');
   const [chatRunState, setChatRunState] = useState<ChatRunState>('idle');
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [composerText, setComposerText] = useState('');
   const [composerMode, setComposerMode] = useState<ComposerMode>('action');
   const [spaces, setSpaces] = useState<SpaceSummary[]>([]);
@@ -287,8 +336,17 @@ export function App(): JSX.Element {
   }, [activeTab.id, activeTab.url]);
 
   useEffect(() => {
+    if (activePanel !== 'browser') return;
+    setBrowserMode(isAiBrowserHomeUrl(activeTab.url) ? 'home' : 'web');
+  }, [activePanel, activeTab.id, activeTab.url]);
+
+  useEffect(() => {
     saveBookmarks(window.localStorage, bookmarks);
   }, [bookmarks]);
+
+  useEffect(() => {
+    saveVisitedSites(window.localStorage, visitedSites);
+  }, [visitedSites]);
 
   useEffect(() => {
     return window.lastbrowser.browser.onOpenTab((url) => addTab(url));
@@ -515,17 +573,19 @@ export function App(): JSX.Element {
   function navigate(url: string): void {
     const normalized = normalizeNavigationInput(url);
     setTabs((current) => updateTabUrl(current, activeTab.id, normalized));
+    setBrowserMode(isAiBrowserHomeUrl(normalized) ? 'home' : 'web');
     setActivePanel('browser');
   }
 
   function submitNavigation(event: FormEvent): void {
     event.preventDefault();
-    navigate(addressValue.trim() ? addressValue : aiBrowserHomeUrl);
+    navigate(addressValue.trim() ? addressValue : browserStartUrl);
   }
 
-  function addTab(url = aiBrowserHomeUrl): void {
+  function addTab(url = browserStartUrl): void {
     const next = createInitialTab(url);
     setTabs((current) => [...current, next]);
+    setBrowserMode(isAiBrowserHomeUrl(url) ? 'home' : 'web');
     activeTabIdRef.current = next.id;
     setActiveTabId(next.id);
     setActivePanel('browser');
@@ -558,6 +618,10 @@ export function App(): JSX.Element {
 
   function updateTitle(tabId: string, title: string): void {
     setTabs((current) => updateTabTitle(current, tabId, title));
+    const tab = tabs.find((item) => item.id === tabId);
+    if (tab) {
+      setVisitedSites((current) => recordVisit(current, tab.url, title, { increment: false }));
+    }
   }
 
   function updateUrl(tabId: string, url: string): void {
@@ -565,6 +629,19 @@ export function App(): JSX.Element {
     if (activeTabIdRef.current === tabId) {
       setAddressValue(isAiBrowserHomeUrl(url) ? '' : url);
     }
+    if (activePanel === 'browser' && activeTabIdRef.current === tabId) {
+      setBrowserMode(isAiBrowserHomeUrl(url) ? 'home' : 'web');
+    }
+    const tab = tabs.find((item) => item.id === tabId);
+    setVisitedSites((current) => recordVisit(current, url, tab?.title || ''));
+  }
+
+  function moveTab(tabId: string, targetTabId: string): void {
+    setTabs((current) => reorderTabs(current, tabId, targetTabId));
+  }
+
+  function toggleTabPinned(tabId: string): void {
+    setTabs((current) => togglePinnedTab(current, tabId));
   }
 
   async function completeSetup(form: SetupForm): Promise<void> {
@@ -947,13 +1024,18 @@ export function App(): JSX.Element {
       <WindowTitlebar
         tabs={tabs}
         activeTabId={activeTab.id}
+        draggedTabId={draggedTabId}
         onActivateTab={(tabId) => {
           activeTabIdRef.current = tabId;
           setActiveTabId(tabId);
           setActivePanel('browser');
         }}
         onCloseTab={closeTab}
+        onMoveTab={moveTab}
         onNewTab={() => addTab()}
+        onPinTab={toggleTabPinned}
+        onDragStartTab={setDraggedTabId}
+        onDragEndTab={() => setDraggedTabId(null)}
       />
       <div className="browser-chrome">
         <header className="topbar">
@@ -1005,7 +1087,12 @@ export function App(): JSX.Element {
           activePanel={activePanel}
           leftCollapsed={leftSidebarCollapsed}
           installedSidebarApps={installedSidebarApps}
-          onPanel={setActivePanel}
+          onPanel={(panel) => {
+            setActivePanel(panel);
+            if (panel === 'browser') {
+              setBrowserMode('search');
+            }
+          }}
           onToggleLeft={() => setLeftSidebarCollapsed((current) => !current)}
         />
         <ContextSidebar
@@ -1031,6 +1118,7 @@ export function App(): JSX.Element {
             setActivePanel('chat');
           }}
           onContextItemChange={setActiveContextItem}
+          onBrowserModeChange={setBrowserMode}
           onToggleCollapse={() => setContextSidebarCollapsed((current) => !current)}
         />
         <BrowserMain
@@ -1044,11 +1132,14 @@ export function App(): JSX.Element {
           chatRunState={chatRunState}
           composerMode={composerMode}
           composerText={composerText}
+          bookmarks={bookmarks}
           serviceStatus={status}
           sessionLoading={activeSessionLoading}
           setupModel={setupState.model}
           spaces={spaces}
           activeSpacePath={activeSpacePath}
+          browserMode={browserMode}
+          visitedSites={visitedSites}
           activeContextItem={activeContextItem}
           webviewRef={webviewRef}
           onAction={runSidekickAction}
@@ -1283,15 +1374,25 @@ function SpaceSelector({
 function WindowTitlebar({
   tabs,
   activeTabId,
+  draggedTabId,
   onActivateTab,
   onCloseTab,
-  onNewTab
+  onDragEndTab,
+  onDragStartTab,
+  onMoveTab,
+  onNewTab,
+  onPinTab
 }: {
   tabs?: BrowserTab[];
   activeTabId?: string;
+  draggedTabId?: string | null;
   onActivateTab?: (tabId: string) => void;
   onCloseTab?: (tabId: string) => void;
+  onDragEndTab?: () => void;
+  onDragStartTab?: (tabId: string | null) => void;
+  onMoveTab?: (tabId: string, targetTabId: string) => void;
   onNewTab?: () => void;
+  onPinTab?: (tabId: string) => void;
 }): JSX.Element {
   return (
     <header className="browser-titlebar">
@@ -1302,15 +1403,49 @@ function WindowTitlebar({
       {tabs && activeTabId && onActivateTab && onCloseTab && onNewTab ? (
         <nav className="tabbar" aria-label="Browser tabs">
           {tabs.map((tab) => (
-            <button
+            <div
               key={tab.id}
-              type="button"
-              className={`tab ${tab.id === activeTabId ? 'active' : ''}`}
+              role="button"
+              tabIndex={0}
+              draggable
+              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${draggedTabId === tab.id ? 'dragging' : ''}`}
               onClick={() => onActivateTab(tab.id)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onActivateTab(tab.id);
+                }
+              }}
+              onDragStart={() => onDragStartTab?.(tab.id)}
+              onDragEnd={() => onDragEndTab?.()}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (draggedTabId && draggedTabId !== tab.id) onMoveTab?.(draggedTabId, tab.id);
+                onDragEndTab?.();
+              }}
             >
+              <button
+                type="button"
+                className={`tab-favorite ${tab.pinned ? 'active' : ''}`}
+                aria-label={tab.pinned ? `Unfavorite ${tab.title}` : `Favorite ${tab.title}`}
+                aria-pressed={Boolean(tab.pinned)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onPinTab?.(tab.id);
+                }}
+              >
+                <Star size={11} fill={tab.pinned ? 'currentColor' : 'none'} />
+              </button>
               <span>{tab.title}</span>
-              <X size={13} onClick={(event) => { event.stopPropagation(); onCloseTab(tab.id); }} />
-            </button>
+              <X
+                size={13}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCloseTab(tab.id);
+                }}
+              />
+            </div>
           ))}
           <button type="button" className="new-tab" onClick={onNewTab} aria-label="New tab"><Plus size={16} /></button>
         </nav>
@@ -1410,6 +1545,7 @@ function ContextSidebar({
   onSearch,
   onSelectSession,
   onContextItemChange,
+  onBrowserModeChange,
   onToggleCollapse
 }: {
   activePanel: LastbrowserPanelId;
@@ -1431,6 +1567,7 @@ function ContextSidebar({
   onSearch: (value: string) => void;
   onSelectSession: (sessionId: string) => void;
   onContextItemChange: (item: string) => void;
+  onBrowserModeChange: (mode: 'home' | 'search' | 'web') => void;
   onToggleCollapse: () => void;
 }): JSX.Element {
   const panel = lastbrowserPanels.find((item) => item.id === activePanel) || lastbrowserPanels[0];
@@ -1449,12 +1586,21 @@ function ContextSidebar({
 
   function handleContextItem(item: string): void {
     onContextItemChange(item);
+    if (activePanel === 'browser' && item === 'AI Search') {
+      onBrowserModeChange('search');
+      return;
+    }
     if (item === 'New chat' || item === 'Chat sessions') {
       onNewSession();
       return;
     }
     const targetPanel = panelForContextItem(item);
-    if (targetPanel) onPanel(targetPanel);
+    if (targetPanel) {
+      if (targetPanel === 'browser') {
+        onBrowserModeChange(item === 'AI Search' ? 'search' : 'web');
+      }
+      onPanel(targetPanel);
+    }
   }
 
   if (collapsed) {
@@ -1583,6 +1729,8 @@ function BrowserMain({
   chatMessages,
   chatRunState,
   activeContextItem,
+  bookmarks,
+  browserMode,
   composerMode,
   composerText,
   serviceStatus,
@@ -1590,6 +1738,7 @@ function BrowserMain({
   setupModel,
   spaces,
   activeSpacePath,
+  visitedSites,
   webviewRef,
   onAction,
   onAddSpace,
@@ -1617,6 +1766,8 @@ function BrowserMain({
   chatMessages: DesktopChatMessage[];
   chatRunState: ChatRunState;
   activeContextItem: string;
+  bookmarks: BrowserBookmark[];
+  browserMode: 'home' | 'search' | 'web';
   composerMode: ComposerMode;
   composerText: string;
   serviceStatus: ServiceStatus | null;
@@ -1624,6 +1775,7 @@ function BrowserMain({
   setupModel: string;
   spaces: SpaceSummary[];
   activeSpacePath: string;
+  visitedSites: BrowserVisit[];
   webviewRef: React.MutableRefObject<Electron.WebviewTag | null>;
   onAction: (action: SidekickActionId) => Promise<void>;
   onAddSpace: (path: string, name: string) => void;
@@ -1644,25 +1796,27 @@ function BrowserMain({
 }): JSX.Element {
   if (activePanel === 'chat') {
     return (
-      <NativeChatMain
-        activeSession={activeSession}
-        activeSessionId={activeSessionId}
-        busy={busy}
-        chatError={chatError}
-        messages={chatMessages}
-        runState={chatRunState}
-        composerMode={composerMode}
-        composerText={composerText}
-        serviceStatus={serviceStatus}
-        sessionLoading={sessionLoading}
-        setupModel={setupModel}
-        activeSpacePath={activeSpacePath}
-        onComposerMode={onComposerMode}
-        onComposerText={onComposerText}
-        onCreateSession={onCreateSession}
-        onSend={onSendChat}
-        onStop={onStopChat}
-      />
+      <PanelErrorBoundary panel={activePanel} key={activePanel}>
+        <NativeChatMain
+          activeSession={activeSession}
+          activeSessionId={activeSessionId}
+          busy={busy}
+          chatError={chatError}
+          messages={chatMessages}
+          runState={chatRunState}
+          composerMode={composerMode}
+          composerText={composerText}
+          serviceStatus={serviceStatus}
+          sessionLoading={sessionLoading}
+          setupModel={setupModel}
+          activeSpacePath={activeSpacePath}
+          onComposerMode={onComposerMode}
+          onComposerText={onComposerText}
+          onCreateSession={onCreateSession}
+          onSend={onSendChat}
+          onStop={onStopChat}
+        />
+      </PanelErrorBoundary>
     );
   }
 
@@ -1670,62 +1824,80 @@ function BrowserMain({
     switch (activePanel) {
       case 'workspaces':
         return (
-          <NativeSpacesMain
-            activeSpacePath={activeSpacePath}
-            activeContextItem={activeContextItem}
-            error=""
-            serviceStatus={serviceStatus}
-            spaces={spaces}
-            onAddSpace={onAddSpace}
-            onMoveSpace={onMoveSpace}
-            onRemoveSpace={onRemoveSpace}
-            onRenameSpace={onRenameSpace}
-            onSelectSpace={onSelectSpace}
-          />
+          <PanelErrorBoundary panel={activePanel} key={activePanel}>
+            <NativeSpacesMain
+              activeSpacePath={activeSpacePath}
+              activeContextItem={activeContextItem}
+              error=""
+              serviceStatus={serviceStatus}
+              spaces={spaces}
+              onAddSpace={onAddSpace}
+              onMoveSpace={onMoveSpace}
+              onRemoveSpace={onRemoveSpace}
+              onRenameSpace={onRenameSpace}
+              onSelectSpace={onSelectSpace}
+              onNewSession={createNativeSession}
+            />
+          </PanelErrorBoundary>
         );
       case 'tasks':
-        return <NativeTasksMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTasksMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'kanban':
-        return <NativeKanbanMain activeContextItem={activeContextItem} activeSpacePath={activeSpacePath} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeKanbanMain activeContextItem={activeContextItem} activeSpacePath={activeSpacePath} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'todos':
-        return <NativeTodosMain activeContextItem={activeContextItem} activeSession={activeSession} messages={chatMessages} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTodosMain activeContextItem={activeContextItem} activeSession={activeSession} messages={chatMessages} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'skills':
-        return <NativeSkillsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSkillsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'agents':
-        return <NativeAgentsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeAgentsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'profiles':
-        return <NativeProfilesMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeProfilesMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'memory':
-        return <NativeMemoryMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeMemoryMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'insights':
-        return <NativeInsightsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeInsightsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'logs':
-        return <NativeLogsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeLogsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'gmail':
-        return <NativeGmailMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeGmailMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'discord':
-        return <NativeDiscordMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeDiscordMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'appstore':
         return (
-          <NativeAppstoreMain
-            activeContextItem={activeContextItem}
-            serviceStatus={serviceStatus}
-            onInstalledSidebarApp={onInstalledSidebarApp}
-            onUninstalledSidebarApp={onUninstalledSidebarApp}
-          />
+          <PanelErrorBoundary panel={activePanel} key={activePanel}>
+            <NativeAppstoreMain
+              activeContextItem={activeContextItem}
+              serviceStatus={serviceStatus}
+              onInstalledSidebarApp={onInstalledSidebarApp}
+              onUninstalledSidebarApp={onUninstalledSidebarApp}
+            />
+          </PanelErrorBoundary>
         );
       case 'settings':
-        return <NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       default:
-        return <NativeChatMain activeSession={activeSession} activeSessionId={activeSessionId} busy={busy} chatError={chatError} messages={chatMessages} runState={chatRunState} composerMode={composerMode} composerText={composerText} serviceStatus={serviceStatus} sessionLoading={sessionLoading} setupModel={setupModel} activeSpacePath={activeSpacePath} onComposerMode={onComposerMode} onComposerText={onComposerText} onCreateSession={onCreateSession} onSend={onSendChat} onStop={onStopChat} />;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeChatMain activeSession={activeSession} activeSessionId={activeSessionId} busy={busy} chatError={chatError} messages={chatMessages} runState={chatRunState} composerMode={composerMode} composerText={composerText} serviceStatus={serviceStatus} sessionLoading={sessionLoading} setupModel={setupModel} activeSpacePath={activeSpacePath} onComposerMode={onComposerMode} onComposerText={onComposerText} onCreateSession={onCreateSession} onSend={onSendChat} onStop={onStopChat} /></PanelErrorBoundary>;
     }
   }
 
-  if (isAiBrowserHomeUrl(activeTab.url)) {
-    return <NativeAiBrowserMain serviceStatus={serviceStatus} onNavigate={onNavigate} />;
+  if (browserMode === 'search') {
+    return <PanelErrorBoundary panel="browser" key="browser-search"><NativeAiBrowserMain serviceStatus={serviceStatus} onNavigate={onNavigate} /></PanelErrorBoundary>;
+  }
+
+  if (browserMode === 'home' || isAiBrowserHomeUrl(activeTab.url)) {
+    return (
+      <PanelErrorBoundary panel="browser" key="browser-home">
+        <NativeBrowserStartPage
+          bookmarks={bookmarks}
+          visits={visitedSites}
+          onNavigate={onNavigate}
+        />
+      </PanelErrorBoundary>
+    );
   }
 
   return (
+    <PanelErrorBoundary panel="browser" key={activeTab.id}>
     <section className="browser-main browser-page-main">
       <div className="browser-action-strip" aria-label="Sidekick page actions">
         <button type="button" onClick={() => void onAction('summarize-page')} disabled={busy}>
@@ -1757,6 +1929,7 @@ function BrowserMain({
         />
       </div>
     </section>
+    </PanelErrorBoundary>
   );
 }
 
@@ -2151,7 +2324,8 @@ function NativeSpacesMain({
   onMoveSpace,
   onRemoveSpace,
   onRenameSpace,
-  onSelectSpace
+  onSelectSpace,
+  onNewSession
 }: {
   activeSpacePath: string;
   activeContextItem: string;
@@ -2163,11 +2337,13 @@ function NativeSpacesMain({
   onRemoveSpace: (space: SpaceSummary) => void;
   onRenameSpace: (space: SpaceSummary) => void;
   onSelectSpace: (path: string) => void;
+  onNewSession: () => void;
 }): JSX.Element {
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
   const [section, setSection] = useState(activeContextItem || 'Spaces');
   const ready = canCallSidekickApi(serviceStatus);
+  const activeSpace = spaces.find((space) => space.path === activeSpacePath) || spaces[0] || null;
 
   useEffect(() => {
     setSection(activeContextItem || 'Spaces');
@@ -2200,13 +2376,21 @@ function NativeSpacesMain({
         ))}
       </div>
       <section className="native-work-card detail-json-card">
-        <header><strong>{section}</strong></header>
+        <header>
+          <strong>{section}</strong>
+          {section === 'New chat' && (
+            <button type="button" className="primary-action compact" onClick={onNewSession} disabled={!ready}>
+              <Plus size={13} />
+              <span>Open chat</span>
+            </button>
+          )}
+        </header>
         <pre>{jsonPreview({
           activeSpacePath,
           spaceCount: spaces.length,
-          activeSpace: spaces.find((space) => space.path === activeSpacePath) || null,
+          activeSpace,
           hint: section === 'New chat'
-            ? 'Create a new chat in the selected space from the chat panel.'
+            ? 'Open a new chat session in the active space.'
             : section === 'Files'
               ? 'Use the workspace panel on the right to browse files for the active session.'
               : section === 'Active workspace'
@@ -2253,6 +2437,17 @@ function NativeSpacesMain({
           </div>
         )}
       </div>
+      <section className="native-work-card detail-json-card">
+        <header><strong>Active workspace</strong></header>
+        <pre>{jsonPreview({
+          activeSpacePath,
+          activeSpace,
+          actions: {
+            select: 'Choose a space from the list to make it active',
+            chat: 'Use the Open chat button to start a session in the active space'
+          }
+        })}</pre>
+      </section>
     </section>
   );
 }
@@ -2272,6 +2467,7 @@ function NativeTasksMain({
   const [schedule, setSchedule] = useState('0 9 * * *');
   const [prompt, setPrompt] = useState('');
   const [section, setSection] = useState(activeContextItem || 'Scheduled jobs');
+  const [dispatchState, setDispatchState] = useState<Record<string, unknown> | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!ready) return;
@@ -2290,6 +2486,19 @@ function NativeTasksMain({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const refreshDispatchState = useCallback(async (): Promise<void> => {
+    if (!ready) return;
+    try {
+      setDispatchState(await window.lastbrowser.sidekick.getActiveDispatches());
+    } catch {
+      setDispatchState(null);
+    }
+  }, [ready]);
+
+  useEffect(() => {
+    void refreshDispatchState();
+  }, [refreshDispatchState]);
 
   useEffect(() => {
     setSection(activeContextItem || 'Scheduled jobs');
@@ -2356,6 +2565,12 @@ function NativeTasksMain({
     }
   }
 
+  async function runDispatcher(): Promise<void> {
+    if (!ready) return;
+    await window.lastbrowser.sidekick.runDispatchOnce({ dryRun: false });
+    await Promise.all([refresh(), refreshDispatchState()]);
+  }
+
   return (
     <section className="browser-main native-work-main tasks-main">
       <header className="native-work-header">
@@ -2367,6 +2582,10 @@ function NativeTasksMain({
         <button type="button" className="secondary-action compact" onClick={() => void refresh()} disabled={!ready || loading}>
           {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
           <span>Refresh</span>
+        </button>
+        <button type="button" className="secondary-action compact" onClick={() => void runDispatcher()} disabled={!ready}>
+          <Sparkles size={15} />
+          <span>Run dispatcher</span>
         </button>
       </header>
       <div className="native-card-actions insights-tabs">
@@ -2394,6 +2613,10 @@ function NativeTasksMain({
       </form>
       {error && <div className="workspace-error">{error}</div>}
       <AdvancedWebUiTools panel="tasks" serviceStatus={serviceStatus} compact />
+      <section className="native-work-card detail-json-card">
+        <header><strong>Dispatcher</strong></header>
+        <pre>{jsonPreview(dispatchState || { active: [] })}</pre>
+      </section>
       <div className="native-work-grid">
         {visibleJobs.map((job) => {
           const paused = job.enabled === false || job.state === 'paused';
@@ -2452,6 +2675,7 @@ function NativeKanbanMain({
   const [body, setBody] = useState('');
   const [status, setStatus] = useState('todo');
   const [section, setSection] = useState(activeContextItem || 'Board');
+  const [dispatchState, setDispatchState] = useState<Record<string, unknown> | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!ready) return;
@@ -2470,6 +2694,19 @@ function NativeKanbanMain({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const refreshDispatchState = useCallback(async (): Promise<void> => {
+    if (!ready) return;
+    try {
+      setDispatchState(await window.lastbrowser.sidekick.getActiveDispatches());
+    } catch {
+      setDispatchState(null);
+    }
+  }, [ready]);
+
+  useEffect(() => {
+    void refreshDispatchState();
+  }, [refreshDispatchState]);
 
   useEffect(() => {
     setSection(activeContextItem || 'Board');
@@ -2509,6 +2746,12 @@ function NativeKanbanMain({
     }
   }
 
+  async function runDispatcher(): Promise<void> {
+    if (!ready) return;
+    await window.lastbrowser.sidekick.runDispatchOnce({ dryRun: false });
+    await Promise.all([refresh(), refreshDispatchState()]);
+  }
+
   return (
     <section className="browser-main native-work-main kanban-main">
       <header className="native-work-header">
@@ -2520,6 +2763,10 @@ function NativeKanbanMain({
         <button type="button" className="secondary-action compact" onClick={() => void refresh()} disabled={!ready || loading}>
           {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
           <span>Refresh</span>
+        </button>
+        <button type="button" className="secondary-action compact" onClick={() => void runDispatcher()} disabled={!ready}>
+          <Sparkles size={15} />
+          <span>Run dispatcher</span>
         </button>
       </header>
       <div className="native-card-actions insights-tabs">
@@ -2549,6 +2796,10 @@ function NativeKanbanMain({
       </form>
       {error && <div className="workspace-error">{error}</div>}
       <AdvancedWebUiTools panel="kanban" serviceStatus={serviceStatus} compact />
+      <section className="native-work-card detail-json-card">
+        <header><strong>Dispatcher</strong></header>
+        <pre>{jsonPreview(dispatchState || { active: [] })}</pre>
+      </section>
       <div className="native-kanban-board">
         {visibleColumns.map((column) => (
           <section key={column.name} className="native-kanban-column">

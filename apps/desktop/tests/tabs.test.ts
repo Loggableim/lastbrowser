@@ -5,6 +5,8 @@ import {
   isAiBrowserHomeUrl,
   normalizeNavigationInput,
   renameTab,
+  reorderTabs,
+  togglePinnedTab,
   updateTabTitle,
   updateTabUrl
 } from '../src/renderer/tabs.js';
@@ -22,6 +24,7 @@ describe('browser tabs', () => {
     expect(tab.id).toMatch(/^tab-/);
     expect(tab.url).toBe(aiBrowserHomeUrl);
     expect(tab.title).toBe('New tab');
+    expect(tab.pinned).toBe(false);
   });
 
   it('treats the native AI Browser home as an internal browser tab', () => {
@@ -50,5 +53,25 @@ describe('browser tabs', () => {
     expect(titled.find((tab) => tab.id === oldWebTab.id)?.title).toBe('Google Search');
     expect(titled.find((tab) => tab.id === newNativeTab.id)?.url).toBe(aiBrowserHomeUrl);
     expect(titled.find((tab) => tab.id === newNativeTab.id)?.title).toBe('New tab');
+  });
+
+  it('pins tabs and keeps pinned tabs before regular tabs', () => {
+    const first = createInitialTab('https://example.com');
+    const second = createInitialTab('https://openai.com');
+    const pinned = togglePinnedTab([first, second], second.id);
+
+    expect(pinned[0].id).toBe(second.id);
+    expect(pinned[0].pinned).toBe(true);
+    expect(pinned[1].id).toBe(first.id);
+  });
+
+  it('reorders tabs through drag and drop targets', () => {
+    const first = createInitialTab('https://example.com');
+    const second = createInitialTab('https://openai.com');
+    const third = createInitialTab('https://lastbrowser.com');
+
+    const reordered = reorderTabs([first, second, third], third.id, first.id);
+
+    expect(reordered.map((tab) => tab.id)).toEqual([third.id, first.id, second.id]);
   });
 });

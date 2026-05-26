@@ -37,6 +37,7 @@ import {
   getAgentSoul,
   getAgentSplashStatus,
   getAgentStats,
+  getActiveDispatches,
   getAgentWorkspaces,
   getAppstoreSdk,
   getChatStreamStatus,
@@ -90,6 +91,7 @@ import {
   renameWorkspaceEntry,
   reorderSpaces,
   renameSession,
+  runDispatchOnce,
   resumeCron,
   runCron,
   requestWebui,
@@ -152,6 +154,69 @@ describe('sidekick api client', () => {
       model: 'openai/gpt-5.4-mini',
       api_key: 'sk-test'
     });
+  });
+
+  it('falls back to bundled skills when the WebUI skill catalog is empty', async () => {
+    const fetchImpl = async (url: string | URL) => {
+      const href = String(url);
+      if (href.endsWith('/api/skills')) {
+        return new Response(JSON.stringify({ skills: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    };
+
+    const payload = await listSkills('http://127.0.0.1:8787', fetchImpl);
+    const skills = Array.isArray(payload.skills) ? payload.skills : [];
+
+    expect(payload.source).toBe('bundled');
+    expect(skills.length).toBeGreaterThan(10);
+    expect(skills.some((skill: Record<string, unknown>) => String(skill.name || '').includes('kanban'))).toBe(true);
+  });
+
+  it('reads bundled skill content when the WebUI lookup is unavailable', async () => {
+    const fetchImpl = async (url: string | URL) => {
+      const href = String(url);
+      if (href.includes('/api/skills/content')) {
+        return new Response(JSON.stringify({ error: 'not found' }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    };
+
+    const payload = await getSkillContent(
+      'http://127.0.0.1:8787',
+      { name: 'kanban-worker' },
+      fetchImpl
+    );
+
+    expect(String(payload.content || '')).toContain('Kanban Worker');
+    expect(String(payload.path || '')).toContain('services');
+    expect(payload.source).toBe('bundled');
+  });
+
+  it('exposes the dispatcher endpoints used by Tasks and Kanban', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ active: [{ board: 'default' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    };
+
+    await runDispatchOnce('http://127.0.0.1:8787', { dryRun: true }, fetchImpl);
+    await getActiveDispatches('http://127.0.0.1:8787', fetchImpl);
+
+    expect(calls[0].url).toBe('http://127.0.0.1:8787/api/dispatch/run');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ dry_run: true });
+    expect(calls[1].url).toBe('http://127.0.0.1:8787/api/dispatch/active');
+    expect(calls[1].init?.method).toBeUndefined();
   });
 
   it('extracts the last non-empty assistant message from a completed session', () => {

@@ -102,7 +102,7 @@ export const lastbrowserPanels: LastbrowserPanel[] = [
   { id: 'insights', label: 'Insights', tooltip: 'Insights' },
   { id: 'logs', label: 'Logs', tooltip: 'Logs' },
   { id: 'gmail', label: 'Gmail', tooltip: 'Gmail' },
-  { id: 'browser', label: 'AI Browser', tooltip: 'AI Browser' },
+  { id: 'browser', label: 'AI Search', tooltip: 'AI Search' },
   { id: 'discord', label: 'Discord', tooltip: 'Discord' },
   { id: 'appstore', label: 'Appstore', tooltip: 'Appstore' },
   { id: 'settings', label: 'Settings', tooltip: 'Settings' },

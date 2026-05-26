@@ -24,7 +24,7 @@ type AiBrowserPayload = {
 
 export function buildAiBrowserPrompt(query: string): string {
   return [
-    'You are Sidekick inside Lastbrowser AI Browser.',
+    'You are Sidekick inside Lastbrowser AI Search.',
     'Take over the web search for the user and return a compact research brief.',
     `Query: ${query.trim()}`,
     '',

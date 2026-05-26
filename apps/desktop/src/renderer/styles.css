@@ -3604,9 +3604,8 @@ body.sidebar-resizing * {
 }
 
 .browser-main.browser-page-main {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  align-content: stretch;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   min-width: 0;
   min-height: 0;
@@ -3625,20 +3624,24 @@ body.sidebar-resizing * {
 .browser-main.browser-page-main > .browser-webview-frame {
   position: relative;
   inset: auto;
+  display: flex;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: #ffffff;
 }
 
 .browser-view {
   display: block;
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1 1 auto;
   width: 100%;
   height: 100%;
-  min-width: 100%;
-  min-height: 100%;
+  min-width: 0;
+  min-height: 0;
   border: 0;
   background: #07111f;
 }

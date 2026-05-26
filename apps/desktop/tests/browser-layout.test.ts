@@ -44,12 +44,14 @@ describe('browser shell layout', () => {
     expect(browserPane).toContain('display: flex');
     expect(browserPane).toContain('height: 100%');
     expect(browserPane).toContain('overflow: hidden');
-    expect(browserPageMain).toContain('display: grid');
-    expect(browserPageMain).toContain('grid-template-rows: auto minmax(0, 1fr)');
+    expect(browserPageMain).toContain('display: flex');
+    expect(browserPageMain).toContain('flex-direction: column');
     expect(browserPageMain).toContain('min-height: 0');
     expect(browserPageMain).toContain('height: 100%');
     expect(browserPageMain).toContain('padding: 12px');
     expect(browserWebviewFrame).toContain('position: relative');
+    expect(browserWebviewFrame).toContain('display: flex');
+    expect(browserWebviewFrame).toContain('flex: 1 1 auto');
     expect(browserWebviewFrame).toContain('min-height: 0');
     expect(browserWebviewFrame).toContain('overflow: hidden');
     expect(aiBrowserMain).toContain('overflow: auto');
@@ -58,8 +60,8 @@ describe('browser shell layout', () => {
     expect(browserCanvas).toContain('background: #07111f');
     expect(sidebarHandle).toContain('position: absolute');
     expect(sidebarHandle).toContain('cursor: col-resize');
-    expect(browserView).toContain('position: absolute');
-    expect(browserView).toContain('inset: 0');
+    expect(browserView).toContain('position: relative');
+    expect(browserView).toContain('flex: 1 1 auto');
     expect(browserView).toContain('height: 100%');
   });
 

@@ -87,6 +87,8 @@ type PanelStorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 export const activePanelStorageKey = 'lastbrowser.activePanel';
 export const leftSidebarCollapsedStorageKey = 'lastbrowser.leftSidebarCollapsed';
 export const workspacePanelCollapsedStorageKey = 'lastbrowser.workspacePanelCollapsed';
+export const contextSidebarWidthStorageKey = 'lastbrowser.contextSidebarWidth';
+export const workspacePanelWidthStorageKey = 'lastbrowser.workspacePanelWidth';
 export const installedSidebarAppsStorageKey = 'lastbrowser.installedSidebarApps';
 
 export const lastbrowserPanels: LastbrowserPanel[] = [
@@ -224,6 +226,44 @@ export function saveBooleanPreference(
 
   try {
     storage.setItem(key, value ? '1' : '0');
+  } catch {
+    // Ignore unavailable storage, for example in restricted renderer contexts.
+  }
+}
+
+export function loadNumericPreference(
+  storage: PanelStorageLike | undefined = defaultStorage(),
+  key: string,
+  defaultValue: number,
+  min: number,
+  max: number,
+): number {
+  if (!storage) {
+    return defaultValue;
+  }
+
+  try {
+    const value = Number(storage.getItem(key));
+    if (!Number.isFinite(value)) {
+      return defaultValue;
+    }
+    return Math.min(max, Math.max(min, Math.round(value)));
+  } catch {
+    return defaultValue;
+  }
+}
+
+export function saveNumericPreference(
+  storage: PanelStorageLike | undefined = defaultStorage(),
+  key: string,
+  value: number,
+): void {
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.setItem(key, String(Math.round(value)));
   } catch {
     // Ignore unavailable storage, for example in restricted renderer contexts.
   }

@@ -95,7 +95,7 @@ function idOf(item: AnyRecord): string {
   return text(item.slug || item.id || item.name || item.path || titleOf(item));
 }
 
-function jsonPreview(value: unknown): string {
+export function jsonPreview(value: unknown): string {
   if (typeof value === 'string') return value;
   try {
     return JSON.stringify(value ?? {}, null, 2);

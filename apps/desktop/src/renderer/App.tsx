@@ -102,10 +102,14 @@ import {
   leftSidebarCollapsedStorageKey,
   loadInstalledSidebarApps,
   loadBooleanPreference,
+  loadNumericPreference,
   loadInitialPanel,
   saveActivePanel,
   saveBooleanPreference,
+  saveNumericPreference,
   saveInstalledSidebarApps,
+  contextSidebarWidthStorageKey,
+  workspacePanelWidthStorageKey,
   workspacePanelCollapsedStorageKey
 } from './shell-state.js';
 import { canCallSidekickApi } from './runtime-readiness.js';
@@ -123,7 +127,8 @@ import {
   NativeMemoryMain,
   NativeProfilesMain,
   NativeSettingsMain,
-  NativeSkillsMain
+  NativeSkillsMain,
+  jsonPreview
 } from './panels/NativeRestPanels.js';
 import './styles.css';
 
@@ -164,6 +169,25 @@ type TodoItem = {
   title?: string;
   status?: string;
 };
+
+type SidebarResizeTarget = 'context' | 'workspace';
+
+type SidebarResizeState = {
+  target: SidebarResizeTarget;
+  startX: number;
+  startWidth: number;
+};
+
+const DEFAULT_LEFT_RAIL_WIDTH = 168;
+const COLLAPSED_LEFT_RAIL_WIDTH = 48;
+const DEFAULT_CONTEXT_SIDEBAR_WIDTH = 280;
+const MIN_CONTEXT_SIDEBAR_WIDTH = 220;
+const MAX_CONTEXT_SIDEBAR_WIDTH = 420;
+const DEFAULT_WORKSPACE_PANEL_WIDTH = 320;
+const MIN_WORKSPACE_PANEL_WIDTH = 260;
+const MAX_WORKSPACE_PANEL_WIDTH = 520;
+const MIN_BROWSER_WIDTH = 640;
+const COLLAPSED_PANEL_WIDTH = 44;
 
 const idleCodexOAuth: CodexOAuthState = { status: 'idle' };
 
@@ -273,8 +297,14 @@ export function App(): JSX.Element {
     loadBooleanPreference(undefined, leftSidebarCollapsedStorageKey, false)
   ));
   const [contextSidebarCollapsed, setContextSidebarCollapsed] = useState(false);
+  const [contextSidebarWidth, setContextSidebarWidth] = useState(() => (
+    loadNumericPreference(undefined, contextSidebarWidthStorageKey, DEFAULT_CONTEXT_SIDEBAR_WIDTH, MIN_CONTEXT_SIDEBAR_WIDTH, MAX_CONTEXT_SIDEBAR_WIDTH)
+  ));
   const [workspacePanelCollapsed, setWorkspacePanelCollapsed] = useState(() => (
     loadBooleanPreference(undefined, workspacePanelCollapsedStorageKey, false)
+  ));
+  const [workspacePanelWidth, setWorkspacePanelWidth] = useState(() => (
+    loadNumericPreference(undefined, workspacePanelWidthStorageKey, DEFAULT_WORKSPACE_PANEL_WIDTH, MIN_WORKSPACE_PANEL_WIDTH, MAX_WORKSPACE_PANEL_WIDTH)
   ));
   const [activeContextItem, setActiveContextItem] = useState('');
   const [browserMode, setBrowserMode] = useState<'home' | 'search' | 'web'>(() => (
@@ -324,6 +354,12 @@ export function App(): JSX.Element {
   const activeBookmarked = useMemo(() => isBookmarked(bookmarks, activeTab.url), [activeTab.url, bookmarks]);
   const activeTabIdRef = useRef(activeTabId);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
+  const resizeStateRef = useRef<SidebarResizeState | null>(null);
+  const contextSidebarWidthRef = useRef(contextSidebarWidth);
+  const workspacePanelWidthRef = useRef(workspacePanelWidth);
+  const contextSidebarCollapsedRef = useRef(contextSidebarCollapsed);
+  const workspacePanelCollapsedRef = useRef(workspacePanelCollapsed);
+  const leftSidebarCollapsedRef = useRef(leftSidebarCollapsed);
   const setupRequired = isFirstRunRequired(setupState, onboardingStatus);
   const sidekickApiReady = canCallSidekickApi(status);
 
@@ -378,6 +414,34 @@ export function App(): JSX.Element {
   useEffect(() => {
     saveBooleanPreference(undefined, workspacePanelCollapsedStorageKey, workspacePanelCollapsed);
   }, [workspacePanelCollapsed]);
+
+  useEffect(() => {
+    saveNumericPreference(undefined, contextSidebarWidthStorageKey, contextSidebarWidth);
+  }, [contextSidebarWidth]);
+
+  useEffect(() => {
+    saveNumericPreference(undefined, workspacePanelWidthStorageKey, workspacePanelWidth);
+  }, [workspacePanelWidth]);
+
+  useEffect(() => {
+    contextSidebarWidthRef.current = contextSidebarWidth;
+  }, [contextSidebarWidth]);
+
+  useEffect(() => {
+    workspacePanelWidthRef.current = workspacePanelWidth;
+  }, [workspacePanelWidth]);
+
+  useEffect(() => {
+    contextSidebarCollapsedRef.current = contextSidebarCollapsed;
+  }, [contextSidebarCollapsed]);
+
+  useEffect(() => {
+    workspacePanelCollapsedRef.current = workspacePanelCollapsed;
+  }, [workspacePanelCollapsed]);
+
+  useEffect(() => {
+    leftSidebarCollapsedRef.current = leftSidebarCollapsed;
+  }, [leftSidebarCollapsed]);
 
   useEffect(() => {
     let alive = true;
@@ -1019,6 +1083,87 @@ export function App(): JSX.Element {
     }
   }
 
+  function clampSidebarWidth(
+    target: SidebarResizeTarget,
+    width: number,
+  ): number {
+    const leftWidth = leftSidebarCollapsedRef.current ? COLLAPSED_LEFT_RAIL_WIDTH : DEFAULT_LEFT_RAIL_WIDTH;
+    const contextWidth = contextSidebarCollapsedRef.current ? COLLAPSED_PANEL_WIDTH : contextSidebarWidthRef.current;
+    const workspaceWidth = workspacePanelCollapsedRef.current ? COLLAPSED_PANEL_WIDTH : workspacePanelWidthRef.current;
+    const browserFloor = MIN_BROWSER_WIDTH;
+    const maxByViewport = Math.max(
+      target === 'context' ? MIN_CONTEXT_SIDEBAR_WIDTH : MIN_WORKSPACE_PANEL_WIDTH,
+      window.innerWidth - leftWidth - contextWidth - workspaceWidth - browserFloor
+    );
+
+    if (target === 'context') {
+      return Math.round(Math.min(MAX_CONTEXT_SIDEBAR_WIDTH, Math.max(MIN_CONTEXT_SIDEBAR_WIDTH, Math.min(width, maxByViewport))));
+    }
+
+    return Math.round(Math.min(MAX_WORKSPACE_PANEL_WIDTH, Math.max(MIN_WORKSPACE_PANEL_WIDTH, Math.min(width, maxByViewport))));
+  }
+
+  function beginSidebarResize(target: SidebarResizeTarget, event: React.MouseEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (target === 'context' && contextSidebarCollapsedRef.current) return;
+    if (target === 'workspace' && workspacePanelCollapsedRef.current) return;
+
+    resizeStateRef.current = {
+      target,
+      startX: event.clientX,
+      startWidth: target === 'context' ? contextSidebarWidthRef.current : workspacePanelWidthRef.current
+    };
+    document.body.classList.add('sidebar-resizing');
+  }
+
+  useEffect(() => {
+    function handleMouseMove(event: MouseEvent): void {
+      const resize = resizeStateRef.current;
+      if (!resize) return;
+
+      const delta = resize.target === 'context'
+        ? event.clientX - resize.startX
+        : resize.startX - event.clientX;
+      const nextWidth = clampSidebarWidth(resize.target, resize.startWidth + delta);
+
+      if (resize.target === 'context') {
+        setContextSidebarWidth(nextWidth);
+      } else {
+        setWorkspacePanelWidth(nextWidth);
+      }
+      document.body.classList.add('sidebar-resizing');
+    }
+
+    function handleMouseUp(): void {
+      if (!resizeStateRef.current) return;
+      resizeStateRef.current = null;
+      document.body.classList.remove('sidebar-resizing');
+    }
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('blur', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+      document.body.classList.remove('sidebar-resizing');
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!resizeStateRef.current) return;
+    const target = resizeStateRef.current.target;
+    const nextWidth = clampSidebarWidth(target, target === 'context' ? contextSidebarWidthRef.current : workspacePanelWidthRef.current);
+    if (target === 'context') {
+      setContextSidebarWidth(nextWidth);
+    } else {
+      setWorkspacePanelWidth(nextWidth);
+    }
+  }, [leftSidebarCollapsed, contextSidebarCollapsed, workspacePanelCollapsed]);
+
   return (
     <div className={`app-shell panel-${activePanel}`}>
       <WindowTitlebar
@@ -1082,7 +1227,14 @@ export function App(): JSX.Element {
         />
       </div>
 
-      <main className={`workspace ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${contextSidebarCollapsed ? 'context-collapsed' : ''} ${workspacePanelCollapsed ? 'workspace-collapsed' : ''}`}>
+      <main
+        className={`workspace ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${contextSidebarCollapsed ? 'context-collapsed' : ''} ${workspacePanelCollapsed ? 'workspace-collapsed' : ''}`}
+        style={{
+          '--left-rail-width': `${leftSidebarCollapsed ? COLLAPSED_LEFT_RAIL_WIDTH : DEFAULT_LEFT_RAIL_WIDTH}px`,
+          '--context-sidebar-width': `${contextSidebarCollapsed ? COLLAPSED_PANEL_WIDTH : contextSidebarWidth}px`,
+          '--workspace-panel-width': `${workspacePanelCollapsed ? COLLAPSED_PANEL_WIDTH : workspacePanelWidth}px`
+        } as React.CSSProperties}
+      >
         <ShellRail
           activePanel={activePanel}
           leftCollapsed={leftSidebarCollapsed}
@@ -1120,6 +1272,7 @@ export function App(): JSX.Element {
           onContextItemChange={setActiveContextItem}
           onBrowserModeChange={setBrowserMode}
           onToggleCollapse={() => setContextSidebarCollapsed((current) => !current)}
+          onResizeStart={(event) => beginSidebarResize('context', event)}
         />
         <BrowserMain
           activePanel={activePanel}
@@ -1187,6 +1340,7 @@ export function App(): JSX.Element {
           }}
           onRefresh={() => setWorkspaceRefreshNonce((current) => current + 1)}
           onToggle={() => setWorkspacePanelCollapsed((current) => !current)}
+          onResizeStart={(event) => beginSidebarResize('workspace', event)}
         />
         {setupRequired && (
           <FirstRunSetupPane
@@ -1546,7 +1700,8 @@ function ContextSidebar({
   onSelectSession,
   onContextItemChange,
   onBrowserModeChange,
-  onToggleCollapse
+  onToggleCollapse,
+  onResizeStart
 }: {
   activePanel: LastbrowserPanelId;
   activeSessionId: string | null;
@@ -1569,6 +1724,7 @@ function ContextSidebar({
   onContextItemChange: (item: string) => void;
   onBrowserModeChange: (mode: 'home' | 'search' | 'web') => void;
   onToggleCollapse: () => void;
+  onResizeStart: (event: React.MouseEvent<HTMLDivElement>) => void;
 }): JSX.Element {
   const panel = lastbrowserPanels.find((item) => item.id === activePanel) || lastbrowserPanels[0];
   const filteredSessions = sessions.filter((session) => {
@@ -1684,6 +1840,7 @@ function ContextSidebar({
           </div>
         </>
       )}
+      {!collapsed && <div className="sidebar-resize-handle context-resize-handle" role="presentation" aria-hidden="true" onMouseDown={onResizeStart} />}
 
       {!showSessionTools && (
         <div className="context-native-panel">
@@ -1913,7 +2070,7 @@ function BrowserMain({
           <span>Research</span>
         </button>
       </div>
-      <div className="browser-webview-frame">
+      <div className="browser-webview-frame" ref={browserFrameRef}>
         <webview
           key={activeTab.id}
           ref={webviewRef}
@@ -1922,7 +2079,10 @@ function BrowserMain({
           style={{ width: '100%', height: '100%' }}
           partition="persist:lastbrowser-main"
           allowpopups="false"
-          onDomReady={(event) => void hideWebviewScrollbars(event.currentTarget)}
+          onDomReady={(event) => {
+            void hideWebviewScrollbars(event.currentTarget);
+            void annotateWebviewViewport(event.currentTarget);
+          }}
           onDidNavigate={(event) => onWebviewNavigate(activeTab.id, event.url)}
           onDidNavigateInPage={(event) => onWebviewNavigate(activeTab.id, event.url)}
           onPageTitleUpdated={(event) => onWebviewTitle(activeTab.id, event.title)}
@@ -2952,7 +3112,8 @@ function WorkspacePanel({
   onSavePreview,
   onToggleEditing,
   onToggleHidden,
-  onToggle
+  onToggle,
+  onResizeStart
 }: {
   activeSessionId: string | null;
   collapsed: boolean;
@@ -2976,6 +3137,7 @@ function WorkspacePanel({
   onToggleEditing: () => void;
   onToggleHidden: () => void;
   onToggle: () => void;
+  onResizeStart: (event: React.MouseEvent<HTMLDivElement>) => void;
 }): JSX.Element {
   if (collapsed) {
     return (
@@ -2992,6 +3154,7 @@ function WorkspacePanel({
 
   return (
     <aside className="workspace-panel">
+      <div className="sidebar-resize-handle workspace-resize-handle" role="presentation" aria-hidden="true" onMouseDown={onResizeStart} />
       <div className="workspace-header">
         <div>
           <span>WORKSPACE</span>

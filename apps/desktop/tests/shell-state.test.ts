@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   lastbrowserPanels,
+  contextSidebarWidthStorageKey,
   isInstalledSidebarApp,
   loadInitialPanel,
   loadInstalledSidebarApps,
+  loadNumericPreference,
   normalizePanelId,
-  saveActivePanel
+  saveActivePanel,
+  saveNumericPreference,
+  workspacePanelWidthStorageKey
 } from '../src/renderer/shell-state.js';
 
 class MemoryStorage {
@@ -62,6 +66,22 @@ describe('Lastbrowser shell state', () => {
     saveActivePanel(storage, 'workspaces');
 
     expect(storage.getItem('lastbrowser.activePanel')).toBe('workspaces');
+  });
+
+  it('persists sidebar widths and clamps invalid values back to defaults', () => {
+    const storage = new MemoryStorage();
+
+    saveNumericPreference(storage, contextSidebarWidthStorageKey, 301);
+    saveNumericPreference(storage, workspacePanelWidthStorageKey, 499);
+
+    expect(loadNumericPreference(storage, contextSidebarWidthStorageKey, 280, 220, 420)).toBe(301);
+    expect(loadNumericPreference(storage, workspacePanelWidthStorageKey, 320, 260, 520)).toBe(499);
+
+    storage.setItem(contextSidebarWidthStorageKey, '9999');
+    storage.setItem(workspacePanelWidthStorageKey, 'not-a-number');
+
+    expect(loadNumericPreference(storage, contextSidebarWidthStorageKey, 280, 220, 420)).toBe(420);
+    expect(loadNumericPreference(storage, workspacePanelWidthStorageKey, 320, 260, 520)).toBe(320);
   });
 
   it('keeps gmail and discord hidden until installed through the appstore', () => {

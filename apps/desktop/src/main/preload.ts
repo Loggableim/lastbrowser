@@ -156,6 +156,17 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     configureDiscord: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:configureDiscord', request),
     sendMessage: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:sendMessage', request)
   },
+  terminal: {
+    start: (cwd: string) => ipcRenderer.invoke('lastbrowser:terminal:start', cwd),
+    write: (request: { id: string; data: string }) => ipcRenderer.invoke('lastbrowser:terminal:write', request),
+    close: (id: string) => ipcRenderer.invoke('lastbrowser:terminal:close', id),
+    list: () => ipcRenderer.invoke('lastbrowser:terminal:list'),
+    onData: (callback: (event: { id: string; data: string }) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: { id: string; data: string }) => callback(payload);
+      ipcRenderer.on('lastbrowser:terminal:data', listener);
+      return () => ipcRenderer.removeListener('lastbrowser:terminal:data', listener);
+    }
+  },
   updates: {
     status: () => ipcRenderer.invoke('lastbrowser:updates:status'),
     check: () => ipcRenderer.invoke('lastbrowser:updates:check'),

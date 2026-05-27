@@ -137,6 +137,7 @@ import {
 } from './sidekick-api.js';
 import { registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
 import { registerWindowControlIpc } from './window-controls.js';
+import { startTerminal, writeTerminal, closeTerminal, getTerminalIds } from './terminal-process.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
 
@@ -158,10 +159,14 @@ function createWindow(): void {
 
 function registerIpc(): void {
   ipcMain.handle('lastbrowser:services:status', () => services?.getStatus());
-  ipcMain.handle('lastbrowser:services:start', async () => {
-    await services?.start();
-    return services?.getStatus();
-  });
+    ipcMain.handle('lastbrowser:services:start', async () => {
+      try {
+        await services?.start();
+      } catch (error) {
+        console.error('[lastbrowser] Failed to start services:', error);
+      }
+      return services?.getStatus();
+    });
   ipcMain.handle('lastbrowser:services:stop', () => {
     services?.stop();
     return services?.getStatus();
@@ -323,6 +328,16 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:unbanDiscordMember', (_event, request) => unbanDiscordMember(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:configureDiscord', (_event, request) => configureDiscord(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:sendMessage', (_event, request) => sendSidekickMessage(requireWebuiUrl(), request));
+  ipcMain.handle('lastbrowser:terminal:start', (_event, cwd) => {
+    const webContents = _event.sender;
+    const result = startTerminal(String(cwd || ''), (id, data) => {
+      try { webContents.send('lastbrowser:terminal:data', { id, data }); } catch (_) {}
+    });
+    return result;
+  });
+  ipcMain.handle('lastbrowser:terminal:write', (_event, request) => writeTerminal(String(request?.id || ''), String(request?.data || '')));
+  ipcMain.handle('lastbrowser:terminal:close', (_event, id) => closeTerminal(String(id || '')));
+  ipcMain.handle('lastbrowser:terminal:list', () => getTerminalIds());
   registerWindowControlIpc(ipcMain, () => mainWindow);
   registerUpdateIpc(() => mainWindow);
 }

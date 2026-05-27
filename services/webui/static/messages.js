@@ -3461,3 +3461,299 @@ function _markCurrentAssistantAsPlan(planText){
 function _clearPlanState(){
   window._activePlan=null;
 }
+
+// ── Message Action Handlers ────────────────────────────────────────────────
+
+/** Edit a user message: replace the body with a textarea for inline editing */
+function editMessage(btn){
+  const row=btn.closest('.msg-row');
+  if(!row) return;
+  const body=row.querySelector('.msg-body');
+  if(!body) return;
+  // Prevent double-edit
+  if(row.querySelector('.msg-edit-area')) return;
+  const rawText=row.dataset.rawText||body.innerText||'';
+  const idx=Number(row.dataset.msgIdx);
+  // Replace body content with an editable textarea
+  body.innerHTML=`<textarea class="msg-edit-area" rows="3" style="width:100%;resize:vertical;font-family:inherit;font-size:inherit;"></textarea>
+    <div class="msg-edit-actions">
+      <button class="msg-edit-save" onclick="saveEditedMessage(this,${idx})">${esc(t('save')||'Save')}</button>
+      <button class="msg-edit-cancel" onclick="cancelEditMessage(this)">${esc(t('cancel')||'Cancel')}</button>
+    </div>`;
+  const ta=body.querySelector('.msg-edit-area');
+  ta.value=rawText;
+  ta.focus();
+  // Auto-resize
+  ta.style.height='auto';
+  ta.style.height=ta.scrollHeight+'px';
+  ta.addEventListener('input',()=>{ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';});
+}
+
+/** Save an edited message: truncate session and re-send */
+async function saveEditedMessage(btn,rawIdx){
+  const row=btn.closest('.msg-row');
+  if(!row||!S.session) return;
+  const body=row.querySelector('.msg-body');
+  const ta=body&&body.querySelector('.msg-edit-area');
+  if(!ta) return;
+  const newText=ta.value.trim();
+  if(!newText){
+    if(typeof showToast==='function') showToast(t('empty_message')||'Message cannot be empty',2000);
+    return;
+  }
+  const sid=S.session.session_id;
+  try{
+    // Truncate the session at this message index (keep messages before it)
+    await api('/api/session/retry',{method:'POST',body:JSON.stringify({session_id:sid})});
+    // If the edited text differs from the original, update the last message content
+    // The retry endpoint already truncated; now we put the edited text in the composer
+    const msgEl=$('msg');
+    if(msgEl){
+      msgEl.value=newText;
+      if(typeof autoResize==='function') autoResize();
+    }
+    // Trigger a new send — the send() function will use the composer text
+    // But first we need to set up S.messages correctly
+    // Remove the edited message and everything after from S.messages
+    S.messages=S.messages.slice(0,rawIdx);
+    S.messages.push({role:'user',content:newText,_ts:Date.now()/1000});
+    renderMessages();
+    // Now call send() to stream the new response — but we already pushed the user message
+    // so we need to just start the stream part
+    if(typeof send==='function'){
+      // We already have the user message in S.messages, so we need to skip the send() push
+      // Instead, directly call the chat/start + stream attach flow
+      if(msgEl) msgEl.value='';
+      await send();
+    }
+  }catch(e){
+    if(typeof showToast==='function') showToast(`Edit failed: ${e.message}`,3000);
+    // Restore original content on failure
+    renderMessages();
+  }
+}
+
+/** Cancel editing and restore original message */
+function cancelEditMessage(btn){
+  const row=btn.closest('.msg-row');
+  if(!row) return;
+  // Trigger a re-render to restore the original message body
+  renderMessages();
+}
+
+/** Regenerate the last assistant response: retry from last user message */
+async function regenerateResponse(btn){
+  if(!S.session||!S.session.session_id) return;
+  const sid=S.session.session_id;
+  if(typeof setBusy==='function') setBusy(true);
+  try{
+    const result=await api('/api/session/retry',{method:'POST',body:JSON.stringify({session_id:sid})});
+    if(result&&result.last_user_text){
+      const msgEl=$('msg');
+      if(msgEl){
+        msgEl.value=result.last_user_text;
+        if(typeof autoResize==='function') autoResize();
+      }
+    }
+    // Reload the session to reflect the truncated state on the server
+    const fresh=await api('/api/session/load?session_id='+encodeURIComponent(sid));
+    if(fresh&&Array.isArray(fresh.messages)){
+      S.messages=fresh.messages;
+    }
+    renderMessages();
+    // If the server returned last_user_text, auto-send so the agent regenerates
+    if(result&&result.last_user_text){
+      await send();
+    }
+  }catch(e){
+    if(typeof showToast==='function') showToast(`Retry failed: ${e.message}`,3000);
+  }finally{
+    if(typeof setBusy==='function') setBusy(false);
+  }
+}
+
+/** Undo the last exchange (remove most recent user+assistant pair) */
+async function undoLastExchange(){
+  if(!S.session||!S.session.session_id) return;
+  const sid=S.session.session_id;
+  try{
+    const result=await api('/api/session/undo',{method:'POST',body:JSON.stringify({session_id:sid})});
+    if(typeof showToast==='function'){
+      showToast(result&&result.removed_preview
+        ? `Undone: "${result.removed_preview}"`
+        : t('undo_success')||'Last exchange removed'
+      ,2000);
+    }
+    // Reload session
+    const fresh=await api('/api/session/load?session_id='+encodeURIComponent(sid));
+    if(fresh&&Array.isArray(fresh.messages)){
+      S.messages=fresh.messages;
+    }
+    renderMessages();
+    if(typeof setBusy==='function') setBusy(false);
+  }catch(e){
+    if(typeof showToast==='function') showToast(`Undo failed: ${e.message}`,3000);
+  }
+}
+
+/** Fork/branch a session from a given message point */
+async function forkFromMessage(keepCount){
+  if(!S.session||!S.session.session_id) return;
+  const sid=S.session.session_id;
+  try{
+    const result=await api('/api/session/branch',{method:'POST',body:JSON.stringify({session_id:sid,keep_count:keepCount})});
+    if(result&&result.session_id){
+      // Navigate to the new branched session
+      if(typeof loadSession==='function'){
+        await loadSession(result.session_id);
+      }else{
+        window.location.href='?session_id='+encodeURIComponent(result.session_id);
+      }
+    }
+  }catch(e){
+    if(typeof showToast==='function') showToast(`Branch failed: ${e.message}`,3000);
+  }
+}
+
+/** Copy message text to clipboard */
+function copyMsg(btn){
+  const row=btn.closest('.msg-row')||btn.closest('.tool-card-row');
+  if(!row) return;
+  const rawText=row.dataset.rawText||'';
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(rawText).then(()=>{
+      if(typeof showToast==='function') showToast(t('copied')||'Copied!',1500);
+    }).catch(()=>{});
+  }else{
+    // Fallback for older browsers / non-HTTPS contexts (e.g. eTLD+1 without cert)
+    const ta=document.createElement('textarea');
+    ta.value=rawText;
+    ta.style.position='fixed';
+    ta.style.opacity='0';
+    document.body.appendChild(ta);
+    ta.select();
+    try{document.execCommand('copy');}catch(_){}
+    document.body.removeChild(ta);
+    if(typeof showToast==='function') showToast(t('copied')||'Copied!',1500);
+  }
+}
+
+/** Speak message text via TTS */
+function speakMessage(btn){
+  if(!('speechSynthesis' in window)) return;
+  const row=btn.closest('.msg-row');
+  if(!row) return;
+  const rawText=row.dataset.rawText||'';
+  if(!rawText) return;
+  // Cancel any ongoing speech
+  speechSynthesis.cancel();
+  const utterance=new SpeechSynthesisUtterance(rawText);
+  const rate=parseFloat(window._ttsRate)||1;
+  if(rate) utterance.rate=rate;
+  speechSynthesis.speak(utterance);
+  if(typeof showToast==='function') showToast('🔊 '+(t('tts_playing')||'Speaking…'),1500);
+}
+
+// Expose handlers globally
+window.editMessage=editMessage;
+window.saveEditedMessage=saveEditedMessage;
+window.cancelEditMessage=cancelEditMessage;
+window.regenerateResponse=regenerateResponse;
+window.undoLastExchange=undoLastExchange;
+window.forkFromMessage=forkFromMessage;
+window.copyMsg=copyMsg;
+window.speakMessage=speakMessage;
+
+// ── Voice Input (Web Speech API) ──────────────────────────────────────────────
+
+let _voiceRecognition = null;
+let _voiceActive = false;
+let _voiceSilenceTimer = null;
+
+function initVoiceInput() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return null;
+  const recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = document.documentElement.lang || 'de-DE';
+  return recognition;
+}
+
+function toggleVoiceInput() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    if (typeof showToast === 'function') showToast('Voice input not supported in this browser', 2500);
+    return;
+  }
+
+  if (_voiceActive) {
+    stopVoiceInput();
+    return;
+  }
+
+  if (!_voiceRecognition) _voiceRecognition = initVoiceInput();
+  if (!_voiceRecognition) return;
+
+  const ta = document.getElementById('msg');
+  if (!ta) return;
+
+  _voiceActive = true;
+  _voiceRecognition.onresult = (event) => {
+    let interim = '';
+    let final = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+      if (event.results[i].isFinal) final += transcript;
+      else interim += transcript;
+    }
+    if (final) {
+      ta.value = (ta.value + ' ' + final).trim();
+      if (typeof autoResize === 'function') autoResize();
+    } else if (interim) {
+      ta.value = (ta.value + ' ' + interim).trim();
+    }
+    // Auto-stop after 2s of silence
+    clearTimeout(_voiceSilenceTimer);
+    _voiceSilenceTimer = setTimeout(() => { stopVoiceInput(); }, 2000);
+  };
+
+  _voiceRecognition.onerror = (event) => {
+    if (event.error !== 'no-speech' && event.error !== 'aborted') {
+      if (typeof showToast === 'function') showToast(`Voice error: ${event.error}`, 2000);
+    }
+    stopVoiceInput();
+  };
+
+  _voiceRecognition.onend = () => {
+    _voiceActive = false;
+    updateVoiceButton();
+  };
+
+  try {
+    _voiceRecognition.start();
+    updateVoiceButton();
+    if (typeof showToast === 'function') showToast('🎤 Listening…', 1500);
+  } catch (_) {
+    _voiceActive = false;
+  }
+}
+
+function stopVoiceInput() {
+  _voiceActive = false;
+  clearTimeout(_voiceSilenceTimer);
+  if (_voiceRecognition) {
+    try { _voiceRecognition.stop(); } catch (_) {}
+  }
+  updateVoiceButton();
+}
+
+function updateVoiceButton() {
+  const btn = document.getElementById('voiceBtn');
+  if (!btn) return;
+  btn.classList.toggle('active', _voiceActive);
+  btn.title = _voiceActive ? 'Stop recording' : 'Voice input';
+  btn.setAttribute('aria-pressed', _voiceActive ? 'true' : 'false');
+}
+
+window.toggleVoiceInput = toggleVoiceInput;

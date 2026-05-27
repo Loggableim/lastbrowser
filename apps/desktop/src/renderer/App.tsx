@@ -42,6 +42,7 @@ import {
   Square,
   Star,
   StopCircle,
+  Terminal,
   Trash2,
   UserCircle,
   Users,
@@ -94,6 +95,7 @@ import {
   DesktopSessionDetail,
   DesktopSessionSummary,
   LastbrowserPanelId,
+  ProjectSummary,
   SpaceSummary,
   WorkspaceFilePreview,
   WorkspaceTreeEntry,
@@ -130,6 +132,13 @@ import {
   NativeSkillsMain,
   jsonPreview
 } from './panels/NativeRestPanels.js';
+import { NativeTerminalMain } from './panels/NativeTerminalMain.js';
+import { ControlCenter } from './NativeControlCenter.js';
+import { ApprovalPollManager, ApprovalCard } from './NativeApproval.js';
+import { ContextUsageIndicator } from './NativeContextUsage.js';
+import { QueueIndicator, CompressButton, useChatQueue } from './NativeCompressQueue.js';
+import { RichTextRenderer } from './NativeRichText.js';
+import { DesktopI18nProvider, useDesktopI18n, desktopLocaleIds, desktopLocaleNames } from './i18n.js';
 import './styles.css';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
@@ -308,7 +317,8 @@ const panelIcons: Record<LastbrowserPanelId, React.ComponentType<{ size?: number
   browser: Globe2,
   discord: Users,
   appstore: LayoutGrid,
-  settings: Settings
+  settings: Settings,
+  terminal: Terminal
 };
 
 const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = {
@@ -326,7 +336,8 @@ const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = {
   discord: ['Guild', 'Channels', 'Members', 'Moderation'],
   appstore: ['Home', 'Categories', 'My apps', 'SDK', 'Submit'],
   settings: ['Conversation', 'Appearance', 'Preferences', 'Providers', 'Plugins', 'System'],
-  browser: ['AI Search', 'Brief', 'Sources', 'Automation tools']
+  browser: ['AI Search', 'Brief', 'Sources', 'Automation tools'],
+  terminal: ['Terminal', 'New session', 'Close']
 };
 
 function panelForContextItem(item: string): LastbrowserPanelId | null {
@@ -355,6 +366,9 @@ export function App(): JSX.Element {
     isAiBrowserHomeUrl(tabs[0].url) ? '' : tabs[0].url
   ));
   const [activePanel, setActivePanel] = useState<LastbrowserPanelId>(() => loadInitialPanel());
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [installedSidebarApps, setInstalledSidebarApps] = useState<LastbrowserPanelId[]>(() => loadInstalledSidebarApps(window.localStorage));
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => (
     loadBooleanPreference(undefined, leftSidebarCollapsedStorageKey, false)
@@ -626,6 +640,11 @@ export function App(): JSX.Element {
       const nextSessions = Array.isArray(result.sessions) ? result.sessions : [];
       setSessions(nextSessions);
       setSessionError('');
+      // Fetch projects
+      try {
+        const projData = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/projects' });
+        if (Array.isArray(projData?.projects)) setProjects(projData.projects);
+      } catch { /* ignore */ }
       setActiveSessionId((current) => {
         if (current && nextSessions.some((session) => session.session_id === current)) return current;
         return nextSessions[0]?.session_id || null;
@@ -1281,6 +1300,7 @@ export function App(): JSX.Element {
   }, [leftSidebarCollapsed, contextSidebarCollapsed, workspacePanelCollapsed]);
 
   return (
+    <DesktopI18nProvider>
     <div className={`app-shell panel-${activePanel}`}>
       <WindowTitlebar
         tabs={tabs}
@@ -1374,12 +1394,17 @@ export function App(): JSX.Element {
           sessions={sessions}
           serviceStatus={status}
           sessionError={sessionError}
+          projects={projects}
+          activeProjectFilter={activeProjectFilter}
+          activeTagFilter={activeTagFilter}
           onAction={runSidekickAction}
           onNewSession={() => void createNativeSession()}
           onPanel={setActivePanel}
           onDeleteSession={(session) => void deleteNativeSession(session)}
           onDuplicateSession={(session) => void duplicateNativeSession(session)}
           onRenameSession={(session) => void renameNativeSession(session)}
+          onPinSession={(session) => (session.pinned ? unpinNativeSession : pinNativeSession)(session)}
+          onArchiveSession={(session) => archiveNativeSession(session)}
           onSearch={setSessionSearch}
           onSelectSession={(sessionId) => {
             setActiveSessionId(sessionId);
@@ -1389,6 +1414,8 @@ export function App(): JSX.Element {
           onBrowserModeChange={setBrowserMode}
           onToggleCollapse={() => setContextSidebarCollapsed((current) => !current)}
           onResizeStart={(event) => beginSidebarResize('context', event)}
+          onProjectFilter={setActiveProjectFilter}
+          onTagFilter={setActiveTagFilter}
         />
         <BrowserMain
           activePanel={activePanel}
@@ -1475,6 +1502,7 @@ export function App(): JSX.Element {
         )}
       </main>
     </div>
+    </DesktopI18nProvider>
   );
 }
 
@@ -1810,18 +1838,25 @@ function ContextSidebar({
   sessions,
   serviceStatus,
   sessionError,
+  projects,
+  activeProjectFilter,
+  activeTagFilter,
   onAction,
   onNewSession,
   onPanel,
   onDeleteSession,
   onDuplicateSession,
   onRenameSession,
+  onPinSession,
+  onArchiveSession,
   onSearch,
   onSelectSession,
   onContextItemChange,
   onBrowserModeChange,
   onToggleCollapse,
-  onResizeStart
+  onResizeStart,
+  onProjectFilter,
+  onTagFilter
 }: {
   activePanel: LastbrowserPanelId;
   activeSessionId: string | null;
@@ -1833,24 +1868,92 @@ function ContextSidebar({
   sessions: DesktopSessionSummary[];
   serviceStatus: ServiceStatus | null;
   sessionError: string;
+  projects: ProjectSummary[];
+  activeProjectFilter: string | null;
+  activeTagFilter: string | null;
   onAction: (action: SidekickActionId) => Promise<void>;
   onNewSession: () => void;
   onPanel: (panel: LastbrowserPanelId) => void;
   onDeleteSession: (session: DesktopSessionSummary) => void;
   onDuplicateSession: (session: DesktopSessionSummary) => void;
   onRenameSession: (session: DesktopSessionSummary) => void;
+  onPinSession: (session: DesktopSessionSummary) => void;
+  onArchiveSession: (session: DesktopSessionSummary) => void;
   onSearch: (value: string) => void;
   onSelectSession: (sessionId: string) => void;
   onContextItemChange: (item: string) => void;
   onBrowserModeChange: (mode: 'home' | 'search' | 'web') => void;
   onToggleCollapse: () => void;
   onResizeStart: (event: React.MouseEvent<HTMLDivElement>) => void;
+  onProjectFilter: (projectId: string | null) => void;
+  onTagFilter: (tag: string | null) => void;
 }): JSX.Element {
   const panel = lastbrowserPanels.find((item) => item.id === activePanel) || lastbrowserPanels[0];
-  const filteredSessions = sessions.filter((session) => {
-    const haystack = `${session.title || ''} ${session.workspace || ''}`.toLowerCase();
-    return haystack.includes(search.trim().toLowerCase());
-  });
+  
+  // Extract all tags from sessions
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    for (const s of sessions) {
+      if (s.tags) for (const t of s.tags) tagSet.add(t);
+      // Also extract #hashtags from title
+      const tagMatch = s.title?.match(/#(\w+)/g);
+      if (tagMatch) tagMatch.forEach((t) => tagSet.add(t.slice(1)));
+    }
+    return Array.from(tagSet).sort();
+  }, [sessions]);
+
+  // Filter sessions by search, project, and tag
+  const filteredSessions = useMemo(() => {
+    let result = sessions;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      result = result.filter((s) => {
+        const haystack = `${s.title || ''} ${s.workspace || ''}`.toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+    if (activeProjectFilter) {
+      result = result.filter((s) => s.project_id === activeProjectFilter);
+    }
+    if (activeTagFilter) {
+      result = result.filter((s) => {
+        if (s.tags?.includes(activeTagFilter)) return true;
+        return s.title?.toLowerCase().includes(`#${activeTagFilter}`.toLowerCase()) ?? false;
+      });
+    }
+    return result;
+  }, [sessions, search, activeProjectFilter, activeTagFilter]);
+
+  // Group sessions: pinned first, then by project, then unassigned
+  const groupedSessions = useMemo(() => {
+    const pinned: DesktopSessionSummary[] = [];
+    const byProject = new Map<string, DesktopSessionSummary[]>();
+    const unassigned: DesktopSessionSummary[] = [];
+
+    for (const s of filteredSessions) {
+      if (s.pinned) {
+        pinned.push(s);
+      } else if (s.project_id) {
+        const list = byProject.get(s.project_id) || [];
+        list.push(s);
+        byProject.set(s.project_id, list);
+      } else {
+        unassigned.push(s);
+      }
+    }
+
+    const groups: { label: string; color?: string; sessions: DesktopSessionSummary[]; kind: 'pinned' | 'project' | 'unassigned' | 'archived' }[] = [];
+    if (pinned.length) groups.push({ label: 'Pinned', sessions: pinned, kind: 'pinned' });
+    
+    for (const [pid, sessList] of byProject) {
+      const proj = projects.find((p) => p.project_id === pid);
+      groups.push({ label: proj?.name || pid, color: proj?.color || '#888', sessions: sessList, kind: 'project' });
+    }
+    
+    if (unassigned.length) groups.push({ label: 'Other', sessions: unassigned, kind: 'unassigned' });
+    
+    return groups;
+  }, [filteredSessions, projects]);
   const recentMessages = messages.slice(-3);
   const showSessionTools = activePanel === 'chat' || activePanel === 'browser';
   const contextItems = panelContextItems[activePanel] || [];
@@ -1912,21 +2015,70 @@ function ContextSidebar({
             <input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Filter conversations..." />
           </label>
           {sessionError && <div className="context-error">{sessionError}</div>}
-          <div className="session-list">
-            {filteredSessions.map((session) => (
-              <div
-                key={session.session_id}
-                className={`session-item ${session.session_id === activeSessionId ? 'active' : ''}`}
-              >
-                <button type="button" className="session-main" onClick={() => onSelectSession(session.session_id)}>
-                  <span>{sessionTitle(session)}</span>
-                  <small>{session.workspace || session.source_label || 'Sidekick'}</small>
+          {/* Project filter bar */}
+          {projects.length > 0 && (
+            <div className="session-project-filters">
+              <button
+                type="button"
+                className={`project-filter-chip ${!activeProjectFilter ? 'active' : ''}`}
+                onClick={() => onProjectFilter(null)}
+              >All</button>
+              {projects.map((proj) => (
+                <button
+                  key={proj.project_id}
+                  type="button"
+                  className={`project-filter-chip ${activeProjectFilter === proj.project_id ? 'active' : ''}`}
+                  style={proj.color ? { '--chip-color': proj.color } as React.CSSProperties : undefined}
+                  onClick={() => onProjectFilter(proj.project_id === activeProjectFilter ? null : proj.project_id)}
+                >
+                  {proj.name}
                 </button>
-                <div className="session-actions">
-                  <button type="button" title="Rename chat" onClick={() => onRenameSession(session)}><Edit3 size={13} /></button>
-                  <button type="button" title="Duplicate chat" onClick={() => onDuplicateSession(session)}><Copy size={13} /></button>
-                  <button type="button" title="Delete chat" onClick={() => onDeleteSession(session)}><Trash2 size={13} /></button>
+              ))}
+            </div>
+          )}
+          {/* Tag filter bar */}
+          {allTags.length > 0 && (
+            <div className="session-tag-filters">
+              {allTags.slice(0, 8).map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  className={`tag-filter-chip ${activeTagFilter === tag ? 'active' : ''}`}
+                  onClick={() => onTagFilter(tag === activeTagFilter ? null : tag)}
+                >{activeTagFilter === tag ? '✕ ' : '# '}{tag}</button>
+              ))}
+              {allTags.length > 8 && <span className="tag-filter-more">+{allTags.length - 8}</span>}
+            </div>
+          )}
+          <div className="session-list">
+            {groupedSessions.map((group) => (
+              <div key={group.label} className="session-group">
+                <div className="session-group-header">
+                  {group.kind === 'pinned' ? <span className="session-group-dot pinned-dot" /> :
+                   group.kind === 'project' ? <span className="session-group-dot" style={{ background: group.color }} /> : null}
+                  <span className="session-group-label">{group.label}</span>
+                  <span className="session-group-count">{group.sessions.length}</span>
                 </div>
+                {group.sessions.map((session) => (
+                  <div
+                    key={session.session_id}
+                    className={`session-item ${session.session_id === activeSessionId ? 'active' : ''}`}
+                  >
+                    <button type="button" className="session-main" onClick={() => onSelectSession(session.session_id)}>
+                      <span>{sessionTitle(session)}</span>
+                      <small>{session.workspace || session.source_label || 'Sidekick'}</small>
+                      {session.is_cli_session && <span className="session-cli-badge">CLI</span>}
+                    </button>
+                    <div className="session-actions">
+                      <button type="button" title={session.pinned ? 'Unpin' : 'Pin'} onClick={() => onPinSession(session)}>
+                        <Star size={13} fill={session.pinned ? 'currentColor' : 'none'} />
+                      </button>
+                      <button type="button" title="Rename" onClick={() => onRenameSession(session)}><Edit3 size={13} /></button>
+                      <button type="button" title="Duplicate" onClick={() => onDuplicateSession(session)}><Copy size={13} /></button>
+                      <button type="button" title="Delete" onClick={() => onDeleteSession(session)}><Trash2 size={13} /></button>
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
             {!filteredSessions.length && (
@@ -2160,6 +2312,8 @@ function BrowserMain({
         );
       case 'settings':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
+      case 'terminal':
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeChatMain activeSession={activeSession} activeSessionId={activeSessionId} busy={busy} chatError={chatError} messages={chatMessages} runState={chatRunState} composerMode={composerMode} composerText={composerText} serviceStatus={serviceStatus} sessionLoading={sessionLoading} setupModel={setupModel} activeSpacePath={activeSpacePath} onComposerMode={onComposerMode} onComposerText={onComposerText} onCreateSession={onCreateSession} onSend={onSendChat} onStop={onStopChat} /></PanelErrorBoundary>;
     }
@@ -2210,7 +2364,7 @@ function BrowserMain({
           ref={webviewRef}
           src={activeTab.url}
           className="browser-view"
-          style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, position: 'absolute', inset: 0 }}
+          style={{ width: '100%', minWidth: 0 } as React.CSSProperties}
           partition="persist:lastbrowser-main"
           allowpopups="false"
           onDidStartLoading={() => onClearBrowserError()}
@@ -2220,7 +2374,15 @@ function BrowserMain({
           }}
           onDidFailLoad={(event) => {
             if (!event.isMainFrame || event.errorCode === -3) return;
-            onSetBrowserError(`${event.errorCode}: ${event.errorDescription}`);
+            // Reset to start page on serious load failures to prevent grey screen
+            if (event.errorCode < -100) {
+              onSetBrowserError(`Connection failed (${event.errorDescription}). Returning to start page.`);
+              setTimeout(() => {
+                onNavigate(browserStartUrl);
+              }, 1500);
+            } else {
+              onSetBrowserError(`${event.errorCode}: ${event.errorDescription}`);
+            }
           }}
           onDidNavigate={(event) => onWebviewNavigate(activeTab.id, event.url)}
           onDidNavigateInPage={(event) => onWebviewNavigate(activeTab.id, event.url)}
@@ -2272,6 +2434,9 @@ function NativeChatMain({
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
   const ready = canCallSidekickApi(serviceStatus);
   const [showDeveloperTools, setShowDeveloperTools] = useState(false);
+  const [showControlCenter, setShowControlCenter] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const { queue, enqueue, dequeue, clearQueue, removeAt } = useChatQueue();
   const { visible: visibleMessages, developer: developerMessages } = useMemo(
     () => partitionChatMessages(messages),
     [messages]
@@ -2279,6 +2444,16 @@ function NativeChatMain({
   const model = activeSession?.model || setupModel || 'default';
   const profile = activeSession?.profile || 'default';
   const workspace = activeSession?.workspace || activeSpacePath || 'default';
+
+  // Wrap onSend to enqueue when busy instead of losing the message
+  const handleSend = useCallback((text: string) => {
+    if (running) {
+      enqueue({ text, model, profile });
+      setStatusMessage(`Queued: "${text.slice(0, 40)}${text.length > 40 ? '…' : ''}"`);
+      return;
+    }
+    onSend(text);
+  }, [running, enqueue, model, profile, onSend]);
 
   return (
     <section className="browser-main native-chat-main">
@@ -2291,6 +2466,21 @@ function NativeChatMain({
           </div>
         </div>
         <div className="native-chat-header-actions">
+          <CompressButton activeSessionId={activeSessionId} ready={ready} onResult={setStatusMessage} />
+          <QueueIndicator queue={queue} onDrain={() => {
+            if (running) { setStatusMessage('Wait for current turn to finish first.'); return; }
+            const msg = dequeue();
+            if (msg) handleSend(msg.text);
+          }} onClear={clearQueue} onRemoveAt={removeAt} busy={running} />
+          <button
+            type="button"
+            className="secondary-action compact"
+            onClick={() => setShowControlCenter(true)}
+            title="Control Center"
+          >
+            <Settings size={14} />
+            <span>Control</span>
+          </button>
           <button
             type="button"
             className={`secondary-action compact developer-toggle ${showDeveloperTools ? 'active' : ''}`}
@@ -2317,7 +2507,16 @@ function NativeChatMain({
         onCreateSession={onCreateSession}
         serviceStatus={serviceStatus}
       />
-      <ChatComposer
+      <ApprovalPollManager
+        activeSessionId={activeSessionId}
+        serviceStatus={serviceStatus}
+        busy={busy || running}
+      >
+        {({ pending, respond }) => (
+          <>
+            {pending && <ApprovalCard entry={pending} onRespond={respond} />}
+            <div className="composer-with-usage">
+            <ChatComposer
         busy={busy || running}
         mode={composerMode}
         model={model}
@@ -2327,9 +2526,21 @@ function NativeChatMain({
         text={composerText}
         workspace={workspace}
         onMode={onComposerMode}
-        onSend={onSend}
+        onSend={handleSend}
         onStop={onStop}
         onText={onComposerText}
+      />
+            {statusMessage && <div className="chat-status-message" onClick={() => setStatusMessage('')}>{statusMessage}</div>}
+            <ContextUsageIndicator activeSessionId={activeSessionId} ready={ready} />
+            </div>
+      </>
+      )}
+    </ApprovalPollManager>
+    <ControlCenter
+        open={showControlCenter}
+        serviceStatus={serviceStatus}
+        activeSessionId={activeSessionId}
+        onClose={() => setShowControlCenter(false)}
       />
     </section>
   );
@@ -2442,7 +2653,7 @@ function ChatMessageBody({ content }: { content: string }): JSX.Element {
     case 'empty':
       return <p>...</p>;
     case 'text':
-      return <p>{view.text}</p>;
+      return <RichTextRenderer content={view.text} />;
     case 'html':
       return (
         <div className="chat-structured chat-html-structured">
@@ -2560,9 +2771,83 @@ function ChatComposer({
   const canSend = ready && text.trim().length > 0 && !busy;
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
 
+  // ── Slash-commands ──────────────────────────────────────────
+  const [showSlashDropdown, setShowSlashDropdown] = useState(false);
+  const [slashFilter, setSlashFilter] = useState('');
+  const slashRef = useRef<HTMLDivElement>(null);
+
+  type SlashCmd = { name: string; help: string; action: string };
+  const SLASH_COMMANDS: SlashCmd[] = useMemo(() => [
+    { name: 'help', help: 'Show available commands', action: 'local' },
+    { name: 'clear', help: 'Clear current conversation', action: 'local' },
+    { name: 'new', help: 'Start a new conversation', action: 'local' },
+    { name: 'compress', help: 'Compress conversation context', action: 'api' },
+    { name: 'model', help: 'Switch model: /model <name>', action: 'api' },
+    { name: 'workspace', help: 'Switch workspace: /workspace <path>', action: 'api' },
+    { name: 'usage', help: 'Show token usage', action: 'api' },
+    { name: 'theme', help: 'Toggle theme: /theme <name>', action: 'local' },
+    { name: 'undo', help: 'Undo last exchange', action: 'local' },
+  ], []);
+
+  const filteredSlashCommands = useMemo(() =>
+    slashFilter ? SLASH_COMMANDS.filter((c) => c.name.startsWith(slashFilter)) : SLASH_COMMANDS,
+    [slashFilter, SLASH_COMMANDS]
+  );
+
+  // Close slash dropdown on outside click
+  useEffect(() => {
+    if (!showSlashDropdown) return;
+    function handleClick(e: MouseEvent) {
+      if (slashRef.current && !slashRef.current.contains(e.target as Node)) setShowSlashDropdown(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showSlashDropdown]);
+
+  function executeSlashCommand(name: string): void {
+    setShowSlashDropdown(false);
+    const cmd = SLASH_COMMANDS.find((c) => c.name === name);
+    if (!cmd) return;
+
+    if (name === 'help') {
+      const helpText = SLASH_COMMANDS.map((c) => `/${c.name} — ${c.help}`).join('\n');
+      alert(`Available commands:\n\n${helpText}`);
+      return;
+    }
+    if (name === 'clear') {
+      if (confirm('Clear the current conversation?')) onText('');
+      return;
+    }
+    if (name === 'new') {
+      window.location.reload();
+      return;
+    }
+    if (name === 'undo') {
+      onText('/undo');
+      onSend('/undo');
+      return;
+    }
+    // For API commands, send as message to agent
+    onText('/' + name);
+    onSend('/' + name);
+  }
+
+  function handleComposerChange(value: string): void {
+    onText(value);
+    // Show slash dropdown when typing / at start
+    if (value.startsWith('/') && value.length > 1 && !value.includes(' ')) {
+      setSlashFilter(value.slice(1).toLowerCase());
+      setShowSlashDropdown(true);
+    } else {
+      setShowSlashDropdown(false);
+    }
+  }
+
   function submit(event?: FormEvent): void {
     event?.preventDefault();
-    if (canSend) onSend(text);
+    if (!canSend) return;
+    setShowSlashDropdown(false);
+    onSend(text);
   }
 
   return (
@@ -2579,18 +2864,30 @@ function ChatComposer({
           </button>
         </div>
       </div>
-      <div className="composer-input-row">
+      <div className="composer-input-row" ref={slashRef}>
+        {showSlashDropdown && filteredSlashCommands.length > 0 && (
+          <div className="slash-dropdown">
+            {filteredSlashCommands.map((cmd) => (
+              <button key={cmd.name} type="button" className="slash-dropdown-item" onClick={() => executeSlashCommand(cmd.name)}>
+                <span className="slash-cmd-name">/{cmd.name}</span>
+                <span className="slash-cmd-help">{cmd.help}</span>
+                <span className="slash-cmd-badge">{cmd.action}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           value={text}
-          placeholder={ready ? 'Message Sidekick...' : 'Sidekick runtime is starting...'}
+          placeholder={ready ? "Message Sidekick... (type / for commands)" : "Sidekick runtime is starting..."}
           rows={3}
           disabled={!ready}
-          onChange={(event) => onText(event.target.value)}
+          onChange={(event) => handleComposerChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
               submit();
             }
+            if (event.key === 'Escape') setShowSlashDropdown(false);
           }}
         />
         {running ? (
@@ -3278,6 +3575,27 @@ function WorkspacePanel({
   onToggle: () => void;
   onResizeStart: (event: React.MouseEvent<HTMLDivElement>) => void;
 }): JSX.Element {
+  const [gitInfo, setGitInfo] = useState<{ branch?: string; dirty?: number; modified?: number; ahead?: number; behind?: number; is_git?: boolean } | null>(null);
+  const ready = serviceStatus?.sidekick === 'ready';
+  const visibleEntries = showHidden ? entries : entries.filter((entry) => !entry.name.startsWith('.'));
+  const previewEntry = preview?.path ? entryFromPreview(preview) : null;
+
+  // Fetch git info when session changes
+  useEffect(() => {
+    setGitInfo(null);
+    if (!activeSessionId || !ready) return;
+    let alive = true;
+    void window.lastbrowser.sidekick.requestWebui({
+      method: 'GET', path: '/api/git-info',
+      query: { session_id: activeSessionId }
+    }).then((result) => {
+      if (!alive) return;
+      const info = (result as { git?: Record<string, unknown> })?.git;
+      if (info && typeof info === 'object') setGitInfo(info as typeof gitInfo);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [activeSessionId, ready]);
+
   if (collapsed) {
     return (
       <aside className="workspace-panel collapsed">
@@ -3288,9 +3606,6 @@ function WorkspacePanel({
     );
   }
 
-  const visibleEntries = showHidden ? entries : entries.filter((entry) => !entry.name.startsWith('.'));
-  const previewEntry = preview?.path ? entryFromPreview(preview) : null;
-
   return (
     <aside className="workspace-panel">
       <div className="sidebar-resize-handle workspace-resize-handle" role="presentation" aria-hidden="true" onMouseDown={onResizeStart} />
@@ -3299,6 +3614,12 @@ function WorkspacePanel({
           <span>WORKSPACE</span>
           <strong>{activeSessionId ? shortSessionId(activeSessionId) : 'No session'}</strong>
         </div>
+        {gitInfo?.is_git && (
+          <div className="workspace-git-badge" title={`${gitInfo.modified || 0} modified, ${gitInfo.ahead || 0} ahead, ${gitInfo.behind || 0} behind`}>
+            <span className="workspace-git-branch">{gitInfo.branch}</span>
+            {(gitInfo.dirty ?? 0) > 0 && <span className="workspace-git-dirty">•{gitInfo.dirty}</span>}
+          </div>
+        )}
         <div className="workspace-actions">
           <button type="button" aria-label="Parent folder" onClick={onParent}><ChevronLeft size={16} /></button>
           <button type="button" aria-label="Refresh workspace" onClick={onRefresh}><RefreshCw size={15} /></button>
@@ -3744,10 +4065,60 @@ function FirstRunSetupPane({
   );
 }
 
+  function pinNativeSession(session: DesktopSessionSummary): void {
+    void window.lastbrowser.sidekick
+      .requestWebui({
+        method: 'POST',
+        path: '/api/session/pin',
+        body: { session_id: session.session_id, pinned: true }
+      })
+      .then(() => {
+        setSessions((current) =>
+          current.map((item) =>
+            item.session_id === session.session_id ? { ...item, pinned: true } : item
+          )
+        );
+      })
+      .catch(() => {});
+  }
+
+  function unpinNativeSession(session: DesktopSessionSummary): void {
+    void window.lastbrowser.sidekick
+      .requestWebui({
+        method: 'POST',
+        path: '/api/session/pin',
+        body: { session_id: session.session_id, pinned: false }
+      })
+      .then(() => {
+        setSessions((current) =>
+          current.map((item) =>
+            item.session_id === session.session_id ? { ...item, pinned: false } : item
+          )
+        );
+      })
+      .catch(() => {});
+  }
+
+  function archiveNativeSession(session: DesktopSessionSummary): void {
+    void window.lastbrowser.sidekick
+      .requestWebui({
+        method: 'POST',
+        path: '/api/session/archive',
+        body: { session_id: session.session_id, archived: true }
+      })
+      .then(() => {
+        setSessions((current) =>
+          current.map((item) =>
+            item.session_id === session.session_id ? { ...item, archived: true } : item
+          )
+        );
+      })
+      .catch(() => {});
+  }
+
 function sessionTitle(session: DesktopSessionSummary): string {
   return session.title?.trim() || shortSessionId(session.session_id);
 }
-
 function spaceDisplayName(space: SpaceSummary): string {
   const cleanName = space.name?.trim();
   if (cleanName) return cleanName;

@@ -107,7 +107,7 @@ const LOCALES = {
     html_open_full: 'Open full page',
     html_sandbox_label: 'HTML Preview (sandboxed)',
     thinking: 'Thinking',
-    reasoning_thought: 'Thought',
+    reasoning_thought: '⚡ Reasoning',
     expand_all: 'Expand all',
     collapse_all: 'Collapse all',
     edit_failed: 'Edit failed: ',

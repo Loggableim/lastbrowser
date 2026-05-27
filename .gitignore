@@ -24,3 +24,5 @@ __pycache__/
 services/sidekick/build/
 .DS_Store
 Thumbs.db
+*.png
+!**/*.svg

@@ -5060,6 +5060,40 @@ function _messageHasReasoningPayload(m){
   if(Array.isArray(m.content)) return m.content.some(p=>p&&(p.type==='thinking'||p.type==='reasoning'));
   return /<think>[\s\S]*?<\/think>|<\|channel>thought\n[\s\S]*?<channel\|>|<\|turn\|>thinking\n[\s\S]*?<turn\|>/.test(String(m.content||''));
 }
+
+/**
+ * Find a role="reasoning" message that immediately precedes the assistant
+ * message at rawIdx.  Returns the reasoning message object or null.
+ */
+function _findPrecedingReasoningMessage(messages, rawIdx){
+  if(!Array.isArray(messages)||rawIdx<=0) return null;
+  // Walk backwards from rawIdx-1 to find the nearest role="reasoning" message
+  for(let i=rawIdx-1;i>=0;i--){
+    const m=messages[i];
+    if(!m) continue;
+    if(m.role==='reasoning') return m;
+    // Stop if we hit another assistant or user message (don't cross turn boundary)
+    if(m.role==='assistant'||m.role==='user') return null;
+  }
+  return null;
+}
+
+/**
+ * Extract the text content from a role="reasoning" message.
+ * Handles both string content and array content with reasoning/thinking parts.
+ */
+function _extractReasoningContent(m){
+  if(!m) return '';
+  if(typeof m.content==='string') return m.content;
+  if(Array.isArray(m.content)){
+    return m.content
+      .filter(p=>p&&(p.type==='reasoning'||p.type==='thinking'||p.type==='text'))
+      .map(p=>p.text||p.reasoning||p.thinking||'')
+      .join('\n');
+  }
+  return '';
+}
+
 function _formatTurnTps(value){
   const n=Number(value);
   if(!Number.isFinite(n)||n<=0) return '';
@@ -5898,6 +5932,9 @@ function renderMessages(options){
     if(!m||!m.role||m.role==='tool')return false;
     if(_isContextCompactionMessage(m)) return false;
     if(_isPreservedCompressionTaskListMessage(m)) return false;
+    // role="reasoning" messages are rendered as the thinking card above the
+    // assistant turn — skip them so they don't appear as a separate bubble.
+    if(m.role==='reasoning') return false;
     if(m.role==='assistant'){
       const hasTc=Array.isArray(m.tool_calls)&&m.tool_calls.length>0;
       const hasTu=Array.isArray(m.content)&&m.content.some(p=>p&&p.type==='tool_use');
@@ -6042,11 +6079,11 @@ function renderMessages(options){
     }
     const statusHtml = (!isUser&&m._statusCard) ? _statusCardHtml(m._statusCard) : '';
     const isEditableUser=isUser&&rawIdx===lastUserRawIdx;
-    const editBtn  = isEditableUser ? `<button class="msg-action-btn msg-edit-btn" title="${t('edit_message')}" onclick="editMessage(this)">${li('pencil',13)}</button>` : '';
+    const editBtn  = isUser ? `<button class="msg-action-btn msg-edit-btn" title="${t('edit_message')}" onclick="editMessage(this)">${li('pencil',13)}</button>` : '';
     const undoBtn  = isLastAssistant ? `<button class="msg-action-btn" title="${t('undo_exchange')}" onclick="undoLastExchange()">${li('undo',13)}</button>` : '';
-    const retryBtn = isLastAssistant ? `<button class="msg-action-btn" title="${t('regenerate')}" onclick="regenerateResponse(this)">${li('rotate-ccw',13)}</button>` : '';
+    const retryBtn = !isUser ? `<button class="msg-action-btn msg-retry-btn" title="${t('regenerate')}" onclick="retryFrom(${rawIdx})">${li('rotate-ccw',13)}</button>` : '';
     const copyBtn  = `<button class="msg-copy-btn msg-action-btn" title="${t('copy')}" onclick="copyMsg(this)">${li('copy',13)}</button>`;
-    const forkBtn  = `<button class="msg-action-btn" title="${t('fork_from_here')}" onclick="forkFromMessage(${rawIdx+1})">${li('git-branch',13)}</button>`;
+    const branchBtn = isUser ? `<button class="msg-action-btn" title="${t('branch_from_here')}" onclick="branchFrom(${rawIdx})">${li('git-branch',13)}</button>` : '';
     const ttsBtn   = !isUser ? `<button class="msg-action-btn msg-tts-btn" title="${t('tts_listen')||'Listen'}" onclick="speakMessage(this)">${li('volume-2',13)}</button>` : '';
     const stopBtn  = (!isUser && isLastAssistant && S.session && S.session.active_stream_id && typeof cancelStream==='function')
       ? `<button class="msg-action-btn msg-stop-btn" title="${t('stop_response')||'Stop response'}" onclick="cancelStream()">${li('square',13)}</button>`
@@ -6062,7 +6099,7 @@ function renderMessages(options){
     const tsTitle=tsVal?(_fmtSv?_fmtSv(new Date(tsVal*1000),{}):new Date(tsVal*1000).toLocaleString()):'';
     const tsTime=_formatMessageFooterTimestamp(tsVal);
     const timeHtml = tsTime ? `<span class="msg-time" title="${esc(tsTitle)}">${tsTime}</span>` : '';
-    const footHtml = `<div class="msg-foot">${timeHtml}<span class="msg-actions">${editBtn}${ttsBtn}${forkBtn}${copyBtn}${stopBtn}${retryBtn}</span></div>`;
+    const footHtml = `<div class="msg-foot">${timeHtml}<span class="msg-actions">${editBtn}${ttsBtn}${branchBtn}${copyBtn}${stopBtn}${retryBtn}</span></div>`;
 
     if(_isContextCompactionMessage(m)){
       if(compressionState || referenceNode){
@@ -6095,6 +6132,40 @@ function renderMessages(options){
       currentAssistantTurn=_createAssistantTurn(tsTitle, isTpsDisplayEnabled()?_formatTurnTps(m._turnTps):'');
       inner.appendChild(currentAssistantTurn);
     }
+    // ── Thinking card: render between user message and assistant response ──
+    // Check both inline thinkingText (extracted from content) AND
+    // role="reasoning" messages that precede this assistant message.
+    if(thinkingText&&window._showThinking!==false){
+      assistantThinking.set(rawIdx, thinkingText);
+    }
+    // Also check for a preceding role="reasoning" message in S.messages
+    if(window._showThinking!==false){
+      const reasoningMsg=_findPrecedingReasoningMessage(S.messages, rawIdx);
+      if(reasoningMsg){
+        const reasoningContent=_extractReasoningContent(reasoningMsg);
+        if(reasoningContent&&!assistantThinking.has(rawIdx)){
+          assistantThinking.set(rawIdx, reasoningContent);
+        }
+      }
+    }
+    // Render the thinking card inside the assistant turn, before any segments
+    if(assistantThinking.has(rawIdx)&&window._showThinking!==false){
+      const blocks=_assistantTurnBlocks(currentAssistantTurn);
+      if(blocks){
+        const existingCard=blocks.querySelector('.thinking-card[data-raw-idx="'+rawIdx+'"]');
+        if(!existingCard){
+          const cardHtml=renderThinkingCard(assistantThinking.get(rawIdx), rawIdx);
+          if(cardHtml){
+            const tmp=document.createElement('div');
+            tmp.innerHTML=cardHtml;
+            const cardEl=tmp.firstElementChild;
+            // Insert as first child of blocks (above tool/assistant segments)
+            if(blocks.firstChild) blocks.insertBefore(cardEl, blocks.firstChild);
+            else blocks.appendChild(cardEl);
+          }
+        }
+      }
+    }
     const seg=document.createElement('div');
     seg.className='assistant-segment';
     seg.dataset.msgIdx=rawIdx;
@@ -6109,9 +6180,6 @@ function renderMessages(options){
       seg.setAttribute('data-live-assistant','1');
     }
     if(_ERR_MSG_RE.test(String(content||'').trim())) seg.dataset.error='1';
-    if(thinkingText&&window._showThinking!==false){
-      assistantThinking.set(rawIdx, thinkingText);
-    }
     // ── Plan card rendering (Plan-Then-Code two-phase mode) ──
     if(m._isPlan){
       seg.classList.add('plan-code-segment');
@@ -7930,6 +7998,74 @@ function _thinkingMarkup(text=''){
     : `<div class="thinking-indicator"><div class="thinking-indicator-dots"><div class="thinking-dot"></div><div class="thinking-dot"></div><div class="thinking-dot"></div></div><span class="thinking-indicator-label">🤔 Still thinking...</span><div class="thinking-indicator-tools"></div></div>`;
 }
 
+// ── Thinking card helper: position a reasoning row inside an assistant turn ──
+// Used by renderMessages to place the reasoning card between the last user
+// message and the assistant response (not inline inside the assistant body).
+function _insertThinkingCard(turn, thinkingText, rawIdx){
+  if(!turn||!thinkingText) return;
+  const blocks=_assistantTurnBlocks(turn);
+  if(!blocks) return;
+  const clean=_sanitizeThinkingDisplayText(thinkingText);
+  if(!String(clean||'').trim()) return;
+  // Collapse long reasoning blocks (>200 chars) by default
+  const isLong=String(clean).trim().length>200;
+  const openClass=isLong?'':' open';
+  // If a reasoning card already exists for this rawIdx, update it in-place
+  // so that live streaming does not accumulate duplicate cards on reload.
+  let card=blocks.querySelector('.thinking-card[data-raw-idx="'+rawIdx+'"]');
+  if(!card){
+    card=document.createElement('div');
+    card.className='thinking-card'+(isLong?' thinking-card-collapsed':'');
+    card.setAttribute('data-thinking-role','1');
+    card.dataset.rawIdx=String(rawIdx);
+    // Insert as the first child of the turn blocks so it sits above tool
+    // cards and assistant segments, but below any preceding user row.
+    if(blocks.firstChild) blocks.insertBefore(card, blocks.firstChild);
+    else blocks.appendChild(card);
+  }
+  card.innerHTML=`<div class="thinking-card-header" onclick="toggleThinkingCard(this)"><span class="thinking-card-icon">\u26A1</span><span class="thinking-card-label">${t('reasoning_thought')}</span><span class="thinking-card-toggle">${li('chevron-right',12)}</span></div><div class="thinking-card-body"><pre>${esc(String(clean).trim())}</pre></div>`;
+}
+
+/**
+ * Render a standalone thinking/reasoning card between a user message and
+ * the assistant response.  This is the public entry point used by
+ * renderMessages() during history rendering and by the SSE done handler.
+ *
+ * @param {string} thinkingText - The accumulated reasoning text.
+ * @param {number}  rawIdx      - The raw message index of the assistant turn.
+ * @param {boolean} [expanded]  - Force expanded (true) / collapsed (false).
+ *                                Default: auto (short = expanded, long = collapsed).
+ * @returns {string} HTML string for the thinking card.
+ */
+function renderThinkingCard(thinkingText, rawIdx, expanded){
+  if(!thinkingText) return '';
+  const clean=_sanitizeThinkingDisplayText(thinkingText);
+  if(!String(clean||'').trim()) return '';
+  const isLong=String(clean).trim().length>200;
+  // Determine initial state: explicit param > auto-detect
+  const isOpen=expanded!==undefined?!!expanded:!isLong;
+  const collapsedClass=isOpen?'':' thinking-card-collapsed';
+  return `<div class="thinking-card${collapsedClass}" data-thinking-role="1" data-raw-idx="${rawIdx||''}"><div class="thinking-card-header" onclick="toggleThinkingCard(this)"><span class="thinking-card-icon">\u26A1</span><span class="thinking-card-label">${t('reasoning_thought')}</span><span class="thinking-card-toggle">${li('chevron-right',12)}</span></div><div class="thinking-card-body"><pre>${esc(String(clean).trim())}</pre></div></div>`;
+}
+window.renderThinkingCard=renderThinkingCard;
+
+/**
+ * Toggle a thinking-card open/closed when the user clicks the header.
+ * @param {HTMLElement} headerEl - The .thinking-card-header that was clicked.
+ */
+function toggleThinkingCard(headerEl){
+  if(!headerEl) return;
+  const card=headerEl.closest('.thinking-card');
+  if(!card) return;
+  const isCollapsed=card.classList.contains('thinking-card-collapsed');
+  if(isCollapsed){
+    card.classList.remove('thinking-card-collapsed');
+  } else {
+    card.classList.add('thinking-card-collapsed');
+  }
+}
+window.toggleThinkingCard=toggleThinkingCard;
+
 // ── Thinking-indicator delayed labels ──
 // Two timers: one for the "Still thinking..." label at 10s, one for
 // the live tool-call summary at 30s. Cleared when content arrives or
@@ -9248,3 +9384,201 @@ if(document.readyState==='loading'){
 
 window.setComposerMode=setComposerMode;
 window.syncComposerModeButtons=syncComposerModeButtons;
+
+// ── Theme Support ─────────────────────────────────────────────────────────────
+
+const THEME_STORAGE_KEY='hermes-webui-theme';
+const THEMES=['dark','light','slate','monokai','nord','oled'];
+
+function setTheme(theme){
+  const t=String(theme||'').toLowerCase();
+  if(t!=='light'&&t!=='dark'){
+    if(THEMES.includes(t)) document.documentElement.setAttribute('data-theme',t);
+    else document.documentElement.removeAttribute('data-theme');
+    try{localStorage.setItem(THEME_STORAGE_KEY,t);}catch(_){}
+    return;
+  }
+  document.documentElement.removeAttribute('data-theme');
+  document.documentElement.classList.toggle('dark',t==='dark');
+  try{localStorage.setItem(THEME_STORAGE_KEY,t);}catch(_){}
+}
+window.setTheme=setTheme;
+
+function getStoredTheme(){
+  try{return localStorage.getItem(THEME_STORAGE_KEY)||'';}catch(_){return '';}
+}
+window.getStoredTheme=getStoredTheme;
+
+function initThemeFromStorage(){
+  const stored=getStoredTheme();
+  if(stored) setTheme(stored);
+}
+// Run on load
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',initThemeFromStorage,{once:true});
+else initThemeFromStorage();
+
+// ── Helper: fetchJson wrapper (api) ───────────────────────────────────────────
+
+async function api(path,opts={}){
+  return fetchJson(path,opts);
+}
+window.api=api;
+
+// ── Message Action: Edit (replace user message with textarea) ─────────────────
+
+function editMessage(btnOrIdx){
+  let rawIdx;
+  if(typeof btnOrIdx==='number'){
+    rawIdx=btnOrIdx;
+  } else if(btnOrIdx instanceof HTMLElement){
+    const row=btnOrIdx.closest('.msg-row');
+    if(!row) return;
+    rawIdx=parseInt(row.dataset.msgIdx,10);
+    if(isNaN(rawIdx)) return;
+  } else return;
+  const msg=(S.messages||[])[rawIdx];
+  if(!msg||msg.role!=='user') return;
+  const row=document.querySelector('.msg-row[data-msg-idx="'+rawIdx+'"]');
+  if(!row) return;
+  const body=row.querySelector('.msg-body');
+  if(!body) return;
+  body.dataset.originalHtml=body.innerHTML;
+  const currentText=String(msg.content||'').trim();
+  body.innerHTML=renderEditArea(rawIdx,currentText);
+  const ta=body.querySelector('.edit-textarea');
+  if(ta){ta.focus();autoResize(ta);}
+}
+window.editMessage=editMessage;
+
+function renderEditArea(messageIdx,currentText){
+  const safeIdx=parseInt(messageIdx,10);
+  const safeText=esc(currentText);
+  return `<div class="edit-area">`
+    +`<textarea class="edit-textarea" rows="3">${safeText}</textarea>`
+    +`<div class="edit-actions">`
+      +`<button class="edit-save-btn" onclick="saveEdit(${safeIdx})">${t('save')||'Save'}</button>`
+      +`<button class="edit-cancel-btn" onclick="cancelEdit(${safeIdx})">${t('cancel')||'Cancel'}</button>`
+    +`</div>`
+  +`</div>`;
+}
+window.renderEditArea=renderEditArea;
+
+function saveEdit(rawIdx){
+  const msg=(S.messages||[])[rawIdx];
+  if(!msg||msg.role!=='user') return;
+  const row=document.querySelector('.msg-row[data-msg-idx="'+rawIdx+'"]');
+  if(!row) return;
+  const ta=row.querySelector('.edit-textarea');
+  if(!ta) return;
+  const newText=ta.value.trim();
+  if(!newText) return;
+  row.querySelector('.msg-body').innerHTML=row.querySelector('.msg-body').dataset.originalHtml||'';
+  msg.content=newText;
+  retryFrom(rawIdx);
+}
+window.saveEdit=saveEdit;
+
+function cancelEdit(rawIdx){
+  const row=document.querySelector('.msg-row[data-msg-idx="'+rawIdx+'"]');
+  if(!row) return;
+  const body=row.querySelector('.msg-body');
+  if(!body) return;
+  if(body.dataset.originalHtml) body.innerHTML=body.dataset.originalHtml;
+  else renderMessages();
+}
+window.cancelEdit=cancelEdit;
+
+// ── Message Action: Retry (regenerate assistant from user message at idx) ─────
+
+async function retryFrom(messageIdx){
+  if(!S.session||!S.session.session_id) return;
+  const sid=S.session.session_id;
+  messageIdx=parseInt(messageIdx,10);
+  if(isNaN(messageIdx)) return;
+  setBusy(true);
+  _queueDrainSid=sid;
+  try{
+    const result=await api('/api/session/retry',{
+      method:'POST',
+      body:JSON.stringify({session_id:sid,message_index:messageIdx}),
+    });
+    if(result&&result.session_id){
+      if(typeof loadSession==='function'&&sid!==result.session_id) await loadSession(result.session_id);
+      else renderMessages();
+    }
+  }catch(e){
+    setBusy(false);
+    if(typeof showToast==='function') showToast(`Retry failed: ${e.message}`,3000);
+  }
+}
+window.retryFrom=retryFrom;
+
+function regenerateResponse(btn){
+  if(!S.session||!S.session.session_id||S.busy) return;
+  let rawIdx;
+  if(btn instanceof HTMLElement){
+    const seg=btn.closest('.assistant-segment')||btn.closest('[data-msg-idx]');
+    if(seg) rawIdx=parseInt(seg.dataset.msgIdx,10);
+  }
+  if(isNaN(rawIdx)){
+    for(let i=S.messages.length-1;i>=0;i--){
+      if(S.messages[i]&&S.messages[i].role==='assistant'){rawIdx=i;break;}
+    }
+  }
+  if(isNaN(rawIdx)) return;
+  const precedingUserIdx=_findPrecedingUserIdx(rawIdx);
+  retryFrom(isNaN(precedingUserIdx)?rawIdx:precedingUserIdx);
+}
+window.regenerateResponse=regenerateResponse;
+
+function _findPrecedingUserIdx(assistantRawIdx){
+  for(let i=assistantRawIdx-1;i>=0;i--){
+    const m=(S.messages||[])[i];
+    if(m&&m.role==='user') return i;
+  }
+  return NaN;
+}
+
+// ── Message Action: Undo last exchange ────────────────────────────────────────
+
+function undoLastExchange(){
+  if(!S.session||!S.session.session_id) return;
+  const msgs=S.messages;
+  let lastAssistantIdx=-1;
+  for(let i=msgs.length-1;i>=0;i--){
+    if(msgs[i]&&msgs[i].role==='assistant'){lastAssistantIdx=i;break;}
+  }
+  if(lastAssistantIdx<0) return;
+  let lastUserIdx=-1;
+  for(let i=lastAssistantIdx;i>=0;i--){
+    if(msgs[i]&&msgs[i].role==='user'){lastUserIdx=i;break;}
+  }
+  if(lastUserIdx<0) return;
+  S.messages=msgs.slice(0,lastUserIdx);
+  renderMessages();
+}
+window.undoLastExchange=undoLastExchange;
+
+// ── Message Action: Branch (fork session from message at idx) ─────────────────
+
+async function branchFrom(messageIdx){
+  if(!S.session||!S.session.session_id) return;
+  const sid=S.session.session_id;
+  messageIdx=parseInt(messageIdx,10);
+  if(isNaN(messageIdx)) return;
+  try{
+    const result=await api('/api/session/branch',{
+      method:'POST',
+      body:JSON.stringify({session_id:sid,message_index:messageIdx}),
+    });
+    if(result&&result.session_id){
+      if(typeof loadSession==='function') await loadSession(result.session_id);
+      else window.location.href='?session_id='+encodeURIComponent(result.session_id);
+      if(typeof showToast==='function') showToast(t('branch_forked')||'Branched',2000);
+    }
+  }catch(e){
+    if(typeof showToast==='function') showToast(`Branch failed: ${e.message}`,3000);
+  }
+}
+window.branchFrom=branchFrom;
+

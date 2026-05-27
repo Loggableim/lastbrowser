@@ -14,7 +14,8 @@ export type LastbrowserPanelId =
   | 'browser'
   | 'discord'
   | 'appstore'
-  | 'settings';
+  | 'settings'
+  | 'terminal';
 
 export type LastbrowserPanel = {
   id: LastbrowserPanelId;
@@ -31,6 +32,21 @@ export type DesktopSessionSummary = {
   message_count?: number;
   source_label?: string;
   profile?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  project_id?: string | null;
+  tags?: string[];
+  is_cli_session?: boolean;
+  session_source?: string;
+  raw_source?: string;
+  source_tag?: string;
+};
+
+export type ProjectSummary = {
+  project_id: string;
+  name: string;
+  color?: string;
+  session_count?: number;
 };
 
 export type DesktopChatMessage = {
@@ -108,6 +124,7 @@ export const lastbrowserPanels: LastbrowserPanel[] = [
   { id: 'discord', label: 'Discord', tooltip: 'Discord' },
   { id: 'appstore', label: 'Appstore', tooltip: 'Appstore' },
   { id: 'settings', label: 'Settings', tooltip: 'Settings' },
+  { id: 'terminal', label: 'Terminal', tooltip: 'Terminal' },
 ];
 
 const panelIds = new Set(lastbrowserPanels.map((panel) => panel.id));

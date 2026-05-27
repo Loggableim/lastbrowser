@@ -5988,17 +5988,23 @@ body.browser-maximized .browser-drawer .browser-stage {
   margin-top: 10px;
 }
 body.browser-drawer-open .browser-drawer {
-  max-height: min(48vh, 560px);
+  max-height: none;
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
   transform: translateY(0);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+body.browser-drawer-open .messages {
+  flex: 0 0 auto;
+  max-height: 50%;
 }
 .browser-drawer-shell {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
-  height: min(48vh, 560px);
   border: 1px solid var(--border2);
   border-radius: 12px;
   background: var(--surface);

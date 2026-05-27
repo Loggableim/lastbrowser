@@ -1448,6 +1448,10 @@ const _THEMES=[
   {name:'Light', value:'light', colors:['#FEFCF7','#FAF7F0','#B8860B']},
   {name:'Dark', value:'dark', colors:['#0D0D1A','#141425','#FFD700']},
   {name:'System', value:'system', colors:['#FEFCF7','#0D0D1A','#B8860B']},
+  {name:'Slate', value:'slate', colors:['#1e293b','#334155','#64748b']},
+  {name:'Monokai', value:'monokai', colors:['#272822','#49483e','#a6e22e']},
+  {name:'Nord', value:'nord', colors:['#2e3440','#3b4252','#88c0d0']},
+  {name:'OLED', value:'oled', colors:['#000000','#1a1a1a','#FFD700']},
 ];
 const _SKINS=[
   {name:'Default',  colors:['#FFD700','#FFBF00','#CD7F32']},
@@ -1463,11 +1467,11 @@ const _SKINS=[
 const _VALID_THEMES=new Set((_THEMES||[]).map(t=>t.value));
 const _VALID_SKINS=new Set((_SKINS||[]).map(s=>s.name.toLowerCase()));
 const _LEGACY_THEME_MAP={
-  slate:{theme:'dark',skin:'slate'},
+  slate:{theme:'slate',skin:'default'},
   solarized:{theme:'dark',skin:'poseidon'},
-  monokai:{theme:'dark',skin:'sisyphus'},
-  nord:{theme:'dark',skin:'slate'},
-  oled:{theme:'dark',skin:'default'},
+  monokai:{theme:'monokai',skin:'default'},
+  nord:{theme:'nord',skin:'default'},
+  oled:{theme:'oled',skin:'default'},
 };
 let _systemThemeMq=null;
 let _onSystemThemeChange=null;
@@ -1564,10 +1568,14 @@ function _applyTheme(name){
     _systemThemeMq=window.matchMedia('(prefers-color-scheme:dark)');
     _onSystemThemeChange=()=>_setResolvedTheme(_systemThemeMq.matches);
     _setResolvedTheme(_systemThemeMq.matches);
-    _systemThemeMq.addEventListener('change',_onSystemThemeChange);
     return;
   }
+  // Set data-theme for slate/monokai/nord/oled; clear for light/dark (handled by .dark class)
+  if(normalized.theme==='slate'||normalized.theme==='monokai'||normalized.theme==='nord'||normalized.theme==='oled'){
+    document.documentElement.dataset.theme=normalized.theme;
+  }
   _setResolvedTheme(normalized.theme==='dark');
+}
 }
 
 function _applySkin(name){

@@ -207,15 +207,25 @@ export class SidecarServices {
       };
       this.webuiProcess = null;
     });
-    this.webuiProcess.once('exit', () => {
+    this.webuiProcess.once('exit', (code, signal) => {
       this.stopHealthLoop();
+      this.webuiProcess = null;
+      const wasRunning = this.status.sidekick === 'ready';
       this.status = {
         ...this.status,
         sidekick: 'stopped',
         webuiHealth: 'unreachable',
-        lastError: 'Sidekick service stopped.'
+        lastError: `Sidekick service stopped (code=${code}, signal=${signal}).`
       };
-      this.webuiProcess = null;
+      // Auto-restart if the process crashed (not a clean stop)
+      if (wasRunning && code !== 0 && code !== null) {
+        console.warn(`[lastbrowser] WebUI process crashed (code=${code}), restarting in 2s...`);
+        setTimeout(() => {
+          if (!this.webuiProcess) {
+            void this.start();
+          }
+        }, 2000);
+      }
     });
     return this.getStatus();
   }

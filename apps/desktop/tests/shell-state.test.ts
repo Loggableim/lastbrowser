@@ -42,7 +42,8 @@ describe('Lastbrowser shell state', () => {
       'browser',
       'discord',
       'appstore',
-      'settings'
+      'settings',
+      'terminal'
     ]);
     expect(lastbrowserPanels.find((panel) => panel.id === 'browser')?.label).toBe('AI Search');
     expect(lastbrowserPanels.find((panel) => panel.id === 'browser')?.tooltip).toBe('AI Search');

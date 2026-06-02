@@ -44,13 +44,15 @@ describe('browser shell layout', () => {
     expect(browserPane).toContain('display: flex');
     expect(browserPane).toContain('height: 100%');
     expect(browserPane).toContain('overflow: hidden');
-    expect(browserPageMain).toContain('display: grid');
-    expect(browserPageMain).toContain('grid-template-rows: auto minmax(0, 1fr)');
+    expect(browserPageMain).toContain('display: block');
+    expect(browserPageMain).toContain('position: relative');
     expect(browserPageMain).toContain('min-height: 0');
     expect(browserPageMain).toContain('height: 100%');
-    expect(browserPageMain).toContain('padding: 12px');
-    expect(browserWebviewFrame).toContain('position: relative');
+    expect(browserPageMain).toContain('padding: 0');
+    expect(browserWebviewFrame).toContain('position: absolute');
+    expect(browserWebviewFrame).toContain('inset: 0');
     expect(browserWebviewFrame).toContain('display: block');
+    expect(browserWebviewFrame).toContain('height: 100%');
     expect(browserWebviewFrame).toContain('min-height: 0');
     expect(browserWebviewFrame).toContain('overflow: hidden');
     expect(aiBrowserMain).toContain('overflow: auto');
@@ -128,6 +130,30 @@ describe('browser shell layout', () => {
     expect(source).toContain('onWebviewNavigate(activeTab.id, event.url)');
     expect(source).toContain('onWebviewTitle(activeTab.id, event.title)');
     expect(source).toContain('hideWebviewScrollbars(event.currentTarget)');
+    expect(source).not.toContain('annotateWebviewViewport');
+  });
+
+  it('renders visited websites in an absolute full-bleed browser viewport', () => {
+    const source = readRendererFile('App.tsx');
+    const css = readRendererFile('styles.css');
+
+    expect(source).toContain('const browserWebviewStyle = {');
+    expect(source).toContain("height: '100%'");
+    expect(source).toContain('style={browserWebviewStyle}');
+    expect(source).not.toContain('useBrowserViewportHeight(');
+
+    const pageMain = cssBlock(css, '.browser-main.browser-page-main');
+    const frame = cssBlock(css, '.browser-main.browser-page-main > .browser-webview-frame');
+    const actionStrip = cssBlock(css, '.browser-main.browser-page-main > .browser-action-strip');
+
+    expect(pageMain).toContain('display: block');
+    expect(pageMain).toContain('height: 100%');
+    expect(pageMain).toContain('overflow: hidden');
+    expect(frame).toContain('position: absolute');
+    expect(frame).toContain('inset: 0');
+    expect(frame).toContain('height: 100%');
+    expect(actionStrip).toContain('position: absolute');
+    expect(actionStrip).toContain('z-index: 6');
   });
 
   it('renders rail, context sidebar, central browser, and workspace panel together', () => {

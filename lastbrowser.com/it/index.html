@@ -87,8 +87,8 @@ nav .inner { display:flex; align-items:center; justify-content:space-between; ga
 .badge.blue { color:#dbe7ff; border-color: rgba(37,99,255,.42); }
 .badge.cyan { color:#d7feff; border-color: rgba(0,229,255,.28); }
 .badge.yellow { color:#ffe7a4; border-color: rgba(255,200,0,.35); }
-.hero { padding:44px 0 22px; position:relative; }
-.h-inner { display:grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap:42px; align-items:start; }
+.hero { padding:52px 0 32px; position:relative; }
+.h-inner { display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap:48px; align-items:center; }
 .hero-text { position:relative; z-index:2; }
 .hero-visual { position:relative; z-index:1; }
 .visual-card { isolation:isolate; }
@@ -97,7 +97,7 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
 .lead { margin:0; max-width: 60ch; color:var(--muted); font-size:18px; line-height:1.68; }
 .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:24px; }
 .hero-note { margin-top:14px; color:#92a3c3; font-size:13px; line-height:1.5; }
-.hero-visual { display:grid; gap:14px; position:relative; z-index:1; justify-self:end; width:100%; max-width:520px; }
+.hero-visual { display:grid; gap:14px; position:relative; z-index:1; width:100%; }
 .visual-card, .card { background: linear-gradient(180deg, rgba(16,24,39,.94), rgba(11,18,32,.91)); border:1px solid rgba(42,53,80,.64); border-radius:18px; box-shadow:0 16px 36px rgba(0,0,0,.18); }
 .visual-card { overflow:hidden; position:relative; isolation:isolate; }
 .visual-card::before { content:""; position:absolute; inset:0; border-radius:18px; padding:1px; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 24%, rgba(37,99,255,.10)); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events:none; }
@@ -111,12 +111,12 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
 .dots { display:flex; gap:7px; }
 .dot { width:10px; height:10px; border-radius:50%; background:#31415f; }
 .urlbar { flex:1; padding:11px 14px; border-radius:11px; border:1px solid rgba(42,53,80,.72); background: rgba(5,9,17,.72); color:#b7c4d9; font-size:13px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-.browser-body { display:grid; grid-template-columns: 72px 1fr; gap:12px; min-height: 248px; }
-.sidebar { background: rgba(8,13,24,.9); border:1px solid rgba(42,53,80,.68); border-radius:16px; padding:10px 8px; display:flex; flex-direction:column; gap:8px; }
+.browser-body { display:grid; grid-template-columns: 68px 1fr; gap:12px; min-height: 320px; }
+.sidebar { background: rgba(8,13,24,.9); border:1px solid rgba(42,53,80,.68); border-radius:14px; padding:8px 6px; display:flex; flex-direction:column; gap:6px; }
 .side-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:12px; color:var(--muted); font-size:13px; }
 .side-item img { width:22px; height:22px; }
 .side-item.active { background: rgba(16,24,39,.98); color:var(--yellow); box-shadow: 0 0 0 1px rgba(255,200,0,.08) inset; }
-.content { background: linear-gradient(180deg, rgba(10,16,29,.92), rgba(8,13,24,.96)); border:1px solid rgba(42,53,80,.68); border-radius:16px; padding:18px; display:grid; gap:12px; }
+.content { background: linear-gradient(180deg, rgba(10,16,29,.92), rgba(8,13,24,.96)); border:1px solid rgba(42,53,80,.68); border-radius:14px; padding:20px; display:grid; gap:14px; }
 .content h3 { margin:0; font-family: Outfit, Inter, sans-serif; font-size:21px; letter-spacing:-.02em; }
 .content p { margin:0; color:var(--muted); line-height:1.62; font-size:14px; }
 .content-kicker { color: var(--yellow); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.12em; }
@@ -178,7 +178,7 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
 <nav>
   <div class="container inner">
     <a href="#hero" class="logo">
-      <img src="assets/app-icons/nav-icon.ico" alt="Lastbrowser">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser">
       <div>
         <strong>Lastbrowser</strong>
         <span>Open Beta · Browser per Windows · Release 0.1.3</span>
@@ -186,6 +186,7 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
     </a>
     <div class="links">
       <a href="#features">Funzionalità</a>
+      <a href="/it/sidekick/">Sidekick</a>
       <a href="#docs">Download &amp; aggiornamenti</a>
       <a href="#download">Download</a>
       <div class="lang-switcher">
@@ -225,19 +226,14 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
           </div>
           <div class="browser-body">
             <div class="sidebar">
-                <div class="side-item side-item-active"><img src="assets/sidebar-icons/png-32/01-chat-modern-popart.png" alt="Chat">Chat</div>
-                <div class="side-item"><img src="assets/sidebar-icons/png-32/04-skills-modern-popart.png" alt="Competenze">Competenze</div>
-                <div class="side-item"><img src="assets/sidebar-icons/png-32/02-tasks-modern-popart.png" alt="Attività">Attività</div>
-                <div class="side-item"><img src="assets/sidebar-icons/png-32/06-memory-modern-popart.png" alt="Memoria">Memoria</div>
-                <div class="side-item"><img src="assets/sidebar-icons/png-32/07-spaces-modern-popart.png" alt="Spazi">Spazi</div>
-                <div class="side-item"><img src="assets/sidebar-icons/png-32/13-browser-modern-popart.png" alt="Browser">Browser</div>
+                <div class="side-item side-item-active"><img src="/assets/sidebar-icons/png-32/01-chat-modern-popart.png" alt="Chat">Chat</div>
+                <div class="side-item"><img src="/assets/sidebar-icons/png-32/04-skills-modern-popart.png" alt="Competenze">Competenze</div>
+                <div class="side-item"><img src="/assets/sidebar-icons/png-32/02-tasks-modern-popart.png" alt="Attività">Attività</div>
+                <div class="side-item"><img src="/assets/sidebar-icons/png-32/06-memory-modern-popart.png" alt="Memoria">Memoria</div>
+                <div class="side-item"><img src="/assets/sidebar-icons/png-32/07-spaces-modern-popart.png" alt="Spazi">Spazi</div>
+                <div class="side-item"><img src="/assets/sidebar-icons/png-32/13-browser-modern-popart.png" alt="Browser">Browser</div>
             </div>
-                <div class="side-item"><img src="assets/sidebar-icons/png-32/04-skills-modern-popart.png" alt="Competenze">Competenze</div>
-                <div class="side-item"><img src="assets/sidebar-icons/png-32/22-kanban-modern-popart.png" alt="Kanban">Kanban</div>
-                <div class="side-item"><img src="assets/sidebar-icons/png-32/23-agents-modern-popart.png" alt="Agenti">Agenti</div>
-                <div class="side-item"><img src="assets/sidebar-icons/png-32/06-memory-modern-popart.png" alt="Memoria">Memoria</div>
-                <div class="side-item"><img src="assets/sidebar-icons/png-32/07-spaces-modern-popart.png" alt="Spazi">Spazi</div>
-            </div>
+
             <div class="content">
               <div class="content-kicker">Sidekick nella sidebar</div>
               <h3>Riassumi. Chiedi. Agisci.</h3>
@@ -257,32 +253,32 @@ h1 { margin:0 0 16px; font-family: Outfit, Inter, sans-serif; letter-spacing:-.0
     <p class="intro">Lastbrowser porta gli strumenti di lavoro più importanti direttamente nella sidebar — senza deviazioni, senza finestre aggiuntive.</p>
     <div class="feature-grid">
       <article class="card feature-card">
-        <div class="icon"><img src="assets/sidebar-icons/png-32/01-chat-modern-popart.png" alt="Chat senza cambiare scheda"></div>
+        <div class="icon"><img src="/assets/sidebar-icons/png-32/01-chat-modern-popart.png" alt="Chat senza cambiare scheda"></div>
         <h3>Chat senza cambiare scheda</h3>
         <p>Fai domande, comprendi i contenuti, scrivi testi e verifica decisioni — direttamente accanto alla pagina.</p>
       </article>
       <article class="card feature-card">
-        <div class="icon"><img src="assets/sidebar-icons/png-32/02-tasks-modern-popart.png" alt="Tasks sotto controllo"></div>
+        <div class="icon"><img src="/assets/sidebar-icons/png-32/02-tasks-modern-popart.png" alt="Tasks sotto controllo"></div>
         <h3>Tasks sotto controllo</h3>
         <p>Crea attività dal contesto, assegnale una priorità e lasciale aperte finché non sono completate.</p>
       </article>
       <article class="card feature-card">
-        <div class="icon"><img src="assets/sidebar-icons/png-32/04-skills-modern-popart.png" alt="Avvia subito gli Skills"></div>
+        <div class="icon"><img src="/assets/sidebar-icons/png-32/04-skills-modern-popart.png" alt="Avvia subito gli Skills"></div>
         <h3>Avvia subito gli Skills</h3>
         <p>I flussi di lavoro integrati per ricerca, scrittura, analisi e altro sono pronti all'uso.</p>
       </article>
       <article class="card feature-card">
-        <div class="icon"><img src="assets/sidebar-icons/png-32/07-spaces-modern-popart.png" alt="Spaces per i progetti"></div>
+        <div class="icon"><img src="/assets/sidebar-icons/png-32/07-spaces-modern-popart.png" alt="Spaces per i progetti"></div>
         <h3>Spaces per i progetti</h3>
         <p>Ogni progetto ottiene il proprio spazio con un contesto chiaramente separato.</p>
       </article>
       <article class="card feature-card">
-        <div class="icon"><img src="assets/sidebar-icons/png-32/06-memory-modern-popart.png" alt="Conserva il contesto"></div>
+        <div class="icon"><img src="/assets/sidebar-icons/png-32/06-memory-modern-popart.png" alt="Conserva il contesto"></div>
         <h3>Conserva il contesto</h3>
         <p>Le informazioni importanti restano nello Space e sono di nuovo disponibili al passaggio successivo.</p>
       </article>
       <article class="card feature-card">
-        <div class="icon"><img src="assets/sidebar-icons/png-32/13-browser-modern-popart.png" alt="Browser per Windows"></div>
+        <div class="icon"><img src="/assets/sidebar-icons/png-32/13-browser-modern-popart.png" alt="Browser per Windows"></div>
         <h3>Browser per Windows</h3>
         <p>Disponibile come Setup o Portable, pronto all'uso in pochi istanti e pensato per la vita di tutti i giorni.</p>
       </article>

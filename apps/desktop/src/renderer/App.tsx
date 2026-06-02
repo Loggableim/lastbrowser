@@ -2231,6 +2231,13 @@ function BrowserMain({
   onClearBrowserError: () => void;
   onSetBrowserError: (error: string) => void;
 }): JSX.Element {
+  const browserWebviewStyle = {
+    width: '100%',
+    height: '100%',
+    minWidth: 0,
+    minHeight: 0
+  } as React.CSSProperties;
+
   if (activePanel === 'chat') {
     return (
       <PanelErrorBoundary panel={activePanel} key={activePanel}>
@@ -2364,13 +2371,12 @@ function BrowserMain({
           ref={webviewRef}
           src={activeTab.url}
           className="browser-view"
-          style={{ width: '100%', minWidth: 0 } as React.CSSProperties}
+          style={browserWebviewStyle}
           partition="persist:lastbrowser-main"
           allowpopups="false"
           onDidStartLoading={() => onClearBrowserError()}
           onDomReady={(event) => {
             void hideWebviewScrollbars(event.currentTarget);
-            void annotateWebviewViewport(event.currentTarget);
           }}
           onDidFailLoad={(event) => {
             if (!event.isMainFrame || event.errorCode === -3) return;

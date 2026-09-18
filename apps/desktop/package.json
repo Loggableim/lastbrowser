@@ -17,6 +17,7 @@
     "build:renderer": "vite build",
     "test": "vitest",
     "test:run": "vitest run",
+    "smoke:browser": "node scripts/smoke-browser.mjs",
     "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
     "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish always"
   },

@@ -29,3 +29,4 @@ Thumbs.db
 !sidekick_cd_mappe_final/**/*.png
 installer/build/
 installer/dist/
+smoke-output/

@@ -27,7 +27,7 @@ describe('sidecar service layout', () => {
   });
 
   it('keeps services inside the packaged resources directory', () => {
-    const layout = resolveServiceLayout('D:/Lastbrowser/resources');
+    const layout = resolveServiceLayout('D:/Lastbrowser/resources', undefined, {});
 
     expect(layout.sidekickDir).toBe('D:\\Lastbrowser\\resources\\services\\sidekick');
     expect(layout.webuiDir).toBe('D:\\Lastbrowser\\resources\\services\\webui');
@@ -50,7 +50,7 @@ describe('sidecar service layout', () => {
     writeFileSync(pythonExe, '');
 
     try {
-      const layout = resolveServiceLayout(resourcesRoot);
+      const layout = resolveServiceLayout(resourcesRoot, undefined, {});
       expect(layout.pythonExe).toBe(pythonExe);
     } finally {
       rmSync(resourcesRoot, { recursive: true, force: true });

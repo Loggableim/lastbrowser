@@ -26,3 +26,6 @@ services/sidekick/build/
 Thumbs.db
 *.png
 !**/*.svg
+!sidekick_cd_mappe_final/**/*.png
+installer/build/
+installer/dist/

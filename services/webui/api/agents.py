@@ -57,7 +57,7 @@ AGENT_TEMPLATES = {
         ),
         "color": "#3B82F6",
         "tools": ["terminal", "file", "web", "delegation", "kanban"],
-        "workdir_suggestion": "C:\\Users\\<user>\\hermes-webui",
+        "workdir_suggestion": "",
     },
     "project-manager": {
         "name": "Projektmanager",
@@ -110,7 +110,7 @@ AGENT_TEMPLATES = {
         ),
         "color": "#22C55E",
         "tools": ["web", "search", "file"],
-        "workdir_suggestion": "C:\\Users\\<user>\\projects",
+        "workdir_suggestion": "",
     },
     "sysadmin": {
         "name": "System Administrator",
@@ -128,7 +128,7 @@ AGENT_TEMPLATES = {
         ),
         "color": "#F97316",
         "tools": ["terminal", "file", "web"],
-        "workdir_suggestion": "C:\\Users\\<user>",
+        "workdir_suggestion": "",
     },
     "data-analyst": {
         "name": "Data Analyst",
@@ -145,7 +145,7 @@ AGENT_TEMPLATES = {
         ),
         "color": "#8B5CF6",
         "tools": ["terminal", "file", "web"],
-        "workdir_suggestion": "C:\\Users\\<user>\\data",
+        "workdir_suggestion": "",
     },
     "devops": {
         "name": "DevOps Engineer",
@@ -162,7 +162,7 @@ AGENT_TEMPLATES = {
         ),
         "color": "#06B6D4",
         "tools": ["terminal", "file", "web", "delegation"],
-        "workdir_suggestion": "C:\\Users\\<user>\\projects",
+        "workdir_suggestion": "",
     },
     "mentor": {
         "name": "Mentor",

@@ -4,7 +4,7 @@ import { describeChatContent, partitionChatMessages } from '../src/renderer/chat
 describe('chat display helpers', () => {
   it('separates internal prompts from the visible transcript', () => {
     const prompt = [
-      '[Workspace:v1 C:/Users/<user>/AppData/Local/Programs/Lastbrowser/resources/services/webui]',
+      '[Workspace:v1 C:/Users/user/AppData/Local/Programs/Lastbrowser/resources/services/webui]',
       'You are Sidekick inside Lastbrowser.',
       'Take over the web search for the user and return a compact research brief.',
       'Query: compare Arc Browser and Dia Browser',

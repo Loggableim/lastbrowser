@@ -46,7 +46,7 @@ def _load_env():
                     key, _, val = line.partition("=")
                     key = key.strip()
                     val = val.strip().strip("\"'")
-                    if key.startswith("GMAIL_PASS_") and not os.environ.get(key):
+                    if key.startswith("GMAIL_ACCOUNT_") and not os.environ.get(key):
                         os.environ[key] = val
         except (FileNotFoundError, PermissionError, OSError):
             continue
@@ -57,16 +57,17 @@ logger = logging.getLogger(__name__)
 
 # ── Multi-Account Credentials (from env vars — never hardcode!) ──
 # Set these in your .env or shell environment:
+#   GMAIL_ACCOUNT_1_EMAIL=you@example.com
 #   GMAIL_ACCOUNT_1_PASSWORD=xxxx xxxx xxxx xxxx
+#   GMAIL_ACCOUNT_2_EMAIL=other@example.com
 #   GMAIL_ACCOUNT_2_PASSWORD=xxxx xxxx xxxx xxxx
 def _build_accounts():
     accounts = {}
-    dominik_pw = os.environ.get("GMAIL_ACCOUNT_1_PASSWORD")
-    if dominik_pw:
-        accounts["dominik"] = ("user@example.com", dominik_pw)
-    loggableim_pw = os.environ.get("GMAIL_ACCOUNT_2_PASSWORD")
-    if loggableim_pw:
-        accounts["loggableim"] = ("user@example.com", loggableim_pw)
+    for index in range(1, 10):
+        email = os.environ.get(f"GMAIL_ACCOUNT_{index}_EMAIL")
+        password = os.environ.get(f"GMAIL_ACCOUNT_{index}_PASSWORD")
+        if email and password:
+            accounts[f"account{index}"] = (email, password)
     return accounts
 
 def _reload_accounts():
@@ -75,7 +76,7 @@ def _reload_accounts():
     ACCOUNTS = _build_accounts()
 
 ACCOUNTS = _build_accounts()
-DEFAULT_ACCOUNT = "dominik" if "dominik" in ACCOUNTS else (list(ACCOUNTS) or [None])[0]
+DEFAULT_ACCOUNT = (list(ACCOUNTS) or [None])[0]
 
 
 # ── IMAP connection pool (per-account, thread-safe) ──
@@ -259,7 +260,7 @@ def _connect_imap(account=DEFAULT_ACCOUNT):
         account = next(iter(accounts), account)
     user, pw = _get_creds(account)
     if not user or not pw:
-        raise ValueError(f"Missing credentials for account '{account}'. Set GMAIL_PASS_ environment variables.")
+        raise ValueError(f"Missing credentials for account '{account}'. Set GMAIL_ACCOUNT_ environment variables.")
     tid = (threading.get_ident(), account)
     now = time.time()
 

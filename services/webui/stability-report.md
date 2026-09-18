@@ -43,7 +43,7 @@ Erstellt: 11.05.2026
 **Problem:** Session-Heartbeat-Intervall nach Login nie gecleart → unnötiger Traffic.
 
 ### 8. Stale models_cache.json.*.tmp Files (11 Stück)
-**Ort:** `C:\Users\<user>\.hermes\webui\`
+**Ort:** `%APPDATA%\.hermes\webui\`
 **Problem:** Bei every Crash bleiben temp-Dateien liegen. 11 Stück, bis zu 17KB.
 **Risiko:** Keine Datenkorruption, aber verschwendet Speicher und könnte bei Update-Konflikten stören.
 **Fix:** Temp-Files beim Startup löschen.

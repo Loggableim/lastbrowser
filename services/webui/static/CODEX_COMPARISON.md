@@ -1,7 +1,7 @@
 # Codex Comparison — Hermes WebUI Code-Map & Feature-Gap Analyse
 
 Erstellt: 10.05.2026
-Basis: `C:\Users\<user>\hermes-webui\static\`
+Basis: `<repo>\static\`
 
 ---
 

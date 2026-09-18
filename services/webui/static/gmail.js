@@ -640,11 +640,8 @@ function showGmailSplash() {
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;">
         <label style="font-size:12px;color:var(--muted);font-weight:600;">E-Mail</label>
-        <select id="gmailSplashEmail" style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--text);font-size:14px;outline:none;">
-          <option value="dominik">user@example.com</option>
-          <option value="loggableim">user@example.com</option>
-          <option value="logga">user@example.com</option>
-        </select>
+        <input id="gmailSplashEmail" type="email" placeholder="you@example.com" autocomplete="username"
+               style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--text);font-size:14px;outline:none;">
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;">
         <label style="font-size:12px;color:var(--muted);font-weight:600;">Google App-Passwort</label>
@@ -685,8 +682,13 @@ async function saveGmailSplash() {
   const sel = document.getElementById('gmailSplashEmail');
   const pw = document.getElementById('gmailSplashCode')?.value?.trim();
   const btn = document.getElementById('gmailSplashSaveBtn');
-  const email = sel?.selectedOptions?.[0]?.text || sel?.value || 'user@example.com';
-  const accountName = sel?.value || 'dominik';
+  const email = (sel?.value || '').trim();
+  const accountName = email.split('@')[0] || 'default';
+
+  if (!email || !email.includes('@')) {
+    gmailToast('⚠️ Bitte E-Mail-Adresse eingeben', 'error');
+    return;
+  }
 
   if (!pw) {
     gmailToast('⚠️ Bitte App-Passwort eingeben', 'error');

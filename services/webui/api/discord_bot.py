@@ -13,9 +13,9 @@ def _j(handler, payload, status=200):
     handler.end_headers()
     handler.wfile.write(body)
 
-BOT_TOKEN_FILE = r'C:\Users\<user>\discord_token.txt'
-GUILD_ID = '000000000000000000'
-BOT_ID = '000000000000000000'
+BOT_TOKEN_FILE = os.environ.get('DISCORD_BOT_TOKEN_FILE', '')
+GUILD_ID = os.environ.get('DISCORD_GUILD_ID', '')
+BOT_ID = os.environ.get('DISCORD_BOT_ID', '')
 
 def _active_bot_config():
     try:
@@ -43,7 +43,7 @@ def _active_bot_id():
 def _get_headers():
     cfg = _active_bot_config()
     token = (cfg.get("token") or "").strip()
-    if not token:
+    if not token and BOT_TOKEN_FILE:
         with open(BOT_TOKEN_FILE) as f:
             token = f.read().strip()
     return {
@@ -188,7 +188,9 @@ def handle_get(handler, parsed):
     if path == '/api/discord/rawtest':
         import urllib.request, urllib.error
         cfg = _active_bot_config()
-        token = (cfg.get("token") or "").strip() or open(BOT_TOKEN_FILE).read().strip()
+        token = (cfg.get("token") or "").strip()
+        if not token and BOT_TOKEN_FILE:
+            token = open(BOT_TOKEN_FILE).read().strip()
         url = 'https://discord.com/api/v10/users/@me'
         req = urllib.request.Request(url, headers={
             'Authorization': f'Bot {token}',

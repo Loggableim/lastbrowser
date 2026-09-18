@@ -12,7 +12,7 @@
 const GMAIL = {
   currentFolder: 'INBOX',
   currentFilter: 'all',
-  currentAccount: 'dominik',
+  currentAccount: null,
   accounts: [],
   emails: [],
   loaded: false,
@@ -132,7 +132,7 @@ async function loadGmailAccounts() {
     }
     // If current account not in list, reset to first
     if (!GMAIL.accounts.find(a => a.id === GMAIL.currentAccount)) {
-      GMAIL.currentAccount = GMAIL.accounts[0]?.id || 'dominik';
+      GMAIL.currentAccount = GMAIL.accounts[0]?.id || null;
     }
     // Populate dropdown
     const sel = document.getElementById('gmailAccountSelect');

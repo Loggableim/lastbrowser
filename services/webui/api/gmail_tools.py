@@ -782,7 +782,7 @@ def _ai_call_stream(prompt, system_prompt="You are a helpful assistant.", model=
         return
 
 
-def _stream_summary(handler, email_id, account="dominik", model="llama3.2:latest"):
+def _stream_summary(handler, email_id, account=None, model="llama3.2:latest"):
     """Send SSE summary stream for an email."""
     email_data = _read_email(email_id, account)
     if "error" in email_data:
@@ -836,7 +836,7 @@ def _strip_html(text):
 
 
 # ── AI: Summarize email ──
-def _ai_summarize_email(email_id, account="dominik"):
+def _ai_summarize_email(email_id, account=None):
     cache_key = _ai_cache_key("summary", account, email_id)
     cached = _ai_cache_get(cache_key)
     if cached:
@@ -868,7 +868,7 @@ def _ai_summarize_email(email_id, account="dominik"):
 
 
 # ── AI: Draft reply ──
-def _ai_draft_reply(email_id, account="dominik"):
+def _ai_draft_reply(email_id, account=None):
     cache_key = _ai_cache_key("draft", account, email_id)
     cached = _ai_cache_get(cache_key)
     if cached:
@@ -907,7 +907,7 @@ def _ai_draft_reply(email_id, account="dominik"):
 
 
 # ── AI: Find related emails ──
-def _ai_find_related(email_id, account="dominik", max_related=5):
+def _ai_find_related(email_id, account=None, max_related=5):
     cache_key = _ai_cache_key("related", account, email_id)
     cached = _ai_cache_get(cache_key)
     if cached:

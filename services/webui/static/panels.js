@@ -7474,7 +7474,7 @@ async function _appstoreOpenGmailSettings() {
       '</div>' +
       '<div class="appstore-setup-body" style="display:grid;gap:14px;">' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-          '<label class="appstore-step-field"><span>Account-ID</span><input id="gmailAppAccountId" class="appstore-step-input" value="dominik" placeholder="dominik"></label>' +
+          '<label class="appstore-step-field"><span>Account-ID</span><input id="gmailAppAccountId" class="appstore-step-input" value="" placeholder="account-id"></label>' +
           '<label class="appstore-step-field"><span>Gmail-Adresse</span><input id="gmailAppEmail" class="appstore-step-input" type="email" placeholder="name@gmail.com"></label>' +
         '</div>' +
         '<label class="appstore-step-field"><span>Google App-Passwort</span><input id="gmailAppPassword" class="appstore-step-input" type="password" placeholder="xxxx xxxx xxxx xxxx"></label>' +

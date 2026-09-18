@@ -782,7 +782,7 @@ describe('sidekick api client', () => {
     await createGmailTask('http://127.0.0.1:8787', { messageId: 'm1', title: 'Follow up' }, fetchImpl);
     await getDiscordGuild('http://127.0.0.1:8787', fetchImpl);
     await listDiscordChannels('http://127.0.0.1:8787', fetchImpl);
-    await listDiscordMembers('http://127.0.0.1:8787', { query: 'dominik' }, fetchImpl);
+    await listDiscordMembers('http://127.0.0.1:8787', { query: 'testuser' }, fetchImpl);
     await listDiscordMessages('http://127.0.0.1:8787', { channelId: 'c1', limit: 50 }, fetchImpl);
     await sendDiscordMessage('http://127.0.0.1:8787', { channelId: 'c1', content: 'hello' }, fetchImpl);
     await warnDiscordMember('http://127.0.0.1:8787', { memberId: 'u1', reason: 'spam' }, fetchImpl);
@@ -806,7 +806,7 @@ describe('sidekick api client', () => {
       'http://127.0.0.1:8787/api/gmail/ai/task',
       'http://127.0.0.1:8787/api/discord/guild',
       'http://127.0.0.1:8787/api/discord/channels',
-      'http://127.0.0.1:8787/api/discord/members?q=dominik',
+      'http://127.0.0.1:8787/api/discord/members?q=testuser',
       'http://127.0.0.1:8787/api/discord/channel/c1/messages?limit=50',
       'http://127.0.0.1:8787/api/discord/send',
       'http://127.0.0.1:8787/api/discord/warn',

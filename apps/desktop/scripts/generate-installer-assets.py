@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CD_ROOT = ROOT.parents[1] / "lastbrowser_sidekick_cd_mappe_final" / "assets"
+CD_ROOT = ROOT.parents[1] / "sidekick_cd_mappe_final" / "assets"
 BUILD_DIR = ROOT / "build"
 
 

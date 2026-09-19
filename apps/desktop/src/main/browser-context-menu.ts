@@ -141,6 +141,13 @@ function installWindowOpenBridge(
   shell: Shell
 ): void {
   contents.setWindowOpenHandler(({ url }) => {
+    // OAuth / sign-in pages must open in the system browser. Opening them as
+    // an in-app tab hides them behind the first-run wizard (which covers the
+    // full window), leaving the user unable to complete the sign-in.
+    if (isOAuthUrl(url)) {
+      void shell.openExternal(url);
+      return { action: 'deny' };
+    }
     if (isHttpUrl(url)) {
       getWindow()?.webContents.send(browserOpenTabChannel, url);
     } else {
@@ -148,6 +155,10 @@ function installWindowOpenBridge(
     }
     return { action: 'deny' };
   });
+}
+
+function isOAuthUrl(url: string): boolean {
+  return /^https?:\/\/(accounts\.google\.com|login\.microsoftonline\.com|github\.com\/login|auth0\.com|.*\.auth0\.com|claude\.ai|console\.anthropic\.com|platform\.openai\.com|auth\.openai\.com|chatgpt\.com)\//i.test(url);
 }
 
 function isHttpUrl(url: string): boolean {

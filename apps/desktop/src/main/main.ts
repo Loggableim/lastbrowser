@@ -134,11 +134,13 @@ import {
   updateKanbanTask,
   warnDiscordMember,
   writeMemory,
-  ensureWebuiAuth
+  ensureWebuiAuth,
+  getWebuiSessionToken
 } from './sidekick-api.js';
 import { registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
 import { createAdblockController } from './adblock.js';
 import { createSidekickUpdater } from './sidekick-updater.js';
+import { subscribeChatStream, type ChatStreamHandle } from './chat-stream.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startTerminal, writeTerminal, closeTerminal, getTerminalIds } from './terminal-process.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
@@ -159,6 +161,7 @@ const sidekickUpdater = createSidekickUpdater({
   }
 });
 const agentWorkspaceStreams = new Map<string, AbortController>();
+const chatStreams = new Map<string, ChatStreamHandle>();
 
 function createWindow(): void {
   mainWindow = new BrowserWindow(createMainWindowOptions(mainDir));
@@ -213,6 +216,34 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:saveDraft', (_event, request) => saveSessionDraft(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:startChat', (_event, request) => startSidekickChat(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:getStreamStatus', (_event, streamId) => getChatStreamStatus(requireWebuiUrl(), String(streamId || '')));
+  // Live chat stream: subscribe over SSE and push each event to the renderer.
+  // Polling `/api/chat/stream/status` on a timer costs a round-trip per tick and
+  // makes the transcript feel laggy; SSE delivers each delta as it happens.
+  ipcMain.handle('lastbrowser:sidekick:subscribeChatStream', (event, request) => {
+    const streamId = String(request?.streamId || '');
+    if (!streamId) throw new Error('streamId is required');
+    chatStreams.get(streamId)?.close();
+    const handle = subscribeChatStream(
+      requireWebuiUrl(),
+      streamId,
+      getWebuiSessionToken(),
+      (streamEvent) => {
+        if (event.sender.isDestroyed()) return;
+        event.sender.send('lastbrowser:sidekick:chatStreamEvent', { streamId, ...streamEvent });
+      }
+    );
+    chatStreams.set(streamId, handle);
+    void handle.done.finally(() => {
+      if (chatStreams.get(streamId) === handle) chatStreams.delete(streamId);
+    });
+    return { ok: true, streamId };
+  });
+  ipcMain.handle('lastbrowser:sidekick:unsubscribeChatStream', (_event, request) => {
+    const streamId = String(request?.streamId || '');
+    chatStreams.get(streamId)?.close();
+    chatStreams.delete(streamId);
+    return { ok: true, streamId };
+  });
   ipcMain.handle('lastbrowser:sidekick:cancelStream', (_event, streamId) => cancelChatStream(requireWebuiUrl(), String(streamId || '')));
   ipcMain.handle('lastbrowser:sidekick:listWorkspace', (_event, request) => listWorkspace(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:readWorkspaceFile', (_event, request) => readWorkspaceFile(requireWebuiUrl(), request));

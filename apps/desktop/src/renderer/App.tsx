@@ -985,8 +985,60 @@ export function App(): JSX.Element {
     }
   }
 
+  /**
+   * Wait for a chat turn to finish.
+   *
+   * Prefers the SSE stream (each event arrives as the agent produces it) and
+   * falls back to polling when the stream cannot be established — e.g. an older
+   * sidecar without the SSE route, or a proxy that buffers event streams.
+   */
   async function pollNativeChat(streamId: string, sessionId: string): Promise<void> {
     const deadline = Date.now() + 120000;
+    let sawStreamEnd = false;
+    let streamFailed = false;
+
+    const unsubscribe = window.lastbrowser.sidekick.onChatStreamEvent((payload) => {
+      const event = payload as { streamId?: string; event?: string; data?: unknown } | null;
+      if (!event || event.streamId !== streamId) return;
+      if (event.event === 'stream_end' || event.event === 'cancel') {
+        sawStreamEnd = true;
+        return;
+      }
+      if (event.event === 'error') {
+        streamFailed = true;
+        return;
+      }
+      // Any content-bearing event means the turn is progressing; refresh the
+      // transcript so the user sees the text without waiting for completion.
+      if (event.event === 'delta' || event.event === 'message' || event.event === 'tool') {
+        void loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
+      }
+    });
+
+    try {
+      await window.lastbrowser.sidekick.subscribeChatStream({ streamId }).catch(() => {
+        streamFailed = true;
+      });
+
+      while (Date.now() < deadline) {
+        await delay(600);
+        if (sawStreamEnd) return;
+        if (streamFailed) break;
+        // The stream is the fast path, but a dropped connection must not hang
+        // the turn: poll occasionally as a safety net.
+        if (Date.now() % 6000 < 700) {
+          const streamStatus = await window.lastbrowser.sidekick.getStreamStatus(streamId).catch(() => null);
+          const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
+          if (!streamStatus?.active && !latest?.active_stream_id && !latest?.pending_user_message) return;
+        }
+      }
+      if (sawStreamEnd) return;
+    } finally {
+      unsubscribe();
+      void window.lastbrowser.sidekick.unsubscribeChatStream({ streamId }).catch(() => null);
+    }
+
+    // Stream path ended without a terminal event — fall back to polling.
     while (Date.now() < deadline) {
       await delay(1200);
       const streamStatus = await window.lastbrowser.sidekick.getStreamStatus(streamId).catch(() => null);

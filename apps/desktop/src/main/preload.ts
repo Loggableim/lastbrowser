@@ -37,6 +37,13 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     saveDraft: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:saveDraft', request),
     startChat: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:startChat', request),
     getStreamStatus: (streamId: string) => ipcRenderer.invoke('lastbrowser:sidekick:getStreamStatus', streamId),
+    subscribeChatStream: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:subscribeChatStream', request),
+    unsubscribeChatStream: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:unsubscribeChatStream', request),
+    onChatStreamEvent: (listener: (payload: unknown) => void) => {
+      const wrapped = (_event: unknown, payload: unknown) => listener(payload);
+      ipcRenderer.on('lastbrowser:sidekick:chatStreamEvent', wrapped);
+      return () => ipcRenderer.removeListener('lastbrowser:sidekick:chatStreamEvent', wrapped);
+    },
     cancelStream: (streamId: string) => ipcRenderer.invoke('lastbrowser:sidekick:cancelStream', streamId),
     listWorkspace: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:listWorkspace', request),
     readWorkspaceFile: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:readWorkspaceFile', request),

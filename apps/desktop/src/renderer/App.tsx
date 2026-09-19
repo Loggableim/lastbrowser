@@ -32,6 +32,7 @@ import {
   AlertTriangle,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Plus,
   RefreshCw,
   Save,
@@ -71,6 +72,18 @@ import {
   togglePinnedTab
 } from './tabs.js';
 import { brandAssets } from './brand.js';
+import {
+  addProfile,
+  loadActiveProfileId,
+  loadProfiles,
+  profileById,
+  profilePartition,
+  removeProfile,
+  renameProfile,
+  saveActiveProfileId,
+  saveProfiles,
+  type BrowserProfile
+} from './profiles.js';
 import { loadVisitedSites, recordVisit, saveVisitedSites, type BrowserVisit } from './history.js';
 import {
   SidekickActionId,
@@ -359,6 +372,8 @@ function panelForContextItem(item: string): LastbrowserPanelId | null {
 export function App(): JSX.Element {
   const [tabs, setTabs] = useState<BrowserTab[]>(() => [createInitialTab(browserStartUrl)]);
   const [bookmarks, setBookmarks] = useState<BrowserBookmark[]>(() => loadBookmarks(window.localStorage));
+  const [profiles, setProfiles] = useState<BrowserProfile[]>(() => loadProfiles(window.localStorage));
+  const [activeProfileId, setActiveProfileId] = useState<string>(() => loadActiveProfileId(window.localStorage));
   const [visitedSites, setVisitedSites] = useState<BrowserVisit[]>(() => loadVisitedSites(window.localStorage));
   const [desktopSettings, setDesktopSettings] = useState<Record<string, unknown> | null>(() => loadDesktopSettingsFromStorage());
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
@@ -428,6 +443,8 @@ export function App(): JSX.Element {
     }
   ]);
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) || tabs[0], [activeTabId, tabs]);
+  const activeProfile = useMemo(() => profileById(profiles, activeProfileId), [profiles, activeProfileId]);
+  const activePartition = useMemo(() => profilePartition(activeProfile.id), [activeProfile.id]);
   const activeBookmarkable = isBookmarkableUrl(activeTab.url);
   const activeBookmarked = useMemo(() => isBookmarked(bookmarks, activeTab.url), [activeTab.url, bookmarks]);
   const activeTabIdRef = useRef(activeTabId);
@@ -800,6 +817,39 @@ export function App(): JSX.Element {
 
   function removeBookmarkItem(bookmark: BrowserBookmark): void {
     setBookmarks((current) => removeBookmark(current, bookmark.url));
+  }
+
+  function switchProfile(profileId: string): void {
+    if (profileId === activeProfileId) return;
+    setActiveProfileId(profileId);
+    saveActiveProfileId(window.localStorage, profileId);
+  }
+
+  function createProfileEntry(name: string): void {
+    setProfiles((current) => {
+      const next = addProfile(current, name);
+      saveProfiles(window.localStorage, next);
+      return next;
+    });
+  }
+
+  function renameProfileEntry(profileId: string, name: string): void {
+    setProfiles((current) => {
+      const next = renameProfile(current, profileId, name);
+      saveProfiles(window.localStorage, next);
+      return next;
+    });
+  }
+
+  function deleteProfileEntry(profileId: string): void {
+    setProfiles((current) => {
+      const next = removeProfile(current, profileId);
+      saveProfiles(window.localStorage, next);
+      return next;
+    });
+    if (profileId === activeProfileId) {
+      switchProfile('default');
+    }
   }
 
   function closeTab(tabId: string): void {
@@ -1347,6 +1397,14 @@ export function App(): JSX.Element {
             onOpenSpaces={() => setActivePanel('workspaces')}
             onSelect={(path) => setActiveSpacePath(path)}
           />
+          <ProfileSwitcher
+            profiles={profiles}
+            activeProfileId={activeProfile.id}
+            onSelect={switchProfile}
+            onCreate={createProfileEntry}
+            onRename={renameProfileEntry}
+            onDelete={deleteProfileEntry}
+          />
           <div className={`runtime-pill ${status?.sidekick === 'ready' ? 'ready' : 'starting'}`}>
             <span className="status-dot" />
             <span>{status?.sidekick === 'ready' ? 'sidekick online' : 'sidekick starting'}</span>
@@ -1422,6 +1480,7 @@ export function App(): JSX.Element {
           activeSession={activeSession}
           activeSessionId={activeSessionId}
           activeTab={activeTab}
+          activeProfile={activeProfile}
           busy={sidekickBusy}
           chatError={chatError}
           chatMessages={chatMessages}
@@ -1606,6 +1665,163 @@ function updateLabel(status: UpdateStatus): string {
   if (status.state === 'downloaded') return 'restart to update';
   if (status.state === 'error') return 'update retry';
   return 'updates';
+}
+
+function ProfileSwitcher({
+  profiles,
+  activeProfileId,
+  onSelect,
+  onCreate,
+  onRename,
+  onDelete
+}: {
+  profiles: BrowserProfile[];
+  activeProfileId: string;
+  onSelect: (profileId: string) => void;
+  onCreate: (name: string) => void;
+  onRename: (profileId: string, name: string) => void;
+  onDelete: (profileId: string) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const activeProfile = profiles.find((profile) => profile.id === activeProfileId) || profiles[0];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleClick = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [open]);
+
+  function submitCreate(event: React.FormEvent): void {
+    event.preventDefault();
+    const name = draftName.trim();
+    if (!name) return;
+    onCreate(name);
+    setDraftName('');
+    setOpen(false);
+  }
+
+  function submitRename(event: React.FormEvent, profileId: string): void {
+    event.preventDefault();
+    const name = renameDraft.trim();
+    if (name) onRename(profileId, name);
+    setRenamingId(null);
+    setRenameDraft('');
+  }
+
+  return (
+    <div className="profile-switcher" ref={rootRef}>
+      <button
+        type="button"
+        className="profile-switcher-trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={`Profile: ${activeProfile?.name || 'Default'}`}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="profile-dot" style={{ background: activeProfile?.color || '#2563FF' }} />
+        <span>{activeProfile?.icon || '🌐'} {activeProfile?.name || 'Default'}</span>
+        <ChevronDown size={14} />
+      </button>
+      {open && (
+        <div className="profile-switcher-menu" role="menu">
+          {profiles.map((profile) => (
+            <div
+              key={profile.id}
+              className={`profile-switcher-item ${profile.id === activeProfileId ? 'is-active' : ''}`}
+              role="menuitem"
+              tabIndex={0}
+              onClick={() => {
+                onSelect(profile.id);
+                setOpen(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onSelect(profile.id);
+                  setOpen(false);
+                }
+              }}
+            >
+              <span className="profile-dot" style={{ background: profile.color }} />
+              {renamingId === profile.id ? (
+                <form className="profile-switcher-form" onSubmit={(event) => submitRename(event, profile.id)}>
+                  <input
+                    className="profile-switcher-input"
+                    value={renameDraft}
+                    autoFocus
+                    onChange={(event) => setRenameDraft(event.target.value)}
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                  <button type="submit" className="profile-switcher-action">Save</button>
+                </form>
+              ) : (
+                <>
+                  <span className="profile-switcher-item-name">{profile.icon} {profile.name}</span>
+                  {profile.isDefault && <span className="profile-switcher-item-badge">Default</span>}
+                  <button
+                    type="button"
+                    className="profile-switcher-delete"
+                    aria-label={`Rename ${profile.name}`}
+                    title="Rename"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setRenamingId(profile.id);
+                      setRenameDraft(profile.name);
+                    }}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  {!profile.isDefault && (
+                    <button
+                      type="button"
+                      className="profile-switcher-delete"
+                      aria-label={`Delete ${profile.name}`}
+                      title="Delete profile"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDelete(profile.id);
+                      }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+          <div className="profile-switcher-separator" />
+          <form className="profile-switcher-form" onSubmit={submitCreate}>
+            <input
+              className="profile-switcher-input"
+              placeholder="New profile name…"
+              value={draftName}
+              onChange={(event) => setDraftName(event.target.value)}
+            />
+            <button type="submit" className="profile-switcher-action" disabled={!draftName.trim()}>
+              <Plus size={13} /> Add
+            </button>
+          </form>
+          <div className="profile-switcher-empty">
+            Each profile keeps its own cookies, logins and storage.
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SpaceSelector({
@@ -2153,6 +2369,7 @@ function BrowserMain({
   activeSession,
   activeSessionId,
   activeTab,
+  activeProfile,
   busy,
   chatError,
   chatMessages,
@@ -2194,6 +2411,7 @@ function BrowserMain({
   activeSession: DesktopSessionDetail | null;
   activeSessionId: string | null;
   activeTab: BrowserTab;
+  activeProfile: BrowserProfile;
   busy: boolean;
   chatError: string;
   chatMessages: DesktopChatMessage[];
@@ -2367,12 +2585,12 @@ function BrowserMain({
           </div>
         )}
         <webview
-          key={activeTab.id}
+          key={`${activeProfile.id}:${activeTab.id}`}
           ref={webviewRef}
           src={activeTab.url}
           className="browser-view"
           style={browserWebviewStyle}
-          partition="persist:lastbrowser-main"
+          partition={profilePartition(activeProfile.id)}
           allowpopups="false"
           onDidStartLoading={() => onClearBrowserError()}
           onDomReady={(event) => {

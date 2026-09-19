@@ -4,6 +4,7 @@ import type { LastbrowserPanelId } from '../shell-state.js';
 import { canCallSidekickApi } from '../runtime-readiness.js';
 import { endpointGroupsForPanel } from '../webui-endpoints.js';
 import type { WebuiEndpointAction } from '../webui-endpoints.js';
+import { catalogEndpointsForPanel } from '../webui-endpoint-catalog.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 
@@ -31,8 +32,27 @@ export function AdvancedWebUiTools({
 }): JSX.Element | null {
   const groups = useMemo(() => endpointGroupsForPanel(panel), [panel]);
   const actions = groups.flatMap((group) => group.actions);
-  const [selectedId, setSelectedId] = useState(actions[0]?.id || '');
-  const selected = actions.find((action) => action.id === selectedId) || actions[0];
+  // The full API catalog for this panel, generated from the live Sidekick
+  // OpenAPI spec + legacy route scan. The hand-curated `actions` above stay
+  // first because they carry query/body templates.
+  const catalog = useMemo(() => catalogEndpointsForPanel(panel), [panel]);
+  const catalogActions = useMemo<WebuiEndpointAction[]>(
+    () => catalog.map((entry) => ({
+      id: `catalog:${entry.method}:${entry.path}`,
+      panel,
+      label: entry.label,
+      method: entry.method === '*' ? 'GET' : entry.method,
+      path: entry.path,
+      dangerous: entry.dangerous
+    })),
+    [catalog, panel]
+  );
+  const allActions = useMemo(
+    () => [...actions, ...catalogActions.filter((entry) => !actions.some((a) => a.path === entry.path))],
+    [actions, catalogActions]
+  );
+  const [selectedId, setSelectedId] = useState(allActions[0]?.id || '');
+  const selected = allActions.find((action) => action.id === selectedId) || allActions[0];
   const [queryText, setQueryText] = useState('{}');
   const [bodyText, setBodyText] = useState('{}');
   const [result, setResult] = useState('');
@@ -41,7 +61,7 @@ export function AdvancedWebUiTools({
   const ready = canCallSidekickApi(serviceStatus);
 
   useEffect(() => {
-    setSelectedId(actions[0]?.id || '');
+    setSelectedId(allActions[0]?.id || '');
   }, [panel]);
 
   useEffect(() => {
@@ -79,7 +99,7 @@ export function AdvancedWebUiTools({
     <details className={`advanced-webui-tools ${compact ? 'compact' : ''}`}>
       <summary>
         <span>Native WebUI API tools</span>
-        <small>{actions.length} endpoints</small>
+        <small>{allActions.length} endpoints</small>
       </summary>
       <div className="advanced-webui-grid">
         <aside className="advanced-webui-actions">
@@ -100,6 +120,23 @@ export function AdvancedWebUiTools({
               ))}
             </section>
           ))}
+          {catalogActions.length > 0 && (
+            <section>
+              <strong>Full API catalog</strong>
+              <small>{catalogActions.length} endpoints from the live Sidekick spec.</small>
+              {catalogActions.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className={action.id === selected.id ? 'active' : ''}
+                  onClick={() => setSelectedId(action.id)}
+                >
+                  <span>{action.label}</span>
+                  <em>{action.method}</em>
+                </button>
+              ))}
+            </section>
+          )}
         </aside>
         <main className="advanced-webui-runner">
           <header>

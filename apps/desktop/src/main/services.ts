@@ -269,6 +269,9 @@ export class SidecarServices {
 
     try {
       const launch = buildSidecarLaunch(this.layout, webuiPort);
+      // Capture stderr: a crash during an OAuth flow is otherwise invisible
+      // (stdio: 'ignore' swallows the traceback), which makes sidecar failures
+      // impossible to diagnose from the app.
       this.webuiProcess = this.spawnImpl(
         this.layout.pythonExe,
         launch.args,
@@ -276,9 +279,15 @@ export class SidecarServices {
           cwd: launch.cwd,
           env,
           windowsHide: true,
-          stdio: 'ignore'
+          stdio: ['ignore', 'pipe', 'pipe']
         }
       );
+      this.webuiProcess.stdout?.on('data', (chunk: Buffer) => {
+        console.log(`[sidekick] ${chunk.toString().trimEnd()}`);
+      });
+      this.webuiProcess.stderr?.on('data', (chunk: Buffer) => {
+        console.error(`[sidekick] ${chunk.toString().trimEnd()}`);
+      });
     } catch (error) {
       this.status = {
         ...this.status,

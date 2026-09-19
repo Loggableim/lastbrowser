@@ -11,6 +11,7 @@ import {
   Grid2X2,
   Inbox,
   Loader2,
+  LogIn,
   Mail,
   MessageSquare,
   Package,
@@ -28,6 +29,8 @@ import {
   X
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
+import { cloudProviderOptions, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
+import { providerPresentation } from '../provider-presentation.js';
 import { canCallSidekickApi } from '../runtime-readiness.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 
@@ -2007,7 +2010,7 @@ export function NativeAppstoreMain({
   );
 }
 
-export function NativeSettingsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
+export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void }): JSX.Element {
   const ready = isReady(serviceStatus);
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
   const modelsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' }), [ready], ready);
@@ -2038,8 +2041,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
   const sidekickUpdateVersion = settingsText(sidekickUpdateState.data?.currentVersion, '');
   const sidekickUpdateSource = settingsText(sidekickUpdateState.data?.source, 'bundled');
   const sidekickUpdateMessage = settingsText(sidekickUpdateState.data?.message, '');
-  const sidekickUpdateAvailable = settingsText(sidekickUpdateState.data?.state, 'idle') === 'available';
+  const sidekickUpdateStatus = settingsText(sidekickUpdateState.data?.state, 'idle');
+  const sidekickUpdateAvailable = sidekickUpdateStatus === 'available';
   const pluginList = arrayFrom(pluginsState.data, ['plugins', 'items']);
+  // Provider list for the settings panel: the onboarding API is the
+  // authoritative source, so the panel shows the same providers the wizard does.
+  const providerOptions = useMemo(() => cloudProviderOptions(onboardingStatus), [onboardingStatus]);
 
   useEffect(() => {
     const normalized = activeContextItem.trim().toLowerCase();
@@ -2189,6 +2196,43 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
       showToast(`Sidekick update failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setSidekickUpdateBusy(false);
+    }
+  }
+
+  /** Start the OAuth/CLI connect flow for a provider from the settings panel. */
+  async function startProviderConnect(option: ProviderOption): Promise<void> {
+    if (!option.oauthProvider) return;
+    try {
+      const response = await window.lastbrowser.sidekick.startOAuth({ provider: option.oauthProvider });
+      if (response.error) throw new Error(String(response.error));
+      const url = String(response.verification_uri || response.auth_url || '');
+      if (response.status === 'success') {
+        showToast(`${option.label} credentials found and connected.`);
+        await modelsState.refresh();
+        return;
+      }
+      if (!url) throw new Error('Sidekick returned no sign-in URL.');
+      window.open(url, '_blank', 'noopener,noreferrer');
+      showToast(`Sign in with ${option.label} in the opened browser tab.`);
+    } catch (error) {
+      showToast(`Connect failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** Switch the active provider by writing it through the settings endpoint. */
+  async function switchProvider(providerId: string): Promise<void> {
+    setSaving(true);
+    try {
+      await window.lastbrowser.sidekick.saveSettings({
+        settings: { ...cleanSettingsPayload(settings), provider: providerId }
+      });
+      await settingsState.refresh();
+      await modelsState.refresh();
+      showToast(`Active provider set to ${providerId}.`);
+    } catch (error) {
+      showToast(`Could not switch provider: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2533,10 +2577,67 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
             {section === 'providers' && (
               <>
                 <SettingsCard
-                  title="Provider defaults"
-                  description="Provider routing and API redaction."
+                  title="Connected providers"
+                  description="Which providers Sidekick can use, and how to sign in."
                   action={<span className="settings-badge">{activeProvider || 'No active provider'}</span>}
                 >
+                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label="Loading providers…" />}
+                  {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
+                  {!modelsState.loading && !modelsState.error && (
+                    <div className="provider-status-list">
+                      {providerOptions.map((option) => {
+                        const meta = providerPresentation(option.id);
+                        const isActive = option.id === activeProvider;
+                        const connected = isActive && settingsBoolean(settings.provider_configured ?? true, true);
+                        return (
+                          <div key={option.id} className={`provider-status-row ${isActive ? 'active' : ''}`}>
+                            <span className="provider-mark" style={{ background: meta.color }}>{meta.mark}</span>
+                            <span className="provider-copy">
+                              <strong>{option.label}</strong>
+                              <small>{meta.description}</small>
+                            </span>
+                            {isActive && <span className="provider-badge">active</span>}
+                            {option.oauthProvider && (
+                              <button
+                                type="button"
+                                className="secondary-action compact"
+                                onClick={() => void startProviderConnect(option)}
+                                disabled={!ready}
+                              >
+                                <LogIn size={14} />
+                                <span>Connect</span>
+                              </button>
+                            )}
+                            {!isActive && (
+                              <button
+                                type="button"
+                                className="secondary-action compact"
+                                onClick={() => void switchProvider(option.id)}
+                                disabled={!ready || saving}
+                              >
+                                <span>Use</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </SettingsCard>
+
+                <SettingsCard title="Model catalog" description="Live `/api/models` payload mirrored from the backend.">
+                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label="Loading models…" />}
+                  {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
+                  {!modelsState.loading && !modelsState.error && (
+                    <div className="settings-model-summary">
+                      <span className="settings-badge">Default: {settingsText(modelsState.data?.default_model, '—')}</span>
+                      <span className="settings-badge">Active provider: {activeProvider || '—'}</span>
+                      <span className="settings-badge">Groups: {modelGroups.length}</span>
+                    </div>
+                  )}
+                </SettingsCard>
+
+                <SettingsCard title="Advanced provider routing" description="Raw identifiers — only change these if you know the backend expects them.">
                   <div className="settings-field-grid">
                     <SettingsField label="Provider" description="Top-level provider identifier.">
                       <input value={settingsText(draft.provider ?? settings.provider, '')} onChange={(event) => updateDraftField('provider', event.target.value)} placeholder="openai-codex" />
@@ -2560,18 +2661,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
                       </select>
                     </SettingsField>
                   </div>
-                </SettingsCard>
-
-                <SettingsCard title="Model catalog" description="Live `/api/models` payload mirrored from the backend.">
-                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label="Loading models…" />}
-                  {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
-                  {!modelsState.loading && !modelsState.error && (
-                    <div className="settings-model-summary">
-                      <span className="settings-badge">Default: {settingsText(modelsState.data?.default_model, '—')}</span>
-                      <span className="settings-badge">Active provider: {activeProvider || '—'}</span>
-                      <span className="settings-badge">Groups: {modelGroups.length}</span>
-                    </div>
-                  )}
                 </SettingsCard>
               </>
             )}
@@ -2606,6 +2695,26 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
 
             {section === 'system' && (
               <>
+                <SettingsCard
+                  title="Setup assistant"
+                  description="Reopen the first-run wizard to change providers, sign in again, or review the model options."
+                >
+                  <div className="settings-system-actions">
+                    <button
+                      type="button"
+                      className="secondary-action compact"
+                      onClick={onReopenSetup}
+                    >
+                      <Sparkles size={15} />
+                      <span>Open setup assistant</span>
+                    </button>
+                  </div>
+                  <p className="settings-hint">
+                    The assistant walks through provider sign-in and model choice. It does not change
+                    anything until you confirm.
+                  </p>
+                </SettingsCard>
+
                 <SettingsCard
                   title="Access and updates"
                   description="Authentication, password control and package updates."
@@ -2684,9 +2793,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
                     <span className="settings-badge">
                       Source: {sidekickUpdateSource === 'runtime' ? 'updated copy' : 'bundled'}
                     </span>
-                    {sidekickUpdateState !== 'idle' && (
-                      <span className={`settings-badge ${sidekickUpdateState === 'error' ? 'warning' : ''}`}>
-                        {sidekickUpdateState}
+                    {sidekickUpdateStatus !== 'idle' && (
+                      <span className={`settings-badge ${sidekickUpdateStatus === 'error' ? 'warning' : ''}`}>
+                        {sidekickUpdateStatus}
                       </span>
                     )}
                     {sidekickUpdateMessage && <span className="settings-badge">{sidekickUpdateMessage}</span>}

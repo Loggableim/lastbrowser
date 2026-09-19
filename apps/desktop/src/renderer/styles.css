@@ -4254,6 +4254,29 @@ body.sidebar-resizing * {
   border-radius: 0;
 }
 
+.first-run-dismiss {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--lb-border);
+  border-radius: 0;
+  background: var(--lb-surface);
+  color: var(--lb-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+
+.first-run-dismiss:hover {
+  border-color: rgba(0, 217, 255, .45);
+  color: var(--lb-text);
+}
+
 .workspace > .first-run-pane.wide .first-run-hero {
   grid-template-columns: 54px minmax(0, 1fr);
   max-width: 720px;
@@ -4376,6 +4399,138 @@ body.sidebar-resizing * {
 .provider-badge.subtle {
   background: var(--lb-border);
   color: var(--lb-muted);
+}
+
+/* Settings → Providers: status rows reuse the wizard's provider card look. */
+.provider-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.provider-status-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border: 1px solid var(--lb-border);
+  border-radius: 0;
+  background: var(--lb-surface);
+}
+
+.provider-status-row.active {
+  border-color: var(--electricBlue, #2563ff);
+  background: rgba(37, 99, 255, .1);
+}
+
+.provider-status-row .provider-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Wizard → model comparison cards. */
+.model-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.model-picker > header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.model-picker > header strong {
+  font-size: 13px;
+  color: var(--lb-text);
+}
+
+.model-picker > header span {
+  font-size: 12px;
+  color: var(--lb-muted);
+}
+
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 8px;
+}
+
+.model-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--lb-border);
+  border-radius: 0;
+  background: var(--lb-surface);
+  color: var(--lb-text);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+
+.model-card:hover {
+  border-color: rgba(0, 217, 255, .45);
+  background: var(--hover-bg, rgba(255, 255, 255, .05));
+}
+
+.model-card.active {
+  border-color: var(--electricBlue, #2563ff);
+  background: rgba(37, 99, 255, .12);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 255, .35);
+}
+
+.model-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.model-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.model-copy small {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--lb-muted);
+}
+
+.model-copy .model-caveat {
+  color: #ffb454;
+}
+
+.model-tier {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  background: var(--lb-border);
+  color: var(--lb-muted);
+}
+
+.model-tier.fast {
+  background: rgba(124, 255, 107, .16);
+  color: #9dff8f;
+}
+
+.model-tier.balanced {
+  background: rgba(0, 229, 255, .16);
+  color: #7fe6ff;
+}
+
+.model-tier.powerful {
+  background: rgba(138, 63, 252, .2);
+  color: #c4a0ff;
 }
 
 .workspace > .first-run-pane::-webkit-scrollbar {

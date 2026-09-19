@@ -104,6 +104,43 @@ export const SIDEKICK_PATCHES = [
                 # flow — the hardcoded catalog below is the fallback.
                 _probe_timeout = float(os.getenv("SIDEKICK_MODELS_PROBE_TIMEOUT", "3"))
                 with urllib.request.urlopen(req, timeout=_probe_timeout) as response:  # nosec B310`
+  },
+  {
+    id: 'google-oauth-state-per-server',
+    file: 'runtime/google_oauth.py',
+    description:
+      'Bind the OAuth expected_state to the server instance instead of the ' +
+      'handler class, so a second flow cannot clobber the first one and make ' +
+      'a valid Google sign-in fail with "state_mismatch".',
+    find: `        if state != type(self).expected_state:
+            type(self).captured_error = "state_mismatch"
+            self._respond_html(400, _ERROR_PAGE.format(message="State mismatch — aborting for safety."))`,
+    replace: `        # Read the expected state from the server instance, not the class.
+        # \`expected_state\` is a class attribute, so two concurrent flows (or a
+        # retried flow) would overwrite each other and the second callback
+        # would fail with "state_mismatch" even though the user signed in
+        # correctly. The server carries the state for its own flow.
+        expected = getattr(self.server, "expected_state", None)
+        if expected is None:
+            expected = type(self).expected_state
+        if state != expected:
+            type(self).captured_error = "state_mismatch"
+            self._respond_html(400, _ERROR_PAGE.format(message="State mismatch — aborting for safety."))`
+  },
+  {
+    id: 'google-oauth-state-bind-to-server',
+    file: 'runtime/google_oauth.py',
+    description:
+      'Store the flow state on the callback server instance (companion to ' +
+      'google-oauth-state-per-server).',
+    find: `    _OAuthCallbackHandler.expected_state = state
+    _OAuthCallbackHandler.captured_code = None`,
+    replace: `    # Bind the expected state to THIS server instance. The handler class
+    # attribute is shared across flows, so a second flow would clobber the
+    # first one's state and its callback would fail with "state_mismatch".
+    server.expected_state = state
+    _OAuthCallbackHandler.expected_state = state
+    _OAuthCallbackHandler.captured_code = None`
   }
 ];
 

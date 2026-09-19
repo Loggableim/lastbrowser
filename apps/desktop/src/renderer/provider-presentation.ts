@@ -142,3 +142,67 @@ export const categoryLabels: Record<ProviderCategory, { title: string; hint: str
     hint: 'Point Sidekick at a model server on this machine or your network.'
   }
 };
+
+/**
+ * Short, honest descriptions for the models the wizard offers.
+ *
+ * The onboarding API returns ids and labels only, so the picker would show a
+ * bare list. These notes let a new user compare options without leaving the
+ * wizard. Keys are matched by substring against the model id, longest first.
+ */
+export type ModelNote = {
+  /** What this model is good at. */
+  summary: string;
+  /** Rough cost/speed class shown as a badge. */
+  tier: 'fast' | 'balanced' | 'powerful' | 'local';
+  /** Optional caveat worth knowing before choosing. */
+  caveat?: string;
+};
+
+const MODEL_NOTES: Array<[string, ModelNote]> = [
+  // OpenAI / Codex
+  ['gpt-5.5-mini', { summary: 'Cheap and quick for everyday chat and short tasks.', tier: 'fast' }],
+  ['gpt-5.5', { summary: 'Strong general reasoning; the safest default for mixed work.', tier: 'powerful' }],
+  ['gpt-5.4-mini', { summary: 'Lightweight GPT-5.4 — good for high-volume simple turns.', tier: 'fast' }],
+  ['gpt-5.4', { summary: 'Balanced GPT-5.4 for coding and analysis.', tier: 'balanced' }],
+  ['gpt-5.3-codex', { summary: 'Tuned for code: refactors, tests, multi-file edits.', tier: 'powerful' }],
+  ['gpt-5.2-codex', { summary: 'Earlier Codex generation; still strong for code.', tier: 'balanced' }],
+  ['codex-mini', { summary: 'Smallest Codex variant — fast code answers, less depth.', tier: 'fast' }],
+  // Anthropic
+  ['claude-opus-4.7', { summary: 'Anthropic’s most capable model; best for hard reasoning.', tier: 'powerful', caveat: 'Slowest and most expensive option.' }],
+  ['claude-opus-4.6', { summary: 'Previous flagship — near-top quality, slightly cheaper.', tier: 'powerful' }],
+  ['claude-sonnet-4.6', { summary: 'Best quality-per-cost for coding and long context.', tier: 'balanced' }],
+  ['claude-sonnet-4-5', { summary: 'Reliable all-rounder from the previous generation.', tier: 'balanced' }],
+  // Google
+  ['gemini-3.1-pro', { summary: 'Google’s flagship; very large context window.', tier: 'powerful' }],
+  ['gemini-3-flash', { summary: 'Fast Gemini with good quality for chat and search.', tier: 'fast' }],
+  ['gemini-3.1-flash-lite', { summary: 'Cheapest Gemini — fine for simple, high-volume turns.', tier: 'fast' }],
+  ['gemini-2.5-pro', { summary: 'Older Pro model; stable and well-tested.', tier: 'balanced' }],
+  // Others
+  ['deepseek', { summary: 'Strong reasoning at low cost; popular for code.', tier: 'balanced' }],
+  ['mimo', { summary: 'Xiaomi’s model — inexpensive general chat.', tier: 'fast' }],
+  ['glm', { summary: 'Z.AI GLM — solid multilingual reasoning.', tier: 'balanced' }],
+  ['grok', { summary: 'xAI Grok — current-events flavored chat.', tier: 'balanced' }],
+  ['mistral', { summary: 'European-hosted models; good latency in the EU.', tier: 'balanced' }],
+  ['nemotron', { summary: 'NVIDIA Nemotron — optimized for NIM endpoints.', tier: 'balanced' }],
+  ['qwen', { summary: 'Qwen — strong multilingual and coding ability.', tier: 'balanced' }],
+  ['llama', { summary: 'Meta Llama — widely used open-weight family.', tier: 'balanced' }],
+  ['claude', { summary: 'Anthropic Claude model.', tier: 'balanced' }],
+  ['gpt-', { summary: 'OpenAI GPT model.', tier: 'balanced' }],
+  ['gemini', { summary: 'Google Gemini model.', tier: 'balanced' }]
+];
+
+export function modelNote(modelId: string): ModelNote | null {
+  const id = modelId.toLowerCase();
+  for (const [needle, note] of MODEL_NOTES) {
+    if (id.includes(needle)) return note;
+  }
+  return null;
+}
+
+export const tierLabels: Record<ModelNote['tier'], string> = {
+  fast: 'fast',
+  balanced: 'balanced',
+  powerful: 'most capable',
+  local: 'local'
+};

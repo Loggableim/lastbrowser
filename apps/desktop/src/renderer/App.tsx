@@ -72,7 +72,7 @@ import {
   togglePinnedTab
 } from './tabs.js';
 import { brandAssets } from './brand.js';
-import { categoryLabels, providerPresentation } from './provider-presentation.js';
+import { categoryLabels, modelNote, providerPresentation, tierLabels } from './provider-presentation.js';
 import {
   addProfile,
   loadActiveProfileId,
@@ -414,6 +414,15 @@ export function App(): JSX.Element {
   const [browserLoadError, setBrowserLoadError] = useState('');
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [setupState, setSetupState] = useState<SetupState>(defaultSetupState);
+  // The wizard covers the whole window, so it must always be dismissible —
+  // otherwise a user who cannot finish setup is locked out of the browser.
+  const [setupDismissed, setSetupDismissed] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem('lastbrowser.setupDismissed') === '1';
+    } catch {
+      return false;
+    }
+  });
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null);
   const [setupLoading, setSetupLoading] = useState(true);
   const [setupError, setSetupError] = useState('');
@@ -471,7 +480,7 @@ export function App(): JSX.Element {
   const contextSidebarCollapsedRef = useRef(contextSidebarCollapsed);
   const workspacePanelCollapsedRef = useRef(workspacePanelCollapsed);
   const leftSidebarCollapsedRef = useRef(leftSidebarCollapsed);
-  const setupRequired = isFirstRunRequired(setupState, onboardingStatus);
+  const setupRequired = isFirstRunRequired(setupState, onboardingStatus) && !setupDismissed;
   const sidekickApiReady = canCallSidekickApi(status);
 
   useEffect(() => {
@@ -1507,6 +1516,15 @@ export function App(): JSX.Element {
           activeSessionId={activeSessionId}
           activeTab={activeTab}
           activeProfile={activeProfile}
+          onboardingStatus={onboardingStatus}
+          onReopenSetup={() => {
+            setSetupDismissed(false);
+            try {
+              window.localStorage.removeItem('lastbrowser.setupDismissed');
+            } catch {
+              // Storage unavailable — the wizard still opens for this session.
+            }
+          }}
           busy={sidekickBusy}
           chatError={chatError}
           chatMessages={chatMessages}
@@ -1583,6 +1601,14 @@ export function App(): JSX.Element {
             saving={setupSaving}
             onRefreshOnboarding={refreshOnboardingStatus}
             onSubmit={completeSetup}
+            onDismiss={() => {
+              setSetupDismissed(true);
+              try {
+                window.localStorage.setItem('lastbrowser.setupDismissed', '1');
+              } catch {
+                // Storage unavailable — the wizard stays dismissed for this session.
+              }
+            }}
           />
         )}
       </main>
@@ -2396,6 +2422,8 @@ function BrowserMain({
   activeSessionId,
   activeTab,
   activeProfile,
+  onboardingStatus,
+  onReopenSetup,
   busy,
   chatError,
   chatMessages,
@@ -2438,6 +2466,8 @@ function BrowserMain({
   activeSessionId: string | null;
   activeTab: BrowserTab;
   activeProfile: BrowserProfile;
+  onboardingStatus: OnboardingStatus | null;
+  onReopenSetup: () => void;
   busy: boolean;
   chatError: string;
   chatMessages: DesktopChatMessage[];
@@ -2594,7 +2624,7 @@ function BrowserMain({
           </PanelErrorBoundary>
         );
       case 'settings':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} /></PanelErrorBoundary>;
       case 'terminal':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:
@@ -4083,7 +4113,8 @@ function FirstRunSetupPane({
   error,
   saving,
   onRefreshOnboarding,
-  onSubmit
+  onSubmit,
+  onDismiss
 }: {
   status: ServiceStatus | null;
   onboardingStatus: OnboardingStatus | null;
@@ -4092,6 +4123,7 @@ function FirstRunSetupPane({
   saving: boolean;
   onRefreshOnboarding: () => Promise<void>;
   onSubmit: (form: SetupForm) => Promise<void>;
+  onDismiss: () => void;
 }): JSX.Element {
   const providers = cloudProviderOptions(onboardingStatus);
   const [provider, setProvider] = useState(providers[0]?.id || 'openrouter');
@@ -4252,6 +4284,16 @@ function FirstRunSetupPane({
 
   return (
     <aside className="first-run-pane wide">
+      <button
+        type="button"
+        className="first-run-dismiss"
+        aria-label="Close setup and browse"
+        title="Close setup — you can finish it later in Settings"
+        onClick={onDismiss}
+      >
+        <X size={16} />
+        <span>Browse without Sidekick</span>
+      </button>
       <div className="first-run-hero">
         <img src={brandAssets.sidekickAvatar} alt="" className="first-run-avatar" />
         <div className="setup-brand">
@@ -4329,12 +4371,34 @@ function FirstRunSetupPane({
           })}
         </div>
 
-        <label>
-          <span>Model</span>
-          <select value={model} onChange={(event) => setModel(event.target.value)}>
-            {models.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-          </select>
-        </label>
+        <div className="model-picker">
+          <header>
+            <strong>Model</strong>
+            <span>Pick the model Sidekick should use by default. You can change it later.</span>
+          </header>
+          <div className="model-grid">
+            {models.map((item) => {
+              const note = modelNote(item.id);
+              const active = item.id === model;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`model-card ${active ? 'active' : ''}`}
+                  aria-pressed={active}
+                  onClick={() => setModel(item.id)}
+                >
+                  <span className="model-copy">
+                    <strong>{item.label}</strong>
+                    {note && <small>{note.summary}</small>}
+                    {note?.caveat && <small className="model-caveat">{note.caveat}</small>}
+                  </span>
+                  {note && <span className={`model-tier ${note.tier}`}>{tierLabels[note.tier]}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         {activeProviderOption?.oauthProvider ? (
           <div className={`codex-auth-card ${oauthState.status}`}>
             <div className="codex-auth-copy">

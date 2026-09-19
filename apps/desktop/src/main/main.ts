@@ -135,7 +135,9 @@ import {
   warnDiscordMember,
   writeMemory,
   ensureWebuiAuth,
-  getWebuiSessionToken
+  getWebuiSessionToken,
+  getFallbackModel,
+  setFallbackModel
 } from './sidekick-api.js';
 import { registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
 import { createAdblockController } from './adblock.js';
@@ -193,6 +195,12 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:onboardingStatus', () => getOnboardingStatus(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:applyCloudSetup', (_event, request) => applyCloudSetup(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:setDefaultModel', (_event, request) => setDefaultModel(requireWebuiUrl(), String(request?.model || '')));
+  ipcMain.handle('lastbrowser:sidekick:getFallbackModel', () => getFallbackModel(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:sidekick:setFallbackModel', (_event, request) => setFallbackModel(requireWebuiUrl(), {
+    model: String(request?.model || ''),
+    provider: request?.provider ? String(request.provider) : undefined,
+    baseUrl: request?.baseUrl ? String(request.baseUrl) : undefined
+  }));
   ipcMain.handle('lastbrowser:sidekick:completeCloudSetup', () => completeCloudSetup(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:startOAuth', (_event, request) => startOnboardingOAuth(requireWebuiUrl(), String(request?.provider || 'openai-codex')));
   ipcMain.handle('lastbrowser:sidekick:pollOAuth', (_event, flowId) => pollOnboardingOAuth(requireWebuiUrl(), String(flowId || '')));

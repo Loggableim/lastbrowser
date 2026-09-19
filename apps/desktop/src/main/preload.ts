@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     onboardingStatus: () => ipcRenderer.invoke('lastbrowser:sidekick:onboardingStatus'),
     applyCloudSetup: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:applyCloudSetup', request),
     setDefaultModel: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:setDefaultModel', request),
+    getFallbackModel: () => ipcRenderer.invoke('lastbrowser:sidekick:getFallbackModel'),
+    setFallbackModel: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:setFallbackModel', request),
     completeCloudSetup: () => ipcRenderer.invoke('lastbrowser:sidekick:completeCloudSetup'),
     startOAuth: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:startOAuth', request),
     pollOAuth: (flowId: string) => ipcRenderer.invoke('lastbrowser:sidekick:pollOAuth', flowId),

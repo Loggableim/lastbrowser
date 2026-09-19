@@ -683,6 +683,29 @@ export function setDefaultModel(webuiUrl: string, model: string, fetchImpl: Fetc
   }, fetchImpl);
 }
 
+/**
+ * Read the fallback model — the one the agent switches to when the primary
+ * model hits a rate limit.
+ */
+export function getFallbackModel(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/fallback-model', {}, fetchImpl);
+}
+
+/** Set (or clear, with an empty model) the fallback model. */
+export function setFallbackModel(
+  webuiUrl: string,
+  request: { model: string; provider?: string; baseUrl?: string },
+  fetchImpl: FetchLike = fetch
+): Promise<Record<string, unknown>> {
+  const body: Record<string, string> = { model: request.model };
+  if (request.provider) body.provider = request.provider;
+  if (request.baseUrl) body.base_url = request.baseUrl;
+  return jsonRequest(webuiUrl, '/api/fallback-model', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  }, fetchImpl);
+}
+
 export function completeCloudSetup(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
   return jsonRequest(webuiUrl, '/api/onboarding/complete', {
     method: 'POST',

@@ -2047,6 +2047,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   // Provider list for the settings panel: the onboarding API is the
   // authoritative source, so the panel shows the same providers the wizard does.
   const providerOptions = useMemo(() => cloudProviderOptions(onboardingStatus), [onboardingStatus]);
+  const fallbackState = useApiState(() => window.lastbrowser.sidekick.getFallbackModel(), [ready], ready);
+  const fallbackModel = settingsText(fallbackState.data?.fallback_model?.model, '');
 
   useEffect(() => {
     const normalized = activeContextItem.trim().toLowerCase();
@@ -2245,6 +2247,20 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     }
   }
 
+  /** Persist (or clear) the fallback model used when the primary is rate-limited. */
+  async function saveFallbackModel(modelId: string): Promise<void> {
+    setSaving(true);
+    try {
+      await window.lastbrowser.sidekick.setFallbackModel({ model: modelId });
+      await fallbackState.refresh();
+      showToast(modelId ? `Fallback model set to ${modelId}.` : 'Fallback model cleared.');
+    } catch (error) {
+      showToast(`Could not save fallback: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function renderModelOptions(): JSX.Element {
     if (!modelGroups.length) {
       return <input value={defaultModel} onChange={(event) => updateDraftField('default_model', event.target.value)} placeholder="model-id" />;
@@ -2396,6 +2412,40 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       <input value={settingsText(draft.bot_name ?? settings.bot_name, 'Hermes')} onChange={(event) => updateDraftField('bot_name', event.target.value)} placeholder="Hermes" />
                     </SettingsField>
                   </div>
+                </SettingsCard>
+
+                <SettingsCard
+                  title="Fallback model"
+                  description="Used automatically when the primary model hits a rate limit or quota. Without one, a rate-limited turn just fails."
+                  action={fallbackModel ? <span className="settings-badge">active</span> : <span className="settings-badge">none</span>}
+                >
+                  <div className="settings-field-grid">
+                    <SettingsField label="Fallback model" description="Leave on “None” to disable the fallback.">
+                      <select
+                        value={fallbackModel}
+                        onChange={(event) => void saveFallbackModel(event.target.value)}
+                        disabled={!ready || saving}
+                      >
+                        <option value="">None</option>
+                        {modelGroups.map((group) => {
+                          const providerLabel = settingsText(group.provider || group.provider_id || 'Provider');
+                          const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
+                          return (
+                            <optgroup key={`fb-${providerLabel}`} label={providerLabel}>
+                              {models.map((model) => {
+                                const id = settingsText(model.id || model.name || model.label);
+                                return <option key={id} value={id}>{settingsText(model.label || model.name || model.id)}</option>;
+                              })}
+                            </optgroup>
+                          );
+                        })}
+                      </select>
+                    </SettingsField>
+                  </div>
+                  <p className="settings-hint">
+                    A good fallback is a model on a different provider — e.g. an OpenRouter model when your
+                    Google quota is exhausted.
+                  </p>
                 </SettingsCard>
               </>
             )}

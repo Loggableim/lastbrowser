@@ -141,6 +141,135 @@ export const SIDEKICK_PATCHES = [
     server.expected_state = state
     _OAuthCallbackHandler.expected_state = state
     _OAuthCallbackHandler.captured_code = None`
+  },
+  {
+    id: 'fallback-model-accessors',
+    file: 'web/api/config.py',
+    description:
+      'Add get/set_sidekick_fallback_model so the WebUI can configure the ' +
+      'fallback used when the primary model is rate-limited (previously ' +
+      'config.yaml-only).',
+    find: `    invalidate_models_cache()
+    return {"ok": True, "model": persisted_model}
+
+
+# ── TTL cache for get_available_models() ─────────────────────────────────────`,
+    replace: `    invalidate_models_cache()
+    return {"ok": True, "model": persisted_model}
+
+
+def get_sidekick_fallback_model() -> dict:
+    """Read the configured fallback model (used when the primary hits a rate limit).
+
+    The agent reads \`\`fallback_model\`\` from config.yaml when a turn fails with
+    HTTP 429; without it a rate-limited provider just ends the turn. The WebUI
+    had no way to set it, so users could not recover from a quota exhaustion
+    without editing YAML by hand.
+    """
+    config_path = _get_config_path()
+    try:
+        config_data = _load_yaml_config_file(config_path)
+    except Exception:
+        config_data = {}
+    entry = config_data.get("fallback_model")
+    if isinstance(entry, list):
+        entry = next((e for e in entry if isinstance(e, dict) and e.get("model")), None)
+    if not isinstance(entry, dict):
+        return {"ok": True, "fallback_model": None}
+    return {
+        "ok": True,
+        "fallback_model": {
+            "model": str(entry.get("model") or ""),
+            "provider": str(entry.get("provider") or ""),
+            "base_url": entry.get("base_url") or None,
+        },
+    }
+
+
+def set_sidekick_fallback_model(
+    model_id: str, provider: str = "", base_url: str | None = None
+) -> dict:
+    """Persist \`\`fallback_model\`\` in config.yaml, or clear it when model is empty.
+
+    Mirrors the shape the agent expects (\`\`{model, provider, base_url}\`\`) so a
+    rate-limited primary model can hand off to a working one instead of failing
+    the turn outright.
+    """
+    config_path = _get_config_path()
+    selected_model = str(model_id or "").strip()
+    with _cfg_lock:
+        config_data = _load_yaml_config_file(config_path)
+        if not selected_model:
+            config_data.pop("fallback_model", None)
+            _save_yaml_config_file(config_path, config_data)
+        else:
+            resolved_model, resolved_provider, resolved_base_url = resolve_model_provider(
+                selected_model
+            )
+            entry: dict = {
+                "model": resolved_model or selected_model,
+                "provider": str(provider or "").strip() or resolved_provider or "",
+            }
+            effective_base_url = base_url or resolved_base_url
+            if effective_base_url:
+                entry["base_url"] = effective_base_url
+            config_data["fallback_model"] = entry
+            _save_yaml_config_file(config_path, config_data)
+    reload_config()
+    return get_sidekick_fallback_model()
+
+
+# ── TTL cache for get_available_models() ─────────────────────────────────────`
+  },
+  {
+    id: 'fallback-model-route',
+    file: 'web/api/routes.py',
+    description:
+      'Expose GET/POST /api/fallback-model (companion to fallback-model-accessors).',
+    find: `    if parsed.path == "/api/default-model":
+        try:
+            return j(handler, set_sidekick_default_model(body.get("model")))
+        except ValueError as e:
+            return bad(handler, str(e))
+        except RuntimeError as e:
+            return bad(handler, str(e), 500)`,
+    replace: `    if parsed.path == "/api/default-model":
+        try:
+            return j(handler, set_sidekick_default_model(body.get("model")))
+        except ValueError as e:
+            return bad(handler, str(e))
+        except RuntimeError as e:
+            return bad(handler, str(e), 500)
+
+    if parsed.path == "/api/fallback-model":
+        # GET returns the configured fallback; POST sets or clears it.
+        try:
+            if handler.command == "GET":
+                return j(handler, get_sidekick_fallback_model())
+            return j(
+                handler,
+                set_sidekick_fallback_model(
+                    body.get("model", ""),
+                    str(body.get("provider", "") or ""),
+                    body.get("base_url") or None,
+                ),
+            )
+        except ValueError as e:
+            return bad(handler, str(e))
+        except RuntimeError as e:
+            return bad(handler, str(e), 500)`
+  },
+  {
+    id: 'fallback-model-route-import',
+    file: 'web/api/routes.py',
+    description:
+      'Import the fallback accessors in routes.py (companion to fallback-model-route).',
+    find: `    set_sidekick_default_model,
+    model_with_provider_context,`,
+    replace: `    set_sidekick_default_model,
+    get_sidekick_fallback_model,
+    set_sidekick_fallback_model,
+    model_with_provider_context,`
   }
 ];
 

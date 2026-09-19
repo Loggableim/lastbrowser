@@ -155,6 +155,28 @@ function copyTree(src, dest) {
   });
 }
 
+/**
+ * Remove a directory tree, retrying on Windows lock errors (EPERM/EBUSY).
+ * Returns false when the tree could not be removed — the caller then syncs
+ * in place instead of failing the build.
+ */
+function removeTreeWithRetry(dir, attempts = 5) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+      return true;
+    } catch (error) {
+      const code = error && error.code;
+      if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'ENOTEMPTY') throw error;
+      if (attempt === attempts - 1) return false;
+      // Give the lock holder a moment to release.
+      const wait = 300 * (attempt + 1);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait);
+    }
+  }
+  return false;
+}
+
 function main() {
   const version = fetchRepo();
 
@@ -169,8 +191,15 @@ function main() {
   }
 
   // Replace the bundled monorepo wholesale so no stale files linger.
+  // On Windows a running sidecar (or a shell sitting in the directory) can
+  // hold a lock on the tree, so a plain rmSync fails with EPERM. Retry a few
+  // times, and if the directory still cannot be removed, fall back to syncing
+  // into it in place (copy over the top) rather than failing the build.
   console.log(`[sync-sidekick] replacing ${targetDir}`);
-  rmSync(targetDir, { recursive: true, force: true });
+  const removed = removeTreeWithRetry(targetDir);
+  if (!removed) {
+    console.warn('[sync-sidekick] could not remove the existing tree (locked); syncing in place');
+  }
   mkdirSync(targetDir, { recursive: true });
 
   // Copy every top-level entry except the excludes.

@@ -33,7 +33,15 @@ function main() {
   }
 
   console.log(`[prepare:python] Preparing Python runtime from ${sourcePythonHome}`);
-  rmSync(pythonRuntimeDir, { recursive: true, force: true });
+  // Windows can hold a lock on the tree (a running sidecar, a shell sitting in
+  // it). Retry, and if it still cannot be removed, fail with a clear message
+  // instead of an opaque EPERM stack.
+  if (!removeTreeWithRetry(pythonRuntimeDir)) {
+    throw new Error(
+      `Could not replace the Python runtime at ${pythonRuntimeDir} — a process is holding it.\n` +
+      'Close Lastbrowser (and any shell inside that directory) and retry.'
+    );
+  }
   mkdirSync(pythonRuntimeDir, { recursive: true });
   copyPythonHome(sourcePythonHome, pythonRuntimeDir);
 
@@ -182,6 +190,26 @@ function assertInside(parent, child) {
   if (rel.startsWith('..') || rel === '' || resolve(rel) === rel) {
     throw new Error(`Refusing to modify path outside desktop directory: ${child}`);
   }
+}
+
+/**
+ * Remove a directory tree, retrying on Windows lock errors (EPERM/EBUSY).
+ * Returns false when the tree could not be removed.
+ */
+function removeTreeWithRetry(dir, attempts = 5) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+      return true;
+    } catch (error) {
+      const code = error && error.code;
+      if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'ENOTEMPTY') throw error;
+      if (attempt === attempts - 1) return false;
+      const wait = 300 * (attempt + 1);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait);
+    }
+  }
+  return false;
 }
 
 main();

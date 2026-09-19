@@ -25,10 +25,16 @@ function loadMermaid(): Promise<void> {
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
     script.onload = () => {
-      if (window.mermaid) {
+      // The CDN can serve a build whose API differs (or a partial load), so
+      // verify the method we actually call exists before resolving. Without
+      // this the caller throws "run is not a function" and the whole chat
+      // panel falls into the error boundary.
+      if (window.mermaid && typeof window.mermaid.run === 'function') {
         window.mermaid.initialize({ startOnLoad: false, theme: 'dark' });
         resolve();
-      } else reject(new Error('mermaid loaded but not found'));
+      } else {
+        reject(new Error('mermaid loaded without a usable run()'));
+      }
     };
     script.onerror = () => reject(new Error('Failed to load mermaid'));
     document.head.appendChild(script);
@@ -38,18 +44,24 @@ function loadMermaid(): Promise<void> {
 function renderMermaidBlocks(container: HTMLElement): void {
   const blocks = container.querySelectorAll<HTMLElement>('.mermaid-block');
   if (!blocks.length) return;
-  void loadMermaid().then(() => {
-    if (window.mermaid) {
-      void window.mermaid.run({ nodes: Array.from(blocks) });
-    }
-  });
+  // Diagram rendering is a progressive enhancement: a missing CDN or an API
+  // mismatch must never break the chat transcript.
+  void loadMermaid()
+    .then(() => {
+      if (window.mermaid && typeof window.mermaid.run === 'function') {
+        void window.mermaid.run({ nodes: Array.from(blocks) });
+      }
+    })
+    .catch(() => {
+      /* leave the raw diagram text in place */
+    });
 }
 
 // ── KaTeX ────────────────────────────────────────────────────
 
 function loadKatex(): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (typeof window.katex !== 'undefined') {
+    if (typeof window.katex !== 'undefined' && typeof window.katex.renderToString === 'function') {
       resolve();
       return;
     }
@@ -61,7 +73,11 @@ function loadKatex(): Promise<void> {
     // Load JS
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js';
-    script.onload = () => resolve();
+    script.onload = () => {
+      // Same guard as mermaid: verify the method we call actually exists.
+      if (window.katex && typeof window.katex.renderToString === 'function') resolve();
+      else reject(new Error('katex loaded without renderToString()'));
+    };
     script.onerror = () => reject(new Error('Failed to load katex'));
     document.head.appendChild(script);
   });
@@ -71,8 +87,9 @@ function renderKatexInElement(el: HTMLElement): void {
   const texBlocks = el.querySelectorAll<HTMLElement>('.katex-block');
   const texInline = el.querySelectorAll<HTMLElement>('.katex-inline');
   if (!texBlocks.length && !texInline.length) return;
+  // Math rendering is a progressive enhancement — never break the transcript.
   void loadKatex().then(() => {
-    if (!window.katex) return;
+    if (!window.katex || typeof window.katex.renderToString !== 'function') return;
     texBlocks.forEach((block) => {
       try {
         block.innerHTML = window.katex!.renderToString(block.textContent || '', {

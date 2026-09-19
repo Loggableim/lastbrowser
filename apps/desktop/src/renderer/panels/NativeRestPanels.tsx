@@ -2120,6 +2120,15 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       payload.enabled_plugins = parseSettingsCsv(settingsCsv(payload.enabled_plugins));
       payload.plugins = parseSettingsCsv(settingsCsv(payload.plugins));
       await window.lastbrowser.sidekick.saveSettings({ settings: payload });
+      // `default_model` lives in config.yaml, not in the settings store — the
+      // settings endpoint silently drops it, so a model change in this panel
+      // appeared to save but never took effect. Write it through the dedicated
+      // endpoint that actually persists it.
+      const chosenModel = settingsText(payload.default_model, '').trim();
+      if (chosenModel && chosenModel !== settingsText(settings.default_model, '').trim()) {
+        await window.lastbrowser.sidekick.setDefaultModel({ model: chosenModel });
+        await modelsState.refresh();
+      }
       window.dispatchEvent(new CustomEvent('lastbrowser:settings-changed', { detail: payload }));
       setDirty(false);
       setPasswordDraft('');

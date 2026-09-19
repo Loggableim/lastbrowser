@@ -72,6 +72,7 @@ import {
   togglePinnedTab
 } from './tabs.js';
 import { brandAssets } from './brand.js';
+import { categoryLabels, providerPresentation } from './provider-presentation.js';
 import {
   addProfile,
   loadActiveProfileId,
@@ -4100,11 +4101,16 @@ function FirstRunSetupPane({
   const [oauthState, setOAuthState] = useState<CodexOAuthState>(idleCodexOAuth);
   const readiness = firstRunStatus(status, onboardingStatus);
   const canSubmit = canSubmitCloudSetup(readiness);
-  const isCodexProvider = provider === 'openai-codex';
-  const codexAlreadyReady = onboardingStatus?.system?.chat_ready === true
-    && onboardingStatus.system.current_provider === 'openai-codex';
-  const codexLoginReady = !isCodexProvider || oauthState.status === 'success' || codexAlreadyReady;
-  const canSubmitForm = canSubmit && codexLoginReady;
+  const activeProviderOption = providers.find((item) => item.id === provider);
+  // Any provider the live API marks with an oauth_provider supports a
+  // connect flow (ChatGPT/Codex, Claude Code, Gemini CLI).
+  const oauthProviderId = activeProviderOption?.oauthProvider || '';
+  const oauthAlreadyReady = Boolean(oauthProviderId)
+    && onboardingStatus?.system?.chat_ready === true
+    && String(onboardingStatus.system.current_provider || '').toLowerCase() === oauthProviderId;
+  const oauthNeedsLogin = Boolean(oauthProviderId) && oauthState.status !== 'success' && !oauthAlreadyReady;
+  const oauthLoginReady = !oauthNeedsLogin;
+  const canSubmitForm = canSubmit && oauthLoginReady;
 
   useEffect(() => {
     if (!providers.some((item) => item.id === provider) && providers[0]) {
@@ -4120,13 +4126,13 @@ function FirstRunSetupPane({
   }, [model, onboardingStatus, provider]);
 
   useEffect(() => {
-    if (!isCodexProvider && oauthState.status !== 'idle') {
+    if (!oauthProviderId && oauthState.status !== 'idle') {
       setOAuthState(idleCodexOAuth);
     }
-  }, [isCodexProvider, oauthState.status]);
+  }, [oauthProviderId, oauthState.status]);
 
   useEffect(() => {
-    if (!isCodexProvider || oauthState.status !== 'pending' || !oauthState.flowId) return;
+    if (!oauthProviderId || oauthState.status !== 'pending' || !oauthState.flowId) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       try {
@@ -4137,7 +4143,7 @@ function FirstRunSetupPane({
           setOAuthState((current) => ({
             ...current,
             status: 'pending',
-            message: 'Waiting for ChatGPT authorization...'
+            message: `Waiting for ${activeProviderOption?.label || 'provider'} authorization...`
           }));
           return;
         }
@@ -4145,7 +4151,7 @@ function FirstRunSetupPane({
           setOAuthState((current) => ({
             ...current,
             status: 'success',
-            message: 'ChatGPT login connected. Codex tokens are ready for Sidekick.'
+            message: `${activeProviderOption?.label || 'Provider'} connected. Credentials are ready for Sidekick.`
           }));
           await onRefreshOnboarding();
           return;
@@ -4153,7 +4159,7 @@ function FirstRunSetupPane({
         setOAuthState((current) => ({
           ...current,
           status: nextStatus,
-          message: response.error || 'The ChatGPT login flow ended before credentials were saved.'
+          message: response.error || 'The login flow ended before credentials were saved.'
         }));
       } catch (pollError) {
         if (cancelled) return;
@@ -4169,33 +4175,45 @@ function FirstRunSetupPane({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [isCodexProvider, oauthState.flowId, oauthState.pollIntervalSeconds, oauthState.status, onRefreshOnboarding]);
+  }, [oauthProviderId, activeProviderOption?.label, oauthState.flowId, oauthState.pollIntervalSeconds, oauthState.status, onRefreshOnboarding]);
 
-  async function startCodexLogin(): Promise<void> {
-    setOAuthState({ status: 'starting', message: 'Starting ChatGPT login...' });
+  async function startProviderLogin(): Promise<void> {
+    if (!oauthProviderId) return;
+    const providerLabel = activeProviderOption?.label || 'provider';
+    setOAuthState({ status: 'starting', message: `Starting ${providerLabel} login...` });
     try {
-      const response = await window.lastbrowser.sidekick.startOAuth({ provider: 'openai-codex' });
+      const response = await window.lastbrowser.sidekick.startOAuth({ provider: oauthProviderId });
       if (response.error) throw new Error(response.error);
       const flowId = String(response.flow_id || '');
+
+      // Anthropic/Claude Code links existing CLI credentials and completes
+      // immediately — there is no browser step.
       if (response.status === 'success') {
         setOAuthState({
           status: 'success',
           flowId,
-          message: 'Existing Codex login found and connected. Codex tokens are ready for Sidekick.'
+          message: `${providerLabel} credentials found and connected.`
         });
         await onRefreshOnboarding();
         return;
       }
-      const verificationUri = String(response.verification_uri || '');
+
+      // Two pending shapes exist:
+      //   Codex   -> user_code + verification_uri (device flow, user types a code)
+      //   Gemini  -> auth_url (user just opens the URL)
+      const verificationUri = String(response.verification_uri || response.auth_url || '');
       const userCode = String(response.user_code || '');
-      if (!flowId || !verificationUri || !userCode) throw new Error('Sidekick returned an incomplete ChatGPT login flow.');
+      if (!flowId || !verificationUri) throw new Error('Sidekick returned an incomplete login flow.');
+
       setOAuthState({
-        status: response.status === 'success' ? 'success' : 'pending',
+        status: 'pending',
         flowId,
         verificationUri,
         userCode,
         pollIntervalSeconds: Number(response.poll_interval_seconds || 3),
-        message: 'Open ChatGPT, enter the code, then return to Lastbrowser.'
+        message: userCode
+          ? `Open ${providerLabel}, enter the code, then return to Lastbrowser.`
+          : `Sign in with ${providerLabel} in the opened tab, then return to Lastbrowser.`
       });
       window.open(verificationUri, '_blank', 'noopener,noreferrer');
     } catch (loginError) {
@@ -4208,9 +4226,9 @@ function FirstRunSetupPane({
 
   async function cancelCodexLogin(): Promise<void> {
     const flowId = oauthState.flowId;
-    setOAuthState({ status: 'cancelled', message: 'ChatGPT login cancelled.' });
+    setOAuthState({ status: 'cancelled', message: 'Login cancelled.' });
     if (flowId) {
-      await window.lastbrowser.sidekick.cancelOAuth({ flowId, provider: 'openai-codex' }).catch(() => null);
+      await window.lastbrowser.sidekick.cancelOAuth({ flowId, provider: oauthProviderId || 'openai-codex' }).catch(() => null);
     }
   }
 
@@ -4221,11 +4239,11 @@ function FirstRunSetupPane({
 
   function submit(event: FormEvent): void {
     event.preventDefault();
-    if (isCodexProvider && !codexLoginReady) {
+    if (oauthNeedsLogin) {
       setOAuthState((current) => ({
         ...current,
         status: current.status === 'idle' ? 'error' : current.status,
-        message: 'Sign in with ChatGPT before starting Lastbrowser with Codex.'
+        message: `Connect ${activeProviderOption?.label || 'your account'} before starting Lastbrowser.`
       }));
       return;
     }
@@ -4233,7 +4251,7 @@ function FirstRunSetupPane({
   }
 
   return (
-    <aside className="first-run-pane">
+    <aside className="first-run-pane wide">
       <div className="first-run-hero">
         <img src={brandAssets.sidekickAvatar} alt="" className="first-run-avatar" />
         <div className="setup-brand">
@@ -4269,32 +4287,61 @@ function FirstRunSetupPane({
       </div>
 
       <form className="setup-form" onSubmit={submit}>
-        <label>
-          <span>Provider</span>
-          <select
-            value={provider}
-            onChange={(event) => {
-              setProvider(event.target.value);
-              setApiKey('');
-              setOAuthState(idleCodexOAuth);
-            }}
-          >
-            {providers.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-          </select>
-        </label>
+        <div className="provider-picker">
+          {(['connect', 'cloud', 'local'] as const).map((category) => {
+            const inCategory = providers.filter((item) => providerPresentation(item.id).category === category);
+            if (!inCategory.length) return null;
+            return (
+              <section key={category} className="provider-group">
+                <header>
+                  <strong>{categoryLabels[category].title}</strong>
+                  <span>{categoryLabels[category].hint}</span>
+                </header>
+                <div className="provider-grid">
+                  {inCategory.map((item) => {
+                    const meta = providerPresentation(item.id);
+                    const active = item.id === provider;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`provider-card ${active ? 'active' : ''}`}
+                        aria-pressed={active}
+                        onClick={() => {
+                          setProvider(item.id);
+                          setApiKey('');
+                          setOAuthState(idleCodexOAuth);
+                        }}
+                      >
+                        <span className="provider-mark" style={{ background: meta.color }}>{meta.mark}</span>
+                        <span className="provider-copy">
+                          <strong>{item.label}</strong>
+                          <small>{meta.description}</small>
+                        </span>
+                        {item.oauthProvider && <span className="provider-badge">sign in</span>}
+                        {item.keyOptional && !item.oauthProvider && <span className="provider-badge subtle">no key</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+
         <label>
           <span>Model</span>
           <select value={model} onChange={(event) => setModel(event.target.value)}>
             {models.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
         </label>
-        {isCodexProvider ? (
+        {activeProviderOption?.oauthProvider ? (
           <div className={`codex-auth-card ${oauthState.status}`}>
             <div className="codex-auth-copy">
-              <strong>ChatGPT Codex login</strong>
-              <span>Use your OpenAI Codex credentials instead of pasting an API key.</span>
+              <strong>{activeProviderOption.oauthLabel || 'Connect account'}</strong>
+              <span>Use your existing account instead of pasting an API key.</span>
             </div>
-            {oauthState.status === 'success' || codexAlreadyReady ? (
+            {oauthState.status === 'success' || oauthAlreadyReady ? (
               <div className="codex-auth-success">
                 <CheckCircle2 size={17} />
                 <span>Connected</span>
@@ -4303,25 +4350,27 @@ function FirstRunSetupPane({
               <button
                 type="button"
                 className="secondary-action"
-                onClick={() => void startCodexLogin()}
+                onClick={() => void startProviderLogin()}
                 disabled={!canSubmit || oauthState.status === 'starting' || oauthState.status === 'pending'}
               >
                 {oauthState.status === 'starting' || oauthState.status === 'pending'
                   ? <Loader2 size={16} className="spin" />
                   : <LogIn size={16} />}
-                <span>Sign in with ChatGPT</span>
+                <span>{activeProviderOption.oauthLabel ? `Connect ${activeProviderOption.label}` : 'Connect account'}</span>
               </button>
             )}
-            {oauthState.verificationUri && oauthState.userCode && oauthState.status === 'pending' && (
+            {oauthState.verificationUri && oauthState.status === 'pending' && (
               <div className="codex-device-flow">
                 <a href={oauthState.verificationUri} target="_blank" rel="noreferrer">
                   <ExternalLink size={14} />
-                  <span>Open authorization page</span>
+                  <span>{oauthState.userCode ? 'Open authorization page' : 'Open sign-in page'}</span>
                 </a>
-                <button type="button" className="code-pill" onClick={copyCodexCode}>
-                  <span>{oauthState.userCode}</span>
-                  <ClipboardCopy size={14} />
-                </button>
+                {oauthState.userCode && (
+                  <button type="button" className="code-pill" onClick={copyCodexCode}>
+                    <span>{oauthState.userCode}</span>
+                    <ClipboardCopy size={14} />
+                  </button>
+                )}
                 <button type="button" className="text-action" onClick={() => void cancelCodexLogin()}>Cancel</button>
               </div>
             )}
@@ -4329,19 +4378,29 @@ function FirstRunSetupPane({
           </div>
         ) : (
           <label>
-            <span>API key</span>
+            <span>{activeProviderOption?.keyOptional ? 'API key (optional)' : 'API key'}</span>
             <input
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
               type="password"
-              placeholder="Cloud provider API key"
+              placeholder={activeProviderOption?.keyOptional
+                ? 'Leave empty for a local install, or paste a cloud key'
+                : 'Cloud provider API key'}
             />
+            {activeProviderOption?.keyOptional && (
+              <small className="setup-hint">
+                {providerPresentation(provider).keyHint
+                  || (activeProviderOption.defaultBaseUrl
+                    ? `Works without a key against ${activeProviderOption.defaultBaseUrl}. Paste a key to use the hosted service instead.`
+                    : 'Works without a key for local installs. Paste a key to use the hosted service instead.')}
+              </small>
+            )}
           </label>
         )}
         {error && <div className="setup-error">{error}</div>}
         <button type="submit" className="primary-action" disabled={saving || !provider || !model || !canSubmitForm}>
           {saving || !canSubmitForm ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
-          <span>{saving ? 'Connecting' : canSubmitForm ? 'Start Lastbrowser' : isCodexProvider ? 'Connect ChatGPT first' : 'Preparing sidekick'}</span>
+          <span>{saving ? 'Connecting' : canSubmitForm ? 'Start Lastbrowser' : oauthNeedsLogin ? 'Connect account first' : 'Preparing sidekick'}</span>
         </button>
       </form>
     </aside>

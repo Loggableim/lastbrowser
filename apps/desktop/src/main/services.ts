@@ -148,11 +148,16 @@ export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number
     SIDEKICK_HOME: layout.runtimeDir,
     SIDEKICK_AGENT_DIR: layout.sidekickDir,
     SIDEKICK_BRIDGE_TOKEN: layout.bridgeToken,
-    // The live monorepo resolves its agent dir via SIDEKICK_WEBUI_AGENT_DIR.
+    // The live monorepo resolves its agent dir via SIDEKICK_WEBUI_AGENT_DIR,
+    // its state dir via SIDEKICK_WEBUI_STATE_DIR, and its port via
+    // SIDEKICK_WEBUI_PORT. Without these the WebUI falls back to defaults and
+    // writes state (settings, auth, sessions) to the wrong directory.
     SIDEKICK_WEBUI_AGENT_DIR: layout.sidekickDir,
+    SIDEKICK_WEBUI_STATE_DIR: path.join(layout.runtimeDir, 'webui'),
     SIDEKICK_WEBUI_PYTHON: layout.pythonExe,
     SIDEKICK_WEBUI_PORT: webuiPortValue,
     SIDEKICK_WEBUI_NO_BROWSER: '1',
+    SIDEKICK_STATE_DIR: path.join(layout.runtimeDir, 'webui'),
     HERMES_HOME: layout.runtimeDir,
     HERMES_WEBUI_AGENT_DIR: layout.sidekickDir,
     HERMES_WEBUI_STATE_DIR: path.join(layout.runtimeDir, 'webui'),

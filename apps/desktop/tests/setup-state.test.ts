@@ -27,7 +27,7 @@ describe('cloud first-run setup state', () => {
     });
   });
 
-  it('filters onboarding providers to cloud choices for this slice', () => {
+  it('surfaces every provider the onboarding API offers, including local ones', () => {
     const options = cloudProviderOptions({
       setup: {
         providers: [
@@ -39,20 +39,41 @@ describe('cloud first-run setup state', () => {
       }
     });
 
-    expect(options).toEqual([
-      { id: 'openai-codex', label: 'OpenAI Codex (ChatGPT)' },
-      { id: 'openrouter', label: 'OpenRouter' },
-      { id: 'anthropic', label: 'Anthropic' }
+    // Local / key-optional providers are legitimate choices, not noise: the
+    // wizard must offer Ollama and LM Studio alongside the cloud providers.
+    expect(options.map((option) => option.id)).toEqual([
+      'openai-codex',
+      'openrouter',
+      'anthropic',
+      'lmstudio',
+      'ollama'
     ]);
+    expect(options.find((option) => option.id === 'ollama')?.keyOptional).toBe(true);
+  });
+
+  it('carries the OAuth connect info through for CLI providers', () => {
+    const options = cloudProviderOptions({
+      setup: {
+        providers: [
+          { id: 'anthropic', label: 'Anthropic', oauth_provider: 'anthropic', oauth_label: 'Claude Code OAuth' },
+          { id: 'google-gemini-cli', label: 'Gemini CLI', oauth_provider: 'google-gemini-cli', oauth_label: 'Google-Konto / Gemini CLI', key_optional: true }
+        ]
+      }
+    });
+
+    const gemini = options.find((option) => option.id === 'google-gemini-cli');
+    expect(gemini?.oauthProvider).toBe('google-gemini-cli');
+    expect(gemini?.oauthLabel).toBe('Google-Konto / Gemini CLI');
+    expect(options.find((option) => option.id === 'anthropic')?.oauthProvider).toBe('anthropic');
   });
 
   it('shows cloud provider fallbacks before the onboarding API responds', () => {
-    expect(cloudProviderOptions(null)).toEqual([
-      { id: 'openai-codex', label: 'OpenAI Codex (ChatGPT)' },
-      { id: 'openrouter', label: 'OpenRouter' },
-      { id: 'openai', label: 'OpenAI' },
-      { id: 'anthropic', label: 'Anthropic' },
-      { id: 'gemini', label: 'Google Gemini' }
+    expect(cloudProviderOptions(null).map((option) => option.id)).toEqual([
+      'openai-codex',
+      'openrouter',
+      'openai',
+      'anthropic',
+      'gemini'
     ]);
   });
 
@@ -64,10 +85,10 @@ describe('cloud first-run setup state', () => {
           { id: 'openai', label: 'OpenAI' }
         ]
       }
-    })).toEqual([
-      { id: 'openai-codex', label: 'OpenAI Codex (ChatGPT)' },
-      { id: 'openrouter', label: 'OpenRouter' },
-      { id: 'openai', label: 'OpenAI' }
+    }).map((option) => option.id)).toEqual([
+      'openai-codex',
+      'openrouter',
+      'openai'
     ]);
   });
 

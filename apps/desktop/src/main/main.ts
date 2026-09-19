@@ -133,7 +133,8 @@ import {
   updateCron,
   updateKanbanTask,
   warnDiscordMember,
-  writeMemory
+  writeMemory,
+  ensureWebuiAuth
 } from './sidekick-api.js';
 import { registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
 import { createAdblockController } from './adblock.js';
@@ -417,6 +418,24 @@ function requireWebuiUrl(): string {
   return status.webuiUrl;
 }
 
+/**
+ * Authenticate against the sidecar when it requires a password.
+ *
+ * The shell owns the sidecar process, so it can pass the password in the
+ * environment and log in once. Without this, every native panel call fails
+ * with HTTP 401 as soon as the user enables WebUI auth.
+ */
+async function ensureSidecarAuth(): Promise<void> {
+  try {
+    const status = services?.getStatus();
+    if (!status?.webuiUrl) return;
+    const password = process.env.SIDEKICK_WEBUI_PASSWORD || process.env.HERMES_WEBUI_PASSWORD || '';
+    await ensureWebuiAuth(status.webuiUrl, password);
+  } catch {
+    // Auth is optional — a failure must not block the shell.
+  }
+}
+
 app.setName('Lastbrowser');
 app.whenReady().then(() => {
   installBrowserChrome(Menu);
@@ -428,7 +447,7 @@ app.whenReady().then(() => {
     getWindow: () => mainWindow
   });
   services = new SidecarServices(resolveServiceLayout(appResourcesDir()));
-  void services.start();
+  void services.start().then(() => ensureSidecarAuth());
   registerIpc();
   createWindow();
   startAutoUpdateChecks();

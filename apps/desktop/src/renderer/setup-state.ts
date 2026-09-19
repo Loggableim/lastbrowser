@@ -9,6 +9,7 @@ export type OnboardingProvider = {
   label?: string;
   models?: Array<string | { id?: string; value?: string; label?: string }>;
   requires_base_url?: boolean;
+  default_base_url?: string;
   key_optional?: boolean;
   oauth_provider?: string;
   oauth_label?: string;
@@ -104,7 +105,19 @@ export function normalizeSetupState(raw: unknown): SetupState {
 
 export function isFirstRunRequired(state: SetupState, onboardingStatus: unknown): boolean {
   const status = onboardingStatus as OnboardingStatus | null;
-  return state.cloudSetupComplete !== true || status?.system?.chat_ready !== true;
+  // The wizard is done once the user completed setup AND the runtime reports a
+  // usable chat provider. `chat_ready` is the authoritative signal, but the
+  // newer FastAPI WebUI may omit it while still being fully configured — in
+  // that case fall back to the persisted setup state so the wizard does not
+  // reappear on every launch.
+  if (state.cloudSetupComplete === true) {
+    const chatReady = status?.system?.chat_ready;
+    if (chatReady === true) return false;
+    if (chatReady === false) return true;
+    // chat_ready unknown (undefined): trust the persisted setup state.
+    return false;
+  }
+  return true;
 }
 
 export function firstRunStatus(serviceStatus: FirstRunServiceStatus, onboardingStatus: OnboardingStatus | null | undefined): FirstRunStatus {
@@ -156,7 +169,27 @@ export function canSubmitCloudSetup(status: FirstRunStatus): boolean {
   return status.canSubmit;
 }
 
-export function cloudProviderOptions(status: OnboardingStatus | null | undefined): Array<{ id: string; label: string }> {
+export type ProviderOption = {
+  id: string;
+  label: string;
+  /** Provider supports an OAuth/CLI connect flow (Claude Code, Gemini CLI). */
+  oauthProvider?: string;
+  oauthLabel?: string;
+  /** Provider works without an API key (local Ollama, LM Studio). */
+  keyOptional?: boolean;
+  requiresBaseUrl?: boolean;
+  defaultBaseUrl?: string;
+};
+
+/**
+ * Providers offered in the first-run wizard.
+ *
+ * The live Sidekick onboarding API already returns the authoritative list
+ * (including `oauth_provider` for Claude Code / Gemini CLI and `key_optional`
+ * for local Ollama). We surface that list as-is instead of filtering it down:
+ * local and key-optional providers are legitimate choices, not noise.
+ */
+export function cloudProviderOptions(status: OnboardingStatus | null | undefined): ProviderOption[] {
   const providers = status?.setup?.providers?.length ? status.setup.providers : null;
   const codexFallback = fallbackCloudProviders[0];
   const mergedProviders: OnboardingProvider[] = providers
@@ -166,16 +199,23 @@ export function cloudProviderOptions(status: OnboardingStatus | null | undefined
     ]
     : fallbackCloudProviders;
   return mergedProviders
-    .filter((provider) => {
-      const id = String(provider.id || '').trim().toLowerCase();
-      if (!id || localProviderIds.has(id)) return false;
-      if (provider.key_optional && provider.requires_base_url) return false;
-      return true;
-    })
+    .filter((provider) => Boolean(String(provider.id || '').trim()))
     .map((provider) => ({
       id: String(provider.id).trim(),
-      label: String(provider.label || provider.id).trim()
+      label: String(provider.label || provider.id).trim(),
+      oauthProvider: provider.oauth_provider ? String(provider.oauth_provider).trim() : undefined,
+      oauthLabel: provider.oauth_label ? String(provider.oauth_label).trim() : undefined,
+      keyOptional: provider.key_optional === true,
+      requiresBaseUrl: provider.requires_base_url === true,
+      defaultBaseUrl: provider.default_base_url ? String(provider.default_base_url).trim() : undefined
     }));
+}
+
+export function providerOption(
+  status: OnboardingStatus | null | undefined,
+  providerId: string
+): ProviderOption | undefined {
+  return cloudProviderOptions(status).find((option) => option.id === providerId);
 }
 
 export function modelsForProvider(status: OnboardingStatus | null | undefined, providerId: string): Array<{ id: string; label: string }> {

@@ -4241,6 +4241,143 @@ body.sidebar-resizing * {
   scrollbar-width: none;
 }
 
+/* ── First-run wizard: full-width provider picker ───────────────────────────
+   The provider choice is the one decision a new user must make, so it gets
+   the full browser width instead of a cramped 390px card. */
+.workspace > .first-run-pane.wide {
+  left: 16px;
+  right: 16px;
+  width: auto;
+  max-width: none;
+  padding: 20px 24px;
+  gap: 16px;
+  border-radius: 0;
+}
+
+.workspace > .first-run-pane.wide .first-run-hero {
+  grid-template-columns: 54px minmax(0, 1fr);
+  max-width: 720px;
+}
+
+.workspace > .first-run-pane.wide .setup-progress {
+  max-width: 720px;
+}
+
+.workspace > .first-run-pane.wide .setup-form {
+  max-width: none;
+  width: 100%;
+}
+
+.provider-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+}
+
+.provider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provider-group > header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.provider-group > header strong {
+  font-size: 13px;
+  letter-spacing: .02em;
+  color: var(--lb-text);
+}
+
+.provider-group > header span {
+  font-size: 12px;
+  color: var(--lb-muted);
+}
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.provider-card {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  text-align: left;
+  border: 1px solid var(--lb-border);
+  border-radius: 0;
+  background: var(--lb-surface);
+  color: var(--lb-text);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+
+.provider-card:hover {
+  border-color: rgba(0, 217, 255, .45);
+  background: var(--hover-bg, rgba(255, 255, 255, .05));
+}
+
+.provider-card.active {
+  border-color: var(--electricBlue, #2563ff);
+  background: rgba(37, 99, 255, .12);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 255, .35);
+}
+
+.provider-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: #fff;
+}
+
+.provider-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.provider-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.provider-copy small {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--lb-muted);
+}
+
+.provider-badge {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  background: rgba(0, 217, 255, .16);
+  color: #7fe6ff;
+}
+
+.provider-badge.subtle {
+  background: var(--lb-border);
+  color: var(--lb-muted);
+}
+
 .workspace > .first-run-pane::-webkit-scrollbar {
   display: none;
 }

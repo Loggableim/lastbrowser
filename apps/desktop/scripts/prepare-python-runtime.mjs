@@ -47,8 +47,9 @@ function main() {
 
   run(join(pythonRuntimeDir, 'python.exe'), ['-m', 'ensurepip', '--upgrade']);
   // The bundled Sidekick runtime is the live monorepo, whose web UI runs on
-  // FastAPI/uvicorn (cli/web_server.py). Those must be present in the
-  // packaged Python or the sidecar cannot start.
+  // FastAPI/uvicorn (cli/web_server.py) and whose agent tools import requests
+  // and httpx. Those must be present in the packaged Python or the sidecar
+  // starts with a degraded tool set ("No module named 'requests'").
   run(join(pythonRuntimeDir, 'python.exe'), [
     '-m',
     'pip',
@@ -57,6 +58,8 @@ function main() {
     '--upgrade',
     'fastapi>=0.104,<1',
     'uvicorn[standard]>=0.24,<1',
+    'requests>=2.31',
+    'httpx>=0.27',
     '-r',
     resolve(repoRoot, 'services', 'webui', 'requirements.txt'),
     resolve(repoRoot, 'services', 'sidekick')

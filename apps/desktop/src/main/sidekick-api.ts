@@ -478,19 +478,107 @@ function urlFor(webuiUrl: string, path: string): string {
 }
 
 async function jsonRequest<T>(webuiUrl: string, path: string, init: RequestInit = {}, fetchImpl: FetchLike = fetch): Promise<T> {
-  const response = await fetchImpl(urlFor(webuiUrl, path), {
-    ...init,
-    headers: {
-      'content-type': 'application/json',
-      ...(init.headers || {})
-    }
-  });
+  const response = await sendJson(webuiUrl, path, init, fetchImpl);
   const text = await response.text();
   const payload = text ? JSON.parse(text) : {};
   if (!response.ok) {
     throw new Error(String(payload.error || payload.message || `HTTP ${response.status}`));
   }
   return payload as T;
+}
+
+/**
+ * Send a JSON request, retrying once after refreshing the session token.
+ *
+ * The WebUI generates its session token fresh on every server start, so a
+ * request made before the token was captured (or after a sidecar restart)
+ * returns 401. Retrying once with a freshly fetched token makes the bridge
+ * self-healing instead of permanently broken.
+ */
+async function sendJson(
+  webuiUrl: string,
+  path: string,
+  init: RequestInit,
+  fetchImpl: FetchLike
+): Promise<Response> {
+  const request = () => fetchImpl(urlFor(webuiUrl, path), {
+    ...init,
+    headers: {
+      'content-type': 'application/json',
+      ...authHeader(),
+      ...(init.headers || {})
+    }
+  });
+  const response = await request();
+  if (response.status !== 401) return response;
+  const refreshed = await refreshWebuiAuth(webuiUrl, fetchImpl);
+  if (!refreshed) return response;
+  return request();
+}
+
+/**
+ * Auth bridge for the bundled Sidekick WebUI.
+ *
+ * The live FastAPI WebUI gates every /api/* route behind an ephemeral session
+ * token (`X-Sidekick-Session-Token`), generated fresh on each server start and
+ * injected into the SPA HTML as `window.__SIDEKICK_SESSION_TOKEN__`. The
+ * desktop shell is not the SPA, so it must fetch the token from the served
+ * HTML once and send it on every API call — otherwise all native panels fail
+ * with HTTP 401.
+ */
+const SESSION_HEADER = 'X-Sidekick-Session-Token';
+let _sessionToken: string | null = null;
+let _authAttempted = false;
+
+export function setWebuiSessionToken(token: string | null): void {
+  _sessionToken = token;
+  _authAttempted = token !== null;
+}
+
+export function getWebuiSessionToken(): string | null {
+  return _sessionToken;
+}
+
+function authHeader(): Record<string, string> {
+  return _sessionToken ? { [SESSION_HEADER]: _sessionToken } : {};
+}
+
+/**
+ * Fetch the ephemeral session token from the served SPA HTML.
+ * Safe to call repeatedly — it only attempts once per process.
+ */
+export async function ensureWebuiAuth(
+  webuiUrl: string,
+  _password = '',
+  fetchImpl: FetchLike = fetch
+): Promise<boolean> {
+  if (_authAttempted) return _sessionToken !== null;
+  _authAttempted = true;
+  return refreshWebuiAuth(webuiUrl, fetchImpl);
+}
+
+/**
+ * (Re)fetch the session token. Unlike `ensureWebuiAuth` this always tries,
+ * which is what the 401 retry path needs after a sidecar restart.
+ */
+export async function refreshWebuiAuth(
+  webuiUrl: string,
+  fetchImpl: FetchLike = fetch
+): Promise<boolean> {
+  try {
+    const response = await fetchImpl(urlFor(webuiUrl, '/'));
+    if (!response.ok) return false;
+    const html = await response.text();
+    const match = html.match(/__SIDEKICK_SESSION_TOKEN__\s*=\s*["']([^"']+)["']/);
+    if (match?.[1]) {
+      _sessionToken = match[1];
+      _authAttempted = true;
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 function assertLocalWebuiApiPath(path: string): void {
@@ -524,14 +612,22 @@ export async function requestWebui(
   const url = new URL(path, webuiUrl.endsWith('/') ? webuiUrl : `${webuiUrl}/`);
   appendQuery(url, request.query);
 
-  const headers: Record<string, string> = { ...(request.headers || {}) };
+  const headers: Record<string, string> = { ...authHeader(), ...(request.headers || {}) };
   const init: RequestInit = { method, headers };
   if (method !== 'GET' && request.body !== undefined) {
     headers['content-type'] = headers['content-type'] || 'application/json';
     init.body = typeof request.body === 'string' ? request.body : JSON.stringify(request.body);
   }
 
-  const response = await fetchImpl(url.toString(), init);
+  let response = await fetchImpl(url.toString(), init);
+  if (response.status === 401) {
+    // The session token is regenerated on every sidecar start; refresh once.
+    const refreshed = await refreshWebuiAuth(webuiUrl, fetchImpl);
+    if (refreshed) {
+      headers[SESSION_HEADER] = _sessionToken as string;
+      response = await fetchImpl(url.toString(), init);
+    }
+  }
   const raw = await response.text();
   let payload: Record<string, unknown>;
   try {

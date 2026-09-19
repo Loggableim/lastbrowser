@@ -4186,6 +4186,9 @@ function FirstRunSetupPane({
             message: `${activeProviderOption?.label || 'Provider'} connected. Credentials are ready for Sidekick.`
           }));
           await onRefreshOnboarding();
+          // Signing in only stores credentials — activate the provider too,
+          // otherwise Sidekick keeps using the previously configured one.
+          await activateProviderAfterLogin();
           return;
         }
         setOAuthState((current) => ({
@@ -4227,6 +4230,7 @@ function FirstRunSetupPane({
           message: `${providerLabel} credentials found and connected.`
         });
         await onRefreshOnboarding();
+        await activateProviderAfterLogin();
         return;
       }
 
@@ -4253,6 +4257,41 @@ function FirstRunSetupPane({
         status: 'error',
         message: loginError instanceof Error ? loginError.message : String(loginError)
       });
+    }
+  }
+
+  /**
+   * Persist the provider selection after a successful sign-in.
+   *
+   * Signing in only stores credentials — the runtime keeps using whichever
+   * provider was configured before, so the user stays "logged out" from
+   * Sidekick's point of view. Writing the provider + model through the setup
+   * endpoint is what actually activates it.
+   */
+  async function activateProviderAfterLogin(): Promise<void> {
+    if (!provider) return;
+    try {
+      const modelToUse = model || models[0]?.id || '';
+      // `confirm_overwrite` is required whenever config.yaml already exists —
+      // without it the setup endpoint refuses with "config_exists" and the
+      // provider never switches, which is exactly the "signed in but still
+      // logged out" symptom. The user just completed an explicit sign-in for
+      // this provider, so overwriting the previous selection is intended.
+      await window.lastbrowser.sidekick.applyCloudSetup({
+        provider,
+        model: modelToUse,
+        apiKey: '',
+        confirmOverwrite: true
+      });
+      await window.lastbrowser.sidekick.completeCloudSetup().catch(() => null);
+      await window.lastbrowser.setup.save({
+        cloudSetupComplete: true,
+        provider,
+        model: modelToUse
+      });
+      await onRefreshOnboarding();
+    } catch {
+      // Activation is best-effort; the user can still press Start Lastbrowser.
     }
   }
 

@@ -17,6 +17,12 @@ export type CloudSetupRequest = {
   provider: string;
   model: string;
   apiKey?: string;
+  /**
+   * Acknowledge overwriting an existing config.yaml. The setup endpoint
+   * refuses with "config_exists" otherwise, which silently prevents switching
+   * providers on an already-configured install.
+   */
+  confirmOverwrite?: boolean;
 };
 
 export type OnboardingOAuthResponse = {
@@ -658,11 +664,12 @@ export function getOnboardingStatus(webuiUrl: string, fetchImpl: FetchLike = fet
 }
 
 export function applyCloudSetup(webuiUrl: string, request: CloudSetupRequest, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
-  const body: Record<string, string> = {
+  const body: Record<string, string | boolean> = {
     provider: request.provider,
     model: request.model
   };
   if (request.apiKey?.trim()) body.api_key = request.apiKey.trim();
+  if (request.confirmOverwrite) body.confirm_overwrite = true;
   return jsonRequest(webuiUrl, '/api/onboarding/setup', {
     method: 'POST',
     body: JSON.stringify(body)

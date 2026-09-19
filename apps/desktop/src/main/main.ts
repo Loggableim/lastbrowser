@@ -136,6 +136,7 @@ import {
   writeMemory
 } from './sidekick-api.js';
 import { registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
+import { createAdblockController } from './adblock.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startTerminal, writeTerminal, closeTerminal, getTerminalIds } from './terminal-process.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
@@ -144,6 +145,7 @@ import { registerBrowserContextMenu } from './browser-context-menu.js';
 const mainDir = moduleDirname(import.meta.url);
 let mainWindow: BrowserWindow | null = null;
 let services: SidecarServices | null = null;
+const adblock = createAdblockController();
 const agentWorkspaceStreams = new Map<string, AbortController>();
 
 function createWindow(): void {
@@ -340,6 +342,11 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:terminal:list', () => getTerminalIds());
   registerWindowControlIpc(ipcMain, () => mainWindow);
   registerUpdateIpc(() => mainWindow);
+  ipcMain.handle('lastbrowser:adblock:status', () => adblock.getStatus());
+  ipcMain.handle('lastbrowser:adblock:setEnabled', (_event, enabled: unknown) => {
+    adblock.setEnabled(enabled !== false);
+    return adblock.getStatus();
+  });
 }
 
 async function runAgentWorkspaceStream(
@@ -415,6 +422,12 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+// Attach ad blocking to every browser session (webviews use per-profile
+// `persist:` partitions, so each profile gets its own blocking context).
+app.on('session-created', (session) => {
+  void adblock.attach(session);
 });
 
 app.on('before-quit', () => {

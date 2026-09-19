@@ -84,6 +84,11 @@ import {
   saveProfiles,
   type BrowserProfile
 } from './profiles.js';
+import {
+  loadProfileTabs,
+  removeProfileTabs,
+  saveProfileTabs
+} from './tab-sessions.js';
 import { loadVisitedSites, recordVisit, saveVisitedSites, type BrowserVisit } from './history.js';
 import {
   SidekickActionId,
@@ -370,7 +375,10 @@ function panelForContextItem(item: string): LastbrowserPanelId | null {
 }
 
 export function App(): JSX.Element {
-  const [tabs, setTabs] = useState<BrowserTab[]>(() => [createInitialTab(browserStartUrl)]);
+  const [tabs, setTabs] = useState<BrowserTab[]>(() => {
+    const stored = loadProfileTabs(loadActiveProfileId(window.localStorage), window.localStorage);
+    return stored.tabs.length ? stored.tabs : [createInitialTab(browserStartUrl)];
+  });
   const [bookmarks, setBookmarks] = useState<BrowserBookmark[]>(() => loadBookmarks(window.localStorage));
   const [profiles, setProfiles] = useState<BrowserProfile[]>(() => loadProfiles(window.localStorage));
   const [activeProfileId, setActiveProfileId] = useState<string>(() => loadActiveProfileId(window.localStorage));
@@ -445,6 +453,12 @@ export function App(): JSX.Element {
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) || tabs[0], [activeTabId, tabs]);
   const activeProfile = useMemo(() => profileById(profiles, activeProfileId), [profiles, activeProfileId]);
   const activePartition = useMemo(() => profilePartition(activeProfile.id), [activeProfile.id]);
+
+  // Keep the active profile's tab session up to date.
+  useEffect(() => {
+    saveProfileTabs(activeProfileId, { tabs, activeTabId }, window.localStorage);
+  }, [activeProfileId, tabs, activeTabId]);
+
   const activeBookmarkable = isBookmarkableUrl(activeTab.url);
   const activeBookmarked = useMemo(() => isBookmarked(bookmarks, activeTab.url), [activeTab.url, bookmarks]);
   const activeTabIdRef = useRef(activeTabId);
@@ -821,6 +835,16 @@ export function App(): JSX.Element {
 
   function switchProfile(profileId: string): void {
     if (profileId === activeProfileId) return;
+    // Persist the outgoing profile's tabs before swapping.
+    saveProfileTabs(activeProfileId, { tabs, activeTabId }, window.localStorage);
+    const stored = loadProfileTabs(profileId, window.localStorage);
+    const nextTabs = stored.tabs.length ? stored.tabs : [createInitialTab(browserStartUrl)];
+    const nextActiveId = stored.activeTabId && nextTabs.some((tab) => tab.id === stored.activeTabId)
+      ? stored.activeTabId
+      : nextTabs[0].id;
+    setTabs(nextTabs);
+    activeTabIdRef.current = nextActiveId;
+    setActiveTabId(nextActiveId);
     setActiveProfileId(profileId);
     saveActiveProfileId(window.localStorage, profileId);
   }
@@ -847,6 +871,7 @@ export function App(): JSX.Element {
       saveProfiles(window.localStorage, next);
       return next;
     });
+    removeProfileTabs(profileId, window.localStorage);
     if (profileId === activeProfileId) {
       switchProfile('default');
     }

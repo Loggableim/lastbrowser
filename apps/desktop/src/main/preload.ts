@@ -178,6 +178,10 @@ contextBridge.exposeInMainWorld('lastbrowser', {
       return () => ipcRenderer.removeListener('lastbrowser:updates:status', listener);
     }
   },
+  adblock: {
+    status: () => ipcRenderer.invoke('lastbrowser:adblock:status'),
+    setEnabled: (enabled: boolean) => ipcRenderer.invoke('lastbrowser:adblock:setEnabled', enabled)
+  },
   window: {
     minimize: () => ipcRenderer.invoke('lastbrowser:window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('lastbrowser:window:toggleMaximize'),

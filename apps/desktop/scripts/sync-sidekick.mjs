@@ -34,6 +34,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { applySidekickPatches } from './sidekick-patches.mjs';
 
 const REPO = process.env.LASTBROWSER_SIDEKICK_REPO || 'https://github.com/Loggableim/sidekick-agent.git';
 const REF = process.env.LASTBROWSER_SIDEKICK_REF || 'master';
@@ -229,6 +230,12 @@ function main() {
 
   const changed = sanitizeTree(targetDir);
   console.log(`[sync-sidekick] sanitizer rewrote ${changed} file(s)`);
+
+  // Re-apply our local fixes: the sync replaces the tree wholesale, so any
+  // patch we made to the vendored copy would otherwise be lost.
+  const { applied, skipped } = applySidekickPatches(targetDir, { readFileSync, writeFileSync }, path);
+  if (applied.length) console.log(`[sync-sidekick] applied patches: ${applied.join(', ')}`);
+  if (skipped.length) console.log(`[sync-sidekick] skipped patches: ${skipped.join(', ')}`);
 
   // Version marker: the bundled copy has no .git, so bake the version in.
   const versionFile = path.join(targetDir, 'web', 'api', '_version.py');

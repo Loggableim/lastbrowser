@@ -19,6 +19,9 @@ export function createMainWindowOptions(mainDir: string): BrowserWindowConstruct
     frame: false,
     autoHideMenuBar: true,
     backgroundColor: '#07111F',
+    // The renderer build ships the app icon next to index.html; without this
+    // the window falls back to the generic Electron icon.
+    icon: path.join(mainDir, '..', 'renderer', 'Lastbrowser.ico'),
     webPreferences: {
       preload: path.join(mainDir, 'preload.js'),
       nodeIntegration: false,

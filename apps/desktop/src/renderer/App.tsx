@@ -1,4 +1,4 @@
-import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
   Bot,
@@ -2481,6 +2481,38 @@ function BrowserMain({
     minHeight: 0
   } as React.CSSProperties;
 
+  // Electron creates the guest webContents with the size the <webview> had at
+  // mount time, and later CSS/size changes on that element do NOT resize the
+  // guest (verified: explicit px size and display toggles both leave the guest
+  // at its initial height). Only re-creating the element gives the guest the
+  // correct bounds. So we mount the webview, then remount it once the frame
+  // has been laid out — that second mount is the one that sticks.
+  const [webviewReady, setWebviewReady] = useState(false);
+  const [webviewMountKey, setWebviewMountKey] = useState(0);
+  useLayoutEffect(() => {
+    setWebviewReady(false);
+    let cancelled = false;
+    let attempts = 0;
+    const measure = () => {
+      if (cancelled) return;
+      const frame = browserFrameRef.current;
+      const rect = frame?.getBoundingClientRect();
+      if (rect && rect.width > 0 && rect.height > 0) {
+        setWebviewReady(true);
+        // Force one remount so the guest is created with the real bounds.
+        setWebviewMountKey((current) => current + 1);
+        return;
+      }
+      // Give up after ~1s so a missing frame cannot block browsing forever.
+      if (attempts++ < 60) window.requestAnimationFrame(measure);
+      else setWebviewReady(true);
+    };
+    measure();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab.id, activeProfile.id, activePanel]);
+
   if (activePanel === 'chat') {
     return (
       <PanelErrorBoundary panel={activePanel} key={activePanel}>
@@ -2523,7 +2555,7 @@ function BrowserMain({
               onRemoveSpace={onRemoveSpace}
               onRenameSpace={onRenameSpace}
               onSelectSpace={onSelectSpace}
-              onNewSession={createNativeSession}
+              onNewSession={onCreateSession}
             />
           </PanelErrorBoundary>
         );
@@ -2609,8 +2641,9 @@ function BrowserMain({
             <span>{browserLoadError}</span>
           </div>
         )}
+        {webviewReady && (
         <webview
-          key={`${activeProfile.id}:${activeTab.id}`}
+          key={`${activeProfile.id}:${activeTab.id}:${webviewMountKey}`}
           ref={webviewRef}
           src={activeTab.url}
           className="browser-view"
@@ -2637,6 +2670,7 @@ function BrowserMain({
           onDidNavigateInPage={(event) => onWebviewNavigate(activeTab.id, event.url)}
           onPageTitleUpdated={(event) => onWebviewTitle(activeTab.id, event.title)}
         />
+        )}
       </div>
     </section>
     </PanelErrorBoundary>

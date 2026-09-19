@@ -38,12 +38,17 @@ function main() {
   copyPythonHome(sourcePythonHome, pythonRuntimeDir);
 
   run(join(pythonRuntimeDir, 'python.exe'), ['-m', 'ensurepip', '--upgrade']);
+  // The bundled Sidekick runtime is the live monorepo, whose web UI runs on
+  // FastAPI/uvicorn (cli/web_server.py). Those must be present in the
+  // packaged Python or the sidecar cannot start.
   run(join(pythonRuntimeDir, 'python.exe'), [
     '-m',
     'pip',
     'install',
     '--no-cache-dir',
     '--upgrade',
+    'fastapi>=0.104,<1',
+    'uvicorn[standard]>=0.24,<1',
     '-r',
     resolve(repoRoot, 'services', 'webui', 'requirements.txt'),
     resolve(repoRoot, 'services', 'sidekick')

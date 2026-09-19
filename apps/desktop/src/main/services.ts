@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { app } from 'electron';
@@ -11,6 +11,8 @@ export type ServiceLayout = {
   sidekickDir: string;
   webuiDir: string;
   webuiServer: string;
+  /** 'monorepo' = uvicorn cli.web_server:app, 'legacy' = stdlib web/server.py */
+  webuiMode: 'monorepo' | 'legacy';
   pythonExe: string;
   bridgeToken: string;
 };
@@ -22,10 +24,71 @@ export type ServiceStatus = {
   port: number | null;
   runtimeDir: string;
   lastError: string | null;
+  /** Where the running Sidekick code came from. */
+  source: 'bundled' | 'runtime';
+  version: string | null;
 };
 
 export type PortResolver = (preferredPort: number) => Promise<number>;
 export type WebuiHealthChecker = (webuiUrl: string) => Promise<{ ok: boolean; error?: string }>;
+
+/**
+ * Where an updated Sidekick copy lives after a runtime update. The updater
+ * downloads the live monorepo here; if present it takes precedence over the
+ * bundled copy so Sidekick can be updated without a Lastbrowser release.
+ */
+export function runtimeSidekickDir(runtimeRoot = defaultRuntimeRoot()): string {
+  return path.join(runtimeRoot, 'runtime', 'sidekick');
+}
+
+export type SidecarLaunch = {
+  args: string[];
+  cwd: string;
+};
+
+/**
+ * Read the Sidekick version from a bundled/updated copy. The live monorepo
+ * writes `web/api/_version.py` (baked at sync time); older copies have no
+ * version file, so fall back to the sync manifest or null.
+ */
+export function readSidekickVersion(sidekickDir: string): string | null {
+  const versionFile = path.join(sidekickDir, 'web', 'api', '_version.py');
+  try {
+    const raw = readFileSync(versionFile, 'utf8');
+    const match = raw.match(/__version__\s*=\s*['"]([^'"]+)['"]/);
+    if (match) return match[1];
+  } catch {
+    // No version file — fall through.
+  }
+  const manifest = path.join(path.dirname(sidekickDir), 'sidekick-source.json');
+  try {
+    const parsed = JSON.parse(readFileSync(manifest, 'utf8')) as { version?: string };
+    if (parsed.version) return parsed.version;
+  } catch {
+    // No manifest either.
+  }
+  return null;
+}
+
+/**
+ * Build the sidecar launch command.
+ *
+ * monorepo: the live Sidekick layout — `python -m uvicorn cli.web_server:app`
+ *           run from the sidekick directory (package imports need that cwd).
+ * legacy:   the older split layout — `python <webui>/server.py`.
+ */
+export function buildSidecarLaunch(layout: ServiceLayout, webuiPort: number): SidecarLaunch {
+  if (layout.webuiMode === 'monorepo') {
+    return {
+      args: ['-m', 'uvicorn', 'cli.web_server:app', '--host', '127.0.0.1', '--port', String(webuiPort)],
+      cwd: layout.sidekickDir
+    };
+  }
+  return {
+    args: [layout.webuiServer],
+    cwd: layout.webuiDir
+  };
+}
 
 export function resolveServiceLayout(
   resourcesDir: string,
@@ -35,7 +98,7 @@ export function resolveServiceLayout(
   const normalizedResources = path.normalize(resourcesDir);
   const runtimeDir = path.join(runtimeRoot, 'runtime');
   const servicesDir = path.join(normalizedResources, 'services');
-  const sidekickDir = path.join(servicesDir, 'sidekick');
+  const bundledSidekickDir = path.join(servicesDir, 'sidekick');
   const webuiDir = path.join(servicesDir, 'webui');
   const resourcesPythonExe = path.join(normalizedResources, 'runtime', 'python', 'python.exe');
   const workspacePythonExe = path.join(normalizedResources, 'apps', 'desktop', 'runtime', 'python', 'python.exe');
@@ -45,12 +108,26 @@ export function resolveServiceLayout(
       ? workspacePythonExe
       : resourcesPythonExe;
 
+  // Prefer a runtime-updated Sidekick copy over the bundled one. The runtime
+  // copy is the live monorepo (FastAPI entrypoint); the bundled copy may be
+  // either the monorepo or the older split layout.
+  const updatedDir = runtimeSidekickDir(runtimeRoot);
+  const updatedEntry = path.join(updatedDir, 'cli', 'web_server.py');
+  const bundledEntry = path.join(bundledSidekickDir, 'cli', 'web_server.py');
+  const useUpdated = existsSync(updatedEntry);
+  const sidekickDir = useUpdated ? updatedDir : bundledSidekickDir;
+  const monorepoEntry = useUpdated ? updatedEntry : bundledEntry;
+  const webuiMode: 'monorepo' | 'legacy' = existsSync(monorepoEntry) ? 'monorepo' : 'legacy';
+
   return {
     resourcesDir: normalizedResources,
     runtimeDir,
     sidekickDir,
     webuiDir,
-    webuiServer: path.join(webuiDir, 'server.py'),
+    // In monorepo mode the server is launched as `uvicorn cli.web_server:app`
+    // from sidekickDir; webuiServer then points at that entry file.
+    webuiServer: webuiMode === 'monorepo' ? monorepoEntry : path.join(webuiDir, 'server.py'),
+    webuiMode,
     pythonExe: env.LASTBROWSER_WEBUI_PYTHON || env.HERMES_WEBUI_PYTHON || bundledPythonExe,
     bridgeToken: randomBytes(24).toString('hex')
   };
@@ -71,6 +148,11 @@ export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number
     SIDEKICK_HOME: layout.runtimeDir,
     SIDEKICK_AGENT_DIR: layout.sidekickDir,
     SIDEKICK_BRIDGE_TOKEN: layout.bridgeToken,
+    // The live monorepo resolves its agent dir via SIDEKICK_WEBUI_AGENT_DIR.
+    SIDEKICK_WEBUI_AGENT_DIR: layout.sidekickDir,
+    SIDEKICK_WEBUI_PYTHON: layout.pythonExe,
+    SIDEKICK_WEBUI_PORT: webuiPortValue,
+    SIDEKICK_WEBUI_NO_BROWSER: '1',
     HERMES_HOME: layout.runtimeDir,
     HERMES_WEBUI_AGENT_DIR: layout.sidekickDir,
     HERMES_WEBUI_STATE_DIR: path.join(layout.runtimeDir, 'webui'),
@@ -106,6 +188,13 @@ export async function findAvailablePort(preferredPort: number, host = '127.0.0.1
 export async function checkWebuiHealth(webuiUrl: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const response = await fetch(new URL('/api/onboarding/status', webuiUrl));
+    // 401/403 still prove the server is up and routing — the newer FastAPI
+    // WebUI protects this endpoint with auth, so treating those as failure
+    // would leave the sidecar permanently "unreachable".
+    if (response.status === 401 || response.status === 403) {
+      await response.arrayBuffer();
+      return { ok: true };
+    }
     if (!response.ok) return { ok: false, error: `HTTP ${response.status}` };
     await response.arrayBuffer();
     return { ok: true };
@@ -133,7 +222,9 @@ export class SidecarServices {
       webuiUrl: '',
       port: null,
       lastError: null,
-      runtimeDir: this.layout.runtimeDir
+      runtimeDir: this.layout.runtimeDir,
+      source: this.layout.sidekickDir.includes(`${path.sep}runtime${path.sep}`) ? 'runtime' : 'bundled',
+      version: readSidekickVersion(this.layout.sidekickDir)
     };
   }
 
@@ -172,11 +263,12 @@ export class SidecarServices {
     this.status = { ...this.status, webuiUrl, port: webuiPort, webuiHealth: 'checking', lastError: null };
 
     try {
+      const launch = buildSidecarLaunch(this.layout, webuiPort);
       this.webuiProcess = this.spawnImpl(
         this.layout.pythonExe,
-        [this.layout.webuiServer],
+        launch.args,
         {
-          cwd: this.layout.webuiDir,
+          cwd: launch.cwd,
           env,
           windowsHide: true,
           stdio: 'ignore'

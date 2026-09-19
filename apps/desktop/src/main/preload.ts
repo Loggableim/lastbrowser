@@ -182,6 +182,11 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     status: () => ipcRenderer.invoke('lastbrowser:adblock:status'),
     setEnabled: (enabled: boolean) => ipcRenderer.invoke('lastbrowser:adblock:setEnabled', enabled)
   },
+  sidekickUpdate: {
+    status: () => ipcRenderer.invoke('lastbrowser:sidekick-update:status'),
+    check: () => ipcRenderer.invoke('lastbrowser:sidekick-update:check'),
+    apply: () => ipcRenderer.invoke('lastbrowser:sidekick-update:apply')
+  },
   window: {
     minimize: () => ipcRenderer.invoke('lastbrowser:window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('lastbrowser:window:toggleMaximize'),

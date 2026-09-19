@@ -137,6 +137,7 @@ import {
 } from './sidekick-api.js';
 import { registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
 import { createAdblockController } from './adblock.js';
+import { createSidekickUpdater } from './sidekick-updater.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startTerminal, writeTerminal, closeTerminal, getTerminalIds } from './terminal-process.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
@@ -146,6 +147,16 @@ const mainDir = moduleDirname(import.meta.url);
 let mainWindow: BrowserWindow | null = null;
 let services: SidecarServices | null = null;
 const adblock = createAdblockController();
+const sidekickUpdater = createSidekickUpdater({
+  // After a successful Sidekick update, restart the sidecar so the new code
+  // is loaded. The layout is re-resolved so the runtime copy is picked up.
+  onInstalled: async () => {
+    if (!services) return;
+    services.stop();
+    services = new SidecarServices(resolveServiceLayout(appResourcesDir()));
+    await services.start();
+  }
+});
 const agentWorkspaceStreams = new Map<string, AbortController>();
 
 function createWindow(): void {
@@ -347,6 +358,9 @@ function registerIpc(): void {
     adblock.setEnabled(enabled !== false);
     return adblock.getStatus();
   });
+  ipcMain.handle('lastbrowser:sidekick-update:status', () => sidekickUpdater.getStatus());
+  ipcMain.handle('lastbrowser:sidekick-update:check', () => sidekickUpdater.check());
+  ipcMain.handle('lastbrowser:sidekick-update:apply', () => sidekickUpdater.apply());
 }
 
 async function runAgentWorkspaceStream(

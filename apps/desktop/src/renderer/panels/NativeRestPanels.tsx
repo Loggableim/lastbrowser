@@ -2014,6 +2014,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
   const authState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/auth/status' }), [ready], ready);
   const pluginsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/plugins' }), [ready], ready);
   const updatesState = useApiState(() => window.lastbrowser.updates.status(), [], true);
+  const sidekickUpdateState = useApiState(() => window.lastbrowser.sidekickUpdate.status(), [], true);
+  const [sidekickUpdateBusy, setSidekickUpdateBusy] = useState(false);
   const [section, setSection] = useState<SettingsSectionId>('conversation');
   const [draft, setDraft] = useState<AnyRecord>({});
   const [passwordDraft, setPasswordDraft] = useState('');
@@ -2033,6 +2035,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
   const updateCurrentVersion = settingsText(updatesState.data?.currentVersion, '');
   const updateAvailableVersion = settingsText(updatesState.data?.availableVersion, '');
   const updateMessage = settingsText(updatesState.data?.message, '');
+  const sidekickUpdateVersion = settingsText(sidekickUpdateState.data?.currentVersion, '');
+  const sidekickUpdateSource = settingsText(sidekickUpdateState.data?.source, 'bundled');
+  const sidekickUpdateMessage = settingsText(sidekickUpdateState.data?.message, '');
+  const sidekickUpdateAvailable = settingsText(sidekickUpdateState.data?.state, 'idle') === 'available';
   const pluginList = arrayFrom(pluginsState.data, ['plugins', 'items']);
 
   useEffect(() => {
@@ -2153,6 +2159,36 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
       await updatesState.refresh();
     } catch (error) {
       showToast(`Update check failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function checkSidekickUpdate(): Promise<void> {
+    setSidekickUpdateBusy(true);
+    try {
+      await window.lastbrowser.sidekickUpdate.check();
+      await sidekickUpdateState.refresh();
+    } catch (error) {
+      showToast(`Sidekick check failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSidekickUpdateBusy(false);
+    }
+  }
+
+  async function applySidekickUpdate(): Promise<void> {
+    setSidekickUpdateBusy(true);
+    try {
+      const result = await window.lastbrowser.sidekickUpdate.apply();
+      await sidekickUpdateState.refresh();
+      const state = settingsText((result as AnyRecord)?.state, '');
+      if (state === 'updated') {
+        showToast('Sidekick updated — the runtime restarted with the new version.');
+      } else {
+        showToast(settingsText((result as AnyRecord)?.message, 'Sidekick update finished.'));
+      }
+    } catch (error) {
+      showToast(`Sidekick update failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSidekickUpdateBusy(false);
     }
   }
 
@@ -2634,6 +2670,46 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem }: { servi
                     {updateCurrentVersion && <span className="settings-badge">Current: {updateCurrentVersion}</span>}
                     {updateAvailableVersion && <span className="settings-badge">Available: {updateAvailableVersion}</span>}
                     {updateMessage && <span className="settings-badge">{updateMessage}</span>}
+                  </div>
+                </SettingsCard>
+
+                <SettingsCard
+                  title="Sidekick runtime"
+                  description="Sidekick ships with Lastbrowser but updates independently — no Lastbrowser release needed."
+                >
+                  <div className="settings-system-status">
+                    <span className="settings-badge">
+                      Version: {sidekickUpdateVersion || 'unknown'}
+                    </span>
+                    <span className="settings-badge">
+                      Source: {sidekickUpdateSource === 'runtime' ? 'updated copy' : 'bundled'}
+                    </span>
+                    {sidekickUpdateState !== 'idle' && (
+                      <span className={`settings-badge ${sidekickUpdateState === 'error' ? 'warning' : ''}`}>
+                        {sidekickUpdateState}
+                      </span>
+                    )}
+                    {sidekickUpdateMessage && <span className="settings-badge">{sidekickUpdateMessage}</span>}
+                  </div>
+                  <div className="settings-system-actions">
+                    <button
+                      type="button"
+                      className="secondary-action compact"
+                      onClick={() => void checkSidekickUpdate()}
+                      disabled={sidekickUpdateBusy}
+                    >
+                      {sidekickUpdateBusy ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
+                      <span>Check Sidekick</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-action compact"
+                      onClick={() => void applySidekickUpdate()}
+                      disabled={sidekickUpdateBusy || !sidekickUpdateAvailable}
+                    >
+                      <Download size={15} />
+                      <span>Update Sidekick</span>
+                    </button>
                   </div>
                 </SettingsCard>
 

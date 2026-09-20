@@ -56,18 +56,32 @@ export type PermissionController = {
   revokeOrigin(origin: string): void;
   /** Load previously trusted origins. */
   setTrustedOrigins(origins: string[]): void;
+  /** Subscribe to trust-list changes (for persistence). */
+  onTrustedChange(listener: (origins: string[]) => void): () => void;
 };
 
 export function createPermissionController(
   initialTrusted: string[] = []
 ): PermissionController {
   const trusted = new Set(initialTrusted.filter(Boolean));
+  const listeners = new Set<(origins: string[]) => void>();
 
   const originOf = (raw: string): string => {
     try {
       return new URL(raw).origin;
     } catch {
       return '';
+    }
+  };
+
+  const emit = (): void => {
+    const list = Array.from(trusted);
+    for (const listener of listeners) {
+      try {
+        listener(list);
+      } catch {
+        // A broken listener must not stop the others.
+      }
     }
   };
 
@@ -91,12 +105,15 @@ export function createPermissionController(
 
     trustOrigin(origin: string): void {
       const normalized = originOf(origin);
-      if (normalized) trusted.add(normalized);
+      if (normalized) {
+        trusted.add(normalized);
+        emit();
+      }
     },
 
     revokeOrigin(origin: string): void {
       const normalized = originOf(origin);
-      if (normalized) trusted.delete(normalized);
+      if (normalized && trusted.delete(normalized)) emit();
     },
 
     setTrustedOrigins(origins: string[]): void {
@@ -105,6 +122,43 @@ export function createPermissionController(
         const normalized = originOf(origin);
         if (normalized) trusted.add(normalized);
       }
+      emit();
+    },
+
+    onTrustedChange(listener: (origins: string[]) => void): () => void {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     }
   };
+}
+
+/**
+ * Trusted origins are stored next to the app's other settings so a video-call
+ * site the user allowed once does not have to be allowed again after a restart.
+ */
+export const trustedOriginsFileName = 'trusted-origins.json';
+
+export function loadTrustedOrigins(filePath: string, fs: {
+  existsSync: (p: string) => boolean;
+  readFileSync: (p: string, enc: 'utf8') => string;
+}): string[] {
+  try {
+    if (!fs.existsSync(filePath)) return [];
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0);
+  } catch {
+    // A corrupt file must not block startup — start with an empty trust list.
+    return [];
+  }
+}
+
+export function saveTrustedOrigins(filePath: string, origins: string[], fs: {
+  writeFileSync: (p: string, data: string, enc: 'utf8') => void;
+}): void {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(origins, null, 2), 'utf8');
+  } catch {
+    // Persistence is best-effort; the in-memory list still applies.
+  }
 }

@@ -200,6 +200,13 @@ contextBridge.exposeInMainWorld('lastbrowser', {
       return () => ipcRenderer.removeListener('lastbrowser:downloads:changed', wrapped);
     }
   },
+  permissions: {
+    trustedOrigins: () => ipcRenderer.invoke('lastbrowser:permissions:trustedOrigins'),
+    trust: (origin: string) => ipcRenderer.invoke('lastbrowser:permissions:trust', origin),
+    revoke: (origin: string) => ipcRenderer.invoke('lastbrowser:permissions:revoke', origin),
+    decide: (request: { permission: string; origin: string }) =>
+      ipcRenderer.invoke('lastbrowser:permissions:decide', request)
+  },
   sidekickUpdate: {
     status: () => ipcRenderer.invoke('lastbrowser:sidekick-update:status'),
     check: () => ipcRenderer.invoke('lastbrowser:sidekick-update:check'),

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { app, BrowserWindow, clipboard, ipcMain, Menu, shell } from 'electron';
 import { moduleDirname } from './module-path.js';
 import { SidecarServices, appResourcesDir, resolveServiceLayout } from './services.js';
@@ -144,7 +145,7 @@ import { createAdblockController } from './adblock.js';
 import { createSidekickUpdater } from './sidekick-updater.js';
 import { subscribeChatStream, type ChatStreamHandle } from './chat-stream.js';
 import { createDownloadTracker } from './downloads.js';
-import { createPermissionController } from './permissions.js';
+import { createPermissionController, loadTrustedOrigins, saveTrustedOrigins, trustedOriginsFileName } from './permissions.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startTerminal, writeTerminal, closeTerminal, getTerminalIds } from './terminal-process.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
@@ -167,7 +168,12 @@ const sidekickUpdater = createSidekickUpdater({
 const agentWorkspaceStreams = new Map<string, AbortController>();
 const chatStreams = new Map<string, ChatStreamHandle>();
 const downloads = createDownloadTracker();
-const permissions = createPermissionController();
+// Trusted origins live next to the app's other settings so a video-call site the
+// user allowed once does not have to be allowed again after a restart.
+const trustedOriginsPath = path.join(app.getPath('userData'), trustedOriginsFileName);
+const trustedOriginsFs = { existsSync, readFileSync, writeFileSync };
+const permissions = createPermissionController(loadTrustedOrigins(trustedOriginsPath, trustedOriginsFs));
+permissions.onTrustedChange((origins) => saveTrustedOrigins(trustedOriginsPath, origins, trustedOriginsFs));
 
 function createWindow(): void {
   mainWindow = new BrowserWindow(createMainWindowOptions(mainDir));
@@ -414,6 +420,22 @@ function registerIpc(): void {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('lastbrowser:downloads:changed', entries);
     }
+  });
+  // Per-site permission trust: the renderer lists trusted origins and can add
+  // or revoke one. Without this the deny-by-default policy would be unusable —
+  // a video-call site could never be allowed to use the camera.
+  ipcMain.handle('lastbrowser:permissions:trustedOrigins', () => permissions.trustedOrigins());
+  ipcMain.handle('lastbrowser:permissions:trust', (_event, origin: unknown) => {
+    permissions.trustOrigin(String(origin || ''));
+    return permissions.trustedOrigins();
+  });
+  ipcMain.handle('lastbrowser:permissions:revoke', (_event, origin: unknown) => {
+    permissions.revokeOrigin(String(origin || ''));
+    return permissions.trustedOrigins();
+  });
+  ipcMain.handle('lastbrowser:permissions:decide', (_event, request: unknown) => {
+    const payload = (request || {}) as { permission?: string; origin?: string };
+    return permissions.decide(String(payload.permission || ''), String(payload.origin || ''));
   });
   ipcMain.handle('lastbrowser:sidekick-update:status', () => sidekickUpdater.getStatus());
   ipcMain.handle('lastbrowser:sidekick-update:check', () => sidekickUpdater.check());

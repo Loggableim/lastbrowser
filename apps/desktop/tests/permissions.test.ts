@@ -81,4 +81,58 @@ describe('permission controller', () => {
     const c = createPermissionController(['', 'https://a.com']);
     expect(c.trustedOrigins()).toEqual(['https://a.com']);
   });
+
+  it('notifies subscribers when an origin is trusted', () => {
+    const c = createPermissionController();
+    const seen: string[][] = [];
+    c.onTrustedChange((origins) => seen.push(origins));
+    c.trustOrigin('https://meet.example.com');
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toEqual(['https://meet.example.com']);
+  });
+
+  it('notifies subscribers when an origin is revoked', () => {
+    const c = createPermissionController(['https://meet.example.com']);
+    const seen: string[][] = [];
+    c.onTrustedChange((origins) => seen.push(origins));
+    c.revokeOrigin('https://meet.example.com');
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toEqual([]);
+  });
+
+  it('does not notify when revoking an origin that was not trusted', () => {
+    const c = createPermissionController();
+    const seen: string[][] = [];
+    c.onTrustedChange((origins) => seen.push(origins));
+    c.revokeOrigin('https://never-trusted.com');
+    expect(seen).toHaveLength(0);
+  });
+
+  it('does not notify for an unparseable origin', () => {
+    const c = createPermissionController();
+    const seen: string[][] = [];
+    c.onTrustedChange((origins) => seen.push(origins));
+    c.trustOrigin('not a url');
+    expect(seen).toHaveLength(0);
+  });
+
+  it('stops notifying after unsubscribe', () => {
+    const c = createPermissionController();
+    const seen: string[][] = [];
+    const unsubscribe = c.onTrustedChange((origins) => seen.push(origins));
+    unsubscribe();
+    c.trustOrigin('https://meet.example.com');
+    expect(seen).toHaveLength(0);
+  });
+
+  it('keeps notifying other subscribers when one throws', () => {
+    const c = createPermissionController();
+    const seen: string[][] = [];
+    c.onTrustedChange(() => {
+      throw new Error('broken listener');
+    });
+    c.onTrustedChange((origins) => seen.push(origins));
+    expect(() => c.trustOrigin('https://meet.example.com')).not.toThrow();
+    expect(seen).toHaveLength(1);
+  });
 });

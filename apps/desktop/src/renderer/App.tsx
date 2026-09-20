@@ -42,6 +42,7 @@ import {
   Search,
   Send,
   Settings,
+  ShieldCheck,
   Sparkles,
   Square,
   Star,
@@ -174,6 +175,7 @@ import { ControlCenter } from './NativeControlCenter.js';
 import { ApprovalPollManager, ApprovalCard } from './NativeApproval.js';
 import { DownloadsPanel } from './NativeDownloads.js';
 import { HistoryPanel } from './NativeHistory.js';
+import { PermissionsPanel, SitePermissionButton } from './NativePermissions.js';
 import { ContextUsageIndicator } from './NativeContextUsage.js';
 import { QueueIndicator, CompressButton, useChatQueue } from './NativeCompressQueue.js';
 import { RichTextRenderer } from './NativeRichText.js';
@@ -2886,6 +2888,7 @@ function BrowserMain({
   const [findOpen, setFindOpen] = useState(false);
   const [downloadsOpen, setDownloadsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [findQuery, setFindQuery] = useState('');
   const [findResult, setFindResult] = useState<{ matches: number; active: number } | null>(null);
   const findInputRef = useRef<HTMLInputElement | null>(null);
@@ -3140,7 +3143,17 @@ function BrowserMain({
         >
           <Code2 size={14} />
         </button>
+        <SitePermissionButton url={activeTab.url} />
+        <button
+          type="button"
+          className="permissions-trigger"
+          title="Site permissions"
+          onClick={() => setPermissionsOpen((current) => !current)}
+        >
+          <ShieldCheck size={14} />
+        </button>
       </div>
+      <PermissionsPanel open={permissionsOpen} onClose={() => setPermissionsOpen(false)} />
       <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />
       <HistoryPanel
         open={historyOpen}

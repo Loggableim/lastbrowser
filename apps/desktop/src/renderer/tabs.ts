@@ -76,3 +76,38 @@ export function sortTabsByPinned(tabs: BrowserTab[]): BrowserTab[] {
     return 0;
   });
 }
+
+/**
+ * Recently closed tabs, newest last.
+ *
+ * Ctrl+Shift+T is muscle memory — closing a tab by accident and having no way
+ * back is one of the most jarring things a browser can do. Only the URL and
+ * title are kept: the guest webContents is gone, so the tab is recreated and
+ * navigated fresh.
+ */
+export type ClosedTab = {
+  url: string;
+  title: string;
+  closedAt: number;
+};
+
+export const closedTabLimit = 25;
+
+export function rememberClosedTab(
+  closed: ClosedTab[],
+  tab: Pick<BrowserTab, 'url' | 'title'>
+): ClosedTab[] {
+  // The start page is not worth restoring — reopening it is what a new tab does.
+  if (!tab.url || isBrowserStartUrl(tab.url)) return closed;
+  const entry: ClosedTab = { url: tab.url, title: tab.title, closedAt: Date.now() };
+  return [...closed, entry].slice(-closedTabLimit);
+}
+
+/** Pop the most recently closed tab, returning it with the remaining list. */
+export function takeLastClosedTab(
+  closed: ClosedTab[]
+): { tab: ClosedTab | null; rest: ClosedTab[] } {
+  if (!closed.length) return { tab: null, rest: closed };
+  const tab = closed[closed.length - 1];
+  return { tab, rest: closed.slice(0, -1) };
+}

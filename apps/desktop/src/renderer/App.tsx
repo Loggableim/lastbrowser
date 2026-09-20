@@ -67,11 +67,14 @@ import {
   browserStartUrl,
   createInitialTab,
   isAiBrowserHomeUrl,
+  rememberClosedTab,
   reorderTabs,
+  takeLastClosedTab,
   normalizeNavigationInput,
   updateTabTitle,
   updateTabUrl,
-  togglePinnedTab
+  togglePinnedTab,
+  type ClosedTab
 } from './tabs.js';
 import { brandAssets } from './brand.js';
 import { categoryLabels, modelNote, providerPresentation, tierLabels } from './provider-presentation.js';
@@ -395,6 +398,8 @@ export function App(): JSX.Element {
   const [profiles, setProfiles] = useState<BrowserProfile[]>(() => loadProfiles(window.localStorage));
   const [activeProfileId, setActiveProfileId] = useState<string>(() => loadActiveProfileId(window.localStorage));
   const [visitedSites, setVisitedSites] = useState<BrowserVisit[]>(() => loadVisitedSites(window.localStorage));
+  // Recently closed tabs, for Ctrl+Shift+T.
+  const [closedTabs, setClosedTabs] = useState<ClosedTab[]>([]);
   const [desktopSettings, setDesktopSettings] = useState<Record<string, unknown> | null>(() => loadDesktopSettingsFromStorage());
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
   const [addressValue, setAddressValue] = useState(() => (
@@ -911,6 +916,11 @@ export function App(): JSX.Element {
   function closeTab(tabId: string): void {
     if (tabs.length === 1) return;
     const index = tabs.findIndex((tab) => tab.id === tabId);
+    const closing = tabs[index];
+    if (closing) {
+      // Remember it so Ctrl+Shift+T can bring it back.
+      setClosedTabs((current) => rememberClosedTab(current, closing));
+    }
     const nextTabs = tabs.filter((tab) => tab.id !== tabId);
     setTabs(nextTabs);
     if (activeTabId === tabId) {
@@ -918,6 +928,20 @@ export function App(): JSX.Element {
       activeTabIdRef.current = nextActiveId;
       setActiveTabId(nextActiveId);
     }
+  }
+
+  /** Reopen the most recently closed tab (Ctrl+Shift+T). */
+  function reopenClosedTab(): void {
+    const { tab, rest } = takeLastClosedTab(closedTabs);
+    if (!tab) return;
+    setClosedTabs(rest);
+    const created = createInitialTab(tab.url);
+    const restored = { ...created, title: tab.title || created.title };
+    setTabs((current) => [...current, restored]);
+    activeTabIdRef.current = restored.id;
+    setActiveTabId(restored.id);
+    setActivePanel('browser');
+    setAddressValue(isAiBrowserHomeUrl(restored.url) ? '' : restored.url);
   }
 
   function updateTitle(tabId: string, title: string): void {
@@ -1636,6 +1660,7 @@ export function App(): JSX.Element {
           onSetBrowserError={setBrowserLoadError}
           onRemoveVisit={removeHistoryEntry}
           onClearHistory={clearHistory}
+          onReopenClosedTab={reopenClosedTab}
         />
         <WorkspacePanel
           activeSessionId={activeSessionId}
@@ -2536,7 +2561,8 @@ function BrowserMain({
   onClearBrowserError,
   onSetBrowserError,
   onRemoveVisit,
-  onClearHistory
+  onClearHistory,
+  onReopenClosedTab
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -2583,6 +2609,7 @@ function BrowserMain({
   onSetBrowserError: (error: string) => void;
   onRemoveVisit: (url: string) => void;
   onClearHistory: () => void;
+  onReopenClosedTab: () => void;
 }): JSX.Element {
   const browserWebviewStyle = {
     width: '100%',
@@ -2755,6 +2782,18 @@ function BrowserMain({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [stepZoom, applyZoom]);
+
+  // Ctrl/Cmd+Shift+T reopens the most recently closed tab.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || !event.shiftKey) return;
+      if (event.key !== 'T' && event.key !== 't') return;
+      event.preventDefault();
+      onReopenClosedTab();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onReopenClosedTab]);
 
   // ── Find in page ─────────────────────────────────────────────────────────
   // Ctrl+F is muscle memory; without it long pages are unnavigable. The guest

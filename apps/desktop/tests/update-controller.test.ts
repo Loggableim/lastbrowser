@@ -9,9 +9,11 @@ type FakeUpdater = EventEmitter & {
   checkCalls: number;
   downloadCalls: number;
   quitCalls: number;
+  /** Arguments passed to the last quitAndInstall call. */
+  quitArgs: unknown[];
   checkForUpdates: () => Promise<void>;
   downloadUpdate: () => Promise<void>;
-  quitAndInstall: () => void;
+  quitAndInstall: (isSilent?: boolean, isForceRunAfter?: boolean) => void;
 };
 
 function fakeUpdater(): FakeUpdater {
@@ -22,14 +24,16 @@ function fakeUpdater(): FakeUpdater {
   updater.checkCalls = 0;
   updater.downloadCalls = 0;
   updater.quitCalls = 0;
+  updater.quitArgs = [];
   updater.checkForUpdates = async () => {
     updater.checkCalls += 1;
   };
   updater.downloadUpdate = async () => {
     updater.downloadCalls += 1;
   };
-  updater.quitAndInstall = () => {
+  updater.quitAndInstall = (...args: unknown[]) => {
     updater.quitCalls += 1;
+    updater.quitArgs = args;
   };
   return updater;
 }
@@ -89,6 +93,25 @@ describe('update controller', () => {
     updater.emit('update-downloaded', { version: '0.1.4' });
     expect(controller.quitAndInstall().state).toBe('downloaded');
     expect(updater.quitCalls).toBe(1);
+  });
+
+  it('installs silently so the NSIS wizard cannot block the update', async () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({
+      updater,
+      isPackaged: true,
+      currentVersion: '0.1.3'
+    });
+
+    updater.emit('update-downloaded', { version: '0.1.4' });
+    controller.quitAndInstall();
+
+    // The installer is built with `oneClick: false`, so a non-silent
+    // quitAndInstall shows the setup wizard and waits for clicks forever.
+    // Verified against the real installer: it sat on "Installation von
+    // Lastbrowser" until killed.
+    expect(updater.quitArgs[0]).toBe(true);
+    expect(updater.quitArgs[1]).toBe(true);
   });
 
   it('surfaces updater errors as status instead of throwing into the app shell', async () => {

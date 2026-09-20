@@ -34,7 +34,12 @@ export type UpdaterLike = EventEmitter & {
   allowPrerelease: boolean;
   checkForUpdates: () => Promise<unknown>;
   downloadUpdate: () => Promise<unknown>;
-  quitAndInstall: () => void;
+  /**
+   * `isSilent` skips the NSIS wizard (required — the installer is built with
+   * `oneClick: false`, so a non-silent call blocks on user clicks).
+   * `isForceRunAfter` relaunches the app once the install completes.
+   */
+  quitAndInstall: (isSilent?: boolean, isForceRunAfter?: boolean) => void;
 };
 
 export type UpdateController = {
@@ -158,7 +163,13 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     },
     quitAndInstall(): LastbrowserUpdateStatus {
       if (status.state !== 'downloaded') return { ...status };
-      updater.quitAndInstall();
+      // `isSilent = true` is required: the NSIS installer is built with
+      // `oneClick: false`, so a non-silent quitAndInstall shows the full setup
+      // wizard and BLOCKS waiting for clicks. An auto-update must run without
+      // user interaction — verified: without this the installer sat on
+      // "Installation von Lastbrowser" indefinitely.
+      // `isForceRunAfter = true` relaunches the app when the install finishes.
+      updater.quitAndInstall(true, true);
       return { ...status };
     }
   };

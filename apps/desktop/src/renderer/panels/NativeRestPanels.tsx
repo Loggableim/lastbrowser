@@ -31,6 +31,7 @@ import {
 import { brandAssets } from '../brand.js';
 import { cloudProviderOptions, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
 import { providerPresentation } from '../provider-presentation.js';
+import { searchEngines } from '../tabs.js';
 import { canCallSidekickApi } from '../runtime-readiness.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 
@@ -2010,7 +2011,7 @@ export function NativeAppstoreMain({
   );
 }
 
-export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void }): JSX.Element {
+export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void }): JSX.Element {
   const ready = isReady(serviceStatus);
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
   const modelsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' }), [ready], ready);
@@ -2539,6 +2540,24 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
             {section === 'preferences' && (
               <>
+                <SettingsCard
+                  title="Search engine"
+                  description="Used when you type a search term into the address bar instead of a URL."
+                >
+                  <div className="settings-field-grid">
+                    <SettingsField label="Engine" description="Applies to new searches immediately.">
+                      <select
+                        value={searchEngineId}
+                        onChange={(event) => onSearchEngineChange(event.target.value)}
+                      >
+                        {searchEngines.map((engine) => (
+                          <option key={engine.id} value={engine.id}>{engine.label}</option>
+                        ))}
+                      </select>
+                    </SettingsField>
+                  </div>
+                </SettingsCard>
+
                 <SettingsCard title="Defaults" description="Language and chat behavior.">
                   <div className="settings-field-grid">
                     <SettingsField label="Language" description="User-facing UI language.">

@@ -70,8 +70,11 @@ import {
   browserStartUrl,
   createInitialTab,
   isAiBrowserHomeUrl,
+  loadSearchEngineId,
   rememberClosedTab,
   reorderTabs,
+  saveSearchEngineId,
+  searchEngines,
   takeLastClosedTab,
   normalizeNavigationInput,
   updateTabTitle,
@@ -403,6 +406,8 @@ export function App(): JSX.Element {
   const [visitedSites, setVisitedSites] = useState<BrowserVisit[]>(() => loadVisitedSites(window.localStorage));
   // Recently closed tabs, for Ctrl+Shift+T.
   const [closedTabs, setClosedTabs] = useState<ClosedTab[]>([]);
+  // Search engine for the address bar (Settings → Preferences).
+  const [searchEngineId, setSearchEngineId] = useState<string>(() => loadSearchEngineId(window.localStorage));
   const [desktopSettings, setDesktopSettings] = useState<Record<string, unknown> | null>(() => loadDesktopSettingsFromStorage());
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
   const [addressValue, setAddressValue] = useState(() => (
@@ -570,6 +575,10 @@ export function App(): JSX.Element {
   useEffect(() => {
     saveVisitedSites(window.localStorage, visitedSites);
   }, [visitedSites]);
+
+  useEffect(() => {
+    saveSearchEngineId(window.localStorage, searchEngineId);
+  }, [searchEngineId]);
 
   /** Drop a single entry from the history panel. */
   function removeHistoryEntry(url: string): void {
@@ -837,7 +846,7 @@ export function App(): JSX.Element {
   }, [activeSessionId, refreshWorkspace, status?.sidekick, workspacePanelCollapsed, workspacePath, workspaceRefreshNonce]);
 
   function navigate(url: string): void {
-    const normalized = normalizeNavigationInput(url);
+    const normalized = normalizeNavigationInput(url, searchEngineId);
     setTabs((current) => updateTabUrl(current, activeTab.id, normalized));
     setBrowserMode(isAiBrowserHomeUrl(normalized) ? 'home' : 'web');
     setBrowserLoadError('');
@@ -1664,6 +1673,8 @@ export function App(): JSX.Element {
           onRemoveVisit={removeHistoryEntry}
           onClearHistory={clearHistory}
           onReopenClosedTab={reopenClosedTab}
+          searchEngineId={searchEngineId}
+          onSearchEngineChange={setSearchEngineId}
         />
         <WorkspacePanel
           activeSessionId={activeSessionId}
@@ -2565,7 +2576,9 @@ function BrowserMain({
   onSetBrowserError,
   onRemoveVisit,
   onClearHistory,
-  onReopenClosedTab
+  onReopenClosedTab,
+  searchEngineId,
+  onSearchEngineChange
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -2613,6 +2626,8 @@ function BrowserMain({
   onRemoveVisit: (url: string) => void;
   onClearHistory: () => void;
   onReopenClosedTab: () => void;
+  searchEngineId: string;
+  onSearchEngineChange: (id: string) => void;
 }): JSX.Element {
   const browserWebviewStyle = {
     width: '100%',
@@ -3046,7 +3061,7 @@ function BrowserMain({
           </PanelErrorBoundary>
         );
       case 'settings':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} /></PanelErrorBoundary>;
       case 'terminal':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:

@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ClipboardCopy,
   Clock,
+  Code2,
   Columns3,
   Cpu,
   Copy,
@@ -49,6 +50,8 @@ import {
   Trash2,
   UserCircle,
   Users,
+  Volume2,
+  VolumeX,
   X
 } from 'lucide-react';
 import { hideWebviewScrollbars } from './browser-view.js';
@@ -2795,6 +2798,73 @@ function BrowserMain({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onReopenClosedTab]);
 
+  // ── DevTools + per-tab mute ──────────────────────────────────────────────
+  // Both are per-guest: the webContents is recreated on profile/tab switch, so
+  // the state must be re-read whenever the element is (re)created.
+  const [devToolsOpen, setDevToolsOpen] = useState(false);
+  const [muted, setMuted] = useState(false);
+
+  const toggleDevTools = useCallback(() => {
+    const view = webviewRef.current;
+    if (!view || typeof view.openDevTools !== 'function') return;
+    try {
+      if (view.isDevToolsOpened()) {
+        view.closeDevTools();
+        setDevToolsOpen(false);
+      } else {
+        // 'right' keeps the page visible — a bottom dock eats the viewport on
+        // a laptop screen.
+        view.openDevTools({ mode: 'right' });
+        setDevToolsOpen(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const view = webviewRef.current;
+    if (!view || typeof view.setAudioMuted !== 'function') return;
+    setMuted((current) => {
+      const next = !current;
+      try {
+        view.setAudioMuted(next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  // Re-read both flags when the guest is recreated.
+  useEffect(() => {
+    const view = webviewRef.current;
+    if (!view) return;
+    try {
+      setMuted(typeof view.isAudioMuted === 'function' ? view.isAudioMuted() : false);
+      setDevToolsOpen(typeof view.isDevToolsOpened === 'function' ? view.isDevToolsOpened() : false);
+    } catch {
+      // ignore
+    }
+  }, [webviewMountKey, webviewReady, activeTab.id]);
+
+  // F12 toggles DevTools; Ctrl/Cmd+M mutes the tab.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'F12') {
+        event.preventDefault();
+        toggleDevTools();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && (event.key === 'm' || event.key === 'M')) {
+        event.preventDefault();
+        toggleMute();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toggleDevTools, toggleMute]);
+
   // ── Find in page ─────────────────────────────────────────────────────────
   // Ctrl+F is muscle memory; without it long pages are unnavigable. The guest
   // reports matches via 'found-in-page', which we surface as "3 / 12".
@@ -3036,6 +3106,24 @@ function BrowserMain({
         </button>
         <button type="button" className="history-trigger" title="History" onClick={() => setHistoryOpen((current) => !current)}>
           <Clock size={14} />
+        </button>
+        <button
+          type="button"
+          className={`mute-trigger ${muted ? 'active' : ''}`}
+          title={muted ? 'Unmute tab (Ctrl+M)' : 'Mute tab (Ctrl+M)'}
+          aria-pressed={muted}
+          onClick={toggleMute}
+        >
+          {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+        </button>
+        <button
+          type="button"
+          className={`devtools-trigger ${devToolsOpen ? 'active' : ''}`}
+          title="Toggle DevTools (F12)"
+          aria-pressed={devToolsOpen}
+          onClick={toggleDevTools}
+        >
+          <Code2 size={14} />
         </button>
       </div>
       <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />

@@ -1547,6 +1547,34 @@ body.sidebar-resizing * {
   color: var(--lb-text);
 }
 
+/* Toolbar toggles that show an active state (mute, devtools). */
+.mute-trigger,
+.devtools-trigger {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--lb-border);
+  border-radius: 0;
+  background: var(--lb-surface);
+  color: var(--lb-muted);
+  cursor: pointer;
+}
+
+.mute-trigger:hover,
+.devtools-trigger:hover {
+  border-color: rgba(0, 217, 255, .45);
+  color: var(--lb-text);
+}
+
+.mute-trigger.active,
+.devtools-trigger.active {
+  border-color: var(--electricBlue, #2563ff);
+  background: rgba(37, 99, 255, .14);
+  color: #7fe6ff;
+}
+
 /* Find-in-page bar, overlaid on the top-right of the page area. */
 .find-bar {
   position: absolute;

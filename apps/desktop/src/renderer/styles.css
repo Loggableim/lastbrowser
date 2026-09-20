@@ -1529,6 +1529,74 @@ body.sidebar-resizing * {
   cursor: not-allowed;
 }
 
+/* Zoom indicator in the browser toolbar. */
+.zoom-indicator {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--lb-border);
+  border-radius: 0;
+  background: var(--lb-surface);
+  color: var(--lb-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.zoom-indicator:hover {
+  border-color: rgba(0, 217, 255, .45);
+  color: var(--lb-text);
+}
+
+/* Find-in-page bar, overlaid on the top-right of the page area. */
+.find-bar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--lb-border);
+  border-radius: 0;
+  background: var(--lb-surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  color: var(--lb-muted);
+}
+
+.find-bar input {
+  width: 180px;
+  border: 0;
+  background: transparent;
+  color: var(--lb-text);
+  font-size: 12px;
+  outline: none;
+}
+
+.find-bar .find-count {
+  min-width: 44px;
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.find-bar button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--lb-muted);
+  cursor: pointer;
+}
+
+.find-bar button:hover {
+  color: var(--lb-text);
+  background: rgba(255, 255, 255, .06);
+}
+
 .composer-mode {
   display: inline-flex;
   gap: 4px;

@@ -2565,6 +2565,8 @@ function BrowserMain({
     minHeight: 0
   } as React.CSSProperties;
 
+
+
   // Electron creates the guest webContents with the size the <webview> had at
   // mount time, and later CSS/size changes on that element do NOT resize the
   // guest (verified: explicit px size and display toggles both leave the guest
@@ -2596,6 +2598,189 @@ function BrowserMain({
       cancelled = true;
     };
   }, [activeTab.id, activeProfile.id, activePanel]);
+
+  // Browsers are unusable without zoom: dense pages need scaling down, small
+  // text needs scaling up. The guest webContents owns the zoom factor, so it
+  // must be re-applied whenever the webview is recreated (profile/tab switch).
+  const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+  const [zoomFactor, setZoomFactor] = useState<number>(() => {
+    try {
+      const stored = Number(window.localStorage.getItem('lastbrowser.zoomFactor'));
+      return Number.isFinite(stored) && stored > 0 ? stored : 1;
+    } catch {
+      return 1;
+    }
+  });
+
+  const applyZoom = useCallback((next: number) => {
+    const clamped = Math.min(3, Math.max(0.5, next));
+    setZoomFactor(clamped);
+    try {
+      window.localStorage.setItem('lastbrowser.zoomFactor', String(clamped));
+    } catch {
+      // Storage unavailable — zoom still applies for this session.
+    }
+    const view = webviewRef.current;
+    if (view && typeof view.setZoomFactor === 'function') {
+      try {
+        view.setZoomFactor(clamped);
+      } catch {
+        // Guest not ready yet; the effect below re-applies on dom-ready.
+      }
+    }
+  }, []);
+
+  const stepZoom = useCallback((direction: 1 | -1) => {
+    setZoomFactor((current) => {
+      const index = ZOOM_STEPS.findIndex((step) => step >= current - 0.001);
+      const from = index >= 0 ? index : ZOOM_STEPS.length - 1;
+      const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, from + direction))];
+      const clamped = Math.min(3, Math.max(0.5, next));
+      try {
+        window.localStorage.setItem('lastbrowser.zoomFactor', String(clamped));
+      } catch {
+        // ignore
+      }
+      const view = webviewRef.current;
+      if (view && typeof view.setZoomFactor === 'function') {
+        try {
+          view.setZoomFactor(clamped);
+        } catch {
+          // ignore
+        }
+      }
+      return clamped;
+    });
+  }, []);
+
+  // Re-apply the stored zoom whenever the guest is (re)created.
+  useEffect(() => {
+    const view = webviewRef.current;
+    if (!view || typeof view.setZoomFactor !== 'function') return;
+    try {
+      view.setZoomFactor(zoomFactor);
+    } catch {
+      // ignore
+    }
+  }, [zoomFactor, webviewMountKey, webviewReady]);
+
+  // Ctrl/Cmd +, -, 0 — the shortcuts every browser user reaches for.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.key === '=' || event.key === '+') {
+        event.preventDefault();
+        stepZoom(1);
+      } else if (event.key === '-' || event.key === '_') {
+        event.preventDefault();
+        stepZoom(-1);
+      } else if (event.key === '0') {
+        event.preventDefault();
+        applyZoom(1);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [stepZoom, applyZoom]);
+
+  // ── Find in page ─────────────────────────────────────────────────────────
+  // Ctrl+F is muscle memory; without it long pages are unnavigable. The guest
+  // reports matches via 'found-in-page', which we surface as "3 / 12".
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const [findResult, setFindResult] = useState<{ matches: number; active: number } | null>(null);
+  const findInputRef = useRef<HTMLInputElement | null>(null);
+
+  const closeFind = useCallback(() => {
+    setFindOpen(false);
+    setFindResult(null);
+    const view = webviewRef.current;
+    if (view && typeof view.stopFindInPage === 'function') {
+      try {
+        view.stopFindInPage('clearSelection');
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  const runFind = useCallback((query: string, forward = true) => {
+    const view = webviewRef.current;
+    if (!view || typeof view.findInPage !== 'function') return;
+    if (!query) {
+      setFindResult(null);
+      try {
+        view.stopFindInPage('clearSelection');
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    try {
+      // `forward` selects the direction; `findNext` advances to the next match
+      // instead of restarting from the top. Passing `!forward` here inverted
+      // the search and produced no result at all.
+      view.findInPage(query, { forward, findNext: true });
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Ctrl+F opens the bar; Escape closes it.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+        event.preventDefault();
+        setFindOpen(true);
+        window.setTimeout(() => findInputRef.current?.select(), 0);
+      } else if (event.key === 'Escape' && findOpen) {
+        closeFind();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [findOpen, closeFind]);
+
+  // Surface match counts from the guest.
+  //
+  // The ref is still null on the first effect run (React attaches refs after
+  // render), so a plain `webviewRef.current` check silently skips the listener
+  // and the counter stays at 0/0 forever. Retry on the next frame until the
+  // element exists.
+  useEffect(() => {
+    let cancelled = false;
+    let attached: Electron.WebviewTag | null = null;
+    let attempts = 0;
+
+    const onFound = (event: Event) => {
+      const detail = (event as unknown as { result?: { matches?: number; activeMatchOrdinal?: number } }).result;
+      if (!detail) return;
+      setFindResult({ matches: detail.matches ?? 0, active: detail.activeMatchOrdinal ?? 0 });
+    };
+
+    const attach = () => {
+      if (cancelled) return;
+      const view = webviewRef.current;
+      if (!view || typeof view.addEventListener !== 'function') {
+        if (attempts++ < 120) window.requestAnimationFrame(attach);
+        return;
+      }
+      attached = view;
+      view.addEventListener('found-in-page', onFound as EventListener);
+    };
+    attach();
+
+    return () => {
+      cancelled = true;
+      if (attached) {
+        try {
+          attached.removeEventListener('found-in-page', onFound as EventListener);
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [webviewMountKey, webviewReady]);
 
   if (activePanel === 'chat') {
     return (
@@ -2717,8 +2902,66 @@ function BrowserMain({
           <Globe2 size={14} />
           <span>Research</span>
         </button>
+        {/* Zoom indicator — only visible when zoomed away from 100%, so it does
+            not add noise for the common case. Clicking resets to 100%. */}
+        {Math.abs(zoomFactor - 1) > 0.001 && (
+          <button
+            type="button"
+            className="zoom-indicator"
+            title="Reset zoom to 100% (Ctrl+0)"
+            onClick={() => applyZoom(1)}
+          >
+            {Math.round(zoomFactor * 100)}%
+          </button>
+        )}
+        <button type="button" className="find-trigger" title="Find in page (Ctrl+F)" onClick={() => setFindOpen(true)}>
+          <Search size={14} />
+        </button>
       </div>
       <div className="browser-webview-frame" ref={browserFrameRef}>
+        {findOpen && (
+          <div className="find-bar" role="search">
+            <Search size={14} />
+            <input
+              ref={findInputRef}
+              value={findQuery}
+              placeholder="Find in page"
+              aria-label="Find in page"
+              onChange={(event) => {
+                setFindQuery(event.target.value);
+                runFind(event.target.value, true);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  runFind(findQuery, !event.shiftKey);
+                }
+              }}
+            />
+            <span className="find-count">
+              {findResult ? `${findResult.active} / ${findResult.matches}` : findQuery ? '0 / 0' : ''}
+            </span>
+            <button
+              type="button"
+              aria-label="Previous match"
+              title="Previous (Shift+Enter)"
+              onClick={() => runFind(findQuery, false)}
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              type="button"
+              aria-label="Next match"
+              title="Next (Enter)"
+              onClick={() => runFind(findQuery, true)}
+            >
+              <ChevronRight size={14} />
+            </button>
+            <button type="button" aria-label="Close find bar" title="Close (Esc)" onClick={closeFind}>
+              <X size={14} />
+            </button>
+          </div>
+        )}
         {browserLoadError && (
           <div className="browser-load-error" role="alert">
             <AlertTriangle size={16} />

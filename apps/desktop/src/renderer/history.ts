@@ -6,7 +6,14 @@ export type BrowserVisit = {
 };
 
 export const visitedSitesStorageKey = 'lastbrowser.visitedSites.v1';
-const visitLimit = 24;
+/**
+ * The start page only needs a handful of recent sites, but a history panel
+ * needs the full log. Keeping one list with a generous cap serves both: the
+ * start page slices what it shows, the panel reads everything.
+ */
+const visitLimit = 500;
+/** How many entries the start page surfaces. */
+export const startPageVisitLimit = 24;
 
 type VisitStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -69,6 +76,63 @@ export function recordVisit(
 
 export function trackableVisitLabel(url: string): string {
   return readableVisitTitle('', url);
+}
+
+/**
+ * Filter history by a free-text query, matching title and URL.
+ * An empty query returns everything (already sorted by recency).
+ */
+export function searchVisits(visits: BrowserVisit[], query: string): BrowserVisit[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return visits;
+  return visits.filter(
+    (visit) =>
+      visit.title.toLowerCase().includes(needle) || visit.url.toLowerCase().includes(needle)
+  );
+}
+
+/** Remove a single entry by URL. */
+export function removeVisit(visits: BrowserVisit[], url: string): BrowserVisit[] {
+  const target = normalizeVisitUrl(url);
+  return visits.filter((visit) => normalizeVisitUrl(visit.url) !== target);
+}
+
+/** Group visits by calendar day, newest day first. */
+export function groupVisitsByDay(
+  visits: BrowserVisit[]
+): Array<{ label: string; visits: BrowserVisit[] }> {
+  const groups = new Map<string, BrowserVisit[]>();
+  const today = new Date();
+  const todayKey = dayKey(today);
+  const yesterdayKey = dayKey(new Date(today.getTime() - 86_400_000));
+
+  for (const visit of visits) {
+    const key = dayKey(new Date(visit.lastVisited));
+    groups.set(key, [...(groups.get(key) || []), visit]);
+  }
+
+  return Array.from(groups.entries())
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([key, entries]) => ({
+      label:
+        key === todayKey
+          ? 'Today'
+          : key === yesterdayKey
+            ? 'Yesterday'
+            : new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long'
+              }),
+      visits: entries.sort((a, b) => b.lastVisited - a.lastVisited)
+    }));
+}
+
+function dayKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function normalizeVisit(entry: unknown): BrowserVisit | null {

@@ -127,8 +127,16 @@ describe('browser shell layout', () => {
 
     expect(source).toContain('function updateUrl(tabId: string, url: string): void');
     expect(source).toContain('function updateTitle(tabId: string, title: string): void');
-    expect(source).toContain('onWebviewNavigate(activeTab.id, event.url)');
-    expect(source).toContain('onWebviewTitle(activeTab.id, event.title)');
+    // React ignores webview event props (onDidNavigate & friends) — verified:
+    // the address bar kept the old URL after the guest had already navigated,
+    // and history recorded nothing. The events are registered imperatively, so
+    // assert the listener wiring rather than the dead JSX props.
+    expect(source).toContain("view.addEventListener('did-navigate', onNavigate)");
+    expect(source).toContain("view.addEventListener('did-navigate-in-page', onNavigate)");
+    expect(source).toContain("view.addEventListener('page-title-updated', onTitle)");
+    expect(source).toContain('onWebviewNavigate(activeTab.id, url)');
+    expect(source).toContain('onWebviewTitle(activeTab.id, title)');
+    expect(source).not.toContain('onDidNavigate={(event) =>');
     expect(source).toContain('hideWebviewScrollbars(event.currentTarget)');
     expect(source).not.toContain('annotateWebviewViewport');
   });

@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCopy,
+  Clock,
   Columns3,
   Cpu,
   Copy,
@@ -91,7 +92,14 @@ import {
   removeProfileTabs,
   saveProfileTabs
 } from './tab-sessions.js';
-import { loadVisitedSites, recordVisit, saveVisitedSites, type BrowserVisit } from './history.js';
+import {
+  loadVisitedSites,
+  recordVisit,
+  removeVisit,
+  saveVisitedSites,
+  startPageVisitLimit,
+  type BrowserVisit
+} from './history.js';
 import {
   SidekickActionId,
   buildSidekickPrompt,
@@ -156,6 +164,7 @@ import { NativeTerminalMain } from './panels/NativeTerminalMain.js';
 import { ControlCenter } from './NativeControlCenter.js';
 import { ApprovalPollManager, ApprovalCard } from './NativeApproval.js';
 import { DownloadsPanel } from './NativeDownloads.js';
+import { HistoryPanel } from './NativeHistory.js';
 import { ContextUsageIndicator } from './NativeContextUsage.js';
 import { QueueIndicator, CompressButton, useChatQueue } from './NativeCompressQueue.js';
 import { RichTextRenderer } from './NativeRichText.js';
@@ -553,6 +562,16 @@ export function App(): JSX.Element {
   useEffect(() => {
     saveVisitedSites(window.localStorage, visitedSites);
   }, [visitedSites]);
+
+  /** Drop a single entry from the history panel. */
+  function removeHistoryEntry(url: string): void {
+    setVisitedSites((current) => removeVisit(current, url));
+  }
+
+  /** Wipe the whole history log. */
+  function clearHistory(): void {
+    setVisitedSites([]);
+  }
 
   useEffect(() => {
     return window.lastbrowser.browser.onOpenTab((url) => addTab(url));
@@ -1615,6 +1634,8 @@ export function App(): JSX.Element {
           onStopChat={() => void stopNativeChat()}
           onClearBrowserError={() => setBrowserLoadError('')}
           onSetBrowserError={setBrowserLoadError}
+          onRemoveVisit={removeHistoryEntry}
+          onClearHistory={clearHistory}
         />
         <WorkspacePanel
           activeSessionId={activeSessionId}
@@ -2514,6 +2535,8 @@ function BrowserMain({
   onStopChat,
   onClearBrowserError,
   onSetBrowserError,
+  onRemoveVisit,
+  onClearHistory
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -2558,6 +2581,8 @@ function BrowserMain({
   onStopChat: () => void;
   onClearBrowserError: () => void;
   onSetBrowserError: (error: string) => void;
+  onRemoveVisit: (url: string) => void;
+  onClearHistory: () => void;
 }): JSX.Element {
   const browserWebviewStyle = {
     width: '100%',
@@ -2665,6 +2690,53 @@ function BrowserMain({
     }
   }, [zoomFactor, webviewMountKey, webviewReady]);
 
+  // ── Guest navigation events ──────────────────────────────────────────────
+  // React does NOT wire the webview's DOM events from JSX props: `onDidNavigate`
+  // and friends are silently ignored (verified — the address bar kept the old
+  // URL after the guest had already navigated, and history recorded nothing).
+  // The events must be registered imperatively on the element.
+  useEffect(() => {
+    let cancelled = false;
+    let attached: Electron.WebviewTag | null = null;
+    let attempts = 0;
+
+    const onNavigate = (event: Event) => {
+      const url = (event as unknown as { url?: string }).url;
+      if (typeof url === 'string' && url) onWebviewNavigate(activeTab.id, url);
+    };
+    const onTitle = (event: Event) => {
+      const title = (event as unknown as { title?: string }).title;
+      if (typeof title === 'string') onWebviewTitle(activeTab.id, title);
+    };
+
+    const attach = () => {
+      if (cancelled) return;
+      const view = webviewRef.current;
+      if (!view || typeof view.addEventListener !== 'function') {
+        if (attempts++ < 120) window.requestAnimationFrame(attach);
+        return;
+      }
+      attached = view;
+      view.addEventListener('did-navigate', onNavigate);
+      view.addEventListener('did-navigate-in-page', onNavigate);
+      view.addEventListener('page-title-updated', onTitle);
+    };
+    attach();
+
+    return () => {
+      cancelled = true;
+      if (attached) {
+        try {
+          attached.removeEventListener('did-navigate', onNavigate);
+          attached.removeEventListener('did-navigate-in-page', onNavigate);
+          attached.removeEventListener('page-title-updated', onTitle);
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [activeTab.id, webviewMountKey, webviewReady, onWebviewNavigate, onWebviewTitle]);
+
   // Ctrl/Cmd +, -, 0 — the shortcuts every browser user reaches for.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -2689,6 +2761,7 @@ function BrowserMain({
   // reports matches via 'found-in-page', which we surface as "3 / 12".
   const [findOpen, setFindOpen] = useState(false);
   const [downloadsOpen, setDownloadsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [findQuery, setFindQuery] = useState('');
   const [findResult, setFindResult] = useState<{ matches: number; active: number } | null>(null);
   const findInputRef = useRef<HTMLInputElement | null>(null);
@@ -2922,8 +2995,19 @@ function BrowserMain({
         <button type="button" className="downloads-trigger" title="Downloads" onClick={() => setDownloadsOpen((current) => !current)}>
           <Download size={14} />
         </button>
+        <button type="button" className="history-trigger" title="History" onClick={() => setHistoryOpen((current) => !current)}>
+          <Clock size={14} />
+        </button>
       </div>
       <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />
+      <HistoryPanel
+        open={historyOpen}
+        visits={visitedSites}
+        onClose={() => setHistoryOpen(false)}
+        onOpen={(url) => onNavigate(url)}
+        onRemove={(url) => onRemoveVisit(url)}
+        onClear={() => onClearHistory()}
+      />
       <div className="browser-webview-frame" ref={browserFrameRef}>
         {findOpen && (
           <div className="find-bar" role="search">
@@ -2999,9 +3083,6 @@ function BrowserMain({
               onSetBrowserError(`${event.errorCode}: ${event.errorDescription}`);
             }
           }}
-          onDidNavigate={(event) => onWebviewNavigate(activeTab.id, event.url)}
-          onDidNavigateInPage={(event) => onWebviewNavigate(activeTab.id, event.url)}
-          onPageTitleUpdated={(event) => onWebviewTitle(activeTab.id, event.title)}
         />
         )}
       </div>

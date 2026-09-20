@@ -59,6 +59,25 @@ export function buildSidekickPrompt(action: SidekickActionId, context: BrowserCo
   };
 }
 
+/**
+ * Pull the last assistant message out of a session payload.
+ *
+ * The chat UI needs this after a turn finishes: the pending placeholder must be
+ * replaced with the real answer, not a fixed string. Returns '' when the session
+ * has no assistant message yet.
+ */
+export function lastAssistantText(session: unknown): string {
+  const record = (session || {}) as { messages?: Array<{ role?: string; content?: string }> };
+  const messages = Array.isArray(record.messages) ? record.messages : [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message && message.role === 'assistant' && typeof message.content === 'string' && message.content.trim()) {
+      return message.content.trim();
+    }
+  }
+  return '';
+}
+
 export async function collectBrowserContext(
   webview: Electron.WebviewTag | null,
   activeTab: { url: string; title: string }

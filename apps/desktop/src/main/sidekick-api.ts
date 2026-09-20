@@ -1953,19 +1953,24 @@ async function getSession(webuiUrl: string, sessionId: string, fetchImpl: FetchL
 }
 
 async function startChat(webuiUrl: string, session: SessionShape, request: SidekickMessageRequest, fetchImpl: FetchLike): Promise<{ stream_id: string; session_id?: string }> {
+  // Omit `model` entirely when nothing is configured. Sending '' made the
+  // backend resolve a stale catalog entry instead of the provider default
+  // (observed: "Ring-2.6-1T is no longer available as a free model").
+  const resolvedModel = request.model || session.model || '';
+  const body: Record<string, unknown> = {
+    session_id: session.session_id,
+    message: request.message,
+    workspace: request.workspace || session.workspace || '',
+    model_provider: request.modelProvider ?? session.model_provider ?? null,
+    profile: request.profile || 'default',
+    mode: request.mode || 'action',
+    chat_mode: request.chatMode || 'chat',
+    sandbox_disabled: request.sandboxDisabled ?? false
+  };
+  if (resolvedModel) body.model = resolvedModel;
   return jsonRequest(webuiUrl, '/api/chat/start', {
     method: 'POST',
-    body: JSON.stringify({
-      session_id: session.session_id,
-      message: request.message,
-      model: request.model || session.model || '',
-      workspace: request.workspace || session.workspace || '',
-      model_provider: request.modelProvider ?? session.model_provider ?? null,
-      profile: request.profile || 'default',
-      mode: request.mode || 'action',
-      chat_mode: request.chatMode || 'chat',
-      sandbox_disabled: request.sandboxDisabled ?? false
-    })
+    body: JSON.stringify(body)
   }, fetchImpl);
 }
 

@@ -114,6 +114,7 @@ import {
   SidekickActionId,
   buildSidekickPrompt,
   collectBrowserContext,
+  lastAssistantText,
   sidekickActionLabels
 } from './bridge.js';
 import {
@@ -1129,7 +1130,11 @@ export function App(): JSX.Element {
       const response = await window.lastbrowser.sidekick.startChat({
         sessionId: activeSessionId,
         message: trimmed,
-        model: setupState.model,
+        // Only send a model when one is actually configured. An empty string
+        // used to be forwarded, which made the backend fall back to a stale
+        // catalog entry ("Ring-2.6-1T is no longer available") instead of the
+        // provider's configured default.
+        model: setupState.model || undefined,
         workspace: activeSpacePath,
         mode: composerMode
       });
@@ -1139,8 +1144,15 @@ export function App(): JSX.Element {
       setChatRunState('streaming');
       await window.lastbrowser.sidekick.saveDraft({ sessionId: response.sessionId, text: '', files: [] }).catch(() => null);
       await pollNativeChat(response.streamId, response.sessionId);
+      // Show the ACTUAL answer. The pending placeholder used to be replaced with
+      // the literal string "Sidekick finished.", so every reply — including
+      // errors and full summaries — was hidden behind that text.
+      const finished = await loadActiveSession(response.sessionId, { loadDraft: false, showLoading: false });
+      const answer = lastAssistantText(finished);
       setMessages((current) => current.map((item) => (
-        item.pending ? { ...item, content: 'Sidekick finished.', pending: false } : item
+        item.pending
+          ? { ...item, content: answer || 'Sidekick finished.', pending: false }
+          : item
       )));
       void refreshSessions();
     } catch (error) {

@@ -144,6 +144,7 @@ import { createAdblockController } from './adblock.js';
 import { createSidekickUpdater } from './sidekick-updater.js';
 import { subscribeChatStream, type ChatStreamHandle } from './chat-stream.js';
 import { createDownloadTracker } from './downloads.js';
+import { createPermissionController } from './permissions.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startTerminal, writeTerminal, closeTerminal, getTerminalIds } from './terminal-process.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
@@ -166,6 +167,7 @@ const sidekickUpdater = createSidekickUpdater({
 const agentWorkspaceStreams = new Map<string, AbortController>();
 const chatStreams = new Map<string, ChatStreamHandle>();
 const downloads = createDownloadTracker();
+const permissions = createPermissionController();
 
 function createWindow(): void {
   mainWindow = new BrowserWindow(createMainWindowOptions(mainDir));
@@ -511,11 +513,21 @@ app.whenReady().then(() => {
   });
 });
 
-// Attach ad blocking and download tracking to every browser session (webviews
-// use per-profile `persist:` partitions, so each profile gets its own).
+// Attach ad blocking, download tracking and permission handling to every
+// browser session (webviews use per-profile `persist:` partitions, so each
+// profile gets its own).
 app.on('session-created', (session) => {
   void adblock.attach(session);
   downloads.attach(session);
+  // Deny-by-default: Electron grants every permission silently otherwise, which
+  // would hand any website the camera, microphone and location.
+  session.setPermissionRequestHandler((_contents, permission, callback, details) => {
+    const origin = String((details as { requestingUrl?: string })?.requestingUrl || '');
+    callback(permissions.decide(String(permission), origin) === 'allow');
+  });
+  session.setPermissionCheckHandler((_contents, permission, requestingOrigin) => {
+    return permissions.decide(String(permission), String(requestingOrigin || '')) === 'allow';
+  });
 });
 
 app.on('before-quit', () => {

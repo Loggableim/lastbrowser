@@ -115,6 +115,7 @@ import {
   buildSidekickPrompt,
   collectBrowserContext,
   lastAssistantText,
+  resolveConfiguredModel,
   sidekickActionLabels
 } from './bridge.js';
 import {
@@ -1130,11 +1131,11 @@ export function App(): JSX.Element {
       const response = await window.lastbrowser.sidekick.startChat({
         sessionId: activeSessionId,
         message: trimmed,
-        // Only send a model when one is actually configured. An empty string
-        // used to be forwarded, which made the backend fall back to a stale
-        // catalog entry ("Ring-2.6-1T is no longer available") instead of the
-        // provider's configured default.
-        model: setupState.model || undefined,
+        // Resolve the model explicitly. The setup state is often empty (the
+        // wizard may have been skipped), and sending nothing made the backend
+        // pick a stale catalog entry — observed as
+        // "Ring-2.6-1T is no longer available as a free model".
+        model: setupState.model || (await resolveConfiguredModel((request) => window.lastbrowser.sidekick.requestWebui(request))) || undefined,
         workspace: activeSpacePath,
         mode: composerMode
       });

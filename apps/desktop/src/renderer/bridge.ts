@@ -78,6 +78,37 @@ export function lastAssistantText(session: unknown): string {
   return '';
 }
 
+/**
+ * Resolve a usable model id when nothing is configured in the setup state.
+ *
+ * The first-run wizard is skippable, so `setupState.model` is often empty. The
+ * backend then picks a stale catalog entry instead of the provider default —
+ * observed as "Ring-2.6-1T is no longer available as a free model". This asks
+ * the WebUI for the configured default and falls back to the first model of the
+ * active provider.
+ */
+export async function resolveConfiguredModel(
+  requestWebui: (request: { method: string; path: string }) => Promise<unknown>
+): Promise<string> {
+  try {
+    const data = (await requestWebui({ method: 'GET', path: '/api/models' })) as {
+      default_model?: string;
+      groups?: Array<{ provider?: string; models?: Array<{ id?: string }> }>;
+    };
+    const configured = typeof data?.default_model === 'string' ? data.default_model.trim() : '';
+    if (configured) return configured;
+    const groups = Array.isArray(data?.groups) ? data.groups : [];
+    for (const group of groups) {
+      const models = Array.isArray(group?.models) ? group.models : [];
+      const first = models.find((model) => typeof model?.id === 'string' && model.id.trim());
+      if (first?.id) return first.id.trim();
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 export async function collectBrowserContext(
   webview: Electron.WebviewTag | null,
   activeTab: { url: string; title: string }

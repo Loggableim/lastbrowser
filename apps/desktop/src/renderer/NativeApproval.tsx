@@ -19,12 +19,12 @@ type ApprovalState = {
 export function ApprovalPollManager({
   activeSessionId,
   serviceStatus,
-  busy,
   children
 }: {
   activeSessionId: string | null;
   serviceStatus: ServiceStatus | null;
-  busy: boolean;
+  /** Kept for call-site compatibility; polling no longer depends on it. */
+  busy?: boolean;
   children: (state: { pending: ApprovalEntry | null; respond: (choice: string) => void }) => React.ReactNode;
 }): JSX.Element {
   const [pending, setPending] = useState<ApprovalEntry | null>(null);
@@ -48,13 +48,20 @@ export function ApprovalPollManager({
     }
   }, [activeSessionId, ready]);
 
-  // Poll while agent is busy
+  // Poll whenever a session is selected.
+  //
+  // This used to require `busy` (an in-flight chat turn). That hid approvals
+  // that outlive the turn that created them: a tool call can be parked waiting
+  // for a decision while the UI already considers the turn finished (stream
+  // dropped, page reloaded, agent paused), leaving the user unable to answer
+  // and the agent blocked indefinitely. The endpoint is a cheap in-process
+  // lookup, so polling it continuously is fine.
   useEffect(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
-    if (!activeSessionId || !ready || !busy) {
+    if (!activeSessionId || !ready) {
       setPending(null);
       pendingRef.current = null;
       return;
@@ -65,7 +72,7 @@ export function ApprovalPollManager({
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = null;
     };
-  }, [activeSessionId, ready, busy, fetchPending]);
+  }, [activeSessionId, ready, fetchPending]);
 
   const respond = useCallback(async (choice: string) => {
     const entry = pendingRef.current;

@@ -15,11 +15,15 @@ function trackedTextFiles(): string[] {
 
 describe('secret-shaped fixtures', () => {
   it('does not commit Telegram bot-token-shaped literals in tracked text files', () => {
-    const offenders = trackedTextFiles().filter((file) => {
+    const files = trackedTextFiles();
+    // The repo has grown past the point where reading every tracked file fits
+    // in the default 5s vitest timeout (measured ~15s for ~1400 files), so the
+    // scan needs an explicit budget rather than a flaky failure.
+    const offenders = files.filter((file) => {
       const fullPath = path.join(repoRoot, file);
       return existsSync(fullPath) && telegramBotTokenPattern.test(readFileSync(fullPath, 'utf8'));
     });
 
     expect(offenders).toEqual([]);
-  });
+  }, 60000);
 });

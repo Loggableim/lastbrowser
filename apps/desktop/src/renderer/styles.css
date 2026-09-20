@@ -1497,7 +1497,36 @@ body.sidebar-resizing * {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
+}
+
+/* Model picker in the composer: the connected models must be switchable
+   without leaving the conversation. */
+.composer-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--lb-border);
+  border-radius: 0;
+  background: var(--lb-surface);
+  color: var(--lb-muted);
+  min-width: 0;
+}
+
+.composer-model select {
+  border: 0;
+  background: transparent;
+  color: var(--lb-text);
+  font-size: 12px;
+  max-width: 220px;
+  cursor: pointer;
+}
+
+.composer-model select:disabled {
+  opacity: .55;
+  cursor: not-allowed;
 }
 
 .composer-mode {

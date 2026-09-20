@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ClipboardCopy,
   Columns3,
+  Cpu,
   Copy,
   Download,
   Edit3,
@@ -2811,6 +2812,55 @@ function NativeChatMain({
   const profile = activeSession?.profile || 'default';
   const workspace = activeSession?.workspace || activeSpacePath || 'default';
 
+  // Models the user can pick for this conversation. The catalog comes from the
+  // same /api/models payload the settings panel uses, so the composer offers
+  // exactly the providers that are actually connected.
+  const [modelCatalog, setModelCatalog] = useState<Array<{ provider: string; models: Array<{ id: string; label: string }> }>>([]);
+  useEffect(() => {
+    if (!ready) return;
+    let alive = true;
+    const load = async () => {
+      try {
+        const data = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' });
+        if (!alive) return;
+        const groups = Array.isArray(data?.groups) ? data.groups : [];
+        setModelCatalog(
+          groups
+            .map((group) => {
+              const record = (group || {}) as Record<string, unknown>;
+              const provider = String(record.provider || record.provider_id || 'Provider');
+              const models = Array.isArray(record.models) ? record.models : [];
+              return {
+                provider,
+                models: models
+                  .map((entry) => {
+                    const m = (entry || {}) as Record<string, unknown>;
+                    const id = String(m.id || m.name || m.label || '');
+                    return { id, label: String(m.label || m.name || m.id || id) };
+                  })
+                  .filter((m) => m.id)
+              };
+            })
+            .filter((group) => group.models.length > 0)
+        );
+      } catch {
+        // Catalog is optional — the composer hides the picker when empty.
+      }
+    };
+    void load();
+    return () => { alive = false; };
+  }, [ready]);
+
+  /** Switch the model for this conversation (persists as the new default). */
+  const handleComposerModelChange = useCallback((nextModel: string) => {
+    if (!nextModel || nextModel === model) return;
+    void window.lastbrowser.sidekick.setDefaultModel({ model: nextModel })
+      .then(() => setStatusMessage(`Model set to ${nextModel}`))
+      .catch((error: unknown) => {
+        setStatusMessage(`Could not switch model: ${error instanceof Error ? error.message : String(error)}`);
+      });
+  }, [model]);
+
   // Wrap onSend to enqueue when busy instead of losing the message
   const handleSend = useCallback((text: string) => {
     if (running) {
@@ -2886,12 +2936,14 @@ function NativeChatMain({
         busy={busy || running}
         mode={composerMode}
         model={model}
+        modelOptions={modelCatalog}
         profile={profile}
         ready={ready}
         runState={runState}
         text={composerText}
         workspace={workspace}
         onMode={onComposerMode}
+        onModelChange={handleComposerModelChange}
         onSend={handleSend}
         onStop={onStop}
         onText={onComposerText}
@@ -3111,12 +3163,14 @@ function ChatComposer({
   busy,
   mode,
   model,
+  modelOptions,
   profile,
   ready,
   runState,
   text,
   workspace,
   onMode,
+  onModelChange,
   onSend,
   onStop,
   onText
@@ -3124,12 +3178,15 @@ function ChatComposer({
   busy: boolean;
   mode: ComposerMode;
   model: string;
+  /** Selectable models, grouped by provider. Empty hides the picker. */
+  modelOptions: Array<{ provider: string; models: Array<{ id: string; label: string }> }>;
   profile: string;
   ready: boolean;
   runState: ChatRunState;
   text: string;
   workspace: string;
   onMode: (mode: ComposerMode) => void;
+  onModelChange: (model: string) => void;
   onSend: (message: string) => void;
   onStop: () => void;
   onText: (text: string) => void;
@@ -3229,6 +3286,29 @@ function ChatComposer({
             <span>Plan</span>
           </button>
         </div>
+        {modelOptions.length > 0 && (
+          <label className="composer-model" title="Model for this conversation">
+            <Cpu size={13} />
+            <select
+              value={model}
+              disabled={!ready || running}
+              onChange={(event) => onModelChange(event.target.value)}
+            >
+              {/* Keep the current model visible even when the catalog has not
+                  loaded yet or the model is no longer offered. */}
+              {!modelOptions.some((group) => group.models.some((m) => m.id === model)) && (
+                <option value={model}>{model || 'default'}</option>
+              )}
+              {modelOptions.map((group) => (
+                <optgroup key={group.provider} label={group.provider}>
+                  {group.models.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       <div className="composer-input-row" ref={slashRef}>
         {showSlashDropdown && filteredSlashCommands.length > 0 && (

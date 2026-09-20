@@ -146,6 +146,7 @@ import { createSidekickUpdater } from './sidekick-updater.js';
 import { subscribeChatStream, type ChatStreamHandle } from './chat-stream.js';
 import { createDownloadTracker } from './downloads.js';
 import { createPermissionController, loadTrustedOrigins, saveTrustedOrigins, trustedOriginsFileName } from './permissions.js';
+import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startTerminal, writeTerminal, closeTerminal, getTerminalIds } from './terminal-process.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
@@ -182,7 +183,8 @@ function createWindow(): void {
   if (rendererUrl) {
     void mainWindow.loadURL(rendererUrl);
   } else {
-    void mainWindow.loadFile(path.join(mainDir, '..', 'renderer', 'index.html'));
+    // app:// (not file://) so localStorage persists — see app-protocol.ts.
+    void mainWindow.loadURL(appRendererUrl());
   }
 }
 
@@ -515,7 +517,14 @@ async function ensureSidecarAuth(): Promise<void> {
 }
 
 app.setName('Lastbrowser');
+// Must run before whenReady: registering a scheme as privileged afterwards has
+// no effect on storage partitioning, and localStorage would stay ephemeral.
+registerAppScheme();
 app.whenReady().then(() => {
+  // Serve the renderer over app:// so localStorage/IndexedDB persist to disk.
+  // Under file:// Chromium uses an opaque origin and every setting is lost on
+  // restart (verified: tabs, bookmarks and history all vanished).
+  installAppProtocolHandler(path.join(mainDir, '..', 'renderer'));
   installBrowserChrome(Menu);
   registerBrowserContextMenu({
     app,

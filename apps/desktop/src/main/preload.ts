@@ -191,6 +191,15 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     status: () => ipcRenderer.invoke('lastbrowser:adblock:status'),
     setEnabled: (enabled: boolean) => ipcRenderer.invoke('lastbrowser:adblock:setEnabled', enabled)
   },
+  downloads: {
+    list: () => ipcRenderer.invoke('lastbrowser:downloads:list'),
+    clear: (id?: string) => ipcRenderer.invoke('lastbrowser:downloads:clear', id),
+    onChanged: (listener: (entries: unknown) => void) => {
+      const wrapped = (_event: unknown, entries: unknown) => listener(entries);
+      ipcRenderer.on('lastbrowser:downloads:changed', wrapped);
+      return () => ipcRenderer.removeListener('lastbrowser:downloads:changed', wrapped);
+    }
+  },
   sidekickUpdate: {
     status: () => ipcRenderer.invoke('lastbrowser:sidekick-update:status'),
     check: () => ipcRenderer.invoke('lastbrowser:sidekick-update:check'),

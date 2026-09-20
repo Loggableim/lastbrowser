@@ -143,6 +143,7 @@ import { registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
 import { createAdblockController } from './adblock.js';
 import { createSidekickUpdater } from './sidekick-updater.js';
 import { subscribeChatStream, type ChatStreamHandle } from './chat-stream.js';
+import { createDownloadTracker } from './downloads.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startTerminal, writeTerminal, closeTerminal, getTerminalIds } from './terminal-process.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
@@ -164,6 +165,7 @@ const sidekickUpdater = createSidekickUpdater({
 });
 const agentWorkspaceStreams = new Map<string, AbortController>();
 const chatStreams = new Map<string, ChatStreamHandle>();
+const downloads = createDownloadTracker();
 
 function createWindow(): void {
   mainWindow = new BrowserWindow(createMainWindowOptions(mainDir));
@@ -398,6 +400,19 @@ function registerIpc(): void {
     adblock.setEnabled(enabled !== false);
     return adblock.getStatus();
   });
+  // Download tracking: the renderer polls the list and gets pushed updates.
+  ipcMain.handle('lastbrowser:downloads:list', () => downloads.list());
+  ipcMain.handle('lastbrowser:downloads:clear', (_event, id: unknown) => {
+    const target = String(id || '');
+    if (target) downloads.clear(target);
+    else downloads.clearFinished();
+    return downloads.list();
+  });
+  downloads.subscribe((entries) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('lastbrowser:downloads:changed', entries);
+    }
+  });
   ipcMain.handle('lastbrowser:sidekick-update:status', () => sidekickUpdater.getStatus());
   ipcMain.handle('lastbrowser:sidekick-update:check', () => sidekickUpdater.check());
   ipcMain.handle('lastbrowser:sidekick-update:apply', () => sidekickUpdater.apply());
@@ -496,10 +511,11 @@ app.whenReady().then(() => {
   });
 });
 
-// Attach ad blocking to every browser session (webviews use per-profile
-// `persist:` partitions, so each profile gets its own blocking context).
+// Attach ad blocking and download tracking to every browser session (webviews
+// use per-profile `persist:` partitions, so each profile gets its own).
 app.on('session-created', (session) => {
   void adblock.attach(session);
+  downloads.attach(session);
 });
 
 app.on('before-quit', () => {

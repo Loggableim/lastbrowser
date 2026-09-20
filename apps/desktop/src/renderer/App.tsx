@@ -155,6 +155,7 @@ import {
 import { NativeTerminalMain } from './panels/NativeTerminalMain.js';
 import { ControlCenter } from './NativeControlCenter.js';
 import { ApprovalPollManager, ApprovalCard } from './NativeApproval.js';
+import { DownloadsPanel } from './NativeDownloads.js';
 import { ContextUsageIndicator } from './NativeContextUsage.js';
 import { QueueIndicator, CompressButton, useChatQueue } from './NativeCompressQueue.js';
 import { RichTextRenderer } from './NativeRichText.js';
@@ -2687,6 +2688,7 @@ function BrowserMain({
   // Ctrl+F is muscle memory; without it long pages are unnavigable. The guest
   // reports matches via 'found-in-page', which we surface as "3 / 12".
   const [findOpen, setFindOpen] = useState(false);
+  const [downloadsOpen, setDownloadsOpen] = useState(false);
   const [findQuery, setFindQuery] = useState('');
   const [findResult, setFindResult] = useState<{ matches: number; active: number } | null>(null);
   const findInputRef = useRef<HTMLInputElement | null>(null);
@@ -2917,7 +2919,11 @@ function BrowserMain({
         <button type="button" className="find-trigger" title="Find in page (Ctrl+F)" onClick={() => setFindOpen(true)}>
           <Search size={14} />
         </button>
+        <button type="button" className="downloads-trigger" title="Downloads" onClick={() => setDownloadsOpen((current) => !current)}>
+          <Download size={14} />
+        </button>
       </div>
+      <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />
       <div className="browser-webview-frame" ref={browserFrameRef}>
         {findOpen && (
           <div className="find-bar" role="search">

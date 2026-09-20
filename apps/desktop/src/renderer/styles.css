@@ -1597,6 +1597,163 @@ body.sidebar-resizing * {
   background: rgba(255, 255, 255, .06);
 }
 
+/* Downloads panel, anchored under the toolbar trigger. */
+.downloads-panel {
+  position: absolute;
+  top: 52px;
+  right: 16px;
+  z-index: 20;
+  width: min(420px, calc(100vw - 32px));
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--lb-border);
+  border-radius: 0;
+  background: var(--lb-surface);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .45);
+}
+
+.downloads-panel > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--lb-border);
+  color: var(--lb-muted);
+}
+
+.downloads-panel > header strong {
+  flex: 1 1 auto;
+  font-size: 13px;
+  color: var(--lb-text);
+}
+
+.downloads-panel > header button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--lb-muted);
+  cursor: pointer;
+}
+
+.downloads-panel > header button:hover {
+  color: var(--lb-text);
+  background: rgba(255, 255, 255, .06);
+}
+
+.downloads-badge {
+  padding: 2px 7px;
+  border-radius: 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  background: rgba(0, 217, 255, .16);
+  color: #7fe6ff;
+}
+
+.downloads-list {
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.downloads-empty {
+  margin: 0;
+  padding: 14px 8px;
+  font-size: 12px;
+  color: var(--lb-muted);
+  text-align: center;
+}
+
+.download-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 0;
+}
+
+.download-row + .download-row {
+  border-top-color: var(--lb-border);
+}
+
+.download-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+  color: var(--lb-muted);
+}
+
+.download-row.completed .download-icon {
+  color: #7cff6b;
+}
+
+.download-row.cancelled .download-icon,
+.download-row.interrupted .download-icon {
+  color: #ff8a5c;
+}
+
+.download-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.download-copy strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-copy small {
+  font-size: 11px;
+  color: var(--lb-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-progress {
+  display: block;
+  height: 3px;
+  margin-top: 3px;
+  background: var(--lb-border);
+}
+
+.download-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--electricBlue, #2563ff);
+  transition: width .2s;
+}
+
+.download-row > button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--lb-muted);
+  cursor: pointer;
+}
+
+.download-row > button:hover {
+  color: var(--lb-text);
+  background: rgba(255, 255, 255, .06);
+}
+
 .composer-mode {
   display: inline-flex;
   gap: 4px;

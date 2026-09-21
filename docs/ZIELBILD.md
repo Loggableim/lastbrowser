@@ -18,7 +18,7 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 - [x] **Phase 5: Browser Polish & UX (v0.1.28)** (Tab-Favicons, Lade-Spinner, dynamischer Stop/Reload-Button, Webview Crash-Recovery, F11 Vollbild, Download-Aktivitätsindikator, 306 Unit-Tests grün)
 - [x] **Phase 6: Browser Power-Features (v0.1.29)** (Rechtsklick „Element untersuchen“ / DevTools Inspect mit Auto-Open, Rechtsklick „Deep Research mit [Assistenten-Name]“, Tab Audio-Indikator & Per-Tab Mute, Privater / Inkognito-Modus mit in-memory-incognito Partition & Ctrl+Shift+N, 309 Unit-Tests grün)
 - [x] **Phase 7: Volle Standalone-Parität – Native Integration der Sidekick-Kernfeatures** (TUI, `sidekick doctor`, 38+ CLI-Subcommands, Multi-Platform Messaging Gateway Daemon)
-- [ ] **Phase 8: WebExtensions / Addon-Support** (Chrome Extension Manifest V3 Addons wie Dark Reader, Bitwarden, uBlock Origin)
+- [x] **Phase 8: WebExtensions / Addon-Support (Manifest V3)** (Entpacktes Laden, Zero-Dependency CRX3-Extraktor, kuratierter 1-Klick-Store mit Dark Reader, uBlock Origin Lite, Bitwarden, ClearURLs, Violentmonkey, Web Store URL-Install, Session-Attachment)
 - [x] **Phase 9: Modernes UI-Redesign (Sidekick + Zen Synthese mit einklappbarer Sidebar)** (Einklappbare vertikale Tabs, Wegfall horizontaler Tabs, 48px Slim-Dock, Pinned-Grid, Sidekick-Startseiten-Dashboard, 70/30 Copilot Split-View)
 - [x] **Phase 10: Agentic Browsing & Deep Tab Intelligence (Comet-Parität)** (10.1 Cross-Tab Context Synthesis `@tabs`, 10.6 CometJacking & Prompt-Injection Guardrails, Clickable Citation Badges)
 
@@ -66,15 +66,15 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 3. **Native Terminal UI (`NativeTerminalMain.tsx`):**
    - [x] Modus-Umschalter zwischen PowerShell-Shell und Sidekick TUI, Quick-Command-Chips (`sidekick doctor`, `status`, `--help`), ANSI-Cleaning.
 
-### 7.2 Diagnose-Dashboard (sidekick doctor)
+### 7.2 Diagnose-Dashboard (sidekick doctor) [x] (Umgesetzt)
 1. **Interaktiver Aufruf:**
    - [x] Direkt im Terminal via 1-Klick-Button `doctor` oder CLI `sidekick doctor`.
 2. **Strukturierte JSON-Diagnose-API:**
-   - Backend-Anbindung an `services/sidekick/cli/doctor.py` via Route (`GET /api/system/doctor`) oder IPC.
-   - Kategorien: Python/Runtime, Provider-Konnektivität (Pings), Toolchains (Playwright, Git, Node, FFmpeg), Speicher/Berechtigungen.
+   - [x] IPC-Handler `lastbrowser:doctor:run` & `services.runDoctor({ fix?: boolean })` mit robustem Parser (`parseDoctorOutput`) für strukturierte Reports (`DoctorReport`).
+   - [x] Kategorien: Python/Runtime, Provider-Konnektivität (Pings), Toolchains (Node, Git, Ripgrep), Konfiguration, Speicher/Berechtigungen & WAL.
 3. **Interaktives UI-Dashboard:**
-   - Farbcodierte Status-Badges (Grün/Gelb/Rot) und Quick-Fixes (*„API-Key eintragen“*, *„Local State reparieren“*).
-   - Umschaltung zwischen visuellem Report und Raw-CLI-Konsolenlog.
+   - [x] Farbcodierte Status-Badges (Grün/Gelb/Rot) für jede Diagnosegruppe sowie Quick-Fixes (*„Auto-Fix anwenden (`--fix`)“*, *„Setup-Assistent öffnen“*).
+   - [x] Umschaltung zwischen visuellem Category-Grid-Report und Raw-CLI-Konsolenlog mit 1-Klick-Kopierfunktion.
 
 ### 7.3 38+ CLI-Subcommands – Command Palette & Shell-Integration [x] (Umgesetzt)
 1. **Universal Command Palette (`Ctrl+K`):**
@@ -95,6 +95,39 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 3. **Windows System Tray & 24/7 Betrieb (`tray.ts`):**
    - [x] Windows System Tray mit Kontextmenü (Lastbrowser öffnen, Service/Gateway Status & Toggles, Beenden).
    - [x] Minimize-to-Tray beim Schließen des Fensters (`setupMinimizeToTray`), damit der Agent und Gateway 24/7 erreichbar bleiben.
+
+---
+
+## 4b. Spezifikation Phase 8: WebExtensions / Addon-Support (Manifest V3) [x] (Umgesetzt v0.1.29)
+
+### 8.1 Zero-Dependency CRX3 & ZIP Extraktions-Engine (`extensions.ts`) [x]
+1. **CRX3 / CRX2 Header-Parser:**
+   - [x] Parsing von `Cr24` Magic, Version 3/2 und dynamischem Header-Offset ohne Drittanbieter-NPM-Pakete (rein über Node.js `node:zlib` und `node:fs`).
+   - [x] Schutz vor Directory-Traversal (`..` Pfade werden automatisch neutralisiert).
+2. **Direkter Download aus dem Chrome Web Store:**
+   - [x] Unterstützung von 32-Zeichen CWS-IDs und URLs (`chromewebstore.google.com/detail/...`).
+   - [x] Direkter Download des CRX3-Pakets über Googles offizielle Update-API.
+
+### 8.2 Kuratierter 1-Klick-Store & Unpacked-Modus [x]
+1. **1-Klick-Store Presets:**
+   - [x] **Dark Reader** (Automatischer Dark Mode für jede Webseite)
+   - [x] **uBlock Origin Lite** (Manifest V3 DeclarativeNetRequest Blocker)
+   - [x] **Bitwarden** (Open-Source Passwort-Manager)
+   - [x] **ClearURLs** (Anti-Tracking URL-Cleaner)
+   - [x] **Violentmonkey** (Userscript Manager)
+2. **Unpacked-Modus für Entwickler:**
+   - [x] Nativer Ordnerauswahl-Dialog via Electron `dialog.showOpenDialog`.
+   - [x] Validierung der `manifest.json`, Versionsauslese, Berechtigungs-Pills und Icon-Extraktion (Data-URL).
+
+### 8.3 Session-Attachment, Incognito-Isolation & UI-Verwaltung [x]
+1. **Electron Session Bindung:**
+   - [x] Automatisches Einhängen bei `app.whenReady()` und `app.on('session-created')` für alle Profile (`persist:profile-*`).
+   - [x] Content Scripts, DeclarativeNetRequest und Service-Worker laufen nahtlos in `<webview>` Gästen.
+   - [x] Incognito-Isolation: Standardmäßig im privaten Modus deaktiviert, per Checkbox optional aktivierbar.
+2. **Erweiterungs-Verwaltung:**
+   - [x] Dedizierter Bereich **„Extensions & Add-ons“** in den Einstellungen (`SystemPanels.tsx`).
+   - [x] Titelleisten-Button (`Puzzle`-Icon) für 1-Klick-Zugriff direkt aus dem Browser-Header.
+   - [x] Enable/Disable Switch, Incognito-Toggle und Löschen mit Bestätigungsdialog.
 
 ---
 

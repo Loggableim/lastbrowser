@@ -2962,6 +2962,11 @@ function BrowserMain({
           bookmarks={bookmarks}
           visits={visitedSites}
           onNavigate={onNavigate}
+          onAskAi={(prompt) => {
+            setCopilotOpen(true);
+            void onSendChat(prompt);
+          }}
+          onOpenCommandPalette={() => usePanelStore.getState().setCommandPaletteOpen(true)}
         />
       </PanelErrorBoundary>
     );

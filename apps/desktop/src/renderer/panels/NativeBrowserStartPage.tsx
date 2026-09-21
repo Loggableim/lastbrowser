@@ -1,5 +1,17 @@
-import React, { FormEvent, useMemo, useState } from 'react';
-import { Globe2, Search, Star, TrendingUp, ExternalLink, Sparkles, Compass } from 'lucide-react';
+import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import {
+  Globe2,
+  Search,
+  Star,
+  TrendingUp,
+  ExternalLink,
+  Sparkles,
+  Compass,
+  Clock,
+  Command,
+  Wand2,
+  Bot
+} from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import type { BrowserBookmark } from '../bookmarks.js';
 import type { BrowserVisit } from '../history.js';
@@ -26,16 +38,87 @@ export const DEFAULT_SPEED_DIAL_ITEMS: SpeedDialItem[] = [
   { id: 'openai', label: 'OpenAI', domain: 'openai.com', url: 'https://openai.com', category: 'AI Research', iconText: 'OA', accent: '#10b981' }
 ];
 
+export interface DashboardGreeting {
+  greeting: string;
+  subline: string;
+}
+
+export function getDashboardGreeting(date: Date = new Date()): DashboardGreeting {
+  const hours = date.getHours();
+  if (hours >= 5 && hours < 12) {
+    return { greeting: 'Guten Morgen', subline: 'Bereit für den Tag? Womit kann Sidekick helfen?' };
+  }
+  if (hours >= 12 && hours < 18) {
+    return { greeting: 'Guten Tag', subline: 'Was recherchieren wir als Nächstes?' };
+  }
+  if (hours >= 18 && hours < 23) {
+    return { greeting: 'Guten Abend', subline: 'Den Tag abschließen oder noch ein Thema vertiefen?' };
+  }
+  return { greeting: 'Gute Nacht', subline: 'Nachtsession aktiv. Sidekick steht bereit.' };
+}
+
+export function formatDashboardTime(date: Date = new Date()): string {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+export function formatDashboardDate(date: Date = new Date(), locale: string = 'de-DE'): string {
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    }).format(date);
+  } catch {
+    return date.toDateString();
+  }
+}
+
+export interface DashboardQuickAction {
+  id: string;
+  label: string;
+  prompt: string;
+  icon: string;
+  type: 'prompt' | 'command' | 'action';
+}
+
+export const DASHBOARD_QUICK_ACTIONS: DashboardQuickAction[] = [
+  { id: 'research', label: 'Recherche starten', prompt: 'Recherchiere die wichtigsten Fakten zu: ', icon: '✨', type: 'prompt' },
+  { id: 'tabs-summary', label: 'Tabs zusammenfassen', prompt: '@tabs Fasse alle offenen Tabs in einer strukturierten Tabelle zusammen', icon: '⚡', type: 'prompt' },
+  { id: 'sort-tabs', label: 'Tabs sortieren', prompt: 'sortiere tabs nach domain', icon: '🧹', type: 'command' },
+  { id: 'doctor', label: 'System-Diagnose', prompt: 'sidekick doctor', icon: '🛡️', type: 'command' },
+  { id: 'palette', label: 'Befehlspalette', prompt: 'palette', icon: '⌘K', type: 'action' }
+];
+
 export function NativeBrowserStartPage({
   bookmarks,
   visits,
-  onNavigate
+  onNavigate,
+  onAskAi,
+  onOpenCommandPalette
 }: {
   bookmarks: BrowserBookmark[];
   visits: BrowserVisit[];
   onNavigate: (url: string) => void;
+  onAskAi?: (prompt: string) => void;
+  onOpenCommandPalette?: () => void;
 }): JSX.Element {
   const [query, setQuery] = useState('');
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const greeting = useMemo(() => getDashboardGreeting(currentTime), [currentTime]);
+  const timeString = useMemo(() => formatDashboardTime(currentTime), [currentTime]);
+  const dateString = useMemo(() => formatDashboardDate(currentTime), [currentTime]);
+
   const favorites = useMemo(() => bookmarks.slice(0, 8), [bookmarks]);
   const mostVisited = useMemo(() => visits.slice(0, 8), [visits]);
 
@@ -46,35 +129,116 @@ export function NativeBrowserStartPage({
     onNavigate(normalizeNavigationInput(value));
   }
 
+  function handleAskAi(): void {
+    const value = query.trim();
+    if (!value) return;
+    if (onAskAi) {
+      onAskAi(value);
+    } else {
+      onNavigate(`https://www.google.com/search?q=${encodeURIComponent(value)}`);
+    }
+  }
+
+  function handleQuickAction(action: DashboardQuickAction): void {
+    if (action.id === 'palette') {
+      if (onOpenCommandPalette) {
+        onOpenCommandPalette();
+      } else {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+      }
+      return;
+    }
+
+    if (onAskAi) {
+      onAskAi(action.prompt);
+    } else {
+      setQuery(action.prompt);
+    }
+  }
+
   return (
-    <section className="browser-main browser-start-page">
-      <div className="browser-start-hero">
+    <section className="browser-main browser-start-page" data-testid="browser-start-dashboard">
+      {/* 9.4 Atmospheric Hero Dashboard with Live Clock and Greeting */}
+      <div className="browser-start-hero startpage-dashboard-hero">
         <div className="browser-start-brand">
-          <img src={brandAssets.logo} alt="lastbrowser" />
-          <div>
-            <span className="eyebrow">Browser startpage</span>
-            <h1>Favorites and most visited</h1>
-            <p>Open a website, jump to a bookmark, or continue where you left off.</p>
+          <img src={brandAssets.logo} alt="lastbrowser" className="startpage-logo" />
+          <div className="startpage-welcome-text">
+            <div className="startpage-time-row">
+              <span className="startpage-clock" aria-label="Uhrzeit">
+                {timeString}
+              </span>
+              <span className="startpage-date">
+                {dateString}
+              </span>
+            </div>
+            <h1 className="startpage-greeting">{greeting.greeting}</h1>
+            <p className="startpage-subline">{greeting.subline}</p>
           </div>
         </div>
-        <div className="browser-start-badge">
-          <Sparkles size={14} />
-          <span>AI Search is in the sidebar</span>
+
+        <div className="startpage-hero-aside">
+          <div className="browser-start-badge">
+            <Sparkles size={14} />
+            <span>Sidekick AI Copilot</span>
+          </div>
+          <button
+            type="button"
+            className="startpage-palette-trigger"
+            onClick={() => handleQuickAction(DASHBOARD_QUICK_ACTIONS[4])}
+            title="Befehlspalette öffnen (Strg+K)"
+          >
+            <Command size={13} />
+            <span>Strg+K Palette</span>
+          </button>
         </div>
       </div>
 
-      <form className="browser-start-search" onSubmit={submit}>
+      {/* Dual Search & Prompt Bar */}
+      <form className="browser-start-search startpage-search-bar" onSubmit={submit}>
         <Search size={18} />
         <input
           value={query}
-          placeholder="Search the web or enter a site"
+          placeholder="Web-Adresse eingeben oder Frage an Sidekick richten..."
           onChange={(event) => setQuery(event.target.value)}
+          data-testid="dashboard-search-input"
         />
-        <button type="submit" className="primary-action compact" disabled={!query.trim()}>
-          <Globe2 size={16} />
-          <span>Open</span>
-        </button>
+        <div className="startpage-search-actions">
+          <button
+            type="button"
+            className="secondary-action compact startpage-ask-ai-btn"
+            disabled={!query.trim()}
+            onClick={handleAskAi}
+            title="Frage an Sidekick AI Copilot senden"
+          >
+            <Bot size={15} />
+            <span>Frag Sidekick</span>
+          </button>
+          <button type="submit" className="primary-action compact" disabled={!query.trim()}>
+            <Globe2 size={15} />
+            <span>Öffnen</span>
+          </button>
+        </div>
       </form>
+
+      {/* Quick Action Chips */}
+      <div className="startpage-quick-chips" aria-label="Sidekick Schnellaktionen">
+        <span className="quick-chips-label">
+          <Wand2 size={13} />
+          <span>Schnellaktionen:</span>
+        </span>
+        {DASHBOARD_QUICK_ACTIONS.map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            className="startpage-chip-btn"
+            onClick={() => handleQuickAction(action)}
+            title={action.prompt}
+          >
+            <span className="chip-icon">{action.icon}</span>
+            <span className="chip-label">{action.label}</span>
+          </button>
+        ))}
+      </div>
 
       {/* Speed Dial Quick Launch Section */}
       <section className="speed-dial-section">
@@ -113,6 +277,7 @@ export function NativeBrowserStartPage({
         </div>
       </section>
 
+      {/* Favorites and Most Visited Grids */}
       <div className="browser-start-grid">
         <section className="browser-start-card">
           <div className="browser-start-card-head">

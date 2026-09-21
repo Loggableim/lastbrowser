@@ -1383,7 +1383,7 @@ export function App(): JSX.Element {
         const next = geminiStore.getNextAccount();
         if (next) {
           geminiStore.recordUsage(next.id);
-          accountModel = next.preferredModel || 'gemini-2.5-flash';
+          accountModel = next.preferredModel || 'gemini-3.8-flash';
           accountProvider = 'google-gemini-cli';
         }
       }
@@ -1566,7 +1566,7 @@ export function App(): JSX.Element {
         const currentOrNext = shouldRotate ? geminiStore.getNextAccount() : geminiStore.activeAccount();
         if (currentOrNext) {
           geminiStore.recordUsage(currentOrNext.id);
-          accountModel = currentOrNext.preferredModel || 'gemini-2.5-flash';
+          accountModel = currentOrNext.preferredModel || 'gemini-3.8-flash';
           accountProvider = 'google-gemini-cli';
         }
       }

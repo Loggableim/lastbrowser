@@ -60,7 +60,8 @@ const fallbackCloudProviders = [
 
 const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string }>> = {
   'google-gemini-cli': [
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Empfohlen)' },
+    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (Standard • Empfohlen)' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
     { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
     { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
     { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
@@ -106,7 +107,8 @@ const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string
     { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' }
   ],
   gemini: [
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Empfohlen)' },
+    { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (Standard • Empfohlen)' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
     { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
     { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
     { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },

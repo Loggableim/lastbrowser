@@ -294,7 +294,7 @@ export function GeminiAccountsPanel({ sidekickReady }: GeminiAccountsPanelProps)
         if (status === 'success') {
           const pollEmail = (poll as { email?: string })?.email;
           const email = typeof pollEmail === 'string' ? pollEmail : (label || `google-account-${Date.now()}`);
-          addAccount({ label, email, flowId: response.flow_id, preferredModel: 'gemini-2.5-flash' });
+          addAccount({ label, email, flowId: response.flow_id, preferredModel: 'gemini-3.8-flash' });
           setFlow({ state: 'success' });
           setLabelDraft('');
           // Auto-dismiss after 2s.

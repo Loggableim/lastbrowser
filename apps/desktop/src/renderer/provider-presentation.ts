@@ -174,6 +174,7 @@ const MODEL_NOTES: Array<[string, ModelNote]> = [
   ['claude-sonnet-4.6', { summary: 'Best quality-per-cost for coding and long context.', tier: 'balanced' }],
   ['claude-sonnet-4-5', { summary: 'Reliable all-rounder from the previous generation.', tier: 'balanced' }],
   // Google
+  ['gemini-3.8-flash', { summary: 'Google’s next-gen flagship Flash; ultra-fast with high accuracy and deep reasoning.', tier: 'fast' }],
   ['gemini-3.1-pro', { summary: 'Google flagship preview; 1M+ context window.', tier: 'powerful' }],
   ['gemini-3-flash', { summary: 'Fast next-gen Gemini with high quality for chat and search.', tier: 'fast' }],
   ['gemini-2.5-flash-lite', { summary: 'Ultra-light, fastest Gemini for rapid responses.', tier: 'fast' }],
@@ -230,7 +231,7 @@ export const PROVIDER_RECOMMENDATIONS: Record<string, ProviderRecommendation> = 
       'Kein API-Key oder Kreditkarte nötig – Login direkt mit Google-Konto',
       'Bis zu 1 Million Tokens Kontext – erfasst ganze Websites, PDFs & lange Dokumente',
       'Optimiert für Live-Browsing, Web-Zusammenfassungen und Recherche',
-      'Zugriff auf Gemini 2.5 Flash & Pro'
+      'Zugriff auf Gemini 3.8 Flash & Gemini Pro'
     ],
     bestFor: 'Beste Wahl für die meisten Nutzer: Sofort startklar ohne Kosten',
     actionPrompt: 'In Lastbrowser mit Google anmelden'

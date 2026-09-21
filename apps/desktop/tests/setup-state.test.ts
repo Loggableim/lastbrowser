@@ -101,7 +101,8 @@ describe('cloud first-run setup state', () => {
       label: 'GPT-5.5'
     });
     expect(modelsForProvider(null, 'openai-codex').map((model) => model.id)).toContain('gpt-5.3-codex');
-    expect(modelsForProvider(null, 'google-gemini-cli')[0]?.id).toBe('gemini-2.5-flash');
+    expect(modelsForProvider(null, 'google-gemini-cli')[0]?.id).toBe('gemini-3.8-flash');
+    expect(modelsForProvider(null, 'google-gemini-cli').map((m) => m.id)).toContain('gemini-2.5-flash');
     expect(modelsForProvider(null, 'google-gemini-cli').map((m) => m.id)).toContain('gemini-2.5-pro');
     expect(modelsForProvider(null, 'ollama')[0]?.id).toBe('llama3.3');
     expect(modelsForProvider(null, 'openai')[0]?.id).toBe('gpt-5.5');

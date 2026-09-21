@@ -121,7 +121,8 @@ export function NativeChatMain({
           .filter((group) => group.models.length > 0);
 
         const geminiModels = [
-          { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Empfohlen)' },
+          { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (Standard • Empfohlen)' },
+          { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
           { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
           { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
           { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
@@ -151,7 +152,8 @@ export function NativeChatMain({
         setModelCatalog([{
           provider: geminiGroupLabel,
           models: [
-            { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Empfohlen)' },
+            { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (Standard • Empfohlen)' },
+            { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
             { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
             { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
             { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },

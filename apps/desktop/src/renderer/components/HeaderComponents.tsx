@@ -725,6 +725,8 @@ export type ModernTitlebarProps = {
   onOpenGithub?: () => void;
   quickActions?: QuickActionChip[];
   onExecuteQuickAction?: (chip: QuickActionChip) => void;
+  /** RAM saved by discarded (sleeping) tabs in MB. */
+  savedMemoryMb?: number;
 };
 
 export function ModernTitlebar({
@@ -745,10 +747,15 @@ export function ModernTitlebar({
   onToggleCopilot,
   onOpenGithub,
   quickActions,
-  onExecuteQuickAction
+  onExecuteQuickAction,
+  savedMemoryMb = 0
 }: ModernTitlebarProps): React.JSX.Element {
   const { isMaximized, handleDoubleClick, handleMouseDown } = useWindowDrag();
-  const ramSavedMb = Math.max(1.2, (blockedAdsCount * 0.35) / 1000).toFixed(1);
+  const adRamSavedGb = Math.max(1.2, (blockedAdsCount * 0.35) / 1000).toFixed(1);
+  const totalRamSavedLabel =
+    savedMemoryMb > 0
+      ? `${adRamSavedGb} GB + ${savedMemoryMb} MB tab sleep`
+      : `${adRamSavedGb} GB`;
 
   return (
     <header
@@ -823,12 +830,12 @@ export function ModernTitlebar({
           type="button"
           className="adblock-stats-pill"
           onClick={onToggleShieldPopover}
-          title={`${blockedAdsCount.toLocaleString()} Werbeanzeigen und Tracker blockiert · Geschätzte ${ramSavedMb} GB RAM gespart. Klicken für Einstellungen.`}
+          title={`${blockedAdsCount.toLocaleString()} Werbeanzeigen und Tracker blockiert · Geschätzte ${totalRamSavedLabel} RAM gespart. Klicken für Einstellungen.`}
           aria-label="Adblock and Privacy Shield Statistics"
         >
           <ShieldCheck size={13} className="stats-shield-icon" />
           <span className="stats-text">
-            <strong>{blockedAdsCount.toLocaleString()}</strong> Ads blocked · <strong>{ramSavedMb} GB</strong> RAM saved
+            <strong>{blockedAdsCount.toLocaleString()}</strong> Ads blocked · <strong>{totalRamSavedLabel}</strong> RAM saved
           </span>
         </button>
       </div>

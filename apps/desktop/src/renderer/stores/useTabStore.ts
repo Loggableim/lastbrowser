@@ -18,7 +18,11 @@ import {
   deduplicateTabs,
   sortTabsByDomain,
   closeUnpinnedTabs,
-  closeTabsToRight
+  closeTabsToRight,
+  discardTabById,
+  wakeTabById,
+  discardInactiveTabs as discardInactiveTabsPure,
+  getSavedMemoryEstimateMb as getSavedMemoryEstimateMbPure
 } from '../tabs.js';
 import {
   loadProfileTabs,
@@ -56,6 +60,14 @@ export interface TabState {
   sortTabsByDomain(): void;
   closeUnpinnedTabs(): number;
   closeTabsToTheRight(id: string): number;
+  /** Marks a tab as discarded (sleeping) to free memory. */
+  discardTab(id: string): void;
+  /** Wakes a discarded tab and restores its URL for reload. */
+  wakeTab(id: string): void;
+  /** Discards all tabs idle longer than maxIdleMs. Returns the count discarded. */
+  discardInactiveTabs(maxIdleMs?: number): number;
+  /** Returns estimated MB of RAM saved by currently discarded tabs. */
+  getSavedMemoryEstimateMb(): number;
 }
 
 function resolveInitialTabs(): { tabs: BrowserTab[]; activeTabId: string } {
@@ -248,6 +260,29 @@ export const useTabStore = create<TabState>((set, get) => {
         closedTabs: nextClosed
       });
       return removed.length;
+    },
+
+    discardTab: (id: string) => {
+      const { tabs, activeTabId } = get();
+      const updated = discardTabById(tabs, id, activeTabId);
+      set({ tabs: updated });
+    },
+
+    wakeTab: (id: string) => {
+      const { tabs } = get();
+      const updated = wakeTabById(tabs, id);
+      set({ tabs: updated });
+    },
+
+    discardInactiveTabs: (maxIdleMs?: number) => {
+      const { tabs, activeTabId } = get();
+      const { tabs: updated, count } = discardInactiveTabsPure(tabs, activeTabId, maxIdleMs);
+      set({ tabs: updated });
+      return count;
+    },
+
+    getSavedMemoryEstimateMb: () => {
+      return getSavedMemoryEstimateMbPure(get().tabs);
     }
   };
 });

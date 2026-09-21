@@ -8,6 +8,12 @@ export type BrowserTab = {
   isPlayingAudio?: boolean;
   isMuted?: boolean;
   incognito?: boolean;
+  /** Whether the tab has been discarded (sleeping) to save memory. */
+  isDiscarded?: boolean;
+  /** Unix timestamp (ms) of the last time this tab was the active tab. */
+  lastActiveAt?: number;
+  /** Original URL preserved when the tab is discarded so it can be reloaded. */
+  discardedUrl?: string;
 };
 
 export const browserStartUrl = 'lastbrowser://start';
@@ -300,3 +306,90 @@ export function closeTabsToRight(tabs: BrowserTab[], fromId: string): { remainin
   return { remaining, removed };
 }
 
+// ─── Phase 11.1: Tab-Discarding / Memory Saver ────────────────────────────────
+
+/** Estimated RAM freed per discarded tab (MB). */
+export const DISCARD_MEMORY_ESTIMATE_MB = 50;
+
+/**
+ * How long a tab must be idle before it is eligible for discarding (30 min).
+ * Consumer code may pass a different value to `discardInactiveTabs`.
+ */
+export const DEFAULT_IDLE_THRESHOLD_MS = 30 * 60 * 1000;
+
+/**
+ * Marks a single tab as discarded (sleeping).
+ * Guards: never discards the active tab, pinned tabs, or audio-playing tabs.
+ */
+export function discardTabById(
+  tabs: BrowserTab[],
+  id: string,
+  activeTabId: string
+): BrowserTab[] {
+  return tabs.map((tab) => {
+    if (tab.id !== id) return tab;
+    // Safety guards — never discard protected tabs.
+    if (tab.id === activeTabId || tab.pinned || tab.isPlayingAudio) return tab;
+    return {
+      ...tab,
+      isDiscarded: true,
+      discardedUrl: tab.url,
+      favicon: undefined,
+      isLoading: false
+    };
+  });
+}
+
+/**
+ * Wakes a discarded tab, restoring its URL so the renderer can reload it.
+ */
+export function wakeTabById(tabs: BrowserTab[], id: string): BrowserTab[] {
+  return tabs.map((tab) => {
+    if (tab.id !== id || !tab.isDiscarded) return tab;
+    return {
+      ...tab,
+      isDiscarded: false,
+      url: tab.discardedUrl ?? tab.url,
+      discardedUrl: undefined,
+      lastActiveAt: Date.now()
+    };
+  });
+}
+
+/**
+ * Discards all tabs that have been idle for longer than `maxIdleMs`.
+ * Never discards the active tab, pinned tabs, or audio-playing tabs.
+ *
+ * @returns An object with the updated tab array and the number of tabs discarded.
+ */
+export function discardInactiveTabs(
+  tabs: BrowserTab[],
+  activeTabId: string,
+  maxIdleMs: number = DEFAULT_IDLE_THRESHOLD_MS
+): { tabs: BrowserTab[]; count: number } {
+  const now = Date.now();
+  let count = 0;
+  const updated = tabs.map((tab) => {
+    if (tab.isDiscarded) return tab;
+    if (tab.id === activeTabId || tab.pinned || tab.isPlayingAudio) return tab;
+    const idle = now - (tab.lastActiveAt ?? 0);
+    if (idle < maxIdleMs) return tab;
+    count++;
+    return {
+      ...tab,
+      isDiscarded: true,
+      discardedUrl: tab.url,
+      favicon: undefined,
+      isLoading: false
+    };
+  });
+  return { tabs: updated, count };
+}
+
+/**
+ * Returns an estimate of how many MB of RAM have been saved by discarded tabs.
+ * Each discarded tab is assumed to free ~50 MB.
+ */
+export function getSavedMemoryEstimateMb(tabs: BrowserTab[]): number {
+  return tabs.filter((t) => t.isDiscarded).length * DISCARD_MEMORY_ESTIMATE_MB;
+}

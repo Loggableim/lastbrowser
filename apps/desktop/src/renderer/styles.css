@@ -8933,6 +8933,36 @@ body.sidebar-resizing * {
   color: #bf80ff;
 }
 
+/* ─── Phase 11.1: Tab Sleep / Discard Badge ───────────────────────────────── */
+
+.vtab-discarded-badge {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  color: #7ec8e3;
+  opacity: 0.85;
+  animation: zzz-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes zzz-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%       { opacity: 1;    transform: scale(1.15); }
+}
+
+.vertical-tab-item.discarded .vtab-title {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.vertical-tab-item.discarded .vtab-icon-wrapper {
+  opacity: 0.5;
+}
+
+.vertical-tab-item.discarded:hover .vtab-title,
+.vertical-tab-item.discarded:hover .vtab-icon-wrapper {
+  opacity: 0.8;
+}
+
 .vtab-title {
   flex: 1;
   overflow: hidden;

@@ -7,6 +7,7 @@ import {
   HelpCircle,
   Loader2,
   Menu,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -44,6 +45,8 @@ export interface SidekickSidebarProps {
   onOpenHistory?: () => void;
   onOpenApp: (app: PinnedApp) => void;
   botName?: string;
+  /** Called when a sleeping (discarded) tab is woken before activation. */
+  onWakeTab?: (tabId: string) => void;
 }
 
 export function SidekickSidebar({
@@ -67,7 +70,8 @@ export function SidekickSidebar({
   onOpenSettings,
   onOpenHistory,
   onOpenApp,
-  botName = 'Nova'
+  botName = 'Nova',
+  onWakeTab
 }: SidekickSidebarProps): React.JSX.Element {
   if (mode === 'hidden') {
     return (
@@ -189,11 +193,15 @@ export function SidekickSidebar({
                     tabIndex={0}
                     draggable
                     aria-selected={isActive}
-                    className={`vertical-tab-item ${isActive ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.incognito ? 'incognito' : ''} ${draggedTabId === tab.id ? 'dragging' : ''}`}
-                    onClick={() => onActivateTab(tab.id)}
+                    className={`vertical-tab-item ${isActive ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.incognito ? 'incognito' : ''} ${tab.isDiscarded ? 'discarded' : ''} ${draggedTabId === tab.id ? 'dragging' : ''}`}
+                    onClick={() => {
+                      if (tab.isDiscarded) onWakeTab?.(tab.id);
+                      onActivateTab(tab.id);
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
+                        if (tab.isDiscarded) onWakeTab?.(tab.id);
                         onActivateTab(tab.id);
                       }
                     }}
@@ -223,6 +231,9 @@ export function SidekickSidebar({
                       )}
                       {tab.incognito && (
                         <EyeOff size={10} className="vtab-incognito-badge" title="Private tab" />
+                      )}
+                      {tab.isDiscarded && (
+                        <Moon size={10} className="vtab-discarded-badge" title="Tab sleeping – click to wake" />
                       )}
                     </div>
 

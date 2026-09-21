@@ -86,6 +86,8 @@ import {
   updateTabMediaPlaying,
   updateTabMuted,
   togglePinnedTab,
+  wakeTabById,
+  getSavedMemoryEstimateMb,
   type ClosedTab
 } from './tabs.js';
 import { brandAssets } from './brand.js';
@@ -1205,6 +1207,14 @@ export function App(): JSX.Element {
     }
   }
 
+  /** Wake a sleeping (discarded) tab so it will be reloaded when focused. */
+  function wakeTab(tabId: string): void {
+    setTabs((current) => wakeTabById(current, tabId));
+  }
+
+  /** Estimated MB of RAM freed by currently sleeping (discarded) tabs. */
+  const savedMemoryMb = getSavedMemoryEstimateMb(tabs);
+
   /** Reopen the most recently closed tab (Ctrl+Shift+T), or restore session snapshot if closedTabs is empty. */
   function reopenClosedTab(): void {
     const { tab, rest } = takeLastClosedTab(closedTabs);
@@ -1943,6 +1953,7 @@ export function App(): JSX.Element {
             sidebarMode={sidebarMode}
             onToggleSidebar={cycleSidebarMode}
             blockedAdsCount={3420}
+            savedMemoryMb={savedMemoryMb}
             onToggleShieldPopover={() => {}}
             onToggleFind={() => usePanelStore.getState().setFindOpen(!usePanelStore.getState().findOpen)}
             onToggleDownloads={() => usePanelStore.getState().setDownloadsOpen(!usePanelStore.getState().downloadsOpen)}
@@ -2004,6 +2015,7 @@ export function App(): JSX.Element {
                 }
               }}
               botName={setupState.botName || 'Nova'}
+              onWakeTab={wakeTab}
             />
 
             <div className={`browser-content-area ${copilotOpen ? 'with-copilot-split' : 'full-canvas'}`}>

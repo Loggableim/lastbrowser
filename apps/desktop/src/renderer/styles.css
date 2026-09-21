@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: dark;
   font-family: Inter, Outfit, "Segoe UI", system-ui, sans-serif;
   --lb-bg: #07111f;
@@ -8826,6 +8826,514 @@ body.sidebar-resizing * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ============================================================
+   PINNED APPS REVAMP – Phase X CSS (running dot, active ring,
+   context menu, modal overlay, preset grid, color palette)
+   ============================================================ */
+
+/* Running / active state indicators */
+.pinned-dock-btn.is-running .pinned-dock-icon-wrapper,
+.pinned-grid-cell.is-running .pinned-grid-icon-box {
+  outline: 2px solid var(--accent, #6c63ff);
+  outline-offset: 2px;
+}
+
+.pinned-dock-btn.is-active .pinned-dock-icon-wrapper,
+.pinned-grid-cell.is-active .pinned-grid-icon-box {
+  outline: 2px solid var(--accent-vivid, #a78bfa);
+  outline-offset: 2px;
+  box-shadow: 0 0 8px 2px rgba(167, 139, 250, 0.45);
+}
+
+.pinned-running-dot {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 1px solid rgba(0,0,0,0.25);
+  pointer-events: none;
+}
+
+.pinned-active-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 12px;
+  border: 2px solid var(--accent-vivid, #a78bfa);
+  pointer-events: none;
+  animation: pinned-ring-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pinned-ring-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* App icon rendering */
+.pinned-app-favicon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.pinned-app-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+/* Add button in grid */
+.pinned-grid-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 2px dashed rgba(255,255,255,0.18);
+  background: transparent;
+  cursor: pointer;
+  color: rgba(255,255,255,0.4);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.pinned-grid-add-btn:hover {
+  border-color: rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.75);
+  background: rgba(255,255,255,0.05);
+}
+
+/* Context menu */
+.pinned-context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 170px;
+  background: rgba(28, 28, 40, 0.97);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+  animation: pinned-ctx-appear 0.12s ease-out;
+}
+
+@keyframes pinned-ctx-appear {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.pinned-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  color: rgba(255,255,255,0.85);
+  transition: background 0.1s;
+  user-select: none;
+}
+
+.pinned-ctx-item:hover {
+  background: rgba(255,255,255,0.09);
+}
+
+.pinned-ctx-item.danger {
+  color: #f87171;
+}
+.pinned-ctx-item.danger:hover {
+  background: rgba(248,113,113,0.12);
+}
+
+.pinned-ctx-separator {
+  height: 1px;
+  background: rgba(255,255,255,0.09);
+  margin: 3px 0;
+}
+
+/* ── Modal overlay ────────────────────────────────────── */
+.pinned-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: pinned-modal-fade 0.18s ease-out;
+}
+
+@keyframes pinned-modal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.pinned-modal-card {
+  width: 480px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: rgba(22, 22, 35, 0.97);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.65);
+  animation: pinned-modal-slide 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pinned-modal-slide {
+  from { transform: translateY(24px) scale(0.96); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.pinned-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 22px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.pinned-modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pinned-modal-icon-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.pinned-modal-title-row h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.92);
+  margin: 0;
+}
+
+.pinned-modal-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.pinned-modal-close-btn:hover {
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.85);
+}
+
+/* Quick action banner */
+.pinned-quick-action-banner {
+  margin: 14px 22px;
+  padding: 10px 14px;
+  background: rgba(108, 99, 255, 0.12);
+  border: 1px solid rgba(108, 99, 255, 0.25);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pinned-quick-action-banner span {
+  font-size: 12.5px;
+  color: rgba(255,255,255,0.7);
+}
+
+.pinned-pin-current-btn {
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(108,99,255,0.5);
+  background: rgba(108,99,255,0.2);
+  color: rgba(255,255,255,0.88);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.pinned-pin-current-btn:hover {
+  background: rgba(108,99,255,0.4);
+}
+
+/* Presets section */
+.pinned-presets-section {
+  padding: 0 22px 14px;
+}
+
+.pinned-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.35);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.pinned-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.pinned-preset-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,0.09);
+  background: rgba(255,255,255,0.04);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  min-width: 0;
+}
+.pinned-preset-chip:hover {
+  background: rgba(255,255,255,0.09);
+  border-color: rgba(255,255,255,0.18);
+}
+.pinned-preset-chip.selected {
+  background: rgba(108,99,255,0.18);
+  border-color: rgba(108,99,255,0.4);
+}
+
+.pinned-preset-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.pinned-preset-name {
+  font-size: 11.5px;
+  color: rgba(255,255,255,0.75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.pinned-preset-check {
+  color: #6c63ff;
+  flex-shrink: 0;
+}
+
+/* Form */
+.pinned-modal-form {
+  padding: 0 22px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pinned-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pinned-form-group label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pinned-input {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.88);
+  font-size: 13.5px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.pinned-input:focus {
+  border-color: rgba(108,99,255,0.55);
+}
+
+.pinned-url-input-wrapper {
+  position: relative;
+}
+
+.pinned-domain-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.06);
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+}
+
+/* Color palette */
+.pinned-color-palette {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pinned-color-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s;
+}
+.pinned-color-btn:hover {
+  transform: scale(1.2);
+}
+.pinned-color-btn.selected {
+  border-color: rgba(255,255,255,0.75);
+}
+
+/* Preview box */
+.pinned-preview-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+
+.pinned-preview-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.pinned-preview-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+.pinned-preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pinned-preview-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.88);
+}
+
+.pinned-preview-url {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Footer */
+.pinned-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 22px 18px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.pinned-modal-footer-right {
+  display: flex;
+  gap: 8px;
+}
+
+.pinned-delete-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(248,113,113,0.3);
+  background: transparent;
+  color: #f87171;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.pinned-delete-btn:hover {
+  background: rgba(248,113,113,0.12);
+}
+
+.pinned-cancel-btn {
+  padding: 7px 16px;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: transparent;
+  color: rgba(255,255,255,0.6);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.pinned-cancel-btn:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.pinned-save-btn {
+  padding: 7px 20px;
+  border-radius: 9px;
+  border: none;
+  background: linear-gradient(135deg, #6c63ff, #a78bfa);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.pinned-save-btn:hover {
+  opacity: 0.88;
+}
+
+/* CommandPalette: Apps category */
+.cmd-category-apps {
+  color: #a78bfa;
 }
 
 /* Vertical Tabs Section */

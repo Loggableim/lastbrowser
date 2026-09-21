@@ -1,4 +1,4 @@
-import React, { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
   Bot,
@@ -208,6 +208,10 @@ import {
   useWindowDrag
 } from './components/HeaderComponents.js';
 import { SidekickSidebar } from './components/SidekickSidebar.js';
+import { PinnedAppModal } from './components/PinnedAppModal.js';
+import { usePinnedAppStore } from './stores/usePinnedAppStore.js';
+import type { PinnedApp } from './components/PinnedAppGrid.js';
+
 import { CopilotSplitView } from './components/CopilotSplitView.js';
 import { WorkspacePanel } from './panels/WorkspacePanel.js';
 import { ShellRail } from './components/ShellRail.js';
@@ -460,6 +464,26 @@ export function App(): JSX.Element {
         event.preventDefault();
         usePanelStore.getState().toggleCommandPalette();
       }
+      // Ctrl+1..8: jump to pinned app (singleton routing)
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
+        const digit = parseInt(event.key, 10);
+        if (digit >= 1 && digit <= 8) {
+          event.preventDefault();
+          const pinned = usePinnedAppStore.getState().apps;
+          const app = pinned[digit - 1];
+          if (app) {
+            if (app.panel) {
+              setActivePanel(app.panel);
+            } else if (app.url) {
+              const existingTabs = useTabStore.getState().tabs;
+              const appHost = (() => { try { return new URL(app.url).hostname.replace(/^www\\./, ''); } catch { return ''; } })();
+              const match = existingTabs.find(t => { if (!t.url) return false; try { const h = new URL(t.url).hostname.replace(/^www\\./, ''); return h === appHost || h.endsWith(`.${appHost}`); } catch { return false; } });
+              if (match) { if (match.discarded) wakeTab(match.id); setActiveTabId(match.id); setActivePanel('browser'); }
+              else { addTab(app.url); }
+            }
+          }
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -515,6 +539,8 @@ export function App(): JSX.Element {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [hasActiveDownloads, setHasActiveDownloads] = useState(false);
   const [sidekickBusy, setSidekickBusy] = useState(false);
+  const [pinnedModalOpen, setPinnedModalOpen] = useState(false);
+  const [pinnedEditApp, setPinnedEditApp] = useState<PinnedApp | null>(null);
   const [messages, setMessages] = useState<SidekickMessage[]>(() => [
     {
       id: 'welcome',
@@ -2007,13 +2033,39 @@ export function App(): JSX.Element {
               onSelectSpace={setActiveSpacePath}
               onOpenSettings={() => setActivePanel('settings')}
               onOpenHistory={() => usePanelStore.getState().setHistoryOpen(true)}
-              onOpenApp={(app) => {
+              onOpenApp={(app, opts) => {
                 if (app.panel) {
                   setActivePanel(app.panel);
                 } else if (app.url) {
-                  addTab(app.url);
+                  if (opts?.newTab) {
+                    addTab(app.url);
+                  } else {
+                    // Singleton routing: focus existing tab if domain matches
+                    const existingTabs = useTabStore.getState().tabs;
+                    const appDomain = (() => {
+                      try { return new URL(app.url).hostname.replace(/^www\./, ''); } catch { return ''; }
+                    })();
+                    const match = existingTabs.find(t => {
+                      if (!t.url) return false;
+                      try {
+                        const d = new URL(t.url).hostname.replace(/^www\./, '');
+                        return d === appDomain || d.endsWith(`.${appDomain}`);
+                      } catch { return false; }
+                    });
+                    if (match) {
+                      if (match.discarded) wakeTab(match.id);
+                      setActiveTabId(match.id);
+                      setActivePanel('browser');
+                    } else {
+                      addTab(app.url);
+                    }
+                  }
                 }
               }}
+              onAddPinnedApp={() => { setPinnedEditApp(null); setPinnedModalOpen(true); }}
+              onEditPinnedApp={(app) => { setPinnedEditApp(app); setPinnedModalOpen(true); }}
+              activeTabUrl={activeTab?.url}
+              openTabUrls={tabs.map(t => t.url ?? '').filter(Boolean)}
               botName={setupState.botName || 'Nova'}
               onWakeTab={wakeTab}
             />

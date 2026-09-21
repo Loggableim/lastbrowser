@@ -43,7 +43,11 @@ export interface SidekickSidebarProps {
   onSelectSpace: (path: string) => void;
   onOpenSettings: () => void;
   onOpenHistory?: () => void;
-  onOpenApp: (app: PinnedApp) => void;
+  onOpenApp: (app: PinnedApp, options?: { newTab?: boolean }) => void;
+  onAddPinnedApp?: () => void;
+  onEditPinnedApp?: (app: PinnedApp) => void;
+  activeTabUrl?: string;
+  openTabUrls?: string[];
   botName?: string;
   /** Called when a sleeping (discarded) tab is woken before activation. */
   onWakeTab?: (tabId: string) => void;
@@ -70,9 +74,14 @@ export function SidekickSidebar({
   onOpenSettings,
   onOpenHistory,
   onOpenApp,
+  onAddPinnedApp,
+  onEditPinnedApp,
+  activeTabUrl,
+  openTabUrls = [],
   botName = 'Nova',
   onWakeTab
 }: SidekickSidebarProps): React.JSX.Element {
+
   if (mode === 'hidden') {
     return (
       <div
@@ -103,7 +112,14 @@ export function SidekickSidebar({
 
           {/* Pinned Web Apps Dock */}
           <div className="dock-apps-container">
-            <PinnedAppGrid layout="dock" onOpenApp={onOpenApp} />
+            <PinnedAppGrid
+              layout="dock"
+              activeTabUrl={activeTabUrl}
+              openTabUrls={openTabUrls}
+              onOpenApp={onOpenApp}
+              onAddApp={onAddPinnedApp}
+              onEditApp={onEditPinnedApp}
+            />
           </div>
 
           {/* Bottom Dock Actions */}
@@ -173,7 +189,14 @@ export function SidekickSidebar({
 
           {/* Zen Pinned Apps Raster */}
           <div className="expanded-pinned-raster">
-            <PinnedAppGrid layout="grid" onOpenApp={onOpenApp} />
+            <PinnedAppGrid
+              layout="grid"
+              activeTabUrl={activeTabUrl}
+              openTabUrls={openTabUrls}
+              onOpenApp={onOpenApp}
+              onAddApp={onAddPinnedApp}
+              onEditApp={onEditPinnedApp}
+            />
           </div>
 
           {/* Vertical Tabs List */}

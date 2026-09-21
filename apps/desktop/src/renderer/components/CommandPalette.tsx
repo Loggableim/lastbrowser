@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUpDown,
   BookOpen,
@@ -46,12 +46,13 @@ import { discoverActiveForm, triggerLivePagination, abortLiveAutomation } from '
 import { getActiveWebview } from '../grounding-anchors.js';
 import { WORKFLOW_TEMPLATES, formatWorkflowPrompt } from '../workflow-templates.js';
 import type { LastbrowserPanelId } from '../shell-state.js';
+import { usePinnedAppStore } from '../stores/usePinnedAppStore.js';
 
 export interface CommandItem {
   id: string;
   title: string;
   description?: string;
-  category: 'Sidekick AI' | 'Tabs' | 'Navigation' | 'System' | 'Offene Tabs' | 'Workflows';
+  category: 'Sidekick AI' | 'Tabs' | 'Navigation' | 'System' | 'Offene Tabs' | 'Workflows' | 'Apps';
   icon: React.ReactNode;
   shortcut?: string;
   keywords?: string[];
@@ -84,6 +85,8 @@ export function CommandPalette(): JSX.Element | null {
     () => tabs.find((t) => t.id === activeTabId) ?? tabs[0],
     [tabs, activeTabId]
   );
+
+  const pinnedApps = usePinnedAppStore(s => s.apps);
 
   // Focus input when opened and reset query
   useEffect(() => {
@@ -508,12 +511,29 @@ export function CommandPalette(): JSX.Element | null {
         action: () => {
           window.dispatchEvent(new CustomEvent('lastbrowser:print-page'));
         }
-      }
+      },
+      // --- Pinned Apps (dynamic) ---
+      ...pinnedApps.map((app): CommandItem => ({
+        id: `pinned-app-${app.id}`,
+        title: `> App: ${app.name}`,
+        description: app.url || app.panel,
+        category: 'Apps',
+        icon: <Pin size={16} />,
+        keywords: ['app', 'pinned', 'pin', app.name.toLowerCase(), ...(app.url ? [app.url] : [])],
+        action: () => {
+          if (app.panel) {
+            setActivePanel(app.panel);
+          } else if (app.url) {
+            addTab(app.url);
+          }
+        }
+      })),
     ];
 
     return cmds;
   }, [
     activeTab,
+    pinnedApps,
     addTab,
     closeDuplicateTabs,
     closeTab,

@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   color-scheme: dark;
   font-family: Inter, Outfit, "Segoe UI", system-ui, sans-serif;
   --lb-bg: #07111f;
@@ -10959,6 +10959,471 @@ body.sidebar-resizing * {
   font-size: 10px;
   font-family: monospace;
 }
+
+/* ─── Phase 12: Google Accounts & Round-Robin ────────────────────────────── */
+
+.gemini-accounts-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.gemini-accounts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gemini-accounts-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gemini-accounts-icon {
+  font-size: 24px;
+  color: #4285f4;
+  line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(66, 133, 244, 0.4));
+}
+
+.gemini-accounts-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #e8f2ff);
+}
+
+.gemini-accounts-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary, #9ab);
+}
+
+.gemini-rr-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(66, 133, 244, 0.06);
+  border: 1px solid rgba(66, 133, 244, 0.15);
+}
+
+.gemini-rr-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.gemini-rr-toggle strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-primary, #e8f2ff);
+}
+
+.gemini-rr-toggle em {
+  display: block;
+  font-size: 11px;
+  font-style: normal;
+  color: var(--text-secondary, #9ab);
+}
+
+.gemini-rr-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #4285f4;
+  cursor: pointer;
+}
+
+.gemini-rr-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary, #9ab);
+}
+
+.gemini-rr-mode select {
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: var(--text-primary, #e8f2ff);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.gemini-account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gemini-account-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: all 0.15s ease;
+}
+
+.gemini-account-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.gemini-account-row.active {
+  border-color: rgba(66, 133, 244, 0.4);
+  background: rgba(66, 133, 244, 0.07);
+}
+
+.gemini-account-row.next-up {
+  border-left: 3px solid #4285f4;
+}
+
+.gemini-account-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(66, 133, 244, 0.15);
+  color: #4285f4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.gemini-account-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.gemini-account-label {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #e8f2ff);
+  cursor: pointer;
+}
+
+.gemini-account-label:hover {
+  text-decoration: underline;
+}
+
+.gemini-account-label-input {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #4285f4;
+  color: #fff;
+  outline: none;
+}
+
+.gemini-account-email {
+  font-size: 11px;
+  color: var(--text-secondary, #9ab);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gemini-account-meta {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.gemini-account-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.gemini-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gemini-badge.active {
+  background: rgba(66, 133, 244, 0.2);
+  color: #4285f4;
+  border: 1px solid rgba(66, 133, 244, 0.4);
+}
+
+.gemini-badge.next {
+  background: rgba(0, 217, 255, 0.15);
+  color: #00d9ff;
+  border: 1px solid rgba(0, 217, 255, 0.3);
+}
+
+.gemini-account-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gemini-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary, #e8f2ff);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gemini-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.gemini-action-btn.danger {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.2);
+}
+
+.gemini-action-btn.danger:hover {
+  background: rgba(255, 107, 107, 0.15);
+}
+
+.gemini-accounts-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-secondary, #9ab);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.gemini-accounts-empty-icon {
+  margin-bottom: 8px;
+  opacity: 0.4;
+}
+
+.gemini-accounts-empty-sub {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.gemini-add-account {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.gemini-label-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary, #e8f2ff);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.gemini-label-input:focus {
+  border-color: #4285f4;
+}
+
+.gemini-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: #4285f4;
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+}
+
+.gemini-add-btn:hover:not(:disabled) {
+  background: #3367d6;
+}
+
+.gemini-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gemini-oauth-card {
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(66, 133, 244, 0.3);
+  background: rgba(66, 133, 244, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gemini-oauth-card.loading {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #9ab;
+}
+
+.gemini-oauth-card.success {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  color: #4caf50;
+  border-color: rgba(76, 175, 80, 0.3);
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.gemini-oauth-card.error {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.3);
+  background: rgba(255, 107, 107, 0.08);
+}
+
+.gemini-oauth-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gemini-oauth-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.gemini-oauth-instruction {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary, #9ab);
+}
+
+.gemini-oauth-uri {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #4285f4;
+  font-size: 13px;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.gemini-oauth-uri:hover {
+  text-decoration: underline;
+}
+
+.gemini-oauth-code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gemini-oauth-code {
+  font-family: monospace;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.gemini-oauth-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-secondary, #9ab);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gemini-usage-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.gemini-usage-label {
+  font-size: 11px;
+  color: var(--text-secondary, #9ab);
+}
+
+.gemini-usage-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  overflow: hidden;
+  gap: 2px;
+}
+
+.gemini-usage-segment {
+  height: 100%;
+  background: #4285f4;
+  border-radius: 2px;
+  transition: flex-grow 0.3s ease;
+}
+
+.gemini-usage-segment:nth-child(2) { background: #34a853; }
+.gemini-usage-segment:nth-child(3) { background: #fbbc05; }
+.gemini-usage-segment:nth-child(4) { background: #ea4335; }
+.gemini-usage-segment:nth-child(5) { background: #ab47bc; }
+
+.gemini-usage-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  text-align: right;
+}
+
+.gemini-refresh-hint {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 
 
 

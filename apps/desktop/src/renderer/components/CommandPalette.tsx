@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUpDown,
   BookOpen,
@@ -28,6 +28,7 @@ import {
   Settings,
   ShieldAlert,
   ShieldCheck,
+  Shuffle,
   Sparkles,
   Table,
   Terminal,
@@ -40,6 +41,7 @@ import {
 } from 'lucide-react';
 import { usePanelStore } from '../stores/usePanelStore.js';
 import { useTabStore } from '../stores/useTabStore.js';
+import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { executeBrowserAction } from '../browser-agent-tools.js';
 import { browserStartUrl } from '../tabs.js';
 import { discoverActiveForm, triggerLivePagination, abortLiveAutomation } from '../live-automation.js';
@@ -194,6 +196,63 @@ export function CommandPalette(): JSX.Element | null {
         keywords: ['modell', 'model', 'provider', 'ollama', 'anthropic', 'openai', 'gemini', 'openrouter'],
         action: () => {
           setActivePanel('settings');
+        }
+      },
+      {
+        id: 'sidekick-google-accounts',
+        title: 'Google Accounts & Round-Robin verwalten',
+        description: 'Multi-Account OAuth für Google Gemini CLI (Antigravity) konfigurieren',
+        category: 'Sidekick AI',
+        icon: <Users size={16} />,
+        keywords: ['google', 'account', 'oauth', 'round-robin', 'gemini', 'gravity', 'antigravity', 'token', 'verbrauch'],
+        action: () => {
+          setActivePanel('settings');
+          usePanelStore.getState().setActiveContextItem('google-accounts');
+        }
+      },
+      {
+        id: 'sidekick-gemini-cli-flash',
+        title: 'Modell: Gemini 2.5 Flash (Google CLI / Antigravity)',
+        description: 'Schnelles KI-Modell mit Google OAuth & 1M Token Kontext',
+        category: 'Sidekick AI',
+        icon: <Zap size={16} />,
+        keywords: ['gemini', 'flash', 'google', 'cli', 'antigravity', 'gravity', 'modell'],
+        action: () => {
+          void window.lastbrowser?.sidekick?.setDefaultModel({ model: 'gemini-2.5-flash' });
+        }
+      },
+      {
+        id: 'sidekick-gemini-cli-pro',
+        title: 'Modell: Gemini 2.5 Pro (Google CLI / Antigravity)',
+        description: 'Tiefes Reasoning & komplexes Coding mit Google OAuth',
+        category: 'Sidekick AI',
+        icon: <Bot size={16} />,
+        keywords: ['gemini', 'pro', 'google', 'cli', 'antigravity', 'gravity', 'reasoning', 'modell'],
+        action: () => {
+          void window.lastbrowser?.sidekick?.setDefaultModel({ model: 'gemini-2.5-pro' });
+        }
+      },
+      {
+        id: 'sidekick-gemini-round-robin-toggle',
+        title: 'Google Round-Robin: Token-Rotation umschalten',
+        description: 'Gleichmäßigen Tokenverbrauch über alle Google-Konten ein-/ausschalten',
+        category: 'Sidekick AI',
+        icon: <Shuffle size={16} />,
+        keywords: ['round-robin', 'google', 'rotation', 'token', 'balance', 'wechseln'],
+        action: () => {
+          const s = useGeminiAccountStore.getState();
+          s.setRoundRobinEnabled(!s.roundRobinEnabled);
+        }
+      },
+      {
+        id: 'sidekick-gemini-round-robin-next',
+        title: 'Google Round-Robin: Nächstes Konto aktivieren',
+        description: 'Sofort zum nächsten verbundenen Google-Konto rotieren',
+        category: 'Sidekick AI',
+        icon: <RefreshCw size={16} />,
+        keywords: ['round-robin', 'nächstes', 'konto', 'account', 'wechseln', 'rotieren'],
+        action: () => {
+          useGeminiAccountStore.getState().getNextAccount();
         }
       },
       {

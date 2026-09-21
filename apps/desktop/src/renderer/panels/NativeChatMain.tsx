@@ -32,6 +32,7 @@ import {
   synthesizeTabsContext,
   buildPromptWithTabContext
 } from '../tab-intelligence.js';
+import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 export type ComposerMode = 'action' | 'plan';
@@ -101,27 +102,62 @@ export function NativeChatMain({
         const data = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' });
         if (!alive) return;
         const groups = Array.isArray(data?.groups) ? data.groups : [];
-        setModelCatalog(
-          groups
-            .map((group) => {
-              const record = (group || {}) as Record<string, unknown>;
-              const provider = String(record.provider || record.provider_id || 'Provider');
-              const models = Array.isArray(record.models) ? record.models : [];
-              return {
-                provider,
-                models: models
-                  .map((entry) => {
-                    const m = (entry || {}) as Record<string, unknown>;
-                    const id = String(m.id || m.name || m.label || '');
-                    return { id, label: String(m.label || m.name || m.id || id) };
-                  })
-                  .filter((m) => m.id)
-              };
-            })
-            .filter((group) => group.models.length > 0)
-        );
+        const rawParsed = groups
+          .map((group) => {
+            const record = (group || {}) as Record<string, unknown>;
+            const provider = String(record.provider || record.provider_id || 'Provider');
+            const models = Array.isArray(record.models) ? record.models : [];
+            return {
+              provider,
+              models: models
+                .map((entry) => {
+                  const m = (entry || {}) as Record<string, unknown>;
+                  const id = String(m.id || m.name || m.label || '');
+                  return { id, label: String(m.label || m.name || m.id || id) };
+                })
+                .filter((m) => m.id)
+            };
+          })
+          .filter((group) => group.models.length > 0);
+
+        const geminiModels = [
+          { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Empfohlen)' },
+          { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+          { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+          { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
+          { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
+        ];
+
+        const accounts = useGeminiAccountStore.getState().accounts;
+        const geminiGroupLabel = accounts.length > 1
+          ? `Google Gemini CLI (Antigravity) • Round-Robin (${accounts.length})`
+          : accounts.length === 1
+            ? `Google Gemini CLI (${accounts[0].label})`
+            : 'Google Gemini CLI (Antigravity)';
+
+        const hasCli = rawParsed.some((g) => g.provider.toLowerCase().includes('gemini'));
+        const finalCatalog = hasCli
+          ? rawParsed
+          : [{ provider: geminiGroupLabel, models: geminiModels }, ...rawParsed];
+
+        setModelCatalog(finalCatalog);
       } catch {
-        // Catalog is optional — the composer hides the picker when empty.
+        const accounts = useGeminiAccountStore.getState().accounts;
+        const geminiGroupLabel = accounts.length > 1
+          ? `Google Gemini CLI (Antigravity) • Round-Robin (${accounts.length})`
+          : accounts.length === 1
+            ? `Google Gemini CLI (${accounts[0].label})`
+            : 'Google Gemini CLI (Antigravity)';
+        setModelCatalog([{
+          provider: geminiGroupLabel,
+          models: [
+            { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Empfohlen)' },
+            { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+            { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+            { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
+            { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
+          ]
+        }]);
       }
     };
     void load();

@@ -27,10 +27,12 @@ import {
   Stethoscope,
   Terminal,
   Trash2,
+  Users,
   Wrench,
   X,
   XCircle
 } from 'lucide-react';
+import { GeminiAccountsPanel } from './GeminiAccountsPanel.js';
 import { cloudProviderOptions, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
 import { providerPresentation } from '../provider-presentation.js';
 import { searchEngines } from '../tabs.js';
@@ -102,7 +104,7 @@ export function normalizeAppstoreRecord(app: AnyRecord): AnyRecord {
   };
 }
 
-export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'extensions' | 'plugins' | 'system';
+export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'google-accounts' | 'extensions' | 'plugins' | 'system';
 
 export type SettingsSectionMeta = {
   title: string;
@@ -152,6 +154,11 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
     title: 'Providers',
     description: 'Provider defaults and model routing settings.',
     icon: <Brain size={16} />
+  },
+  'google-accounts': {
+    title: 'Google Accounts',
+    description: 'Multi-account Google CLI / Antigravity OAuth & Round-Robin.',
+    icon: <Users size={16} />
   },
   extensions: {
     title: 'Extensions',
@@ -2458,7 +2465,23 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     </SettingsField>
                   </div>
                 </SettingsCard>
+
+                <SettingsCard
+                  title="Google Accounts & Round-Robin"
+                  description="Multi-account OAuth connections for Google Gemini CLI / Antigravity with balanced token usage."
+                >
+                  <GeminiAccountsPanel sidekickReady={ready} />
+                </SettingsCard>
               </>
+            )}
+
+            {section === 'google-accounts' && (
+              <SettingsCard
+                title="Google Accounts & Round-Robin"
+                description="Connect multiple Google accounts to balance Gemini API / CLI token usage across accounts with round-robin rotation."
+              >
+                <GeminiAccountsPanel sidekickReady={ready} />
+              </SettingsCard>
             )}
 
             {section === 'extensions' && (

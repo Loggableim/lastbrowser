@@ -1,4 +1,4 @@
-﻿import React, { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
   Bot,
@@ -220,6 +220,7 @@ import { AdblockShield } from './components/AdblockShield.js';
 import { AddressBar } from './components/AddressBar.js';
 import { useTabStore } from './stores/useTabStore.js';
 import { usePanelStore } from './stores/usePanelStore.js';
+import { useGeminiAccountStore } from './stores/useGeminiAccountStore.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { LiveAutomationBanner } from './components/LiveAutomationBanner.js';
 import { detectPageCategory, getQuickActionChips, executeQuickAction, type QuickActionChip } from './quick-actions.js';
@@ -1375,7 +1376,23 @@ export function App(): JSX.Element {
     }
 
     try {
-      const result = await window.lastbrowser.sidekick.createSession(activeSpacePath ? { workspace: activeSpacePath } : {});
+      const geminiStore = useGeminiAccountStore.getState();
+      let accountModel: string | undefined;
+      let accountProvider: string | undefined;
+      if (geminiStore.roundRobinEnabled && geminiStore.accounts.length > 0) {
+        const next = geminiStore.getNextAccount();
+        if (next) {
+          geminiStore.recordUsage(next.id);
+          accountModel = next.preferredModel || 'gemini-2.5-flash';
+          accountProvider = 'google-gemini-cli';
+        }
+      }
+
+      const sessionOpts: Record<string, unknown> = activeSpacePath ? { workspace: activeSpacePath } : {};
+      if (accountModel) sessionOpts.model = accountModel;
+      if (accountProvider) sessionOpts.modelProvider = accountProvider;
+
+      const result = await window.lastbrowser.sidekick.createSession(sessionOpts);
       const session = result.session;
       if (session?.session_id) {
         setSessions((current) => [
@@ -1541,6 +1558,19 @@ export function App(): JSX.Element {
     setChatRunState('starting');
     setChatError('');
     try {
+      const geminiStore = useGeminiAccountStore.getState();
+      let accountModel: string | undefined;
+      let accountProvider: string | undefined;
+      if (geminiStore.roundRobinEnabled && geminiStore.accounts.length > 0) {
+        const shouldRotate = !geminiStore.rotatePerSession || !activeSessionId;
+        const currentOrNext = shouldRotate ? geminiStore.getNextAccount() : geminiStore.activeAccount();
+        if (currentOrNext) {
+          geminiStore.recordUsage(currentOrNext.id);
+          accountModel = currentOrNext.preferredModel || 'gemini-2.5-flash';
+          accountProvider = 'google-gemini-cli';
+        }
+      }
+
       const response = await window.lastbrowser.sidekick.startChat({
         sessionId: activeSessionId,
         message: trimmed,
@@ -1548,7 +1578,8 @@ export function App(): JSX.Element {
         // wizard may have been skipped), and sending nothing made the backend
         // pick a stale catalog entry — observed as
         // "Ring-2.6-1T is no longer available as a free model".
-        model: setupState.model || (await resolveConfiguredModel((request) => window.lastbrowser.sidekick.requestWebui(request))) || undefined,
+        model: accountModel || setupState.model || (await resolveConfiguredModel((request) => window.lastbrowser.sidekick.requestWebui(request))) || undefined,
+        modelProvider: accountProvider,
         workspace: activeSpacePath,
         mode: composerMode
       });

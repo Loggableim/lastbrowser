@@ -7,6 +7,10 @@ import {
   renameTab,
   reorderTabs,
   togglePinnedTab,
+  updateTabFavicon,
+  updateTabLoading,
+  updateTabMediaPlaying,
+  updateTabMuted,
   updateTabTitle,
   updateTabUrl
 } from '../src/renderer/tabs.js';
@@ -73,5 +77,42 @@ describe('browser tabs', () => {
     const reordered = reorderTabs([first, second, third], third.id, first.id);
 
     expect(reordered.map((tab) => tab.id)).toEqual([third.id, first.id, second.id]);
+  });
+
+  it('updates tab favicon and loading status', () => {
+    const tab1 = createInitialTab('https://example.com');
+    const tab2 = createInitialTab('https://github.com');
+    const tabs = [tab1, tab2];
+
+    const withFavicon = updateTabFavicon(tabs, tab1.id, 'https://example.com/favicon.ico');
+    expect(withFavicon.find((t) => t.id === tab1.id)?.favicon).toBe('https://example.com/favicon.ico');
+    expect(withFavicon.find((t) => t.id === tab2.id)?.favicon).toBeUndefined();
+
+    const withLoading = updateTabLoading(withFavicon, tab2.id, true);
+    expect(withLoading.find((t) => t.id === tab2.id)?.isLoading).toBe(true);
+    expect(withLoading.find((t) => t.id === tab1.id)?.isLoading).toBeUndefined();
+
+    const stoppedLoading = updateTabLoading(withLoading, tab2.id, false);
+    expect(stoppedLoading.find((t) => t.id === tab2.id)?.isLoading).toBe(false);
+  });
+
+  it('creates incognito tabs and manages media playing and mute states', () => {
+    const regular = createInitialTab('https://example.com');
+    const privateTab = createInitialTab('https://secret.local', { incognito: true });
+
+    expect(regular.incognito).toBeUndefined();
+    expect(privateTab.incognito).toBe(true);
+    expect(privateTab.title).toBe('New private tab');
+
+    const tabs = [regular, privateTab];
+    const playing = updateTabMediaPlaying(tabs, regular.id, true);
+    expect(playing.find((t) => t.id === regular.id)?.isPlayingAudio).toBe(true);
+    expect(playing.find((t) => t.id === privateTab.id)?.isPlayingAudio).toBeUndefined();
+
+    const muted = updateTabMuted(playing, regular.id, true);
+    expect(muted.find((t) => t.id === regular.id)?.isMuted).toBe(true);
+
+    const toggled = updateTabMuted(muted, regular.id);
+    expect(toggled.find((t) => t.id === regular.id)?.isMuted).toBe(false);
   });
 });

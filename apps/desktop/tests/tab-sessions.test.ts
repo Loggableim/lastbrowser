@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clearSessionSnapshot,
   emptyTabState,
+  hasRecoverableSession,
   loadProfileTabs,
+  loadSessionSnapshot,
   removeProfileTabs,
   saveProfileTabs,
+  saveSessionSnapshot,
+  sessionSnapshotStorageKey,
   tabSessionsStorageKey
 } from '../src/renderer/tab-sessions.js';
 import type { BrowserTab } from '../src/renderer/tabs.js';
@@ -119,5 +124,63 @@ describe('per-profile tab persistence', () => {
     });
 
     expect(loadProfileTabs('default', storage).tabs[0].title).toBe('New tab');
+  });
+
+  it('saves, loads, and clears session snapshots', () => {
+    const storage = memoryStorage();
+    const state = { tabs: [tab('1', 'https://example.com'), tab('2', 'https://github.com')], activeTabId: '2' };
+
+    saveSessionSnapshot('default', state, storage);
+
+    const snapshot = loadSessionSnapshot('default', storage);
+    expect(snapshot).not.toBeNull();
+    expect(snapshot?.profileId).toBe('default');
+    expect(snapshot?.state.tabs).toHaveLength(2);
+    expect(snapshot?.state.activeTabId).toBe('2');
+    expect(snapshot?.timestamp).toBeGreaterThan(0);
+
+    // Filtering by wrong profile returns null
+    expect(loadSessionSnapshot('other-profile', storage)).toBeNull();
+
+    clearSessionSnapshot(storage as unknown as Storage);
+    expect(loadSessionSnapshot('default', storage)).toBeNull();
+  });
+
+  it('detects recoverable session when current tabs differ from snapshot', () => {
+    const storage = memoryStorage();
+    const state = { tabs: [tab('1', 'https://example.com'), tab('2', 'https://github.com')], activeTabId: '2' };
+    saveSessionSnapshot('default', state, storage);
+
+    // Only start page open -> recoverable
+    const initialTabs = [tab('start', 'lastbrowser://ai-browser')];
+    expect(hasRecoverableSession('default', initialTabs, storage)).toBe(true);
+
+    // Already restored / same tabs open -> not recoverable
+    expect(hasRecoverableSession('default', state.tabs, storage)).toBe(false);
+  });
+
+  it('excludes incognito tabs from saveProfileTabs and saveSessionSnapshot', () => {
+    const storage = memoryStorage();
+    const incognitoTab: BrowserTab = {
+      id: 'incognito-1',
+      url: 'https://secret.example.com',
+      title: 'Secret Page',
+      pinned: false,
+      incognito: true
+    };
+    const normalTab = tab('normal-1', 'https://example.com');
+    const state = { tabs: [normalTab, incognitoTab], activeTabId: 'incognito-1' };
+
+    saveProfileTabs('default', state, storage);
+    const loaded = loadProfileTabs('default', storage);
+    expect(loaded.tabs).toHaveLength(1);
+    expect(loaded.tabs[0].id).toBe('normal-1');
+    expect(loaded.activeTabId).toBe('normal-1');
+
+    saveSessionSnapshot('default', state, storage);
+    const snapshot = loadSessionSnapshot('default', storage);
+    expect(snapshot?.state.tabs).toHaveLength(1);
+    expect(snapshot?.state.tabs[0].id).toBe('normal-1');
+    expect(snapshot?.state.activeTabId).toBe('normal-1');
   });
 });

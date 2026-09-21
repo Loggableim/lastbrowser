@@ -66,6 +66,7 @@ import {
   upsertBookmark
 } from './bookmarks.js';
 import type { BrowserBookmark } from './bookmarks.js';
+import { mergeBookmarks } from './bookmark-io.js';
 import {
   BrowserTab,
   browserStartUrl,
@@ -80,6 +81,10 @@ import {
   normalizeNavigationInput,
   updateTabTitle,
   updateTabUrl,
+  updateTabFavicon,
+  updateTabLoading,
+  updateTabMediaPlaying,
+  updateTabMuted,
   togglePinnedTab,
   type ClosedTab
 } from './tabs.js';
@@ -99,8 +104,10 @@ import {
 } from './profiles.js';
 import {
   loadProfileTabs,
+  loadSessionSnapshot,
   removeProfileTabs,
-  saveProfileTabs
+  saveProfileTabs,
+  saveSessionSnapshot
 } from './tab-sessions.js';
 import {
   loadVisitedSites,
@@ -136,7 +143,10 @@ import {
   DesktopSessionSummary,
   LastbrowserPanelId,
   ProjectSummary,
+  sessionTitle,
+  shortSessionId,
   SpaceSummary,
+  spaceDisplayName,
   WorkspaceFilePreview,
   WorkspaceTreeEntry,
   lastbrowserPanels,
@@ -172,6 +182,7 @@ import {
   NativeSkillsMain,
   jsonPreview
 } from './panels/NativeRestPanels.js';
+import { NativeTasksMain, NativeKanbanMain, NativeTodosMain } from './panels/TaskPanels.js';
 import { NativeTerminalMain } from './panels/NativeTerminalMain.js';
 import { ControlCenter } from './NativeControlCenter.js';
 import { ApprovalPollManager, ApprovalCard } from './NativeApproval.js';
@@ -182,6 +193,31 @@ import { ContextUsageIndicator } from './NativeContextUsage.js';
 import { QueueIndicator, CompressButton, useChatQueue } from './NativeCompressQueue.js';
 import { RichTextRenderer } from './NativeRichText.js';
 import { DesktopI18nProvider, useDesktopI18n, desktopLocaleIds, desktopLocaleNames } from './i18n.js';
+import { FirstRunSetupPane, type SetupForm } from './components/FirstRunSetupPane.js';
+import { NativeChatMain, type ComposerMode } from './panels/NativeChatMain.js';
+import {
+  BookmarkBar,
+  UpdatePill,
+  ProfileSwitcher,
+  SpaceSelector,
+  WindowTitlebar,
+  ModernTitlebar,
+  WindowControls,
+  useWindowDrag
+} from './components/HeaderComponents.js';
+import { SidekickSidebar } from './components/SidekickSidebar.js';
+import { CopilotSplitView } from './components/CopilotSplitView.js';
+import { WorkspacePanel } from './panels/WorkspacePanel.js';
+import { ShellRail } from './components/ShellRail.js';
+import { ContextSidebar, panelContextItems, type SidekickMessage } from './components/ContextSidebar.js';
+import { AdblockShield } from './components/AdblockShield.js';
+import { AddressBar } from './components/AddressBar.js';
+import { useTabStore } from './stores/useTabStore.js';
+import { usePanelStore } from './stores/usePanelStore.js';
+import { CommandPalette } from './components/CommandPalette.js';
+import { LiveAutomationBanner } from './components/LiveAutomationBanner.js';
+import { detectPageCategory, getQuickActionChips, executeQuickAction, type QuickActionChip } from './quick-actions.js';
+import { parseNaturalLanguageBrowserCommand, executeBrowserAction } from './browser-agent-tools.js';
 import './styles.css';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
@@ -253,30 +289,6 @@ function applyDesktopAppearance(settings: DesktopSettingsRecord | null): void {
   root.style.colorScheme = resolvedTheme;
 }
 
-type SidekickMessage = {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  pending?: boolean;
-};
-
-type ComposerMode = 'action' | 'plan';
-
-type SetupForm = {
-  provider: string;
-  model: string;
-  apiKey: string;
-};
-
-type CodexOAuthState = {
-  status: 'idle' | 'starting' | 'pending' | 'success' | 'expired' | 'cancelled' | 'error';
-  flowId?: string;
-  verificationUri?: string;
-  userCode?: string;
-  pollIntervalSeconds?: number;
-  message?: string;
-};
-
 type TodoItem = {
   id?: string;
   content?: string;
@@ -303,7 +315,7 @@ const MAX_WORKSPACE_PANEL_WIDTH = 520;
 const MIN_BROWSER_WIDTH = 640;
 const COLLAPSED_PANEL_WIDTH = 44;
 
-const idleCodexOAuth: CodexOAuthState = { status: 'idle' };
+
 
 class PanelErrorBoundary extends React.Component<
   { panel: LastbrowserPanelId; children: React.ReactNode },
@@ -364,82 +376,102 @@ const panelIcons: Record<LastbrowserPanelId, React.ComponentType<{ size?: number
   terminal: Terminal
 };
 
-const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = {
-  skills: ['Library', 'Editor', 'Linked files', 'Create skill'],
-  agents: ['Dashboard', 'Agents', 'Chat sessions', 'Workspace terminal', 'Create agent'],
-  memory: ['Core memory', 'User facts', 'Supermemory', 'Hybrid search'],
-  workspaces: ['Spaces', 'Active workspace', 'Files', 'New chat'],
-  profiles: ['Profiles', 'Active profile', 'Gateway', 'Model defaults'],
-  tasks: ['Scheduled jobs', 'Active', 'Paused', 'History'],
-  kanban: ['Board', 'Triage', 'Running', 'Done'],
-  todos: ['Pending', 'In progress', 'Completed'],
-  insights: ['Usage', 'Models', 'Cost', 'LLM wiki'],
-  logs: ['Agent', 'WebUI', 'Errors', 'Gateway'],
-  gmail: ['Accounts', 'Inbox', 'Search', 'AI actions'],
-  discord: ['Guild', 'Channels', 'Members', 'Moderation'],
-  appstore: ['Home', 'Categories', 'My apps', 'SDK', 'Submit'],
-  settings: ['Conversation', 'Appearance', 'Preferences', 'Providers', 'Plugins', 'System'],
-  browser: ['AI Search', 'Brief', 'Sources', 'Automation tools'],
-  terminal: ['Terminal', 'New session', 'Close']
-};
-
-function panelForContextItem(item: string): LastbrowserPanelId | null {
-  const label = item.toLowerCase();
-  if (['spaces', 'active workspace', 'files'].includes(label)) return 'workspaces';
-  if (['scheduled jobs', 'active', 'paused', 'history'].includes(label)) return 'tasks';
-  if (['board', 'triage', 'running', 'done'].includes(label)) return 'kanban';
-  if (['pending', 'in progress', 'completed'].includes(label)) return 'todos';
-  if (['usage', 'models', 'cost', 'llm wiki'].includes(label)) return 'insights';
-  if (['agent', 'webui', 'errors'].includes(label)) return 'logs';
-  if (['accounts', 'inbox', 'ai actions'].includes(label)) return 'gmail';
-  if (['guild', 'channels', 'members', 'moderation'].includes(label)) return 'discord';
-  if (['home', 'categories', 'my apps', 'sdk', 'submit'].includes(label)) return 'appstore';
-  if (['conversation', 'appearance', 'preferences', 'providers', 'plugins', 'system'].includes(label)) return 'settings';
-  if (['ai search', 'brief', 'sources', 'automation tools'].includes(label)) return 'browser';
-  return null;
-}
-
 export function App(): JSX.Element {
-  const [tabs, setTabs] = useState<BrowserTab[]>(() => {
-    const stored = loadProfileTabs(loadActiveProfileId(window.localStorage), window.localStorage);
-    return stored.tabs.length ? stored.tabs : [createInitialTab(browserStartUrl)];
+  const {
+    tabs,
+    setTabs,
+    activeTabId,
+    setActiveTabId,
+    closedTabs,
+    setClosedTabs,
+    searchEngineId,
+    setSearchEngineId,
+    draggedTabId,
+    setDraggedTabId,
+    addressValue,
+    setAddressValue,
+    browserMode,
+    setBrowserMode,
+    browserLoadError,
+    setBrowserLoadError
+  } = useTabStore();
+
+  const {
+    activePanel,
+    setActivePanel,
+    leftSidebarCollapsed,
+    setLeftSidebarCollapsed,
+    sidebarMode,
+    setSidebarMode,
+    cycleSidebarMode,
+    copilotOpen,
+    setCopilotOpen,
+    toggleCopilot,
+    contextSidebarCollapsed,
+    setContextSidebarCollapsed,
+    contextSidebarWidth,
+    setContextSidebarWidth,
+    workspacePanelCollapsed,
+    setWorkspacePanelCollapsed,
+    workspacePanelWidth,
+    setWorkspacePanelWidth,
+    activeContextItem,
+    setActiveContextItem,
+    installedSidebarApps,
+    setInstalledSidebarApps
+  } = usePanelStore();
+
+  const [layoutMode, setLayoutMode] = useState<'modern' | 'classic'>(() => {
+    try {
+      const val = window.localStorage.getItem('lastbrowser.layoutMode.v1');
+      if (val === 'classic' || val === 'modern') return val;
+    } catch {}
+    return 'modern';
   });
+
+  useEffect(() => {
+    const handleLayoutModeChanged = () => {
+      try {
+        const val = window.localStorage.getItem('lastbrowser.layoutMode.v1');
+        if (val === 'classic' || val === 'modern') setLayoutMode(val);
+      } catch {}
+    };
+    window.addEventListener('lastbrowser:layout-mode-changed', handleLayoutModeChanged);
+    window.addEventListener('storage', handleLayoutModeChanged);
+    return () => {
+      window.removeEventListener('lastbrowser:layout-mode-changed', handleLayoutModeChanged);
+      window.removeEventListener('storage', handleLayoutModeChanged);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b') {
+        event.preventDefault();
+        cycleSidebarMode();
+      }
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') {
+        event.preventDefault();
+        toggleCopilot();
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        usePanelStore.getState().toggleCommandPalette();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [cycleSidebarMode, toggleCopilot]);
+
   const [bookmarks, setBookmarks] = useState<BrowserBookmark[]>(() => loadBookmarks(window.localStorage));
   const [profiles, setProfiles] = useState<BrowserProfile[]>(() => loadProfiles(window.localStorage));
   const [activeProfileId, setActiveProfileId] = useState<string>(() => loadActiveProfileId(window.localStorage));
   const [visitedSites, setVisitedSites] = useState<BrowserVisit[]>(() => loadVisitedSites(window.localStorage));
-  // Recently closed tabs, for Ctrl+Shift+T.
-  const [closedTabs, setClosedTabs] = useState<ClosedTab[]>([]);
-  // Search engine for the address bar (Settings → Preferences).
-  const [searchEngineId, setSearchEngineId] = useState<string>(() => loadSearchEngineId(window.localStorage));
   const [desktopSettings, setDesktopSettings] = useState<Record<string, unknown> | null>(() => loadDesktopSettingsFromStorage());
-  const [activeTabId, setActiveTabId] = useState(tabs[0].id);
-  const [addressValue, setAddressValue] = useState(() => (
-    isAiBrowserHomeUrl(tabs[0].url) ? '' : tabs[0].url
-  ));
-  const [activePanel, setActivePanel] = useState<LastbrowserPanelId>(() => loadInitialPanel());
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
-  const [installedSidebarApps, setInstalledSidebarApps] = useState<LastbrowserPanelId[]>(() => loadInstalledSidebarApps(window.localStorage));
-  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => (
-    loadBooleanPreference(undefined, leftSidebarCollapsedStorageKey, false)
-  ));
-  const [contextSidebarCollapsed, setContextSidebarCollapsed] = useState(false);
-  const [contextSidebarWidth, setContextSidebarWidth] = useState(() => (
-    loadNumericPreference(undefined, contextSidebarWidthStorageKey, DEFAULT_CONTEXT_SIDEBAR_WIDTH, MIN_CONTEXT_SIDEBAR_WIDTH, MAX_CONTEXT_SIDEBAR_WIDTH)
-  ));
-  const [workspacePanelCollapsed, setWorkspacePanelCollapsed] = useState(() => (
-    loadBooleanPreference(undefined, workspacePanelCollapsedStorageKey, false)
-  ));
-  const [workspacePanelWidth, setWorkspacePanelWidth] = useState(() => (
-    loadNumericPreference(undefined, workspacePanelWidthStorageKey, DEFAULT_WORKSPACE_PANEL_WIDTH, MIN_WORKSPACE_PANEL_WIDTH, MAX_WORKSPACE_PANEL_WIDTH)
-  ));
-  const [activeContextItem, setActiveContextItem] = useState('');
-  const [browserMode, setBrowserMode] = useState<'home' | 'search' | 'web'>(() => (
-    isAiBrowserHomeUrl(tabs[0].url) ? 'home' : 'web'
-  ));
-  const [browserLoadError, setBrowserLoadError] = useState('');
+  const { isMaximized: windowMaximized, handleDoubleClick: handleTopbarDoubleClick, handleMouseDown: handleTopbarMouseDown } = useWindowDrag();
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [setupState, setSetupState] = useState<SetupState>(defaultSetupState);
   // The wizard covers the whole window, so it must always be dismissible —
@@ -465,7 +497,6 @@ export function App(): JSX.Element {
   const [chatError, setChatError] = useState('');
   const [chatRunState, setChatRunState] = useState<ChatRunState>('idle');
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
-  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [composerText, setComposerText] = useState('');
   const [composerMode, setComposerMode] = useState<ComposerMode>('action');
   const [spaces, setSpaces] = useState<SpaceSummary[]>([]);
@@ -480,6 +511,7 @@ export function App(): JSX.Element {
   const [workspaceShowHidden, setWorkspaceShowHidden] = useState(false);
   const [workspaceRefreshNonce, setWorkspaceRefreshNonce] = useState(0);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [hasActiveDownloads, setHasActiveDownloads] = useState(false);
   const [sidekickBusy, setSidekickBusy] = useState(false);
   const [messages, setMessages] = useState<SidekickMessage[]>(() => [
     {
@@ -492,9 +524,10 @@ export function App(): JSX.Element {
   const activeProfile = useMemo(() => profileById(profiles, activeProfileId), [profiles, activeProfileId]);
   const activePartition = useMemo(() => profilePartition(activeProfile.id), [activeProfile.id]);
 
-  // Keep the active profile's tab session up to date.
+  // Keep the active profile's tab session and auto-recovery snapshot up to date.
   useEffect(() => {
     saveProfileTabs(activeProfileId, { tabs, activeTabId }, window.localStorage);
+    saveSessionSnapshot(activeProfileId, { tabs, activeTabId }, window.localStorage);
   }, [activeProfileId, tabs, activeTabId]);
 
   const activeBookmarkable = isBookmarkableUrl(activeTab.url);
@@ -502,6 +535,7 @@ export function App(): JSX.Element {
   const activeTabIdRef = useRef(activeTabId);
   const browserFrameRef = useRef<HTMLDivElement | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
   const resizeStateRef = useRef<SidebarResizeState | null>(null);
   const contextSidebarWidthRef = useRef(contextSidebarWidth);
   const workspacePanelWidthRef = useRef(workspacePanelWidth);
@@ -595,8 +629,229 @@ export function App(): JSX.Element {
   }
 
   useEffect(() => {
-    return window.lastbrowser.browser.onOpenTab((url) => addTab(url));
+    const unbindTab = window.lastbrowser?.browser?.onOpenTab?.((url) => addTab(url));
+    const unbindIncognito = window.lastbrowser?.browser?.onOpenIncognitoTab?.((url) => addTab(url, { incognito: true }));
+    const unbindResearch = window.lastbrowser?.browser?.onDeepResearch?.(async (payload) => {
+      setActivePanel('chat');
+      if (payload.selectionText) {
+        await startNativeChat(
+          `Erstelle eine tiefe, fundierte Recherche zu folgendem ausgewählten Text:\n\n„${payload.selectionText}“\n\nQuelle: ${payload.pageUrl || 'Browser'}`,
+          `Deep Research: ${payload.selectionText.slice(0, 30)}…`
+        );
+      } else if (payload.pageUrl) {
+        await runSidekickAction('research-page');
+      }
+    });
+    return () => {
+      unbindTab?.();
+      unbindIncognito?.();
+      unbindResearch?.();
+    };
+  }, [addTab]);
+
+  useEffect(() => {
+    if (!window.lastbrowser?.downloads?.onChanged) return;
+    return window.lastbrowser.downloads.onChanged((entries) => {
+      setHasActiveDownloads(entries.some((e) => e.state === 'progressing'));
+    });
   }, []);
+
+  useEffect(() => {
+    const handleToggleDevtools = () => {
+      try {
+        const view = webviewRef.current;
+        if (view && typeof view.openDevTools === 'function') {
+          if (view.isDevToolsOpened()) {
+            view.closeDevTools();
+          } else {
+            view.openDevTools({ mode: 'right' });
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    const handlePrint = () => {
+      try {
+        webviewRef.current?.print?.();
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener('lastbrowser:toggle-devtools', handleToggleDevtools);
+    window.addEventListener('lastbrowser:print-page', handlePrint);
+    return () => {
+      window.removeEventListener('lastbrowser:toggle-devtools', handleToggleDevtools);
+      window.removeEventListener('lastbrowser:print-page', handlePrint);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!window.lastbrowser?.browser?.onShortcut) return;
+    return window.lastbrowser.browser.onShortcut((event: { action: string; payload?: { index?: number } }) => {
+      switch (event.action) {
+        case 'new-tab':
+          addTab();
+          setActivePanel('browser');
+          break;
+        case 'new-incognito-tab':
+          addTab(browserStartUrl, { incognito: true });
+          setActivePanel('browser');
+          break;
+        case 'history-back':
+          try {
+            webviewRef.current?.goBack();
+          } catch {
+            // ignore
+          }
+          break;
+        case 'history-forward':
+          try {
+            webviewRef.current?.goForward();
+          } catch {
+            // ignore
+          }
+          break;
+        case 'toggle-fullscreen':
+          void window.lastbrowser.window?.toggleFullScreen?.();
+          break;
+        case 'print-page':
+          try {
+            webviewRef.current?.print?.();
+          } catch {
+            // ignore
+          }
+          break;
+        case 'close-tab': {
+          const curId = activeTabIdRef.current;
+          if (curId) closeTab(curId);
+          break;
+        }
+        case 'reopen-tab':
+          reopenClosedTab();
+          setActivePanel('browser');
+          break;
+        case 'focus-address':
+          addressInputRef.current?.focus();
+          addressInputRef.current?.select();
+          break;
+        case 'reload':
+          try {
+            webviewRef.current?.reload();
+          } catch {
+            // ignore
+          }
+          break;
+        case 'reload-hard':
+          try {
+            (webviewRef.current as any)?.reloadIgnoringCache?.() ?? webviewRef.current?.reload();
+          } catch {
+            // ignore
+          }
+          break;
+        case 'next-tab': {
+          const allTabs = useTabStore.getState().tabs;
+          const curId = activeTabIdRef.current;
+          const idx = allTabs.findIndex((t) => t.id === curId);
+          if (allTabs.length > 1 && idx >= 0) {
+            const nextIdx = (idx + 1) % allTabs.length;
+            setActiveTabId(allTabs[nextIdx].id);
+            setActivePanel('browser');
+          }
+          break;
+        }
+        case 'prev-tab': {
+          const allTabs = useTabStore.getState().tabs;
+          const curId = activeTabIdRef.current;
+          const idx = allTabs.findIndex((t) => t.id === curId);
+          if (allTabs.length > 1 && idx >= 0) {
+            const prevIdx = (idx - 1 + allTabs.length) % allTabs.length;
+            setActiveTabId(allTabs[prevIdx].id);
+            setActivePanel('browser');
+          }
+          break;
+        }
+        case 'jump-tab': {
+          const allTabs = useTabStore.getState().tabs;
+          const target = event.payload?.index ?? 0;
+          if (target >= 0 && target < allTabs.length) {
+            setActiveTabId(allTabs[target].id);
+            setActivePanel('browser');
+          }
+          break;
+        }
+        case 'jump-last-tab': {
+          const allTabs = useTabStore.getState().tabs;
+          if (allTabs.length > 0) {
+            setActiveTabId(allTabs[allTabs.length - 1].id);
+            setActivePanel('browser');
+          }
+          break;
+        }
+        case 'find-in-page':
+          usePanelStore.getState().setFindOpen(true);
+          break;
+        case 'open-history':
+          usePanelStore.getState().setHistoryOpen(!usePanelStore.getState().historyOpen);
+          break;
+        case 'open-downloads':
+          usePanelStore.getState().setDownloadsOpen(!usePanelStore.getState().downloadsOpen);
+          break;
+        case 'open-settings':
+          setActivePanel('settings');
+          break;
+        case 'toggle-sidebar':
+          cycleSidebarMode();
+          setContextSidebarCollapsed((prev) => !prev);
+          break;
+        case 'toggle-command-palette':
+          usePanelStore.getState().toggleCommandPalette();
+          break;
+        case 'toggle-copilot':
+          toggleCopilot();
+          break;
+        case 'toggle-devtools':
+          try {
+            const view = webviewRef.current;
+            if (view && typeof view.openDevTools === 'function') {
+              if (view.isDevToolsOpened()) {
+                view.closeDevTools();
+              } else {
+                view.openDevTools({ mode: 'right' });
+              }
+            }
+          } catch {
+            // ignore
+          }
+          break;
+        case 'zoom-in': {
+          const view = webviewRef.current;
+          if (view && typeof view.getZoomFactor === 'function' && typeof view.setZoomFactor === 'function') {
+            view.getZoomFactor((factor: number) => {
+              view.setZoomFactor(Math.min(3, factor + 0.1));
+            });
+          }
+          break;
+        }
+        case 'zoom-out': {
+          const view = webviewRef.current;
+          if (view && typeof view.getZoomFactor === 'function' && typeof view.setZoomFactor === 'function') {
+            view.getZoomFactor((factor: number) => {
+              view.setZoomFactor(Math.max(0.25, factor - 0.1));
+            });
+          }
+          break;
+        }
+        case 'zoom-reset': {
+          const view = webviewRef.current;
+          if (view && typeof view.setZoomFactor === 'function') {
+            view.setZoomFactor(1);
+          }
+          break;
+        }
+      }
+    });
+  }, [addTab, closeTab, reopenClosedTab, setActiveTabId, setActivePanel, setContextSidebarCollapsed]);
 
   useEffect(() => {
     saveActivePanel(undefined, activePanel);
@@ -862,8 +1117,8 @@ export function App(): JSX.Element {
     navigate(addressValue.trim() ? addressValue : browserStartUrl);
   }
 
-  function addTab(url = browserStartUrl): void {
-    const next = createInitialTab(url);
+  function addTab(url = browserStartUrl, options?: { incognito?: boolean }): void {
+    const next = createInitialTab(url, options);
     setTabs((current) => [...current, next]);
     setBrowserMode(isAiBrowserHomeUrl(url) ? 'home' : 'web');
     setBrowserLoadError('');
@@ -883,6 +1138,10 @@ export function App(): JSX.Element {
 
   function removeBookmarkItem(bookmark: BrowserBookmark): void {
     setBookmarks((current) => removeBookmark(current, bookmark.url));
+  }
+
+  function importBookmarkItems(incoming: BrowserBookmark[]): void {
+    setBookmarks((current) => mergeBookmarks(current, incoming));
   }
 
   function switchProfile(profileId: string): void {
@@ -933,7 +1192,7 @@ export function App(): JSX.Element {
     if (tabs.length === 1) return;
     const index = tabs.findIndex((tab) => tab.id === tabId);
     const closing = tabs[index];
-    if (closing) {
+    if (closing && !closing.incognito) {
       // Remember it so Ctrl+Shift+T can bring it back.
       setClosedTabs((current) => rememberClosedTab(current, closing));
     }
@@ -946,24 +1205,35 @@ export function App(): JSX.Element {
     }
   }
 
-  /** Reopen the most recently closed tab (Ctrl+Shift+T). */
+  /** Reopen the most recently closed tab (Ctrl+Shift+T), or restore session snapshot if closedTabs is empty. */
   function reopenClosedTab(): void {
     const { tab, rest } = takeLastClosedTab(closedTabs);
-    if (!tab) return;
-    setClosedTabs(rest);
-    const created = createInitialTab(tab.url);
-    const restored = { ...created, title: tab.title || created.title };
-    setTabs((current) => [...current, restored]);
-    activeTabIdRef.current = restored.id;
-    setActiveTabId(restored.id);
-    setActivePanel('browser');
-    setAddressValue(isAiBrowserHomeUrl(restored.url) ? '' : restored.url);
+    if (tab) {
+      setClosedTabs(rest);
+      const created = createInitialTab(tab.url);
+      const restored = { ...created, title: tab.title || created.title };
+      setTabs((current) => [...current, restored]);
+      activeTabIdRef.current = restored.id;
+      setActiveTabId(restored.id);
+      setActivePanel('browser');
+      setAddressValue(isAiBrowserHomeUrl(restored.url) ? '' : restored.url);
+      return;
+    }
+    const snapshot = loadSessionSnapshot(activeProfileId, window.localStorage);
+    if (snapshot && snapshot.state.tabs.length > tabs.length) {
+      setTabs(snapshot.state.tabs);
+      if (snapshot.state.activeTabId) {
+        activeTabIdRef.current = snapshot.state.activeTabId;
+        setActiveTabId(snapshot.state.activeTabId);
+      }
+      setActivePanel('browser');
+    }
   }
 
   function updateTitle(tabId: string, title: string): void {
     setTabs((current) => updateTabTitle(current, tabId, title));
     const tab = tabs.find((item) => item.id === tabId);
-    if (tab) {
+    if (tab && !tab.incognito) {
       setVisitedSites((current) => recordVisit(current, tab.url, title, { increment: false }));
     }
   }
@@ -978,7 +1248,34 @@ export function App(): JSX.Element {
       setBrowserMode(isAiBrowserHomeUrl(url) ? 'home' : 'web');
     }
     const tab = tabs.find((item) => item.id === tabId);
-    setVisitedSites((current) => recordVisit(current, url, tab?.title || ''));
+    if (tab && !tab.incognito) {
+      setVisitedSites((current) => recordVisit(current, url, tab?.title || ''));
+    }
+  }
+
+  function updateFavicon(tabId: string, favicon: string): void {
+    setTabs((current) => updateTabFavicon(current, tabId, favicon));
+  }
+
+  function updateLoading(tabId: string, isLoading: boolean): void {
+    setTabs((current) => updateTabLoading(current, tabId, isLoading));
+  }
+
+  function updateMediaPlaying(tabId: string, isPlayingAudio: boolean): void {
+    setTabs((current) => updateTabMediaPlaying(current, tabId, isPlayingAudio));
+  }
+
+  function toggleTabMute(tabId: string): void {
+    const target = tabs.find((t) => t.id === tabId);
+    const nextMuted = !target?.isMuted;
+    setTabs((current) => updateTabMuted(current, tabId, nextMuted));
+    if (tabId === activeTab.id) {
+      try {
+        webviewRef.current?.setAudioMuted(nextMuted);
+      } catch {
+        // ignore
+      }
+    }
   }
 
   function moveTab(tabId: string, targetTabId: string): void {
@@ -1002,6 +1299,16 @@ export function App(): JSX.Element {
           model: form.model.startsWith('@openai-codex:') ? form.model : `@openai-codex:${form.model}`
         });
       }
+      const botName = form.botName?.trim() || 'Nova';
+      const personality = form.personality?.trim() || 'nova';
+
+      await window.lastbrowser.sidekick.saveSettings({
+        settings: {
+          bot_name: botName,
+          personality: personality
+        }
+      }).catch(() => null);
+
       const nextStatus = await window.lastbrowser.sidekick.applyCloudSetup({
         provider: form.provider,
         model: form.model,
@@ -1011,7 +1318,9 @@ export function App(): JSX.Element {
       const nextState = await window.lastbrowser.setup.save({
         cloudSetupComplete: true,
         provider: form.provider,
-        model: form.model
+        model: form.model,
+        botName: botName,
+        personality: personality
       });
       setSetupState(nextState);
       setOnboardingStatus((completeStatus || nextStatus) as OnboardingStatus);
@@ -1044,6 +1353,57 @@ export function App(): JSX.Element {
     } catch (error) {
       setSessionError(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  function pinNativeSession(session: DesktopSessionSummary): void {
+    void window.lastbrowser.sidekick
+      .requestWebui({
+        method: 'POST',
+        path: '/api/session/pin',
+        body: { session_id: session.session_id, pinned: true }
+      })
+      .then(() => {
+        setSessions((current) =>
+          current.map((item) =>
+            item.session_id === session.session_id ? { ...item, pinned: true } : item
+          )
+        );
+      })
+      .catch(() => {});
+  }
+
+  function unpinNativeSession(session: DesktopSessionSummary): void {
+    void window.lastbrowser.sidekick
+      .requestWebui({
+        method: 'POST',
+        path: '/api/session/pin',
+        body: { session_id: session.session_id, pinned: false }
+      })
+      .then(() => {
+        setSessions((current) =>
+          current.map((item) =>
+            item.session_id === session.session_id ? { ...item, pinned: false } : item
+          )
+        );
+      })
+      .catch(() => {});
+  }
+
+  function archiveNativeSession(session: DesktopSessionSummary): void {
+    void window.lastbrowser.sidekick
+      .requestWebui({
+        method: 'POST',
+        path: '/api/session/archive',
+        body: { session_id: session.session_id, archived: true }
+      })
+      .then(() => {
+        setSessions((current) =>
+          current.map((item) =>
+            item.session_id === session.session_id ? { ...item, archived: true } : item
+          )
+        );
+      })
+      .catch(() => {});
   }
 
   /**
@@ -1113,6 +1473,23 @@ export function App(): JSX.Element {
   async function startNativeChat(message: string, displayText = message): Promise<void> {
     const trimmed = message.trim();
     if (!trimmed || sidekickBusy || chatRunState === 'starting' || chatRunState === 'streaming') return;
+
+    // Fast-path: Check for natural language browser management commands (Phase 10.4)
+    const browserCommand = parseNaturalLanguageBrowserCommand(trimmed);
+    if (browserCommand) {
+      const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
+      setChatMessages((current) => [...current, visibleUserMessage]);
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', content: displayText }]);
+      setComposerText('');
+
+      const result = await executeBrowserAction(browserCommand);
+      const assistantReply = `### 🛠️ ${result.title}\n\n${result.message}`;
+
+      setChatMessages((current) => [...current, { role: 'assistant', content: assistantReply, pending: false }]);
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: assistantReply, pending: false }]);
+      return;
+    }
+
     const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
     setChatMessages((current) => [
       ...current,
@@ -1508,219 +1885,437 @@ export function App(): JSX.Element {
     }
   }, [leftSidebarCollapsed, contextSidebarCollapsed, workspacePanelCollapsed]);
 
+  const activePageCategory = useMemo(() => {
+    return detectPageCategory(activeTab.url, activeTab.title);
+  }, [activeTab.url, activeTab.title]);
+
+  const quickActions = useMemo(() => {
+    if (!activeTab.url || activeTab.url.startsWith('lastbrowser://') || activeTab.url.startsWith('about:') || activeTab.url.startsWith('chrome://')) {
+      return [];
+    }
+    return getQuickActionChips(activePageCategory, activeTab.url);
+  }, [activePageCategory, activeTab.url]);
+
+  const handleExecuteQuickAction = useCallback((chip: QuickActionChip) => {
+    setCopilotOpen(true);
+    void executeQuickAction(chip, activeTab, (prompt) => {
+      void startNativeChat(prompt);
+    });
+  }, [activeTab, setCopilotOpen, startNativeChat]);
+
+  const isModernBrowser = layoutMode === 'modern' && activePanel === 'browser';
+
   return (
     <DesktopI18nProvider>
-    <div className={`app-shell panel-${activePanel}`}>
-      <WindowTitlebar
-        tabs={tabs}
-        activeTabId={activeTab.id}
-        draggedTabId={draggedTabId}
-        onActivateTab={(tabId) => {
-          activeTabIdRef.current = tabId;
-          setActiveTabId(tabId);
-          setActivePanel('browser');
-        }}
-        onCloseTab={closeTab}
-        onMoveTab={moveTab}
-        onNewTab={() => addTab()}
-        onPinTab={toggleTabPinned}
-        onDragStartTab={setDraggedTabId}
-        onDragEndTab={() => setDraggedTabId(null)}
-      />
-      <div className="browser-chrome">
-        <header className="topbar">
-          <div className="traffic-actions">
-            <button type="button" aria-label="Back" onClick={() => webviewRef.current?.goBack()}><ChevronLeft size={17} /></button>
-            <button type="button" aria-label="Forward" onClick={() => webviewRef.current?.goForward()}><ChevronRight size={17} /></button>
-            <button type="button" aria-label="Reload" onClick={() => webviewRef.current?.reload()}><RefreshCw size={16} /></button>
-          </div>
-          <form className="addressbar" onSubmit={submitNavigation}>
-            <Globe2 size={16} />
-            <input value={addressValue} onChange={(event) => setAddressValue(event.target.value)} aria-label="Address or search" />
-            <button
-              type="button"
-              className={`bookmark-star ${activeBookmarked ? 'active' : ''}`}
-              aria-label={activeBookmarked ? 'Remove bookmark' : 'Add bookmark'}
-              aria-pressed={activeBookmarked}
-              disabled={!activeBookmarkable}
-              onClick={toggleActiveBookmark}
-            >
-              <Star size={15} fill={activeBookmarked ? 'currentColor' : 'none'} />
-            </button>
-            <button type="submit" aria-label="Navigate"><Search size={16} /></button>
-          </form>
-          <SpaceSelector
-            activePath={activeSpacePath}
-            error={spacesError}
-            spaces={spaces}
-            onOpenSpaces={() => setActivePanel('workspaces')}
-            onSelect={(path) => setActiveSpacePath(path)}
-          />
-          <ProfileSwitcher
-            profiles={profiles}
-            activeProfileId={activeProfile.id}
-            onSelect={switchProfile}
-            onCreate={createProfileEntry}
-            onRename={renameProfileEntry}
-            onDelete={deleteProfileEntry}
-          />
-          <div className={`runtime-pill ${status?.sidekick === 'ready' ? 'ready' : 'starting'}`}>
-            <span className="status-dot" />
-            <span>{status?.sidekick === 'ready' ? 'sidekick online' : 'sidekick starting'}</span>
-          </div>
-          <UpdatePill status={updateStatus} />
-        </header>
-        <BookmarkBar
-          activeBookmarkable={activeBookmarkable}
-          activeBookmarked={activeBookmarked}
-          bookmarks={bookmarks}
-          onNavigate={navigate}
-          onRemove={removeBookmarkItem}
-          onToggleActive={toggleActiveBookmark}
-        />
-      </div>
+    <div className={`app-shell panel-${activePanel} ${isModernBrowser ? 'modern-mode' : ''} ${windowMaximized ? 'is-maximized' : ''}`}>
+      {isModernBrowser ? (
+        <>
+          <ModernTitlebar
+            isLoading={activeTab.isLoading}
+            onGoBack={() => webviewRef.current?.goBack()}
+            onGoForward={() => webviewRef.current?.goForward()}
+            onReloadOrStop={() => {
+              if (activeTab.isLoading) {
+                try {
+                  webviewRef.current?.stop();
+                } catch {
+                  // ignore
+                }
+                updateLoading(activeTab.id, false);
+              } else {
+                webviewRef.current?.reload();
+              }
+            }}
+            sidebarMode={sidebarMode}
+            onToggleSidebar={cycleSidebarMode}
+            blockedAdsCount={3420}
+            onToggleShieldPopover={() => {}}
+            onToggleFind={() => usePanelStore.getState().setFindOpen(!usePanelStore.getState().findOpen)}
+            onToggleDownloads={() => usePanelStore.getState().setDownloadsOpen(!usePanelStore.getState().downloadsOpen)}
+            hasActiveDownloads={hasActiveDownloads}
+            onToggleExtensions={() => {
+              setActivePanel('settings');
+              setActiveContextItem('extensions');
+            }}
+            copilotOpen={copilotOpen}
+            onToggleCopilot={toggleCopilot}
+            onOpenGithub={() => addTab('https://github.com/Loggableim/lastbrowser')}
+            quickActions={quickActions}
+            onExecuteQuickAction={handleExecuteQuickAction}
+          >
+            <AddressBar
+              value={addressValue}
+              onChange={setAddressValue}
+              onSubmit={navigate}
+              bookmarks={bookmarks}
+              visits={visitedSites}
+              searchEngineId={searchEngineId}
+              activeBookmarkable={activeBookmarkable}
+              activeBookmarked={activeBookmarked}
+              onToggleBookmark={toggleActiveBookmark}
+              inputRef={addressInputRef}
+            />
+          </ModernTitlebar>
 
-      <main
-        className={`workspace ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${contextSidebarCollapsed ? 'context-collapsed' : ''} ${workspacePanelCollapsed ? 'workspace-collapsed' : ''}`}
-        style={{
-          '--left-rail-width': `${leftSidebarCollapsed ? COLLAPSED_LEFT_RAIL_WIDTH : DEFAULT_LEFT_RAIL_WIDTH}px`,
-          '--context-sidebar-width': `${contextSidebarCollapsed ? COLLAPSED_PANEL_WIDTH : contextSidebarWidth}px`,
-          '--workspace-panel-width': `${workspacePanelCollapsed ? COLLAPSED_PANEL_WIDTH : workspacePanelWidth}px`
-        } as React.CSSProperties}
-      >
-        <ShellRail
-          activePanel={activePanel}
-          leftCollapsed={leftSidebarCollapsed}
-          installedSidebarApps={installedSidebarApps}
-          onPanel={(panel) => {
-            setActivePanel(panel);
-            if (panel === 'browser') {
-              setBrowserMode('search');
-            }
-          }}
-          onToggleLeft={() => setLeftSidebarCollapsed((current) => !current)}
-        />
-        <ContextSidebar
-          activePanel={activePanel}
-          activeSessionId={activeSessionId}
-          busy={sidekickBusy}
-          collapsed={contextSidebarCollapsed}
-          activeContextItem={activeContextItem}
-          messages={messages}
-          search={sessionSearch}
-          sessions={sessions}
-          serviceStatus={status}
-          sessionError={sessionError}
-          projects={projects}
-          activeProjectFilter={activeProjectFilter}
-          activeTagFilter={activeTagFilter}
-          onAction={runSidekickAction}
-          onNewSession={() => void createNativeSession()}
-          onPanel={setActivePanel}
-          onDeleteSession={(session) => void deleteNativeSession(session)}
-          onDuplicateSession={(session) => void duplicateNativeSession(session)}
-          onRenameSession={(session) => void renameNativeSession(session)}
-          onPinSession={(session) => (session.pinned ? unpinNativeSession : pinNativeSession)(session)}
-          onArchiveSession={(session) => archiveNativeSession(session)}
-          onSearch={setSessionSearch}
-          onSelectSession={(sessionId) => {
-            setActiveSessionId(sessionId);
-            setActivePanel('chat');
-          }}
-          onContextItemChange={setActiveContextItem}
-          onBrowserModeChange={setBrowserMode}
-          onToggleCollapse={() => setContextSidebarCollapsed((current) => !current)}
-          onResizeStart={(event) => beginSidebarResize('context', event)}
-          onProjectFilter={setActiveProjectFilter}
-          onTagFilter={setActiveTagFilter}
-        />
-        <BrowserMain
-          activePanel={activePanel}
-          activeSession={activeSession}
-          activeSessionId={activeSessionId}
-          activeTab={activeTab}
-          activeProfile={activeProfile}
-          onboardingStatus={onboardingStatus}
-          onReopenSetup={() => {
-            setSetupDismissed(false);
-            try {
-              window.localStorage.removeItem('lastbrowser.setupDismissed');
-            } catch {
-              // Storage unavailable — the wizard still opens for this session.
-            }
-          }}
-          busy={sidekickBusy}
-          chatError={chatError}
-          chatMessages={chatMessages}
-          chatRunState={chatRunState}
-          composerMode={composerMode}
-          composerText={composerText}
-          bookmarks={bookmarks}
-          serviceStatus={status}
-          sessionLoading={activeSessionLoading}
-          setupModel={setupState.model}
-          spaces={spaces}
-          activeSpacePath={activeSpacePath}
-          browserMode={browserMode}
-          browserLoadError={browserLoadError}
-          visitedSites={visitedSites}
-          browserFrameRef={browserFrameRef}
-          activeContextItem={activeContextItem}
-          webviewRef={webviewRef}
-          onAction={runSidekickAction}
-          onComposerMode={setComposerMode}
-          onComposerText={setComposerText}
-          onCreateSession={() => void createNativeSession()}
-          onAddSpace={(path, name) => void addSpaceNative(path, name)}
-          onMoveSpace={(space, direction) => void moveSpaceNative(space, direction)}
-          onNavigate={navigate}
-          onInstalledSidebarApp={(panel) => setInstalledSidebarApps((current) => Array.from(new Set([...current, panel])))}
-          onUninstalledSidebarApp={(panel) => setInstalledSidebarApps((current) => current.filter((item) => item !== panel))}
-          onWebviewNavigate={updateUrl}
-          onWebviewTitle={updateTitle}
-          onRemoveSpace={(space) => void removeSpaceNative(space)}
-          onRenameSpace={(space) => void renameSpaceNative(space)}
-          onSelectSpace={setActiveSpacePath}
-          onSendChat={(message) => void startNativeChat(message)}
-          onStopChat={() => void stopNativeChat()}
-          onClearBrowserError={() => setBrowserLoadError('')}
-          onSetBrowserError={setBrowserLoadError}
-          onRemoveVisit={removeHistoryEntry}
-          onClearHistory={clearHistory}
-          onReopenClosedTab={reopenClosedTab}
-          searchEngineId={searchEngineId}
-          onSearchEngineChange={setSearchEngineId}
-        />
-        <WorkspacePanel
-          activeSessionId={activeSessionId}
-          collapsed={workspacePanelCollapsed}
-          entries={workspaceEntries}
-          error={workspaceError}
-          editing={workspaceEditing}
-          draft={workspacePreviewDraft}
-          showHidden={workspaceShowHidden}
-          path={workspacePath}
-          preview={workspacePreview}
-          serviceStatus={status}
-          onEntry={readWorkspaceEntry}
-          onCreateFile={() => void createWorkspaceFileNative()}
-          onCreateFolder={() => void createWorkspaceFolderNative()}
-          onDeleteEntry={(entry) => void deleteWorkspaceEntryNative(entry)}
-          onDraft={setWorkspacePreviewDraft}
-          onRenameEntry={(entry) => void renameWorkspaceEntryNative(entry)}
-          onSavePreview={() => void saveWorkspacePreviewNative()}
-          onToggleEditing={() => setWorkspaceEditing((current) => !current)}
-          onToggleHidden={() => setWorkspaceShowHidden((current) => !current)}
-          onParent={() => {
-            setWorkspacePath(parentPath(workspacePath));
-            setWorkspacePreview(null);
-            setWorkspacePreviewDraft('');
-            setWorkspaceEditing(false);
-          }}
-          onRefresh={() => setWorkspaceRefreshNonce((current) => current + 1)}
-          onToggle={() => setWorkspacePanelCollapsed((current) => !current)}
-          onResizeStart={(event) => beginSidebarResize('workspace', event)}
-        />
+          <div className={`browser-zen-workspace mode-${sidebarMode}`}>
+            <SidekickSidebar
+              mode={sidebarMode}
+              tabs={tabs}
+              activeTabId={activeTab.id}
+              draggedTabId={draggedTabId}
+              onActivateTab={(tabId) => {
+                activeTabIdRef.current = tabId;
+                setActiveTabId(tabId);
+                setActivePanel('browser');
+              }}
+              onCloseTab={closeTab}
+              onNewTab={(url, opts) => addTab(url, opts)}
+              onPinTab={toggleTabPinned}
+              onToggleTabMute={toggleTabMute}
+              onDragStartTab={setDraggedTabId}
+              onDragEndTab={() => setDraggedTabId(null)}
+              onMoveTab={moveTab}
+              onCycleMode={cycleSidebarMode}
+              onSetMode={setSidebarMode}
+              activeSpacePath={activeSpacePath}
+              spaces={spaces}
+              onSelectSpace={setActiveSpacePath}
+              onOpenSettings={() => setActivePanel('settings')}
+              onOpenHistory={() => usePanelStore.getState().setHistoryOpen(true)}
+              onOpenApp={(app) => {
+                if (app.panel) {
+                  setActivePanel(app.panel);
+                } else if (app.url) {
+                  addTab(app.url);
+                }
+              }}
+              botName={setupState.botName || 'Nova'}
+            />
+
+            <div className={`browser-content-area ${copilotOpen ? 'with-copilot-split' : 'full-canvas'}`}>
+              <div className="browser-canvas-pane">
+                <BrowserMain
+                  activePanel={activePanel}
+                  activeSession={activeSession}
+                  activeSessionId={activeSessionId}
+                  activeTab={activeTab}
+                  activeProfile={activeProfile}
+                  onboardingStatus={onboardingStatus}
+                  onReopenSetup={() => {
+                    setSetupDismissed(false);
+                    try {
+                      window.localStorage.removeItem('lastbrowser.setupDismissed');
+                    } catch {
+                      // Storage unavailable — the wizard still opens for this session.
+                    }
+                  }}
+                  busy={sidekickBusy}
+                  chatError={chatError}
+                  chatMessages={chatMessages}
+                  chatRunState={chatRunState}
+                  composerMode={composerMode}
+                  composerText={composerText}
+                  bookmarks={bookmarks}
+                  serviceStatus={status}
+                  sessionLoading={activeSessionLoading}
+                  setupModel={setupState.model}
+                  spaces={spaces}
+                  activeSpacePath={activeSpacePath}
+                  browserMode={browserMode}
+                  browserLoadError={browserLoadError}
+                  visitedSites={visitedSites}
+                  browserFrameRef={browserFrameRef}
+                  activeContextItem={activeContextItem}
+                  webviewRef={webviewRef}
+                  onAction={runSidekickAction}
+                  onComposerMode={setComposerMode}
+                  onComposerText={setComposerText}
+                  onCreateSession={() => void createNativeSession()}
+                  onAddSpace={(path, name) => void addSpaceNative(path, name)}
+                  onMoveSpace={(space, direction) => void moveSpaceNative(space, direction)}
+                  onNavigate={navigate}
+                  onInstalledSidebarApp={(panel) => setInstalledSidebarApps((current) => Array.from(new Set([...current, panel])))}
+                  onUninstalledSidebarApp={(panel) => setInstalledSidebarApps((current) => current.filter((item) => item !== panel))}
+                  onWebviewNavigate={updateUrl}
+                  onWebviewTitle={updateTitle}
+                  onWebviewFavicon={updateFavicon}
+                  onWebviewLoading={updateLoading}
+                  onWebviewMediaPlaying={updateMediaPlaying}
+                  hasActiveDownloads={hasActiveDownloads}
+                  onRemoveSpace={(space) => void removeSpaceNative(space)}
+                  onRenameSpace={(space) => void renameSpaceNative(space)}
+                  onSelectSpace={setActiveSpacePath}
+                  onSendChat={(message) => void startNativeChat(message)}
+                  onStopChat={() => void stopNativeChat()}
+                  onClearBrowserError={() => setBrowserLoadError('')}
+                  onSetBrowserError={setBrowserLoadError}
+                  onRemoveVisit={removeHistoryEntry}
+                  onClearHistory={clearHistory}
+                  onReopenClosedTab={reopenClosedTab}
+                  searchEngineId={searchEngineId}
+                  onSearchEngineChange={setSearchEngineId}
+                />
+              </div>
+
+              {copilotOpen && (
+                <CopilotSplitView
+                  isOpen={copilotOpen}
+                  onClose={() => setCopilotOpen(false)}
+                  onMinimize={() => setCopilotOpen(false)}
+                  botName={setupState.botName || 'Nova'}
+                  modelName={setupState.model || 'Sidekick Pro'}
+                  messages={chatMessages}
+                  busy={sidekickBusy}
+                  onSendMessage={(msg) => void startNativeChat(msg)}
+                  onStopChat={() => void stopNativeChat()}
+                  activeUrl={activeTab.url}
+                  activeTitle={activeTab.title}
+                  quickActions={quickActions}
+                  onExecuteQuickAction={handleExecuteQuickAction}
+                />
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <WindowTitlebar
+            tabs={tabs}
+            activeTabId={activeTab.id}
+            draggedTabId={draggedTabId}
+            onActivateTab={(tabId) => {
+              activeTabIdRef.current = tabId;
+              setActiveTabId(tabId);
+              setActivePanel('browser');
+            }}
+            onCloseTab={closeTab}
+            onMoveTab={moveTab}
+            onNewTab={() => addTab()}
+            onPinTab={toggleTabPinned}
+            onToggleTabMute={toggleTabMute}
+            onDragStartTab={setDraggedTabId}
+            onDragEndTab={() => setDraggedTabId(null)}
+          />
+          <div className="browser-chrome">
+            <header
+              className={`topbar ${windowMaximized ? 'is-maximized' : ''}`}
+              onDoubleClick={handleTopbarDoubleClick}
+              onMouseDown={handleTopbarMouseDown}
+            >
+              <div className="traffic-actions">
+                <button type="button" aria-label="Back" onClick={() => webviewRef.current?.goBack()}><ChevronLeft size={17} /></button>
+                <button type="button" aria-label="Forward" onClick={() => webviewRef.current?.goForward()}><ChevronRight size={17} /></button>
+                <button
+                  type="button"
+                  aria-label={activeTab.isLoading ? 'Stop loading' : 'Reload'}
+                  onClick={() => {
+                    if (activeTab.isLoading) {
+                      try {
+                        webviewRef.current?.stop();
+                      } catch {
+                        // ignore
+                      }
+                      updateLoading(activeTab.id, false);
+                    } else {
+                      webviewRef.current?.reload();
+                    }
+                  }}
+                >
+                  {activeTab.isLoading ? <X size={16} /> : <RefreshCw size={16} />}
+                </button>
+              </div>
+              <AddressBar
+                value={addressValue}
+                onChange={setAddressValue}
+                onSubmit={navigate}
+                bookmarks={bookmarks}
+                visits={visitedSites}
+                searchEngineId={searchEngineId}
+                activeBookmarkable={activeBookmarkable}
+                activeBookmarked={activeBookmarked}
+                onToggleBookmark={toggleActiveBookmark}
+                inputRef={addressInputRef}
+              />
+              <SpaceSelector
+                activePath={activeSpacePath}
+                error={spacesError}
+                spaces={spaces}
+                onOpenSpaces={() => setActivePanel('workspaces')}
+                onSelect={(path) => setActiveSpacePath(path)}
+              />
+              <ProfileSwitcher
+                profiles={profiles}
+                activeProfileId={activeProfile.id}
+                onSelect={switchProfile}
+                onCreate={createProfileEntry}
+                onRename={renameProfileEntry}
+                onDelete={deleteProfileEntry}
+              />
+              <div className={`runtime-pill ${status?.sidekick === 'ready' ? 'ready' : 'starting'}`}>
+                <span className="status-dot" />
+                <span>{status?.sidekick === 'ready' ? 'sidekick online' : 'sidekick starting'}</span>
+              </div>
+              <UpdatePill status={updateStatus} />
+            </header>
+            <BookmarkBar
+              activeBookmarkable={activeBookmarkable}
+              activeBookmarked={activeBookmarked}
+              bookmarks={bookmarks}
+              onNavigate={navigate}
+              onRemove={removeBookmarkItem}
+              onToggleActive={toggleActiveBookmark}
+              onImport={importBookmarkItems}
+            />
+          </div>
+
+          <main
+            className={`workspace ${leftSidebarCollapsed ? 'left-collapsed' : ''} ${contextSidebarCollapsed ? 'context-collapsed' : ''} ${workspacePanelCollapsed ? 'workspace-collapsed' : ''}`}
+            style={{
+              '--left-rail-width': `${leftSidebarCollapsed ? COLLAPSED_LEFT_RAIL_WIDTH : DEFAULT_LEFT_RAIL_WIDTH}px`,
+              '--context-sidebar-width': `${contextSidebarCollapsed ? COLLAPSED_PANEL_WIDTH : contextSidebarWidth}px`,
+              '--workspace-panel-width': `${workspacePanelCollapsed ? COLLAPSED_PANEL_WIDTH : workspacePanelWidth}px`
+            } as React.CSSProperties}
+          >
+            <ShellRail
+              activePanel={activePanel}
+              leftCollapsed={leftSidebarCollapsed}
+              installedSidebarApps={installedSidebarApps}
+              onPanel={(panel) => {
+                setActivePanel(panel);
+                if (panel === 'browser') {
+                  setBrowserMode('search');
+                }
+              }}
+              onToggleLeft={() => setLeftSidebarCollapsed((current) => !current)}
+            />
+            <ContextSidebar
+              activePanel={activePanel}
+              activeSessionId={activeSessionId}
+              busy={sidekickBusy}
+              collapsed={contextSidebarCollapsed}
+              activeContextItem={activeContextItem}
+              messages={messages}
+              search={sessionSearch}
+              sessions={sessions}
+              serviceStatus={status}
+              sessionError={sessionError}
+              projects={projects}
+              activeProjectFilter={activeProjectFilter}
+              activeTagFilter={activeTagFilter}
+              onAction={runSidekickAction}
+              onNewSession={() => void createNativeSession()}
+              onPanel={setActivePanel}
+              onDeleteSession={(session) => void deleteNativeSession(session)}
+              onDuplicateSession={(session) => void duplicateNativeSession(session)}
+              onRenameSession={(session) => void renameNativeSession(session)}
+              onPinSession={(session) => (session.pinned ? unpinNativeSession : pinNativeSession)(session)}
+              onArchiveSession={(session) => archiveNativeSession(session)}
+              onSearch={setSessionSearch}
+              onSelectSession={(sessionId) => {
+                setActiveSessionId(sessionId);
+                setActivePanel('chat');
+              }}
+              onContextItemChange={setActiveContextItem}
+              onBrowserModeChange={setBrowserMode}
+              onToggleCollapse={() => setContextSidebarCollapsed((current) => !current)}
+              onResizeStart={(event) => beginSidebarResize('context', event)}
+              onProjectFilter={setActiveProjectFilter}
+              onTagFilter={setActiveTagFilter}
+            />
+            <BrowserMain
+              activePanel={activePanel}
+              activeSession={activeSession}
+              activeSessionId={activeSessionId}
+              activeTab={activeTab}
+              activeProfile={activeProfile}
+              onboardingStatus={onboardingStatus}
+              onReopenSetup={() => {
+                setSetupDismissed(false);
+                try {
+                  window.localStorage.removeItem('lastbrowser.setupDismissed');
+                } catch {
+                  // Storage unavailable — the wizard still opens for this session.
+                }
+              }}
+              busy={sidekickBusy}
+              chatError={chatError}
+              chatMessages={chatMessages}
+              chatRunState={chatRunState}
+              composerMode={composerMode}
+              composerText={composerText}
+              bookmarks={bookmarks}
+              serviceStatus={status}
+              sessionLoading={activeSessionLoading}
+              setupModel={setupState.model}
+              spaces={spaces}
+              activeSpacePath={activeSpacePath}
+              browserMode={browserMode}
+              browserLoadError={browserLoadError}
+              visitedSites={visitedSites}
+              browserFrameRef={browserFrameRef}
+              activeContextItem={activeContextItem}
+              webviewRef={webviewRef}
+              onAction={runSidekickAction}
+              onComposerMode={setComposerMode}
+              onComposerText={setComposerText}
+              onCreateSession={() => void createNativeSession()}
+              onAddSpace={(path, name) => void addSpaceNative(path, name)}
+              onMoveSpace={(space, direction) => void moveSpaceNative(space, direction)}
+              onNavigate={navigate}
+              onInstalledSidebarApp={(panel) => setInstalledSidebarApps((current) => Array.from(new Set([...current, panel])))}
+              onUninstalledSidebarApp={(panel) => setInstalledSidebarApps((current) => current.filter((item) => item !== panel))}
+              onWebviewNavigate={updateUrl}
+              onWebviewTitle={updateTitle}
+              onWebviewFavicon={updateFavicon}
+              onWebviewLoading={updateLoading}
+              onWebviewMediaPlaying={updateMediaPlaying}
+              hasActiveDownloads={hasActiveDownloads}
+              onRemoveSpace={(space) => void removeSpaceNative(space)}
+              onRenameSpace={(space) => void renameSpaceNative(space)}
+              onSelectSpace={setActiveSpacePath}
+              onSendChat={(message) => void startNativeChat(message)}
+              onStopChat={() => void stopNativeChat()}
+              onClearBrowserError={() => setBrowserLoadError('')}
+              onSetBrowserError={setBrowserLoadError}
+              onRemoveVisit={removeHistoryEntry}
+              onClearHistory={clearHistory}
+              onReopenClosedTab={reopenClosedTab}
+              searchEngineId={searchEngineId}
+              onSearchEngineChange={setSearchEngineId}
+            />
+            <WorkspacePanel
+              activeSessionId={activeSessionId}
+              collapsed={workspacePanelCollapsed}
+              entries={workspaceEntries}
+              error={workspaceError}
+              editing={workspaceEditing}
+              draft={workspacePreviewDraft}
+              showHidden={workspaceShowHidden}
+              path={workspacePath}
+              preview={workspacePreview}
+              serviceStatus={status}
+              onEntry={readWorkspaceEntry}
+              onCreateFile={() => void createWorkspaceFileNative()}
+              onCreateFolder={() => void createWorkspaceFolderNative()}
+              onDeleteEntry={(entry) => void deleteWorkspaceEntryNative(entry)}
+              onDraft={setWorkspacePreviewDraft}
+              onRenameEntry={(entry) => void renameWorkspaceEntryNative(entry)}
+              onSavePreview={() => void saveWorkspacePreviewNative()}
+              onToggleEditing={() => setWorkspaceEditing((current) => !current)}
+              onToggleHidden={() => setWorkspaceShowHidden((current) => !current)}
+              onParent={() => {
+                setWorkspacePath(parentPath(workspacePath));
+                setWorkspacePreview(null);
+                setWorkspacePreviewDraft('');
+                setWorkspaceEditing(false);
+              }}
+              onRefresh={() => setWorkspaceRefreshNonce((current) => current + 1)}
+              onToggle={() => setWorkspacePanelCollapsed((current) => !current)}
+              onResizeStart={(event) => beginSidebarResize('workspace', event)}
+            />
+          </main>
+        </>
+      )}
         {setupRequired && (
           <FirstRunSetupPane
             status={status}
@@ -1740,808 +2335,9 @@ export function App(): JSX.Element {
             }}
           />
         )}
-      </main>
+        <CommandPalette />
     </div>
     </DesktopI18nProvider>
-  );
-}
-
-function BookmarkBar({
-  activeBookmarkable,
-  activeBookmarked,
-  bookmarks,
-  onNavigate,
-  onRemove,
-  onToggleActive
-}: {
-  activeBookmarkable: boolean;
-  activeBookmarked: boolean;
-  bookmarks: BrowserBookmark[];
-  onNavigate: (url: string) => void;
-  onRemove: (bookmark: BrowserBookmark) => void;
-  onToggleActive: () => void;
-}): JSX.Element {
-  return (
-    <nav className="bookmark-bar" aria-label="Bookmarks">
-      <div className="bookmark-list">
-        {bookmarks.map((bookmark) => (
-          <div key={bookmark.id} className="bookmark-item">
-            <button
-              type="button"
-              className="bookmark-open"
-              title={bookmark.url}
-              onClick={() => onNavigate(bookmark.url)}
-            >
-              <Star size={13} fill="currentColor" />
-              <span>{bookmark.title}</span>
-            </button>
-            <button
-              type="button"
-              className="bookmark-remove"
-              aria-label={`Remove ${bookmark.title}`}
-              onClick={() => onRemove(bookmark)}
-            >
-              <X size={12} />
-            </button>
-          </div>
-        ))}
-        {!bookmarks.length && <span className="bookmark-empty">No bookmarks yet</span>}
-      </div>
-      <button
-        type="button"
-        className={`bookmark-add ${activeBookmarked ? 'active' : ''}`}
-        disabled={!activeBookmarkable}
-        aria-label={activeBookmarked ? 'Remove bookmark' : 'Add bookmark'}
-        aria-pressed={activeBookmarked}
-        onClick={onToggleActive}
-      >
-        <Star size={14} fill={activeBookmarked ? 'currentColor' : 'none'} />
-      </button>
-    </nav>
-  );
-}
-
-function UpdatePill({ status }: { status: UpdateStatus | null }): JSX.Element | null {
-  if (!status || status.state === 'disabled') return null;
-  const visibleStates: UpdateStatus['state'][] = ['checking', 'available', 'downloading', 'downloaded', 'error'];
-  if (!visibleStates.includes(status.state)) return null;
-
-  const label = updateLabel(status);
-  const handleClick = () => {
-    if (status.state === 'downloaded') {
-      void window.lastbrowser.updates.install();
-      return;
-    }
-    if (status.state === 'available') {
-      void window.lastbrowser.updates.download();
-      return;
-    }
-    if (status.state === 'error') {
-      void window.lastbrowser.updates.check();
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      className={`update-pill ${status.state}`}
-      onClick={handleClick}
-      disabled={status.state === 'checking' || status.state === 'downloading'}
-      title={status.message || label}
-    >
-      {status.state === 'checking' || status.state === 'downloading'
-        ? <Loader2 size={14} className="spin" />
-        : status.state === 'downloaded'
-          ? <CheckCircle2 size={14} />
-          : <RefreshCw size={14} />}
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function updateLabel(status: UpdateStatus): string {
-  if (status.state === 'checking') return 'checking updates';
-  if (status.state === 'available') return status.availableVersion ? `update ${status.availableVersion}` : 'update available';
-  if (status.state === 'downloading') return `downloading ${status.percent ?? 0}%`;
-  if (status.state === 'downloaded') return 'restart to update';
-  if (status.state === 'error') return 'update retry';
-  return 'updates';
-}
-
-function ProfileSwitcher({
-  profiles,
-  activeProfileId,
-  onSelect,
-  onCreate,
-  onRename,
-  onDelete
-}: {
-  profiles: BrowserProfile[];
-  activeProfileId: string;
-  onSelect: (profileId: string) => void;
-  onCreate: (name: string) => void;
-  onRename: (profileId: string, name: string) => void;
-  onDelete: (profileId: string) => void;
-}): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const [draftName, setDraftName] = useState('');
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState('');
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const activeProfile = profiles.find((profile) => profile.id === activeProfileId) || profiles[0];
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const handleClick = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
-    };
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [open]);
-
-  function submitCreate(event: React.FormEvent): void {
-    event.preventDefault();
-    const name = draftName.trim();
-    if (!name) return;
-    onCreate(name);
-    setDraftName('');
-    setOpen(false);
-  }
-
-  function submitRename(event: React.FormEvent, profileId: string): void {
-    event.preventDefault();
-    const name = renameDraft.trim();
-    if (name) onRename(profileId, name);
-    setRenamingId(null);
-    setRenameDraft('');
-  }
-
-  return (
-    <div className="profile-switcher" ref={rootRef}>
-      <button
-        type="button"
-        className="profile-switcher-trigger"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={`Profile: ${activeProfile?.name || 'Default'}`}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className="profile-dot" style={{ background: activeProfile?.color || '#2563FF' }} />
-        <span>{activeProfile?.icon || '🌐'} {activeProfile?.name || 'Default'}</span>
-        <ChevronDown size={14} />
-      </button>
-      {open && (
-        <div className="profile-switcher-menu" role="menu">
-          {profiles.map((profile) => (
-            <div
-              key={profile.id}
-              className={`profile-switcher-item ${profile.id === activeProfileId ? 'is-active' : ''}`}
-              role="menuitem"
-              tabIndex={0}
-              onClick={() => {
-                onSelect(profile.id);
-                setOpen(false);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onSelect(profile.id);
-                  setOpen(false);
-                }
-              }}
-            >
-              <span className="profile-dot" style={{ background: profile.color }} />
-              {renamingId === profile.id ? (
-                <form className="profile-switcher-form" onSubmit={(event) => submitRename(event, profile.id)}>
-                  <input
-                    className="profile-switcher-input"
-                    value={renameDraft}
-                    autoFocus
-                    onChange={(event) => setRenameDraft(event.target.value)}
-                    onClick={(event) => event.stopPropagation()}
-                  />
-                  <button type="submit" className="profile-switcher-action">Save</button>
-                </form>
-              ) : (
-                <>
-                  <span className="profile-switcher-item-name">{profile.icon} {profile.name}</span>
-                  {profile.isDefault && <span className="profile-switcher-item-badge">Default</span>}
-                  <button
-                    type="button"
-                    className="profile-switcher-delete"
-                    aria-label={`Rename ${profile.name}`}
-                    title="Rename"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setRenamingId(profile.id);
-                      setRenameDraft(profile.name);
-                    }}
-                  >
-                    <Pencil size={13} />
-                  </button>
-                  {!profile.isDefault && (
-                    <button
-                      type="button"
-                      className="profile-switcher-delete"
-                      aria-label={`Delete ${profile.name}`}
-                      title="Delete profile"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDelete(profile.id);
-                      }}
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          ))}
-          <div className="profile-switcher-separator" />
-          <form className="profile-switcher-form" onSubmit={submitCreate}>
-            <input
-              className="profile-switcher-input"
-              placeholder="New profile name…"
-              value={draftName}
-              onChange={(event) => setDraftName(event.target.value)}
-            />
-            <button type="submit" className="profile-switcher-action" disabled={!draftName.trim()}>
-              <Plus size={13} /> Add
-            </button>
-          </form>
-          <div className="profile-switcher-empty">
-            Each profile keeps its own cookies, logins and storage.
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SpaceSelector({
-  activePath,
-  error,
-  spaces,
-  onOpenSpaces,
-  onSelect
-}: {
-  activePath: string;
-  error: string;
-  spaces: SpaceSummary[];
-  onOpenSpaces: () => void;
-  onSelect: (path: string) => void;
-}): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const activeSpace = spaces.find((space) => space.path === activePath) || spaces[0] || null;
-  const label = activeSpace ? spaceDisplayName(activeSpace) : 'default';
-
-  return (
-    <div className="titlebar-space">
-      <button
-        type="button"
-        className={`space-button ${open ? 'open' : ''}`}
-        title={error || activeSpace?.path || 'Spaces'}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <img src={brandAssets.sidebarIcons.folder} alt="" />
-        <span>{label}</span>
-        <ChevronDown size={14} />
-      </button>
-      {open && (
-        <div className="space-dropdown">
-          <div className="space-dropdown-head">
-            <strong>Spaces</strong>
-            <button type="button" onClick={() => { setOpen(false); onOpenSpaces(); }}>
-              Manage
-            </button>
-          </div>
-          <div className="space-list">
-            {spaces.map((space) => (
-              <button
-                key={space.path}
-                type="button"
-                className={space.path === activePath ? 'active' : ''}
-                onClick={() => {
-                  onSelect(space.path);
-                  setOpen(false);
-                }}
-              >
-                <span>{space.emoji || '·'}</span>
-                <strong>{spaceDisplayName(space)}</strong>
-                <small>{space.path}</small>
-              </button>
-            ))}
-            {!spaces.length && (
-              <div className="space-empty">
-                {error || 'Sidekick loads spaces when the runtime is online.'}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function WindowTitlebar({
-  tabs,
-  activeTabId,
-  draggedTabId,
-  onActivateTab,
-  onCloseTab,
-  onDragEndTab,
-  onDragStartTab,
-  onMoveTab,
-  onNewTab,
-  onPinTab
-}: {
-  tabs?: BrowserTab[];
-  activeTabId?: string;
-  draggedTabId?: string | null;
-  onActivateTab?: (tabId: string) => void;
-  onCloseTab?: (tabId: string) => void;
-  onDragEndTab?: () => void;
-  onDragStartTab?: (tabId: string | null) => void;
-  onMoveTab?: (tabId: string, targetTabId: string) => void;
-  onNewTab?: () => void;
-  onPinTab?: (tabId: string) => void;
-}): JSX.Element {
-  return (
-    <header className="browser-titlebar">
-      <div className="brand">
-        <img src={brandAssets.appIcon256} alt="" className="brand-mark" />
-        <span>lastbrowser</span>
-      </div>
-      {tabs && activeTabId && onActivateTab && onCloseTab && onNewTab ? (
-        <nav className="tabbar" aria-label="Browser tabs">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              role="button"
-              tabIndex={0}
-              draggable
-              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${draggedTabId === tab.id ? 'dragging' : ''}`}
-              onClick={() => onActivateTab(tab.id)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onActivateTab(tab.id);
-                }
-              }}
-              onDragStart={() => onDragStartTab?.(tab.id)}
-              onDragEnd={() => onDragEndTab?.()}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                if (draggedTabId && draggedTabId !== tab.id) onMoveTab?.(draggedTabId, tab.id);
-                onDragEndTab?.();
-              }}
-            >
-              <button
-                type="button"
-                className={`tab-favorite ${tab.pinned ? 'active' : ''}`}
-                aria-label={tab.pinned ? `Unfavorite ${tab.title}` : `Favorite ${tab.title}`}
-                aria-pressed={Boolean(tab.pinned)}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onPinTab?.(tab.id);
-                }}
-              >
-                <Star size={11} fill={tab.pinned ? 'currentColor' : 'none'} />
-              </button>
-              <span>{tab.title}</span>
-              <X
-                size={13}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onCloseTab(tab.id);
-                }}
-              />
-            </div>
-          ))}
-          <button type="button" className="new-tab" onClick={onNewTab} aria-label="New tab"><Plus size={16} /></button>
-        </nav>
-      ) : (
-        <div className="titlebar-drag-fill" />
-      )}
-      <WindowControls />
-    </header>
-  );
-}
-
-function WindowControls(): JSX.Element {
-  return (
-    <div className="window-controls" aria-label="Window controls">
-      <button type="button" className="window-control" aria-label="Minimize" onClick={() => void window.lastbrowser.window.minimize()}>
-        <Minus size={15} />
-      </button>
-      <button type="button" className="window-control" aria-label="Maximize or restore" onClick={() => void window.lastbrowser.window.toggleMaximize()}>
-        <Square size={13} />
-      </button>
-      <button type="button" className="window-control close" aria-label="Close" onClick={() => void window.lastbrowser.window.close()}>
-        <X size={15} />
-      </button>
-    </div>
-  );
-}
-
-function ShellRail({
-  activePanel,
-  leftCollapsed,
-  installedSidebarApps,
-  onPanel,
-  onToggleLeft
-}: {
-  activePanel: LastbrowserPanelId;
-  leftCollapsed: boolean;
-  installedSidebarApps: LastbrowserPanelId[];
-  onPanel: (panel: LastbrowserPanelId) => void;
-  onToggleLeft: () => void;
-}): JSX.Element {
-  const visiblePanels = lastbrowserPanels.filter((panel) => panel.id !== 'settings' && isInstalledSidebarApp(panel.id, installedSidebarApps));
-  const settingsPanel = lastbrowserPanels.find((panel) => panel.id === 'settings') || lastbrowserPanels[lastbrowserPanels.length - 1];
-
-  return (
-    <nav className="shell-rail" aria-label="Lastbrowser navigation">
-      <div className="rail-main">
-        {visiblePanels.map((panel) => (
-          <button
-            key={panel.id}
-            type="button"
-            className={`rail-button ${activePanel === panel.id ? 'active' : ''}`}
-            title={panel.tooltip}
-            onClick={() => onPanel(panel.id)}
-          >
-            <img src={brandAssets.sidebarIcons[panel.id]} alt="" />
-            <span>{panel.label}</span>
-            {panel.id === 'tasks' && <em>9+</em>}
-          </button>
-        ))}
-      </div>
-      <div className="rail-bottom">
-        <button type="button" className="rail-collapse" title="Toggle sidebar" onClick={onToggleLeft}>
-          {leftCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-          <span>Sidebar ein-/ausblenden</span>
-        </button>
-        <button
-          type="button"
-          className={`rail-button ${activePanel === 'settings' ? 'active' : ''}`}
-          title={settingsPanel.tooltip}
-          onClick={() => onPanel('settings')}
-        >
-          <img src={brandAssets.sidebarIcons.settings} alt="" />
-          <span>{settingsPanel.label}</span>
-        </button>
-      </div>
-    </nav>
-  );
-}
-
-function ContextSidebar({
-  activePanel,
-  activeSessionId,
-  busy,
-  collapsed,
-  activeContextItem,
-  messages,
-  search,
-  sessions,
-  serviceStatus,
-  sessionError,
-  projects,
-  activeProjectFilter,
-  activeTagFilter,
-  onAction,
-  onNewSession,
-  onPanel,
-  onDeleteSession,
-  onDuplicateSession,
-  onRenameSession,
-  onPinSession,
-  onArchiveSession,
-  onSearch,
-  onSelectSession,
-  onContextItemChange,
-  onBrowserModeChange,
-  onToggleCollapse,
-  onResizeStart,
-  onProjectFilter,
-  onTagFilter
-}: {
-  activePanel: LastbrowserPanelId;
-  activeSessionId: string | null;
-  busy: boolean;
-  collapsed: boolean;
-  activeContextItem: string;
-  messages: SidekickMessage[];
-  search: string;
-  sessions: DesktopSessionSummary[];
-  serviceStatus: ServiceStatus | null;
-  sessionError: string;
-  projects: ProjectSummary[];
-  activeProjectFilter: string | null;
-  activeTagFilter: string | null;
-  onAction: (action: SidekickActionId) => Promise<void>;
-  onNewSession: () => void;
-  onPanel: (panel: LastbrowserPanelId) => void;
-  onDeleteSession: (session: DesktopSessionSummary) => void;
-  onDuplicateSession: (session: DesktopSessionSummary) => void;
-  onRenameSession: (session: DesktopSessionSummary) => void;
-  onPinSession: (session: DesktopSessionSummary) => void;
-  onArchiveSession: (session: DesktopSessionSummary) => void;
-  onSearch: (value: string) => void;
-  onSelectSession: (sessionId: string) => void;
-  onContextItemChange: (item: string) => void;
-  onBrowserModeChange: (mode: 'home' | 'search' | 'web') => void;
-  onToggleCollapse: () => void;
-  onResizeStart: (event: React.MouseEvent<HTMLDivElement>) => void;
-  onProjectFilter: (projectId: string | null) => void;
-  onTagFilter: (tag: string | null) => void;
-}): JSX.Element {
-  const panel = lastbrowserPanels.find((item) => item.id === activePanel) || lastbrowserPanels[0];
-  
-  // Extract all tags from sessions
-  const allTags = useMemo(() => {
-    const tagSet = new Set<string>();
-    for (const s of sessions) {
-      if (s.tags) for (const t of s.tags) tagSet.add(t);
-      // Also extract #hashtags from title
-      const tagMatch = s.title?.match(/#(\w+)/g);
-      if (tagMatch) tagMatch.forEach((t) => tagSet.add(t.slice(1)));
-    }
-    return Array.from(tagSet).sort();
-  }, [sessions]);
-
-  // Filter sessions by search, project, and tag
-  const filteredSessions = useMemo(() => {
-    let result = sessions;
-    const q = search.trim().toLowerCase();
-    if (q) {
-      result = result.filter((s) => {
-        const haystack = `${s.title || ''} ${s.workspace || ''}`.toLowerCase();
-        return haystack.includes(q);
-      });
-    }
-    if (activeProjectFilter) {
-      result = result.filter((s) => s.project_id === activeProjectFilter);
-    }
-    if (activeTagFilter) {
-      result = result.filter((s) => {
-        if (s.tags?.includes(activeTagFilter)) return true;
-        return s.title?.toLowerCase().includes(`#${activeTagFilter}`.toLowerCase()) ?? false;
-      });
-    }
-    return result;
-  }, [sessions, search, activeProjectFilter, activeTagFilter]);
-
-  // Group sessions: pinned first, then by project, then unassigned
-  const groupedSessions = useMemo(() => {
-    const pinned: DesktopSessionSummary[] = [];
-    const byProject = new Map<string, DesktopSessionSummary[]>();
-    const unassigned: DesktopSessionSummary[] = [];
-
-    for (const s of filteredSessions) {
-      if (s.pinned) {
-        pinned.push(s);
-      } else if (s.project_id) {
-        const list = byProject.get(s.project_id) || [];
-        list.push(s);
-        byProject.set(s.project_id, list);
-      } else {
-        unassigned.push(s);
-      }
-    }
-
-    const groups: { label: string; color?: string; sessions: DesktopSessionSummary[]; kind: 'pinned' | 'project' | 'unassigned' | 'archived' }[] = [];
-    if (pinned.length) groups.push({ label: 'Pinned', sessions: pinned, kind: 'pinned' });
-    
-    for (const [pid, sessList] of byProject) {
-      const proj = projects.find((p) => p.project_id === pid);
-      groups.push({ label: proj?.name || pid, color: proj?.color || '#888', sessions: sessList, kind: 'project' });
-    }
-    
-    if (unassigned.length) groups.push({ label: 'Other', sessions: unassigned, kind: 'unassigned' });
-    
-    return groups;
-  }, [filteredSessions, projects]);
-  const recentMessages = messages.slice(-3);
-  const showSessionTools = activePanel === 'chat' || activePanel === 'browser';
-  const contextItems = panelContextItems[activePanel] || [];
-  const activeContextItemDefault = contextItems[0] || '';
-
-  useEffect(() => {
-    onContextItemChange(activeContextItemDefault);
-  }, [activeContextItemDefault, onContextItemChange]);
-
-  function handleContextItem(item: string): void {
-    onContextItemChange(item);
-    if (activePanel === 'browser' && item === 'AI Search') {
-      onBrowserModeChange('search');
-      return;
-    }
-    if (item === 'New chat' || item === 'Chat sessions') {
-      onNewSession();
-      return;
-    }
-    const targetPanel = panelForContextItem(item);
-    if (targetPanel) {
-      if (targetPanel === 'browser') {
-        onBrowserModeChange(item === 'AI Search' ? 'search' : 'web');
-      }
-      onPanel(targetPanel);
-    }
-  }
-
-  if (collapsed) {
-    return (
-      <aside className="context-sidebar collapsed">
-        <button type="button" aria-label="Open context sidebar" title="Open context sidebar" onClick={onToggleCollapse}>
-          <PanelLeftOpen size={17} />
-        </button>
-      </aside>
-    );
-  }
-
-  return (
-    <aside className={`context-sidebar ${collapsed ? 'collapsed' : ''}`}>
-      <div className="context-header">
-        <div>
-          <span className="context-kicker">{panel.id === 'browser' ? 'BROWSER' : panel.label.toUpperCase()}</span>
-          <h2>{panel.label}</h2>
-        </div>
-        <button type="button" aria-label="Collapse sidebar" onClick={onToggleCollapse}>
-          <PanelLeftClose size={17} />
-        </button>
-      </div>
-
-      {showSessionTools && (
-        <>
-          <button type="button" className="new-session-button" onClick={onNewSession}>
-            <Plus size={16} />
-            <span>New chat</span>
-          </button>
-          <label className="session-search">
-            <Search size={15} />
-            <input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Filter conversations..." />
-          </label>
-          {sessionError && <div className="context-error">{sessionError}</div>}
-          {/* Project filter bar */}
-          {projects.length > 0 && (
-            <div className="session-project-filters">
-              <button
-                type="button"
-                className={`project-filter-chip ${!activeProjectFilter ? 'active' : ''}`}
-                onClick={() => onProjectFilter(null)}
-              >All</button>
-              {projects.map((proj) => (
-                <button
-                  key={proj.project_id}
-                  type="button"
-                  className={`project-filter-chip ${activeProjectFilter === proj.project_id ? 'active' : ''}`}
-                  style={proj.color ? { '--chip-color': proj.color } as React.CSSProperties : undefined}
-                  onClick={() => onProjectFilter(proj.project_id === activeProjectFilter ? null : proj.project_id)}
-                >
-                  {proj.name}
-                </button>
-              ))}
-            </div>
-          )}
-          {/* Tag filter bar */}
-          {allTags.length > 0 && (
-            <div className="session-tag-filters">
-              {allTags.slice(0, 8).map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  className={`tag-filter-chip ${activeTagFilter === tag ? 'active' : ''}`}
-                  onClick={() => onTagFilter(tag === activeTagFilter ? null : tag)}
-                >{activeTagFilter === tag ? '✕ ' : '# '}{tag}</button>
-              ))}
-              {allTags.length > 8 && <span className="tag-filter-more">+{allTags.length - 8}</span>}
-            </div>
-          )}
-          <div className="session-list">
-            {groupedSessions.map((group) => (
-              <div key={group.label} className="session-group">
-                <div className="session-group-header">
-                  {group.kind === 'pinned' ? <span className="session-group-dot pinned-dot" /> :
-                   group.kind === 'project' ? <span className="session-group-dot" style={{ background: group.color }} /> : null}
-                  <span className="session-group-label">{group.label}</span>
-                  <span className="session-group-count">{group.sessions.length}</span>
-                </div>
-                {group.sessions.map((session) => (
-                  <div
-                    key={session.session_id}
-                    className={`session-item ${session.session_id === activeSessionId ? 'active' : ''}`}
-                  >
-                    <button type="button" className="session-main" onClick={() => onSelectSession(session.session_id)}>
-                      <span>{sessionTitle(session)}</span>
-                      <small>{session.workspace || session.source_label || 'Sidekick'}</small>
-                      {session.is_cli_session && <span className="session-cli-badge">CLI</span>}
-                    </button>
-                    <div className="session-actions">
-                      <button type="button" title={session.pinned ? 'Unpin' : 'Pin'} onClick={() => onPinSession(session)}>
-                        <Star size={13} fill={session.pinned ? 'currentColor' : 'none'} />
-                      </button>
-                      <button type="button" title="Rename" onClick={() => onRenameSession(session)}><Edit3 size={13} /></button>
-                      <button type="button" title="Duplicate" onClick={() => onDuplicateSession(session)}><Copy size={13} /></button>
-                      <button type="button" title="Delete" onClick={() => onDeleteSession(session)}><Trash2 size={13} /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ))}
-            {!filteredSessions.length && (
-              <div className="context-empty">
-                <Bot size={18} />
-                <span>{serviceStatus?.sidekick === 'ready' ? 'No conversations yet' : 'Sidekick starting'}</span>
-              </div>
-            )}
-          </div>
-          <div className="context-actions">
-            <button type="button" onClick={() => void onAction('summarize-page')} disabled={busy}>
-              <Sparkles size={15} />
-              <span>Summarize</span>
-            </button>
-            <button type="button" onClick={() => void onAction('explain-selection')} disabled={busy}>
-              <MessageSquare size={15} />
-              <span>Explain</span>
-            </button>
-            <button type="button" onClick={() => void onAction('research-page')} disabled={busy}>
-              <Globe2 size={15} />
-              <span>Research</span>
-            </button>
-          </div>
-          <div className="activity-feed">
-            {recentMessages.map((message) => (
-              <div key={message.id} className={`activity-item ${message.role} ${message.pending ? 'pending' : ''}`}>
-                {message.pending && <Loader2 size={13} className="spin" />}
-                <p>{message.content}</p>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-      {!collapsed && <div className="sidebar-resize-handle context-resize-handle" role="presentation" aria-hidden="true" onMouseDown={onResizeStart} />}
-
-      {!showSessionTools && (
-        <div className="context-native-panel">
-          <div className="panel-mini panel-hand-off">
-            <div className="panel-mini-icon">
-              <img src={brandAssets.sidebarIcons[activePanel]} alt="" />
-            </div>
-            <strong>{panel.label}</strong>
-            {activePanel === 'workspaces' && (
-              <button type="button" className="new-session-button" onClick={onNewSession}>
-                <Plus size={15} />
-                <span>New chat in selected space</span>
-              </button>
-            )}
-          </div>
-          <div className="context-section-list">
-            {contextItems.map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={item === activeContextItem ? 'active' : ''}
-                aria-pressed={item === activeContextItem}
-                onClick={() => handleContextItem(item)}
-              >
-                <img src={brandAssets.sidebarIcons[activePanel]} alt="" />
-                <span>{item}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </aside>
   );
 }
 
@@ -2582,6 +2378,10 @@ function BrowserMain({
   onUninstalledSidebarApp,
   onWebviewNavigate,
   onWebviewTitle,
+  onWebviewFavicon,
+  onWebviewLoading,
+  onWebviewMediaPlaying,
+  hasActiveDownloads,
   onRemoveSpace,
   onRenameSpace,
   onSelectSpace,
@@ -2631,6 +2431,10 @@ function BrowserMain({
   onUninstalledSidebarApp: (panel: LastbrowserPanelId) => void;
   onWebviewNavigate: (tabId: string, url: string) => void;
   onWebviewTitle: (tabId: string, title: string) => void;
+  onWebviewFavicon?: (tabId: string, favicon: string) => void;
+  onWebviewLoading?: (tabId: string, isLoading: boolean) => void;
+  onWebviewMediaPlaying?: (tabId: string, isPlaying: boolean) => void;
+  hasActiveDownloads?: boolean;
   onRemoveSpace: (space: SpaceSummary) => void;
   onRenameSpace: (space: SpaceSummary) => void;
   onSelectSpace: (path: string) => void;
@@ -2750,6 +2554,17 @@ function BrowserMain({
     }
   }, [zoomFactor, webviewMountKey, webviewReady]);
 
+  // Sync tab muted state to the active webview
+  useEffect(() => {
+    const view = webviewRef.current;
+    if (!view || typeof view.setAudioMuted !== 'function') return;
+    try {
+      view.setAudioMuted(Boolean(activeTab.isMuted));
+    } catch {
+      // ignore
+    }
+  }, [activeTab.id, activeTab.isMuted, webviewMountKey, webviewReady]);
+
   // ── Guest navigation events ──────────────────────────────────────────────
   // React does NOT wire the webview's DOM events from JSX props: `onDidNavigate`
   // and friends are silently ignored (verified — the address bar kept the old
@@ -2768,6 +2583,31 @@ function BrowserMain({
       const title = (event as unknown as { title?: string }).title;
       if (typeof title === 'string') onWebviewTitle(activeTab.id, title);
     };
+    const onFavicon = (event: Event) => {
+      const favicons = (event as unknown as { favicons?: string[] }).favicons;
+      if (favicons && favicons.length > 0 && favicons[0]) {
+        onWebviewFavicon?.(activeTab.id, favicons[0]);
+      }
+    };
+    const onStartLoading = () => {
+      onWebviewLoading?.(activeTab.id, true);
+    };
+    const onStopLoading = () => {
+      onWebviewLoading?.(activeTab.id, false);
+    };
+    const onFailLoad = () => {
+      onWebviewLoading?.(activeTab.id, false);
+    };
+    const onCrash = () => {
+      onWebviewLoading?.(activeTab.id, false);
+      onSetBrowserError?.('The web page crashed or was terminated unexpectedly.');
+    };
+    const onMediaStarted = () => {
+      onWebviewMediaPlaying?.(activeTab.id, true);
+    };
+    const onMediaPaused = () => {
+      onWebviewMediaPlaying?.(activeTab.id, false);
+    };
 
     const attach = () => {
       if (cancelled) return;
@@ -2780,6 +2620,13 @@ function BrowserMain({
       view.addEventListener('did-navigate', onNavigate);
       view.addEventListener('did-navigate-in-page', onNavigate);
       view.addEventListener('page-title-updated', onTitle);
+      view.addEventListener('page-favicon-updated', onFavicon);
+      view.addEventListener('did-start-loading', onStartLoading);
+      view.addEventListener('did-stop-loading', onStopLoading);
+      view.addEventListener('did-fail-load', onFailLoad);
+      view.addEventListener('render-process-gone', onCrash);
+      view.addEventListener('media-started-playing', onMediaStarted);
+      view.addEventListener('media-paused', onMediaPaused);
     };
     attach();
 
@@ -2790,12 +2637,19 @@ function BrowserMain({
           attached.removeEventListener('did-navigate', onNavigate);
           attached.removeEventListener('did-navigate-in-page', onNavigate);
           attached.removeEventListener('page-title-updated', onTitle);
+          attached.removeEventListener('page-favicon-updated', onFavicon);
+          attached.removeEventListener('did-start-loading', onStartLoading);
+          attached.removeEventListener('did-stop-loading', onStopLoading);
+          attached.removeEventListener('did-fail-load', onFailLoad);
+          attached.removeEventListener('render-process-gone', onCrash);
+          attached.removeEventListener('media-started-playing', onMediaStarted);
+          attached.removeEventListener('media-paused', onMediaPaused);
         } catch {
           // ignore
         }
       }
     };
-  }, [activeTab.id, webviewMountKey, webviewReady, onWebviewNavigate, onWebviewTitle]);
+  }, [activeTab.id, webviewMountKey, webviewReady, onWebviewNavigate, onWebviewTitle, onWebviewFavicon, onWebviewLoading, onWebviewMediaPlaying, onSetBrowserError]);
 
   // Ctrl/Cmd +, -, 0 — the shortcuts every browser user reaches for.
   useEffect(() => {
@@ -2898,13 +2752,25 @@ function BrowserMain({
   // ── Find in page ─────────────────────────────────────────────────────────
   // Ctrl+F is muscle memory; without it long pages are unnavigable. The guest
   // reports matches via 'found-in-page', which we surface as "3 / 12".
-  const [findOpen, setFindOpen] = useState(false);
-  const [downloadsOpen, setDownloadsOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [permissionsOpen, setPermissionsOpen] = useState(false);
+  const {
+    findOpen,
+    setFindOpen,
+    downloadsOpen,
+    setDownloadsOpen,
+    historyOpen,
+    setHistoryOpen,
+    permissionsOpen,
+    setPermissionsOpen
+  } = usePanelStore();
   const [findQuery, setFindQuery] = useState('');
   const [findResult, setFindResult] = useState<{ matches: number; active: number } | null>(null);
   const findInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (findOpen) {
+      window.setTimeout(() => findInputRef.current?.select(), 0);
+    }
+  }, [findOpen]);
 
   const closeFind = useCallback(() => {
     setFindOpen(false);
@@ -2917,7 +2783,7 @@ function BrowserMain({
         // ignore
       }
     }
-  }, []);
+  }, [setFindOpen]);
 
   const runFind = useCallback((query: string, forward = true) => {
     const view = webviewRef.current;
@@ -3132,8 +2998,14 @@ function BrowserMain({
         <button type="button" className="find-trigger" title="Find in page (Ctrl+F)" onClick={() => setFindOpen(true)}>
           <Search size={14} />
         </button>
-        <button type="button" className="downloads-trigger" title="Downloads" onClick={() => setDownloadsOpen((current) => !current)}>
+        <button
+          type="button"
+          className="downloads-trigger"
+          title="Downloads (Ctrl+J)"
+          onClick={() => setDownloadsOpen((current) => !current)}
+        >
           <Download size={14} />
+          {hasActiveDownloads && <span className="downloads-active-dot" />}
         </button>
         <button type="button" className="history-trigger" title="History" onClick={() => setHistoryOpen((current) => !current)}>
           <Clock size={14} />
@@ -3177,6 +3049,7 @@ function BrowserMain({
         onClear={() => onClearHistory()}
       />
       <div className="browser-webview-frame" ref={browserFrameRef}>
+        <LiveAutomationBanner webview={webviewRef.current} />
         {findOpen && (
           <div className="find-bar" role="search">
             <Search size={14} />
@@ -3233,7 +3106,7 @@ function BrowserMain({
           src={activeTab.url}
           className="browser-view"
           style={browserWebviewStyle}
-          partition={profilePartition(activeProfile.id)}
+          partition={activeTab.incognito ? 'in-memory-incognito' : profilePartition(activeProfile.id)}
           allowpopups="false"
           onDidStartLoading={() => onClearBrowserError()}
           onDomReady={(event) => {
@@ -3259,600 +3132,6 @@ function BrowserMain({
   );
 }
 
-function NativeChatMain({
-  activeSession,
-  activeSessionId,
-  busy,
-  chatError,
-  messages,
-  runState,
-  composerMode,
-  composerText,
-  serviceStatus,
-  sessionLoading,
-  setupModel,
-  activeSpacePath,
-  onComposerMode,
-  onComposerText,
-  onCreateSession,
-  onSend,
-  onStop
-}: {
-  activeSession: DesktopSessionDetail | null;
-  activeSessionId: string | null;
-  busy: boolean;
-  chatError: string;
-  messages: DesktopChatMessage[];
-  runState: ChatRunState;
-  composerMode: ComposerMode;
-  composerText: string;
-  serviceStatus: ServiceStatus | null;
-  sessionLoading: boolean;
-  setupModel: string;
-  activeSpacePath: string;
-  onComposerMode: (mode: ComposerMode) => void;
-  onComposerText: (text: string) => void;
-  onCreateSession: () => void;
-  onSend: (message: string) => void;
-  onStop: () => void;
-}): JSX.Element {
-  const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
-  const ready = canCallSidekickApi(serviceStatus);
-  const [showDeveloperTools, setShowDeveloperTools] = useState(false);
-  const [showControlCenter, setShowControlCenter] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
-  const { queue, enqueue, dequeue, clearQueue, removeAt } = useChatQueue();
-  const { visible: visibleMessages, developer: developerMessages } = useMemo(
-    () => partitionChatMessages(messages),
-    [messages]
-  );
-  const model = activeSession?.model || setupModel || 'default';
-  const profile = activeSession?.profile || 'default';
-  const workspace = activeSession?.workspace || activeSpacePath || 'default';
-
-  // Models the user can pick for this conversation. The catalog comes from the
-  // same /api/models payload the settings panel uses, so the composer offers
-  // exactly the providers that are actually connected.
-  const [modelCatalog, setModelCatalog] = useState<Array<{ provider: string; models: Array<{ id: string; label: string }> }>>([]);
-  useEffect(() => {
-    if (!ready) return;
-    let alive = true;
-    const load = async () => {
-      try {
-        const data = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' });
-        if (!alive) return;
-        const groups = Array.isArray(data?.groups) ? data.groups : [];
-        setModelCatalog(
-          groups
-            .map((group) => {
-              const record = (group || {}) as Record<string, unknown>;
-              const provider = String(record.provider || record.provider_id || 'Provider');
-              const models = Array.isArray(record.models) ? record.models : [];
-              return {
-                provider,
-                models: models
-                  .map((entry) => {
-                    const m = (entry || {}) as Record<string, unknown>;
-                    const id = String(m.id || m.name || m.label || '');
-                    return { id, label: String(m.label || m.name || m.id || id) };
-                  })
-                  .filter((m) => m.id)
-              };
-            })
-            .filter((group) => group.models.length > 0)
-        );
-      } catch {
-        // Catalog is optional — the composer hides the picker when empty.
-      }
-    };
-    void load();
-    return () => { alive = false; };
-  }, [ready]);
-
-  /** Switch the model for this conversation (persists as the new default). */
-  const handleComposerModelChange = useCallback((nextModel: string) => {
-    if (!nextModel || nextModel === model) return;
-    void window.lastbrowser.sidekick.setDefaultModel({ model: nextModel })
-      .then(() => setStatusMessage(`Model set to ${nextModel}`))
-      .catch((error: unknown) => {
-        setStatusMessage(`Could not switch model: ${error instanceof Error ? error.message : String(error)}`);
-      });
-  }, [model]);
-
-  // Wrap onSend to enqueue when busy instead of losing the message
-  const handleSend = useCallback((text: string) => {
-    if (running) {
-      enqueue({ text, model, profile });
-      setStatusMessage(`Queued: "${text.slice(0, 40)}${text.length > 40 ? '…' : ''}"`);
-      return;
-    }
-    onSend(text);
-  }, [running, enqueue, model, profile, onSend]);
-
-  return (
-    <section className="browser-main native-chat-main">
-      <div className="native-chat-header">
-        <div className="native-chat-title">
-          <img src={brandAssets.sidekickAvatar} alt="" />
-          <div>
-            <span>{activeSessionId ? shortSessionId(activeSessionId) : 'New chat'}</span>
-            <h1>{activeSession ? sessionTitle(activeSession) : 'Sidekick'}</h1>
-          </div>
-        </div>
-        <div className="native-chat-header-actions">
-          <CompressButton activeSessionId={activeSessionId} ready={ready} onResult={setStatusMessage} />
-          <QueueIndicator queue={queue} onDrain={() => {
-            if (running) { setStatusMessage('Wait for current turn to finish first.'); return; }
-            const msg = dequeue();
-            if (msg) handleSend(msg.text);
-          }} onClear={clearQueue} onRemoveAt={removeAt} busy={running} />
-          <button
-            type="button"
-            className="secondary-action compact"
-            onClick={() => setShowControlCenter(true)}
-            title="Control Center"
-          >
-            <Settings size={14} />
-            <span>Control</span>
-          </button>
-          <button
-            type="button"
-            className={`secondary-action compact developer-toggle ${showDeveloperTools ? 'active' : ''}`}
-            onClick={() => setShowDeveloperTools((current) => !current)}
-          >
-            {showDeveloperTools ? <Eye size={14} /> : <EyeOff size={14} />}
-            <span>Developer</span>
-          </button>
-          <div className={`native-chat-status ${ready ? 'ready' : 'starting'}`}>
-            <span className={ready ? 'status-dot ready' : 'status-dot'} />
-            <span>{ready ? 'Online' : 'Starting'}</span>
-          </div>
-        </div>
-      </div>
-      <ChatTranscript
-        activeSession={activeSession}
-        error={chatError}
-        developerMessages={developerMessages}
-        loading={sessionLoading}
-        messages={visibleMessages}
-        pendingUserMessage={activeSession?.pending_user_message || ''}
-        ready={ready}
-        showDeveloperTools={showDeveloperTools}
-        onCreateSession={onCreateSession}
-        serviceStatus={serviceStatus}
-      />
-      <ApprovalPollManager
-        activeSessionId={activeSessionId}
-        serviceStatus={serviceStatus}
-        busy={busy || running}
-      >
-        {({ pending, respond }) => (
-          <>
-            {pending && <ApprovalCard entry={pending} onRespond={respond} />}
-            <div className="composer-with-usage">
-            <ChatComposer
-        busy={busy || running}
-        mode={composerMode}
-        model={model}
-        modelOptions={modelCatalog}
-        profile={profile}
-        ready={ready}
-        runState={runState}
-        text={composerText}
-        workspace={workspace}
-        onMode={onComposerMode}
-        onModelChange={handleComposerModelChange}
-        onSend={handleSend}
-        onStop={onStop}
-        onText={onComposerText}
-      />
-            {statusMessage && <div className="chat-status-message" onClick={() => setStatusMessage('')}>{statusMessage}</div>}
-            <ContextUsageIndicator activeSessionId={activeSessionId} ready={ready} />
-            </div>
-      </>
-      )}
-    </ApprovalPollManager>
-    <ControlCenter
-        open={showControlCenter}
-        serviceStatus={serviceStatus}
-        activeSessionId={activeSessionId}
-        onClose={() => setShowControlCenter(false)}
-      />
-    </section>
-  );
-}
-
-function ChatTranscript({
-  activeSession,
-  error,
-  developerMessages,
-  loading,
-  messages,
-  pendingUserMessage,
-  ready,
-  showDeveloperTools,
-  onCreateSession,
-  serviceStatus
-}: {
-  activeSession: DesktopSessionDetail | null;
-  error: string;
-  developerMessages: DesktopChatMessage[];
-  loading: boolean;
-  messages: DesktopChatMessage[];
-  pendingUserMessage: string;
-  ready: boolean;
-  showDeveloperTools: boolean;
-  onCreateSession: () => void;
-  serviceStatus: ServiceStatus | null;
-}): JSX.Element {
-  if (loading) {
-    return (
-      <div className="chat-transcript chat-state">
-        <Loader2 size={22} className="spin" />
-        <span>Loading session...</span>
-      </div>
-    );
-  }
-
-  if (!activeSession && !messages.length) {
-    return (
-      <div className="chat-transcript chat-empty-state">
-        <img src={brandAssets.sidekickAvatar} alt="" />
-        <h2>Start a Sidekick chat</h2>
-        <p>Chat, browser actions, planning and workspace runs now use native Lastbrowser UI.</p>
-        <button type="button" className="primary-action compact" onClick={onCreateSession} disabled={!ready}>
-          <Plus size={15} />
-          <span>New chat</span>
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="chat-transcript">
-      {error && <div className="chat-error">{error}</div>}
-      {messages.map((message, index) => (
-        <article key={`${message.role || 'message'}-${index}`} className={`chat-message ${message.role || 'assistant'} ${message.pending ? 'pending' : ''}`}>
-          <div className="message-avatar">
-            {message.role === 'user' ? <UserCircle size={17} /> : <img src={brandAssets.sidekickAvatar} alt="" />}
-          </div>
-          <div className="message-body">
-            <div className="message-meta">
-              <strong>{message.role === 'user' ? 'You' : message.role === 'system' ? 'System' : 'Sidekick'}</strong>
-              {message.pending && <Loader2 size={13} className="spin" />}
-            </div>
-            <ChatMessageBody content={String(message.content || '')} />
-          </div>
-        </article>
-      ))}
-      {pendingUserMessage && (
-        <article className="chat-message user pending">
-          <div className="message-avatar"><UserCircle size={17} /></div>
-          <div className="message-body">
-            <div className="message-meta"><strong>You</strong><Loader2 size={13} className="spin" /></div>
-            <ChatMessageBody content={pendingUserMessage} />
-          </div>
-        </article>
-      )}
-      {showDeveloperTools && (
-        <section className="chat-developer-panel native-work-card">
-          <div className="chat-developer-header">
-            <div>
-              <strong>Developer trace</strong>
-              <span>{developerMessages.length} hidden messages</span>
-            </div>
-            <span>Hidden by default</span>
-          </div>
-          <div className="chat-developer-messages">
-            {developerMessages.length ? developerMessages.map((message, index) => (
-              <article key={`dev-${message.role || 'message'}-${index}`} className={`chat-developer-message ${message.role || 'assistant'}`}>
-                <div className="message-meta">
-                  <strong>{message.role || 'message'}</strong>
-                </div>
-                <pre>{String(message.content || '').trim() || '...'}</pre>
-              </article>
-            )) : (
-              <div className="chat-developer-empty">No hidden prompts or tool messages.</div>
-            )}
-          </div>
-          <AdvancedWebUiTools panel="chat" serviceStatus={serviceStatus} compact />
-        </section>
-      )}
-    </div>
-  );
-}
-
-function ChatMessageBody({ content }: { content: string }): JSX.Element {
-  const view = useMemo(() => describeChatContent(content), [content]);
-
-  switch (view.kind) {
-    case 'empty':
-      return <p>...</p>;
-    case 'text':
-      return <RichTextRenderer content={view.text} />;
-    case 'html':
-      return (
-        <div className="chat-structured chat-html-structured">
-          <div className="chat-structured-header">
-            <strong>HTML response</strong>
-            <span>{view.title || 'Markup payload'}</span>
-          </div>
-          <div className="chat-html-preview">
-            <div className="chat-html-preview-chip">{view.title || 'HTML'}</div>
-            <pre>{view.snippet}</pre>
-          </div>
-          <details className="chat-structured-raw">
-            <summary>Show raw HTML</summary>
-            <pre>{view.raw}</pre>
-          </details>
-        </div>
-      );
-    case 'research':
-      return (
-        <div className="chat-structured chat-research-structured">
-          <div className="chat-structured-header">
-            <strong>{view.summary}</strong>
-            <span>{view.results.length} results</span>
-          </div>
-          {view.keyPoints.length > 0 && (
-            <div className="chat-chip-row">
-              {view.keyPoints.map((point, index) => <span key={`${point}-${index}`}>{point}</span>)}
-            </div>
-          )}
-          {view.results.length > 0 && (
-            <div className="chat-result-list">
-              {view.results.map((result, index) => (
-                <article key={`${result.title}-${index}`} className="chat-result-card">
-                  <div className="chat-result-card-head">
-                    <strong>{result.title}</strong>
-                    {result.source && <span>{result.source}</span>}
-                  </div>
-                  {result.url && (
-                    <a href={result.url} target="_blank" rel="noreferrer">
-                      {result.url}
-                    </a>
-                  )}
-                  {result.snippet && <p>{result.snippet}</p>}
-                </article>
-              ))}
-            </div>
-          )}
-          {view.nextSteps.length > 0 && (
-            <div className="chat-next-steps">
-              <strong>Next steps</strong>
-              <ul>
-                {view.nextSteps.map((step, index) => <li key={`${step}-${index}`}>{step}</li>)}
-              </ul>
-            </div>
-          )}
-          <details className="chat-structured-raw">
-            <summary>Show raw JSON</summary>
-            <pre>{view.raw}</pre>
-          </details>
-        </div>
-      );
-    case 'json':
-      return (
-        <div className="chat-structured chat-json-structured">
-          <div className="chat-structured-header">
-            <strong>JSON response</strong>
-            <span>{view.entries.length} fields</span>
-          </div>
-          <dl className="chat-json-grid">
-            {view.entries.map((entry) => (
-              <React.Fragment key={entry.key}>
-                <dt>{entry.key}</dt>
-                <dd>{entry.value || '-'}</dd>
-              </React.Fragment>
-            ))}
-          </dl>
-          <details className="chat-structured-raw">
-            <summary>Show raw JSON</summary>
-            <pre>{view.raw}</pre>
-          </details>
-        </div>
-      );
-    default:
-      return <p>{content.trim()}</p>;
-  }
-}
-
-function ChatComposer({
-  busy,
-  mode,
-  model,
-  modelOptions,
-  profile,
-  ready,
-  runState,
-  text,
-  workspace,
-  onMode,
-  onModelChange,
-  onSend,
-  onStop,
-  onText
-}: {
-  busy: boolean;
-  mode: ComposerMode;
-  model: string;
-  /** Selectable models, grouped by provider. Empty hides the picker. */
-  modelOptions: Array<{ provider: string; models: Array<{ id: string; label: string }> }>;
-  profile: string;
-  ready: boolean;
-  runState: ChatRunState;
-  text: string;
-  workspace: string;
-  onMode: (mode: ComposerMode) => void;
-  onModelChange: (model: string) => void;
-  onSend: (message: string) => void;
-  onStop: () => void;
-  onText: (text: string) => void;
-}): JSX.Element {
-  const canSend = ready && text.trim().length > 0 && !busy;
-  const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
-
-  // ── Slash-commands ──────────────────────────────────────────
-  const [showSlashDropdown, setShowSlashDropdown] = useState(false);
-  const [slashFilter, setSlashFilter] = useState('');
-  const slashRef = useRef<HTMLDivElement>(null);
-
-  type SlashCmd = { name: string; help: string; action: string };
-  const SLASH_COMMANDS: SlashCmd[] = useMemo(() => [
-    { name: 'help', help: 'Show available commands', action: 'local' },
-    { name: 'clear', help: 'Clear current conversation', action: 'local' },
-    { name: 'new', help: 'Start a new conversation', action: 'local' },
-    { name: 'compress', help: 'Compress conversation context', action: 'api' },
-    { name: 'model', help: 'Switch model: /model <name>', action: 'api' },
-    { name: 'workspace', help: 'Switch workspace: /workspace <path>', action: 'api' },
-    { name: 'usage', help: 'Show token usage', action: 'api' },
-    { name: 'theme', help: 'Toggle theme: /theme <name>', action: 'local' },
-    { name: 'undo', help: 'Undo last exchange', action: 'local' },
-  ], []);
-
-  const filteredSlashCommands = useMemo(() =>
-    slashFilter ? SLASH_COMMANDS.filter((c) => c.name.startsWith(slashFilter)) : SLASH_COMMANDS,
-    [slashFilter, SLASH_COMMANDS]
-  );
-
-  // Close slash dropdown on outside click
-  useEffect(() => {
-    if (!showSlashDropdown) return;
-    function handleClick(e: MouseEvent) {
-      if (slashRef.current && !slashRef.current.contains(e.target as Node)) setShowSlashDropdown(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showSlashDropdown]);
-
-  function executeSlashCommand(name: string): void {
-    setShowSlashDropdown(false);
-    const cmd = SLASH_COMMANDS.find((c) => c.name === name);
-    if (!cmd) return;
-
-    if (name === 'help') {
-      const helpText = SLASH_COMMANDS.map((c) => `/${c.name} — ${c.help}`).join('\n');
-      alert(`Available commands:\n\n${helpText}`);
-      return;
-    }
-    if (name === 'clear') {
-      if (confirm('Clear the current conversation?')) onText('');
-      return;
-    }
-    if (name === 'new') {
-      window.location.reload();
-      return;
-    }
-    if (name === 'undo') {
-      onText('/undo');
-      onSend('/undo');
-      return;
-    }
-    // For API commands, send as message to agent
-    onText('/' + name);
-    onSend('/' + name);
-  }
-
-  function handleComposerChange(value: string): void {
-    onText(value);
-    // Show slash dropdown when typing / at start
-    if (value.startsWith('/') && value.length > 1 && !value.includes(' ')) {
-      setSlashFilter(value.slice(1).toLowerCase());
-      setShowSlashDropdown(true);
-    } else {
-      setShowSlashDropdown(false);
-    }
-  }
-
-  function submit(event?: FormEvent): void {
-    event?.preventDefault();
-    if (!canSend) return;
-    setShowSlashDropdown(false);
-    onSend(text);
-  }
-
-  return (
-    <form className="chat-composer" onSubmit={submit}>
-      <div className="composer-toolbar">
-        <div className="composer-mode" role="group" aria-label="Composer mode">
-          <button type="button" className={mode === 'action' ? 'active' : ''} onClick={() => onMode('action')}>
-            <Sparkles size={13} />
-            <span>Action</span>
-          </button>
-          <button type="button" className={mode === 'plan' ? 'active' : ''} onClick={() => onMode('plan')}>
-            <Columns3 size={13} />
-            <span>Plan</span>
-          </button>
-        </div>
-        {modelOptions.length > 0 && (
-          <label className="composer-model" title="Model for this conversation">
-            <Cpu size={13} />
-            <select
-              value={model}
-              disabled={!ready || running}
-              onChange={(event) => onModelChange(event.target.value)}
-            >
-              {/* Keep the current model visible even when the catalog has not
-                  loaded yet or the model is no longer offered. */}
-              {!modelOptions.some((group) => group.models.some((m) => m.id === model)) && (
-                <option value={model}>{model || 'default'}</option>
-              )}
-              {modelOptions.map((group) => (
-                <optgroup key={group.provider} label={group.provider}>
-                  {group.models.map((m) => (
-                    <option key={m.id} value={m.id}>{m.label}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </label>
-        )}
-      </div>
-      <div className="composer-input-row" ref={slashRef}>
-        {showSlashDropdown && filteredSlashCommands.length > 0 && (
-          <div className="slash-dropdown">
-            {filteredSlashCommands.map((cmd) => (
-              <button key={cmd.name} type="button" className="slash-dropdown-item" onClick={() => executeSlashCommand(cmd.name)}>
-                <span className="slash-cmd-name">/{cmd.name}</span>
-                <span className="slash-cmd-help">{cmd.help}</span>
-                <span className="slash-cmd-badge">{cmd.action}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        <textarea
-          value={text}
-          placeholder={ready ? "Message Sidekick... (type / for commands)" : "Sidekick runtime is starting..."}
-          rows={3}
-          disabled={!ready}
-          onChange={(event) => handleComposerChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              submit();
-            }
-            if (event.key === 'Escape') setShowSlashDropdown(false);
-          }}
-        />
-        {running ? (
-          <button type="button" className="composer-send stop" onClick={onStop}>
-            <StopCircle size={17} />
-          </button>
-        ) : (
-          <button type="submit" className="composer-send" disabled={!canSend}>
-            <Send size={17} />
-          </button>
-        )}
-      </div>
-      <div className="composer-chips">
-        <span>{mode}</span>
-        <span>{model}</span>
-        <span>{profile}</span>
-        <span>{workspaceLabel(workspace)}</span>
-      </div>
-    </form>
-  );
-}
 
 function NativeSpacesMain({
   activeSpacePath,
@@ -3992,461 +3271,6 @@ function NativeSpacesMain({
   );
 }
 
-function NativeTasksMain({
-  activeContextItem,
-  serviceStatus
-}: {
-  activeContextItem: string;
-  serviceStatus: ServiceStatus | null;
-}): JSX.Element {
-  const ready = canCallSidekickApi(serviceStatus);
-  const [jobs, setJobs] = useState<CronJobSummary[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [name, setName] = useState('');
-  const [schedule, setSchedule] = useState('0 9 * * *');
-  const [prompt, setPrompt] = useState('');
-  const [section, setSection] = useState(activeContextItem || 'Scheduled jobs');
-  const [dispatchState, setDispatchState] = useState<Record<string, unknown> | null>(null);
-
-  const refresh = useCallback(async (): Promise<void> => {
-    if (!ready) return;
-    setLoading(true);
-    try {
-      const result = await window.lastbrowser.sidekick.listCrons();
-      setJobs(Array.isArray(result.jobs) ? result.jobs : []);
-      setError('');
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
-    } finally {
-      setLoading(false);
-    }
-  }, [ready]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  const refreshDispatchState = useCallback(async (): Promise<void> => {
-    if (!ready) return;
-    try {
-      setDispatchState(await window.lastbrowser.sidekick.getActiveDispatches());
-    } catch {
-      setDispatchState(null);
-    }
-  }, [ready]);
-
-  useEffect(() => {
-    void refreshDispatchState();
-  }, [refreshDispatchState]);
-
-  useEffect(() => {
-    setSection(activeContextItem || 'Scheduled jobs');
-  }, [activeContextItem]);
-
-  const visibleJobs = jobs.filter((job) => {
-    const paused = job.enabled === false || job.state === 'paused';
-    if (section === 'Active') return !paused;
-    if (section === 'Paused') return paused;
-    return true;
-  });
-
-  async function createJob(event: FormEvent): Promise<void> {
-    event.preventDefault();
-    if (!prompt.trim() || !schedule.trim()) return;
-    setLoading(true);
-    try {
-      await window.lastbrowser.sidekick.createCron({
-        name: name.trim(),
-        prompt: prompt.trim(),
-        schedule: schedule.trim(),
-        deliver: 'local'
-      });
-      setName('');
-      setPrompt('');
-      await refresh();
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : String(createError));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function editJob(job: CronJobSummary): Promise<void> {
-    const nextName = window.prompt('Task name', job.name || '');
-    if (nextName === null) return;
-    const nextSchedule = window.prompt('Schedule', cronScheduleLabel(job));
-    if (!nextSchedule?.trim()) return;
-    const nextPrompt = window.prompt('Prompt', job.prompt || '');
-    if (nextPrompt === null) return;
-    try {
-      await window.lastbrowser.sidekick.updateCron({
-        jobId: job.id,
-        name: nextName.trim(),
-        schedule: nextSchedule.trim(),
-        prompt: nextPrompt.trim()
-      });
-      await refresh();
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : String(updateError));
-    }
-  }
-
-  async function mutateJob(job: CronJobSummary, action: 'run' | 'pause' | 'resume' | 'delete'): Promise<void> {
-    if (action === 'delete' && !window.confirm(`Delete "${job.name || job.id}"?`)) return;
-    try {
-      if (action === 'run') await window.lastbrowser.sidekick.runCron({ jobId: job.id });
-      if (action === 'pause') await window.lastbrowser.sidekick.pauseCron({ jobId: job.id });
-      if (action === 'resume') await window.lastbrowser.sidekick.resumeCron({ jobId: job.id });
-      if (action === 'delete') await window.lastbrowser.sidekick.deleteCron({ jobId: job.id });
-      await refresh();
-    } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
-    }
-  }
-
-  async function runDispatcher(): Promise<void> {
-    if (!ready) return;
-    await window.lastbrowser.sidekick.runDispatchOnce({ dryRun: false });
-    await Promise.all([refresh(), refreshDispatchState()]);
-  }
-
-  return (
-    <section className="browser-main native-work-main tasks-main">
-      <header className="native-work-header">
-        <div>
-          <span className="eyebrow">Tasks</span>
-          <h1>{section}</h1>
-          <p>Native port of the WebUI Tasks panel. Jobs use the existing Sidekick cron backend.</p>
-        </div>
-        <button type="button" className="secondary-action compact" onClick={() => void refresh()} disabled={!ready || loading}>
-          {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
-          <span>Refresh</span>
-        </button>
-        <button type="button" className="secondary-action compact" onClick={() => void runDispatcher()} disabled={!ready}>
-          <Sparkles size={15} />
-          <span>Run dispatcher</span>
-        </button>
-      </header>
-      <div className="native-card-actions insights-tabs">
-        {['Scheduled jobs', 'Active', 'Paused', 'History'].map((item) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
-        ))}
-      </div>
-      <form className="native-work-card native-task-form" onSubmit={(event) => void createJob(event)}>
-        <label>
-          <span>Name</span>
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Daily review" />
-        </label>
-        <label>
-          <span>Schedule</span>
-          <input value={schedule} onChange={(event) => setSchedule(event.target.value)} placeholder="0 9 * * *" />
-        </label>
-        <label className="wide">
-          <span>Prompt</span>
-          <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What should Sidekick do on this schedule?" rows={3} />
-        </label>
-        <button type="submit" className="primary-action compact" disabled={!ready || loading || !prompt.trim() || !schedule.trim()}>
-          <Plus size={15} />
-          <span>New job</span>
-        </button>
-      </form>
-      {error && <div className="workspace-error">{error}</div>}
-      <AdvancedWebUiTools panel="tasks" serviceStatus={serviceStatus} compact />
-      <section className="native-work-card detail-json-card">
-        <header><strong>Dispatcher</strong></header>
-        <pre>{jsonPreview(dispatchState || { active: [] })}</pre>
-      </section>
-      <div className="native-work-grid">
-        {visibleJobs.map((job) => {
-          const paused = job.enabled === false || job.state === 'paused';
-          return (
-            <article key={job.id} className="native-work-card task-card">
-              <div className="task-card-head">
-                <div>
-                  <strong>{job.name || cronScheduleLabel(job) || job.id}</strong>
-                  <span>{cronScheduleLabel(job) || 'manual'}</span>
-                </div>
-                <span className={`task-state ${paused ? 'paused' : cronStatus(job)}`}>{paused ? 'paused' : cronStatus(job)}</span>
-              </div>
-              <p>{job.prompt || job.last_error || 'No prompt preview available.'}</p>
-              <div className="task-card-meta">
-                <span>Next: {formatMaybeDate(job.next_run_at) || 'n/a'}</span>
-                <span>Last: {formatMaybeDate(job.last_run_at) || 'never'}</span>
-              </div>
-              <div className="native-card-actions">
-                <button type="button" onClick={() => void mutateJob(job, 'run')}><Sparkles size={13} /><span>Run</span></button>
-                {paused ? (
-                  <button type="button" onClick={() => void mutateJob(job, 'resume')}><CheckCircle2 size={13} /><span>Resume</span></button>
-                ) : (
-                  <button type="button" onClick={() => void mutateJob(job, 'pause')}><Minus size={13} /><span>Pause</span></button>
-                )}
-                <button type="button" onClick={() => void editJob(job)}><Edit3 size={13} /><span>Edit</span></button>
-                <button type="button" className="danger" onClick={() => void mutateJob(job, 'delete')}><Trash2 size={13} /><span>Delete</span></button>
-              </div>
-            </article>
-          );
-        })}
-        {!visibleJobs.length && (
-          <div className="native-work-empty">
-            <CalendarDays size={28} />
-            <span>{ready ? 'No scheduled jobs yet.' : 'Sidekick runtime is starting.'}</span>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function NativeKanbanMain({
-  activeContextItem,
-  activeSpacePath,
-  serviceStatus
-}: {
-  activeContextItem: string;
-  activeSpacePath: string;
-  serviceStatus: ServiceStatus | null;
-}): JSX.Element {
-  const ready = canCallSidekickApi(serviceStatus);
-  const [board, setBoard] = useState<KanbanBoardResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [status, setStatus] = useState('todo');
-  const [section, setSection] = useState(activeContextItem || 'Board');
-  const [dispatchState, setDispatchState] = useState<Record<string, unknown> | null>(null);
-
-  const refresh = useCallback(async (): Promise<void> => {
-    if (!ready) return;
-    setLoading(true);
-    try {
-      const result = await window.lastbrowser.sidekick.getKanbanBoard({ workspace: activeSpacePath || undefined });
-      setBoard(result);
-      setError('');
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
-    } finally {
-      setLoading(false);
-    }
-  }, [activeSpacePath, ready]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  const refreshDispatchState = useCallback(async (): Promise<void> => {
-    if (!ready) return;
-    try {
-      setDispatchState(await window.lastbrowser.sidekick.getActiveDispatches());
-    } catch {
-      setDispatchState(null);
-    }
-  }, [ready]);
-
-  useEffect(() => {
-    void refreshDispatchState();
-  }, [refreshDispatchState]);
-
-  useEffect(() => {
-    setSection(activeContextItem || 'Board');
-  }, [activeContextItem]);
-
-  const columns = board?.columns?.length
-    ? board.columns
-    : ['triage', 'todo', 'ready', 'running', 'blocked', 'done'].map((name) => ({ name, tasks: [] }));
-  const visibleColumns = section === 'Board'
-    ? columns
-    : columns.filter((column) => kanbanColumnLabel(column.name).toLowerCase() === section.toLowerCase() || column.name.toLowerCase() === section.toLowerCase());
-
-  async function createTask(event: FormEvent): Promise<void> {
-    event.preventDefault();
-    if (!title.trim()) return;
-    try {
-      await window.lastbrowser.sidekick.createKanbanTask({
-        title: title.trim(),
-        body: body.trim(),
-        status
-      });
-      setTitle('');
-      setBody('');
-      await refresh();
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : String(createError));
-    }
-  }
-
-  async function moveTask(task: KanbanTaskSummary, nextStatus: string): Promise<void> {
-    if (!task.id || !nextStatus) return;
-    try {
-      await window.lastbrowser.sidekick.updateKanbanTask({ taskId: task.id, status: nextStatus });
-      await refresh();
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : String(updateError));
-    }
-  }
-
-  async function runDispatcher(): Promise<void> {
-    if (!ready) return;
-    await window.lastbrowser.sidekick.runDispatchOnce({ dryRun: false });
-    await Promise.all([refresh(), refreshDispatchState()]);
-  }
-
-  return (
-    <section className="browser-main native-work-main kanban-main">
-      <header className="native-work-header">
-        <div>
-          <span className="eyebrow">Kanban</span>
-          <h1>{section}</h1>
-          <p>{activeSpacePath ? workspaceLabel(activeSpacePath) : 'Default workspace'} · native board view backed by `/api/kanban`.</p>
-        </div>
-        <button type="button" className="secondary-action compact" onClick={() => void refresh()} disabled={!ready || loading}>
-          {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
-          <span>Refresh</span>
-        </button>
-        <button type="button" className="secondary-action compact" onClick={() => void runDispatcher()} disabled={!ready}>
-          <Sparkles size={15} />
-          <span>Run dispatcher</span>
-        </button>
-      </header>
-      <div className="native-card-actions insights-tabs">
-        {['Board', 'Triage', 'Running', 'Done'].map((item) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
-        ))}
-      </div>
-      <form className="native-work-card kanban-task-form" onSubmit={(event) => void createTask(event)}>
-        <label>
-          <span>Title</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="New task" />
-        </label>
-        <label>
-          <span>Status</span>
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
-            {columns.map((column) => <option key={column.name} value={column.name}>{kanbanColumnLabel(column.name)}</option>)}
-          </select>
-        </label>
-        <label className="wide">
-          <span>Description</span>
-          <textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Task details" rows={2} />
-        </label>
-        <button type="submit" className="primary-action compact" disabled={!ready || !title.trim()}>
-          <Plus size={15} />
-          <span>Add task</span>
-        </button>
-      </form>
-      {error && <div className="workspace-error">{error}</div>}
-      <AdvancedWebUiTools panel="kanban" serviceStatus={serviceStatus} compact />
-      <section className="native-work-card detail-json-card">
-        <header><strong>Dispatcher</strong></header>
-        <pre>{jsonPreview(dispatchState || { active: [] })}</pre>
-      </section>
-      <div className="native-kanban-board">
-        {visibleColumns.map((column) => (
-          <section key={column.name} className="native-kanban-column">
-            <header>
-              <span>{kanbanColumnLabel(column.name)}</span>
-              <strong>{column.tasks?.length || 0}</strong>
-            </header>
-            <div className="native-kanban-cards">
-              {(column.tasks || []).map((task) => (
-                <article key={task.id} className="native-work-card kanban-card-native">
-                  <small>{task.id}</small>
-                  <strong>{kanbanTaskTitle(task)}</strong>
-                  {kanbanTaskBody(task) && <p>{kanbanTaskBody(task)}</p>}
-                  <div className="task-card-meta">
-                    {task.assignee && <span>@{task.assignee}</span>}
-                    {task.tenant && <span>{task.tenant}</span>}
-                    {task.priority !== undefined && <span>P{String(task.priority)}</span>}
-                  </div>
-                  <select value={task.status || column.name} onChange={(event) => void moveTask(task, event.target.value)}>
-                    {columns.map((target) => <option key={target.name} value={target.name}>{kanbanColumnLabel(target.name)}</option>)}
-                  </select>
-                </article>
-              ))}
-              {!column.tasks?.length && <div className="native-kanban-empty">Empty</div>}
-            </div>
-          </section>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function NativeTodosMain({
-  activeContextItem,
-  activeSession,
-  messages,
-  serviceStatus
-}: {
-  activeContextItem: string;
-  activeSession: DesktopSessionDetail | null;
-  messages: DesktopChatMessage[];
-  serviceStatus: ServiceStatus | null;
-}): JSX.Element {
-  const [section, setSection] = useState(activeContextItem || 'Pending');
-  const todos = extractTodosFromSession(activeSession, messages);
-  const pending = todos.filter((todo) => normalizeTodoStatus(todo.status) === 'pending');
-  const inProgress = todos.filter((todo) => normalizeTodoStatus(todo.status) === 'in_progress');
-  const completed = todos.filter((todo) => ['completed', 'cancelled'].includes(normalizeTodoStatus(todo.status)));
-  useEffect(() => {
-    setSection(activeContextItem || 'Pending');
-  }, [activeContextItem]);
-  const visibleTodos = section === 'In progress' ? inProgress : section === 'Completed / cancelled' ? completed : pending;
-
-  return (
-    <section className="browser-main native-work-main todos-main">
-      <header className="native-work-header">
-        <div>
-          <span className="eyebrow">Todos</span>
-          <h1>{section}</h1>
-          <p>Native view of the latest todo state emitted in the active Sidekick session.</p>
-        </div>
-        <div className="todo-metrics">
-          <span><strong>{todos.length}</strong> total</span>
-          <span><strong>{pending.length + inProgress.length}</strong> active</span>
-          <span><strong>{completed.length}</strong> done</span>
-        </div>
-      </header>
-      <div className="native-card-actions insights-tabs">
-        {['Pending', 'In progress', 'Completed / cancelled'].map((item) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
-        ))}
-      </div>
-      <div className="todos-columns-native">
-        <TodoColumn title={section} todos={visibleTodos} />
-      </div>
-      <AdvancedWebUiTools panel="todos" serviceStatus={serviceStatus} compact />
-      {!todos.length && (
-        <div className="native-work-empty">
-          <ListChecks size={28} />
-          <span>No active todo state in this chat yet.</span>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function TodoColumn({ title, todos }: { title: string; todos: TodoItem[] }): JSX.Element {
-  return (
-    <section className="native-work-card todo-column-native">
-      <header>
-        <span>{title}</span>
-        <strong>{todos.length}</strong>
-      </header>
-      {todos.map((todo, index) => (
-        <article key={todo.id || `${title}-${index}`} className={`todo-card ${normalizeTodoStatus(todo.status)}`}>
-          {normalizeTodoStatus(todo.status) === 'completed' ? <CheckCircle2 size={15} /> : <Square size={15} />}
-          <div>
-            <strong>{todo.content || todo.title || 'Untitled todo'}</strong>
-            <span>{todo.id || normalizeTodoStatus(todo.status)}</span>
-          </div>
-        </article>
-      ))}
-      {!todos.length && <div className="native-kanban-empty">Empty</div>}
-    </section>
-  );
-}
-
 function NativePanelMain({
   activePanel,
   serviceStatus,
@@ -4470,737 +3294,7 @@ function NativePanelMain({
   );
 }
 
-function WorkspacePanel({
-  activeSessionId,
-  collapsed,
-  draft,
-  editing,
-  entries,
-  error,
-  path,
-  preview,
-  serviceStatus,
-  showHidden,
-  onEntry,
-  onCreateFile,
-  onCreateFolder,
-  onDeleteEntry,
-  onDraft,
-  onParent,
-  onRenameEntry,
-  onRefresh,
-  onSavePreview,
-  onToggleEditing,
-  onToggleHidden,
-  onToggle,
-  onResizeStart
-}: {
-  activeSessionId: string | null;
-  collapsed: boolean;
-  draft: string;
-  editing: boolean;
-  entries: WorkspaceTreeEntry[];
-  error: string;
-  path: string;
-  preview: WorkspaceFilePreview | null;
-  serviceStatus: ServiceStatus | null;
-  showHidden: boolean;
-  onEntry: (entry: WorkspaceTreeEntry) => Promise<void>;
-  onCreateFile: () => void;
-  onCreateFolder: () => void;
-  onDeleteEntry: (entry: WorkspaceTreeEntry) => void;
-  onDraft: (value: string) => void;
-  onParent: () => void;
-  onRenameEntry: (entry: WorkspaceTreeEntry) => void;
-  onRefresh: () => void;
-  onSavePreview: () => void;
-  onToggleEditing: () => void;
-  onToggleHidden: () => void;
-  onToggle: () => void;
-  onResizeStart: (event: React.MouseEvent<HTMLDivElement>) => void;
-}): JSX.Element {
-  const [gitInfo, setGitInfo] = useState<{ branch?: string; dirty?: number; modified?: number; ahead?: number; behind?: number; is_git?: boolean } | null>(null);
-  const ready = serviceStatus?.sidekick === 'ready';
-  const visibleEntries = showHidden ? entries : entries.filter((entry) => !entry.name.startsWith('.'));
-  const previewEntry = preview?.path ? entryFromPreview(preview) : null;
 
-  // Fetch git info when session changes
-  useEffect(() => {
-    setGitInfo(null);
-    if (!activeSessionId || !ready) return;
-    let alive = true;
-    void window.lastbrowser.sidekick.requestWebui({
-      method: 'GET', path: '/api/git-info',
-      query: { session_id: activeSessionId }
-    }).then((result) => {
-      if (!alive) return;
-      const info = (result as { git?: Record<string, unknown> })?.git;
-      if (info && typeof info === 'object') setGitInfo(info as typeof gitInfo);
-    }).catch(() => {});
-    return () => { alive = false; };
-  }, [activeSessionId, ready]);
-
-  if (collapsed) {
-    return (
-      <aside className="workspace-panel collapsed">
-        <button type="button" aria-label="Open workspace" onClick={onToggle}>
-          <HardDrive size={18} />
-        </button>
-      </aside>
-    );
-  }
-
-  return (
-    <aside className="workspace-panel">
-      <div className="sidebar-resize-handle workspace-resize-handle" role="presentation" aria-hidden="true" onMouseDown={onResizeStart} />
-      <div className="workspace-header">
-        <div>
-          <span>WORKSPACE</span>
-          <strong>{activeSessionId ? shortSessionId(activeSessionId) : 'No session'}</strong>
-        </div>
-        {gitInfo?.is_git && (
-          <div className="workspace-git-badge" title={`${gitInfo.modified || 0} modified, ${gitInfo.ahead || 0} ahead, ${gitInfo.behind || 0} behind`}>
-            <span className="workspace-git-branch">{gitInfo.branch}</span>
-            {(gitInfo.dirty ?? 0) > 0 && <span className="workspace-git-dirty">•{gitInfo.dirty}</span>}
-          </div>
-        )}
-        <div className="workspace-actions">
-          <button type="button" aria-label="Parent folder" onClick={onParent}><ChevronLeft size={16} /></button>
-          <button type="button" aria-label="Refresh workspace" onClick={onRefresh}><RefreshCw size={15} /></button>
-          <button type="button" aria-label="Collapse workspace" onClick={onToggle}><ChevronRight size={16} /></button>
-        </div>
-      </div>
-      <WorkspaceBreadcrumb path={path} onRoot={() => onEntry({ name: '.', path: '.', type: 'dir', is_dir: true })} onSelect={(nextPath) => onEntry({ name: nextPath, path: nextPath, type: 'dir', is_dir: true })} />
-      <WorkspaceToolbar
-        disabled={!activeSessionId}
-        showHidden={showHidden}
-        onCreateFile={onCreateFile}
-        onCreateFolder={onCreateFolder}
-        onRefresh={onRefresh}
-        onToggleHidden={onToggleHidden}
-      />
-      {error && <div className="workspace-error">{error}</div>}
-      {!activeSessionId && (
-        <div className="workspace-empty">
-          <Folder size={20} />
-          <span>{serviceStatus?.sidekick === 'ready' ? 'Start or select a chat' : 'Workspace loading'}</span>
-        </div>
-      )}
-      {activeSessionId && (
-        <div className="workspace-list">
-          {visibleEntries.map((entry) => {
-            const isFolder = isWorkspaceDirectory(entry);
-            return (
-              <div
-                key={`${entry.path || entry.name}-${entry.type || ''}`}
-                className="workspace-entry"
-              >
-                <button type="button" className="workspace-entry-main" onClick={() => void onEntry(entry)}>
-                  {isFolder ? <Folder size={15} /> : <FileText size={15} />}
-                  <span>{entry.name}</span>
-                  {entry.size !== undefined && <small>{formatBytes(entry.size)}</small>}
-                </button>
-                <div className="workspace-entry-actions">
-                  <button type="button" title="Rename" onClick={() => onRenameEntry(entry)}><Edit3 size={13} /></button>
-                  <button type="button" title="Delete" onClick={() => onDeleteEntry(entry)}><Trash2 size={13} /></button>
-                </div>
-              </div>
-            );
-          })}
-          {!visibleEntries.length && !error && (
-            <div className="workspace-empty">
-              <Folder size={20} />
-              <span>{entries.length ? 'Hidden files are currently hidden' : 'No files found'}</span>
-            </div>
-          )}
-        </div>
-      )}
-      <WorkspacePreview
-        draft={draft}
-        editing={editing}
-        entry={previewEntry}
-        preview={preview}
-        serviceStatus={serviceStatus}
-        sessionId={activeSessionId}
-        onDeleteEntry={previewEntry ? () => onDeleteEntry(previewEntry) : undefined}
-        onDraft={onDraft}
-        onRenameEntry={previewEntry ? () => onRenameEntry(previewEntry) : undefined}
-        onSavePreview={onSavePreview}
-        onToggleEditing={onToggleEditing}
-      />
-    </aside>
-  );
-}
-
-function WorkspaceToolbar({
-  disabled,
-  showHidden,
-  onCreateFile,
-  onCreateFolder,
-  onRefresh,
-  onToggleHidden
-}: {
-  disabled: boolean;
-  showHidden: boolean;
-  onCreateFile: () => void;
-  onCreateFolder: () => void;
-  onRefresh: () => void;
-  onToggleHidden: () => void;
-}): JSX.Element {
-  return (
-    <div className="workspace-toolbar">
-      <button type="button" title="New file" disabled={disabled} onClick={onCreateFile}><FilePlus size={14} /></button>
-      <button type="button" title="New folder" disabled={disabled} onClick={onCreateFolder}><FolderPlus size={14} /></button>
-      <button type="button" title={showHidden ? 'Hide dotfiles' : 'Show dotfiles'} disabled={disabled} onClick={onToggleHidden}>
-        {showHidden ? <Eye size={14} /> : <EyeOff size={14} />}
-      </button>
-      <button type="button" title="Refresh" disabled={disabled} onClick={onRefresh}><RefreshCw size={14} /></button>
-    </div>
-  );
-}
-
-function WorkspaceBreadcrumb({
-  path,
-  onRoot,
-  onSelect
-}: {
-  path: string;
-  onRoot: () => void;
-  onSelect: (path: string) => void;
-}): JSX.Element {
-  const parts = workspacePathParts(path);
-  return (
-    <div className="workspace-breadcrumb">
-      <button type="button" onClick={onRoot}>~</button>
-      {parts.map((part, index) => {
-        const nextPath = parts.slice(0, index + 1).join('/');
-        return (
-          <React.Fragment key={`${part}-${index}`}>
-            <span>/</span>
-            <button type="button" onClick={() => onSelect(nextPath)}>{part}</button>
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-function WorkspacePreview({
-  draft,
-  editing,
-  entry,
-  preview,
-  serviceStatus,
-  sessionId,
-  onDeleteEntry,
-  onDraft,
-  onRenameEntry,
-  onSavePreview,
-  onToggleEditing
-}: {
-  draft: string;
-  editing: boolean;
-  entry: WorkspaceTreeEntry | null;
-  preview: WorkspaceFilePreview | null;
-  serviceStatus: ServiceStatus | null;
-  sessionId: string | null;
-  onDeleteEntry?: () => void;
-  onDraft: (value: string) => void;
-  onRenameEntry?: () => void;
-  onSavePreview: () => void;
-  onToggleEditing: () => void;
-}): JSX.Element | null {
-  if (!preview?.path) return null;
-  const rawUrl = serviceStatus?.webuiUrl && sessionId
-    ? `${serviceStatus.webuiUrl.replace(/\/+$/, '')}/api/file/raw?session_id=${encodeURIComponent(sessionId)}&path=${encodeURIComponent(preview.path)}&download=1`
-    : '';
-
-  return (
-    <div className="workspace-preview">
-      <div className="workspace-preview-head">
-        <strong>{preview.path}</strong>
-        <div className="workspace-preview-actions">
-          {rawUrl && <a href={rawUrl} title="Download"><Download size={13} /></a>}
-          <button type="button" title={editing ? 'Cancel edit' : 'Edit'} onClick={onToggleEditing}><Edit3 size={13} /></button>
-          <button type="button" title="Save" disabled={!editing} onClick={onSavePreview}><Save size={13} /></button>
-          <button type="button" title="Rename" disabled={!entry} onClick={onRenameEntry}><FileText size={13} /></button>
-          <button type="button" title="Delete" disabled={!entry} onClick={onDeleteEntry}><Trash2 size={13} /></button>
-        </div>
-      </div>
-      {editing ? (
-        <textarea value={draft} onChange={(event) => onDraft(event.target.value)} />
-      ) : (
-        <pre>{preview.content || ''}</pre>
-      )}
-    </div>
-  );
-}
-
-function FirstRunSetupPane({
-  status,
-  onboardingStatus,
-  setupLoading,
-  error,
-  saving,
-  onRefreshOnboarding,
-  onSubmit,
-  onDismiss
-}: {
-  status: ServiceStatus | null;
-  onboardingStatus: OnboardingStatus | null;
-  setupLoading: boolean;
-  error: string;
-  saving: boolean;
-  onRefreshOnboarding: () => Promise<void>;
-  onSubmit: (form: SetupForm) => Promise<void>;
-  onDismiss: () => void;
-}): JSX.Element {
-  const providers = cloudProviderOptions(onboardingStatus);
-  const [provider, setProvider] = useState(providers[0]?.id || 'openrouter');
-  const models = modelsForProvider(onboardingStatus, provider);
-  const [model, setModel] = useState(models[0]?.id || '');
-  const [apiKey, setApiKey] = useState('');
-  const [oauthState, setOAuthState] = useState<CodexOAuthState>(idleCodexOAuth);
-  const readiness = firstRunStatus(status, onboardingStatus);
-  const canSubmit = canSubmitCloudSetup(readiness);
-  const activeProviderOption = providers.find((item) => item.id === provider);
-  // Any provider the live API marks with an oauth_provider supports a
-  // connect flow (ChatGPT/Codex, Claude Code, Gemini CLI).
-  const oauthProviderId = activeProviderOption?.oauthProvider || '';
-  const oauthAlreadyReady = Boolean(oauthProviderId)
-    && onboardingStatus?.system?.chat_ready === true
-    && String(onboardingStatus.system.current_provider || '').toLowerCase() === oauthProviderId;
-  const oauthNeedsLogin = Boolean(oauthProviderId) && oauthState.status !== 'success' && !oauthAlreadyReady;
-  const oauthLoginReady = !oauthNeedsLogin;
-  const canSubmitForm = canSubmit && oauthLoginReady;
-
-  useEffect(() => {
-    if (!providers.some((item) => item.id === provider) && providers[0]) {
-      setProvider(providers[0].id);
-    }
-  }, [provider, providers]);
-
-  useEffect(() => {
-    const nextModels = modelsForProvider(onboardingStatus, provider);
-    if (!nextModels.some((item) => item.id === model)) {
-      setModel(nextModels[0]?.id || '');
-    }
-  }, [model, onboardingStatus, provider]);
-
-  useEffect(() => {
-    if (!oauthProviderId && oauthState.status !== 'idle') {
-      setOAuthState(idleCodexOAuth);
-    }
-  }, [oauthProviderId, oauthState.status]);
-
-  useEffect(() => {
-    if (!oauthProviderId || oauthState.status !== 'pending' || !oauthState.flowId) return;
-    let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await window.lastbrowser.sidekick.pollOAuth(oauthState.flowId || '');
-        if (cancelled) return;
-        const nextStatus = String(response.status || 'error') as CodexOAuthState['status'];
-        if (nextStatus === 'pending') {
-          setOAuthState((current) => ({
-            ...current,
-            status: 'pending',
-            message: `Waiting for ${activeProviderOption?.label || 'provider'} authorization...`
-          }));
-          return;
-        }
-        if (nextStatus === 'success') {
-          setOAuthState((current) => ({
-            ...current,
-            status: 'success',
-            message: `${activeProviderOption?.label || 'Provider'} connected. Credentials are ready for Sidekick.`
-          }));
-          await onRefreshOnboarding();
-          // Signing in only stores credentials — activate the provider too,
-          // otherwise Sidekick keeps using the previously configured one.
-          await activateProviderAfterLogin();
-          return;
-        }
-        setOAuthState((current) => ({
-          ...current,
-          status: nextStatus,
-          message: response.error || 'The login flow ended before credentials were saved.'
-        }));
-      } catch (pollError) {
-        if (cancelled) return;
-        setOAuthState((current) => ({
-          ...current,
-          status: 'error',
-          message: pollError instanceof Error ? pollError.message : String(pollError)
-        }));
-      }
-    }, Math.max(1000, (oauthState.pollIntervalSeconds || 3) * 1000));
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [oauthProviderId, activeProviderOption?.label, oauthState.flowId, oauthState.pollIntervalSeconds, oauthState.status, onRefreshOnboarding]);
-
-  async function startProviderLogin(): Promise<void> {
-    if (!oauthProviderId) return;
-    const providerLabel = activeProviderOption?.label || 'provider';
-    setOAuthState({ status: 'starting', message: `Starting ${providerLabel} login...` });
-    try {
-      const response = await window.lastbrowser.sidekick.startOAuth({ provider: oauthProviderId });
-      if (response.error) throw new Error(response.error);
-      const flowId = String(response.flow_id || '');
-
-      // Anthropic/Claude Code links existing CLI credentials and completes
-      // immediately — there is no browser step.
-      if (response.status === 'success') {
-        setOAuthState({
-          status: 'success',
-          flowId,
-          message: `${providerLabel} credentials found and connected.`
-        });
-        await onRefreshOnboarding();
-        await activateProviderAfterLogin();
-        return;
-      }
-
-      // Two pending shapes exist:
-      //   Codex   -> user_code + verification_uri (device flow, user types a code)
-      //   Gemini  -> auth_url (user just opens the URL)
-      const verificationUri = String(response.verification_uri || response.auth_url || '');
-      const userCode = String(response.user_code || '');
-      if (!flowId || !verificationUri) throw new Error('Sidekick returned an incomplete login flow.');
-
-      setOAuthState({
-        status: 'pending',
-        flowId,
-        verificationUri,
-        userCode,
-        pollIntervalSeconds: Number(response.poll_interval_seconds || 3),
-        message: userCode
-          ? `Open ${providerLabel}, enter the code, then return to Lastbrowser.`
-          : `Sign in with ${providerLabel} in the opened tab, then return to Lastbrowser.`
-      });
-      window.open(verificationUri, '_blank', 'noopener,noreferrer');
-    } catch (loginError) {
-      setOAuthState({
-        status: 'error',
-        message: loginError instanceof Error ? loginError.message : String(loginError)
-      });
-    }
-  }
-
-  /**
-   * Persist the provider selection after a successful sign-in.
-   *
-   * Signing in only stores credentials — the runtime keeps using whichever
-   * provider was configured before, so the user stays "logged out" from
-   * Sidekick's point of view. Writing the provider + model through the setup
-   * endpoint is what actually activates it.
-   */
-  async function activateProviderAfterLogin(): Promise<void> {
-    if (!provider) return;
-    try {
-      const modelToUse = model || models[0]?.id || '';
-      // `confirm_overwrite` is required whenever config.yaml already exists —
-      // without it the setup endpoint refuses with "config_exists" and the
-      // provider never switches, which is exactly the "signed in but still
-      // logged out" symptom. The user just completed an explicit sign-in for
-      // this provider, so overwriting the previous selection is intended.
-      await window.lastbrowser.sidekick.applyCloudSetup({
-        provider,
-        model: modelToUse,
-        apiKey: '',
-        confirmOverwrite: true
-      });
-      await window.lastbrowser.sidekick.completeCloudSetup().catch(() => null);
-      await window.lastbrowser.setup.save({
-        cloudSetupComplete: true,
-        provider,
-        model: modelToUse
-      });
-      await onRefreshOnboarding();
-    } catch {
-      // Activation is best-effort; the user can still press Start Lastbrowser.
-    }
-  }
-
-  async function cancelCodexLogin(): Promise<void> {
-    const flowId = oauthState.flowId;
-    setOAuthState({ status: 'cancelled', message: 'Login cancelled.' });
-    if (flowId) {
-      await window.lastbrowser.sidekick.cancelOAuth({ flowId, provider: oauthProviderId || 'openai-codex' }).catch(() => null);
-    }
-  }
-
-  function copyCodexCode(): void {
-    if (!oauthState.userCode) return;
-    void navigator.clipboard?.writeText(oauthState.userCode);
-  }
-
-  function submit(event: FormEvent): void {
-    event.preventDefault();
-    if (oauthNeedsLogin) {
-      setOAuthState((current) => ({
-        ...current,
-        status: current.status === 'idle' ? 'error' : current.status,
-        message: `Connect ${activeProviderOption?.label || 'your account'} before starting Lastbrowser.`
-      }));
-      return;
-    }
-    void onSubmit({ provider, model, apiKey });
-  }
-
-  return (
-    <aside className="first-run-pane wide">
-      <button
-        type="button"
-        className="first-run-dismiss"
-        aria-label="Close setup and browse"
-        title="Close setup — you can finish it later in Settings"
-        onClick={onDismiss}
-      >
-        <X size={16} />
-        <span>Browse without Sidekick</span>
-      </button>
-      <div className="first-run-hero">
-        <img src={brandAssets.sidekickAvatar} alt="" className="first-run-avatar" />
-        <div className="setup-brand">
-          <img src={brandAssets.logo} alt="Lastbrowser" />
-        </div>
-        <span className="eyebrow">AI-native browsing runtime</span>
-        <h1>Set up Sidekick while you browse</h1>
-        <p>The browser is already available. Sidekick comes online in the background.</p>
-      </div>
-
-      <div className="setup-progress" aria-label="First-run setup status">
-        <div className={`setup-step ${readiness.id === 'starting-runtime' ? 'active' : 'ready'}`}>
-          <span className={readiness.id === 'starting-runtime' ? 'status-dot' : 'status-dot ready'} />
-          <div>
-            <strong>Starting runtime</strong>
-            <span>{status?.port ? `Local port ${status.port}` : 'Finding local runtime port'}</span>
-          </div>
-        </div>
-        <div className={`setup-step ${status?.sidekick === 'ready' ? 'ready' : ''}`}>
-          <span className={status?.sidekick === 'ready' ? 'status-dot ready' : 'status-dot'} />
-          <div>
-            <strong>Sidekick ready</strong>
-            <span>{readiness.id === 'sidekick-ready' ? readiness.detail : status?.webuiHealth || 'Waiting'}</span>
-          </div>
-        </div>
-        <div className={`setup-step ${readiness.id === 'provider-needed' ? 'active' : readiness.id === 'ready' ? 'ready' : ''}`}>
-          <span className={readiness.id === 'ready' ? 'status-dot ready' : 'status-dot'} />
-          <div>
-            <strong>{readiness.label}</strong>
-            <span>{setupLoading ? 'Loading local setup state' : readiness.detail}</span>
-          </div>
-        </div>
-      </div>
-
-      <form className="setup-form" onSubmit={submit}>
-        <div className="provider-picker">
-          {(['connect', 'cloud', 'local'] as const).map((category) => {
-            const inCategory = providers.filter((item) => providerPresentation(item.id).category === category);
-            if (!inCategory.length) return null;
-            return (
-              <section key={category} className="provider-group">
-                <header>
-                  <strong>{categoryLabels[category].title}</strong>
-                  <span>{categoryLabels[category].hint}</span>
-                </header>
-                <div className="provider-grid">
-                  {inCategory.map((item) => {
-                    const meta = providerPresentation(item.id);
-                    const active = item.id === provider;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={`provider-card ${active ? 'active' : ''}`}
-                        aria-pressed={active}
-                        onClick={() => {
-                          setProvider(item.id);
-                          setApiKey('');
-                          setOAuthState(idleCodexOAuth);
-                        }}
-                      >
-                        <span className="provider-mark" style={{ background: meta.color }}>{meta.mark}</span>
-                        <span className="provider-copy">
-                          <strong>{item.label}</strong>
-                          <small>{meta.description}</small>
-                        </span>
-                        {item.oauthProvider && <span className="provider-badge">sign in</span>}
-                        {item.keyOptional && !item.oauthProvider && <span className="provider-badge subtle">no key</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-
-        <div className="model-picker">
-          <header>
-            <strong>Model</strong>
-            <span>Pick the model Sidekick should use by default. You can change it later.</span>
-          </header>
-          <div className="model-grid">
-            {models.map((item) => {
-              const note = modelNote(item.id);
-              const active = item.id === model;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`model-card ${active ? 'active' : ''}`}
-                  aria-pressed={active}
-                  onClick={() => setModel(item.id)}
-                >
-                  <span className="model-copy">
-                    <strong>{item.label}</strong>
-                    {note && <small>{note.summary}</small>}
-                    {note?.caveat && <small className="model-caveat">{note.caveat}</small>}
-                  </span>
-                  {note && <span className={`model-tier ${note.tier}`}>{tierLabels[note.tier]}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        {activeProviderOption?.oauthProvider ? (
-          <div className={`codex-auth-card ${oauthState.status}`}>
-            <div className="codex-auth-copy">
-              <strong>{activeProviderOption.oauthLabel || 'Connect account'}</strong>
-              <span>Use your existing account instead of pasting an API key.</span>
-            </div>
-            {oauthState.status === 'success' || oauthAlreadyReady ? (
-              <div className="codex-auth-success">
-                <CheckCircle2 size={17} />
-                <span>Connected</span>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="secondary-action"
-                onClick={() => void startProviderLogin()}
-                disabled={!canSubmit || oauthState.status === 'starting' || oauthState.status === 'pending'}
-              >
-                {oauthState.status === 'starting' || oauthState.status === 'pending'
-                  ? <Loader2 size={16} className="spin" />
-                  : <LogIn size={16} />}
-                <span>{activeProviderOption.oauthLabel ? `Connect ${activeProviderOption.label}` : 'Connect account'}</span>
-              </button>
-            )}
-            {oauthState.verificationUri && oauthState.status === 'pending' && (
-              <div className="codex-device-flow">
-                <a href={oauthState.verificationUri} target="_blank" rel="noreferrer">
-                  <ExternalLink size={14} />
-                  <span>{oauthState.userCode ? 'Open authorization page' : 'Open sign-in page'}</span>
-                </a>
-                {oauthState.userCode && (
-                  <button type="button" className="code-pill" onClick={copyCodexCode}>
-                    <span>{oauthState.userCode}</span>
-                    <ClipboardCopy size={14} />
-                  </button>
-                )}
-                <button type="button" className="text-action" onClick={() => void cancelCodexLogin()}>Cancel</button>
-              </div>
-            )}
-            {oauthState.message && <p className="codex-auth-message">{oauthState.message}</p>}
-          </div>
-        ) : (
-          <label>
-            <span>{activeProviderOption?.keyOptional ? 'API key (optional)' : 'API key'}</span>
-            <input
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              type="password"
-              placeholder={activeProviderOption?.keyOptional
-                ? 'Leave empty for a local install, or paste a cloud key'
-                : 'Cloud provider API key'}
-            />
-            {activeProviderOption?.keyOptional && (
-              <small className="setup-hint">
-                {providerPresentation(provider).keyHint
-                  || (activeProviderOption.defaultBaseUrl
-                    ? `Works without a key against ${activeProviderOption.defaultBaseUrl}. Paste a key to use the hosted service instead.`
-                    : 'Works without a key for local installs. Paste a key to use the hosted service instead.')}
-              </small>
-            )}
-          </label>
-        )}
-        {error && <div className="setup-error">{error}</div>}
-        <button type="submit" className="primary-action" disabled={saving || !provider || !model || !canSubmitForm}>
-          {saving || !canSubmitForm ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
-          <span>{saving ? 'Connecting' : canSubmitForm ? 'Start Lastbrowser' : oauthNeedsLogin ? 'Connect account first' : 'Preparing sidekick'}</span>
-        </button>
-      </form>
-    </aside>
-  );
-}
-
-  function pinNativeSession(session: DesktopSessionSummary): void {
-    void window.lastbrowser.sidekick
-      .requestWebui({
-        method: 'POST',
-        path: '/api/session/pin',
-        body: { session_id: session.session_id, pinned: true }
-      })
-      .then(() => {
-        setSessions((current) =>
-          current.map((item) =>
-            item.session_id === session.session_id ? { ...item, pinned: true } : item
-          )
-        );
-      })
-      .catch(() => {});
-  }
-
-  function unpinNativeSession(session: DesktopSessionSummary): void {
-    void window.lastbrowser.sidekick
-      .requestWebui({
-        method: 'POST',
-        path: '/api/session/pin',
-        body: { session_id: session.session_id, pinned: false }
-      })
-      .then(() => {
-        setSessions((current) =>
-          current.map((item) =>
-            item.session_id === session.session_id ? { ...item, pinned: false } : item
-          )
-        );
-      })
-      .catch(() => {});
-  }
-
-  function archiveNativeSession(session: DesktopSessionSummary): void {
-    void window.lastbrowser.sidekick
-      .requestWebui({
-        method: 'POST',
-        path: '/api/session/archive',
-        body: { session_id: session.session_id, archived: true }
-      })
-      .then(() => {
-        setSessions((current) =>
-          current.map((item) =>
-            item.session_id === session.session_id ? { ...item, archived: true } : item
-          )
-        );
-      })
-      .catch(() => {});
-  }
-
-function sessionTitle(session: DesktopSessionSummary): string {
-  return session.title?.trim() || shortSessionId(session.session_id);
-}
-function spaceDisplayName(space: SpaceSummary): string {
-  const cleanName = space.name?.trim();
-  if (cleanName) return cleanName;
-  const normalized = space.path.replace(/\\/g, '/').replace(/\/+$/, '');
-  const parts = normalized.split('/').filter(Boolean);
-  return parts[parts.length - 1] || 'default';
-}
 
 function isTransientSidekickFetchError(message: string): boolean {
   return /fetch failed|service is not ready|ECONNREFUSED|unreachable/i.test(message);
@@ -5247,72 +3341,10 @@ function entryFromPreview(preview: WorkspaceFilePreview): WorkspaceTreeEntry {
   };
 }
 
-function cronScheduleLabel(job: CronJobSummary): string {
-  if (job.schedule_display) return String(job.schedule_display);
-  if (typeof job.schedule === 'string') return job.schedule;
-  return String(job.schedule?.expression || '');
-}
-
-function cronStatus(job: CronJobSummary): string {
-  if (job.last_error) return 'error';
-  return String(job.last_status || job.state || 'active');
-}
-
-function formatMaybeDate(value: string | number | null | undefined): string {
-  if (!value) return '';
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return String(value);
-  }
-}
-
-function kanbanColumnLabel(name: string): string {
-  return name.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function kanbanTaskTitle(task: KanbanTaskSummary): string {
-  return task.title || task.summary || task.id || 'Task';
-}
-
-function kanbanTaskBody(task: KanbanTaskSummary): string {
-  return task.body || task.description || task.prompt || '';
-}
-
-function extractTodosFromSession(
-  activeSession: DesktopSessionDetail | null,
-  messages: DesktopChatMessage[]
-): TodoItem[] {
-  const source = Array.isArray(activeSession?.messages) && activeSession.messages.length
-    ? activeSession.messages
-    : messages;
-  for (let index = source.length - 1; index >= 0; index -= 1) {
-    const message = source[index];
-    if (message?.role !== 'tool') continue;
-    try {
-      const parsed = JSON.parse(String(message.content || '{}')) as { todos?: TodoItem[] };
-      if (Array.isArray(parsed.todos)) return parsed.todos;
-    } catch {
-      // Ignore non-todo tool payloads.
-    }
-  }
-  return [];
-}
-
-function normalizeTodoStatus(status: string | undefined): string {
-  const value = String(status || 'pending').toLowerCase();
-  if (value === 'done') return 'completed';
-  if (value === 'active' || value === 'running') return 'in_progress';
-  return value;
-}
-
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function shortSessionId(sessionId: string): string {
-  return sessionId.length > 8 ? sessionId.slice(0, 8) : sessionId;
-}
 
 function parentPath(path: string): string {
   const normalized = (path || '.').replace(/\\/g, '/').replace(/\/+$/, '');

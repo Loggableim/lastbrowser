@@ -15,6 +15,21 @@ contextBridge.exposeInMainWorld('lastbrowser', {
       const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url);
       ipcRenderer.on('lastbrowser:browser:openTab', listener);
       return () => ipcRenderer.removeListener('lastbrowser:browser:openTab', listener);
+    },
+    onOpenIncognitoTab: (callback: (url: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url);
+      ipcRenderer.on('lastbrowser:browser:openIncognitoTab', listener);
+      return () => ipcRenderer.removeListener('lastbrowser:browser:openIncognitoTab', listener);
+    },
+    onDeepResearch: (callback: (payload: { selectionText?: string; pageUrl?: string }) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: { selectionText?: string; pageUrl?: string }) => callback(payload);
+      ipcRenderer.on('lastbrowser:browser:deepResearch', listener);
+      return () => ipcRenderer.removeListener('lastbrowser:browser:deepResearch', listener);
+    },
+    onShortcut: (callback: (event: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, shortcut: unknown) => callback(shortcut);
+      ipcRenderer.on('lastbrowser:browser:shortcut', listener);
+      return () => ipcRenderer.removeListener('lastbrowser:browser:shortcut', listener);
     }
   },
   sidekick: {
@@ -166,8 +181,11 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     sendMessage: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:sendMessage', request)
   },
   terminal: {
-    start: (cwd: string) => ipcRenderer.invoke('lastbrowser:terminal:start', cwd),
+    start: (request: string | { cwd?: string; mode?: 'shell' | 'tui'; cols?: number; rows?: number }) =>
+      ipcRenderer.invoke('lastbrowser:terminal:start', request),
     write: (request: { id: string; data: string }) => ipcRenderer.invoke('lastbrowser:terminal:write', request),
+    resize: (request: { id: string; cols: number; rows: number }) =>
+      ipcRenderer.invoke('lastbrowser:terminal:resize', request),
     close: (id: string) => ipcRenderer.invoke('lastbrowser:terminal:close', id),
     list: () => ipcRenderer.invoke('lastbrowser:terminal:list'),
     onData: (callback: (event: { id: string; data: string }) => void) => {
@@ -175,6 +193,20 @@ contextBridge.exposeInMainWorld('lastbrowser', {
       ipcRenderer.on('lastbrowser:terminal:data', listener);
       return () => ipcRenderer.removeListener('lastbrowser:terminal:data', listener);
     }
+  },
+  gateway: {
+    status: () => ipcRenderer.invoke('lastbrowser:gateway:status'),
+    start: () => ipcRenderer.invoke('lastbrowser:gateway:start'),
+    stop: () => ipcRenderer.invoke('lastbrowser:gateway:stop'),
+    restart: () => ipcRenderer.invoke('lastbrowser:gateway:restart'),
+    platforms: () => ipcRenderer.invoke('lastbrowser:gateway:platforms')
+  },
+  doctor: {
+    run: (options?: { fix?: boolean }) => ipcRenderer.invoke('lastbrowser:doctor:run', options)
+  },
+  tabIntelligence: {
+    synthesizeContext: (options?: unknown) => ipcRenderer.invoke('lastbrowser:tabs:synthesizeContext', options),
+    extractActive: (maxChars?: number) => ipcRenderer.invoke('lastbrowser:tabs:extractActive', maxChars)
   },
   updates: {
     status: () => ipcRenderer.invoke('lastbrowser:updates:status'),
@@ -212,9 +244,43 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     check: () => ipcRenderer.invoke('lastbrowser:sidekick-update:check'),
     apply: () => ipcRenderer.invoke('lastbrowser:sidekick-update:apply')
   },
+  auth: {
+    openConnectWindow: (url: string) => ipcRenderer.invoke('lastbrowser:auth:openConnectWindow', url)
+  },
+  extensions: {
+    list: () => ipcRenderer.invoke('lastbrowser:extensions:list'),
+    presets: () => ipcRenderer.invoke('lastbrowser:extensions:presets'),
+    installUnpacked: (dirPath: string) => ipcRenderer.invoke('lastbrowser:extensions:installUnpacked', dirPath),
+    installCws: (idOrUrl: string) => ipcRenderer.invoke('lastbrowser:extensions:installCws', idOrUrl),
+    toggle: (request: { id: string; enabled: boolean }) => ipcRenderer.invoke('lastbrowser:extensions:toggle', request),
+    toggleIncognito: (request: { id: string; allow: boolean }) => ipcRenderer.invoke('lastbrowser:extensions:toggleIncognito', request),
+    remove: (id: string) => ipcRenderer.invoke('lastbrowser:extensions:remove', id),
+    chooseDir: () => ipcRenderer.invoke('lastbrowser:extensions:chooseDir')
+  },
   window: {
     minimize: () => ipcRenderer.invoke('lastbrowser:window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('lastbrowser:window:toggleMaximize'),
-    close: () => ipcRenderer.invoke('lastbrowser:window:close')
+    close: () => ipcRenderer.invoke('lastbrowser:window:close'),
+    isMaximized: () => ipcRenderer.invoke('lastbrowser:window:isMaximized'),
+    unmaximize: () => ipcRenderer.invoke('lastbrowser:window:unmaximize'),
+    setPosition: (x: number, y: number) => ipcRenderer.invoke('lastbrowser:window:setPosition', { x, y }),
+    getBounds: () => ipcRenderer.invoke('lastbrowser:window:getBounds'),
+    isFullScreen: () => ipcRenderer.invoke('lastbrowser:window:isFullScreen'),
+    setFullScreen: (flag: boolean) => ipcRenderer.invoke('lastbrowser:window:setFullScreen', flag),
+    toggleFullScreen: () => ipcRenderer.invoke('lastbrowser:window:toggleFullScreen'),
+    onMaximizeChange: (callback: (maximized: boolean) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized);
+      ipcRenderer.on('lastbrowser:window:maximizeChanged', listener);
+      return () => ipcRenderer.removeListener('lastbrowser:window:maximizeChanged', listener);
+    },
+    onFullScreenChange: (callback: (fullscreen: boolean) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, fullscreen: boolean) => callback(fullscreen);
+      ipcRenderer.on('lastbrowser:window:fullScreenChanged', listener);
+      return () => ipcRenderer.removeListener('lastbrowser:window:fullScreenChanged', listener);
+    }
+  },
+  cdp: {
+    status: () => ipcRenderer.invoke('lastbrowser:cdp:status'),
+    execute: (request: unknown) => ipcRenderer.invoke('lastbrowser:cdp:execute', request)
   }
 });

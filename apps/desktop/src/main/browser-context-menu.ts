@@ -7,8 +7,11 @@ import type {
   Shell,
   WebContents
 } from 'electron';
+import { isOAuthUrl, openAuthConnectWindow } from './auth-window.js';
 
 export const browserOpenTabChannel = 'lastbrowser:browser:openTab';
+export const browserOpenIncognitoTabChannel = 'lastbrowser:browser:openIncognitoTab';
+export const browserDeepResearchChannel = 'lastbrowser:browser:deepResearch';
 
 export type BrowserContextMenuParams = Pick<
   ContextMenuParams,
@@ -22,9 +25,12 @@ export type BrowserContextMenuActions = {
   goForward?: () => void;
   reload?: () => void;
   openLinkInNewTab: (url: string) => void;
+  openLinkInIncognitoTab?: (url: string) => void;
   openExternal?: (url: string) => void;
   copyText: (text: string) => void;
   inspect?: (x: number, y: number) => void;
+  deepResearch?: (payload: { selectionText?: string; pageUrl?: string }) => void;
+  assistantName?: string;
 };
 
 type MenuLike = {
@@ -38,7 +44,20 @@ export function buildBrowserContextMenuTemplate(
   actions: BrowserContextMenuActions
 ): MenuItemConstructorOptions[] {
   const template: MenuItemConstructorOptions[] = [];
+  const assistantName = actions.assistantName?.trim() || 'Nova';
   const linkUrl = params.linkURL?.trim();
+
+  if (params.selectionText?.trim()) {
+    const raw = params.selectionText.trim();
+    const shortText = raw.length > 28 ? `${raw.slice(0, 28)}…` : raw;
+    template.push(
+      {
+        label: `Deep Research mit ${assistantName}: „${shortText}“`,
+        click: () => actions.deepResearch?.({ selectionText: raw, pageUrl: params.pageURL })
+      },
+      { type: 'separator' }
+    );
+  }
 
   if (linkUrl) {
     template.push(
@@ -47,12 +66,28 @@ export function buildBrowserContextMenuTemplate(
         click: () => actions.openLinkInNewTab(linkUrl)
       },
       {
+        label: 'Open link in new private tab',
+        click: () => actions.openLinkInIncognitoTab?.(linkUrl)
+      },
+      {
+        label: `Deep Research Link mit ${assistantName}`,
+        click: () => actions.deepResearch?.({ pageUrl: linkUrl })
+      },
+      {
         label: 'Open link in system browser',
         click: () => actions.openExternal?.(linkUrl)
       },
       {
         label: 'Copy link address',
         click: () => actions.copyText(linkUrl)
+      },
+      { type: 'separator' }
+    );
+  } else if (!params.selectionText?.trim() && params.pageURL) {
+    template.push(
+      {
+        label: `Deep Research mit ${assistantName}`,
+        click: () => actions.deepResearch?.({ pageUrl: params.pageURL })
       },
       { type: 'separator' }
     );
@@ -94,7 +129,7 @@ export function buildBrowserContextMenuTemplate(
     template.push(
       { type: 'separator' },
       {
-        label: 'Inspect element',
+        label: 'Element untersuchen (Inspect)',
         click: () => actions.inspect?.(params.x ?? 0, params.y ?? 0)
       }
     );
@@ -108,13 +143,15 @@ export function registerBrowserContextMenu({
   Menu,
   clipboard,
   shell,
-  getWindow
+  getWindow,
+  getAssistantName
 }: {
   app: App;
   Menu: MenuLike;
   clipboard: Clipboard;
   shell: Shell;
   getWindow: () => BrowserWindow | null;
+  getAssistantName?: () => string;
 }): void {
   app.on('web-contents-created', (_event, contents) => {
     installWindowOpenBridge(contents, getWindow, shell);
@@ -126,9 +163,17 @@ export function registerBrowserContextMenu({
         goForward: () => contents.goForward(),
         reload: () => contents.reload(),
         openLinkInNewTab: (url) => getWindow()?.webContents.send(browserOpenTabChannel, url),
+        openLinkInIncognitoTab: (url) => getWindow()?.webContents.send(browserOpenIncognitoTabChannel, url),
         openExternal: (url) => void shell.openExternal(url),
         copyText: (text) => clipboard.writeText(text),
-        inspect: (x, y) => contents.inspectElement(x, y)
+        inspect: (x, y) => {
+          if (!contents.isDevToolsOpened()) {
+            contents.openDevTools({ mode: 'right' });
+          }
+          contents.inspectElement(x, y);
+        },
+        deepResearch: (payload) => getWindow()?.webContents.send(browserDeepResearchChannel, payload),
+        assistantName: getAssistantName?.() || 'Nova'
       });
       Menu.buildFromTemplate(template).popup({ window: getWindow() ?? undefined });
     });
@@ -141,11 +186,13 @@ function installWindowOpenBridge(
   shell: Shell
 ): void {
   contents.setWindowOpenHandler(({ url }) => {
-    // OAuth / sign-in pages must open in the system browser. Opening them as
-    // an in-app tab hides them behind the first-run wizard (which covers the
-    // full window), leaving the user unable to complete the sign-in.
+    // OAuth / sign-in pages (e.g. Google Gemini, ChatGPT, Claude) open in a
+    // dedicated Lastbrowser Connect window with clean User-Agent and auto-close.
     if (isOAuthUrl(url)) {
-      void shell.openExternal(url);
+      openAuthConnectWindow({
+        url,
+        parentWindow: getWindow()
+      });
       return { action: 'deny' };
     }
     if (isHttpUrl(url)) {
@@ -155,10 +202,6 @@ function installWindowOpenBridge(
     }
     return { action: 'deny' };
   });
-}
-
-function isOAuthUrl(url: string): boolean {
-  return /^https?:\/\/(accounts\.google\.com|login\.microsoftonline\.com|github\.com\/login|auth0\.com|.*\.auth0\.com|claude\.ai|console\.anthropic\.com|platform\.openai\.com|auth\.openai\.com|chatgpt\.com)\//i.test(url);
 }
 
 function isHttpUrl(url: string): boolean {

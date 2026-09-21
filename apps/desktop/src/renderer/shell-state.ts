@@ -42,6 +42,14 @@ export type DesktopSessionSummary = {
   source_tag?: string;
 };
 
+export function shortSessionId(sessionId: string): string {
+  return sessionId.length > 8 ? sessionId.slice(0, 8) : sessionId;
+}
+
+export function sessionTitle(session: DesktopSessionSummary): string {
+  return session.title?.trim() || shortSessionId(session.session_id);
+}
+
 export type ProjectSummary = {
   project_id: string;
   name: string;
@@ -97,6 +105,14 @@ export type SpaceSummary = {
   emoji?: string;
   color?: string;
 };
+
+export function spaceDisplayName(space: SpaceSummary): string {
+  const cleanName = space.name?.trim();
+  if (cleanName) return cleanName;
+  const normalized = space.path.replace(/\\/g, '/').replace(/\/+$/, '');
+  const parts = normalized.split('/').filter(Boolean);
+  return parts[parts.length - 1] || 'default';
+}
 
 type PanelStorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 

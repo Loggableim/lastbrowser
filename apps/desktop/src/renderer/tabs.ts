@@ -3,6 +3,11 @@ export type BrowserTab = {
   title: string;
   url: string;
   pinned?: boolean;
+  favicon?: string;
+  isLoading?: boolean;
+  isPlayingAudio?: boolean;
+  isMuted?: boolean;
+  incognito?: boolean;
 };
 
 export const browserStartUrl = 'lastbrowser://start';
@@ -84,13 +89,17 @@ export function isBrowserStartUrl(url: string): boolean {
   return url === browserStartUrl;
 }
 
-export function createInitialTab(url = aiBrowserHomeUrl): BrowserTab {
+export function createInitialTab(
+  url = aiBrowserHomeUrl,
+  options?: { incognito?: boolean }
+): BrowserTab {
   tabCounter += 1;
   return {
     id: `tab-${Date.now()}-${tabCounter}`,
-    title: 'New tab',
+    title: options?.incognito ? 'New private tab' : 'New tab',
     url,
-    pinned: false
+    pinned: false,
+    ...(options?.incognito ? { incognito: true } : {})
   };
 }
 
@@ -107,6 +116,22 @@ export function updateTabUrl(tabs: BrowserTab[], tabId: string, url: string): Br
 
 export function updateTabTitle(tabs: BrowserTab[], tabId: string, title: string): BrowserTab[] {
   return tabs.map((tab) => (tab.id === tabId ? renameTab(tab, title) : tab));
+}
+
+export function updateTabFavicon(tabs: BrowserTab[], tabId: string, favicon: string): BrowserTab[] {
+  return tabs.map((tab) => (tab.id === tabId ? { ...tab, favicon } : tab));
+}
+
+export function updateTabLoading(tabs: BrowserTab[], tabId: string, isLoading: boolean): BrowserTab[] {
+  return tabs.map((tab) => (tab.id === tabId ? { ...tab, isLoading } : tab));
+}
+
+export function updateTabMediaPlaying(tabs: BrowserTab[], tabId: string, isPlayingAudio: boolean): BrowserTab[] {
+  return tabs.map((tab) => (tab.id === tabId ? { ...tab, isPlayingAudio } : tab));
+}
+
+export function updateTabMuted(tabs: BrowserTab[], tabId: string, isMuted?: boolean): BrowserTab[] {
+  return tabs.map((tab) => (tab.id === tabId ? { ...tab, isMuted: isMuted ?? !tab.isMuted } : tab));
 }
 
 export function togglePinnedTab(tabs: BrowserTab[], tabId: string): BrowserTab[] {
@@ -169,3 +194,109 @@ export function takeLastClosedTab(
   const tab = closed[closed.length - 1];
   return { tab, rest: closed.slice(0, -1) };
 }
+
+/**
+ * Normalizes a URL for duplicate detection (stripping trailing slash and lowercasing domain).
+ */
+export function normalizeUrlForDeduplication(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  try {
+    const parsed = new URL(trimmed);
+    if (!parsed.hostname) {
+      return `${parsed.protocol}${parsed.pathname.replace(/\/+$/, '')}${parsed.search}`;
+    }
+    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${parsed.pathname.replace(/\/+$/, '')}${parsed.search}`;
+  } catch {
+    return trimmed.replace(/\/+$/, '').toLowerCase();
+  }
+}
+
+/**
+ * Finds and filters out duplicate tabs based on normalized URLs.
+ * Pinned tabs are preserved preferentially.
+ */
+export function deduplicateTabs(tabs: BrowserTab[]): { deduplicated: BrowserTab[]; removed: BrowserTab[] } {
+  const seenUrls = new Set<string>();
+  const deduplicated: BrowserTab[] = [];
+  const removed: BrowserTab[] = [];
+
+  // First pass: register all pinned tabs to protect them
+  for (const tab of tabs) {
+    if (tab.pinned) {
+      const key = normalizeUrlForDeduplication(tab.url);
+      seenUrls.add(key);
+      deduplicated.push(tab);
+    }
+  }
+
+  // Second pass: add unpinned tabs only if URL hasn't been seen
+  for (const tab of tabs) {
+    if (tab.pinned) continue;
+    const key = normalizeUrlForDeduplication(tab.url);
+    if (seenUrls.has(key)) {
+      removed.push(tab);
+    } else {
+      seenUrls.add(key);
+      deduplicated.push(tab);
+    }
+  }
+
+  return { deduplicated, removed };
+}
+
+/**
+ * Sorts unpinned tabs alphabetically by their hostname / domain.
+ * Pinned tabs remain at the very front of the strip.
+ */
+export function sortTabsByDomain(tabs: BrowserTab[]): BrowserTab[] {
+  const pinned = tabs.filter((t) => t.pinned);
+  const unpinned = tabs.filter((t) => !t.pinned);
+
+  const getDomain = (tab: BrowserTab): string => {
+    try {
+      return new URL(tab.url).hostname.replace(/^www\./i, '').toLowerCase();
+    } catch {
+      return tab.title.toLowerCase();
+    }
+  };
+
+  const sortedUnpinned = [...unpinned].sort((a, b) => {
+    const domainA = getDomain(a);
+    const domainB = getDomain(b);
+    const domainCmp = domainA.localeCompare(domainB);
+    if (domainCmp !== 0) return domainCmp;
+    return a.title.localeCompare(b.title);
+  });
+
+  return [...pinned, ...sortedUnpinned];
+}
+
+/**
+ * Separates pinned tabs from unpinned tabs to allow closing all unpinned tabs.
+ */
+export function closeUnpinnedTabs(tabs: BrowserTab[]): { remaining: BrowserTab[]; removed: BrowserTab[] } {
+  const remaining = tabs.filter((t) => t.pinned);
+  const removed = tabs.filter((t) => !t.pinned);
+
+  if (!remaining.length) {
+    return { remaining: [createInitialTab(browserStartUrl)], removed };
+  }
+
+  return { remaining, removed };
+}
+
+/**
+ * Closes all tabs located to the right of the given tab ID.
+ */
+export function closeTabsToRight(tabs: BrowserTab[], fromId: string): { remaining: BrowserTab[]; removed: BrowserTab[] } {
+  const index = tabs.findIndex((t) => t.id === fromId);
+  if (index === -1 || index === tabs.length - 1) {
+    return { remaining: [...tabs], removed: [] };
+  }
+
+  const remaining = tabs.slice(0, index + 1);
+  const removed = tabs.slice(index + 1);
+  return { remaining, removed };
+}
+

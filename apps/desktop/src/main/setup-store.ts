@@ -5,6 +5,8 @@ export type SetupState = {
   cloudSetupComplete: boolean;
   provider: string;
   model: string;
+  botName?: string;
+  personality?: string;
 };
 
 export const defaultSetupState: SetupState = {
@@ -20,10 +22,14 @@ export function setupStatePath(userDataDir: string): string {
 export function normalizeSetupState(raw: unknown): SetupState {
   if (!raw || typeof raw !== 'object') return defaultSetupState;
   const data = raw as Partial<SetupState>;
+  const botName = typeof data.botName === 'string' ? data.botName.trim() : '';
+  const personality = typeof data.personality === 'string' ? data.personality.trim() : '';
   return {
     cloudSetupComplete: data.cloudSetupComplete === true,
     provider: String(data.provider || '').trim(),
-    model: String(data.model || '').trim()
+    model: String(data.model || '').trim(),
+    ...(botName ? { botName } : {}),
+    ...(personality ? { personality } : {})
   };
 }
 

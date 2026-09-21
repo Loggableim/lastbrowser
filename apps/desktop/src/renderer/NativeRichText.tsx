@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { switchTabByIndex } from './tab-intelligence.js';
 
 // Lightweight Mermaid/KaTeX renderer for chat content.
 // Uses CDN-loaded libraries — mermaid and katex are loaded on first use.
@@ -139,6 +140,16 @@ export function processRichText(text: string): { html: string } {
     }
   );
 
+  // 5. Tab Citations: [Tab 1: ...] or [Tab 2]
+  html = html.replace(
+    /\[Tab\s+(\d+)(?::\s*([^\]]+))?\]/gi,
+    (_, tabNum: string, label: string) => {
+      const snippet = label ? label.trim() : '';
+      const displayLabel = snippet ? `Tab ${tabNum}: ${escapeHtml(snippet)}` : `Tab ${tabNum}`;
+      return `<button type="button" class="tab-citation-pill" data-tab-index="${escapeHtml(tabNum)}" data-snippet="${escapeHtml(snippet)}" title="Zu Tab ${escapeHtml(tabNum)} wechseln und Stelle hervorheben" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; padding: 1px 7px; border-radius: 12px; font-size: 11px; cursor: pointer; vertical-align: baseline; margin: 0 2px;"><span>🔖</span> <strong>${displayLabel}</strong></button>`;
+    }
+  );
+
   return { html };
 }
 
@@ -160,6 +171,23 @@ export function RichTextRenderer({ content }: { content: string }): JSX.Element 
     renderMermaidBlocks(ref.current);
     renderKatexInElement(ref.current);
   }, [content]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const handleClick = (e: MouseEvent) => {
+      const btn = (e.target as HTMLElement).closest('.tab-citation-pill') as HTMLElement | null;
+      if (btn && btn.dataset.tabIndex) {
+        const tabNum = parseInt(btn.dataset.tabIndex, 10);
+        const snippet = btn.dataset.snippet || '';
+        if (!isNaN(tabNum)) {
+          switchTabByIndex(tabNum, snippet);
+        }
+      }
+    };
+    el.addEventListener('click', handleClick);
+    return () => el.removeEventListener('click', handleClick);
+  }, []);
 
   const { html } = processRichText(content);
 

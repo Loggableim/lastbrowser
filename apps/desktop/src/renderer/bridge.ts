@@ -1,5 +1,35 @@
 export type SidekickActionId = 'summarize-page' | 'explain-selection' | 'research-page';
 
+export type ExtensionSource = 'store' | 'unpacked' | 'preset';
+
+export type ExtensionRecord = {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  iconDataUrl?: string;
+  path: string;
+  enabled: boolean;
+  manifestVersion: number;
+  source: ExtensionSource;
+  installTime: number;
+  allowInIncognito: boolean;
+  permissions?: string[];
+  homepageUrl?: string;
+};
+
+export type ExtensionPreset = {
+  id: string;
+  name: string;
+  cwsId: string;
+  category: string;
+  description: string;
+  author: string;
+  badge?: string;
+  icon: string;
+  homepageUrl?: string;
+};
+
 export type BrowserContextPayload = {
   url: string;
   title: string;

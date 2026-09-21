@@ -124,11 +124,23 @@ async function main() {
   if (!shell) finish(child);
 
   const cdp = new CDP(shell.webSocketDebuggerUrl);
+
+  // If first-run wizard is open, dismiss it so browser chrome renders
+  await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const btn = [...document.querySelectorAll('button')]
+        .find(b => /erstmal ohne|ohne ki|dismiss|skip/i.test(b.innerText || ''));
+      if (btn) btn.click();
+    })()`,
+    returnByValue: true
+  });
+  await sleep(1000);
+
   const shellState = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
       const text = document.body ? document.body.innerText : '';
       return JSON.stringify({
-        hasSidebar: /chat/i.test(text) && /settings/i.test(text),
+        hasSidebar: (/chat/i.test(text) && /settings/i.test(text)) || Boolean(document.querySelector('.sidekick-sidebar, .shell-rail')),
         hasAddressBar: [...document.querySelectorAll('input')]
           .some(el => el.getBoundingClientRect().y < 90 && el.getBoundingClientRect().width > 200),
         textLength: text.length
@@ -180,10 +192,17 @@ async function main() {
       check('webview renders page', info.readyState === 'complete' && info.bodyLength > 0,
         `${info.title || 'no title'} (${info.readyState})`);
 
-      const shot = await wvCdp.send('Page.captureScreenshot', { format: 'png' });
-      const shotPath = path.join(OUT_DIR, 'webview.png');
-      writeFileSync(shotPath, Buffer.from(shot.data, 'base64'));
-      console.log(`\n  screenshot: ${shotPath}`);
+      try {
+        await wvCdp.send('Page.enable', {}, 3000);
+        const shot = await wvCdp.send('Page.captureScreenshot', { format: 'png' }, 5000);
+        if (shot?.data) {
+          const shotPath = path.join(OUT_DIR, 'webview.png');
+          writeFileSync(shotPath, Buffer.from(shot.data, 'base64'));
+          console.log(`\n  screenshot: ${shotPath}`);
+        }
+      } catch {
+        // Guest webview screenshot is best-effort
+      }
     } catch (e) {
       check('webview renders page', false, e.message);
     }

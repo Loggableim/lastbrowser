@@ -2,6 +2,8 @@ export type SetupState = {
   cloudSetupComplete: boolean;
   provider: string;
   model: string;
+  botName?: string;
+  personality?: string;
 };
 
 export type OnboardingProvider = {
@@ -46,14 +48,34 @@ export const defaultSetupState: SetupState = {
 };
 
 const fallbackCloudProviders = [
-  { id: 'openai-codex', label: 'OpenAI Codex (ChatGPT)' },
+  { id: 'openai-codex', label: 'OpenAI Codex (ChatGPT)', oauth_provider: 'openai-codex', oauth_label: 'ChatGPT Account' },
+  { id: 'google-gemini-cli', label: 'Google Gemini (CLI)', oauth_provider: 'google-gemini-cli', oauth_label: 'Google-Konto (Gemini CLI)', key_optional: true },
+  { id: 'ollama', label: 'Ollama (Lokal)', requires_base_url: true, key_optional: true, default_base_url: 'http://127.0.0.1:11434' },
   { id: 'openrouter', label: 'OpenRouter' },
   { id: 'openai', label: 'OpenAI' },
   { id: 'anthropic', label: 'Anthropic' },
-  { id: 'gemini', label: 'Google Gemini' }
+  { id: 'gemini', label: 'Google Gemini' },
+  { id: 'deepseek', label: 'DeepSeek' }
 ];
 
 const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string }>> = {
+  'google-gemini-cli': [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Empfohlen)' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
+    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
+  ],
+  ollama: [
+    { id: 'llama3.3', label: 'Llama 3.3 (70B)' },
+    { id: 'llama3.2', label: 'Llama 3.2 (3B)' },
+    { id: 'qwen2.5', label: 'Qwen 2.5' },
+    { id: 'deepseek-r1', label: 'DeepSeek-R1 (Local)' },
+    { id: 'mistral', label: 'Mistral (7B)' }
+  ],
+  deepseek: [
+    { id: 'deepseek-chat', label: 'DeepSeek V3 (Chat)' },
+    { id: 'deepseek-reasoner', label: 'DeepSeek R1 (Reasoner)' }
+  ],
   'openai-codex': [
     { id: 'gpt-5.5', label: 'GPT-5.5' },
     { id: 'gpt-5.5-mini', label: 'GPT-5.5 Mini' },
@@ -84,10 +106,11 @@ const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string
     { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' }
   ],
   gemini: [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Empfohlen)' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
     { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
-    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
-    { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite Preview' },
-    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' }
+    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
   ]
 };
 
@@ -96,10 +119,14 @@ const localProviderIds = new Set(['lmstudio', 'lm-studio', 'ollama', 'custom', '
 export function normalizeSetupState(raw: unknown): SetupState {
   if (!raw || typeof raw !== 'object') return defaultSetupState;
   const data = raw as Partial<SetupState>;
+  const botName = typeof data.botName === 'string' ? data.botName.trim() : '';
+  const personality = typeof data.personality === 'string' ? data.personality.trim() : '';
   return {
     cloudSetupComplete: data.cloudSetupComplete === true,
     provider: String(data.provider || '').trim(),
-    model: String(data.model || '').trim()
+    model: String(data.model || '').trim(),
+    ...(botName ? { botName } : {}),
+    ...(personality ? { personality } : {})
   };
 }
 

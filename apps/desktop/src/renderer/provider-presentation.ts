@@ -174,11 +174,14 @@ const MODEL_NOTES: Array<[string, ModelNote]> = [
   ['claude-sonnet-4.6', { summary: 'Best quality-per-cost for coding and long context.', tier: 'balanced' }],
   ['claude-sonnet-4-5', { summary: 'Reliable all-rounder from the previous generation.', tier: 'balanced' }],
   // Google
-  ['gemini-3.1-pro', { summary: 'Google’s flagship; very large context window.', tier: 'powerful' }],
-  ['gemini-3-flash', { summary: 'Fast Gemini with good quality for chat and search.', tier: 'fast' }],
-  ['gemini-3.1-flash-lite', { summary: 'Cheapest Gemini — fine for simple, high-volume turns.', tier: 'fast' }],
-  ['gemini-2.5-pro', { summary: 'Older Pro model; stable and well-tested.', tier: 'balanced' }],
+  ['gemini-3.1-pro', { summary: 'Google flagship preview; 1M+ context window.', tier: 'powerful' }],
+  ['gemini-3-flash', { summary: 'Fast next-gen Gemini with high quality for chat and search.', tier: 'fast' }],
+  ['gemini-2.5-flash-lite', { summary: 'Ultra-light, fastest Gemini for rapid responses.', tier: 'fast' }],
+  ['gemini-2.5-flash', { summary: 'Flagship speed & accuracy; ideal for everyday browsing & research.', tier: 'fast' }],
+  ['gemini-2.5-pro', { summary: 'Advanced reasoning, deep comprehension and huge context.', tier: 'powerful' }],
   // Others
+  ['deepseek-reasoner', { summary: 'DeepSeek-R1 reasoning model; outstanding complex problem solving.', tier: 'powerful' }],
+  ['deepseek-chat', { summary: 'DeepSeek-V3 general assistant; fast, versatile and inexpensive.', tier: 'balanced' }],
   ['deepseek', { summary: 'Strong reasoning at low cost; popular for code.', tier: 'balanced' }],
   ['mimo', { summary: 'Xiaomi’s model — inexpensive general chat.', tier: 'fast' }],
   ['glm', { summary: 'Z.AI GLM — solid multilingual reasoning.', tier: 'balanced' }],
@@ -206,3 +209,135 @@ export const tierLabels: Record<ModelNote['tier'], string> = {
   powerful: 'most capable',
   local: 'local'
 };
+
+export type ProviderRecommendation = {
+  id: string;
+  badge: string;
+  badgeType: 'recommended' | 'popular' | 'private' | 'power';
+  headline: string;
+  benefits: string[];
+  bestFor: string;
+  actionPrompt: string;
+};
+
+export const PROVIDER_RECOMMENDATIONS: Record<string, ProviderRecommendation> = {
+  'google-gemini-cli': {
+    id: 'google-gemini-cli',
+    badge: 'Empfohlen • Kostenlos mit Google-Konto',
+    badgeType: 'recommended',
+    headline: 'Google Gemini (Schnell & Riesiges Kontextfenster)',
+    benefits: [
+      'Kein API-Key oder Kreditkarte nötig – Login direkt mit Google-Konto',
+      'Bis zu 1 Million Tokens Kontext – erfasst ganze Websites, PDFs & lange Dokumente',
+      'Optimiert für Live-Browsing, Web-Zusammenfassungen und Recherche',
+      'Zugriff auf Gemini 2.5 Flash & Pro'
+    ],
+    bestFor: 'Beste Wahl für die meisten Nutzer: Sofort startklar ohne Kosten',
+    actionPrompt: 'In Lastbrowser mit Google anmelden'
+  },
+  'openai-codex': {
+    id: 'openai-codex',
+    badge: 'Beliebt • Mit ChatGPT Plus/Team',
+    badgeType: 'popular',
+    headline: 'ChatGPT / OpenAI (Bestehendes Abo nutzen)',
+    benefits: [
+      'Nutze dein vorhandenes ChatGPT Plus-, Team- oder Enterprise-Abonnement',
+      'Keine separaten API-Token-Abrechnungen',
+      'Zugriff auf GPT-4o und OpenAI Reasoning-Modelle',
+      'Sicherer Device-Login ohne Passworteingabe in der App'
+    ],
+    bestFor: 'Ideal, wenn du bereits ein monatliches ChatGPT-Abo nutzt',
+    actionPrompt: 'Mit ChatGPT anmelden'
+  },
+  ollama: {
+    id: 'ollama',
+    badge: '100% Privat • Lokal auf deinem PC',
+    badgeType: 'private',
+    headline: 'Ollama (Lokale Open-Source KI)',
+    benefits: [
+      'Vollständiger Datenschutz: Keine Daten verlassen deinen Computer',
+      'Funktioniert offline und komplett ohne Internetverbindung',
+      '100% kostenlos ohne Limits oder Account-Pflicht',
+      'Unterstützt Llama 3.3, Mistral, Qwen 2.5 und DeepSeek-R1'
+    ],
+    bestFor: 'Für maximale Privatsphäre, Offline-Arbeit und Entwickler',
+    actionPrompt: 'Ollama lokal verbinden'
+  }
+};
+
+export type PersonalityProfile = {
+  id: string;
+  name: string;
+  tagline: string;
+  description: string;
+  badge: string;
+  badgeType: 'recommended' | 'precision' | 'code' | 'creative' | 'mentor';
+  icon: string;
+  tone: string;
+  samplePhrase: string;
+};
+
+export const PERSONALITY_PROFILES: PersonalityProfile[] = [
+  {
+    id: 'nova',
+    name: 'Nova (Standard)',
+    tagline: 'Direkt & Proaktiv',
+    description: 'Pragmatisch, lösungsorientiert und faktenbasiert. Packt Aufgaben direkt an ohne unnötiges Vorgeplänkel.',
+    badge: 'Empfohlen',
+    badgeType: 'recommended',
+    icon: '✨',
+    tone: 'Direkt & Ausgewogen',
+    samplePhrase: '„Hier ist das konkrete Ergebnis samt der relevanten Fakten.“'
+  },
+  {
+    id: 'analytical',
+    name: 'Analyst & Forscher',
+    tagline: 'Präzise & Akademisch',
+    description: 'Tiefgründig, methodisch und strukturiert. Nennt Quellen, wägt Vor- und Nachteile ab und prüft Annahmen gründlich.',
+    badge: 'Exakt',
+    badgeType: 'precision',
+    icon: '🔬',
+    tone: 'Wissenschaftlich & Gründlich',
+    samplePhrase: '„Die Evidenz zeigt folgende Muster; hier sind die Metriken dazu.“'
+  },
+  {
+    id: 'developer',
+    name: 'Coder / Hacker',
+    tagline: 'Code & Architektur',
+    description: 'Minimaler Text, sauber formatierter Code, Best Practices, CLI-Befehle und pragmatische Problemlösung.',
+    badge: 'Code-Fokus',
+    badgeType: 'code',
+    icon: '💻',
+    tone: 'Prägnant & Technisch',
+    samplePhrase: '„Hier ist der optimierte Patch samt Validierungs-Befehl.“'
+  },
+  {
+    id: 'creative',
+    name: 'Brainstormer',
+    tagline: 'Kreativ & Out-of-the-Box',
+    description: 'Ideenreich, bildhaft und unkonventionell. Eröffnet neue Blickwinkel und findet innovative Ansätze.',
+    badge: 'Inspirierend',
+    badgeType: 'creative',
+    icon: '🎨',
+    tone: 'Lebendig & Explorativ',
+    samplePhrase: '„Was wäre, wenn wir das umdrehen? Hier sind 3 frische Ideen.“'
+  },
+  {
+    id: 'mentor',
+    name: 'Mentor & Begleiter',
+    tagline: 'Geduldig & Erklärend',
+    description: 'Schritt-für-Schritt-Anleitungen, warmherzig und pädagogisch wertvoll. Ideal zum Lernen und Verstehen.',
+    badge: 'Didaktisch',
+    badgeType: 'mentor',
+    icon: '🌱',
+    tone: 'Warmherzig & Didaktisch',
+    samplePhrase: '„Lass uns das Schritt für Schritt gemeinsam durchgehen.“'
+  }
+];
+
+export const BOT_NAME_PRESETS = [
+  { name: 'Nova', desc: 'Modern & KI-nativ' },
+  { name: 'Sidekick', desc: 'Klassischer Begleiter' },
+  { name: 'Hermes', desc: 'Schnell & Agil' },
+  { name: 'Aura', desc: 'Ruhig & Fokussiert' }
+];

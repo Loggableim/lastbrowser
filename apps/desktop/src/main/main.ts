@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { app, BrowserWindow, clipboard, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, Menu, shell, session, type Session } from 'electron';
+import { ExtensionManager } from './extensions.js';
+import { resolveCdpPort } from './cdp.js';
 import { moduleDirname } from './module-path.js';
 import { SidecarServices, appResourcesDir, resolveServiceLayout } from './services.js';
 import { loadSetupState, saveSetupState } from './setup-store.js';
@@ -148,13 +150,19 @@ import { createDownloadTracker } from './downloads.js';
 import { createPermissionController, loadTrustedOrigins, saveTrustedOrigins, trustedOriginsFileName } from './permissions.js';
 import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
 import { registerWindowControlIpc } from './window-controls.js';
-import { startTerminal, writeTerminal, closeTerminal, getTerminalIds } from './terminal-process.js';
+import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTerminalIds } from './terminal-process.js';
+import { createAppTray, setupMinimizeToTray, type TrayController } from './tray.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
+import { registerBrowserShortcuts } from './shortcuts.js';
+import { openAuthConnectWindow } from './auth-window.js';
+import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
 
 const mainDir = moduleDirname(import.meta.url);
 let mainWindow: BrowserWindow | null = null;
 let services: SidecarServices | null = null;
+let appTray: TrayController | null = null;
+let isQuitting = false;
 const adblock = createAdblockController();
 const sidekickUpdater = createSidekickUpdater({
   // After a successful Sidekick update, restart the sidecar so the new code
@@ -175,9 +183,41 @@ const trustedOriginsPath = path.join(app.getPath('userData'), trustedOriginsFile
 const trustedOriginsFs = { existsSync, readFileSync, writeFileSync };
 const permissions = createPermissionController(loadTrustedOrigins(trustedOriginsPath, trustedOriginsFs));
 permissions.onTrustedChange((origins) => saveTrustedOrigins(trustedOriginsPath, origins, trustedOriginsFs));
+let currentAssistantName = 'Nova';
+const activeSessions = new Set<Session>();
+const extensionManager = new ExtensionManager(app.getPath('userData'), () => Array.from(activeSessions));
 
 function createWindow(): void {
   mainWindow = new BrowserWindow(createMainWindowOptions(mainDir));
+
+  mainWindow.on('maximize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('lastbrowser:window:maximizeChanged', true);
+    }
+  });
+
+  mainWindow.on('unmaximize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('lastbrowser:window:maximizeChanged', false);
+    }
+  });
+
+  mainWindow.on('enter-full-screen', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('lastbrowser:window:fullScreenChanged', true);
+    }
+  });
+
+  mainWindow.on('leave-full-screen', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('lastbrowser:window:fullScreenChanged', false);
+    }
+  });
+
+  setupMinimizeToTray(mainWindow, () => {
+    if (isQuitting || process.platform === 'darwin') return false;
+    return true;
+  });
 
   const rendererUrl = process.env.LASTBROWSER_RENDERER_URL;
   if (rendererUrl) {
@@ -202,8 +242,16 @@ function registerIpc(): void {
     services?.stop();
     return services?.getStatus();
   });
-  ipcMain.handle('lastbrowser:setup:load', () => loadSetupState(app.getPath('userData')));
-  ipcMain.handle('lastbrowser:setup:save', (_event, state) => saveSetupState(app.getPath('userData'), state));
+  ipcMain.handle('lastbrowser:setup:load', async () => {
+    const state = await loadSetupState(app.getPath('userData'));
+    if (state.botName) currentAssistantName = state.botName;
+    return state;
+  });
+  ipcMain.handle('lastbrowser:setup:save', async (_event, state) => {
+    const saved = await saveSetupState(app.getPath('userData'), state);
+    if (saved.botName) currentAssistantName = saved.botName;
+    return saved;
+  });
   ipcMain.handle('lastbrowser:sidekick:onboardingStatus', () => getOnboardingStatus(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:applyCloudSetup', (_event, request) => applyCloudSetup(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:setDefaultModel', (_event, request) => setDefaultModel(requireWebuiUrl(), String(request?.model || '')));
@@ -221,6 +269,10 @@ function registerIpc(): void {
     String(request?.flowId || ''),
     String(request?.provider || 'openai-codex')
   ));
+  ipcMain.handle('lastbrowser:auth:openConnectWindow', (_event, url: string) => {
+    openAuthConnectWindow({ url: String(url || ''), parentWindow: mainWindow });
+    return true;
+  });
   ipcMain.handle('lastbrowser:sidekick:requestWebui', (_event, request) => requestWebui(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:listSessions', () => listSessions(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:listSpaces', () => listSpaces(requireWebuiUrl()));
@@ -393,16 +445,76 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:unbanDiscordMember', (_event, request) => unbanDiscordMember(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:configureDiscord', (_event, request) => configureDiscord(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:sendMessage', (_event, request) => sendSidekickMessage(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:terminal:start', (_event, cwd) => {
+  ipcMain.handle('lastbrowser:terminal:start', (_event, request) => {
     const webContents = _event.sender;
-    const result = startTerminal(String(cwd || ''), (id, data) => {
-      try { webContents.send('lastbrowser:terminal:data', { id, data }); } catch (_) {}
-    });
+    const reqObj = typeof request === 'string' ? { cwd: request } : (request || {});
+    const cwd = String(reqObj.cwd || '');
+    const mode = reqObj.mode === 'tui' ? 'tui' : 'shell';
+    const layout = services?.getLayout();
+    const result = startTerminal(
+      cwd,
+      (id, data) => {
+        try { webContents.send('lastbrowser:terminal:data', { id, data }); } catch (_) {}
+      },
+      {
+        mode,
+        pythonExe: layout?.pythonExe,
+        sidekickDir: layout?.sidekickDir,
+        cols: reqObj.cols,
+        rows: reqObj.rows
+      }
+    );
     return result;
   });
   ipcMain.handle('lastbrowser:terminal:write', (_event, request) => writeTerminal(String(request?.id || ''), String(request?.data || '')));
+  ipcMain.handle('lastbrowser:terminal:resize', (_event, request) =>
+    resizeTerminal(String(request?.id || ''), Number(request?.cols || 120), Number(request?.rows || 30))
+  );
   ipcMain.handle('lastbrowser:terminal:close', (_event, id) => closeTerminal(String(id || '')));
   ipcMain.handle('lastbrowser:terminal:list', () => getTerminalIds());
+
+  // Multi-Platform Messaging Gateway Daemon handlers
+  ipcMain.handle('lastbrowser:gateway:status', () => {
+    return services?.getGatewayStatus() ?? { running: false, pid: null, lastError: null, startedAt: null };
+  });
+  ipcMain.handle('lastbrowser:gateway:start', async () => {
+    const status = await services?.startGateway();
+    appTray?.updateMenu();
+    return status;
+  });
+  ipcMain.handle('lastbrowser:gateway:stop', async () => {
+    const status = await services?.stopGateway();
+    appTray?.updateMenu();
+    return status;
+  });
+  ipcMain.handle('lastbrowser:gateway:restart', async () => {
+    const status = await services?.restartGateway();
+    appTray?.updateMenu();
+    return status;
+  });
+  ipcMain.handle('lastbrowser:gateway:platforms', () => {
+    return [
+      { id: 'telegram', name: 'Telegram', protocol: 'MTProto / Bot API', icon: 'send', status: 'available' },
+      { id: 'whatsapp', name: 'WhatsApp', protocol: 'Web Multi-Device & Cloud API', icon: 'message-circle', status: 'available' },
+      { id: 'signal', name: 'Signal', protocol: 'Signal-CLI Daemon', icon: 'shield', status: 'available' },
+      { id: 'discord', name: 'Discord', protocol: 'Gateway WebSocket v10', icon: 'message-square', status: 'available' },
+      { id: 'slack', name: 'Slack', protocol: 'Socket Mode & Events API', icon: 'hash', status: 'available' },
+      { id: 'matrix', name: 'Matrix', protocol: 'Matrix Client-Server API', icon: 'globe', status: 'available' },
+      { id: 'bluebubbles', name: 'iMessage / Apple', protocol: 'BlueBubbles REST / Socket', icon: 'smartphone', status: 'available' },
+      { id: 'homeassistant', name: 'Home Assistant', protocol: 'WebSocket & REST API', icon: 'home', status: 'available' },
+      { id: 'email', name: 'Email / IMAP', protocol: 'IMAP / SMTP Relay', icon: 'mail', status: 'available' }
+    ];
+  });
+  ipcMain.handle('lastbrowser:doctor:run', (_event, options?: { fix?: boolean }) => {
+    return services?.runDoctor(options);
+  });
+  // Cross-Tab Context Synthesis & Intelligence (Phase 10.1 & 10.6)
+  ipcMain.handle('lastbrowser:tabs:synthesizeContext', (_event, options?: TabSynthesisOptions) => {
+    return synthesizeTabs(options);
+  });
+  ipcMain.handle('lastbrowser:tabs:extractActive', (_event, maxChars?: number) => {
+    return extractActiveWebview(maxChars);
+  });
   registerWindowControlIpc(ipcMain, () => mainWindow);
   registerUpdateIpc(() => mainWindow);
   ipcMain.handle('lastbrowser:adblock:status', () => adblock.getStatus());
@@ -442,6 +554,67 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick-update:status', () => sidekickUpdater.getStatus());
   ipcMain.handle('lastbrowser:sidekick-update:check', () => sidekickUpdater.check());
   ipcMain.handle('lastbrowser:sidekick-update:apply', () => sidekickUpdater.apply());
+  ipcMain.handle('lastbrowser:extensions:list', () => extensionManager.list());
+  ipcMain.handle('lastbrowser:extensions:presets', () => extensionManager.getPresets());
+  ipcMain.handle('lastbrowser:extensions:installUnpacked', async (_event, dirPath: unknown) => {
+    return extensionManager.installFromDirectory(String(dirPath || ''));
+  });
+  ipcMain.handle('lastbrowser:extensions:installCws', async (_event, idOrUrl: unknown) => {
+    return extensionManager.installFromCws(String(idOrUrl || ''));
+  });
+  ipcMain.handle('lastbrowser:extensions:toggle', async (_event, request: unknown) => {
+    const payload = (request || {}) as { id?: string; enabled?: boolean };
+    return extensionManager.toggle(String(payload.id || ''), Boolean(payload.enabled));
+  });
+  ipcMain.handle('lastbrowser:extensions:toggleIncognito', async (_event, request: unknown) => {
+    const payload = (request || {}) as { id?: string; allow?: boolean };
+    return extensionManager.toggleIncognito(String(payload.id || ''), Boolean(payload.allow));
+  });
+  ipcMain.handle('lastbrowser:extensions:remove', async (_event, id: unknown) => {
+    return extensionManager.remove(String(id || ''));
+  });
+  ipcMain.handle('lastbrowser:extensions:chooseDir', async () => {
+    return extensionManager.chooseDirectory(mainWindow || undefined);
+  });
+  ipcMain.handle('lastbrowser:cdp:status', async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:${cdpPort}/json/version`);
+      const data = (await res.json()) as { webSocketDebuggerUrl?: string; Browser?: string };
+      return {
+        available: true,
+        port: cdpPort,
+        url: `http://127.0.0.1:${cdpPort}`,
+        wsUrl: data.webSocketDebuggerUrl ?? null,
+        browser: data.Browser ?? null
+      };
+    } catch {
+      return {
+        available: false,
+        port: cdpPort,
+        url: `http://127.0.0.1:${cdpPort}`,
+        wsUrl: null,
+        browser: null
+      };
+    }
+  });
+  ipcMain.handle('lastbrowser:cdp:execute', async (_event, request: unknown) => {
+    const payload = (request || {}) as { targetUrl?: string; method?: string; params?: Record<string, unknown> };
+    try {
+      const listRes = await fetch(`http://127.0.0.1:${cdpPort}/json/list`);
+      const targets = (await listRes.json()) as Array<{ id: string; url: string; webSocketDebuggerUrl?: string; type: string }>;
+      const guestTarget = payload.targetUrl
+        ? targets.find((t) => t.url.includes(payload.targetUrl!))
+        : targets.find((t) => t.type === 'webview' || (t.type === 'page' && !t.url.includes('index.html')));
+
+      return {
+        ok: true,
+        targetsCount: targets.length,
+        matchedTarget: guestTarget ? { id: guestTarget.id, url: guestTarget.url } : null
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
 }
 
 async function runAgentWorkspaceStream(
@@ -516,6 +689,11 @@ async function ensureSidecarAuth(): Promise<void> {
   }
 }
 
+export const cdpPort = resolveCdpPort();
+if (!process.argv.some((a) => a.startsWith('--remote-debugging-port'))) {
+  app.commandLine.appendSwitch('remote-debugging-port', String(cdpPort));
+}
+
 app.setName('Lastbrowser');
 // Must run before whenReady: registering a scheme as privileged afterwards has
 // no effect on storage partitioning, and localStorage would stay ephemeral.
@@ -531,6 +709,11 @@ app.whenReady().then(() => {
     Menu,
     clipboard,
     shell,
+    getWindow: () => mainWindow,
+    getAssistantName: () => currentAssistantName
+  });
+  registerBrowserShortcuts({
+    app,
     getWindow: () => mainWindow
   });
   services = new SidecarServices(resolveServiceLayout(appResourcesDir()));
@@ -538,6 +721,17 @@ app.whenReady().then(() => {
   registerIpc();
   createWindow();
   startAutoUpdateChecks();
+  activeSessions.add(session.defaultSession);
+  void extensionManager.init();
+  appTray = createAppTray({
+    getMainWindow: () => mainWindow,
+    getServices: () => services,
+    resourcesDir: appResourcesDir(),
+    onQuit: () => {
+      isQuitting = true;
+      app.quit();
+    }
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -548,8 +742,11 @@ app.whenReady().then(() => {
 // browser session (webviews use per-profile `persist:` partitions, so each
 // profile gets its own).
 app.on('session-created', (session) => {
+  activeSessions.add(session);
   void adblock.attach(session);
   downloads.attach(session);
+  const isIncognito = (session as unknown as { isInMemory?: () => boolean }).isInMemory?.() ?? false;
+  void extensionManager.attachToSession(session, isIncognito);
   // Deny-by-default: Electron grants every permission silently otherwise, which
   // would hand any website the camera, microphone and location.
   session.setPermissionRequestHandler((_contents, permission, callback, details) => {
@@ -562,6 +759,8 @@ app.on('session-created', (session) => {
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
+  appTray?.destroy();
   for (const controller of agentWorkspaceStreams.values()) controller.abort();
   agentWorkspaceStreams.clear();
   services?.stop();

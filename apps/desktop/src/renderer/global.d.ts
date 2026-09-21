@@ -127,6 +127,83 @@ type WebuiBridgeRequest = {
   headers?: Record<string, string>;
 };
 
+type DoctorCheck = {
+  type: 'ok' | 'warn' | 'fail' | 'info';
+  text: string;
+  detail?: string;
+};
+
+type DoctorCategory = {
+  name: string;
+  checks: DoctorCheck[];
+  status: 'ok' | 'warn' | 'fail';
+};
+
+type DoctorReport = {
+  timestamp: number;
+  exitCode: number;
+  rawOutput: string;
+  categories: DoctorCategory[];
+  issues: string[];
+  summary: {
+    passed: number;
+    warnings: number;
+    failures: number;
+  };
+};
+
+type ExtractedTabContent = {
+  tabId?: string;
+  url: string;
+  title: string;
+  metaDescription?: string;
+  markdown: string;
+  headings: string[];
+  tables: string[];
+  charCount: number;
+  estimatedTokens: number;
+  hasInjectionAttempt: boolean;
+  sanitizedPatterns: string[];
+  truncated: boolean;
+};
+
+type TabSynthesisResult = {
+  activeTab?: ExtractedTabContent | null;
+  tabs: ExtractedTabContent[];
+  totalTabs: number;
+  promptBlock: string;
+};
+
+type ExtensionSource = 'store' | 'unpacked' | 'preset';
+
+type ExtensionRecord = {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  iconDataUrl?: string;
+  path: string;
+  enabled: boolean;
+  manifestVersion: number;
+  source: ExtensionSource;
+  installTime: number;
+  allowInIncognito: boolean;
+  permissions?: string[];
+  homepageUrl?: string;
+};
+
+type ExtensionPreset = {
+  id: string;
+  name: string;
+  cwsId: string;
+  category: string;
+  description: string;
+  author: string;
+  badge?: string;
+  icon: string;
+  homepageUrl?: string;
+};
+
 declare global {
   interface Window {
     lastbrowser: {
@@ -148,10 +225,13 @@ declare global {
       };
       browser: {
         onOpenTab: (callback: (url: string) => void) => () => void;
+        onOpenIncognitoTab: (callback: (url: string) => void) => () => void;
+        onDeepResearch: (callback: (payload: { selectionText?: string; pageUrl?: string }) => void) => () => void;
+        onShortcut: (callback: (event: { action: string; payload?: { index?: number } }) => void) => () => void;
       };
       sidekick: {
         onboardingStatus: () => Promise<Record<string, unknown>>;
-        applyCloudSetup: (request: { provider: string; model: string; apiKey?: string }) => Promise<Record<string, unknown>>;
+        applyCloudSetup: (request: { provider: string; model: string; apiKey?: string; confirmOverwrite?: boolean }) => Promise<Record<string, unknown>>;
         setDefaultModel: (request: { model: string }) => Promise<Record<string, unknown>>;
         completeCloudSetup: () => Promise<Record<string, unknown>>;
         startOAuth: (request: { provider: string }) => Promise<{
@@ -160,6 +240,8 @@ declare global {
           flow_id?: string;
           status?: string;
           verification_uri?: string;
+          /** Gemini CLI OAuth flow uses auth_url instead of verification_uri. */
+          auth_url?: string;
           user_code?: string;
           expires_at?: number;
           poll_interval_seconds?: number;
@@ -369,10 +451,116 @@ declare global {
         install: () => Promise<LastbrowserUpdateStatus>;
         onStatus: (callback: (status: LastbrowserUpdateStatus) => void) => () => void;
       };
+      terminal: {
+        start: (request: string | { cwd?: string; mode?: 'shell' | 'tui'; cols?: number; rows?: number }) =>
+          Promise<{ id: string; error?: string }>;
+        write: (request: { id: string; data: string }) => Promise<{ ok: boolean; error?: string }>;
+        resize?: (request: { id: string; cols: number; rows: number }) => Promise<{ ok: boolean; error?: string }>;
+        close: (id: string) => Promise<{ ok: boolean; error?: string }>;
+        list: () => Promise<string[]>;
+        onData: (callback: (event: { id: string; data: string }) => void) => () => void;
+      };
+      gateway: {
+        status: () => Promise<{
+          running: boolean;
+          pid: number | null;
+          lastError: string | null;
+          startedAt: number | null;
+        }>;
+        start: () => Promise<{
+          running: boolean;
+          pid: number | null;
+          lastError: string | null;
+          startedAt: number | null;
+        }>;
+        stop: () => Promise<{
+          running: boolean;
+          pid: number | null;
+          lastError: string | null;
+          startedAt: number | null;
+        }>;
+        restart: () => Promise<{
+          running: boolean;
+          pid: number | null;
+          lastError: string | null;
+          startedAt: number | null;
+        }>;
+        platforms: () => Promise<
+          Array<{
+            id: string;
+            name: string;
+            protocol: string;
+            icon: string;
+            status: string;
+          }>
+        >;
+      };
+      doctor: {
+        run: (options?: { fix?: boolean }) => Promise<DoctorReport>;
+      };
+      tabIntelligence: {
+        synthesizeContext: (options?: {
+          tabs?: Array<{ id: string; title: string; url: string; isActive?: boolean }>;
+          tabIds?: string[];
+          maxCharsPerTab?: number;
+        }) => Promise<TabSynthesisResult>;
+        extractActive: (maxChars?: number) => Promise<ExtractedTabContent | null>;
+      };
+      adblock?: {
+        status: () => Promise<{
+          enabled: boolean;
+          blockedCount: number;
+          state: 'idle' | 'loading' | 'ready' | 'error';
+          lastError: string | null;
+        }>;
+        setEnabled: (enabled: boolean) => Promise<{
+          enabled: boolean;
+          blockedCount: number;
+          state: 'idle' | 'loading' | 'ready' | 'error';
+          lastError: string | null;
+        }>;
+      };
+      auth?: {
+        openConnectWindow: (url: string) => Promise<boolean>;
+      };
+      extensions: {
+        list: () => Promise<ExtensionRecord[]>;
+        presets: () => Promise<ExtensionPreset[]>;
+        installUnpacked: (dirPath: string) => Promise<ExtensionRecord>;
+        installCws: (idOrUrl: string) => Promise<ExtensionRecord>;
+        toggle: (request: { id: string; enabled: boolean }) => Promise<ExtensionRecord>;
+        toggleIncognito: (request: { id: string; allow: boolean }) => Promise<ExtensionRecord>;
+        remove: (id: string) => Promise<boolean>;
+        chooseDir: () => Promise<string | null>;
+      };
       window: {
         minimize: () => Promise<void>;
         toggleMaximize: () => Promise<boolean>;
         close: () => Promise<void>;
+        isMaximized?: () => Promise<boolean>;
+        unmaximize?: () => Promise<void>;
+        setPosition?: (x: number, y: number) => Promise<void>;
+        getBounds?: () => Promise<{ x: number; y: number; width: number; height: number }>;
+        isFullScreen?: () => Promise<boolean>;
+        setFullScreen?: (flag: boolean) => Promise<void>;
+        toggleFullScreen?: () => Promise<boolean>;
+        onMaximizeChange?: (callback: (maximized: boolean) => void) => () => void;
+        onFullScreenChange?: (callback: (fullscreen: boolean) => void) => () => void;
+      };
+      cdp?: {
+        status: () => Promise<{
+          available: boolean;
+          port: number;
+          url: string;
+          wsUrl: string | null;
+          browser: string | null;
+        }>;
+        execute: (request: { targetUrl?: string; method?: string; params?: Record<string, unknown> }) => Promise<{
+          ok: boolean;
+          targetsCount?: number;
+          matchedTarget?: { id: string; url: string } | null;
+          error?: string;
+        }>;
       };
     };
   }

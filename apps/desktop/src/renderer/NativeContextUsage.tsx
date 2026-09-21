@@ -62,7 +62,7 @@ export function ContextUsageIndicator({
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     setUsage(null);
     setContext(null);
-    if (!activeSessionId || !ready) return null;
+    if (!activeSessionId || !ready) return;
     void fetchUsage();
     void fetchContext();
     pollRef.current = setInterval(() => {

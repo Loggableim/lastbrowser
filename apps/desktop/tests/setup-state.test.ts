@@ -70,10 +70,13 @@ describe('cloud first-run setup state', () => {
   it('shows cloud provider fallbacks before the onboarding API responds', () => {
     expect(cloudProviderOptions(null).map((option) => option.id)).toEqual([
       'openai-codex',
+      'google-gemini-cli',
+      'ollama',
       'openrouter',
       'openai',
       'anthropic',
-      'gemini'
+      'gemini',
+      'deepseek'
     ]);
   });
 
@@ -98,6 +101,9 @@ describe('cloud first-run setup state', () => {
       label: 'GPT-5.5'
     });
     expect(modelsForProvider(null, 'openai-codex').map((model) => model.id)).toContain('gpt-5.3-codex');
+    expect(modelsForProvider(null, 'google-gemini-cli')[0]?.id).toBe('gemini-2.5-flash');
+    expect(modelsForProvider(null, 'google-gemini-cli').map((m) => m.id)).toContain('gemini-2.5-pro');
+    expect(modelsForProvider(null, 'ollama')[0]?.id).toBe('llama3.3');
     expect(modelsForProvider(null, 'openai')[0]?.id).toBe('gpt-5.5');
     expect(modelsForProvider(null, 'openrouter')[0]?.id).toBe('anthropic/claude-sonnet-4.6');
   });
@@ -148,5 +154,21 @@ describe('cloud first-run setup state', () => {
   it('keeps setup submission disabled until the WebUI API is reachable', () => {
     expect(canSubmitCloudSetup(firstRunStatus({ sidekick: 'ready', webuiHealth: 'checking' }, null))).toBe(false);
     expect(canSubmitCloudSetup(firstRunStatus({ sidekick: 'ready', webuiHealth: 'ready' }, { system: { chat_ready: false } }))).toBe(true);
+  });
+
+  it('normalizes botName and personality settings when provided', () => {
+    expect(normalizeSetupState({
+      cloudSetupComplete: true,
+      provider: 'google-gemini-cli',
+      model: 'gemini-2.5-flash',
+      botName: '  Hermes  ',
+      personality: '  developer  '
+    })).toEqual({
+      cloudSetupComplete: true,
+      provider: 'google-gemini-cli',
+      model: 'gemini-2.5-flash',
+      botName: 'Hermes',
+      personality: 'developer'
+    });
   });
 });

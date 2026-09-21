@@ -136,8 +136,13 @@ export function resolveServiceLayout(
 export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number): NodeJS.ProcessEnv {
   const webuiPortValue = String(webuiPort);
   const webuiBaseUrl = `http://127.0.0.1:${webuiPortValue}`;
+  const cdpPort = process.env.LASTBROWSER_CDP_PORT || process.env.CDP_PORT || '9222';
+  const cdpUrl = `http://127.0.0.1:${cdpPort}`;
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    BROWSER_CDP_URL: cdpUrl,
+    LASTBROWSER_CDP_URL: cdpUrl,
+    LASTBROWSER_CDP_PORT: cdpPort,
     LASTBROWSER_HOME: layout.runtimeDir,
     LASTBROWSER_WEBUI_AGENT_DIR: layout.sidekickDir,
     LASTBROWSER_WEBUI_STATE_DIR: path.join(layout.runtimeDir, 'webui'),
@@ -208,11 +213,191 @@ export async function checkWebuiHealth(webuiUrl: string): Promise<{ ok: boolean;
   }
 }
 
+export type DoctorCheck = {
+  type: 'ok' | 'warn' | 'fail' | 'info';
+  text: string;
+  detail?: string;
+};
+
+export type DoctorCategory = {
+  name: string;
+  checks: DoctorCheck[];
+  status: 'ok' | 'warn' | 'fail';
+};
+
+export type DoctorReport = {
+  timestamp: number;
+  exitCode: number;
+  rawOutput: string;
+  categories: DoctorCategory[];
+  issues: string[];
+  summary: {
+    passed: number;
+    warnings: number;
+    failures: number;
+  };
+};
+
+function extractCheckTextAndDetail(content: string): { text: string; detail?: string } {
+  const trimmed = content.trim();
+  if (!trimmed.endsWith(')')) {
+    return { text: trimmed };
+  }
+
+  // Find the matching opening parenthesis for the closing paren at the end
+  let depth = 0;
+  let splitIdx = -1;
+  for (let i = trimmed.length - 1; i >= 0; i--) {
+    if (trimmed[i] === ')') depth++;
+    else if (trimmed[i] === '(') {
+      depth--;
+      if (depth === 0) {
+        splitIdx = i;
+        break;
+      }
+    }
+  }
+
+  if (splitIdx > 0) {
+    const mainText = trimmed.slice(0, splitIdx).trim();
+    const detailText = trimmed.slice(splitIdx + 1, -1).trim();
+    if (mainText && detailText) {
+      return { text: mainText, detail: detailText };
+    }
+  }
+
+  return { text: trimmed };
+}
+
+export function parseDoctorOutput(raw: string, exitCode: number): DoctorReport {
+  const clean = raw
+    .replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '')
+    .replace(/\u001b\].*?\u0007/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+
+  const lines = clean.split('\n');
+  const categories: DoctorCategory[] = [];
+  let currentCategory: DoctorCategory | null = null;
+  const issues: string[] = [];
+  let inIssues = false;
+  let passed = 0;
+  let warnings = 0;
+  let failures = 0;
+
+  for (let line of lines) {
+    line = line.trimEnd();
+    if (!line) continue;
+
+    // Check if issues section started
+    if (/issue\(s\)\s+to\s+address:/i.test(line)) {
+      inIssues = true;
+      continue;
+    }
+
+    if (inIssues) {
+      const issueMatch = line.match(/^\s*\d+\.\s*(.+)$/);
+      if (issueMatch) {
+        issues.push(issueMatch[1].trim());
+        continue;
+      }
+      if (line.startsWith('Tip:') || line.startsWith('───')) {
+        continue;
+      }
+    }
+
+    // Category line starts with ◆
+    if (line.includes('◆')) {
+      const catName = line.replace(/^.*?◆\s*/, '').trim();
+      if (catName) {
+        currentCategory = {
+          name: catName,
+          checks: [],
+          status: 'ok'
+        };
+        categories.push(currentCategory);
+        continue;
+      }
+    }
+
+    // Check lines start with ✓, ✔, ⚠, ✗, ✘, → or similar
+    const checkMatch = line.match(/([✓✔⚠✗✘→])\s+(.+)$/);
+    if (checkMatch) {
+      const symbol = checkMatch[1];
+      const fullText = checkMatch[2].trim();
+
+      let type: DoctorCheck['type'] = 'info';
+      if (symbol === '✓' || symbol === '✔') {
+        type = 'ok';
+        passed++;
+      } else if (symbol === '⚠') {
+        type = 'warn';
+        warnings++;
+      } else if (symbol === '✗' || symbol === '✘') {
+        type = 'fail';
+        failures++;
+      } else {
+        type = 'info';
+      }
+
+      const { text, detail } = extractCheckTextAndDetail(fullText);
+      const check: DoctorCheck = { type, text };
+      if (detail) {
+        check.detail = detail;
+      }
+
+      if (!currentCategory) {
+        currentCategory = {
+          name: 'General',
+          checks: [],
+          status: 'ok'
+        };
+        categories.push(currentCategory);
+      }
+
+      currentCategory.checks.push(check);
+
+      if (type === 'fail') {
+        currentCategory.status = 'fail';
+      } else if (type === 'warn' && currentCategory.status === 'ok') {
+        currentCategory.status = 'warn';
+      }
+    }
+  }
+
+  return {
+    timestamp: Date.now(),
+    exitCode,
+    rawOutput: raw,
+    categories,
+    issues,
+    summary: {
+      passed,
+      warnings,
+      failures
+    }
+  };
+}
+
+export type GatewayStatus = {
+  running: boolean;
+  pid: number | null;
+  lastError: string | null;
+  startedAt: number | null;
+};
+
 export class SidecarServices {
   private webuiProcess: ChildProcess | null = null;
+  private gatewayProcess: ChildProcess | null = null;
   private startPromise: Promise<ServiceStatus> | null = null;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private status: ServiceStatus;
+  private gatewayStatus: GatewayStatus = {
+    running: false,
+    pid: null,
+    lastError: null,
+    startedAt: null
+  };
 
   constructor(
     private readonly layout: ServiceLayout,
@@ -233,8 +418,172 @@ export class SidecarServices {
     };
   }
 
+  getLayout(): ServiceLayout {
+    return this.layout;
+  }
+
   getStatus(): ServiceStatus {
     return { ...this.status };
+  }
+
+  getGatewayStatus(): GatewayStatus {
+    return { ...this.gatewayStatus };
+  }
+
+  startGateway(): Promise<GatewayStatus> {
+    if (this.gatewayProcess) {
+      return Promise.resolve(this.getGatewayStatus());
+    }
+
+    const port = this.status.port || this.preferredWebuiPort;
+    const env: NodeJS.ProcessEnv = {
+      ...buildSidecarEnvironment(this.layout, port),
+      SIDEKICK_NONINTERACTIVE: '1',
+      PYTHONUNBUFFERED: '1'
+    };
+
+    try {
+      this.gatewayProcess = this.spawnImpl(
+        this.layout.pythonExe,
+        ['-m', 'sidekick_cli.main', 'gateway', 'run'],
+        {
+          cwd: this.layout.sidekickDir,
+          env,
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe']
+        }
+      );
+
+      this.gatewayProcess.stdout?.on('data', (chunk: Buffer) => {
+        console.log(`[gateway] ${chunk.toString().trimEnd()}`);
+      });
+      this.gatewayProcess.stderr?.on('data', (chunk: Buffer) => {
+        console.error(`[gateway] ${chunk.toString().trimEnd()}`);
+      });
+
+      this.gatewayProcess.once('spawn', () => {
+        this.gatewayStatus = {
+          running: true,
+          pid: this.gatewayProcess?.pid ?? null,
+          lastError: null,
+          startedAt: Date.now()
+        };
+      });
+
+      this.gatewayProcess.once('error', (err: Error) => {
+        this.gatewayStatus = {
+          running: false,
+          pid: null,
+          lastError: err.message,
+          startedAt: null
+        };
+        this.gatewayProcess = null;
+      });
+
+      this.gatewayProcess.once('exit', (code, signal) => {
+        this.gatewayStatus = {
+          running: false,
+          pid: null,
+          lastError: code !== 0 && code !== null ? `Gateway exited (code=${code}, signal=${signal})` : null,
+          startedAt: null
+        };
+        this.gatewayProcess = null;
+      });
+
+      this.gatewayStatus = {
+        running: true,
+        pid: this.gatewayProcess.pid ?? null,
+        lastError: null,
+        startedAt: Date.now()
+      };
+      return Promise.resolve(this.getGatewayStatus());
+    } catch (error) {
+      this.gatewayStatus = {
+        running: false,
+        pid: null,
+        lastError: error instanceof Error ? error.message : String(error),
+        startedAt: null
+      };
+      this.gatewayProcess = null;
+      return Promise.resolve(this.getGatewayStatus());
+    }
+  }
+
+  stopGateway(): Promise<GatewayStatus> {
+    if (this.gatewayProcess) {
+      try {
+        this.gatewayProcess.kill();
+      } catch {}
+      this.gatewayProcess = null;
+    }
+    this.gatewayStatus = {
+      running: false,
+      pid: null,
+      lastError: null,
+      startedAt: null
+    };
+    return Promise.resolve(this.getGatewayStatus());
+  }
+
+  async restartGateway(): Promise<GatewayStatus> {
+    await this.stopGateway();
+    return await this.startGateway();
+  }
+
+  runDoctor(options?: { fix?: boolean }): Promise<DoctorReport> {
+    return new Promise((resolve) => {
+      const port = this.status.port || this.preferredWebuiPort;
+      const env: NodeJS.ProcessEnv = {
+        ...buildSidecarEnvironment(this.layout, port),
+        SIDEKICK_NONINTERACTIVE: '1',
+        PYTHONUNBUFFERED: '1'
+      };
+
+      const args = ['-m', 'sidekick_cli.main', 'doctor'];
+      if (options?.fix) {
+        args.push('--fix');
+      }
+
+      let stdout = '';
+      let stderr = '';
+
+      try {
+        const proc = this.spawnImpl(this.layout.pythonExe, args, {
+          cwd: this.layout.sidekickDir,
+          env,
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        proc.stdout?.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString();
+        });
+
+        proc.stderr?.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString();
+        });
+
+        proc.once('error', (err: Error) => {
+          const report = parseDoctorOutput(
+            `Error executing doctor: ${err.message}\n${stderr}`,
+            1
+          );
+          resolve(report);
+        });
+
+        proc.once('exit', (code) => {
+          const combined = stdout + (stderr ? `\n${stderr}` : '');
+          const report = parseDoctorOutput(combined, code ?? 0);
+          resolve(report);
+        });
+      } catch (err) {
+        const report = parseDoctorOutput(
+          `Failed to spawn doctor process: ${err instanceof Error ? err.message : String(err)}`,
+          1
+        );
+        resolve(report);
+      }
+    });
   }
 
   start(): Promise<ServiceStatus> {
@@ -371,6 +720,18 @@ export class SidecarServices {
   stop(): void {
     this.startPromise = null;
     this.stopHealthLoop();
+    if (this.gatewayProcess) {
+      try {
+        this.gatewayProcess.kill();
+      } catch {}
+      this.gatewayProcess = null;
+      this.gatewayStatus = {
+        running: false,
+        pid: null,
+        lastError: null,
+        startedAt: null
+      };
+    }
     if (!this.webuiProcess) {
       this.status = { ...this.status, sidekick: 'stopped' };
       return;

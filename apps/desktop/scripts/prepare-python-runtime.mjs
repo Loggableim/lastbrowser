@@ -82,9 +82,12 @@ function resolvePythonHome() {
     if (home && existsSync(join(home, 'python.exe'))) return requirePythonHome(home);
   }
 
-  for (const candidate of ['py -3.12', 'python']) {
-    const result = spawnSync(candidate, ['-c', 'import sys; print(sys.base_prefix)'], {
-      shell: true,
+  const candidates = [
+    { cmd: 'py', args: ['-3.12', '-c', 'import sys; print(sys.base_prefix)'] },
+    { cmd: 'python', args: ['-c', 'import sys; print(sys.base_prefix)'] }
+  ];
+  for (const { cmd, args } of candidates) {
+    const result = spawnSync(cmd, args, {
       encoding: 'utf8'
     });
     const home = result.stdout?.trim();

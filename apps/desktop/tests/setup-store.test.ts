@@ -30,4 +30,24 @@ describe('setup state store', () => {
       model: 'openai/gpt-5.4-mini'
     });
   });
+
+  it('persists botName and personality when provided', async () => {
+    tmpDir = await mkdtemp(path.join(os.tmpdir(), 'lastbrowser-setup-'));
+
+    await saveSetupState(tmpDir, {
+      cloudSetupComplete: true,
+      provider: 'google-gemini-cli',
+      model: 'gemini-2.5-flash',
+      botName: 'Sidekick',
+      personality: 'mentor'
+    });
+
+    await expect(loadSetupState(tmpDir)).resolves.toEqual({
+      cloudSetupComplete: true,
+      provider: 'google-gemini-cli',
+      model: 'gemini-2.5-flash',
+      botName: 'Sidekick',
+      personality: 'mentor'
+    });
+  });
 });

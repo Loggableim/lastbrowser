@@ -38,9 +38,12 @@ export function saveProfileTabs(
   storage: WriteStorage = window.localStorage
 ): void {
   const all = readAll(storage as unknown as ReadStorage);
+  const persistableTabs = state.tabs.filter((tab) => !tab.incognito);
   all[profileId] = {
-    tabs: state.tabs.map((tab) => ({ ...tab })),
-    activeTabId: state.activeTabId
+    tabs: persistableTabs.map((tab) => ({ ...tab })),
+    activeTabId: persistableTabs.some((t) => t.id === state.activeTabId)
+      ? state.activeTabId
+      : (persistableTabs[0]?.id ?? null)
   };
   storage.setItem(tabSessionsStorageKey, JSON.stringify(all));
 }
@@ -53,6 +56,87 @@ export function removeProfileTabs(
   if (!(profileId in all)) return;
   delete all[profileId];
   storage.setItem(tabSessionsStorageKey, JSON.stringify(all));
+}
+
+export const sessionSnapshotStorageKey = 'lastbrowser.sessionSnapshot.v1';
+
+export type SessionSnapshot = {
+  timestamp: number;
+  profileId: string;
+  state: ProfileTabState;
+};
+
+export function saveSessionSnapshot(
+  profileId: string,
+  state: ProfileTabState,
+  storage: WriteStorage = window.localStorage
+): void {
+  const persistableTabs = state.tabs.filter((tab) => !tab.incognito);
+  if (!persistableTabs.length) return;
+  const snapshot: SessionSnapshot = {
+    timestamp: Date.now(),
+    profileId,
+    state: {
+      tabs: persistableTabs.map((tab) => ({ ...tab })),
+      activeTabId: persistableTabs.some((t) => t.id === state.activeTabId)
+        ? state.activeTabId
+        : (persistableTabs[0]?.id ?? null)
+    }
+  };
+  storage.setItem(sessionSnapshotStorageKey, JSON.stringify(snapshot));
+}
+
+export function loadSessionSnapshot(
+  profileId?: string,
+  storage: ReadStorage = window.localStorage
+): SessionSnapshot | null {
+  const raw = storage.getItem(sessionSnapshotStorageKey);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const candidate = parsed as Partial<SessionSnapshot>;
+    if (typeof candidate.timestamp !== 'number' || !candidate.profileId || !candidate.state) {
+      return null;
+    }
+    if (profileId && candidate.profileId !== profileId) {
+      return null;
+    }
+    const normalizedState = normalizeTabState(candidate.state);
+    if (!normalizedState.tabs.length) return null;
+    return {
+      timestamp: candidate.timestamp,
+      profileId: candidate.profileId,
+      state: normalizedState
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearSessionSnapshot(
+  storage: ReadWriteStorage = window.localStorage
+): void {
+  if (typeof (storage as Storage).removeItem === 'function') {
+    (storage as Storage).removeItem(sessionSnapshotStorageKey);
+  } else {
+    storage.setItem(sessionSnapshotStorageKey, '');
+  }
+}
+
+export function hasRecoverableSession(
+  profileId: string,
+  currentTabs: BrowserTab[],
+  storage: ReadStorage = window.localStorage
+): boolean {
+  const snapshot = loadSessionSnapshot(profileId, storage);
+  if (!snapshot || !snapshot.state.tabs.length) return false;
+  if (currentTabs.length === snapshot.state.tabs.length) {
+    const currentUrls = currentTabs.map((t) => t.url).join('|');
+    const snapshotUrls = snapshot.state.tabs.map((t) => t.url).join('|');
+    if (currentUrls === snapshotUrls) return false;
+  }
+  return true;
 }
 
 function readAll(storage: ReadStorage): Record<string, unknown> {

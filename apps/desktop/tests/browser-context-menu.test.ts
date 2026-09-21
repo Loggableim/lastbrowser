@@ -52,4 +52,62 @@ describe('browser context menu', () => {
       'selectAll'
     ]));
   });
+
+  it('supports deep research, private tabs, and element inspection', () => {
+    const deepResearch = vi.fn();
+    const openLinkInIncognitoTab = vi.fn();
+    const inspect = vi.fn();
+
+    // 1. Text selection on page
+    const textTemplate = buildBrowserContextMenuTemplate({
+      linkURL: '',
+      pageURL: 'https://example.com/quantum',
+      selectionText: 'Quantum computing superposition',
+      isEditable: false,
+      editFlags: {},
+      x: 120,
+      y: 340
+    }, {
+      canGoBack: false,
+      canGoForward: false,
+      openLinkInNewTab: vi.fn(),
+      copyText: vi.fn(),
+      deepResearch,
+      inspect,
+      assistantName: 'Astra'
+    });
+
+    const researchItem = textTemplate.find((item) => item.label?.includes('Deep Research mit Astra'));
+    expect(researchItem).toBeDefined();
+    researchItem?.click?.({} as never, {} as never, {} as never);
+    expect(deepResearch).toHaveBeenCalledWith({
+      selectionText: 'Quantum computing superposition',
+      pageUrl: 'https://example.com/quantum'
+    });
+
+    const inspectItem = textTemplate.find((item) => item.label?.includes('Element untersuchen'));
+    expect(inspectItem).toBeDefined();
+    inspectItem?.click?.({} as never, {} as never, {} as never);
+    expect(inspect).toHaveBeenCalledWith(120, 340);
+
+    // 2. Link right-click
+    const linkTemplate = buildBrowserContextMenuTemplate({
+      linkURL: 'https://example.com/login',
+      pageURL: 'https://example.com',
+      selectionText: '',
+      isEditable: false,
+      editFlags: {}
+    }, {
+      canGoBack: false,
+      canGoForward: false,
+      openLinkInNewTab: vi.fn(),
+      openLinkInIncognitoTab,
+      copyText: vi.fn(),
+      assistantName: 'Nova'
+    });
+
+    expect(linkTemplate.map((item) => item.label)).toContain('Open link in new private tab');
+    linkTemplate.find((item) => item.label === 'Open link in new private tab')?.click?.({} as never, {} as never, {} as never);
+    expect(openLinkInIncognitoTab).toHaveBeenCalledWith('https://example.com/login');
+  });
 });

@@ -90,15 +90,20 @@ describe('browser shell layout', () => {
 
   it('keeps chat developer tools and raw prompts behind an explicit toggle', () => {
     const source = readRendererFile('App.tsx');
+    // After refactoring, ChatTranscript and related chat UI live in ChatComponents.tsx
+    const chatComponents = readRendererFile('panels/ChatComponents.tsx');
     const helper = readRendererFile('chat-display.ts');
     const css = readRendererFile('styles.css');
 
-    expect(source).toContain('showDeveloperTools');
-    expect(source).toContain('showDeveloperTools && (');
-    expect(source).toContain('partitionChatMessages');
-    expect(source).toContain('chat-developer-panel');
-    expect(source).toContain('ChatMessageBody');
-    expect(source).toContain('AdvancedWebUiTools panel="chat" serviceStatus={serviceStatus} compact');
+    // After refactoring, NativeChatMain lives in panels/NativeChatMain.tsx
+    const chatMain = readRendererFile('panels/NativeChatMain.tsx');
+    expect(chatMain).toContain('showDeveloperTools');
+    expect(chatMain).toContain('partitionChatMessages');
+    // The conditional rendering and panel live in the extracted component
+    expect(chatComponents).toContain('showDeveloperTools && (');
+    expect(chatComponents).toContain('chat-developer-panel');
+    expect(chatComponents).toContain('ChatMessageBody');
+    expect(chatComponents).toContain('AdvancedWebUiTools panel="chat" serviceStatus={serviceStatus} compact');
     expect(helper).toContain('summarizeInternalPrompt');
     expect(helper).toContain('describeChatContent');
     expect(helper).toContain('isInternalPromptText');
@@ -108,12 +113,13 @@ describe('browser shell layout', () => {
 
   it('only shows Gmail and Discord in the rail after the appstore marks them installed', () => {
     const source = readRendererFile('App.tsx');
+    const railSource = readRendererFile('components/ShellRail.tsx');
     const shellState = readRendererFile('shell-state.ts');
-    const appstore = readRendererFile('panels/NativeRestPanels.tsx');
+    const appstore = readRendererFile('panels/SystemPanels.tsx');
 
     expect(source).toContain('installedSidebarApps');
     expect(source).toContain('setInstalledSidebarApps');
-    expect(source).toContain('isInstalledSidebarApp(panel.id, installedSidebarApps)');
+    expect(railSource).toContain('isInstalledSidebarApp(panel.id, installedSidebarApps)');
     expect(source).toContain('onInstalledSidebarApp');
     expect(source).toContain('onUninstalledSidebarApp');
     expect(shellState).toContain('installedSidebarAppsStorageKey');
@@ -189,20 +195,23 @@ describe('browser shell layout', () => {
     expect(source).toContain('<NativeDiscordMain');
     expect(source).toContain('<NativeAppstoreMain');
     expect(source).toContain('<NativeSettingsMain');
-    expect(source).toContain('<ChatTranscript');
-    expect(source).toContain('<ChatComposer');
+    const chatSource = readRendererFile('panels/NativeChatMain.tsx');
+    expect(chatSource).toContain('<ChatTranscript');
+    expect(chatSource).toContain('<ChatComposer');
     expect(source).not.toContain('<NativePanelMain');
     expect(source).toContain('<NativeSpacesMain');
-    expect(source).toContain('<WorkspaceToolbar');
-    expect(source).toContain('<WorkspaceBreadcrumb');
-    expect(source).toContain('<WorkspacePreview');
+    const workspaceSource = readRendererFile('panels/WorkspacePanel.tsx');
+    expect(workspaceSource).toContain('<WorkspaceToolbar');
+    expect(workspaceSource).toContain('<WorkspaceBreadcrumb');
+    expect(workspaceSource).toContain('<WorkspacePreview');
     expect(source).toContain('<AdvancedWebUiTools');
     expect(source).toContain('onResizeStart={(event) => beginSidebarResize(\'context\', event)}');
     expect(source).toContain('onResizeStart={(event) => beginSidebarResize(\'workspace\', event)}');
     expect(source).not.toContain('<WebUiPanelMain');
     expect(source).not.toContain('webuiPanelScript');
     expect(source).not.toContain('webui-panel-view');
-    expect(source).toContain('brandAssets.sidebarIcons[panel.id]');
+    const railSource = readRendererFile('components/ShellRail.tsx');
+    expect(railSource).toContain('brandAssets.sidebarIcons[panel.id]');
     expect(source).not.toContain('<NativeSidekick');
     expect(source).not.toContain('sidekick-stack');
     expect(source).not.toContain('Browser runtime stays available');
@@ -217,13 +226,13 @@ describe('browser shell layout', () => {
   });
 
   it('wires context-sidebar section buttons instead of rendering dead controls', () => {
-    const source = readRendererFile('App.tsx');
+    const contextSource = readRendererFile('components/ContextSidebar.tsx');
 
-    expect(source).toContain('function panelForContextItem');
-    expect(source).toContain('function handleContextItem(item: string): void');
-    expect(source).toContain('onClick={() => handleContextItem(item)}');
-    expect(source).toContain('aria-pressed={item === activeContextItem}');
-    expect(source).not.toContain("className={index === 0 ? 'active' : ''}");
+    expect(contextSource).toContain('function panelForContextItem');
+    expect(contextSource).toContain('function handleContextItem(item: string): void');
+    expect(contextSource).toContain('onClick={() => handleContextItem(item)}');
+    expect(contextSource).toContain('aria-pressed={item === activeContextItem}');
+    expect(contextSource).not.toContain("className={index === 0 ? 'active' : ''}");
   });
 
   it('renders native workspace and spaces controls instead of placeholder panels', () => {
@@ -247,13 +256,14 @@ describe('browser shell layout', () => {
 
   it('renders native work-management panels for tasks, kanban, and todos', () => {
     const source = readRendererFile('App.tsx');
+    const taskSource = readRendererFile('panels/TaskPanels.tsx');
     const css = readRendererFile('styles.css');
 
-    expect(source).toContain('listCrons');
-    expect(source).toContain('createCron');
-    expect(source).toContain('getKanbanBoard');
-    expect(source).toContain('createKanbanTask');
-    expect(source).toContain('extractTodosFromSession');
+    expect(taskSource).toContain('listCrons');
+    expect(taskSource).toContain('createCron');
+    expect(taskSource).toContain('getKanbanBoard');
+    expect(taskSource).toContain('createKanbanTask');
+    expect(taskSource).toContain('extractTodosFromSession');
     expect(source).toContain('<NativeTasksMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeKanbanMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeTodosMain activeContextItem={activeContextItem}');
@@ -265,7 +275,11 @@ describe('browser shell layout', () => {
 
   it('renders the remaining native integration panels without a generic migration fallback', () => {
     const source = readRendererFile('App.tsx');
-    const restPanels = readRendererFile('panels/NativeRestPanels.tsx');
+    const restPanels = [
+      readRendererFile('panels/AgentPanels.tsx'),
+      readRendererFile('panels/IntegrationPanels.tsx'),
+      readRendererFile('panels/SystemPanels.tsx')
+    ].join('\n');
     const css = readRendererFile('styles.css');
 
     [

@@ -158,6 +158,19 @@ import { registerBrowserShortcuts } from './shortcuts.js';
 import { openAuthConnectWindow } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
 
+process.on('uncaughtException', (err, origin) => {
+  console.error('[lastbrowser uncaughtException]', origin, err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[lastbrowser unhandledRejection]', reason);
+});
+app.on('render-process-gone', (_event, _contents, details) => {
+  console.error('[lastbrowser render-process-gone]', details);
+});
+app.on('child-process-gone', (_event, details) => {
+  console.error('[lastbrowser child-process-gone]', details);
+});
+
 const mainDir = moduleDirname(import.meta.url);
 let mainWindow: BrowserWindow | null = null;
 let services: SidecarServices | null = null;
@@ -742,6 +755,11 @@ app.whenReady().then(() => {
 // browser session (webviews use per-profile `persist:` partitions, so each
 // profile gets its own).
 app.on('session-created', (session) => {
+  // Only attach browser features to persistent profile sessions or incognito webviews.
+  // Utility partitions (like electron-updater) have no storagePath and must not be polluted.
+  if (!session.storagePath) {
+    return;
+  }
   activeSessions.add(session);
   void adblock.attach(session);
   downloads.attach(session);

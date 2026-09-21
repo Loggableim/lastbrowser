@@ -22,15 +22,21 @@ import {
   Puzzle,
   RefreshCw,
   Search,
+  CheckSquare,
+  FileText,
+  Scale,
   Settings,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Table,
   Terminal,
   Trash2,
   Users,
   Volume2,
   VolumeX,
-  X
+  X,
+  Zap
 } from 'lucide-react';
 import { usePanelStore } from '../stores/usePanelStore.js';
 import { useTabStore } from '../stores/useTabStore.js';
@@ -38,13 +44,14 @@ import { executeBrowserAction } from '../browser-agent-tools.js';
 import { browserStartUrl } from '../tabs.js';
 import { discoverActiveForm, triggerLivePagination, abortLiveAutomation } from '../live-automation.js';
 import { getActiveWebview } from '../grounding-anchors.js';
+import { WORKFLOW_TEMPLATES, formatWorkflowPrompt } from '../workflow-templates.js';
 import type { LastbrowserPanelId } from '../shell-state.js';
 
 export interface CommandItem {
   id: string;
   title: string;
   description?: string;
-  category: 'Sidekick AI' | 'Tabs' | 'Navigation' | 'System' | 'Offene Tabs';
+  category: 'Sidekick AI' | 'Tabs' | 'Navigation' | 'System' | 'Offene Tabs' | 'Workflows';
   icon: React.ReactNode;
   shortcut?: string;
   keywords?: string[];
@@ -241,6 +248,33 @@ export function CommandPalette(): JSX.Element | null {
           setActivePanel('workspaces');
         }
       },
+
+      // --- Agentic Workflow Templates (Phase 11.2) ---
+      ...WORKFLOW_TEMPLATES.map((tmpl): CommandItem => ({
+        id: `workflow-${tmpl.id}`,
+        title: `> Workflow: ${tmpl.title}`,
+        description: tmpl.description,
+        category: 'Workflows',
+        icon: tmpl.id === 'competitor-analysis' ? <Scale size={16} /> :
+              tmpl.id === 'markdown-extractor' ? <FileText size={16} /> :
+              tmpl.id === 'table-to-csv' ? <Table size={16} /> :
+              tmpl.id === 'page-audit' ? <ShieldAlert size={16} /> :
+              tmpl.id === 'action-items' ? <CheckSquare size={16} /> :
+              <Zap size={16} />,
+        keywords: [
+          'workflow',
+          'agent',
+          tmpl.category,
+          tmpl.id,
+          ...tmpl.title.toLowerCase().split(' '),
+          ...tmpl.description.toLowerCase().split(' ')
+        ],
+        action: () => {
+          const prompt = formatWorkflowPrompt(tmpl, activeTab?.url, activeTab?.title);
+          usePanelStore.getState().setCopilotOpen(true);
+          window.dispatchEvent(new CustomEvent('lastbrowser:workflow:send', { detail: { prompt } }));
+        }
+      })),
 
       // --- Tab Management Tools (Phase 10.4) ---
       {

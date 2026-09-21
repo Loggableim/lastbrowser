@@ -236,7 +236,26 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
 
 ---
 
-## 7. Checkliste für umsetzende Agenten
+## 7. Spezifikation Phase 11: Agentic Workflow Templates & Quick Action Hub [x] (Umgesetzt v0.1.29)
+
+### 11.2 Kuratierte 1-Klick Recherche- & Analyse-Workflows [x]
+1. **Workflow-Templates-Engine (`workflow-templates.ts`):**
+   - [x] Standardisiertes Template-Interface `AgenticWorkflowTemplate` mit Typisierung für Kategorien (`research`, `data`, `content`, `audit`) und Kontextanforderungen (`none`, `active_tab`, `all_tabs`).
+   - [x] 5 kuratierte High-Impact-Workflows:
+     - `competitor-analysis`: „Wettbewerber- & Preisvergleich“ (extrahiert Preise, Features, Vor-/Nachteile in eine Markdown-Tabelle über `@tabs`).
+     - `markdown-extractor`: „Artikel als Clean Markdown archivieren“ (bereinigt Werbung, Nav, Footer und erzeugt sauberes Obsidian/Notion-kompatibles Markdown mit YAML-Frontmatter).
+     - `table-to-csv`: „Tabellen erkennen & als CSV/JSON exportieren“ (sucht HTML-Tabellen der aktuellen Seite und konvertiert sie strukturiert in CSV- und JSON-Blöcke).
+     - `page-audit`: „Barrierefreiheits-, Performance- & SEO-Audit“ (analysiert Headings, Alt-Tags, Kontraste, Lesbarkeit und Meta-Tags mit Score).
+     - `action-items`: „Meeting-Notes & To-dos extrahieren“ (filtert Deadlines, Zuständigkeiten und Checkboxen `- [ ]`).
+2. **Sidekick Copilot Integration (`CopilotSplitView.tsx`, `styles.css`):**
+   - [x] Header-Button `⚡ Workflows` mit animiertem Dropdown-Menü zur 1-Klick-Auswahl.
+   - [x] Empty-State Quick-Launcher-Chips für sofortige Workflow-Starts.
+3. **Universal Command Palette Integration (`CommandPalette.tsx`):**
+   - [x] Registrierung aller Workflow-Templates mit Präfix `> Workflow: [Name]` und Kategorie `Workflows` in der Command Palette (`Ctrl+K`).
+
+---
+
+## 8. Checkliste für umsetzende Agenten
 
 Jeder nachfolgende Agent arbeitet nach folgenden Regeln:
 

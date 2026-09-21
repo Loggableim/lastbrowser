@@ -2,19 +2,30 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Bot,
   Check,
+  CheckSquare,
   ChevronDown,
   Copy,
+  FileText,
   Minus,
   Paperclip,
+  Scale,
   Send,
+  ShieldAlert,
   Smile,
   Sparkles,
   StopCircle,
-  X
+  Table,
+  X,
+  Zap
 } from 'lucide-react';
 import type { DesktopChatMessage } from '../bridge.js';
 import { RichTextRenderer } from '../NativeRichText.js';
 import type { QuickActionChip } from '../quick-actions.js';
+import {
+  WORKFLOW_TEMPLATES,
+  formatWorkflowPrompt,
+  type AgenticWorkflowTemplate
+} from '../workflow-templates.js';
 
 export interface CopilotSplitViewProps {
   isOpen: boolean;
@@ -49,13 +60,33 @@ export function CopilotSplitView({
 }: CopilotSplitViewProps): React.JSX.Element | null {
   const [inputText, setInputText] = useState('');
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+  const [workflowsMenuOpen, setWorkflowsMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const workflowDropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, busy]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (workflowDropdownRef.current && !workflowDropdownRef.current.contains(event.target as Node)) {
+        setWorkflowsMenuOpen(false);
+      }
+    }
+    if (workflowsMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [workflowsMenuOpen]);
+
+  function handleSelectWorkflow(template: AgenticWorkflowTemplate) {
+    setWorkflowsMenuOpen(false);
+    const prompt = formatWorkflowPrompt(template, activeUrl, activeTitle);
+    onSendMessage(prompt);
+  }
 
   if (!isOpen) return null;
 
@@ -134,7 +165,55 @@ export function CopilotSplitView({
           </div>
           <span className="copilot-header-title">Sidekick AI Copilot</span>
         </div>
-        <div className="copilot-header-actions">
+        <div className="copilot-header-actions" ref={workflowDropdownRef} style={{ position: 'relative' }}>
+          <button
+            type="button"
+            className={`copilot-workflows-btn ${workflowsMenuOpen ? 'active' : ''}`}
+            title="Agentic 1-Klick-Workflows"
+            onClick={() => setWorkflowsMenuOpen((prev) => !prev)}
+          >
+            <Zap size={12} className="copilot-zap-icon" />
+            <span>Workflows</span>
+            <ChevronDown size={11} className={`copilot-chevron-icon ${workflowsMenuOpen ? 'open' : ''}`} />
+          </button>
+
+          {workflowsMenuOpen && (
+            <div className="copilot-workflows-dropdown" role="menu">
+              <div className="copilot-workflows-dropdown-header">
+                <span className="dropdown-title">⚡ Agentic Workflows</span>
+                <span className="dropdown-subtitle">Kuratierte 1-Klick Recherche & Analyse</span>
+              </div>
+              <div className="copilot-workflows-list">
+                {WORKFLOW_TEMPLATES.map((tmpl) => (
+                  <button
+                    key={tmpl.id}
+                    type="button"
+                    className="copilot-workflow-item"
+                    role="menuitem"
+                    onClick={() => handleSelectWorkflow(tmpl)}
+                  >
+                    <div className="workflow-item-icon">
+                      {tmpl.id === 'competitor-analysis' && <Scale size={15} />}
+                      {tmpl.id === 'markdown-extractor' && <FileText size={15} />}
+                      {tmpl.id === 'table-to-csv' && <Table size={15} />}
+                      {tmpl.id === 'page-audit' && <ShieldAlert size={15} />}
+                      {tmpl.id === 'action-items' && <CheckSquare size={15} />}
+                    </div>
+                    <div className="workflow-item-text">
+                      <div className="workflow-item-title-row">
+                        <span className="workflow-item-title">{tmpl.title}</span>
+                        <span className={`workflow-cat-badge cat-${tmpl.category}`}>
+                          {tmpl.category}
+                        </span>
+                      </div>
+                      <span className="workflow-item-desc">{tmpl.description}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {onMinimize && (
             <button
               type="button"
@@ -167,6 +246,25 @@ export function CopilotSplitView({
             <p>
               {activeTitle ? `„${activeTitle.slice(0, 45)}…“` : 'Stelle Fragen oder analysiere den Inhalt dieser Webseite.'}
             </p>
+
+            <div className="copilot-workflow-empty-section">
+              <span className="copilot-chips-heading">⚡ Agentic 1-Klick-Workflows:</span>
+              <div className="copilot-workflow-pill-row">
+                {WORKFLOW_TEMPLATES.map((tmpl) => (
+                  <button
+                    key={`wf-empty-${tmpl.id}`}
+                    type="button"
+                    className="copilot-workflow-chip"
+                    title={tmpl.description}
+                    onClick={() => handleSelectWorkflow(tmpl)}
+                  >
+                    <Zap size={11} className="chip-zap" />
+                    <span>{tmpl.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="copilot-quick-prompts">
               {quickActions && quickActions.length > 0 && onExecuteQuickAction && (
                 <>

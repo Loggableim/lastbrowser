@@ -1565,6 +1565,20 @@ export function App(): JSX.Element {
     }
   }
 
+  useEffect(() => {
+    const handleWorkflowSend = (event: Event) => {
+      const custom = event as CustomEvent<{ prompt?: string }>;
+      if (custom.detail?.prompt) {
+        setCopilotOpen(true);
+        void startNativeChat(custom.detail.prompt);
+      }
+    };
+    window.addEventListener('lastbrowser:workflow:send', handleWorkflowSend);
+    return () => {
+      window.removeEventListener('lastbrowser:workflow:send', handleWorkflowSend);
+    };
+  }, [setCopilotOpen]);
+
   async function renameNativeSession(session: DesktopSessionSummary): Promise<void> {
     const nextTitle = window.prompt('Rename chat', sessionTitle(session));
     if (!nextTitle?.trim()) return;

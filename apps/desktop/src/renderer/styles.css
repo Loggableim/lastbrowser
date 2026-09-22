@@ -11754,6 +11754,680 @@ body.sidebar-resizing * {
   color: var(--lb-text, #fff);
 }
 
+/* ==========================================================================
+   Phase 13: UI-Synthese (Variante B), Popart Icons & Action Bar
+   ========================================================================== */
+
+/* Multi-Tier Drawer Tabs in Sidekick Sidebar */
+.sidebar-drawer-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: rgba(13, 20, 36, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.drawer-tab-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: rgba(220, 235, 255, 0.6);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.drawer-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #eaf4ff;
+}
+
+.drawer-tab-btn.active {
+  background: rgba(0, 217, 255, 0.12);
+  border-color: rgba(0, 217, 255, 0.35);
+  color: #00e5ff;
+  box-shadow: 0 0 12px rgba(0, 217, 255, 0.15);
+}
+
+.sidebar-drawer-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 10px;
+  overflow-y: auto;
+  gap: 8px;
+}
+
+.drawer-section-title {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(140, 170, 210, 0.6);
+  padding: 4px 6px 2px;
+  text-transform: uppercase;
+}
+
+.drawer-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-drawer-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 9px;
+  cursor: pointer;
+  text-align: left;
+  position: relative;
+  transition: all 0.16s ease;
+  width: 100%;
+}
+
+.sidebar-drawer-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(0, 217, 255, 0.25);
+  transform: translateX(2px);
+}
+
+.sidebar-drawer-card.is-active {
+  background: rgba(0, 217, 255, 0.12);
+  border-color: rgba(0, 217, 255, 0.45);
+  box-shadow: 0 0 14px rgba(0, 217, 255, 0.12);
+}
+
+.drawer-card-icon-box {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 7px;
+}
+
+.drawer-popart-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+
+.drawer-card-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.drawer-card-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #f0f6fc;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-drawer-card.is-active .drawer-card-title {
+  color: #00f0ff;
+}
+
+.drawer-card-desc {
+  font-size: 10px;
+  color: rgba(160, 185, 215, 0.65);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.drawer-active-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00e5ff;
+  box-shadow: 0 0 8px #00e5ff;
+  flex-shrink: 0;
+}
+
+/* Slim dock shortcuts */
+.dock-quick-shortcuts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.dock-shortcut-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dock-shortcut-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(0, 217, 255, 0.3);
+  transform: scale(1.08);
+}
+
+.dock-shortcut-btn.is-active {
+  border-color: #00e5ff;
+  background: rgba(0, 217, 255, 0.15);
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.25);
+}
+
+.dock-mini-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.dock-popart-avatar {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+/* In-Page Action Bar (Draggable & Dockable) */
+.browser-action-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(7, 17, 31, 0.88);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.35);
+  transition: box-shadow 0.2s ease;
+  z-index: 10;
+}
+
+.browser-action-strip.is-dragging {
+  cursor: grabbing !important;
+  box-shadow: 0 18px 45px rgba(0, 217, 255, 0.3);
+  border-color: rgba(0, 217, 255, 0.5);
+}
+
+.action-strip-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: rgba(140, 160, 190, 0.65);
+  padding: 2px 2px;
+  margin-right: 2px;
+  border-radius: 4px;
+}
+
+.action-strip-drag-handle:hover {
+  color: #00e5ff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.action-strip-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.14);
+  margin: 0 3px;
+}
+
+/* Dock locations */
+.browser-action-strip.dock-top-left {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+}
+
+.browser-action-strip.dock-top-center {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.browser-action-strip.dock-top-right {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.browser-action-strip.dock-bottom-center {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.action-strip-dock-anchor {
+  position: relative;
+}
+
+.dock-menu-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: rgba(140, 160, 190, 0.7);
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dock-menu-trigger-btn:hover,
+.dock-menu-trigger-btn.open {
+  background: rgba(255, 255, 255, 0.1);
+  color: #00e5ff;
+}
+
+.action-strip-dock-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 170px;
+  background: rgba(10, 17, 30, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 217, 255, 0.25);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dock-dropdown-header {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(140, 170, 210, 0.6);
+  padding: 4px 8px;
+}
+
+.dock-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: #e6f0ff;
+  font-size: 11.5px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dock-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #00e5ff;
+}
+
+.dock-dropdown-item.selected {
+  background: rgba(0, 217, 255, 0.14);
+  color: #00f0ff;
+  font-weight: 500;
+}
+
+.dock-check-badge {
+  font-size: 12px;
+  color: #00e5ff;
+}
+
+.browser-page-corner-actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Copilot Model Picker */
+.copilot-model-pill {
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  font-size: 11px;
+  color: #eaf4ff;
+  transition: all 0.15s ease;
+}
+
+.copilot-model-pill:hover,
+.copilot-model-pill.open {
+  background: rgba(0, 217, 255, 0.12);
+  border-color: rgba(0, 217, 255, 0.35);
+  color: #00e5ff;
+}
+
+.model-chevron {
+  transition: transform 0.15s ease;
+}
+
+.model-chevron.open {
+  transform: rotate(180deg);
+}
+
+.copilot-model-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 260px;
+  background: rgba(10, 16, 28, 0.96);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(0, 217, 255, 0.28);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.5);
+  z-index: 120;
+}
+
+.model-dropdown-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: rgba(140, 170, 210, 0.65);
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  margin-bottom: 4px;
+}
+
+.model-dropdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.model-option-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.12s ease;
+}
+
+.model-option-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(0, 217, 255, 0.2);
+}
+
+.model-option-item.selected {
+  background: rgba(0, 217, 255, 0.12);
+  border-color: rgba(0, 217, 255, 0.35);
+}
+
+.model-option-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.model-provider-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.model-provider-badge.gemini {
+  background: rgba(66, 133, 244, 0.2);
+  color: #70aaff;
+  border: 1px solid rgba(66, 133, 244, 0.35);
+}
+
+.model-provider-badge.claude {
+  background: rgba(217, 119, 87, 0.2);
+  color: #ff9d75;
+  border: 1px solid rgba(217, 119, 87, 0.35);
+}
+
+.model-provider-badge.openai {
+  background: rgba(16, 163, 127, 0.2);
+  color: #4eedbb;
+  border: 1px solid rgba(16, 163, 127, 0.35);
+}
+
+.model-provider-badge.deepseek {
+  background: rgba(77, 107, 254, 0.2);
+  color: #8fa5ff;
+  border: 1px solid rgba(77, 107, 254, 0.35);
+}
+
+.model-provider-badge.ollama {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e0e0e0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.model-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.model-option-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #f0f6fc;
+}
+
+.model-option-desc {
+  font-size: 9.5px;
+  color: rgba(160, 185, 215, 0.6);
+}
+
+.model-check-icon {
+  color: #00e5ff;
+  flex-shrink: 0;
+}
+
+/* Workflows Dropdown Enhancements */
+.dropdown-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.workflow-count-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  background: rgba(0, 217, 255, 0.15);
+  color: #00e5ff;
+  border-radius: 10px;
+}
+
+.workflow-search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.workflow-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 11px;
+  color: #fff;
+}
+
+.workflow-category-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.workflow-tab-chip {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid transparent;
+  color: rgba(200, 220, 245, 0.65);
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.workflow-tab-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.workflow-tab-chip.active {
+  background: rgba(0, 217, 255, 0.15);
+  border-color: rgba(0, 217, 255, 0.35);
+  color: #00e5ff;
+}
+
+.workflows-empty-search {
+  padding: 24px 12px;
+  text-align: center;
+  color: rgba(160, 180, 205, 0.6);
+  font-size: 11.5px;
+}
+
+/* Modern Appearance Settings */
+.settings-modern-layout-config {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-field-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-field-info strong {
+  font-size: 12.5px;
+  color: #eaf4ff;
+}
+
+.settings-field-info small {
+  font-size: 11px;
+  color: rgba(160, 185, 215, 0.65);
+}
+
+.settings-segmented-group {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-seg-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 8px;
+  color: rgba(220, 235, 255, 0.7);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.settings-seg-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.settings-seg-btn.active {
+  background: rgba(0, 217, 255, 0.15);
+  border-color: rgba(0, 217, 255, 0.45);
+  color: #00e5ff;
+  box-shadow: 0 0 14px rgba(0, 217, 255, 0.15);
+}
+
+.settings-dock-buttons-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-dock-btn {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 7px;
+  color: rgba(220, 235, 255, 0.7);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.settings-dock-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.settings-dock-btn.active {
+  background: rgba(0, 217, 255, 0.14);
+  border-color: rgba(0, 217, 255, 0.4);
+  color: #00e5ff;
+}
+
 
 
 

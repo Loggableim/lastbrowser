@@ -37,7 +37,7 @@ jobs:
         run: npm run test:run
 
       - name: Build Windows Installer
-        run: npm --workspace apps/desktop run package:win
+        run: npm --workspace apps/desktop run package:win:publish
 
       - name: Sign binaries with Azure Trusted Signing (Microsoft Store / Authenticode)
         if: env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != ''
@@ -76,3 +76,4 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -38,6 +38,7 @@ import { providerPresentation } from '../provider-presentation.js';
 import { searchEngines } from '../tabs.js';
 import { type ExtensionRecord, type ExtensionPreset } from '../bridge.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
+import { usePanelStore, type ZenExitDefaultMode, type ActionBarDock } from '../stores/usePanelStore.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -1726,6 +1727,22 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     return 'modern';
   });
 
+  const [zenExitMode, setZenExitModeState] = useState<ZenExitDefaultMode>(() => {
+    try {
+      const val = window.localStorage.getItem('lastbrowser.zenExitDefaultMode.v1') as ZenExitDefaultMode;
+      if (val === 'slim' || val === 'expanded') return val;
+    } catch {}
+    return 'slim';
+  });
+
+  const [actionBarDock, setActionBarDockState] = useState<ActionBarDock>(() => {
+    try {
+      const val = window.localStorage.getItem('lastbrowser.actionBarDock.v1') as ActionBarDock;
+      if (val && ['top-left', 'top-center', 'top-right', 'bottom-center', 'free'].includes(val)) return val;
+    } catch {}
+    return 'top-left';
+  });
+
   const [defaultBrowserStatus, setDefaultBrowserStatus] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -2167,38 +2184,67 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
             {section === 'appearance' && (
               <>
-                <SettingsCard title="Browser Layout" description="Switch between the modern Sidekick + Zen Browser experience and the classic browser shell.">
-                  <div className="settings-theme-grid">
-                    <button
-                      type="button"
-                      className={layoutMode === 'modern' ? 'settings-theme-btn active' : 'settings-theme-btn'}
-                      onClick={() => {
-                        setLayoutMode('modern');
-                        try {
-                          window.localStorage.setItem('lastbrowser.layoutMode.v1', 'modern');
-                          window.dispatchEvent(new Event('lastbrowser:layout-mode-changed'));
-                        } catch {}
-                      }}
-                    >
-                      <span className="settings-theme-preview settings-theme-preview-dark" />
-                      <strong>Sidekick + Zen Modern</strong>
-                      <small style={{ color: 'rgba(232, 242, 255, 0.5)', fontSize: '10px' }}>Unified Titlebar, Collapsible Dock & Copilot Split</small>
-                    </button>
-                    <button
-                      type="button"
-                      className={layoutMode === 'classic' ? 'settings-theme-btn active' : 'settings-theme-btn'}
-                      onClick={() => {
-                        setLayoutMode('classic');
-                        try {
-                          window.localStorage.setItem('lastbrowser.layoutMode.v1', 'classic');
-                          window.dispatchEvent(new Event('lastbrowser:layout-mode-changed'));
-                        } catch {}
-                      }}
-                    >
-                      <span className="settings-theme-preview settings-theme-preview-light" />
-                      <strong>Classic Layout</strong>
-                      <small style={{ color: 'rgba(232, 242, 255, 0.5)', fontSize: '10px' }}>Horizontal Tab Bar & Classic Rail</small>
-                    </button>
+                <SettingsCard title="Modern Zen & Sidekick Layout (Variante B)" description="Konfiguration für die modulare Multi-Tier Seitenleiste und die In-Page Nova Action Bar.">
+                  <div className="settings-modern-layout-config">
+                    {/* Zen Exit Default Mode */}
+                    <div className="settings-field-row">
+                      <div className="settings-field-info">
+                        <strong>Zen-Modus Aufwach-Standard (Ctrl+B)</strong>
+                        <small>Bestimmt, ob beim Verlassen des Zen-Modus das kompakte Dock oder die volle Seitenleiste geöffnet wird.</small>
+                      </div>
+                      <div className="settings-segmented-group">
+                        <button
+                          type="button"
+                          className={zenExitMode === 'slim' ? 'settings-seg-btn active' : 'settings-seg-btn'}
+                          onClick={() => {
+                            setZenExitModeState('slim');
+                            usePanelStore.getState().setZenExitDefaultMode('slim');
+                          }}
+                        >
+                          Kompaktes Dock (48px)
+                        </button>
+                        <button
+                          type="button"
+                          className={zenExitMode === 'expanded' ? 'settings-seg-btn active' : 'settings-seg-btn'}
+                          onClick={() => {
+                            setZenExitModeState('expanded');
+                            usePanelStore.getState().setZenExitDefaultMode('expanded');
+                          }}
+                        >
+                          Volle Leiste (240px)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Action Bar Docking Preference */}
+                    <div className="settings-field-row">
+                      <div className="settings-field-info">
+                        <strong>In-Page AI Action Bar Andockung</strong>
+                        <small>Standard-Position der schwebenden Nova-Menüleiste im Browserfenster.</small>
+                      </div>
+                      <div className="settings-dock-buttons-row">
+                        {[
+                          { id: 'top-left', label: 'Oben Links' },
+                          { id: 'top-center', label: 'Oben Mitte' },
+                          { id: 'top-right', label: 'Oben Rechts' },
+                          { id: 'bottom-center', label: 'Unten Mitte' },
+                          { id: 'free', label: 'Frei schwebend' }
+                        ].map((d) => (
+                          <button
+                            key={d.id}
+                            type="button"
+                            className={actionBarDock === d.id ? 'settings-dock-btn active' : 'settings-dock-btn'}
+                            onClick={() => {
+                              const typed = d.id as ActionBarDock;
+                              setActionBarDockState(typed);
+                              usePanelStore.getState().setActionBarDock(typed);
+                            }}
+                          >
+                            {d.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </SettingsCard>
 

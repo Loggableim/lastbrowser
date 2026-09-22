@@ -1,14 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Bot,
   Check,
   CheckSquare,
   ChevronDown,
   Copy,
+  Cpu,
   FileText,
+  Filter,
   Minus,
   Paperclip,
   Scale,
+  Search,
   Send,
   ShieldAlert,
   Smile,
@@ -30,6 +33,23 @@ import {
   type AgenticWorkflowTemplate
 } from '../workflow-templates.js';
 
+export interface AvailableModelItem {
+  id: string;
+  label: string;
+  provider: string;
+  badge: string;
+  badgeClass: string;
+}
+
+export const AVAILABLE_MODELS: AvailableModelItem[] = [
+  { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', provider: 'Google', badge: 'Standard • Schnell', badgeClass: 'gemini' },
+  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google', badge: 'Deep Reasoning', badgeClass: 'gemini' },
+  { id: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6', provider: 'Anthropic', badge: 'Code & Analyse', badgeClass: 'claude' },
+  { id: 'gpt-5.5', label: 'GPT-5.5', provider: 'OpenAI', badge: 'Flaggschiff', badgeClass: 'openai' },
+  { id: 'deepseek-reasoner', label: 'DeepSeek R1', provider: 'DeepSeek', badge: 'Reasoning', badgeClass: 'deepseek' },
+  { id: 'llama3.3', label: 'Llama 3.3 (70B)', provider: 'Ollama', badge: 'Lokal • Offline', badgeClass: 'ollama' }
+];
+
 export interface CopilotSplitViewProps {
   isOpen: boolean;
   onClose: () => void;
@@ -44,6 +64,7 @@ export interface CopilotSplitViewProps {
   activeTitle?: string;
   quickActions?: QuickActionChip[];
   onExecuteQuickAction?: (chip: QuickActionChip) => void;
+  onSelectModel?: (modelId: string) => void;
 }
 
 export function CopilotSplitView({
@@ -51,7 +72,7 @@ export function CopilotSplitView({
   onClose,
   onMinimize,
   botName = 'Nova',
-  modelName = 'Sidekick Pro',
+  modelName = 'Gemini 3.8 Flash',
   messages,
   busy,
   onSendMessage,
@@ -59,16 +80,22 @@ export function CopilotSplitView({
   activeUrl,
   activeTitle,
   quickActions,
-  onExecuteQuickAction
+  onExecuteQuickAction,
+  onSelectModel
 }: CopilotSplitViewProps): React.JSX.Element | null {
   const [inputText, setInputText] = useState('');
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [workflowsMenuOpen, setWorkflowsMenuOpen] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [workflowCategory, setWorkflowCategory] = useState<string>('all');
+  const [workflowSearch, setWorkflowSearch] = useState<string>('');
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
   const [upvotedIndices, setUpvotedIndices] = useState<Set<number>>(new Set());
+
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workflowDropdownRef = useRef<HTMLDivElement | null>(null);
+  const modelPickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -76,6 +103,7 @@ export function CopilotSplitView({
     }
   }, [messages, busy]);
 
+  // Click outside workflow dropdown
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (workflowDropdownRef.current && !workflowDropdownRef.current.contains(event.target as Node)) {
@@ -88,10 +116,38 @@ export function CopilotSplitView({
     }
   }, [workflowsMenuOpen]);
 
+  // Click outside model picker dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (modelPickerRef.current && !modelPickerRef.current.contains(event.target as Node)) {
+        setModelPickerOpen(false);
+      }
+    }
+    if (modelPickerOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [modelPickerOpen]);
+
+  const filteredWorkflows = useMemo(() => {
+    return WORKFLOW_TEMPLATES.filter((tmpl) => {
+      const matchesCat = workflowCategory === 'all' || tmpl.category === workflowCategory;
+      const matchesSearch = !workflowSearch.trim() ||
+        tmpl.title.toLowerCase().includes(workflowSearch.toLowerCase()) ||
+        tmpl.description.toLowerCase().includes(workflowSearch.toLowerCase());
+      return matchesCat && matchesSearch;
+    });
+  }, [workflowCategory, workflowSearch]);
+
   function handleSelectWorkflow(template: AgenticWorkflowTemplate) {
     setWorkflowsMenuOpen(false);
     const prompt = formatWorkflowPrompt(template, activeUrl, activeTitle);
     onSendMessage(prompt);
+  }
+
+  function handlePickModel(model: AvailableModelItem) {
+    setModelPickerOpen(false);
+    onSelectModel?.(model.id);
   }
 
   if (!isOpen) return null;
@@ -135,11 +191,11 @@ export function CopilotSplitView({
             <button
               type="button"
               className="copilot-code-copy-btn"
-              title="Copy code"
+              title="Code kopieren"
               onClick={() => handleCopy(code, snippetId)}
             >
               {copiedCodeId === snippetId ? <Check size={12} /> : <Copy size={12} />}
-              <span>{copiedCodeId === snippetId ? 'Copied' : 'Copy'}</span>
+              <span>{copiedCodeId === snippetId ? 'Kopiert' : 'Kopieren'}</span>
             </button>
           </div>
           <pre className="copilot-code-content">
@@ -162,20 +218,20 @@ export function CopilotSplitView({
   }
 
   return (
-    <aside className="copilot-split-panel" aria-label="Sidekick AI Copilot">
+    <aside className="copilot-split-panel" aria-label={`${botName} AI Workspace (Sidekick AI Copilot)`}>
       {/* Top Header */}
       <div className="copilot-header">
         <div className="copilot-header-brand">
           <div className="copilot-logo-circle">
             <Sparkles size={14} className="copilot-sparkle-icon" />
           </div>
-          <span className="copilot-header-title">Sidekick AI Copilot</span>
+          <span className="copilot-header-title">{botName} AI</span>
         </div>
         <div className="copilot-header-actions" ref={workflowDropdownRef} style={{ position: 'relative' }}>
           <button
             type="button"
             className={`copilot-workflows-btn ${workflowsMenuOpen ? 'active' : ''}`}
-            title="Agentic 1-Klick-Workflows"
+            title="Agentic Workflows (50+ Skills)"
             onClick={() => setWorkflowsMenuOpen((prev) => !prev)}
           >
             <Zap size={12} className="copilot-zap-icon" />
@@ -186,36 +242,87 @@ export function CopilotSplitView({
           {workflowsMenuOpen && (
             <div className="copilot-workflows-dropdown" role="menu">
               <div className="copilot-workflows-dropdown-header">
-                <span className="dropdown-title">⚡ Agentic Workflows</span>
-                <span className="dropdown-subtitle">Kuratierte 1-Klick Recherche & Analyse</span>
+                <div className="dropdown-title-row">
+                  <span className="dropdown-title">⚡ Agentic Workflows</span>
+                  <span className="workflow-count-pill">{WORKFLOW_TEMPLATES.length} Skills</span>
+                </div>
+                <span className="dropdown-subtitle">Kuratierte 1-Klick Recherche, Analyse & Code-Workflows</span>
+
+                {/* Workflow Search input */}
+                <div className="workflow-search-box">
+                  <Search size={12} />
+                  <input
+                    type="text"
+                    value={workflowSearch}
+                    onChange={(e) => setWorkflowSearch(e.target.value)}
+                    placeholder="Workflows durchsuchen..."
+                    className="workflow-search-input"
+                    autoFocus
+                  />
+                  {workflowSearch && (
+                    <button type="button" className="clear-search-btn" onClick={() => setWorkflowSearch('')}>
+                      <X size={11} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Category Filter Tabs */}
+                <div className="workflow-category-tabs" role="tablist">
+                  {[
+                    { id: 'all', label: `Alle (${WORKFLOW_TEMPLATES.length})` },
+                    { id: 'research', label: 'Recherche' },
+                    { id: 'content', label: 'Content' },
+                    { id: 'code', label: 'Code' },
+                    { id: 'data', label: 'Daten' },
+                    { id: 'audit', label: 'Audit' }
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={workflowCategory === cat.id}
+                      className={`workflow-tab-chip ${workflowCategory === cat.id ? 'active' : ''}`}
+                      onClick={() => setWorkflowCategory(cat.id)}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+
               <div className="copilot-workflows-list">
-                {WORKFLOW_TEMPLATES.map((tmpl) => (
-                  <button
-                    key={tmpl.id}
-                    type="button"
-                    className="copilot-workflow-item"
-                    role="menuitem"
-                    onClick={() => handleSelectWorkflow(tmpl)}
-                  >
-                    <div className="workflow-item-icon">
-                      {tmpl.id === 'competitor-analysis' && <Scale size={15} />}
-                      {tmpl.id === 'markdown-extractor' && <FileText size={15} />}
-                      {tmpl.id === 'table-to-csv' && <Table size={15} />}
-                      {tmpl.id === 'page-audit' && <ShieldAlert size={15} />}
-                      {tmpl.id === 'action-items' && <CheckSquare size={15} />}
-                    </div>
-                    <div className="workflow-item-text">
-                      <div className="workflow-item-title-row">
-                        <span className="workflow-item-title">{tmpl.title}</span>
-                        <span className={`workflow-cat-badge cat-${tmpl.category}`}>
-                          {tmpl.category}
-                        </span>
+                {filteredWorkflows.length === 0 ? (
+                  <div className="workflows-empty-search">
+                    <span>Keine Workflows für „{workflowSearch}“ gefunden.</span>
+                  </div>
+                ) : (
+                  filteredWorkflows.map((tmpl) => (
+                    <button
+                      key={tmpl.id}
+                      type="button"
+                      className="copilot-workflow-item"
+                      role="menuitem"
+                      onClick={() => handleSelectWorkflow(tmpl)}
+                    >
+                      <div className="workflow-item-icon">
+                        {tmpl.category === 'research' && <Scale size={14} />}
+                        {tmpl.category === 'content' && <FileText size={14} />}
+                        {tmpl.category === 'code' && <Cpu size={14} />}
+                        {tmpl.category === 'data' && <Table size={14} />}
+                        {tmpl.category === 'audit' && <ShieldAlert size={14} />}
                       </div>
-                      <span className="workflow-item-desc">{tmpl.description}</span>
-                    </div>
-                  </button>
-                ))}
+                      <div className="workflow-item-text">
+                        <div className="workflow-item-title-row">
+                          <span className="workflow-item-title">{tmpl.title}</span>
+                          <span className={`workflow-cat-badge cat-${tmpl.category}`}>
+                            {tmpl.category}
+                          </span>
+                        </div>
+                        <span className="workflow-item-desc">{tmpl.description}</span>
+                      </div>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -224,7 +331,7 @@ export function CopilotSplitView({
             <button
               type="button"
               className="copilot-action-btn"
-              title="Minimize Copilot"
+              title="Minimieren"
               onClick={onMinimize}
             >
               <Minus size={14} />
@@ -233,7 +340,7 @@ export function CopilotSplitView({
           <button
             type="button"
             className="copilot-action-btn close"
-            title="Close Copilot"
+            title="Schließen"
             onClick={onClose}
           >
             <X size={14} />
@@ -250,132 +357,96 @@ export function CopilotSplitView({
             </div>
             <h4>Frag {botName} zur aktuellen Seite</h4>
             <p>
-              {activeTitle ? `„${activeTitle.slice(0, 45)}…“` : 'Stelle Fragen oder analysiere den Inhalt dieser Webseite.'}
+              Erhalte Zusammenfassungen, Übersetzungen, Code-Analysen oder starte
+              automatisierte Recherche-Agenten.
             </p>
 
-            <div className="copilot-workflow-empty-section">
-              <span className="copilot-chips-heading">⚡ Agentic 1-Klick-Workflows:</span>
-              <div className="copilot-workflow-pill-row">
-                {WORKFLOW_TEMPLATES.map((tmpl) => (
+            {quickActions && quickActions.length > 0 && (
+              <div className="copilot-starter-chips">
+                {quickActions.map((chip) => (
                   <button
-                    key={`wf-empty-${tmpl.id}`}
+                    key={chip.id}
                     type="button"
-                    className="copilot-workflow-chip"
-                    title={tmpl.description}
-                    onClick={() => handleSelectWorkflow(tmpl)}
+                    className="copilot-starter-chip"
+                    onClick={() => onExecuteQuickAction?.(chip)}
                   >
-                    <Zap size={11} className="chip-zap" />
-                    <span>{tmpl.title}</span>
+                    <span>{chip.icon}</span>
+                    <span>{chip.label}</span>
                   </button>
                 ))}
               </div>
-            </div>
-
-            <div className="copilot-quick-prompts">
-              {quickActions && quickActions.length > 0 && onExecuteQuickAction && (
-                <>
-                  {quickActions.map((chip) => (
-                    <button
-                      key={chip.id}
-                      type="button"
-                      className="copilot-quick-btn"
-                      style={{ borderColor: 'rgba(168, 85, 247, 0.4)', background: 'rgba(168, 85, 247, 0.12)', color: '#f3e8ff' }}
-                      title={chip.tooltip}
-                      onClick={() => onExecuteQuickAction(chip)}
-                    >
-                      <span>{chip.label}</span>
-                    </button>
-                  ))}
-                </>
-              )}
-              <button
-                type="button"
-                className="copilot-quick-btn"
-                onClick={() => onSendMessage('Fasse diese Seite in 3 Kernpunkten zusammen.')}
-              >
-                📄 Seite zusammenfassen
-              </button>
-              <button
-                type="button"
-                className="copilot-quick-btn"
-                onClick={() => onSendMessage('Welche Kernfragen oder Thesen werden hier diskutiert?')}
-              >
-                💡 Wichtigste Erkenntnisse
-              </button>
-              <button
-                type="button"
-                className="copilot-quick-btn"
-                onClick={() => onSendMessage('Erstelle eine fundierte Deep Research zu diesem Thema.')}
-              >
-                🔍 Deep Research starten
-              </button>
-            </div>
+            )}
           </div>
         ) : (
           <div className="copilot-messages-list">
-            {messages.map((msg, idx) => {
+            {messages.map((msg, index) => {
               const isUser = msg.role === 'user';
+              const isAssistant = msg.role === 'assistant';
+
               return (
                 <div
-                  key={msg.id || idx}
+                  key={msg.timestamp ? `${msg.timestamp}-${index}` : index}
                   className={`copilot-message-row ${isUser ? 'user-row' : 'assistant-row'}`}
                 >
                   {!isUser && (
                     <div className="copilot-avatar-circle" title={botName}>
-                      <Bot size={13} />
+                      <Sparkles size={13} />
                     </div>
                   )}
+
                   <div className={`copilot-bubble ${isUser ? 'user' : 'assistant'}`}>
-                    {isUser ? (
-                      <p className="copilot-text-p">{msg.content}</p>
-                    ) : (
-                      <>
-                        <RichTextRenderer content={msg.content} />
-                        {!busy && (
-                          <div className="copilot-message-action-bar">
-                            <button
-                              type="button"
-                              className="copilot-action-pill"
-                              title="Text kopieren"
-                              onClick={() => {
-                                navigator.clipboard.writeText(msg.content);
-                                setCopiedMsgIdx(idx);
-                                setTimeout(() => setCopiedMsgIdx(null), 1500);
-                              }}
-                            >
-                              {copiedMsgIdx === idx ? <Check size={11} color="#22c55e" /> : <Copy size={11} />}
-                            </button>
-                            <button
-                              type="button"
-                              className={`copilot-action-pill ${upvotedIndices.has(idx) ? 'active' : ''}`}
-                              title="Hilfreiche Antwort"
-                              onClick={() => {
-                                setUpvotedIndices((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(idx)) next.delete(idx);
-                                  else next.add(idx);
-                                  return next;
-                                });
-                              }}
-                            >
-                              <ThumbsUp size={11} />
-                            </button>
-                            <button
-                              type="button"
-                              className="copilot-action-pill report"
-                              title="Problem melden / Feedback geben (Store AI Policy)"
-                              onClick={() => setFeedbackMessage(msg.content)}
-                            >
-                              <ThumbsDown size={11} />
-                            </button>
-                          </div>
-                        )}
-                      </>
+                    <div className="copilot-bubble-body">
+                      {isAssistant ? (
+                        <RichTextRenderer text={msg.content || ''} />
+                      ) : (
+                        renderMessageContent(msg.content || '', index)
+                      )}
+                    </div>
+
+                    {isAssistant && (
+                      <div className="copilot-msg-actions-bar">
+                        <button
+                          type="button"
+                          className="msg-action-icon-btn"
+                          title="Nachricht kopieren"
+                          onClick={() => {
+                            navigator.clipboard.writeText(msg.content || '').catch(() => {});
+                            setCopiedMsgIdx(index);
+                            setTimeout(() => setCopiedMsgIdx(null), 1800);
+                          }}
+                        >
+                          {copiedMsgIdx === index ? <Check size={12} /> : <Copy size={12} />}
+                        </button>
+                        <button
+                          type="button"
+                          className={`msg-action-icon-btn ${upvotedIndices.has(index) ? 'voted' : ''}`}
+                          title="Gute Antwort (Upvote)"
+                          onClick={() => {
+                            setUpvotedIndices((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(index)) next.delete(index);
+                              else next.add(index);
+                              return next;
+                            });
+                          }}
+                        >
+                          <ThumbsUp size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className="msg-action-icon-btn"
+                          title="Problem melden (Feedback)"
+                          onClick={() => setFeedbackMessage(msg.content || '')}
+                        >
+                          <ThumbsDown size={12} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
               );
             })}
+
             {busy && (
               <div className="copilot-message-row assistant-row">
                 <div className="copilot-avatar-circle spin">
@@ -392,21 +463,61 @@ export function CopilotSplitView({
         )}
       </div>
 
-      {/* Bottom Controls: Model Selector & Glowing Input */}
+      {/* Bottom Controls: Dynamic Model Selector & Input */}
       <div className="copilot-footer">
-        <div className="copilot-model-row">
-          <span className="copilot-model-label">Model</span>
-          <div className="copilot-model-pill" title={`Active engine: ${modelName}`}>
-            <span>{modelName}</span>
-            <ChevronDown size={12} />
+        <div className="copilot-model-row" ref={modelPickerRef} style={{ position: 'relative' }}>
+          <span className="copilot-model-label">Modell:</span>
+          <div
+            className={`copilot-model-pill ${modelPickerOpen ? 'open' : ''}`}
+            title={`Aktive KI-Engine: ${modelName} • Klicken zum Wechseln`}
+            onClick={() => setModelPickerOpen((prev) => !prev)}
+            role="button"
+            tabIndex={0}
+          >
+            <span className="model-pill-text">{modelName}</span>
+            <ChevronDown size={12} className={`model-chevron ${modelPickerOpen ? 'open' : ''}`} />
           </div>
+
+          {/* Model Selector Dropdown */}
+          {modelPickerOpen && (
+            <div className="copilot-model-dropdown" role="menu">
+              <div className="model-dropdown-header">KI-Modell auswählen:</div>
+              <div className="model-dropdown-list">
+                {AVAILABLE_MODELS.map((m) => {
+                  const isSelected =
+                    modelName.toLowerCase().includes(m.id.toLowerCase()) ||
+                    modelName.toLowerCase().includes(m.label.toLowerCase()) ||
+                    (m.id === 'gemini-3.8-flash' && modelName.toLowerCase().includes('gemini'));
+
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={`model-option-item ${isSelected ? 'selected' : ''}`}
+                      role="menuitem"
+                      onClick={() => handlePickModel(m)}
+                    >
+                      <div className="model-option-left">
+                        <span className={`model-provider-badge ${m.badgeClass}`}>{m.provider}</span>
+                        <div className="model-option-text">
+                          <span className="model-option-name">{m.label}</span>
+                          <span className="model-option-desc">{m.badge}</span>
+                        </div>
+                      </div>
+                      {isSelected && <Check size={14} className="model-check-icon" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <form className="copilot-input-container" onSubmit={handleSubmit}>
           <button
             type="button"
             className="copilot-input-extra-btn"
-            title="Emoji / Tone"
+            title="Tonalität & Prompts"
           >
             <Smile size={16} />
           </button>
@@ -422,7 +533,7 @@ export function CopilotSplitView({
             <button
               type="button"
               className="copilot-send-btn stop"
-              title="Stop response"
+              title="Antwort stoppen"
               onClick={onStopChat}
             >
               <StopCircle size={15} />
@@ -431,10 +542,10 @@ export function CopilotSplitView({
             <button
               type="submit"
               className={`copilot-send-btn ${inputText.trim() ? 'active' : ''}`}
-              title="Send (Enter)"
+              title="Senden (Enter)"
               disabled={!inputText.trim()}
             >
-              <span>Send</span>
+              <span>Senden</span>
               <Send size={13} />
             </button>
           )}

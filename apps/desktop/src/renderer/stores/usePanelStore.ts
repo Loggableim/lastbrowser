@@ -29,11 +29,17 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export type SidebarMode = 'slim' | 'expanded' | 'hidden';
+export type ZenExitDefaultMode = 'slim' | 'expanded';
+export type SidebarDrawerTab = 'tabs' | 'ai' | 'workflows' | 'tools';
+export type ActionBarDock = 'top-left' | 'top-center' | 'top-right' | 'bottom-center' | 'free';
 
 export interface PanelState {
   activePanel: LastbrowserPanelId;
   leftSidebarCollapsed: boolean;
   sidebarMode: SidebarMode;
+  zenExitDefaultMode: ZenExitDefaultMode;
+  sidebarDrawerTab: SidebarDrawerTab;
+  actionBarDock: ActionBarDock;
   copilotOpen: boolean;
   contextSidebarCollapsed: boolean;
   contextSidebarWidth: number;
@@ -51,6 +57,9 @@ export interface PanelState {
   setActivePanel(panel: LastbrowserPanelId): void;
   setLeftSidebarCollapsed(collapsed: boolean | ((current: boolean) => boolean)): void;
   setSidebarMode(mode: SidebarMode | ((current: SidebarMode) => SidebarMode)): void;
+  setZenExitDefaultMode(mode: ZenExitDefaultMode): void;
+  setSidebarDrawerTab(tab: SidebarDrawerTab): void;
+  setActionBarDock(dock: ActionBarDock): void;
   cycleSidebarMode(): void;
   setCopilotOpen(open: boolean | ((current: boolean) => boolean)): void;
   toggleCopilot(): void;
@@ -72,6 +81,9 @@ export interface PanelState {
 
 export const sidebarModeStorageKey = 'lastbrowser.sidebarMode.v1';
 export const copilotOpenStorageKey = 'lastbrowser.copilotOpen.v1';
+export const zenExitDefaultModeStorageKey = 'lastbrowser.zenExitDefaultMode.v1';
+export const sidebarDrawerTabStorageKey = 'lastbrowser.sidebarDrawerTab.v1';
+export const actionBarDockStorageKey = 'lastbrowser.actionBarDock.v1';
 
 function loadSidebarMode(): SidebarMode {
   try {
@@ -97,10 +109,49 @@ function loadCopilotOpen(): boolean {
   return true;
 }
 
+function loadZenExitDefaultMode(): ZenExitDefaultMode {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(zenExitDefaultModeStorageKey);
+      if (raw === 'slim' || raw === 'expanded') return raw;
+    }
+  } catch {
+    // ignore
+  }
+  return 'slim';
+}
+
+function loadSidebarDrawerTab(): SidebarDrawerTab {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(sidebarDrawerTabStorageKey);
+      if (raw === 'tabs' || raw === 'ai' || raw === 'workflows' || raw === 'tools') return raw;
+    }
+  } catch {
+    // ignore
+  }
+  return 'tabs';
+}
+
+function loadActionBarDock(): ActionBarDock {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(actionBarDockStorageKey);
+      if (raw === 'top-left' || raw === 'top-center' || raw === 'top-right' || raw === 'bottom-center' || raw === 'free') return raw;
+    }
+  } catch {
+    // ignore
+  }
+  return 'top-left';
+}
+
 export const usePanelStore = create<PanelState>((set) => ({
   activePanel: loadInitialPanel(),
   leftSidebarCollapsed: loadBooleanPreference(undefined, leftSidebarCollapsedStorageKey, false),
   sidebarMode: loadSidebarMode(),
+  zenExitDefaultMode: loadZenExitDefaultMode(),
+  sidebarDrawerTab: loadSidebarDrawerTab(),
+  actionBarDock: loadActionBarDock(),
   copilotOpen: loadCopilotOpen(),
   contextSidebarCollapsed: false,
   contextSidebarWidth: loadNumericPreference(
@@ -161,6 +212,39 @@ export const usePanelStore = create<PanelState>((set) => ({
     });
   },
 
+  setZenExitDefaultMode: (mode) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(zenExitDefaultModeStorageKey, mode);
+      }
+    } catch {
+      // ignore
+    }
+    set({ zenExitDefaultMode: mode });
+  },
+
+  setSidebarDrawerTab: (tab) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(sidebarDrawerTabStorageKey, tab);
+      }
+    } catch {
+      // ignore
+    }
+    set({ sidebarDrawerTab: tab });
+  },
+
+  setActionBarDock: (dock) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(actionBarDockStorageKey, dock);
+      }
+    } catch {
+      // ignore
+    }
+    set({ actionBarDock: dock });
+  },
+
   cycleSidebarMode: () => {
     set((state) => {
       const nextMode: SidebarMode =
@@ -168,7 +252,7 @@ export const usePanelStore = create<PanelState>((set) => ({
           ? 'expanded'
           : state.sidebarMode === 'expanded'
             ? 'hidden'
-            : 'slim';
+            : state.zenExitDefaultMode;
       try {
         if (typeof window !== 'undefined' && window.localStorage) {
           window.localStorage.setItem(sidebarModeStorageKey, nextMode);

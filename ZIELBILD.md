@@ -255,14 +255,148 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
 
 ---
 
-## 8. Checkliste für umsetzende Agenten
+---
+
+## 8. Spezifikation Phase 12: Google Gemini CLI Provider & Multi-Account Round-Robin [x] (Umgesetzt v0.1.30)
+1. **Google Gemini CLI Anbindung:**
+   - [x] Auslesen der lokalen CLI-Credentials (`~/.gemini/credentials.json` bzw. `%APPDATA%\gemini`) identisch zur Antigravity-/Gravity-Toolchain.
+   - [x] Automatisches Token-Refreshing ohne erneuten Browser-Login.
+2. **Multi-Account Round-Robin Load Balancing:**
+   - [x] Unterstützung beliebig vieler Google-Accounts mit persistentem Account-Speicher (`geminiAccounts.ts`).
+   - [x] Gleichmäßige Verteilung des Token-Verbrauchs durch zyklisches Round-Robin bei jeder Modellanfrage.
+   - [x] Auto-Failover: Tritt ein Quota-Limit (HTTP 429) auf, springt der Request sofort zum nächsten aktiven Account.
+3. **Default-Modell: `gemini-3.8-flash`:**
+   - [x] `gemini-3.8-flash` als primäres Standardmodell für alle Chats, Recherchen und Agenten-Workflows hinterlegt.
+
+---
+
+## 9. Spezifikation Phase 13: UI-Synthese, Nova AI Branding & Power-Tools Integration [ ] (In Planung)
+
+### 13.1 Re-Branding: Nova AI & konfigurierbare Mentalität
+1. **Abschaffung von „Copilot“ und „Sidekick“ im UI-Wording:**
+   - Die Begriffe „Copilot“ und „Sidekick“ werden aus sämtlichen Labels, Tooltips, Platzhaltern und Benachrichtigungen entfernt.
+   - Die integrierte KI heißt standardmäßig **„Nova“** (bzw. Home Space / Nova Space).
+2. **Personalisierung im First Launch Assistant (Setup Wizard):**
+   - Im Onboarding-Wizard legt der Nutzer den **Namen** (z. B. Nova, Jarvis, Aria) und die **Mentalität / Persönlichkeit** (z. B. „Pragmatisch & Direkt“, „Forschend & Gründlich“, „Kreativ & Visionär“, „Technisch & Präzise“) der Home Space AI fest.
+   - Diese Einstellungen fließen direkt in den System-Prompt und die Begrüßung auf der Startseite ein.
+
+### 13.2 Intelligente Menü-Synthese: Alle Power-Tools im neuen Overlay
+1. **Vollständige Parität der Panels aus der alten UI:**
+   - Alle 17+ Panels (`agents`, `kanban`, `skills`, `memory`, `workspaces`, `profiles`, `todos`, `insights`, `logs`, `gmail`, `discord`, `appstore`, `terminal`, `history`, `downloads`, `extensions`, `permissions`) werden nahtlos in die moderne Navigation integriert.
+2. **Entscheidungsgrundlage via Mockups:**
+   - **Ansatz A („Command Dock & Mega-Launcher Flyout“):**
+     - Frosted-Glass-Launcher-Overlay (zentriert-links), aufrufbar über das App-Icon in der Sidebar oder `Ctrl+Space`.
+     - Kategorisierte Power-Kacheln (Dev & System, AI & Knowledge, Productivity, Communication, Browser Tools) mit Live-Filtersuche und Favoriten-Pinning.
+   - **Ansatz B („Integrated Modular Multi-Tier Sidebar & Workspace HUD“):**
+     - Integrierte Drawer-Tabs direkt in der Sidebar (`Tabs`, `AI & Agents`, `Workflows`, `Tools`).
+     - Modulare Untermenüs, die sich bei Bedarf andocken oder als Split-View neben der Webseite einblenden lassen.
+
+### 13.3 Pinned Apps: Top-64-Katalog & Custom Apps Popup
+1. **Kuratierter App-Katalog (Top 64):**
+   - Klick auf das `+`-Icon bei den Pinned Apps öffnet ein modales Auswahl-Grid mit den 64 gängigsten Web-Apps (Gmail, Discord, WhatsApp, Signal, Telegram, Notion, Slack, Spotify, GitHub, YouTube, X/Twitter, ChatGPT, Claude, Linear, Figma, Reddit, Google Calendar, Google Drive, Trello, Jira, Asana, Miro, GitLab, Outlook, Microsoft 365, Netflix, etc.).
+   - Kategorisierte Filter (Produktivität, Dev, Messaging, Media, AI).
+   - 1-Klick An- und Abpinnen mit Favicon-Vorschau.
+2. **Custom App Erstellung:**
+   - Formularfeld im Modal für eigene URLs, benutzerdefinierte Namen und Farbakzente.
+
+### 13.4 Draggable & Dockable AI-Aktionsleiste
+1. **Frei verschiebbare Aktions-Pill beim Browsen:**
+   - Die Overlay-Aktionsleiste (*Summarize*, *Explain*, *Deep Research*, *Extract Actions*) wird mit Drag-Handle ausgestattet.
+   - Kann per Drag & Drop frei auf dem Viewport positioniert werden (mit persistenter Position).
+2. **Andockbare Zonen:**
+   - Andocken an die obere Navigationsleiste, an den unteren Viewport-Rand oder an die Sidebar.
+
+### 13.5 Konfigurierbarer Default-Zustand nach Zen-Modus
+1. **Einstellbare Rückkehr aus dem Zen-Modus:**
+   - In den Einstellungen (und per Shortcut-Option) kann definiert werden, welcher Modus nach dem Verlassen des Zen-Fokusmodus (0px) standardmäßig eingenommen wird:
+     - Standardzustand A: **Kompakter Mini-Mode / Slim Dock (48px)**.
+     - Standardzustand B: **Vollständig Ausgeklappt (~240px)**.
+
+### 13.6 Universelle Modellauswahl in Nova AI
+1. **Entsperrung des Modell-Pickers:**
+   - Beseitigung der starren Einschränkung auf „Sidekick Pro“.
+   - Dynamischer Dropdown-Picker mit allen aktiven und konfigurierten Modellen:
+     - **Gemini CLI:** `gemini-3.8-flash` (Default), `gemini-1.5-pro`, `gemini-1.5-flash` (inkl. Anzeige des aktiven Round-Robin Google-Accounts).
+     - **Anthropic:** `claude-3-5-sonnet`, `claude-3-opus`, `claude-3-5-haiku`.
+     - **OpenAI:** `gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini`.
+     - **Lokale Modelle:** Ollama / LocalAI Instanzen.
+
+### 13.7 Agentic Workflows: Kategorisiertes Dropout-Menü mit 12+ Skills pro Kategorie
+1. **Erweitertes Dropout-Menü:**
+   - Umwandlung des einfachen Dropdowns in ein strukturiertes, zweistufiges Mega-Menü mit Kategorien.
+2. **Mindestens 12 spezialisierte Skills pro Kategorie:**
+   - **Kategorie 1: Recherche & Deep Analysis (12 Skills):**
+     1. Wettbewerber- & Feature-Vergleich (`competitor-analysis`)
+     2. Cross-Tab Quellensynthese (`tabs-synthesis`)
+     3. Fact-Checking & Primärquellen-Audit
+     4. Trend- & Marktforschungs-Report
+     5. Wissenschaftlicher Paper-Summarizer mit Methodenkritik
+     6. Patent- & Marken-Recherche
+     7. Preisverlauf & Historien-Analyse
+     8. Sentiment- & Review-Aggregator
+     9. Regulatorik- & Compliance-Prüfung
+     10. SEO-Keyword- & Backlink-Strukturanalyse
+     11. Timeline- & Chronologie-Ersteller aus News-Artikeln
+     12. Pro- & Contra-Matrix mit Gewichtung
+   - **Kategorie 2: Content, Schreibassistent & Dokumentation (12 Skills):**
+     1. Clean Markdown Archivierung mit Frontmatter (`markdown-extractor`)
+     2. Executive Summary (1-Pager Management-Zusammenfassung)
+     3. TL;DR & Bullet-Point Briefing
+     4. Blogpost- & Tutorial-Entwurf aus Dokumentationen
+     5. Social Media Thread-Creator (X/LinkedIn mit Hooks)
+     6. Fachübersetzung mit Glossar-Treue (EN/DE/FR/ES/IT/PT)
+     7. Changelog- & Release-Notes Generator
+     8. FAQ-Generator aus Webseiteninhalten
+     9. Pressemitteilungs-Formulierer
+     10. E-Mail Draft & Follow-up Creator aus Webinhalten
+     11. Präsentations-Gliederung (Slides / Outline)
+     12. Glossar & Begriffserklärungs-Extraktor
+   - **Kategorie 3: Code, API & Engineering (12 Skills):**
+     1. Code-Erklärer mit Flowchart-Generierung
+     2. Security & Vulnerability Audit (OWASP Check)
+     3. API-Spezifikations-Extraktor (OpenAPI/Swagger JSON aus Doku)
+     4. SQL-Query & Schema-Reverse-Engineering
+     5. Refactoring-Vorschläge & Performance-Tuning
+     6. TypeScript Interface & Zod-Schema Generator aus JSON
+     7. Git-Commit & PR-Description Formulierer
+     8. Unit-Test Generator für Code-Snippets
+     9. Regex & Parser Builder aus Beispieltexten
+     10. Dockerfile & CI/CD Pipeline Generator
+     11. Shell-Script / PowerShell Automator
+     12. cURL to Fetch/Axios/Python Requests Konverter
+   - **Kategorie 4: Daten, Extraktion & Automatisierung (12 Skills):**
+     1. Tabellen-Erkennung & CSV/JSON Export (`table-to-csv`)
+     2. Lead- & Kontaktdaten-Extraktor
+     3. To-dos, Action-Items & Deadlines Extraktor (`action-items`)
+     4. Schema.org & JSON-LD Structured Data Validator
+     5. Preis- & Produktkatalog-Extraktor
+     6. Formular-Auto-Fill & Feld-Erkenner
+     7. Bild- & Asset-URL Scraper mit Format-Filter
+     8. Broken Link & Redirect Verifier
+     9. Seiten-Audit: Barrierefreiheit, Performance & Meta (`page-audit`)
+     10. RSS/Atom Feed Entdecker & Parser
+     11. Cookie- & DSGVO-Banner Tracker Auditor
+     12. Webhook & Alert Trigger Generator
+
+### 13.8 Phasing-out des Classic Layouts & Moderne Appearance-Settings
+1. **Ablösung des Classic-Layouts:**
+   - Sobald die Menü-Synthese (13.2) abgeschlossen ist, wird der Schalter „Classic vs. New Mode“ entfernt und das alte redundante 3-Spalten-Layout entfällt ersatzlos.
+2. **Neue Appearance-Optionen in Settings:**
+   - **Akzent-Themes:** Neon Cyan (Default), Electric Violet, Emerald Flow, Solar Amber, Monochrome Slate.
+   - **Glassmorphism-Stufe:** Deaktiviert (Solid), Subtil (Low Blur), Modern (Medium Frosting), Deep Glass (High Blur).
+   - **Default-Zustand nach Zen-Mode:** Mini-Dock (48px) vs. Ausgeklappt (240px).
+   - **Schriftgrößen & UI-Dichte:** Kompakt / Standard / Groß.
+
+---
+
+## 10. Checkliste für umsetzende Agenten
 
 Jeder nachfolgende Agent arbeitet nach folgenden Regeln:
 
-1. **Ein Fokus pro Durchlauf:** Genau einen Teilbereich (z. B. 7.1, 7.2, 9.1, 9.2 oder 10.1) bearbeiten.
+1. **Ein Fokus pro Durchlauf:** Genau einen Teilbereich (z. B. 13.1, 13.3, 13.6) bearbeiten.
 2. **Einklappbarkeit bewahren:** Die Ein-/Ausklapp-Logik der Sidebar niemals entfernen, sondern auf die 3 definierten Modi (Expanded, 48px Slim, Hidden) optimieren.
-3. **Keine Regressionen:** Nach jeder Änderung `npm run test:run` ausführen; alle bestehenden 322+ Tests müssen grün bleiben.
-4. **Unit-Tests für neue UI-Logik:** Neue Komponenten und Store-Zustände in `tests/` mit Vitest abdecken.
+3. **Keine Regressionen:** Nach jeder Änderung `npm run test:run` ausführen; alle bestehenden 499+ Tests müssen grün bleiben.
+4. **Unit-Tests für neue UI-Logik:** Neue Komponenten, Workflows und Store-Zustände in `tests/` mit Vitest abdecken.
 5. **Typensicherheit:** `npm run build` (`build:main` und `build:renderer`) müssen 0 TypeScript- und Vite-Fehler aufweisen.
 6. **Dokumentenpflege:** Nach erfolgreicher Umsetzung den Haken in diesem Zielbild (`[x]`) und im Backlog setzen.
 

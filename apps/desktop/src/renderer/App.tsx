@@ -208,7 +208,9 @@ import {
   useWindowDrag
 } from './components/HeaderComponents.js';
 import { SidekickSidebar } from './components/SidekickSidebar.js';
+import { InPageActionBar } from './components/InPageActionBar.js';
 import { PinnedAppModal } from './components/PinnedAppModal.js';
+
 import { usePinnedAppStore } from './stores/usePinnedAppStore.js';
 import type { PinnedApp } from './components/PinnedAppGrid.js';
 
@@ -425,7 +427,13 @@ export function App(): JSX.Element {
     activeContextItem,
     setActiveContextItem,
     installedSidebarApps,
-    setInstalledSidebarApps
+    setInstalledSidebarApps,
+    zenExitDefaultMode,
+    setZenExitDefaultMode,
+    sidebarDrawerTab,
+    setSidebarDrawerTab,
+    actionBarDock,
+    setActionBarDock
   } = usePanelStore();
 
   const [layoutMode, setLayoutMode] = useState<'modern' | 'classic'>(() => {
@@ -2099,6 +2107,11 @@ export function App(): JSX.Element {
               openTabUrls={tabs.map(t => t.url ?? '').filter(Boolean)}
               botName={setupState.botName || 'Nova'}
               onWakeTab={wakeTab}
+              activePanel={activePanel}
+              onSelectPanel={(panel) => setActivePanel(panel)}
+              drawerTab={sidebarDrawerTab}
+              onSelectDrawerTab={setSidebarDrawerTab}
+              zenExitDefaultMode={zenExitDefaultMode}
             />
 
             <div className={`browser-content-area ${copilotOpen ? 'with-copilot-split' : 'full-canvas'}`}>
@@ -2172,7 +2185,7 @@ export function App(): JSX.Element {
                   onClose={() => setCopilotOpen(false)}
                   onMinimize={() => setCopilotOpen(false)}
                   botName={setupState.botName || 'Nova'}
-                  modelName={setupState.model || 'Sidekick Pro'}
+                  modelName={setupState.model || 'Gemini 3.8 Flash'}
                   messages={chatMessages}
                   busy={sidekickBusy}
                   onSendMessage={(msg) => void startNativeChat(msg)}
@@ -2181,6 +2194,9 @@ export function App(): JSX.Element {
                   activeTitle={activeTab.title}
                   quickActions={quickActions}
                   onExecuteQuickAction={handleExecuteQuickAction}
+                  onSelectModel={(modelId) => {
+                    setSetupState((prev) => ({ ...prev, model: modelId }));
+                  }}
                 />
               )}
             </div>
@@ -3084,55 +3100,24 @@ function BrowserMain({
   return (
     <PanelErrorBoundary panel="browser" key={activeTab.id}>
     <section className="browser-main browser-page-main">
-      <div className="browser-action-strip" aria-label="Sidekick page actions">
-        <button type="button" onClick={() => void onAction('summarize-page')} disabled={busy}>
-          <Sparkles size={14} />
-          <span>Summarize</span>
-        </button>
-        <button type="button" onClick={() => void onAction('explain-selection')} disabled={busy}>
-          <MessageSquare size={14} />
-          <span>Explain</span>
-        </button>
-        <button type="button" onClick={() => void onAction('research-page')} disabled={busy}>
-          <Globe2 size={14} />
-          <span>Research</span>
-        </button>
-        {/* Zoom indicator — only visible when zoomed away from 100%, so it does
-            not add noise for the common case. Clicking resets to 100%. */}
-        {Math.abs(zoomFactor - 1) > 0.001 && (
-          <button
-            type="button"
-            className="zoom-indicator"
-            title="Reset zoom to 100% (Ctrl+0)"
-            onClick={() => applyZoom(1)}
-          >
-            {Math.round(zoomFactor * 100)}%
-          </button>
-        )}
-        <button type="button" className="find-trigger" title="Find in page (Ctrl+F)" onClick={() => setFindOpen(true)}>
-          <Search size={14} />
-        </button>
-        <button
-          type="button"
-          className="downloads-trigger"
-          title="Downloads (Ctrl+J)"
-          onClick={() => setDownloadsOpen((current) => !current)}
-        >
-          <Download size={14} />
-          {hasActiveDownloads && <span className="downloads-active-dot" />}
-        </button>
-        <button type="button" className="history-trigger" title="History" onClick={() => setHistoryOpen((current) => !current)}>
-          <Clock size={14} />
-        </button>
-        <button
-          type="button"
-          className={`mute-trigger ${muted ? 'active' : ''}`}
-          title={muted ? 'Unmute tab (Ctrl+M)' : 'Mute tab (Ctrl+M)'}
-          aria-pressed={muted}
-          onClick={toggleMute}
-        >
-          {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-        </button>
+      <InPageActionBar
+        busy={busy}
+        onAction={onAction}
+        zoomFactor={zoomFactor}
+        onResetZoom={() => applyZoom(1)}
+        onFindOpen={() => setFindOpen(true)}
+        downloadsOpen={downloadsOpen}
+        hasActiveDownloads={hasActiveDownloads}
+        onToggleDownloads={() => setDownloadsOpen((current) => !current)}
+        historyOpen={historyOpen}
+        onToggleHistory={() => setHistoryOpen((current) => !current)}
+        muted={muted}
+        onToggleMute={toggleMute}
+        dockMode={usePanelStore.getState().actionBarDock}
+        onSetDockMode={(dock) => usePanelStore.getState().setActionBarDock(dock)}
+      />
+
+      <div className="browser-page-corner-actions">
         <button
           type="button"
           className={`devtools-trigger ${devToolsOpen ? 'active' : ''}`}

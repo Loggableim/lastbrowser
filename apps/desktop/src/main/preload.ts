@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     load: () => ipcRenderer.invoke('lastbrowser:setup:load'),
     save: (state: unknown) => ipcRenderer.invoke('lastbrowser:setup:save', state)
   },
+  system: {
+    isDefaultBrowser: () => ipcRenderer.invoke('lastbrowser:system:isDefaultBrowser'),
+    setDefaultBrowser: () => ipcRenderer.invoke('lastbrowser:system:setDefaultBrowser')
+  },
   browser: {
     onOpenTab: (callback: (url: string) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url);

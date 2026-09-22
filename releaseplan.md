@@ -38,9 +38,9 @@ Dieses Dokument definiert den verbindlichen Release- und Zertifizierungsplan zur
 
 ## 3. Phase 1: Technische Code- & Installer-Härtung (Repository)
 
-### 1.1 Silent-Uninstall Absicherung (`apps/desktop/build/installer.nsh`)
-- [ ] **Problem:** Microsofts automatische Zertifizierung führt `Uninstall.exe /S` aus. Die aktuelle `MessageBox` blockiert die Ausführung im Silent-Modus und führt zum Timeout.
-- [ ] **Lösung:** Umschließen des Dialogs mit `${ifNot} ${Silent}`:
+### 1.1 Silent-Uninstall Absicherung (`apps/desktop/build/installer.nsh`) [x] (Umgesetzt)
+- [x] **Problem:** Microsofts automatische Zertifizierung führt `Uninstall.exe /S` aus. Die aktuelle `MessageBox` blockiert die Ausführung im Silent-Modus und führt zum Timeout.
+- [x] **Lösung:** Umschließen des Dialogs mit `${ifNot} ${Silent}`:
   ```nsis
   ${ifNot} ${Silent}
     ${ifNot} ${isUpdated}
@@ -52,24 +52,24 @@ Dieses Dokument definiert den verbindlichen Release- und Zertifizierungsplan zur
   ${endIf}
   ```
 
-### 1.2 Single-Instance-Lock & URL-Dispatcher (`apps/desktop/src/main/main.ts`)
-- [ ] **Problem:** Wird Lastbrowser als Standard-Browser gesetzt, ruft Windows bei Klick auf externe Links (Mail, Slack, Word) `Lastbrowser.exe "https://..."` auf. Ohne Instance-Lock startet ein zweiter Prozess, der Port-Konflikte mit dem Sidecar auslöst.
-- [ ] **Lösung:**
+### 1.2 Single-Instance-Lock & URL-Dispatcher (`apps/desktop/src/main/main.ts`) [x] (Umgesetzt)
+- [x] **Problem:** Wird Lastbrowser als Standard-Browser gesetzt, ruft Windows bei Klick auf externe Links (Mail, Slack, Word) `Lastbrowser.exe "https://..."` auf. Ohne Instance-Lock startet ein zweiter Prozess, der Port-Konflikte mit dem Sidecar auslöst.
+- [x] **Lösung:**
   1. Aufruf von `app.requestSingleInstanceLock()`. Beenden (`app.quit()`), falls bereits eine Instanz läuft.
   2. Implementierung des Events `app.on('second-instance', (event, argv) => { ... })`:
      - Vorhandenes `mainWindow` wiederherstellen und fokussieren (`show()`, `focus()`).
-     - URL aus `argv` extrahieren und per IPC `lastbrowser:open-url` an den Renderer senden.
-  3. URL-Parsing beim Kaltstart (`process.argv`): Übergebene URL beim Start direkt an den Tab-Store übergeben.
-  4. Renderer-Anbindung: Neuer Listener in `App.tsx`, der die empfangene URL als neuen aktiven Tab öffnet.
+     - URL aus `argv` via `extractUrlFromArgs` extrahieren und per IPC `lastbrowser:browser:openTab` an den Renderer senden.
+  3. URL-Parsing beim Kaltstart (`process.argv`): Übergebene URL beim Start direkt per `dispatchOpenUrl` an den Tab-Store übergeben.
+  4. Renderer-Anbindung: `onOpenTab`-Listener in `App.tsx` öffnet die empfangene URL als neuen aktiven Tab.
 
-### 1.3 Windows Standard-Browser-Registrierung (`apps/desktop/package.json` & `main.ts`)
-- [ ] **Problem:** Windows Settings (*„Standard-Apps“*) muss Lastbrowser als Webbrowser für HTTP/HTTPS und HTML-Dateien erkennen.
-- [ ] **Lösung:**
-  1. `apps/desktop/package.json` um `protocols` und `fileAssociations` erweitern:
+### 1.3 Windows Standard-Browser-Registrierung (`apps/desktop/package.json` & `main.ts`) [x] (Umgesetzt)
+- [x] **Problem:** Windows Settings (*„Standard-Apps“*) muss Lastbrowser als Webbrowser für HTTP/HTTPS und HTML-Dateien erkennen.
+- [x] **Lösung:**
+  1. `apps/desktop/package.json` um `protocols` und `fileAssociations` erweitert:
      ```json
      "protocols": [
-       { "name": "HTTP Link", "schemes": ["http"] },
-       { "name": "HTTPS Link", "schemes": ["https"] }
+       { "name": "HTTP Web Link", "schemes": ["http"] },
+       { "name": "HTTPS Secure Web Link", "schemes": ["https"] }
      ],
      "fileAssociations": [
        { "ext": "html", "name": "HTML Document" },

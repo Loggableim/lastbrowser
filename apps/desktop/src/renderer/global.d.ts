@@ -562,6 +562,10 @@ declare global {
           error?: string;
         }>;
       };
+      system?: {
+        isDefaultBrowser: () => Promise<boolean>;
+        setDefaultBrowser: () => Promise<boolean>;
+      };
     };
   }
 }

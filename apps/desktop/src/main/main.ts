@@ -200,6 +200,24 @@ let currentAssistantName = 'Nova';
 const activeSessions = new Set<Session>();
 const extensionManager = new ExtensionManager(app.getPath('userData'), () => Array.from(activeSessions));
 
+import { extractUrlFromArgs } from './url-dispatch.js';
+export { extractUrlFromArgs };
+
+export function dispatchOpenUrl(targetUrl: string): void {
+  if (!targetUrl || !mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+
+  if (mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      mainWindow?.webContents.send('lastbrowser:browser:openTab', targetUrl);
+    });
+  } else {
+    mainWindow.webContents.send('lastbrowser:browser:openTab', targetUrl);
+  }
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow(createMainWindowOptions(mainDir));
 
@@ -239,9 +257,34 @@ function createWindow(): void {
     // app:// (not file://) so localStorage persists — see app-protocol.ts.
     void mainWindow.loadURL(appRendererUrl());
   }
+
+  // Handle cold-start URL (e.g. launched by clicking link in an external app)
+  const initialUrl = extractUrlFromArgs(process.argv);
+  if (initialUrl) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('lastbrowser:browser:openTab', initialUrl);
+        }
+      }, 350);
+    });
+  }
 }
 
 function registerIpc(): void {
+  ipcMain.handle('lastbrowser:system:isDefaultBrowser', () => {
+    if (typeof app?.isDefaultProtocolClient !== 'function') return false;
+    return app.isDefaultProtocolClient('http') && app.isDefaultProtocolClient('https');
+  });
+  ipcMain.handle('lastbrowser:system:setDefaultBrowser', () => {
+    if (typeof app?.setAsDefaultProtocolClient !== 'function') return false;
+    const httpOk = app.setAsDefaultProtocolClient('http');
+    const httpsOk = app.setAsDefaultProtocolClient('https');
+    if (process.platform === 'win32') {
+      void shell.openExternal('ms-settings:defaultapps');
+    }
+    return httpOk && httpsOk;
+  });
   ipcMain.handle('lastbrowser:services:status', () => services?.getStatus());
     ipcMain.handle('lastbrowser:services:start', async () => {
       try {
@@ -708,10 +751,42 @@ if (!process.argv.some((a) => a.startsWith('--remote-debugging-port'))) {
 }
 
 app.setName('Lastbrowser');
+
+// Enforce single instance lock: prevent port collisions and handle incoming external URLs
+const gotSingleInstanceLock = typeof app?.requestSingleInstanceLock === 'function' ? app.requestSingleInstanceLock() : true;
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  if (typeof app?.on === 'function') {
+    app.on('second-instance', (_event, commandLine) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        if (!mainWindow.isVisible()) mainWindow.show();
+        mainWindow.focus();
+
+        const targetUrl = extractUrlFromArgs(commandLine);
+        if (targetUrl) {
+          dispatchOpenUrl(targetUrl);
+        }
+      }
+    });
+  }
+}
+
 // Must run before whenReady: registering a scheme as privileged afterwards has
 // no effect on storage partitioning, and localStorage would stay ephemeral.
 registerAppScheme();
 app.whenReady().then(() => {
+  // Register Lastbrowser as protocol client for standard web links
+  if (typeof app?.isDefaultProtocolClient === 'function') {
+    if (!app.isDefaultProtocolClient('http')) {
+      app.setAsDefaultProtocolClient('http');
+    }
+    if (!app.isDefaultProtocolClient('https')) {
+      app.setAsDefaultProtocolClient('https');
+    }
+  }
+
   // Serve the renderer over app:// so localStorage/IndexedDB persist to disk.
   // Under file:// Chromium uses an opaque origin and every setting is lost on
   // restart (verified: tabs, bookmarks and history all vanished).

@@ -1726,6 +1726,29 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     return 'modern';
   });
 
+  const [defaultBrowserStatus, setDefaultBrowserStatus] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void window.lastbrowser?.system?.isDefaultBrowser?.().then((isDef) => {
+      if (active) setDefaultBrowserStatus(isDef);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const handleSetDefaultBrowser = async () => {
+    try {
+      await window.lastbrowser?.system?.setDefaultBrowser?.();
+      showToast('Windows Standard-Apps Einstellungen geöffnet');
+      setTimeout(async () => {
+        const isDef = await window.lastbrowser?.system?.isDefaultBrowser?.();
+        if (typeof isDef === 'boolean') setDefaultBrowserStatus(isDef);
+      }, 1500);
+    } catch {
+      showToast('Konnte Standard-Browser nicht setzen');
+    }
+  };
+
   const settings = isRecord(settingsState.data?.settings) ? settingsState.data.settings : (settingsState.data || {});
   const authEnabled = settingsBoolean(authState.data?.auth_enabled, false);
   const loggedIn = settingsBoolean(authState.data?.logged_in, false);
@@ -2281,6 +2304,34 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                         ))}
                       </select>
                     </SettingsField>
+                  </div>
+                </SettingsCard>
+
+                <SettingsCard
+                  title="Default browser"
+                  description="Use Lastbrowser as your default application for opening web links and HTML documents."
+                >
+                  <div className="settings-field-grid">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '16px' }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>
+                          {defaultBrowserStatus === true
+                            ? '✓ Lastbrowser ist aktuell als Standard-Browser eingerichtet.'
+                            : defaultBrowserStatus === false
+                            ? 'Lastbrowser ist noch nicht als Standard-Browser eingerichtet.'
+                            : 'Status wird überprüft...'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        onClick={handleSetDefaultBrowser}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                      >
+                        <ExternalLink size={14} />
+                        {defaultBrowserStatus === true ? 'Windows-Einstellungen öffnen' : 'Als Standard festlegen'}
+                      </button>
+                    </div>
                   </div>
                 </SettingsCard>
 

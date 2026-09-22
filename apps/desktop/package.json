@@ -78,6 +78,38 @@
         "to": "runtime/python"
       }
     ],
+    "protocols": [
+      {
+        "name": "HTTP Web Link",
+        "schemes": [
+          "http"
+        ]
+      },
+      {
+        "name": "HTTPS Secure Web Link",
+        "schemes": [
+          "https"
+        ]
+      }
+    ],
+    "fileAssociations": [
+      {
+        "ext": "html",
+        "name": "HTML Document"
+      },
+      {
+        "ext": "htm",
+        "name": "HTML Document"
+      },
+      {
+        "ext": "shtml",
+        "name": "HTML Document"
+      },
+      {
+        "ext": "xhtml",
+        "name": "XHTML Document"
+      }
+    ],
     "win": {
       "target": [
         "nsis",

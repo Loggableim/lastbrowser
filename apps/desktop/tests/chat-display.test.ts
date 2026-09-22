@@ -55,3 +55,28 @@ describe('chat display helpers', () => {
     expect(view.snippet).toContain('<!DOCTYPE html>');
   });
 });
+
+import { processRichText } from '../src/renderer/NativeRichText.js';
+
+describe('processRichText resilience', () => {
+  it('gracefully handles undefined, null and empty inputs without throwing', () => {
+    expect(processRichText(undefined as any)).toEqual({ html: '' });
+    expect(processRichText(null as any)).toEqual({ html: '' });
+    expect(processRichText('')).toEqual({ html: '' });
+  });
+
+  it('correctly processes code blocks, mermaid and math without crashing', () => {
+    const res = processRichText('```mermaid\ngraph TD;\nA-->B;\n```\n$$x^2$$\nNormal text');
+    expect(res.html).toContain('mermaid-block');
+    expect(res.html).toContain('katex-block');
+    expect(res.html).toContain('Normal text');
+  });
+
+  it('handles tab citations safely', () => {
+    const res = processRichText('Check [Tab 1: Example Domain] and [Tab 2]');
+    expect(res.html).toContain('tab-citation-pill');
+    expect(res.html).toContain('Tab 1');
+    expect(res.html).toContain('Tab 2');
+  });
+});
+

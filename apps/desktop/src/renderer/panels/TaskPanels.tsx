@@ -89,9 +89,10 @@ export function normalizeTodoStatus(status: string | undefined): string {
   return value;
 }
 
-export function workspaceLabel(path: string): string {
+export function workspaceLabel(path?: string | null): string {
   if (!path || path === 'default') return 'default';
-  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  const raw = String(path || '');
+  const normalized = raw.replace(/\\/g, '/').replace(/\/+$/, '');
   const parts = normalized.split('/').filter(Boolean);
   return parts[parts.length - 1] || normalized;
 }

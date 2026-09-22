@@ -106,10 +106,12 @@ export type SpaceSummary = {
   color?: string;
 };
 
-export function spaceDisplayName(space: SpaceSummary): string {
+export function spaceDisplayName(space?: SpaceSummary | null): string {
+  if (!space) return 'default';
   const cleanName = space.name?.trim();
   if (cleanName) return cleanName;
-  const normalized = space.path.replace(/\\/g, '/').replace(/\/+$/, '');
+  const rawPath = space.path ? String(space.path) : '';
+  const normalized = rawPath.replace(/\\/g, '/').replace(/\/+$/, '');
   const parts = normalized.split('/').filter(Boolean);
   return parts[parts.length - 1] || 'default';
 }

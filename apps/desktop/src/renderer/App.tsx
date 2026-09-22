@@ -3419,22 +3419,23 @@ function normalizeChatMessages(messages: DesktopChatMessage[] | undefined): Desk
     : [];
 }
 
-function workspaceLabel(path: string): string {
+function workspaceLabel(path?: string | null): string {
   if (!path || path === 'default') return 'default';
-  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  const raw = String(path || '');
+  const normalized = raw.replace(/\\/g, '/').replace(/\/+$/, '');
   const parts = normalized.split('/').filter(Boolean);
   return parts[parts.length - 1] || normalized;
 }
 
-function workspacePathParts(path: string): string[] {
-  const normalized = (path || '.').replace(/\\/g, '/').replace(/^\.\/?/, '').replace(/\/+$/, '');
+function workspacePathParts(path?: string | null): string[] {
+  const normalized = String(path || '.').replace(/\\/g, '/').replace(/^\.\/?/, '').replace(/\/+$/, '');
   if (!normalized || normalized === '.') return [];
   return normalized.split('/').filter(Boolean);
 }
 
-function joinWorkspacePath(basePath: string, name: string): string {
-  const cleanName = name.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
-  const base = (basePath || '.').replace(/\\/g, '/').replace(/\/+$/, '');
+function joinWorkspacePath(basePath?: string | null, name?: string | null): string {
+  const cleanName = String(name || '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+  const base = String(basePath || '.').replace(/\\/g, '/').replace(/\/+$/, '');
   if (!base || base === '.') return cleanName;
   return `${base}/${cleanName}`;
 }

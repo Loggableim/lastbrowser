@@ -382,16 +382,17 @@ export function CopilotSplitView({
 
   // Format code blocks inside message content
   function renderMessageContent(content: string, msgIndex: number) {
+    const rawContent = String(content || '');
     const codeBlockRegex = /```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g;
     const parts = [];
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
-    while ((match = codeBlockRegex.exec(content)) !== null) {
+    while ((match = codeBlockRegex.exec(rawContent)) !== null) {
       if (match.index > lastIndex) {
         parts.push(
           <p key={`text-${lastIndex}`} className="copilot-text-p">
-            {content.slice(lastIndex, match.index)}
+            {rawContent.slice(lastIndex, match.index)}
           </p>
         );
       }
@@ -636,7 +637,7 @@ export function CopilotSplitView({
                   <div className={`copilot-bubble ${isUser ? 'user' : 'assistant'}`}>
                     <div className="copilot-bubble-body">
                       {isAssistant ? (
-                        <RichTextRenderer text={msg.content || ''} />
+                        <RichTextRenderer content={msg.content || ''} text={msg.content || ''} />
                       ) : (
                         renderMessageContent(msg.content || '', index)
                       )}

@@ -278,9 +278,10 @@ const SLASH_COMMANDS: SlashCmd[] = [
 ];
 
 /** Derive the last segment of a workspace path for display in the chip row. */
-function workspaceLabel(path: string): string {
+function workspaceLabel(path?: string | null): string {
   if (!path || path === 'default') return 'default';
-  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  const raw = String(path || '');
+  const normalized = raw.replace(/\\/g, '/').replace(/\/+$/, '');
   const parts = normalized.split('/').filter(Boolean);
   return parts[parts.length - 1] || normalized;
 }

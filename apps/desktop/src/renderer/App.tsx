@@ -2032,6 +2032,7 @@ export function App(): JSX.Element {
             onOpenGithub={() => addTab('https://github.com/Loggableim/lastbrowser')}
             quickActions={quickActions}
             onExecuteQuickAction={handleExecuteQuickAction}
+            botName={setupState.botName || 'Nova'}
           >
             <AddressBar
               value={addressValue}

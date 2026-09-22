@@ -727,6 +727,7 @@ export type ModernTitlebarProps = {
   onExecuteQuickAction?: (chip: QuickActionChip) => void;
   /** RAM saved by discarded (sleeping) tabs in MB. */
   savedMemoryMb?: number;
+  botName?: string;
 };
 
 export function ModernTitlebar({
@@ -748,7 +749,8 @@ export function ModernTitlebar({
   onOpenGithub,
   quickActions,
   onExecuteQuickAction,
-  savedMemoryMb = 0
+  savedMemoryMb = 0,
+  botName = 'Nova'
 }: ModernTitlebarProps): React.JSX.Element {
   const { isMaximized, handleDoubleClick, handleMouseDown } = useWindowDrag();
   const adRamSavedGb = Math.max(1.2, (blockedAdsCount * 0.35) / 1000).toFixed(1);
@@ -888,12 +890,12 @@ export function ModernTitlebar({
         <button
           type="button"
           className={`titlebar-tool-btn copilot-toggle-btn ${copilotOpen ? 'active' : ''}`}
-          title="Toggle Sidekick AI Copilot (70/30 Split View)"
-          aria-label="Toggle Sidekick AI Copilot"
+          title={`Toggle ${botName} AI (70/30 Split View)`}
+          aria-label={`Toggle ${botName} AI`}
           onClick={onToggleCopilot}
         >
           <Sparkles size={15} />
-          <span className="copilot-btn-label">Copilot</span>
+          <span className="copilot-btn-label">{botName}</span>
         </button>
 
         <WindowControls />

@@ -4,18 +4,20 @@ Lastbrowser is a Windows-first Electron browser shell with Sidekick integrated a
 
 ## Structure
 
-- `apps/desktop` - Electron, TypeScript, Vite and React browser shell.
-- `services/sidekick` - Sidekick agent service, currently based on the Hermes agent runtime for compatibility.
-- `services/webui` - Existing WebUI embedded as the primary Sidekick sidebar surface.
-- `installer` - Bootstrapper source copied from Hermes Portable for the Lastbrowser installer path.
-- `brand` - Sidekick/Lastbrowser brand assets.
+- `apps/desktop` - Electron, TypeScript, Vite and React browser shell (`src/main/` and `src/renderer/`).
+- `services/sidekick` - In-tree Sidekick Python backend engine, FastAPI server, CLI tools, runtime & skills.
+- `assets/store` - Microsoft Store certification asset pack (512/1024 icons, 1920x1080 screenshots).
+- `brand` - Vector brand assets, icons, and logos.
+- `docs` - Technical architecture, Microsoft Store listing metadata, and release planning.
+- `lastbrowser.com` - Official product landing page, GDPR/Store privacy policy, and support portal.
 
-## Development
+## Development & Verification
 
 ```powershell
 npm install
-npm run test:run
-npm run build
+npm test                  # 514+ Vitest unit & integration tests
+npm run verify:store      # Automated Microsoft Store release readiness preflight (27 checks)
+npm run build             # Build main TypeScript and renderer Vite bundles
 ```
 
 For local UI work, run the renderer and Electron separately:
@@ -25,8 +27,9 @@ npm run dev
 npm --workspace apps/desktop run start:dev
 ```
 
-## v1 Notes
+## Architecture Notes
 
-- Electron is the product browser shell; Lastbrowser is not a Chromium fork.
-- Sidekick/WebUI are local sidecar services. The Electron shell starts them through the service manager and embeds the WebUI as part of the browser UI.
-- `LASTBROWSER_*` and `SIDEKICK_*` are the public environment names. `HERMES_*` aliases remain for compatibility while the inherited runtime is still being refactored.
+- Lastbrowser is a **fully integrated Monorepo**: `services/sidekick` is maintained in-tree as the native Python engine.
+- See [`AGENTS.md`](./AGENTS.md) and [`GEMINI.md`](./GEMINI.md) for mandatory agent conventions and workflow boundaries.
+- Offline-ready: Builds and packaging do not depend on external repository syncing.
+

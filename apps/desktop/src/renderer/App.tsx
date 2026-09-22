@@ -1567,14 +1567,18 @@ export function App(): JSX.Element {
     setChatError('');
     try {
       const geminiStore = useGeminiAccountStore.getState();
+      const storedModel = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('lastbrowser.selectedModel.v1') : null;
+      const effectiveSelectedModel = setupState.model || storedModel || undefined;
+      const isGeminiRequested = !effectiveSelectedModel || effectiveSelectedModel.toLowerCase().includes('gemini');
+
       let accountModel: string | undefined;
       let accountProvider: string | undefined;
-      if (geminiStore.roundRobinEnabled && geminiStore.accounts.length > 0) {
+      if (isGeminiRequested && geminiStore.roundRobinEnabled && geminiStore.accounts.length > 0) {
         const shouldRotate = !geminiStore.rotatePerSession || !activeSessionId;
         const currentOrNext = shouldRotate ? geminiStore.getNextAccount() : geminiStore.activeAccount();
         if (currentOrNext) {
           geminiStore.recordUsage(currentOrNext.id);
-          accountModel = currentOrNext.preferredModel || 'gemini-3.8-flash';
+          accountModel = effectiveSelectedModel || currentOrNext.preferredModel || 'gemini-3.8-flash';
           accountProvider = 'google-gemini-cli';
         }
       }
@@ -1586,7 +1590,7 @@ export function App(): JSX.Element {
         // wizard may have been skipped), and sending nothing made the backend
         // pick a stale catalog entry — observed as
         // "Ring-2.6-1T is no longer available as a free model".
-        model: accountModel || setupState.model || (await resolveConfiguredModel((request) => window.lastbrowser.sidekick.requestWebui(request))) || undefined,
+        model: accountModel || effectiveSelectedModel || (await resolveConfiguredModel((request) => window.lastbrowser.sidekick.requestWebui(request))) || undefined,
         modelProvider: accountProvider,
         workspace: activeSpacePath,
         mode: composerMode
@@ -2196,7 +2200,16 @@ export function App(): JSX.Element {
                   quickActions={quickActions}
                   onExecuteQuickAction={handleExecuteQuickAction}
                   onSelectModel={(modelId) => {
-                    setSetupState((prev) => ({ ...prev, model: modelId }));
+                    setSetupState((prev) => {
+                      const next = { ...prev, model: modelId };
+                      void window.lastbrowser?.setup?.save(next).catch(() => {});
+                      return next;
+                    });
+                    try {
+                      if (typeof window !== 'undefined' && window.localStorage) {
+                        window.localStorage.setItem('lastbrowser.selectedModel.v1', modelId);
+                      }
+                    } catch {}
                   }}
                 />
               )}

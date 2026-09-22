@@ -24,6 +24,7 @@ export interface ChatState {
   activeStreamId: string | null;
   composerText: string;
   composerMode: ComposerMode;
+  selectedModel: string;
 
   setSessions: (
     sessions:
@@ -49,6 +50,7 @@ export interface ChatState {
   setActiveStreamId: (id: string | null) => void;
   setComposerText: (text: string) => void;
   setComposerMode: (mode: ComposerMode) => void;
+  setSelectedModel: (model: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -64,6 +66,10 @@ export const useChatStore = create<ChatState>((set) => ({
   activeStreamId: null,
   composerText: '',
   composerMode: 'action',
+  selectedModel:
+    typeof window !== 'undefined' && window.localStorage
+      ? window.localStorage.getItem('lastbrowser.selectedModel.v1') || 'gemini-3.8-flash'
+      : 'gemini-3.8-flash',
 
   setSessions: (sessions) =>
     set((state) => ({
@@ -85,5 +91,13 @@ export const useChatStore = create<ChatState>((set) => ({
   setChatRunState: (chatRunState) => set({ chatRunState }),
   setActiveStreamId: (activeStreamId) => set({ activeStreamId }),
   setComposerText: (composerText) => set({ composerText }),
-  setComposerMode: (composerMode) => set({ composerMode })
+  setComposerMode: (composerMode) => set({ composerMode }),
+  setSelectedModel: (selectedModel) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('lastbrowser.selectedModel.v1', selectedModel);
+      }
+    } catch {}
+    set({ selectedModel });
+  }
 }));

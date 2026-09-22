@@ -207,8 +207,35 @@ export function PinnedAppModal({
           </button>
         </div>
 
+        {/* Modal View Switcher Tabs (Katalog vs. Benutzerdefiniert) */}
+        {!editApp && (
+          <div className="pinned-modal-nav-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!showCustomForm}
+              className={`pinned-nav-tab ${!showCustomForm ? 'active' : ''}`}
+              onClick={() => setShowCustomForm(false)}
+            >
+              <Sparkles size={13} />
+              <span>Top 64 Katalog</span>
+              <span className="pinned-nav-count">64</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={showCustomForm}
+              className={`pinned-nav-tab ${showCustomForm ? 'active' : ''}`}
+              onClick={() => setShowCustomForm(true)}
+            >
+              <Plus size={13} />
+              <span>Benutzerdefinierte App</span>
+            </button>
+          </div>
+        )}
+
         {/* Pin Current Tab Banner */}
-        {!editApp && canPinCurrentTab && (
+        {!editApp && canPinCurrentTab && !showCustomForm && (
           <div className="pinned-quick-action-banner">
             <div className="pinned-quick-action-text">
               <span className="pinned-quick-action-label">Aktueller Tab:</span>
@@ -234,7 +261,7 @@ export function PinnedAppModal({
           </div>
         )}
 
-        {!editApp && (
+        {!editApp && !showCustomForm && (
           <>
             {/* Search & Categories Bar */}
             <div className="catalog-search-section">
@@ -246,21 +273,25 @@ export function PinnedAppModal({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="catalog-search-input"
+                  aria-label="Apps durchsuchen"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     className="catalog-search-clear"
                     onClick={() => setSearchQuery('')}
+                    aria-label="Suche leeren"
                   >
                     <X size={13} />
                   </button>
                 )}
               </div>
 
-              <div className="catalog-category-tabs">
+              <div className="catalog-category-tabs" role="tablist">
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={selectedCategory === 'all'}
                   className={`catalog-cat-tab ${selectedCategory === 'all' ? 'active' : ''}`}
                   onClick={() => setSelectedCategory('all')}
                 >
@@ -268,13 +299,17 @@ export function PinnedAppModal({
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={selectedCategory === 'communication'}
                   className={`catalog-cat-tab ${selectedCategory === 'communication' ? 'active' : ''}`}
                   onClick={() => setSelectedCategory('communication')}
                 >
-                  <MessageSquare size={12} /> Messaging (13)
+                  <MessageSquare size={12} /> Kommunikation (13)
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={selectedCategory === 'productivity'}
                   className={`catalog-cat-tab ${selectedCategory === 'productivity' ? 'active' : ''}`}
                   onClick={() => setSelectedCategory('productivity')}
                 >
@@ -282,13 +317,17 @@ export function PinnedAppModal({
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={selectedCategory === 'developer'}
                   className={`catalog-cat-tab ${selectedCategory === 'developer' ? 'active' : ''}`}
                   onClick={() => setSelectedCategory('developer')}
                 >
-                  <Code2 size={12} /> Dev & AI (17)
+                  <Code2 size={12} /> Entwickler & KI (17)
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={selectedCategory === 'media'}
                   className={`catalog-cat-tab ${selectedCategory === 'media' ? 'active' : ''}`}
                   onClick={() => setSelectedCategory('media')}
                 >
@@ -311,6 +350,7 @@ export function PinnedAppModal({
                       onClick={() => handleToggleCatalogApp(preset)}
                       role="button"
                       tabIndex={0}
+                      title={isPinned ? `${preset.name} abpinnen (1-Klick)` : `${preset.name} anheften (1-Klick)`}
                     >
                       <div
                         className="catalog-card-icon"
@@ -328,12 +368,27 @@ export function PinnedAppModal({
                         <span>{preset.letter || preset.name.charAt(0)}</span>
                       </div>
                       <div className="catalog-card-info">
-                        <span className="catalog-card-name">{preset.name}</span>
+                        <div className="catalog-card-header-row">
+                          <span className="catalog-card-name">{preset.name}</span>
+                          {isPinned ? (
+                            <span className="catalog-pinned-status-badge">
+                              <Check size={10} /> Angepinnt
+                            </span>
+                          ) : null}
+                        </div>
                         <span className="catalog-card-desc">{preset.description || preset.domain}</span>
                       </div>
-                      <div className={`catalog-card-toggle ${isPinned ? 'pinned' : ''}`}>
+                      <button
+                        type="button"
+                        className={`catalog-card-toggle ${isPinned ? 'pinned' : ''}`}
+                        title={isPinned ? `${preset.name} abpinnen` : `${preset.name} anheften`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleCatalogApp(preset);
+                        }}
+                      >
                         {isPinned ? <Check size={13} /> : <Plus size={13} />}
-                      </div>
+                      </button>
                     </div>
                   );
                 })}
@@ -350,7 +405,7 @@ export function PinnedAppModal({
               className="catalog-custom-toggle-btn"
               onClick={() => setShowCustomForm((prev) => !prev)}
             >
-              {showCustomForm ? '▲ Benutzerdefinierte App einklappen' : '▼ Eigene Web-Adresse (Custom URL) hinzufügen'}
+              {showCustomForm ? '▲ Zum Top 64 Katalog wechseln' : '▼ Eigene Web-Adresse (Custom URL) hinzufügen'}
             </button>
           </div>
         )}

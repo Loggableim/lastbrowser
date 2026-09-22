@@ -9,7 +9,8 @@
     "test": "npm --workspace apps/desktop run test",
     "test:run": "npm --workspace apps/desktop run test:run",
     "package:win": "npm --workspace apps/desktop run package:win",
-    "release:win": "npm --workspace apps/desktop run package:win:publish"
+    "release:win": "npm --workspace apps/desktop run package:win:publish",
+    "verify:store": "powershell -ExecutionPolicy Bypass -File scripts/verify-store-readiness.ps1"
   },
   "workspaces": [
     "apps/desktop"

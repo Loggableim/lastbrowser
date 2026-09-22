@@ -182,7 +182,7 @@ Microsoft lässt im Win32-Store-Weg nur digital signierte Binaries und Installer
 ### 5.1 Partner Center Formular (Win32 Submission)
 - [ ] Neues Produkt anlegen: **Windows-Desktopanwendung (Installationsprogramm)**.
 - [ ] Technische Installationsangaben hinterlegen:
-  - **Download-URL des Installers:** Direkter Link zum GitHub Release Asset (z. B. `https://github.com/Loggableim/lastbrowser/releases/download/v0.1.30/Lastbrowser-0.1.30-x64-setup.exe`).
+  - **Download-URL des Installers:** Direkter Link zum GitHub Release Asset (z. B. `https://github.com/Loggableim/lastbrowser/releases/download/v0.1.31/Lastbrowser-0.1.31-x64-setup.exe`).
   - **Parameter für automatische Installation:** `/S`
   - **Parameter für automatische Deinstallation:** `/S`
   - **Rückgabecode für Erfolg:** `0`

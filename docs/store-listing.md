@@ -10,7 +10,7 @@ Dieses Dokument bündelt alle verbindlichen Metadaten, mehrsprachigen Texte, rec
 | :--- | :--- | :--- |
 | **Produktname** | `Lastbrowser` | Im Partner Center reserviert |
 | **Paket-Typ** | `Windows-Desktopanwendung (Installationsprogramm)` | Unpackaged Win32 / NSIS |
-| **Installations-URL** | `https://github.com/Loggableim/lastbrowser/releases/download/v0.1.30/Lastbrowser-0.1.30-x64-setup.exe` | Direkter Link zum GitHub Release Asset |
+| **Installations-URL** | `https://github.com/Loggableim/lastbrowser/releases/download/v0.1.31/Lastbrowser-0.1.31-x64-setup.exe` | Direkter Link zum GitHub Release Asset |
 | **Silent Install Argument** | `/S` | NSIS Silent-Switch für automatische WACK-Installation |
 | **Silent Uninstall Argument** | `/S` | NSIS Silent-Switch (gesichert gegen Dialog-Timeouts) |
 | **Erfolgs-Exit-Code** | `0` | Standard Windows Exit Code |

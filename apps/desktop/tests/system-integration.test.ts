@@ -125,3 +125,27 @@ describe('Silent-Uninstall Certification Guard (installer.nsh)', () => {
     expect(content).toContain('customUnInstall');
   });
 });
+
+describe('Clear Browsing Data (Microsoft Store Policy 10.2)', () => {
+  it('exposes clearData in preload bridge', () => {
+    const preloadPath = path.resolve(__dirname, '../src/main/preload.ts');
+    const content = readFileSync(preloadPath, 'utf8');
+    expect(content).toContain('clearData');
+    expect(content).toContain('lastbrowser:browser:clearData');
+  });
+
+  it('declares clearData in global.d.ts', () => {
+    const dtsPath = path.resolve(__dirname, '../src/renderer/global.d.ts');
+    const content = readFileSync(dtsPath, 'utf8');
+    expect(content).toContain('clearData?:');
+    expect(content).toContain('Promise<{ ok: boolean }>;');
+  });
+
+  it('implements lastbrowser:browser:clearData in main.ts with cache and storage cleanup', () => {
+    const mainPath = path.resolve(__dirname, '../src/main/main.ts');
+    const content = readFileSync(mainPath, 'utf8');
+    expect(content).toContain("ipcMain.handle('lastbrowser:browser:clearData'");
+    expect(content).toContain('sess.clearCache()');
+    expect(content).toContain('sess.clearStorageData(');
+  });
+});

@@ -2335,6 +2335,39 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   </div>
                 </SettingsCard>
 
+                <SettingsCard
+                  title="Browsing data & cache"
+                  description="Clear temporary HTTP cache, cookies, and local web storage across all browser sessions."
+                >
+                  <div className="settings-field-grid">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '16px' }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>
+                          Löscht Netzwerk-Cache und Cookies zur Einhaltung der Privatsphäre (Policy 10.2).
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        onClick={async () => {
+                          if (window.confirm('Möchtest du Cache und Cookies wirklich bereinigen?')) {
+                            try {
+                              await window.lastbrowser?.browser?.clearData?.({ cache: true, cookies: true, storage: true });
+                              showToast('Cache und Browserdaten erfolgreich gelöscht');
+                            } catch {
+                              showToast('Fehler beim Bereinigen der Browserdaten');
+                            }
+                          }
+                        }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+                      >
+                        <Trash2 size={14} />
+                        Daten jetzt bereinigen
+                      </button>
+                    </div>
+                  </div>
+                </SettingsCard>
+
                 <SettingsCard title="Defaults" description="Language and chat behavior.">
                   <div className="settings-field-grid">
                     <SettingsField label="Language" description="User-facing UI language.">

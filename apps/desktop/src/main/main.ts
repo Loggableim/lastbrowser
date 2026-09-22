@@ -285,6 +285,29 @@ function registerIpc(): void {
     }
     return httpOk && httpsOk;
   });
+  ipcMain.handle('lastbrowser:browser:clearData', async (_event, options?: { cache?: boolean; cookies?: boolean; storage?: boolean }) => {
+    const opts = { cache: true, cookies: true, storage: true, ...options };
+    const targets = Array.from(activeSessions);
+    if (!targets.includes(session.defaultSession)) targets.push(session.defaultSession);
+
+    for (const sess of targets) {
+      if (!sess) continue;
+      try {
+        if (opts.cache && typeof sess.clearCache === 'function') {
+          await sess.clearCache();
+        }
+        const storagesToClear: string[] = [];
+        if (opts.cookies) storagesToClear.push('cookies');
+        if (opts.storage) storagesToClear.push('localstorage', 'cachestorage', 'indexdb', 'websql', 'serviceworkers');
+        if (storagesToClear.length > 0 && typeof sess.clearStorageData === 'function') {
+          await sess.clearStorageData({ storages: storagesToClear as any });
+        }
+      } catch (err) {
+        console.error('[lastbrowser] Failed to clear session data:', err);
+      }
+    }
+    return { ok: true };
+  });
   ipcMain.handle('lastbrowser:services:status', () => services?.getStatus());
     ipcMain.handle('lastbrowser:services:start', async () => {
       try {

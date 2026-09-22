@@ -34,7 +34,9 @@ contextBridge.exposeInMainWorld('lastbrowser', {
       const listener = (_event: Electron.IpcRendererEvent, shortcut: unknown) => callback(shortcut);
       ipcRenderer.on('lastbrowser:browser:shortcut', listener);
       return () => ipcRenderer.removeListener('lastbrowser:browser:shortcut', listener);
-    }
+    },
+    clearData: (options?: { cache?: boolean; cookies?: boolean; storage?: boolean }) =>
+      ipcRenderer.invoke('lastbrowser:browser:clearData', options)
   },
   sidekick: {
     onboardingStatus: () => ipcRenderer.invoke('lastbrowser:sidekick:onboardingStatus'),

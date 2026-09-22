@@ -33,12 +33,36 @@ export function HistoryPanel({
   onClear: () => void;
 }): JSX.Element | null {
   const [query, setQuery] = useState('');
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [includeHistory, setIncludeHistory] = useState(true);
+  const [includeCache, setIncludeCache] = useState(true);
+  const [includeCookies, setIncludeCookies] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const groups = useMemo(
     () => groupVisitsByDay(searchVisits(visits, query)),
     [visits, query]
   );
   const total = groups.reduce((sum, group) => sum + group.visits.length, 0);
+
+  const handleClearConfirmed = async () => {
+    setClearing(true);
+    try {
+      if (includeHistory) {
+        onClear();
+      }
+      if (includeCache || includeCookies) {
+        await window.lastbrowser?.browser?.clearData?.({
+          cache: includeCache,
+          cookies: includeCookies,
+          storage: includeCookies
+        });
+      }
+      setShowClearModal(false);
+    } finally {
+      setClearing(false);
+    }
+  };
 
   if (!open) return null;
 
@@ -51,11 +75,8 @@ export function HistoryPanel({
         <button
           type="button"
           className="history-clear"
-          title="Clear all history"
-          disabled={visits.length === 0}
-          onClick={() => {
-            if (window.confirm('Clear all browsing history?')) onClear();
-          }}
+          title="Clear browsing data (history, cache, cookies)"
+          onClick={() => setShowClearModal((prev) => !prev)}
         >
           <Trash2 size={13} />
         </button>
@@ -63,6 +84,64 @@ export function HistoryPanel({
           <X size={14} />
         </button>
       </header>
+
+      {showClearModal && (
+        <div className="history-clear-dialog">
+          <div className="history-clear-dialog-header">
+            <strong>Browserdaten löschen</strong>
+            <button
+              type="button"
+              className="history-clear-dialog-close"
+              onClick={() => setShowClearModal(false)}
+            >
+              <X size={12} />
+            </button>
+          </div>
+          <div className="history-clear-dialog-body">
+            <label className="history-clear-option">
+              <input
+                type="checkbox"
+                checked={includeHistory}
+                onChange={(e) => setIncludeHistory(e.target.checked)}
+              />
+              <span>Verlauf & Suchhistorie ({visits.length})</span>
+            </label>
+            <label className="history-clear-option">
+              <input
+                type="checkbox"
+                checked={includeCache}
+                onChange={(e) => setIncludeCache(e.target.checked)}
+              />
+              <span>Bilder & Dateien im Cache</span>
+            </label>
+            <label className="history-clear-option">
+              <input
+                type="checkbox"
+                checked={includeCookies}
+                onChange={(e) => setIncludeCookies(e.target.checked)}
+              />
+              <span>Cookies & Website-Speicher</span>
+            </label>
+          </div>
+          <div className="history-clear-dialog-footer">
+            <button
+              type="button"
+              className="history-clear-btn cancel"
+              onClick={() => setShowClearModal(false)}
+            >
+              Abbrechen
+            </button>
+            <button
+              type="button"
+              className="history-clear-btn confirm"
+              disabled={clearing || (!includeHistory && !includeCache && !includeCookies)}
+              onClick={handleClearConfirmed}
+            >
+              {clearing ? 'Wird gelöscht...' : 'Daten löschen'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="history-search">
         <Search size={13} />

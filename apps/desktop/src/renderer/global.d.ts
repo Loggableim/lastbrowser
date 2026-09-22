@@ -228,6 +228,7 @@ declare global {
         onOpenIncognitoTab: (callback: (url: string) => void) => () => void;
         onDeepResearch: (callback: (payload: { selectionText?: string; pageUrl?: string }) => void) => () => void;
         onShortcut: (callback: (event: { action: string; payload?: { index?: number } }) => void) => () => void;
+        clearData?: (options?: { cache?: boolean; cookies?: boolean; storage?: boolean }) => Promise<{ ok: boolean }>;
       };
       sidekick: {
         onboardingStatus: () => Promise<Record<string, unknown>>;

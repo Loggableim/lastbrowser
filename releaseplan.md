@@ -83,13 +83,13 @@ Dieses Dokument definiert den verbindlichen Release- und Zertifizierungsplan zur
      - `app.setAsDefaultProtocolClient('https')`
   3. Einstellungs-Button in den UI-Settings (*„Als Standard-Browser festlegen“*): Öffnet per `shell.openExternal('ms-settings:defaultapps')` die Windows-Einstellungen.
 
-### 1.4 Browserdaten-Bereinigung (`Clear Browsing Data` / Policy 10.2)
-- [ ] **Problem:** Microsoft verlangt, dass Nutzer ihre Surfdaten (Cookies, Cache, Local Storage) verwalten und löschen können.
-- [ ] **Lösung:**
-  1. Neuer IPC-Kanal `lastbrowser:browser:clear-data`:
+### 1.4 Browserdaten-Bereinigung (`Clear Browsing Data` / Policy 10.2) [x] (Umgesetzt)
+- [x] **Problem:** Microsoft verlangt, dass Nutzer ihre Surfdaten (Cookies, Cache, Local Storage) verwalten und löschen können.
+- [x] **Lösung:**
+  1. Neuer IPC-Kanal `lastbrowser:browser:clearData`:
      - Löschen von HTTP-Cache (`session.clearCache()`).
      - Bereinigung von Cookies, Storage, Cache (`session.clearStorageData({ storages: ['cookies', 'localstorage', 'cachestorage', 'indexdb'] })`).
-  2. UI-Schaltfläche in `NativeHistory.tsx` und `SystemPanels.tsx` (*„Browserdaten & Cache leeren“*).
+  2. UI-Schaltfläche in `NativeHistory.tsx` (modaler Löschdialog für Verlauf, Cache und Cookies) und `SystemPanels.tsx` (*„Browserdaten & Cache leeren“*).
 
 ### 1.5 KI-Feedback & Melde-Mechanismus (Microsoft Store AI Policy)
 - [ ] **Problem:** Microsoft Store Policy für generative KI verlangt eine Feedback- oder Meldefunktion für generierte Inhalte.

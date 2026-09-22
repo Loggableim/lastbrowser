@@ -27,6 +27,7 @@ Thumbs.db
 *.png
 !**/*.svg
 !sidekick_cd_mappe_final/**/*.png
+!assets/store/**/*.png
 installer/build/
 installer/dist/
 smoke-output/

@@ -154,17 +154,17 @@ Microsoft lässt im Win32-Store-Weg nur digital signierte Binaries und Installer
 
 ## 6. Phase 4: Store Listing & Marketing-Assets
 
-### 4.1 Bildmaterial & Grafiken
-- [ ] **App-Icon:**
-  - 1:1 quadratisch, 512×512 Pixel und 1024×1024 Pixel PNG (hohe Qualität, dunkles Icon, transparenter Hintergrund, keine abgerundeten Ecken).
-- [ ] **Screenshots (1920×1080 Pixel / 16:9):**
-  - Mindestens 4, empfohlen 6 hochwertige Screenshots:
-    1. *Zen-Browseransicht:* Einklappbare Sidebar, vertikale Tabs und Pinned-Apps-Grid.
-    2. *70/30 Copilot Split-View:* Web-Inhalt links, Sidekick AI Copilot rechts mit Code-Highlighting.
-    3. *Deep Tab Intelligence (`@tabs`):* Kontext-Synthese über mehrere Tabs hinweg mit klickbaren Zitat-Badges.
-    4. *PowerShell-Terminal & Diagnostik:* Eingebettetes ConPTY-Terminal und interaktives `sidekick doctor` Dashboard.
-    5. *Extensions & Add-on Store:* Manifest V3 WebExtensions (Dark Reader, Bitwarden, uBlock Origin Lite).
-    6. *Privacy & Adblock Shield:* Adblock-Statistiken in der Omnibox und Inkognito-Modus.
+### 4.1 Bildmaterial & Grafiken [x] (Umgesetzt in `assets/store/`)
+- [x] **App-Icon:**
+  - 1:1 quadratisch, 512×512 Pixel (`assets/store/icon-512.png`) und 1024×1024 Pixel PNG (`assets/store/icon-1024.png`).
+- [x] **Screenshots (1920×1080 Pixel / 16:9):**
+  - Alle 6 hochauflösenden Screenshots via `scripts/generate-store-screenshots.py` generiert:
+    1. *Zen-Browseransicht:* `store-screen-1-zen-sidebar.png`
+    2. *70/30 Copilot Split-View:* `store-screen-2-copilot-splitview.png`
+    3. *Deep Tab Intelligence (`@tabs`):* `store-screen-3-tab-intelligence.png`
+    4. *PowerShell-Terminal & Diagnostik:* `store-screen-4-conpty-terminal.png`
+    5. *Extensions & Add-on Store:* `store-screen-5-webextensions.png`
+    6. *Privacy & Adblock Shield:* `store-screen-6-privacy-shield.png`
 
 ### 4.2 Metadaten & Texte (Deutsch & Englisch) [x] (Umgesetzt)
 - [x] **Store Listing Package erstellt (`docs/store-listing.md`):**
@@ -222,7 +222,7 @@ Microsoft lässt im Win32-Store-Weg nur digital signierte Binaries und Installer
 | **3.2** | Support-Kanal (`support@lastbrowser.com`) einrichten | Ops | [x] |
 | **3.3** | Partner Center Account anlegen & Namen sichern | Management | [ ] |
 | **3.4** | IARC-Altersfreigabe ausfüllen | Management | [ ] |
-| **4.1** | Store-Screenshots (1920x1080) & Icon erstellen | Design | [ ] |
+| **4.1** | Store-Screenshots (1920x1080) & Icon erstellen | Design | [x] |
 | **4.2** | Store-Listing-Texte finalisieren (DE/EN) | Marketing | [x] |
 | **5.1** | Partner Center Submission absenden | Management | [ ] |
 | **5.2** | Zertifizierung begleiten & Store-Go-Live | Team | [ ] |

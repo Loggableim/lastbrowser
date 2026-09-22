@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy – Lastbrowser</title>
+<meta name="description" content="Lastbrowser Privacy Policy: Our uncompromising Local-First commitment, transparent AI privacy principles, and zero cloud tracking.">
+<meta property="og:title" content="Privacy Policy – Lastbrowser">
+<meta property="og:description" content="Local-first architecture, zero telemetry, full user sovereignty over browsing data.">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/en/privacy/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/privacy/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/privacy/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/en/privacy/">
+<style>
+:root {
+  --nearBlack:#070A12; --surface:#101827; --stroke:#2A3550; --text:#F7FAFF; --muted:#AAB4C6;
+  --blue:#2563FF; --cyan:#00E5FF; --purple:#8A3FFC; --pink:#FF2D8F; --yellow:#FFC800; --green:#7CFF6B;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;color:var(--text);font-family:Inter,"Segoe UI",system-ui,-apple-system,sans-serif;
+  background:radial-gradient(circle at 18% 0%,rgba(37,99,255,.18),transparent 28%),
+             radial-gradient(circle at 90% 8%,rgba(255,45,143,.12),transparent 24%),
+             linear-gradient(180deg,#060913 0%,#070B14 52%,#05070D 100%);
+  overflow-x:hidden}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.72;
+  background-image:radial-gradient(circle,rgba(0,229,255,.028) 1px,transparent 1px);background-size:24px 24px}
+.container{width:min(960px,calc(100% - 40px));margin:0 auto}
+a{color:var(--cyan);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Nav */
+nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(18px);background:rgba(7,10,18,.76);border-bottom:1px solid rgba(42,53,80,.62)}
+nav .inner{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0}
+.logo{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+.logo img{width:42px;height:42px;border-radius:11px;border:1px solid rgba(42,53,80,.9)}
+.logo strong{display:block;font-family:Outfit,Inter,sans-serif;font-size:17px}
+.logo span{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.links{display:flex;gap:18px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.links a{color:var(--muted);font-size:14px;font-weight:650}
+.links a:hover{color:var(--text)}
+
+/* Header */
+.page-header{padding:54px 0 28px}
+.eyebrow{display:inline-flex;gap:8px;align-items:center;margin-bottom:16px;padding:8px 14px;border-radius:999px;border:1px solid rgba(0,229,255,.3);background:rgba(0,229,255,.08);color:var(--cyan);font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:800}
+h1{margin:0 0 16px;font-family:Outfit,Inter,sans-serif;font-size:clamp(34px,5vw,52px);letter-spacing:-.04em;line-height:1.1}
+.grad{background:linear-gradient(90deg,var(--cyan),var(--blue),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{margin:0;color:var(--muted);font-size:18px;line-height:1.7}
+.meta-tag{color:var(--muted);font-size:13px;margin-top:14px}
+
+/* Policy Content */
+.policy-content{padding:24px 0 60px}
+.card{background:linear-gradient(180deg,rgba(16,24,39,.94),rgba(11,18,32,.91));border:1px solid rgba(42,53,80,.68);border-radius:20px;padding:28px;margin-bottom:24px;box-shadow:0 18px 42px rgba(0,0,0,.2)}
+.card h2{margin:0 0 14px;font-family:Outfit,Inter,sans-serif;font-size:22px;letter-spacing:-.02em;color:var(--text);display:flex;align-items:center;gap:10px}
+.card p,.card li{color:var(--muted);line-height:1.75;font-size:15px}
+.card ul{padding-left:22px;margin:12px 0}
+.card li{margin-bottom:8px}
+.badge{display:inline-block;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.badge-green{background:rgba(124,255,107,.15);color:var(--green);border:1px solid rgba(124,255,107,.3)}
+.badge-blue{background:rgba(37,99,255,.15);color:var(--cyan);border:1px solid rgba(37,99,255,.3)}
+
+/* Footer */
+.footer{padding:36px 0 48px;margin-top:40px;border-top:1px solid rgba(42,53,80,.6);color:var(--muted);font-size:14px}
+.footer-row{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}
+.footer-links{display:flex;gap:18px;flex-wrap:wrap}
+.footer-links a{color:var(--muted)}
+.footer-links a:hover{color:var(--text)}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container inner">
+    <a href="/en/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser">
+      <div><strong>Lastbrowser</strong><span>Privacy &amp; Data Security</span></div>
+    </a>
+    <div class="links">
+      <a href="/en/">Home</a>
+      <a href="/en/support/">Support</a>
+      <a href="/privacy/">Deutsch (DE)</a>
+      <a href="https://github.com/Loggableim/sidekick-agent" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-header">
+  <div class="container">
+    <div class="eyebrow">Privacy &amp; Trust</div>
+    <h1>Lastbrowser <span class="grad">Privacy Policy</span></h1>
+    <p class="lead">Lastbrowser is built upon a fundamental commitment to a <strong>Local-First architecture</strong>. Your browsing history, open tabs, saved passwords, and personal files belong exclusively to you and never leave your machine without explicit consent.</p>
+    <div class="meta-tag">Effective Date: September 22, 2026 · Microsoft Store &amp; GDPR Compliant</div>
+  </div>
+</header>
+
+<main class="policy-content">
+  <div class="container">
+
+    <article class="card">
+      <h2>1. Our Core Commitment: Local-First <span class="badge badge-green">Zero-Cloud-Tracking</span></h2>
+      <p>Modern mainstream browsers commonly sync every visited URL, search keystroke, and tab snapshot to central cloud servers. <strong>Lastbrowser intentionally rejects this paradigm:</strong></p>
+      <ul>
+        <li><strong>Local-Only Storage on Your PC:</strong> All browser data—including history, session snapshots, bookmarks, cookies, web storage, SQLite databases, and workspace layouts—is stored exclusively on your local computer in your user profile under <code>%APPDATA%\Lastbrowser</code>.</li>
+        <li><strong>No Telemetry or Tracking:</strong> Lastbrowser contains zero hidden analytics scripts, keystroke loggers, advertising identifiers, or tracking beacons.</li>
+        <li><strong>No Account Mandatory:</strong> You can operate the full range of browser features without ever creating an online account.</li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <h2>2. Artificial Intelligence &amp; LLM Providers <span class="badge badge-blue">Bring-Your-Own-Key (BYOK)</span></h2>
+      <p>Lastbrowser integrates an autonomous AI assistant (Nova / Sidekick Copilot) for in-depth research, code inspection, and tab synthesis. We guarantee complete transparency:</p>
+      <ul>
+        <li><strong>No Automated Content Uploads:</strong> Webpage text or DOM contents are never transmitted automatically to any third party or cloud service. Data is processed exclusively when you explicitly initiate an action (e.g., submitting a prompt, clicking <em>"Summarize"</em>, or executing an agentic workflow).</li>
+        <li><strong>Your Own Keys &amp; Local Authentication:</strong> You retain complete control over which AI provider is used. Lastbrowser connects using your personal API keys (Google Gemini API, Anthropic Claude, OpenAI) or via the local Google Gemini CLI with your authorized local Google accounts. Keys are stored locally and encrypted.</li>
+        <li><strong>Zero Training on User Data:</strong> Neither Lastbrowser nor our infrastructure ever uses your queries or webpage snippets to train machine learning models.</li>
+        <li><strong>Prompt-Injection &amp; Guardrail Protection:</strong> Lastbrowser implements strict filters that neutralize prompt-injection attempts, invisible control characters, and malicious payload scripts hidden inside untrusted third-party websites.</li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <h2>3. Data Erasure &amp; User Control (Store Policy 10.2)</h2>
+      <p>In full compliance with Microsoft Store Policy 10.2 and Article 17 of the GDPR (Right to Erasure), you maintain total sovereignty over your browsing data at all times:</p>
+      <ul>
+        <li><strong>Clear Browsing Data:</strong> Through the Settings panel (or the History &amp; Security dialog), you can selectively or completely delete HTTP cache, cookies, local storage, indexedDB, and browsing history with a single click.</li>
+        <li><strong>Private / Incognito Mode:</strong> Browsing in Private Mode (<em>Ctrl+Shift+N</em>) utilizes an isolated, transient in-memory session. No cache, cookies, or history are written to persistent storage, and all temporary traces are purged upon closing the tab.</li>
+        <li><strong>Complete Clean Uninstall:</strong> When uninstalling Lastbrowser via Windows Settings or Control Panel, the uninstaller provides an explicit prompt to cleanly remove all application data, profiles, and cached files from <code>%APPDATA%\Lastbrowser</code>.</li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <h2>4. WebExtensions &amp; Add-ons (Manifest V3)</h2>
+      <p>Lastbrowser supports Chrome WebExtensions via the modern Manifest V3 specification:</p>
+      <ul>
+        <li>Extensions run locally in sandboxed environments within guest webviews.</li>
+        <li>Requested permissions are transparently listed in the extension management panel.</li>
+        <li>Extensions are disabled in Incognito mode by default to prevent incidental tracking, but can be selectively enabled by user choice.</li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <h2>5. Network Requests &amp; Automatic Updates</h2>
+      <p>When you navigate to any website, standard direct HTTP/HTTPS connections are established with the remote server hosting that domain, subject to that third party's privacy policy.</p>
+      <p>To ensure security and stability, Lastbrowser periodically queries GitHub's official release metadata for signed application updates. No identifying information is transmitted during these checks.</p>
+    </article>
+
+    <article class="card">
+      <h2>6. Data Controller &amp; Contact</h2>
+      <p>If you have any questions regarding this Privacy Policy, your rights, or our Local-First security architecture, please contact us at:</p>
+      <p><strong>Lastbrowser Project</strong><br>
+      Email: <a href="mailto:privacy@lastbrowser.com">privacy@lastbrowser.com</a> or <a href="mailto:support@lastbrowser.com">support@lastbrowser.com</a><br>
+      Direct Contact: Dominik Rainer (<a href="mailto:rainer@dominik.in">rainer@dominik.in</a>)<br>
+      Official Website: <a href="https://lastbrowser.com">https://lastbrowser.com</a><br>
+      Open Source Repository: <a href="https://github.com/Loggableim/sidekick-agent/issues" target="_blank" rel="noopener">GitHub Issues</a></p>
+    </article>
+
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="container footer-row">
+    <div>© 2026 Lastbrowser · Local-First AI Web Browser</div>
+    <div class="footer-links">
+      <a href="/en/">Home</a>
+      <a href="/en/support/">Support &amp; FAQ</a>
+      <a href="/en/privacy/">Privacy Policy</a>
+      <a href="/privacy/">German (DE)</a>
+      <a href="https://github.com/Loggableim/sidekick-agent" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

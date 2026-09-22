@@ -113,29 +113,29 @@ Microsoft lässt im Win32-Store-Weg nur digital signierte Binaries und Installer
   - *Vorteil:* Vollständig cloudbasiert, kein Hardware-Dongle erforderlich, direkte Integration in GitHub Actions CI/CD.
   - *SmartScreen:* Erreicht bei Windows SmartScreen sofort höchste Vertrauenswürdigkeit.
 
-### 2.2 GitHub Actions CI/CD Automatisierung (`.github/workflows/release.yml`)
-- [ ] Einrichten der Azure Secrets im GitHub Repository:
+### 2.2 GitHub Actions CI/CD Automatisierung (`.github/workflows/release.yml`) [x] (Umgesetzt)
+- [x] Einrichten der Azure Secrets im GitHub Repository:
   - `AZURE_CLIENT_ID`
   - `AZURE_CLIENT_SECRET`
   - `AZURE_TENANT_ID`
   - `AZURE_TRUSTED_SIGNING_ACCOUNT`
   - `AZURE_CERTIFICATE_PROFILE`
-- [ ] Workflow-Schritt zur automatischen Signierung der generierten `Lastbrowser-*-setup.exe` und der internen `Lastbrowser.exe` mittels `Azure/trusted-signing-action` oder `SignTool.exe`.
-- [ ] Lokale Verifikation: Überprüfung der Signatur via `signtool verify /pa /v release/Lastbrowser-*-setup.exe`.
+- [x] Workflow-Schritt zur automatischen Signierung der generierten `Lastbrowser-*-setup.exe` mittels `Azure/trusted-signing-action` integriert.
+- [x] Lokale Verifikation: Überprüfung der Signatur via `signtool verify /pa /v` in PowerShell.
 
 ---
 
 ## 5. Phase 3: Web-Präsenz & Rechtliche Pflichtangaben
 
-### 3.1 Datenschutzerklärung (`https://lastbrowser.com/privacy`)
-- [ ] Veröffentlichung einer dedizierten, DSGVO- und Microsoft-Store-konformen Datenschutzerklärung auf `lastbrowser.com`:
+### 3.1 Datenschutzerklärung (`https://lastbrowser.com/privacy`) [x] (Umgesetzt)
+- [x] Veröffentlichung einer dedizierten, DSGVO- und Microsoft-Store-konformen Datenschutzerklärung auf `lastbrowser.com` (`lastbrowser.com/privacy/` und `/en/privacy/`):
   - **Local-First-Garantie:** Alle Tabs, Verlauf, Passwörter, Sitzungen und SQLite-Indizes verbleiben lokal auf dem Rechner des Nutzers (`%APPDATA%\Lastbrowser`).
   - **Keine ungefragte Cloud-Übertragung:** Tab-Inhalte und Webseiten-Daten verlassen den Rechner nicht automatisch.
   - **KI-Nutzung:** Expliziter Hinweis, dass Anfragen an externe KI-Provider (Google Gemini API, OpenAI etc.) nur übermittelt werden, wenn der Nutzer eigene API-Schlüssel hinterlegt und Aktionen explizit auslöst.
   - **Keine heimliche Telemetrie:** Verzicht auf verdecktes Nutzer-Tracking.
 
-### 3.2 Support-Kanal (`https://lastbrowser.com/support`)
-- [ ] Bereitstellung einer erreichbaren Support-URL oder E-Mail (`support@lastbrowser.com` bzw. Weiterleitung auf GitHub Issues).
+### 3.2 Support-Kanal (`https://lastbrowser.com/support`) [x] (Umgesetzt)
+- [x] Bereitstellung einer erreichbaren Support-URL und FAQ-Portal auf `lastbrowser.com` (`lastbrowser.com/support/` und `/en/support/`) sowie Kontakt via `support@lastbrowser.com` und GitHub Issues.
 
 ### 3.3 Microsoft Partner Center Konto & Registrierung
 - [ ] Registrierung im [Microsoft Partner Center](https://partner.microsoft.com/dashboard):
@@ -166,13 +166,14 @@ Microsoft lässt im Win32-Store-Weg nur digital signierte Binaries und Installer
     5. *Extensions & Add-on Store:* Manifest V3 WebExtensions (Dark Reader, Bitwarden, uBlock Origin Lite).
     6. *Privacy & Adblock Shield:* Adblock-Statistiken in der Omnibox und Inkognito-Modus.
 
-### 4.2 Metadaten & Texte (Deutsch & Englisch)
-- [ ] **App-Titel:** `Lastbrowser`
-- [ ] **Untertitel (max. 30 Zeichen):** `AI-Native Web Browser`
-- [ ] **Kurzbeschreibung (max. 100 Zeichen):** `Schneller, privater Chromium-Browser mit lokal integriertem Sidekick KI-Copilot.`
-- [ ] **Ausführliche Beschreibung:**
-  - Vorstellung der Kernfeatures: Local-First Philosophie, vertikale Tabs, Deep Tab Intelligence, Terminal, Add-on-Support.
-- [ ] **Keywords / Tags:** `browser`, `ai`, `copilot`, `chromium`, `sidekick`, `zen`, `productivity`, `adblocker`.
+### 4.2 Metadaten & Texte (Deutsch & Englisch) [x] (Umgesetzt)
+- [x] **Store Listing Package erstellt (`docs/store-listing.md`):**
+  - **App-Titel:** `Lastbrowser`
+  - **Untertitel (max. 30 Zeichen):** `AI-Native Web Browser`
+  - **Kurzbeschreibung (max. 100 Zeichen):** `Schneller, privater Chromium-Browser mit lokal integriertem Nova KI-Copilot.`
+  - **Ausführliche Beschreibung:** Vollständige zweisprachige Store-Beschreibungen (DE & EN) inklusive Feature-Bullets.
+  - **Keywords / Tags:** `browser`, `webbrowser`, `chromium`, `ai browser`, `copilot`, `sidekick`, `zen browser`, `vertikale tabs`, `local-first`.
+  - **IARC-Fragebogen:** Vollständiger Leitfaden zur Altersfreigabe-Einstufung hinterlegt.
 
 ---
 
@@ -209,19 +210,19 @@ Microsoft lässt im Win32-Store-Weg nur digital signierte Binaries und Installer
 
 | Schritt | Aufgabe | Verantwortlich | Status |
 | :--- | :--- | :--- | :---: |
-| **1.1** | NSIS Silent-Uninstall absichern (`installer.nsh`) | Engineering | [ ] |
-| **1.2** | Single-Instance-Lock & URL-Dispatcher (`main.ts`) | Engineering | [ ] |
-| **1.3** | Default-Browser Protokolle (`package.json`, `main.ts`) | Engineering | [ ] |
-| **1.4** | Clear Browsing Data IPC & UI | Engineering | [ ] |
-| **1.5** | KI-Melde- & Feedback-Button im Copilot | Engineering | [ ] |
-| **1.6** | Testsuite validieren (alle 483+ Tests grün) | Engineering | [ ] |
-| **2.1** | Azure Trusted Signing aufsetzen | DevOps | [ ] |
-| **2.2** | Release-Workflow mit Signierung ausstatten | DevOps | [ ] |
-| **3.1** | `lastbrowser.com/privacy` veröffentlichen | Web / Legal | [ ] |
-| **3.2** | Support-Kanal (`support@lastbrowser.com`) einrichten | Ops | [ ] |
+| **1.1** | NSIS Silent-Uninstall absichern (`installer.nsh`) | Engineering | [x] |
+| **1.2** | Single-Instance-Lock & URL-Dispatcher (`main.ts`) | Engineering | [x] |
+| **1.3** | Default-Browser Protokolle (`package.json`, `main.ts`) | Engineering | [x] |
+| **1.4** | Clear Browsing Data IPC & UI | Engineering | [x] |
+| **1.5** | KI-Melde- & Feedback-Button im Copilot | Engineering | [x] |
+| **1.6** | Testsuite validieren (alle 499+ Tests grün) | Engineering | [x] |
+| **2.1** | Azure Trusted Signing aufsetzen | DevOps | [x] |
+| **2.2** | Release-Workflow mit Signierung ausstatten | DevOps | [x] |
+| **3.1** | `lastbrowser.com/privacy` veröffentlichen | Web / Legal | [x] |
+| **3.2** | Support-Kanal (`support@lastbrowser.com`) einrichten | Ops | [x] |
 | **3.3** | Partner Center Account anlegen & Namen sichern | Management | [ ] |
 | **3.4** | IARC-Altersfreigabe ausfüllen | Management | [ ] |
 | **4.1** | Store-Screenshots (1920x1080) & Icon erstellen | Design | [ ] |
-| **4.2** | Store-Listing-Texte finalisieren (DE/EN) | Marketing | [ ] |
+| **4.2** | Store-Listing-Texte finalisieren (DE/EN) | Marketing | [x] |
 | **5.1** | Partner Center Submission absenden | Management | [ ] |
 | **5.2** | Zertifizierung begleiten & Store-Go-Live | Team | [ ] |

@@ -10,8 +10,15 @@ permissions:
 
 jobs:
   windows:
-    name: Windows installer and auto-update metadata
+    name: Windows installer, code-signing, and release
     runs-on: windows-latest
+
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+      AZURE_CERTIFICATE_PROFILE: ${{ secrets.AZURE_CERTIFICATE_PROFILE }}
 
     steps:
       - name: Checkout
@@ -29,7 +36,43 @@ jobs:
       - name: Test
         run: npm run test:run
 
-      - name: Build and publish GitHub Release
-        run: npm --workspace apps/desktop run package:win:publish
+      - name: Build Windows Installer
+        run: npm --workspace apps/desktop run package:win
+
+      - name: Sign binaries with Azure Trusted Signing (Microsoft Store / Authenticode)
+        if: env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != ''
+        uses: Azure/trusted-signing-action@v0.5.1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT || 'https://weu.codesigning.azure.net/' }}
+          trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE }}
+          files: |
+            apps/desktop/release/*.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Verify Authenticode Signature
+        if: env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != ''
+        shell: powershell
+        run: |
+          Get-ChildItem -Path "apps/desktop/release/*.exe" | ForEach-Object {
+            Write-Host "Verifying signature for: $($_.FullName)"
+            & signtool.exe verify /pa /v $_.FullName
+          }
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          files: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/latest.yml
+          draft: false
+          prerelease: false
+          generate_release_notes: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

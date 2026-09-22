@@ -91,15 +91,15 @@ Dieses Dokument definiert den verbindlichen Release- und Zertifizierungsplan zur
      - Bereinigung von Cookies, Storage, Cache (`session.clearStorageData({ storages: ['cookies', 'localstorage', 'cachestorage', 'indexdb'] })`).
   2. UI-Schaltfläche in `NativeHistory.tsx` (modaler Löschdialog für Verlauf, Cache und Cookies) und `SystemPanels.tsx` (*„Browserdaten & Cache leeren“*).
 
-### 1.5 KI-Feedback & Melde-Mechanismus (Microsoft Store AI Policy)
-- [ ] **Problem:** Microsoft Store Policy für generative KI verlangt eine Feedback- oder Meldefunktion für generierte Inhalte.
-- [ ] **Lösung:**
-  1. Subtiles Thumbs-Down- / Melde-Icon an jeder Sidekick-Copilot-Nachricht.
-  2. Klick öffnet einen schlanken Dialog (*„Feedback zur KI-Antwort“*), der Feedback lokal protokolliert oder an den Support meldet.
+### 1.5 KI-Feedback & Melde-Mechanismus (Microsoft Store AI Policy) [x] (Umgesetzt)
+- [x] **Problem:** Microsoft Store Policy für generative KI verlangt eine Feedback- oder Meldefunktion für generierte Inhalte.
+- [x] **Lösung:**
+  1. Subtiles Thumbs-Down- / Melde-Icon an jeder Sidekick-Copilot-Nachricht mit Copy- und ThumbsUp-Toolbar (`CopilotSplitView.tsx`).
+  2. Klick öffnet einen schlanken Dialog (*„Feedback zur KI-Antwort“* / `AiFeedbackModal.tsx`), der Feedback kategorisiert (ungenau, unangemessen, Formatierungsfehler, sonstiges) und in `lastbrowser.aiFeedback.v1` protokolliert.
 
-### 1.6 Qualitätskontrolle & Tests
-- [ ] Ausführen aller bestehenden Vitest-Tests (`npm run test:run` – alle 483+ Tests müssen grün bleiben).
-- [ ] Neue Tests für Single-Instance-Handling, URL-Extraktion und Clear-Data-IPC.
+### 1.6 Qualitätskontrolle & Tests [x] (Umgesetzt)
+- [x] Ausführen aller bestehenden Vitest-Tests (`npm test` – alle 499 Tests in 62 Testdateien grün).
+- [x] Neue Tests für Single-Instance-Handling, URL-Extraktion, Clear-Data-IPC und AI-Feedback-Persistenz (`system-integration.test.ts`).
 
 ---
 

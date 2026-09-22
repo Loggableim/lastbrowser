@@ -15,11 +15,14 @@ import {
   Sparkles,
   StopCircle,
   Table,
+  ThumbsDown,
+  ThumbsUp,
   X,
   Zap
 } from 'lucide-react';
 import type { DesktopChatMessage } from '../bridge.js';
 import { RichTextRenderer } from '../NativeRichText.js';
+import { AiFeedbackModal } from './AiFeedbackModal.js';
 import type { QuickActionChip } from '../quick-actions.js';
 import {
   WORKFLOW_TEMPLATES,
@@ -61,6 +64,9 @@ export function CopilotSplitView({
   const [inputText, setInputText] = useState('');
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [workflowsMenuOpen, setWorkflowsMenuOpen] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
+  const [upvotedIndices, setUpvotedIndices] = useState<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workflowDropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -323,7 +329,48 @@ export function CopilotSplitView({
                     {isUser ? (
                       <p className="copilot-text-p">{msg.content}</p>
                     ) : (
-                      <RichTextRenderer content={msg.content} />
+                      <>
+                        <RichTextRenderer content={msg.content} />
+                        {!busy && (
+                          <div className="copilot-message-action-bar">
+                            <button
+                              type="button"
+                              className="copilot-action-pill"
+                              title="Text kopieren"
+                              onClick={() => {
+                                navigator.clipboard.writeText(msg.content);
+                                setCopiedMsgIdx(idx);
+                                setTimeout(() => setCopiedMsgIdx(null), 1500);
+                              }}
+                            >
+                              {copiedMsgIdx === idx ? <Check size={11} color="#22c55e" /> : <Copy size={11} />}
+                            </button>
+                            <button
+                              type="button"
+                              className={`copilot-action-pill ${upvotedIndices.has(idx) ? 'active' : ''}`}
+                              title="Hilfreiche Antwort"
+                              onClick={() => {
+                                setUpvotedIndices((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(idx)) next.delete(idx);
+                                  else next.add(idx);
+                                  return next;
+                                });
+                              }}
+                            >
+                              <ThumbsUp size={11} />
+                            </button>
+                            <button
+                              type="button"
+                              className="copilot-action-pill report"
+                              title="Problem melden / Feedback geben (Store AI Policy)"
+                              onClick={() => setFeedbackMessage(msg.content)}
+                            >
+                              <ThumbsDown size={11} />
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -393,6 +440,12 @@ export function CopilotSplitView({
           )}
         </form>
       </div>
+
+      <AiFeedbackModal
+        open={Boolean(feedbackMessage)}
+        messageContent={feedbackMessage || ''}
+        onClose={() => setFeedbackMessage(null)}
+      />
     </aside>
   );
 }

@@ -149,3 +149,32 @@ describe('Clear Browsing Data (Microsoft Store Policy 10.2)', () => {
     expect(content).toContain('sess.clearStorageData(');
   });
 });
+
+describe('Microsoft Store Generative AI Policy – Response Reporting & Feedback', () => {
+  it('saves feedback entry with reason, snippet, timestamp and uuid', async () => {
+    const { saveAiFeedback, AI_FEEDBACK_STORAGE_KEY } = await import('../src/renderer/components/AiFeedbackModal.js');
+    const mockStore: Record<string, string> = {};
+    const mockStorage = {
+      getItem: (k: string) => mockStore[k] || null,
+      setItem: (k: string, v: string) => { mockStore[k] = v; },
+      removeItem: (k: string) => { delete mockStore[k]; }
+    };
+    (globalThis as any).localStorage = mockStorage;
+    if (typeof window !== 'undefined') (window as any).localStorage = mockStorage;
+
+    const entry = saveAiFeedback({
+      reason: 'inaccurate',
+      comments: 'Falsche Jahreszahl angegeben',
+      messageSnippet: 'Hier ist eine Zusammenfassung...'
+    });
+
+    expect(entry.id).toBeDefined();
+    expect(entry.reason).toBe('inaccurate');
+    expect(entry.comments).toBe('Falsche Jahreszahl angegeben');
+    expect(entry.timestamp).toBeGreaterThan(0);
+
+    const saved = JSON.parse(mockStore[AI_FEEDBACK_STORAGE_KEY]);
+    expect(Array.isArray(saved)).toBe(true);
+    expect(saved[0].id).toBe(entry.id);
+  });
+});

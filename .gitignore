@@ -21,6 +21,7 @@ llama/bin/
 *.db-wal
 __pycache__/
 .pytest_cache/
+*.egg-info/
 services/sidekick/build/
 .DS_Store
 Thumbs.db
@@ -31,8 +32,3 @@ Thumbs.db
 installer/build/
 installer/dist/
 smoke-output/
-
-# Vendored Sidekick runtime — populated by `npm run sync:sidekick` at build time.
-# The live source is https://github.com/Loggableim/sidekick-agent.
-services/sidekick/
-services/sidekick-source.json

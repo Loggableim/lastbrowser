@@ -1,0 +1,563 @@
+"""
+Sidekick -- Optional password authentication.
+Off by default. Enable by setting SIDEKICK_WEBUI_PASSWORD env var
+or configuring a password in the Settings panel.
+"""
+import hashlib
+import hmac
+import http.cookies
+import json
+import logging
+import math
+import os
+import secrets
+import tempfile
+import time
+from pathlib import Path
+
+import web.api.config as _cfg
+from web.api.config import load_settings
+
+logger = logging.getLogger(__name__)
+
+PASSWORD_ENV_VARS = ("SIDEKICK_WEBUI_PASSWORD",)
+SESSION_TTL_ENV_VARS = ("SIDEKICK_WEBUI_SESSION_TTL",)
+
+
+_STATE_DIR_RESOLVE_CACHE: dict = {"raw": None, "path": None}
+
+
+def _state_dir() -> Path:
+    """Resolve the active state dir, memoised on the raw ``STATE_DIR`` value.
+
+    ``Path.resolve()`` is a ``realpath`` syscall (~0.5 ms on Windows) and this
+    runs on every ``is_auth_enabled()`` call, i.e. on every API request.
+    """
+    raw = str(_cfg.STATE_DIR)
+    if _STATE_DIR_RESOLVE_CACHE["raw"] == raw:
+        cached = _STATE_DIR_RESOLVE_CACHE["path"]
+        if cached is not None:
+            return cached
+    path = Path(_cfg.STATE_DIR).expanduser().resolve()
+    _STATE_DIR_RESOLVE_CACHE["raw"] = raw
+    _STATE_DIR_RESOLVE_CACHE["path"] = path
+    return path
+
+
+def _get_password_env_value() -> str:
+    """Return the configured password env value, honoring Sidekick alias first."""
+    for name in PASSWORD_ENV_VARS:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
+# Default session TTL — 30 days. Kept as a module-level constant for backwards
+# compatibility with downstream code and regression tests that import it.
+# At runtime, prefer ``_resolve_session_ttl()`` which honours the env var and
+# settings.json overrides; this constant is the floor / fallback.
+SESSION_TTL = 86400 * 30  # 30 days
+
+
+def _resolve_session_ttl() -> int:
+    """Resolve session TTL from env > settings > default.
+
+    Priority mirrors get_password_hash(): SIDEKICK_WEBUI_SESSION_TTL /
+    legacy SIDEKICK_WEBUI_SESSION_TTL env vars first, then settings.json,
+    falling back to ``SESSION_TTL`` (30 days).
+    Clamped to [60s, 1 year] to prevent runaway cookies or self-lockout.
+    """
+    for env_name in SESSION_TTL_ENV_VARS:
+        env_v = (os.getenv(env_name, '')).strip()
+        if env_v.isdigit():
+            val = int(env_v)
+            if 60 <= val <= 86400 * 365:
+                return val
+    s = load_settings()
+    v = s.get('session_ttl_seconds')
+    if isinstance(v, int) and 60 <= v <= 86400 * 365:
+        return v
+    return SESSION_TTL
+
+
+# ── Public paths (no auth required) ─────────────────────────────────────────
+PUBLIC_PATHS = frozenset({
+    '/login', '/health', '/favicon.ico', '/sw.js',
+    '/api/auth/login', '/api/auth/status',
+    '/manifest.json', '/manifest.webmanifest',
+    '/api/errors',
+    '/api/errors/stats',
+    '/api/errors/log',
+    '/api/errors/clear',
+    '/api/errors/db-path',
+})
+
+COOKIE_NAME = 'sidekick_session'
+
+_STATE_DIR = _state_dir()
+_SESSIONS_FILE = _STATE_DIR / '.sessions.json'
+_LOGIN_ATTEMPTS_FILE = _STATE_DIR / '.login_attempts.json'
+_STATE_DIR_CACHE = _STATE_DIR
+
+
+def _load_sessions() -> dict[str, float]:
+    """Load persisted sessions from STATE_DIR, pruning expired entries.
+
+    Returns an empty dict on any read or parse error so startup is never
+    blocked by a corrupt or missing sessions file.
+    """
+    try:
+        if _SESSIONS_FILE.exists():
+            data = json.loads(_SESSIONS_FILE.read_text(encoding='utf-8'))
+            if not isinstance(data, dict):
+                raise ValueError('malformed sessions file — expected dict')
+            now = time.time()
+            return {t: exp for t, exp in data.items()
+                    if isinstance(t, str) and isinstance(exp, (int, float)) and exp > now}
+    except Exception as e:
+        logger.debug("Failed to load sessions file, starting fresh: %s", e)
+    return {}
+
+
+def _save_sessions(sessions: dict[str, float]) -> None:
+    """Atomically persist sessions to STATE_DIR/.sessions.json (0600).
+
+    Uses a temp file + os.replace() so a crash mid-write never leaves a
+    truncated file.  Mirrors the same pattern as .signing_key persistence.
+    """
+    try:
+        state_dir = _state_dir()
+        state_dir.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=state_dir, suffix='.sessions.tmp')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(sessions, f)
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, _SESSIONS_FILE)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+    except Exception as e:
+        logger.debug("Failed to persist sessions: %s", e)
+
+
+# Active sessions: token -> expiry timestamp (persisted across restarts via STATE_DIR)
+_sessions = _load_sessions()
+
+# ── Login rate limiter ──────────────────────────────────────────────────────
+_LOGIN_ATTEMPTS_FILE = _STATE_DIR / '.login_attempts.json'
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW = 60  # seconds
+
+
+def _load_login_attempts() -> dict[str, list[float]]:
+    """Load persisted login attempts from STATE_DIR, pruning expired entries."""
+    try:
+        if _LOGIN_ATTEMPTS_FILE.exists():
+            data = json.loads(_LOGIN_ATTEMPTS_FILE.read_text(encoding='utf-8'))
+            if not isinstance(data, dict):
+                raise ValueError('malformed login-attempts file — expected dict')
+            now = time.time()
+            attempts: dict[str, list[float]] = {}
+            for ip, raw_times in data.items():
+                if not isinstance(ip, str) or not isinstance(raw_times, list):
+                    continue
+                fresh = [
+                    float(t)
+                    for t in raw_times
+                    if isinstance(t, (int, float)) and now - float(t) < _LOGIN_WINDOW
+                ]
+                if fresh:
+                    attempts[ip] = fresh
+            return attempts
+    except Exception as e:
+        logger.debug("Failed to load login attempts file, starting fresh: %s", e)
+    return {}
+
+
+def _save_login_attempts(attempts: dict[str, list[float]]) -> None:
+    """Atomically persist login attempts to STATE_DIR/.login_attempts.json (0600)."""
+    try:
+        _LOGIN_ATTEMPTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=_LOGIN_ATTEMPTS_FILE.parent, suffix='.login_attempts.tmp')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(attempts, f)
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, _LOGIN_ATTEMPTS_FILE)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+    except Exception as e:
+        logger.debug("Failed to persist login attempts: %s", e)
+
+
+_login_attempts = _load_login_attempts()  # ip -> [timestamp, ...]
+
+
+def _refresh_state_paths() -> None:
+    """Rebind cached auth state paths when the active state dir changes."""
+    global _STATE_DIR, _SESSIONS_FILE, _LOGIN_ATTEMPTS_FILE, _STATE_DIR_CACHE
+    current = _state_dir()
+    if current == _STATE_DIR_CACHE:
+        return
+    _STATE_DIR = current
+    _STATE_DIR_CACHE = current
+    _SESSIONS_FILE = current / '.sessions.json'
+    _LOGIN_ATTEMPTS_FILE = current / '.login_attempts.json'
+    global _sessions, _login_attempts
+    _sessions = _load_sessions()
+    _login_attempts = _load_login_attempts()
+
+
+def _check_login_rate(ip: str) -> bool:
+    """Return True if the IP is allowed to attempt login."""
+    _refresh_state_paths()
+    now = time.time()
+    attempts = _login_attempts.get(ip, [])
+    # Prune old attempts
+    attempts = [t for t in attempts if now - t < _LOGIN_WINDOW]
+    if attempts:
+        _login_attempts[ip] = attempts
+    else:
+        _login_attempts.pop(ip, None)
+    _save_login_attempts(_login_attempts)
+    return len(attempts) < _LOGIN_MAX_ATTEMPTS
+
+
+def _record_login_attempt(ip: str) -> None:
+    _refresh_state_paths()
+    now = time.time()
+    attempts = _login_attempts.get(ip, [])
+    attempts.append(now)
+    _login_attempts[ip] = attempts
+    _save_login_attempts(_login_attempts)
+
+
+_SIGNING_KEY_CACHE: dict = {"path": None, "key": None}
+
+
+def _signing_key():
+    """Return a random signing key, generating and persisting one on first call.
+
+    Memoised per key-file path: the key is immutable for the lifetime of the
+    state dir, and this runs on every ``get_password_hash()`` call (i.e. every
+    API request via ``is_auth_enabled``).
+    """
+    key_file = _state_dir() / '.signing_key'
+    cache = _SIGNING_KEY_CACHE
+    if cache["key"] is not None and cache["path"] == str(key_file):
+        return cache["key"]
+    try:
+        if key_file.exists():
+            raw = key_file.read_bytes()
+            if len(raw) >= 32:
+                key = raw[:32]
+                cache["path"] = str(key_file)
+                cache["key"] = key
+                return key
+    except Exception:
+        logger.debug("Failed to read or access signing key file, using in-memory key")
+    # Generate a new random key
+    key = secrets.token_bytes(32)
+    try:
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_bytes(key)
+        key_file.chmod(0o600)
+    except Exception:
+        logger.debug("Failed to persist signing key, using in-memory key only")
+    cache["path"] = str(key_file)
+    cache["key"] = key
+    return key
+
+
+def _read_signing_key_read_only() -> bytes | None:
+    """Read the persisted signing key without creating state on failure."""
+    try:
+        raw = (_state_dir() / '.signing_key').read_bytes()
+    except Exception:
+        return None
+    return raw[:32] if len(raw) >= 32 else None
+
+
+def _is_auth_enabled_read_only() -> bool:
+    """Resolve password auth without loading defaults or creating state.
+
+    ``load_settings()`` resolves a default workspace and the normal password
+    path can create a signing key.  Project-local Swarm reads deliberately
+    bypass those side effects.  If an existing settings file cannot be read,
+    treat that uncertainty as authentication enabled so the read fails closed.
+    """
+    if _get_password_env_value():
+        return True
+
+    try:
+        raw = (_state_dir() / 'settings.json').read_text(encoding='utf-8')
+    except FileNotFoundError:
+        return False
+    except Exception:
+        return True
+
+    try:
+        settings = json.loads(raw)
+    except Exception:
+        return True
+    if not isinstance(settings, dict):
+        return True
+    return bool(settings.get('password_hash'))
+
+
+def _load_sessions_read_only() -> dict[str, float]:
+    """Load sessions for a pure read without pruning or changing memory."""
+    try:
+        data = json.loads((_state_dir() / '.sessions.json').read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    sessions: dict[str, float] = {}
+    for token, expiry in data.items():
+        if not isinstance(token, str) or not isinstance(expiry, (int, float)):
+            continue
+        try:
+            normalized_expiry = float(expiry)
+        except (OverflowError, ValueError):
+            continue
+        if math.isfinite(normalized_expiry):
+            sessions[token] = normalized_expiry
+    return sessions
+
+
+def verify_session_read_only(cookie_value) -> bool:
+    """Verify a persisted session without pruning, writing, or key creation."""
+    if not cookie_value or '.' not in cookie_value:
+        return False
+    token, sig = cookie_value.rsplit('.', 1)
+    key = _read_signing_key_read_only()
+    if key is None:
+        return False
+    expected_sig = hmac.new(key, token.encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(sig, expected_sig):
+        return False
+    expiry = _load_sessions_read_only().get(token)
+    return expiry is not None and time.time() <= expiry
+
+
+def _hash_password(password):
+    """PBKDF2-SHA256 with 600k iterations (OWASP recommendation).
+    Salt is the persisted random signing key, which is secret and unique per
+    installation. This keeps the stored hash format a plain hex string
+    (no format change to settings.json) while replacing the predictable
+    STATE_DIR-derived salt from the original implementation."""
+    salt = _signing_key()
+    dk = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 600_000)
+    return dk.hex()
+
+
+_ENV_PASSWORD_HASH_CACHE: dict = {"env": None, "salt": None, "hash": None}
+
+
+def get_password_hash() -> str | None:
+    """Return the active password hash, or None if auth is disabled.
+    Priority: env var > settings.json.
+
+    The env-var hash is cached: PBKDF2 with 600k iterations costs ~240 ms and
+    this runs on every API request via ``is_auth_enabled()``. The cache is
+    keyed on the env value and the signing key (the salt), so a changed
+    password or a switched state dir re-hashes.
+    """
+    _refresh_state_paths()
+    env_pw = _get_password_env_value()
+    if env_pw:
+        salt = _signing_key()
+        cache = _ENV_PASSWORD_HASH_CACHE
+        if (
+            cache["hash"] is not None
+            and cache["env"] == env_pw
+            and cache["salt"] == salt
+        ):
+            return cache["hash"]
+        digest = _hash_password(env_pw)
+        cache["env"] = env_pw
+        cache["salt"] = salt
+        cache["hash"] = digest
+        return digest
+    settings = load_settings()
+    return settings.get('password_hash') or None
+
+
+def is_auth_enabled() -> bool:
+    """True if a password is configured (env var or settings)."""
+    _refresh_state_paths()
+    return get_password_hash() is not None
+
+
+def verify_password(plain) -> bool:
+    """Verify a plaintext password against the stored hash."""
+    _refresh_state_paths()
+    expected = get_password_hash()
+    if not expected:
+        return False
+    return hmac.compare_digest(_hash_password(plain), expected)
+
+
+def create_session() -> str:
+    """Create a new auth session. Returns signed cookie value."""
+    _refresh_state_paths()
+    token = secrets.token_hex(32)
+    _sessions[token] = time.time() + _resolve_session_ttl()
+    _save_sessions(_sessions)
+    sig = hmac.new(_signing_key(), token.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{token}.{sig}"
+
+
+_PRUNE_INTERVAL_SECONDS = 60.0
+_last_prune_at: float = 0.0
+
+
+def _prune_expired_sessions(*, force: bool = False) -> None:
+    """Remove all expired session entries to prevent unbounded memory growth.
+
+    Throttled to at most one pass per ``_PRUNE_INTERVAL_SECONDS``: this runs on
+    every ``verify_session`` (i.e. every authenticated request) and used to
+    write the session file whenever any entry had expired. A throttled pass
+    keeps the cleanup bounded without a file write per request.
+    """
+    global _last_prune_at
+    now = time.time()
+    if not force and now - _last_prune_at < _PRUNE_INTERVAL_SECONDS:
+        return
+    _last_prune_at = now
+    expired = [t for t, exp in _sessions.items() if now > exp]
+    if expired:
+        for token in expired:
+            _sessions.pop(token, None)
+        _save_sessions(_sessions)
+
+
+def verify_session(cookie_value) -> bool:
+    """Verify a signed session cookie. Returns True if valid and not expired."""
+    if not cookie_value or '.' not in cookie_value:
+        return False
+    _prune_expired_sessions()  # lazy cleanup on every verification attempt
+    token, sig = cookie_value.rsplit('.', 1)
+    expected_sig = hmac.new(_signing_key(), token.encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(sig, expected_sig):
+        return False
+    expiry = _sessions.get(token)
+    if not expiry or time.time() > expiry:
+        _sessions.pop(token, None)
+        return False
+    return True
+
+
+def invalidate_session(cookie_value) -> None:
+    """Remove a session token."""
+    if cookie_value and '.' in cookie_value:
+        token = cookie_value.rsplit('.', 1)[0]
+        if token in _sessions:
+            _sessions.pop(token, None)
+            _save_sessions(_sessions)
+
+
+def parse_cookie(handler) -> str | None:
+    """Extract the auth cookie from the request headers."""
+    cookie_header = handler.headers.get('Cookie', '')
+    if not cookie_header:
+        return None
+    cookie = http.cookies.SimpleCookie()
+    try:
+        cookie.load(cookie_header)
+    except http.cookies.CookieError:
+        return None
+    morsel = cookie.get(COOKIE_NAME)
+    return morsel.value if morsel else None
+
+
+def check_auth(handler, parsed, *, read_only: bool = False) -> bool:
+    """Check if request is authorized. Returns True if OK.
+    If not authorized, sends 401 (API) or 302 redirect (page) and returns False.
+
+    ``read_only`` is for project-local Swarm GET/SSE routes.  It refuses to
+    repair auth state: missing keys, unreadable settings, missing sessions, and
+    expired sessions all fail closed rather than creating keys or pruning rows.
+    """
+    auth_enabled = _is_auth_enabled_read_only() if read_only else is_auth_enabled()
+    if not auth_enabled:
+        return True
+    # Public paths don't require auth
+    if parsed.path in PUBLIC_PATHS or parsed.path.startswith('/static/') or parsed.path.startswith('/session/static/'):
+        return True
+    # Check session cookie
+    cookie_val = parse_cookie(handler)
+    verify = verify_session_read_only if read_only else verify_session
+    if cookie_val and verify(cookie_val):
+        return True
+    # Not authorized
+    if parsed.path.startswith('/api/'):
+        handler.send_response(401)
+        handler.send_header('Content-Type', 'application/json')
+        handler.end_headers()
+        handler.wfile.write(b'{"error":"Authentication required"}')
+    else:
+        handler.send_response(302)
+        # Pass the original path as ?next= so login.js redirects back after auth.
+        # SECURITY/CORRECTNESS: the inner `?` and `&` MUST be percent-encoded
+        # when stuffed into the outer `?next=` parameter, otherwise:
+        #   (a) multi-param query strings get truncated at the first inner `&`
+        #       (e.g. `/api/sessions?limit=50&offset=0` would round-trip as
+        #       just `/api/sessions?limit=50` after the browser parses the
+        #       outer URL — `offset=0` becomes a separate top-level query
+        #       parameter that the login page ignores).
+        #   (b) attacker-controlled paths could inject a second `next=`
+        #       parameter; per RFC 3986 the duplicate behaviour is undefined
+        #       and parsers diverge (Python's parse_qs returns last-match,
+        #       URLSearchParams returns first-match), opening a query-pollution
+        #       footgun even though _safeNextPath() rejects most malicious
+        #       shapes downstream.
+        # Encoding the entire `path?query` blob with quote(safe='/') turns
+        # `?` → `%3F` and `&` → `%26`, so the outer parameter holds exactly
+        # one path-with-query string and `searchParams.get('next')` returns
+        # the full original URL (the browser auto-decodes once).
+        # (Opus pre-release advisor finding for v0.50.258.)
+        import urllib.parse as _urlparse
+        _path_with_query = parsed.path or '/'
+        if parsed.query:
+            _path_with_query += '?' + parsed.query
+        # safe='/' keeps path separators readable; everything else (including
+        # `?`, `&`, `=`) gets percent-encoded.
+        _next = _urlparse.quote(_path_with_query, safe='/')
+        handler.send_header('Location', 'login?next=' + _next)
+        handler.end_headers()
+    return False
+
+
+def set_auth_cookie(handler, cookie_value) -> None:
+    """Set the auth cookie on the response."""
+    cookie = http.cookies.SimpleCookie()
+    cookie[COOKIE_NAME] = cookie_value
+    cookie[COOKIE_NAME]['httponly'] = True
+    cookie[COOKIE_NAME]['samesite'] = 'Lax'
+    cookie[COOKIE_NAME]['path'] = '/'
+    cookie[COOKIE_NAME]['max-age'] = str(_resolve_session_ttl())
+    # Set Secure flag when connection is HTTPS
+    if getattr(handler.request, 'getpeercert', None) is not None or handler.headers.get('X-Forwarded-Proto', '') == 'https':
+        cookie[COOKIE_NAME]['secure'] = True
+    handler.send_header('Set-Cookie', cookie[COOKIE_NAME].OutputString())
+
+
+def clear_auth_cookie(handler) -> None:
+    """Clear the auth cookie on the response."""
+    cookie = http.cookies.SimpleCookie()
+    cookie[COOKIE_NAME] = ''
+    cookie[COOKIE_NAME]['httponly'] = True
+    cookie[COOKIE_NAME]['path'] = '/'
+    cookie[COOKIE_NAME]['max-age'] = '0'
+    handler.send_header('Set-Cookie', cookie[COOKIE_NAME].OutputString())

@@ -60,8 +60,7 @@ function main() {
     'uvicorn[standard]>=0.24,<1',
     'requests>=2.31',
     'httpx>=0.27',
-    '-r',
-    resolve(repoRoot, 'services', 'webui', 'requirements.txt'),
+    'pyyaml>=6.0',
     resolve(repoRoot, 'services', 'sidekick')
   ]);
 

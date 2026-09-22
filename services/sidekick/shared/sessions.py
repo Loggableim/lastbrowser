@@ -1,0 +1,352 @@
+"""Canonical Session model — shared by CLI, TUI, and WebUI.
+
+JSON-file-backed session storage.  Each session is one JSON file under
+``~/.sidekick/state/webui/sessions/`` (shared path with legacy WebUI).
+
+Fields
+------
+session_id : str
+    Unique session identifier (hex).
+title : str
+    Human-readable title, auto-set from first user message.
+workspace : str
+    Active workspace path.
+model : str
+    Active model identifier.
+messages : list[dict]
+    Conversation history as OpenAI-format message dicts.
+created_at / updated_at : float
+    Unix timestamps.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import tempfile
+import time
+import uuid
+from dataclasses import asdict, dataclass, field, fields
+from pathlib import Path
+from typing import Any
+
+from shared.config import get_default_workspace
+from shared.runtime import web_state_dir
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_SESSION_TITLE = "New chat"
+LEGACY_DEFAULT_SESSION_TITLES = frozenset({"Untitled", "New Chat", DEFAULT_SESSION_TITLE})
+
+# Upper bound for files parsed by list_sessions(). A runaway session (observed
+# 3 GB on a live install) turns the listing into a multi-minute hang.
+_MAX_LIST_SESSION_BYTES = 64 * 1024 * 1024
+
+
+def is_default_session_title(title: str | None) -> bool:
+    clean = str(title or "").strip()
+    return not clean or clean in LEGACY_DEFAULT_SESSION_TITLES
+
+
+@dataclass
+class Session:
+    session_id: str
+    title: str = DEFAULT_SESSION_TITLE
+    workspace: str = ""
+    model: str = "default"
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    created_at: float = field(default_factory=time.time)
+    updated_at: float = field(default_factory=time.time)
+
+    def compact(self) -> dict[str, Any]:
+        payload = {
+            "session_id": self.session_id,
+            "title": self.title,
+            "workspace": self.workspace,
+            "model": self.model,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "message_count": len(self.messages),
+        }
+        payload.update(_session_extra_payload(self))
+        return payload
+
+
+_SESSION_FIELD_NAMES = frozenset(field.name for field in fields(Session))
+
+
+def _session_from_payload(payload: dict[str, Any]) -> Session:
+    if not isinstance(payload, dict):
+        raise TypeError("Session payload must be a mapping")
+
+    known = {key: value for key, value in payload.items() if key in _SESSION_FIELD_NAMES}
+    extra = {key: value for key, value in payload.items() if key not in _SESSION_FIELD_NAMES}
+    session = Session(**known)
+    if extra:
+        # Preserve richer WebUI metadata so cross-surface round-trips do not
+        # silently drop session fields that shared.sessions does not model.
+        setattr(session, "_extra", extra)
+    return session
+
+
+def _session_to_payload(session: Session) -> dict[str, Any]:
+    payload = asdict(session)
+    payload.update(_session_extra_payload(session))
+    # Also keep any other ad-hoc public attrs that callers may have attached.
+    for key, value in session.__dict__.items():
+        if key.startswith("_") or key in payload:
+            continue
+        payload[key] = value
+    return payload
+
+
+def _session_extra_payload(session: Session) -> dict[str, Any]:
+    extra = getattr(session, "_extra", None)
+    return dict(extra) if isinstance(extra, dict) else {}
+
+
+def sessions_dir() -> Path:
+    path = web_state_dir() / "sessions"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _session_path(session_id: str) -> Path:
+    return sessions_dir() / f"{session_id}.json"
+
+
+def save_session(session: Session) -> Path:
+    path = _session_path(session.session_id)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent),
+        prefix=f"{session.session_id}-",
+        suffix=".json.tmp",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(_session_to_payload(session), handle, ensure_ascii=False, indent=2)
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+    return path
+
+
+def load_session(session_id: str) -> Session | None:
+    path = _session_path(session_id)
+    if not path.exists():
+        return None
+    with open(path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    return _session_from_payload(data)
+
+
+def delete_session(session_id: str) -> bool:
+    path = _session_path(session_id)
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
+
+
+def update_session(
+    session_id: str,
+    *,
+    title: str | None = None,
+    workspace: str | None = None,
+    model: str | None = None,
+) -> Session | None:
+    session = load_session(session_id)
+    if session is None:
+        return None
+    if title is not None:
+        session.title = title
+    if workspace is not None:
+        session.workspace = workspace
+    if model is not None:
+        session.model = model
+    session.updated_at = time.time()
+    save_session(session)
+    return session
+
+
+def append_message(
+    session_id: str,
+    *,
+    role: str,
+    content: str,
+) -> Session | None:
+    session = load_session(session_id)
+    if session is None:
+        return None
+    session.messages.append(
+        {
+            "role": role,
+            "content": content,
+            "timestamp": time.time(),
+        }
+    )
+    if is_default_session_title(session.title) and role == "user" and content.strip():
+        session.title = content.strip()[:60]
+    session.updated_at = time.time()
+    save_session(session)
+    return session
+
+
+def list_sessions() -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in sorted(sessions_dir().glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            # Skip runaway session files: a single unbounded session (observed
+            # 3 GB) makes json.load take minutes, hanging every legacy
+            # consumer of this listing. The WebUI session list uses the
+            # state.db index and is unaffected; such sessions are unusable
+            # in the UI anyway until compressed or trimmed.
+            if path.stat().st_size > _MAX_LIST_SESSION_BYTES:
+                logger.warning(
+                    "Skipping oversized session file in list_sessions (%s: %d bytes)",
+                    path.name, path.stat().st_size,
+                )
+                continue
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            session = _session_from_payload(data)
+            rows.append(session.compact())
+        except Exception:
+            continue
+    return rows
+
+
+def new_session(
+    *,
+    title: str | None = None,
+    workspace: str | None = None,
+    model: str | None = None,
+) -> Session:
+    now = time.time()
+    session = Session(
+        session_id=uuid.uuid4().hex[:12],
+        title=title or DEFAULT_SESSION_TITLE,
+        workspace=workspace or get_default_workspace(),
+        model=model or "default",
+        created_at=now,
+        updated_at=now,
+    )
+    save_session(session)
+    return session
+
+
+# ── Session manipulation helpers (retry, undo, status) ─────────────────────
+# Shared across CLI, TUI, and WebUI surfaces.
+
+def _extract_text(content: Any) -> str:
+    """Extract plain text from mixed content (list of parts or plain string)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        texts = [p.get("text", "") if isinstance(p, dict) else str(p) for p in content]
+        return "".join(texts)
+    return str(content or "")
+
+
+def _truncate_at_last_user(history: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+    """Return history up to (not including) the last user message."""
+    if not history:
+        return None
+    last_user_idx = None
+    for i in range(len(history) - 1, -1, -1):
+        if history[i].get("role") == "user":
+            last_user_idx = i
+            break
+    if last_user_idx is None:
+        return None
+    return history[:last_user_idx]
+
+
+def retry_last(session_id: str) -> dict[str, Any]:
+    """Remove the last assistant response — leaves the user's prompt in place.
+
+    Returns:\n        dict with keys ``last_user_text`` and ``removed_count``.
+
+    Raises:
+        KeyError: session not found.
+        ValueError: no user message in transcript.
+    """
+    session = load_session(session_id)
+    if session is None:
+        raise KeyError(session_id)
+    history = session.messages or []
+    last_user_idx = None
+    for i in range(len(history) - 1, -1, -1):
+        if history[i].get("role") == "user":
+            last_user_idx = i
+            break
+    if last_user_idx is None:
+        raise ValueError("No previous message to retry.")
+    last_user_text = _extract_text(history[last_user_idx].get("content", ""))
+    removed_count = len(history) - last_user_idx
+    session.messages = history[:last_user_idx]
+    session.updated_at = time.time()
+    save_session(session)
+    return {"last_user_text": last_user_text, "removed_count": removed_count}
+
+
+def undo_last(session_id: str) -> dict[str, Any]:
+    """Remove the most recent user message and everything after it.
+
+    Returns:\n        dict with keys ``removed_count`` and ``removed_preview``.
+
+    Raises:
+        KeyError: session not found.
+        ValueError: no user message in transcript.
+    """
+    session = load_session(session_id)
+    if session is None:
+        raise KeyError(session_id)
+    history = session.messages or []
+    last_user_idx = None
+    for i in range(len(history) - 1, -1, -1):
+        if history[i].get("role") == "user":
+            last_user_idx = i
+            break
+    if last_user_idx is None:
+        raise ValueError("Nothing to undo.")
+    removed_text = _extract_text(history[last_user_idx].get("content", ""))
+    removed_count = len(history) - last_user_idx
+    session.messages = history[:last_user_idx]
+    session.updated_at = time.time()
+    save_session(session)
+    preview = (removed_text[:40] + "...") if len(removed_text) > 40 else removed_text
+    return {"removed_count": removed_count, "removed_preview": preview}
+
+
+def session_status(session_id: str) -> dict[str, Any]:
+    """Return a metadata snapshot for a session.
+
+    Returns dict with keys: session_id, title, workspace, model, message_count,
+    last_user_text, last_assistant_text, plus any preserved WebUI metadata
+    fields that were loaded with the session.
+    """
+    session = load_session(session_id)
+    if session is None:
+        return {"error": "session not found"}
+    messages = session.messages or []
+    last_user = next((m for m in reversed(messages) if m.get("role") == "user"), None)
+    last_assistant = next(
+        (m for m in reversed(messages) if m.get("role") == "assistant"), None
+    )
+    status = {
+        "session_id": session.session_id,
+        "title": session.title,
+        "workspace": session.workspace,
+        "model": session.model,
+        "message_count": len(messages),
+        "last_user_text": _extract_text(last_user.get("content", ""))[:200] if last_user else "",
+        "last_assistant_text": _extract_text(last_assistant.get("content", ""))[:200] if last_assistant else "",
+    }
+    status.update(_session_extra_payload(session))
+    return status

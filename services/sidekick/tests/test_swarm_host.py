@@ -1,0 +1,1142 @@
+from __future__ import annotations
+
+from contextlib import contextmanager
+import json
+from pathlib import Path
+import threading
+import time
+from types import SimpleNamespace
+
+import pytest
+
+import cli.models as models
+import cli.swarm_host as swarm_host
+from cli.swarm_host import (
+    OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE,
+    SidekickSwarmService,
+)
+from swarm_core.engine import PreCompletionResult
+from swarm_core.models import ModelCatalogSnapshot, ModelRegistry
+from swarm_core.router import ModelRouter
+from swarm_core.store import ProjectSwarmStore
+from swarm_core.transport import ModelProviderError
+from swarm_core.types import ActionCapabilities
+from swarm_core.verifier import VerificationResult
+
+
+_ROUTED_MODELS = (
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "kimi-k2.6",
+    "minimax-m3",
+    "glm-5.2",
+    "kimi-k2.7-code",
+    "nemotron-3-super",
+)
+
+
+def _valid_response(*_args, **_kwargs):
+    return {
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "work": "bounded test work",
+                            "evidence": ["test:evidence"],
+                            "decision": "approve",
+                            "approved": True,
+                        }
+                    )
+                }
+            }
+        ]
+    }
+
+
+def test_execution_options_resolver_uses_durable_run_without_weakening_cloud_dispatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A per-run bridge may tune Core limits but cannot bypass host routing."""
+    calls: list[dict] = []
+    slots: list[tuple[str, str]] = []
+    resolver_runs = []
+    engine_limits: list[tuple[int, int]] = []
+    completion_notifications: list[tuple[Path, str, str]] = []
+    original_engine = swarm_host.SwarmEngine
+
+    class RecordingEngine(original_engine):
+        def __init__(self, *args, **kwargs):
+            engine_limits.append((kwargs["max_calls"], kwargs["max_concurrent"]))
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(swarm_host, "SwarmEngine", RecordingEngine)
+
+    class VerifiedReadOnlyVerifier:
+        def __init__(self) -> None:
+            self.requests = []
+
+        def verify(self, request):
+            self.requests.append(request)
+            return VerificationResult(
+                work="Verified locally without mutation.",
+                evidence=("verifier:bridge-test",),
+                decision="verified",
+                provenance={"adapter": "bridge-test", "mode": "read_only"},
+            )
+
+    class Hook:
+        hook_id = "bridge-test-hook-v1"
+
+        def __init__(self) -> None:
+            self.run_ids: list[str] = []
+
+        def run(self, context):
+            self.run_ids.append(context.run.run_id)
+            return PreCompletionResult(continue_completion=True)
+
+    verifier = VerifiedReadOnlyVerifier()
+    hook = Hook()
+
+    @contextmanager
+    def provider_slot(run_id: str, provider: str):
+        slots.append((run_id, provider))
+        yield
+
+    def unexpected_refresh():
+        raise AssertionError("executing a durable run must not refresh the catalog")
+
+    def on_completed(project_root: Path, completed_run) -> None:
+        completion_notifications.append(
+            (project_root, completed_run.run_id, completed_run.status)
+        )
+
+    def resolve_execution_options(project_root: Path, run):
+        assert project_root == tmp_path.resolve()
+        resolver_runs.append(run)
+        return swarm_host.SwarmExecutionOptions(
+                max_calls=128,
+                verifier=verifier,
+                pre_completion_hook=hook,
+                required_pre_completion_hook_id="bridge-test-hook-v1",
+                on_completed=on_completed,
+        )
+
+    ProjectSwarmStore(tmp_path).save_model_catalog_snapshot(
+        ModelCatalogSnapshot(
+            provider="ollama-cloud",
+            models=_ROUTED_MODELS,
+            healthy=True,
+            source=OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE,
+        )
+    )
+    service = SidekickSwarmService(
+        call_llm=lambda **kwargs: calls.append(kwargs) or _valid_response(),
+        catalog_refresher=unexpected_refresh,
+        provider_slot=provider_slot,
+        execution_options_resolver=resolve_execution_options,
+    )
+    run = service.start_run(
+        "run the bridge options",
+        tmp_path,
+        autonomy="autonomous",
+        host_metadata={"required_pre_completion_hook": "bridge-test-hook-v1"},
+    )
+
+    summary = service.execute_run(tmp_path, run.run_id)
+
+    assert summary.status == "completed"
+    assert resolver_runs == [run]
+    assert resolver_runs[0].metadata["autonomy"] == "autonomous"
+    assert engine_limits == [(48, 3), (128, 3)]
+    assert verifier.requests and verifier.requests[0].run_id == run.run_id
+    assert hook.run_ids == [run.run_id]
+    assert completion_notifications == [
+        (tmp_path.resolve(), run.run_id, "completed")
+    ]
+    assert calls
+    assert len(slots) == len(calls)
+    assert all(provider == "ollama-cloud" for _run_id, provider in slots)
+    assert all(call["provider"] == "ollama-cloud" for call in calls)
+
+
+@pytest.mark.parametrize(
+    ("observer_failure", "audit_failure", "expect_audit"),
+    [
+        (RuntimeError("private observer exception"), None, True),
+        (SystemExit("private observer system exit"), None, True),
+        (
+            RuntimeError("private observer before audit failure"),
+            KeyboardInterrupt("private audit interrupt"),
+            False,
+        ),
+    ],
+)
+def test_post_completion_observer_and_audit_failures_keep_the_durable_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    observer_failure: BaseException,
+    audit_failure: BaseException | None,
+    expect_audit: bool,
+):
+    """Catches terminal observer cleanup changing an already completed result."""
+
+    def raising_observer(_project_root: Path, _run) -> None:
+        raise observer_failure
+
+    if audit_failure is not None:
+        append_event = ProjectSwarmStore.append_event
+
+        def fail_only_observer_audit(
+            store,
+            run_id: str,
+            event_type: str,
+            payload,
+        ):
+            if event_type == "run.completion_observer_failed":
+                raise audit_failure
+            return append_event(store, run_id, event_type, payload)
+
+        monkeypatch.setattr(ProjectSwarmStore, "append_event", fail_only_observer_audit)
+
+    ProjectSwarmStore(tmp_path).save_model_catalog_snapshot(
+        ModelCatalogSnapshot(
+            provider="ollama-cloud",
+            models=_ROUTED_MODELS,
+            healthy=True,
+            source=OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE,
+        )
+    )
+    service = SidekickSwarmService(
+        call_llm=_valid_response,
+        execution_options_resolver=lambda _project, _run: (
+            swarm_host.SwarmExecutionOptions(on_completed=raising_observer)
+        ),
+    )
+    run = service.start_run("contain an observer failure", tmp_path)
+
+    summary = service.execute_run(tmp_path, run.run_id)
+
+    persisted = ProjectSwarmStore.open_read_only(tmp_path).get_run(run.run_id)
+    observer_events = [
+        event
+        for event in ProjectSwarmStore.open_read_only(tmp_path).list_events(run.run_id)
+        if event.event_type == "run.completion_observer_failed"
+    ]
+    assert summary.status == "completed"
+    assert persisted is not None and persisted.status == "completed"
+    expected_payloads = (
+        [{"reason": "completion_observer_failed"}] if expect_audit else []
+    )
+    actual_payloads = [event.payload for event in observer_events]
+    assert actual_payloads == expected_payloads
+    rendered_payloads = json.dumps(actual_payloads, sort_keys=True)
+    assert str(observer_failure) not in rendered_payloads
+    if audit_failure is not None:
+        assert str(audit_failure) not in rendered_payloads
+
+
+def test_execution_options_required_hook_still_fails_closed_without_a_resolver(
+    tmp_path: Path,
+):
+    """A marked integration run cannot complete when no host hook is installed."""
+    calls: list[dict] = []
+    ProjectSwarmStore(tmp_path).save_model_catalog_snapshot(
+        ModelCatalogSnapshot(
+            provider="ollama-cloud",
+            models=_ROUTED_MODELS,
+            healthy=True,
+            source=OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE,
+        )
+    )
+    service = SidekickSwarmService(
+        call_llm=lambda **kwargs: calls.append(kwargs) or _valid_response()
+    )
+    run = service.start_run(
+        "require a bridge hook",
+        tmp_path,
+        autonomy="autonomous",
+        host_metadata={"required_pre_completion_hook": "bridge-test-hook-v1"},
+    )
+
+    summary = service.execute_run(tmp_path, run.run_id)
+
+    assert summary.status == "paused"
+    assert summary.pause_reason == "invalid_execution_options"
+    assert calls == []
+
+
+def test_execution_options_cannot_replace_a_durable_required_hook_contract(
+    tmp_path: Path,
+):
+    """A resolver may confirm a durable gate, never substitute a new one."""
+    calls: list[dict] = []
+    ProjectSwarmStore(tmp_path).save_model_catalog_snapshot(
+        ModelCatalogSnapshot(
+            provider="ollama-cloud",
+            models=_ROUTED_MODELS,
+            healthy=True,
+            source=OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE,
+        )
+    )
+
+    class ReplacementHook:
+        hook_id = "replacement-hook-v1"
+
+        def run(self, _context):
+            raise AssertionError("replacement hook must not bypass the durable requirement")
+
+    service = SidekickSwarmService(
+        call_llm=lambda **kwargs: calls.append(kwargs) or _valid_response(),
+        execution_options_resolver=lambda _root, _run: swarm_host.SwarmExecutionOptions(
+            max_calls=128,
+            pre_completion_hook=ReplacementHook(),
+            required_pre_completion_hook_id="replacement-hook-v1",
+        ),
+    )
+    run = service.start_run(
+        "reject a replacement completion gate",
+        tmp_path,
+        autonomy="autonomous",
+        host_metadata={"required_pre_completion_hook": "original-hook-v1"},
+    )
+
+    summary = service.execute_run(tmp_path, run.run_id)
+
+    assert summary.status == "paused"
+    assert summary.pause_reason == "invalid_execution_options"
+    assert calls == []
+    assert not any(event.event_type == "run.completed" for event in ProjectSwarmStore(tmp_path).list_events(run.run_id))
+
+
+def test_required_hook_contract_rechecks_current_metadata_after_model_work(tmp_path: Path):
+    """A completion hook cannot rely on the pre-work run metadata snapshot."""
+    calls: list[dict] = []
+    ProjectSwarmStore(tmp_path).save_model_catalog_snapshot(
+        ModelCatalogSnapshot(
+            provider="ollama-cloud", models=_ROUTED_MODELS, healthy=True,
+            source=OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE,
+        )
+    )
+
+    class RequiredHook:
+        hook_id = "durable-hook-v1"
+
+        def run(self, _context):
+            raise AssertionError("engine must reject the changed contract before invoking this hook")
+
+    def tamper_marker(**kwargs):
+        calls.append(kwargs)
+        store = ProjectSwarmStore(tmp_path)
+        with store._connection() as connection:
+            raw = connection.execute("SELECT metadata_json FROM runs WHERE run_id = ?", (run.run_id,)).fetchone()[0]
+            metadata = json.loads(raw)
+            metadata.pop("required_pre_completion_hook", None)
+            connection.execute("UPDATE runs SET metadata_json = ? WHERE run_id = ?", (json.dumps(metadata), run.run_id))
+        return _valid_response()
+
+    service = SidekickSwarmService(
+        call_llm=tamper_marker,
+        execution_options_resolver=lambda _root, _run: swarm_host.SwarmExecutionOptions(
+            max_calls=128,
+            pre_completion_hook=RequiredHook(),
+            required_pre_completion_hook_id="durable-hook-v1",
+        ),
+    )
+    run = service.start_run(
+        "recheck the active durable completion contract", tmp_path,
+        autonomy="autonomous",
+        host_metadata={"required_pre_completion_hook": "durable-hook-v1"},
+    )
+
+    summary = service.execute_run(tmp_path, run.run_id)
+
+    assert calls
+    assert summary.status == "paused"
+    assert summary.pause_reason == "required_pre_completion_hook_unavailable"
+    assert not any(event.event_type == "run.completed" for event in ProjectSwarmStore(tmp_path).list_events(run.run_id))
+
+
+def test_execution_options_blocked_reason_pauses_before_engine_or_model_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Resolver failures remain bounded durable pauses with no dispatch path."""
+    calls: list[dict] = []
+    ProjectSwarmStore(tmp_path).save_model_catalog_snapshot(
+        ModelCatalogSnapshot(
+            provider="ollama-cloud",
+            models=_ROUTED_MODELS,
+            healthy=True,
+            source=OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE,
+        )
+    )
+    service = SidekickSwarmService(
+        call_llm=lambda **kwargs: calls.append(kwargs) or _valid_response(),
+        execution_options_resolver=lambda _project, _run: swarm_host.SwarmExecutionOptions(
+            blocked_reason="nova bridge is disabled: private detail"
+        ),
+    )
+    run = service.start_run("wait for the bridge", tmp_path)
+    monkeypatch.setattr(
+        swarm_host,
+        "SwarmEngine",
+        lambda *_args, **_kwargs: pytest.fail(
+            "blocked options must pause before constructing an engine"
+        ),
+    )
+
+    summary = service.execute_run(tmp_path, run.run_id)
+
+    assert summary.status == "paused"
+    assert summary.pause_reason == "execution_options_blocked"
+    assert calls == []
+    event = ProjectSwarmStore(tmp_path).list_events(run.run_id)[-1]
+    assert event.event_type == "run.execution_blocked"
+    assert event.payload == {"reason": "execution_options_blocked"}
+
+
+def test_execution_options_blocked_reason_never_persists_resolver_diagnostics(
+    tmp_path: Path,
+):
+    """Resolver text is untrusted and must map to a fixed audit token."""
+    secret = "S3CR3T-NovaPrivate"
+    path = r"C:\\Nova\\private\\token.json"
+    service = SidekickSwarmService(
+        execution_options_resolver=lambda _project, _run: swarm_host.SwarmExecutionOptions(
+            blocked_reason=f"bridge failed at {path} with {secret}"
+        )
+    )
+    run = service.start_run("keep resolver diagnostics private", tmp_path)
+
+    summary = service.execute_run(tmp_path, run.run_id)
+
+    event = ProjectSwarmStore(tmp_path).list_events(run.run_id)[-1]
+    durable = json.dumps({"reason": summary.pause_reason, "event": event.payload})
+    assert summary.pause_reason == "execution_options_blocked"
+    assert event.payload == {"reason": "execution_options_blocked"}
+    assert secret not in durable
+    assert "NovaPrivate" not in durable
+    assert "C:" not in durable
+
+
+def test_execution_options_competitor_never_resolves_or_pauses_an_active_run(
+    tmp_path: Path,
+):
+    """The lease covers resolver work, so only its owner can block the run."""
+    resolver_entered = threading.Event()
+    release_resolver = threading.Event()
+    resolver_calls: list[str] = []
+    result: dict[str, object] = {}
+
+    def resolver(_project: Path, run):
+        resolver_calls.append(run.run_id)
+        resolver_entered.set()
+        assert release_resolver.wait(timeout=2)
+        return swarm_host.SwarmExecutionOptions(blocked_reason="nova_bridge_disabled")
+
+    service = SidekickSwarmService(execution_options_resolver=resolver)
+    run = service.start_run("only one executor may resolve options", tmp_path)
+
+    def execute_first() -> None:
+        try:
+            result["summary"] = service.execute_run(tmp_path, run.run_id)
+        except Exception as exc:  # pragma: no cover - assertions surface it
+            result["error"] = exc
+
+    worker = threading.Thread(target=execute_first)
+    worker.start()
+    assert resolver_entered.wait(timeout=1)
+
+    with pytest.raises(RuntimeError, match="already active"):
+        service.execute_run(tmp_path, run.run_id)
+    assert resolver_calls == [run.run_id]
+    assert ProjectSwarmStore(tmp_path).get_run(run.run_id).status == "running"
+
+    release_resolver.set()
+    worker.join(timeout=3)
+
+    assert not worker.is_alive()
+    assert "error" not in result
+    assert result["summary"].status == "paused"
+    assert resolver_calls == [run.run_id]
+
+
+def test_execution_options_completion_race_cannot_persist_a_blocked_pause(
+    tmp_path: Path,
+):
+    """A run completed while resolving cannot be relabelled as bridge-blocked."""
+    resolver_entered = threading.Event()
+    release_resolver = threading.Event()
+    result: dict[str, object] = {}
+
+    def resolver(_project: Path, _run):
+        resolver_entered.set()
+        assert release_resolver.wait(timeout=2)
+        return swarm_host.SwarmExecutionOptions(blocked_reason="nova_bridge_disabled")
+
+    service = SidekickSwarmService(execution_options_resolver=resolver)
+    run = service.start_run("do not block a completed run", tmp_path)
+
+    def execute() -> None:
+        try:
+            service.execute_run(tmp_path, run.run_id)
+        except Exception as exc:
+            result["error"] = exc
+
+    worker = threading.Thread(target=execute)
+    worker.start()
+    assert resolver_entered.wait(timeout=1)
+    ProjectSwarmStore(tmp_path).set_run_status(run.run_id, "completed")
+    release_resolver.set()
+    worker.join(timeout=3)
+
+    assert not worker.is_alive()
+    assert isinstance(result.get("error"), ValueError)
+    assert not any(
+        event.event_type == "run.execution_blocked"
+        for event in ProjectSwarmStore(tmp_path).list_events(run.run_id)
+    )
+
+
+def test_execution_options_ownership_preflight_failure_releases_its_lease(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A failed Core handoff cannot strand the host's just-claimed lease."""
+    service = SidekickSwarmService()
+    run = service.start_run("release a failed execution-options handoff", tmp_path)
+    observed_tokens: list[str] = []
+
+    def exploding_ownership_lookup(_store, _run_id: str, owner_token: str) -> bool:
+        observed_tokens.append(owner_token)
+        raise RuntimeError("simulated ownership lookup failure")
+
+    monkeypatch.setattr(
+        ProjectSwarmStore,
+        "run_execution_lease_is_owned",
+        exploding_ownership_lookup,
+    )
+
+    with pytest.raises(RuntimeError, match="simulated ownership lookup failure"):
+        service.execute_run(tmp_path, run.run_id)
+
+    assert len(observed_tokens) == 1
+    monkeypatch.undo()
+    store = ProjectSwarmStore(tmp_path)
+    assert store.claim_run_execution_lease(run.run_id, "next-host")
+    assert store.release_run_execution_lease(run.run_id, "next-host")
+
+
+@pytest.mark.parametrize(
+    ("autonomy", "options"),
+    [
+        ("reviewed_execution", swarm_host.SwarmExecutionOptions(max_calls=127)),
+        ("reviewed_execution", swarm_host.SwarmExecutionOptions(max_calls=128)),
+        ("autonomous", swarm_host.SwarmExecutionOptions(max_calls=48)),
+        ("reviewed_execution", swarm_host.SwarmExecutionOptions(max_concurrent=4)),
+        ("reviewed_execution", swarm_host.SwarmExecutionOptions(verifier=object())),
+        (
+            "reviewed_execution",
+            swarm_host.SwarmExecutionOptions(pre_completion_hook=object()),
+        ),
+        (
+            "reviewed_execution",
+            swarm_host.SwarmExecutionOptions(on_completed=object()),
+        ),
+    ],
+)
+def test_execution_options_reject_unsafe_protocols_and_unapproved_limits_before_cloud(
+    tmp_path: Path,
+    autonomy: str,
+    options: swarm_host.SwarmExecutionOptions,
+):
+    """Only durable autonomy selects an approved budget and usable extensions."""
+    calls: list[dict] = []
+    ProjectSwarmStore(tmp_path).save_model_catalog_snapshot(
+        ModelCatalogSnapshot(
+            provider="ollama-cloud",
+            models=_ROUTED_MODELS,
+            healthy=True,
+            source=OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE,
+        )
+    )
+    service = SidekickSwarmService(
+        call_llm=lambda **kwargs: calls.append(kwargs) or _valid_response(),
+        execution_options_resolver=lambda _project, _run: options,
+    )
+    run = service.start_run("reject unsafe resolver options", tmp_path, autonomy=autonomy)
+
+    summary = service.execute_run(tmp_path, run.run_id)
+
+    assert summary.status == "paused"
+    assert summary.pause_reason == "invalid_execution_options"
+    assert calls == []
+    assert ProjectSwarmStore(tmp_path).get_run(run.run_id).status == "paused"
+
+
+def test_run_never_refreshes_an_absent_catalog_or_calls_another_provider(
+    tmp_path: Path,
+):
+    """Catches a run implicitly discovering models or falling back outside Ollama."""
+    refreshes: list[object] = []
+    calls: list[dict] = []
+
+    def unexpected_refresh():
+        refreshes.append(object())
+        raise AssertionError("run must not refresh the catalog")
+
+    def unexpected_call(**kwargs):
+        calls.append(kwargs)
+        raise AssertionError("unhealthy/missing catalog must pause before transport")
+
+    service = SidekickSwarmService(
+        call_llm=unexpected_call,
+        catalog_refresher=unexpected_refresh,
+    )
+
+    summary = service.run("inspect safely", tmp_path)
+
+    assert summary.status == "paused"
+    assert summary.pause_reason == "no_eligible_model"
+    assert refreshes == []
+    assert calls == []
+    events = ProjectSwarmStore(tmp_path).list_events(summary.run_id)
+    assert any(event.event_type == "model_catalog.unavailable" for event in events)
+
+
+def test_live_refresh_never_routes_a_models_dev_only_model(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Catches a supplemental picker ID being persisted as a live Swarm route."""
+    picker_calls: list[object] = []
+
+    def supplemental_picker(**_kwargs):
+        picker_calls.append(object())
+        return ["deepseek-v4-flash", "gemma4:31b", "qwen3.5"]
+
+    monkeypatch.setenv("OLLAMA_API_KEY", "test-key")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com/v1")
+    monkeypatch.setattr(
+        models,
+        "fetch_api_models",
+        lambda _api_key, _base_url, *, timeout: [
+            "deepseek-v4-flash",
+            "gemma4:31b",
+        ],
+    )
+    monkeypatch.setattr(
+        models,
+        "fetch_ollama_cloud_models",
+        supplemental_picker,
+    )
+
+    snapshot = swarm_host._refresh_ollama_catalog()
+
+    assert snapshot.healthy is True
+    assert snapshot.source == OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE
+    assert snapshot.models == ("deepseek-v4-flash", "gemma4:31b")
+    assert "qwen3.5" not in snapshot.models
+    assert picker_calls == []
+    assert ModelRouter(ModelRegistry(snapshot.models)).select(
+        "vision", {"vision"}
+    ).models == ("gemma4:31b",)
+
+
+def test_live_refresh_rejects_a_local_ollama_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A generic provider override must never become a Cloud routing proof."""
+    api_calls: list[tuple[str, str]] = []
+    monkeypatch.setenv("OLLAMA_API_KEY", "test-key")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.setattr(
+        models,
+        "fetch_api_models",
+        lambda api_key, base_url, *, timeout: (
+            api_calls.append((api_key, base_url)) or ["deepseek-v4-flash"]
+        ),
+    )
+
+    snapshot = swarm_host._refresh_ollama_catalog()
+
+    assert snapshot.models == ()
+    assert snapshot.healthy is False
+    assert snapshot.source == swarm_host.OLLAMA_CLOUD_UNAVAILABLE_CATALOG_SOURCE
+    assert api_calls == []
+
+
+def test_verified_catalog_pauses_when_endpoint_flips_to_local_before_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A catalog proof must not survive a later local endpoint override."""
+    ProjectSwarmStore(tmp_path).save_model_catalog_snapshot(
+        ModelCatalogSnapshot(
+            provider="ollama-cloud",
+            models=_ROUTED_MODELS,
+            healthy=True,
+            source=OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE,
+        )
+    )
+    calls: list[dict] = []
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1")
+    service = SidekickSwarmService(
+        call_llm=lambda **kwargs: calls.append(kwargs) or _valid_response()
+    )
+
+    summary = service.run("must not use local Ollama", tmp_path)
+
+    assert summary.status == "paused"
+    assert summary.pause_reason == "no_eligible_model"
+    assert calls == []
+    unavailable = next(
+        event
+        for event in ProjectSwarmStore(tmp_path).list_events(summary.run_id)
+        if event.event_type == "model_catalog.unavailable"
+    )
+    assert unavailable.payload["endpoint_trusted"] is False
+
+
+def test_default_sidekick_dispatch_rechecks_the_cloud_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """An environment flip after engine construction cannot reach a local server."""
+    import runtime.auxiliary_client as auxiliary_client
+
+    dispatched: list[dict] = []
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.setattr(
+        auxiliary_client,
+        "call_llm",
+        lambda **kwargs: dispatched.append(kwargs) or _valid_response(),
+    )
+
+    with pytest.raises(ModelProviderError, match="canonical Ollama Cloud"):
+        swarm_host._sidekick_call_llm(
+            task="swarm",
+            provider="ollama-cloud",
+            model="deepseek-v4-flash",
+            messages=[],
+        )
+
+    assert dispatched == []
+
+
+def test_default_sidekick_dispatch_does_not_reuse_a_stale_noncanonical_client(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A cached local client must not survive canonical cloud revalidation."""
+    import runtime.auxiliary_client as auxiliary_client
+
+    class RecordingClient:
+        def __init__(self, base_url: str) -> None:
+            self.base_url = base_url
+            self.calls: list[dict] = []
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(create=self._create)
+            )
+
+        def _create(self, **kwargs):
+            self.calls.append(kwargs)
+            content = _valid_response()["choices"][0]["message"]["content"]
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=content),
+                    )
+                ]
+            )
+
+        def close(self) -> None:
+            return None
+
+    auxiliary_client.shutdown_cached_clients()
+    stale = RecordingClient("http://127.0.0.1:11434/v1")
+    stale_key = auxiliary_client._client_cache_key(
+        "ollama-cloud",
+        async_mode=False,
+    )
+    auxiliary_client._store_cached_client(
+        stale_key,
+        stale,
+        "deepseek-v4-flash",
+    )
+    canonical = RecordingClient("https://ollama.com/v1")
+    resolutions: list[str | None] = []
+
+    def resolve_canonical(
+        provider,
+        model=None,
+        async_mode=False,
+        *,
+        explicit_base_url=None,
+        **_kwargs,
+    ):
+        assert provider == "ollama-cloud"
+        assert model == "deepseek-v4-flash"
+        assert async_mode is False
+        resolutions.append(explicit_base_url)
+        return canonical, model
+
+    monkeypatch.setattr(
+        auxiliary_client,
+        "resolve_provider_client",
+        resolve_canonical,
+    )
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com/v1")
+    try:
+        response = swarm_host._sidekick_call_llm(
+            task="swarm",
+            provider="ollama-cloud",
+            model="deepseek-v4-flash",
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Use the canonical cloud route.",
+                }
+            ],
+        )
+    finally:
+        auxiliary_client.shutdown_cached_clients()
+
+    assert response.choices[0].message.content == (
+        _valid_response()["choices"][0]["message"]["content"]
+    )
+    assert stale.calls == []
+    assert len(canonical.calls) == 1
+    assert resolutions == ["https://ollama.com/v1"]
+
+
+def test_legacy_live_snapshot_pauses_until_an_explicit_verified_refresh(
+    tmp_path: Path,
+):
+    """Catches an old merged snapshot making an unproven route executable."""
+    transport_calls: list[dict] = []
+    ProjectSwarmStore(tmp_path).save_model_catalog_snapshot(
+        ModelCatalogSnapshot(
+            provider="ollama-cloud",
+            models=("deepseek-v4-flash",),
+            healthy=True,
+            source="ollama-cloud-live",
+        )
+    )
+    service = SidekickSwarmService(
+        call_llm=lambda **kwargs: transport_calls.append(kwargs) or _valid_response()
+    )
+
+    summary = service.run("must wait for a verified catalog", tmp_path)
+
+    assert summary.status == "paused"
+    assert summary.pause_reason == "no_eligible_model"
+    assert transport_calls == []
+    events = ProjectSwarmStore(tmp_path).list_events(summary.run_id)
+    unavailable = next(
+        event for event in events if event.event_type == "model_catalog.unavailable"
+    )
+    assert unavailable.payload["verified"] is False
+
+
+def test_explicit_refresh_persists_live_catalog_and_host_transport_is_slot_bound(
+    tmp_path: Path,
+):
+    """Catches hidden catalog writes or a transport escaping the Ollama slot/provider."""
+    calls: list[dict] = []
+    slots: list[tuple[str, str]] = []
+
+    @contextmanager
+    def provider_slot(run_id: str, provider: str):
+        slots.append((run_id, provider))
+        yield
+
+    def call_llm(**kwargs):
+        calls.append(kwargs)
+        return _valid_response()
+
+    service = SidekickSwarmService(
+        call_llm=call_llm,
+        catalog_refresher=lambda: ModelCatalogSnapshot(
+            provider="ollama-cloud",
+            models=_ROUTED_MODELS,
+            healthy=True,
+            source=OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE,
+        ),
+        provider_slot=provider_slot,
+    )
+
+    snapshot = service.refresh_models(tmp_path)
+    summary = service.run("produce a structured review", tmp_path)
+
+    assert snapshot.healthy is True
+    assert summary.status == "completed"
+    assert calls
+    assert len(slots) == len(calls)
+    assert all(provider == "ollama-cloud" for _run_id, provider in slots)
+    assert all(call["provider"] == "ollama-cloud" for call in calls)
+    assert all(call["model"] in _ROUTED_MODELS for call in calls)
+    assert all("gpt-oss" not in call["model"] for call in calls)
+    restored = ProjectSwarmStore.open_read_only(tmp_path).get_model_catalog_snapshot(
+        "ollama-cloud"
+    )
+    assert restored is not None
+    assert restored.models == _ROUTED_MODELS
+
+
+def test_started_run_waits_for_human_resume_at_a_model_boundary(tmp_path: Path):
+    """Catches a paused background run completing after its in-flight call returns."""
+    first_call_started = threading.Event()
+    release_first_call = threading.Event()
+    calls: list[dict] = []
+
+    def call_llm(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            first_call_started.set()
+            assert release_first_call.wait(timeout=2)
+        return _valid_response()
+
+    service = SidekickSwarmService(
+        call_llm=call_llm,
+        catalog_refresher=lambda: ModelCatalogSnapshot(
+            provider="ollama-cloud",
+            models=_ROUTED_MODELS,
+            healthy=True,
+            source=OLLAMA_CLOUD_VERIFIED_CATALOG_SOURCE,
+        ),
+    )
+    service.refresh_models(tmp_path)
+    run = service.start_run("pause at a safe boundary", tmp_path)
+    result: dict[str, object] = {}
+
+    def execute() -> None:
+        try:
+            result["summary"] = service.execute_run(tmp_path, run.run_id)
+        except Exception as exc:  # pragma: no cover - assertion below exposes it
+            result["error"] = exc
+
+    worker = threading.Thread(target=execute)
+    worker.start()
+    assert first_call_started.wait(timeout=1)
+
+    paused = service.pause(tmp_path, run.run_id)
+    assert paused.status == "paused"
+    release_first_call.set()
+
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline:
+        events = ProjectSwarmStore.open_read_only(tmp_path).list_events(run.run_id)
+        if any(
+            event.event_type == "work.completed"
+            and event.payload.get("role") == "scout"
+            for event in events
+        ):
+            break
+        time.sleep(0.01)
+    assert (
+        ProjectSwarmStore.open_read_only(tmp_path).get_run(run.run_id).status
+        == "paused"
+    )
+    assert len(calls) == 1
+    assert worker.is_alive()
+
+    resumed = service.resume(tmp_path, run.run_id)
+    assert resumed.status == "running"
+    worker.join(timeout=3)
+
+    assert not worker.is_alive()
+    assert "error" not in result
+    assert result["summary"].status == "completed"
+    assert len(calls) == 8
+
+
+def test_human_approval_is_proposal_bound_and_cannot_execute_an_action(
+    tmp_path: Path,
+):
+    """Catches host approval fabricating model evidence or invoking an adapter."""
+    store = ProjectSwarmStore(tmp_path)
+    run = store.create_run(run_id="approval-run")
+    store.append_event(
+        run.run_id,
+        "swarm.action_proposed",
+        {
+            "proposal_id": "proposal-1",
+            "requested_action": {
+                "name": "write_project_file",
+                "arguments": {"path": "report.txt"},
+                "use_worktree": True,
+            },
+            "evidence_refs": ["evidence:verified"],
+        },
+    )
+    service = SidekickSwarmService(
+        action_classifier=lambda _action: ActionCapabilities(
+            category="project",
+            reversible=True,
+            external=False,
+            cost_increasing=False,
+        )
+    )
+
+    approval = service.record_human_approval(
+        tmp_path,
+        run.run_id,
+        "proposal-1",
+        actor_id="cli:alice",
+        approved=False,
+    )
+
+    assert approval.approval_type == "human"
+    assert approval.approver_id == "cli:alice"
+    assert approval.approved is False
+    assert approval.model_family is None
+    assert approval.evidence_refs == ()
+    assert ProjectSwarmStore(tmp_path).list_approvals(run.run_id) == [approval]
+
+    with pytest.raises(ValueError, match="proposal"):
+        service.record_human_approval(
+            tmp_path,
+            run.run_id,
+            "unknown-proposal",
+            actor_id="cli:alice",
+        )
+
+
+def test_existing_run_controls_do_not_initialize_an_absent_project(tmp_path: Path):
+    """Catches pause/resume/approval typos creating a new empty .swarm tree."""
+    project = tmp_path / "uninitialized"
+    project.mkdir()
+    service = SidekickSwarmService()
+
+    with pytest.raises(FileNotFoundError, match="not initialized"):
+        service.pause(project, "unknown-run")
+
+    assert not (project / ".swarm").exists()
+
+
+def test_execution_failure_returns_a_running_run_to_a_sanitized_pause(
+    tmp_path: Path,
+):
+    """A synchronous host failure must leave the durable run resumable."""
+    store = ProjectSwarmStore(tmp_path)
+    run = store.create_run(run_id="cli-failure")
+    service = SidekickSwarmService()
+
+    paused = service.record_execution_failure(
+        tmp_path,
+        run.run_id,
+        error_type="RuntimeError",
+    )
+
+    assert paused.status == "paused"
+    assert ProjectSwarmStore(tmp_path).get_run(run.run_id).status == "paused"
+    assert ProjectSwarmStore(tmp_path).list_events(run.run_id)[-1].payload == {
+        "error_type": "RuntimeError"
+    }
+
+
+def test_execution_lease_recovery_requires_a_bounded_host_actor(tmp_path: Path):
+    """Catches a caller forging an arbitrary recovery-audit principal."""
+    store = ProjectSwarmStore(tmp_path)
+    run = store.create_run(run_id="recover-host-actor")
+    assert store.claim_run_execution_lease(run.run_id, "abandoned-owner")
+    service = SidekickSwarmService()
+
+    with pytest.raises(ValueError, match="host actor"):
+        service.recover_execution_lease(
+            tmp_path,
+            run.run_id,
+            actor_id="manual:alice",
+        )
+    with pytest.raises(ValueError, match="host actor"):
+        service.recover_execution_lease(
+            tmp_path,
+            run.run_id,
+            actor_id="dashboard:   ",
+        )
+
+    recovered = service.recover_execution_lease(
+        tmp_path,
+        run.run_id,
+        actor_id="dashboard:trusted-test-principal",
+    )
+
+    assert recovered.status == "paused"
+    assert ProjectSwarmStore(tmp_path).list_events(run.run_id)[-1].payload == {
+        "actor_id": "dashboard:trusted-test-principal"
+    }
+
+
+def test_execution_lease_recovery_authorizes_only_the_fifo_unresolved_attempt(
+    tmp_path: Path,
+):
+    """Catches recovery authorizing a completed/failed attempt instead of its successor."""
+    store = ProjectSwarmStore(tmp_path)
+    run = store.create_run(run_id="recover-fifo-attempt")
+    first_attempt = store.append_event(
+        run.run_id,
+        "model.attempt_started",
+        {"role": "scout", "model": "deepseek-v4-flash"},
+    )
+    second_attempt = store.append_event(
+        run.run_id,
+        "model.attempt_started",
+        {"role": "scout", "model": "deepseek-v4-flash"},
+    )
+    store.append_event(
+        run.run_id,
+        "model.attempt_failed",
+        {
+            "role": "scout",
+            "model": "deepseek-v4-flash",
+            "reason": "call_error",
+        },
+    )
+    unresolved_attempt = store.append_event(
+        run.run_id,
+        "model.attempt_started",
+        {"role": "scout", "model": "deepseek-v4-flash"},
+    )
+    store.record_workflow_role_checkpoint(
+        run.run_id,
+        "scout",
+        model="deepseek-v4-flash",
+        data={
+            "work": "scout completed",
+            "evidence": ["scout:deepseek-v4-flash"],
+            "decision": "scout approves",
+        },
+    )
+    assert first_attempt.sequence < second_attempt.sequence < unresolved_attempt.sequence
+    assert store.claim_run_execution_lease(run.run_id, "abandoned-owner")
+
+    recovered = SidekickSwarmService().recover_execution_lease(
+        tmp_path,
+        run.run_id,
+        actor_id="dashboard:trusted-test-principal",
+    )
+
+    # A later host can itself die before it starts the authorized retry.  Its
+    # recovery must retain the original handoff rather than writing a duplicate
+    # authorization that the Engine will correctly reject.
+    assert store.claim_run_execution_lease(run.run_id, "second-abandoned-owner")
+    recovered_again = SidekickSwarmService().recover_execution_lease(
+        tmp_path,
+        run.run_id,
+        actor_id="dashboard:trusted-test-principal",
+    )
+
+    assert recovered.status == "paused"
+    assert recovered_again.status == "paused"
+    assert [
+        event.payload
+        for event in ProjectSwarmStore(tmp_path).list_events(run.run_id)
+        if event.event_type == "model.attempt_replay_authorized_by_human"
+    ] == [
+        {
+            "actor_id": "dashboard:trusted-test-principal",
+            "original_attempt_sequence": unresolved_attempt.sequence,
+            "role": "scout",
+            "model": "deepseek-v4-flash",
+        }
+    ]

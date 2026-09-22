@@ -1,0 +1,7 @@
+{
+  "mode": "in-tree-monorepo",
+  "integratedAt": "2026-09-23T00:35:00.000Z",
+  "source": "https://github.com/Loggableim/sidekick-agent.git",
+  "version": "v0.8.84",
+  "entrypoint": "cli.web_server:app"
+}

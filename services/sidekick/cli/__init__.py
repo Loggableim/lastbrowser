@@ -1,0 +1,59 @@
+"""
+Sidekick CLI - Unified command-line interface for Sidekick Agent.
+
+Provides subcommands for:
+|- sidekick chat          - Interactive chat (same as ./sidekick)
+|- sidekick gateway       - Run gateway in foreground
+|- sidekick gateway start - Start gateway service
+|- sidekick gateway stop  - Stop gateway service
+|- sidekick setup         - Interactive setup wizard
+|- sidekick status        - Show status of all components
+|- sidekick cron          - Manage cron jobs
+"""
+
+import os
+import sys
+from pathlib import Path
+
+
+def _ensure_project_root() -> None:
+    """Make the repo root importable for root-level helper modules."""
+    project_root = str(Path(__file__).resolve().parents[1])
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+
+_ensure_project_root()
+
+from sidekick_cli import __version__ as __version__  # single source of truth
+from sidekick_cli import __release_date__ as __release_date__  # single source of truth
+__all__ = ["__version__", "__release_date__"]
+
+
+def _ensure_utf8():
+    """Force UTF-8 stdout/stderr on Windows to prevent UnicodeEncodeError.
+
+    Windows services and terminals default to cp1252, which cannot encode
+    box-drawing characters used in CLI output. This causes unhandled
+    UnicodeEncodeError crashes on gateway startup.
+    """
+    if sys.platform != "win32":
+        return
+    os.environ.setdefault("PYTHONUTF8", "1")
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+        try:
+            if getattr(stream, "encoding", "").lower().replace("-", "") != "utf8":
+                new_stream = open(
+                    stream.fileno(), "w", encoding="utf-8",
+                    buffering=1, closefd=False,
+                )
+                setattr(sys, stream_name, new_stream)
+        except (AttributeError, OSError):
+            pass
+
+
+_ensure_utf8()

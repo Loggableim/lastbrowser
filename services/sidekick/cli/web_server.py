@@ -1,0 +1,7790 @@
+"""
+Sidekick Agent Ã¢â‚¬â€ Web UI server.
+
+Provides a FastAPI backend serving the Vite/React frontend and REST API
+endpoints for managing configuration, environment variables, and sessions.
+
+Usage:
+    python -m sidekick_cli.main web          # Start on http://127.0.0.1:9119
+    python -m sidekick_cli.main web --port 8080
+"""
+
+import asyncio
+import hashlib
+import hmac
+import importlib.util
+import json
+import logging
+import math
+import mimetypes
+import os
+import secrets
+import subprocess
+import sys
+import threading
+import time
+import urllib.parse
+import urllib.request
+import uuid
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import yaml
+
+
+def _persist_nova_feedback_entity(event: dict[str, object]) -> None:
+    """Persist only the bounded local feedback projection, never raw messages."""
+    try:
+        from nova.autobiography import AutobiographyStore
+        from nova.entity_types import EntityEvent
+        payload = event.get("payload") if isinstance(event, dict) else {}
+        payload = payload if isinstance(payload, dict) else {}
+        redacted = {
+            "target_key": str(payload.get("target_key") or "")[:128],
+            "run_id": str(payload.get("run_id") or "")[:64],
+            "status": str(payload.get("status") or "")[:32],
+            "detail": str(payload.get("detail") or "")[:200],
+        }
+        AutobiographyStore().record_entity_event(EntityEvent(
+            type="nova_feedback",
+            source="local_feedback_adapter",
+            payload=redacted,
+            visibility="private",
+            correlation_id=redacted["run_id"] or redacted["target_key"],
+        ))
+    except Exception:
+        _log.warning("Nova feedback entity persistence failed", exc_info=True)
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from cli import __version__, __release_date__
+from cli.config import (
+    cfg_get,
+    DEFAULT_CONFIG,
+    OPTIONAL_ENV_VARS,
+    get_config_path,
+    get_env_path,
+    get_sidekick_home,
+    get_worktree_settings,
+    load_config,
+    load_env,
+    save_config,
+    save_env_value,
+    remove_env_value,
+    check_config_version,
+    redact_key,
+)
+from gateway.status import get_running_pid, read_runtime_status
+from shared.sessions import is_default_session_title
+from web.api.workspace import (
+    load_workspaces,
+    get_last_workspace,
+    resolve_trusted_workspace,
+    resolve_trusted_workspace_read_only,
+    resolve_enrollment_trusted_workspace_read_only,
+)
+from web.api.onboarding import (
+    get_onboarding_status,
+    complete_onboarding,
+    apply_onboarding_setup,
+    probe_provider_endpoint,
+)
+from web.api.oauth import (
+    start_onboarding_oauth_flow,
+    poll_onboarding_oauth_flow,
+    cancel_onboarding_oauth_flow,
+)
+
+try:
+    from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+    from fastapi.staticfiles import StaticFiles
+    from pydantic import BaseModel
+except ImportError:
+    raise SystemExit(
+        "Web UI requires fastapi and uvicorn.\n"
+        f"Install with: {sys.executable} -m pip install 'fastapi' 'uvicorn[standard]'"
+    ) from None
+
+from web.api.fastapi_bridge import dispatch_route
+
+# WEB_DIST: where the built frontend lives. Falls back through several
+# reasonable locations because the monorepo has the SPA assets in different
+# places depending on build state (web/static/index.html in dev, web_dist
+# after `npm run build`, etc.)
+_WEB_DIST_CANDIDATES = [
+    Path(__file__).parent.parent / "web" / "static",  # web/static (dev / monorepo layout)
+    Path(__file__).parent / "web_dist",                # cli/web_dist (after build)
+    Path(__file__).parent.parent / "web_dist",         # web_dist at repo root
+    Path(__file__).parent.parent / "dist",             # dist at repo root
+]
+_web_dist = os.environ.get("SIDEKICK_WEB_DIST")
+WEB_DIST = Path(_web_dist) if _web_dist else next(
+    (p for p in _WEB_DIST_CANDIDATES if (p / "index.html").exists()),
+    _WEB_DIST_CANDIDATES[1]  # final fallback
+)
+_log = logging.getLogger(__name__)
+
+app = FastAPI(title="Sidekick Agent", version=__version__)
+_CRON_TICKER_STARTED = False
+_NOVA_SUPERVISION_TICKER_STARTED = False
+_NOVA_SUPERVISION_CONSUMER_INTERVAL_SECONDS = 60.0
+_NOVA_SUPERVISION_TICKER_LOCK = threading.RLock()
+_NOVA_SUPERVISION_TICKER_STATE: dict[str, Any] = {
+    "feedback_responder": "disabled",
+    "feedback_last_error": None,
+    "running": False,
+    "process": "cli.web_server",
+    "thread": "",
+    "interval_seconds": 60,
+    "consumer_interval_seconds": 60,
+    "last_catalog_refresh_attempts": 0,
+    "last_pulse_at": None,
+    "last_outcomes": [],
+    "error_count": 0,
+    "last_error": None,
+    "ticker_watchdog": {"status": "not_started", "alert_code": None, "last_pulse_at": None, "age_seconds": None},
+    "mind_watchdog": {"status": "not_started", "pid": None, "restarted": False, "crash_count": 0},
+}
+
+
+def _cleanup_nova_supervision_ticker_lifecycle(lifecycle: dict[str, Any]) -> None:
+    """Stop one ticker generation and release only its bound lease."""
+    stop_requested = lifecycle.get("stop_requested")
+    if callable(getattr(stop_requested, "set", None)):
+        try:
+            stop_requested.set()
+        except Exception:
+            pass
+    stop = lifecycle.get("lease_stop")
+    if callable(getattr(stop, "set", None)):
+        try:
+            stop.set()
+        except Exception:
+            pass
+    runtime = lifecycle.get("runtime")
+    if runtime is not None:
+        try:
+            from nova.space_supervision_runtime import clear_active_runtime
+            clear_active_runtime(runtime)
+        except Exception:
+            pass
+    supervisor = lifecycle.get("supervisor")
+    lease_id = lifecycle.get("ticker_lease_id")
+    owner = lifecycle.get("ticker_owner")
+    if supervisor is not None and isinstance(lease_id, str) and isinstance(owner, str):
+        try:
+            supervisor.release_ticker_lease(lease_id, owner, reason="ticker_thread_exited")
+        except Exception:
+            pass
+    lifecycle["runtime"] = None
+    lifecycle["ticker_lease_id"] = None
+
+
+def _is_asyncio_client_disconnect_context(context: dict[str, Any] | None) -> bool:
+    """Return True for event-loop callback errors caused by closed clients."""
+    exc = (context or {}).get("exception")
+    if isinstance(exc, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
+        return True
+    if isinstance(exc, OSError):
+        if getattr(exc, "errno", None) in (32, 54, 104, 110):
+            return True
+        if getattr(exc, "winerror", None) in (10053, 10054, 10058):
+            return True
+    return False
+
+
+def _install_asyncio_disconnect_exception_filter() -> None:
+    """Suppress noisy asyncio transport tracebacks for normal disconnects."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
+    if getattr(loop, "_sidekick_disconnect_exception_filter", False):
+        return
+    previous_handler = loop.get_exception_handler()
+
+    def _handler(loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
+        if _is_asyncio_client_disconnect_context(context):
+            return
+        if previous_handler is not None:
+            previous_handler(loop, context)
+            return
+        loop.default_exception_handler(context)
+
+    loop.set_exception_handler(_handler)
+    loop._sidekick_disconnect_exception_filter = True
+
+
+def _start_dashboard_cron_ticker() -> None:
+    """Start the file-backed Sidekick cron scheduler for dashboard-only runs."""
+    global _CRON_TICKER_STARTED
+    if _CRON_TICKER_STARTED or os.environ.get("SIDEKICK_DISABLE_CRON_TICKER") == "1":
+        return
+    _CRON_TICKER_STARTED = True
+
+    def _loop() -> None:
+        while True:
+            try:
+                from cron.scheduler import tick as cron_tick
+
+                cron_tick(verbose=False)
+            except Exception:
+                _log.debug("Dashboard cron ticker failed", exc_info=True)
+            time.sleep(60)
+
+    thread = threading.Thread(target=_loop, daemon=True, name="dashboard-cron-ticker")
+    thread.start()
+    app.state.cron_ticker = {
+        "running": True,
+        "process": "cli.web_server",
+        "thread": thread.name,
+        "interval_seconds": 60,
+    }
+
+
+def _poll_nova_space_inputs(supervisor: Any) -> None:
+    """Read-only Git/CI edge detector for already enrolled YOLO Spaces."""
+    try:
+        from nova.space_supervision_runtime import emit_code_owned_signal
+        from web.api.space_engine import get_all_spaces
+    except Exception:
+        return
+    try:
+        spaces = get_all_spaces()
+    except Exception:
+        return
+    heartbeat_bucket = int(time.time() // (15 * 60))
+
+    for space in spaces:
+        target_key = str(getattr(space, "slug", "") or "").strip().lower()
+        if not target_key:
+            continue
+        try:
+            governance = supervisor.current_governance(target_key)
+            if governance is None or governance.yolo is not True or governance.enrolled is not True:
+                continue
+            emit_code_owned_signal(
+                target_key,
+                source="heartbeat",
+                event_id=f"heartbeat:{heartbeat_bucket}",
+                reason_code="periodic_check",
+            )
+            root = governance.canonical_root
+            git = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+                check=False,
+            )
+            head = (git.stdout or "").strip().lower()
+            if git.returncode == 0 and len(head) == 40 and all(c in "0123456789abcdef" for c in head):
+                emit_code_owned_signal(
+                    target_key,
+                    source="git",
+                    event_id=f"git-head:{head}",
+                    reason_code="git_change",
+                )
+
+            # Kanban is a Space-local event source as well. Only the SQLite
+            # file's bounded identity is observed; task titles, IDs and board
+            # paths never enter the supervision ledger.
+            try:
+                kanban_path = Path(getattr(space, "kanban_path", root / "kanban.db"))
+                kanban_stat = kanban_path.stat()
+                kanban_identity = (
+                    f"kanban:{kanban_stat.st_ino}:{kanban_stat.st_size}:"
+                    f"{kanban_stat.st_mtime_ns}"
+                )
+                emit_code_owned_signal(
+                    target_key,
+                    source="kanban",
+                    event_id=kanban_identity,
+                    reason_code="kanban_change",
+                )
+            except (OSError, ValueError, TypeError):
+                # Missing or inaccessible Kanban storage must not stop
+                # supervision of Git, CI or heartbeat signals.
+                pass
+
+            # A managed Space can have meaningful work before its first
+            # commit. Detect that state as a redacted digest only; raw status
+            # output may contain filenames, secrets or user data and must not
+            # enter the supervision ledger or notifications.
+            status_returncode, status_prefix, status_truncated = _probe_nova_status_stream(root, timeout=5)
+            status_text = status_prefix.decode("utf-8", errors="replace")
+            status_digest = _bounded_nova_status_digest(status_text)
+            if status_truncated:
+                status_digest = _bounded_nova_status_digest_bytes(status_prefix, truncated=True)
+            if status_returncode == 0 and status_digest is not None:
+                emit_code_owned_signal(
+                    target_key,
+                    source="git",
+                    event_id=f"git-worktree:{status_digest}",
+                    reason_code="git_change",
+                )
+
+            marker = root / ".swarm" / "ci-status.json"
+            if marker.is_file():
+                payload = json.loads(marker.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    status = str(payload.get("status") or "").strip().lower()
+                    if status in {"success", "passed", "failure", "failed", "error", "cancelled"}:
+                        marker_identity = {
+                            "id": str(payload.get("id") or payload.get("run_id") or ""),
+                            "status": status,
+                            "updated_at": str(payload.get("updated_at") or ""),
+                        }
+                        if marker_identity["id"] or marker_identity["updated_at"]:
+                            event_id = hashlib.sha256(
+                                json.dumps(marker_identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                            ).hexdigest()
+                            emit_code_owned_signal(
+                                target_key,
+                                source="ci",
+                                event_id=f"ci-status:{event_id}",
+                                reason_code="ci_failed" if status in {"failure", "failed", "error", "cancelled"} else "ci_change",
+                            )
+        except Exception:
+            # A malformed Space, Git checkout or CI marker cannot stop the ticker.
+            continue
+
+
+
+_PROVIDER_REFRESH_COOLDOWN_SECONDS = 15 * 60
+_PROVIDER_REFRESH_MAX_ATTEMPTS = 1024
+_PROVIDER_REFRESH_ATTEMPTS: dict[str, float] = {}
+
+def _refresh_recoverable_provider_catalogs(supervisor: Any, *, now: float | None = None) -> int:
+    """Refresh the verified Ollama catalog for paused eligible Spaces only.
+
+    The continuous host loop must not fall back to local providers or refresh
+    arbitrary projects. A refresh is attempted only for a currently paused
+    ``model_chain_exhausted``/provider-recoverable admission and is bounded by
+    the caller's host interval. Failures remain redacted and fail closed.
+    """
+    recoverable = {
+        "model_chain_exhausted",
+        "no_eligible_model",
+        "model_provider_unavailable",
+        "model_catalog_unavailable",
+        "provider_unavailable",
+    }
+    try:
+        from cli.swarm import get_swarm_service
+        from swarm_core.store import ProjectSwarmStore
+    except Exception:
+        return 0
+    try:
+        admissions = supervisor.list_active_admissions()
+    except Exception:
+        return 0
+    attempted = 0
+    service = None
+    current_time = time.monotonic() if now is None else float(now)
+    if not math.isfinite(current_time) or current_time < 0:
+        return 0
+    if len(_PROVIDER_REFRESH_ATTEMPTS) > _PROVIDER_REFRESH_MAX_ATTEMPTS:
+        cutoff = max(0.0, current_time - 86400.0)
+        stale = [key for key, value in _PROVIDER_REFRESH_ATTEMPTS.items() if not math.isfinite(float(value)) or float(value) < cutoff]
+        for key in stale:
+            _PROVIDER_REFRESH_ATTEMPTS.pop(key, None)
+        if len(_PROVIDER_REFRESH_ATTEMPTS) > _PROVIDER_REFRESH_MAX_ATTEMPTS:
+            overflow = len(_PROVIDER_REFRESH_ATTEMPTS) - _PROVIDER_REFRESH_MAX_ATTEMPTS
+            oldest = sorted(_PROVIDER_REFRESH_ATTEMPTS.items(), key=lambda item: float(item[1]))[:overflow]
+            for key, _value in oldest:
+                _PROVIDER_REFRESH_ATTEMPTS.pop(key, None)
+    for admission in admissions:
+        if str(admission.get("state") or "") != "paused":
+            continue
+        try:
+            record = supervisor._record(str(admission.get("admission_id") or ""))
+            if record is None:
+                continue
+            target_key = str(record["target_key"] or "").strip().lower()
+            governance = supervisor.current_governance(target_key)
+            if governance is None or governance.yolo is not True or governance.enrolled is not True:
+                continue
+            root = Path(record["canonical_root"]).resolve()
+            store = ProjectSwarmStore.open_read_only(root)
+            run = store.get_run(str(record["run_id"]))
+            if run is None or run.status != "paused":
+                continue
+            pause_reason = ""
+            for event in reversed(store.list_events(str(record["run_id"]))):
+                if event.event_type == "run.paused":
+                    payload = event.payload if isinstance(event.payload, dict) else {}
+                    pause_reason = str(payload.get("reason") or "").strip().lower()
+                    break
+            if pause_reason not in recoverable:
+                continue
+            refresh_key = str(record["run_id"] or "").strip()
+            if not refresh_key:
+                continue
+            last_attempt = _PROVIDER_REFRESH_ATTEMPTS.get(refresh_key)
+            if last_attempt is not None and current_time - last_attempt < _PROVIDER_REFRESH_COOLDOWN_SECONDS:
+                continue
+            if service is None:
+                service = get_swarm_service()
+            attempted += 1
+            _PROVIDER_REFRESH_ATTEMPTS[refresh_key] = current_time
+            service.refresh_models(root)
+        except Exception:
+            # Provider/ledger/space failures never escape into the host loop.
+            continue
+    return attempted
+
+
+def _dashboard_execution_owner_alive(owner_token: str) -> bool:
+    """Check a dashboard ticker owner without consulting HTTP readiness."""
+    parts = str(owner_token or "").split(":")
+    if not parts or parts[0] != "dashboard":
+        # Unknown worker owners cannot be proven dead by this dashboard.
+        return True
+    if len(parts) != 3:
+        # Unknown/malformed ownership is not proof of death. Keeping the
+        # lease is the fail-closed choice and prevents speculative reclaim.
+        return True
+    try:
+        pid = int(parts[1])
+    except (TypeError, ValueError):
+        return True
+    if pid <= 0:
+        return True
+    if pid == os.getpid():
+        return True
+    if os.name == "nt":
+        try:
+            import ctypes
+            handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+            if handle:
+                ctypes.windll.kernel32.CloseHandle(handle)
+                return True
+            # Access-denied is not proof that a live owner exited.
+            # Reclaim only on definitive invalid/not-found process errors.
+            error_code = int(ctypes.windll.kernel32.GetLastError())
+            return error_code not in {87, 1168}
+        except Exception:
+            # Inspection failure is not proof that the other host exited.
+            return True
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
+def _build_nova_cloud_feedback_responder() -> Callable[[str], object] | None:
+    """Build the responder only after explicit host opt-in and Cloud auth."""
+    if os.environ.get("SIDEKICK_NOVA_CLOUD_RESPONDER") != "1":
+        return None
+    if not str(os.environ.get("OLLAMA_API_KEY") or "").strip():
+        _log.warning("Nova Cloud responder requested but OLLAMA_API_KEY is missing")
+        return None
+    try:
+        from nova.cloud_responder import NovaCloudResponder
+        from swarm_core.transport import OllamaCloudTransport
+        from runtime.auxiliary_client import call_llm
+        def _call_cloud(**kwargs: object) -> object:
+            return call_llm(**kwargs)
+        return NovaCloudResponder(
+            OllamaCloudTransport(_call_cloud),
+            model=os.environ.get("SIDEKICK_NOVA_CLOUD_MODEL", "deepseek-v4-flash"),
+            timeout_seconds=float(os.environ.get("SIDEKICK_NOVA_CLOUD_TIMEOUT", "5")),
+            enabled=True,
+        )
+    except Exception:
+        _log.exception("Nova Cloud responder activation failed closed")
+        return None
+def _start_nova_space_supervision_ticker(*, feedback_responder: Callable[[str], object] | None = None) -> None:
+    """Run the host-owned YOLO supervision pulse without owning model transport."""
+    global _NOVA_SUPERVISION_TICKER_STARTED
+    if feedback_responder is None:
+        feedback_responder = _build_nova_cloud_feedback_responder()
+    if (
+        _NOVA_SUPERVISION_TICKER_STARTED
+        or os.environ.get("SIDEKICK_DISABLE_NOVA_SUPERVISION") == "1"
+    ):
+        return
+    _NOVA_SUPERVISION_TICKER_STARTED = True
+    notification_sink = None
+    digest_sent_dates: dict[str, str] = {}
+    supervisor: Any | None = None
+
+    def _dispatch_run(project_root: Path, run_id: str) -> None:
+        # Admission has already provisioned and started this exact run. The
+        # worker only claims its durable execution lease; it cannot create a
+        # second run or bypass the supervisor's execution options.
+        def _worker() -> None:
+            try:
+                from cli.swarm import get_swarm_service
+                get_swarm_service().execute_run(project_root, run_id)
+                reconciliation = supervisor.reconcile_host_dispatch(
+                    project_root,
+                    run_id,
+                    failure_reason="host_execution_returned",
+                )
+                if reconciliation == "paused":
+                    _notify_supervision_blocker(project_root, run_id, "dispatch_failed")
+            except Exception:
+                try:
+                    reconciliation = supervisor.reconcile_host_dispatch(
+                        project_root,
+                        run_id,
+                        failure_reason="host_dispatch_failed",
+                    )
+                    if reconciliation == "paused":
+                        _notify_supervision_blocker(project_root, run_id, "dispatch_failed")
+                except Exception:
+                    _log.exception(
+                        "Nova supervision reconciliation failed: run_id=%s",
+                        run_id,
+                    )
+                _log.exception(
+                    "Nova supervision run failed: root=%s run_id=%s",
+                    project_root,
+                    run_id,
+                )
+
+        threading.Thread(
+            target=_worker,
+            daemon=True,
+        ).start()
+
+    def _notify_supervision_blocker(project_root: Path, run_id: str, blocker_code: str) -> None:
+        if notification_sink is None:
+            return
+        try:
+            target_key = supervisor.target_key_for_run(project_root, run_id)
+            governance = supervisor.current_governance(target_key) if target_key else None
+            if governance is None:
+                return
+            notification_sink.send_blocker(
+                space_id=governance.space_id,
+                display_name=target_key or "space",
+                run_id=run_id,
+                blocker_code=blocker_code,
+            )
+        except Exception:
+            # Notification failure must never change autonomous execution state.
+            _log.warning("Nova supervision blocker notification failed", exc_info=True)
+
+
+    def _notify_supervision_digest(runtime: Any, supervisor: Any) -> None:
+        if notification_sink is None:
+            return
+        utc_date = datetime.now(timezone.utc).date().isoformat()
+        try:
+            statuses = runtime.status()
+        except Exception:
+            return
+        status_by_target: dict[str, Any | None] = {}
+        for item in statuses:
+            target_key = getattr(item, "target_key", "")
+            if isinstance(target_key, str) and target_key:
+                status_by_target[target_key] = item
+        # A digest is a Space-level signal, not only a run-level signal. Include
+        # every currently enrolled YOLO Space, even when no event has created a
+        # runtime row yet; the zero-count payload is fixed and redacted.
+        try:
+            from web.api.space_engine import get_all_spaces
+            for space in get_all_spaces():
+                target_key = str(getattr(space, "slug", "") or "").strip().lower()
+                if target_key:
+                    status_by_target.setdefault(target_key, None)
+        except Exception:
+            pass
+        for target_key, item in status_by_target.items():
+            try:
+                governance = supervisor.current_governance(target_key)
+            except Exception:
+                continue
+            if governance is None or governance.yolo is not True or governance.enrolled is not True:
+                continue
+            if digest_sent_dates.get(target_key) == utc_date:
+                continue
+            outcome = str(getattr(item, "last_outcome", "") or "") if item is not None else ""
+            pending = bool(getattr(item, "pending", False)) if item is not None else False
+            if item is None:
+                active = 0; completed = 0; blocked = 0; paused = 0
+            elif pending:
+                active = 1; completed = 0; blocked = 0; paused = 0
+            elif outcome in {"admission_failed", "admission_rejected", "active_limit", "start_failed", "ineligible"}:
+                active = 0; completed = 0; blocked = 1; paused = 0
+            elif outcome in {"unchanged", "completed"}:
+                active = 0; completed = 1; blocked = 0; paused = 0
+            elif outcome in {"started", "running"}:
+                active = 1; completed = 0; blocked = 0; paused = 0
+            elif outcome in {"paused", "failed", "cancelled", "abandoned"}:
+                active = 0; completed = 0; blocked = 1; paused = 0
+            else:
+                active = 0; completed = 0; blocked = 0; paused = 1
+            digest_result = "failed"
+            try:
+                digest_result = notification_sink.send_daily_digest(
+                    space_id=governance.space_id,
+                    display_name=target_key,
+                    status_counts={"active": active, "completed": completed, "blocked": blocked, "paused": paused},
+                    utc_date=utc_date,
+                )
+            except Exception:
+                # A digest provider failure must never affect supervision.
+                _log.warning("Nova supervision daily digest failed", exc_info=True)
+            if digest_result in {"sent", "already_claimed"}:
+                digest_sent_dates[target_key] = utc_date
+
+    def _loop(ticker_lifecycle: dict[str, Any]) -> None:
+        nonlocal supervisor, notification_sink
+        runtime = None
+        feedback_consumer = None
+        stop_requested = ticker_lifecycle.get("stop_requested")
+        if not callable(getattr(stop_requested, "is_set", None)):
+            stop_requested = threading.Event()
+        ticker_owner = f"dashboard:{os.getpid()}:{uuid.uuid4().hex}"
+        ticker_lease_id: str | None = None
+        last_consumer_at = 0.0
+        lease_stop = threading.Event()
+        lease_lost = threading.Event()
+        ticker_lifecycle.update({"lease_stop": lease_stop, "supervisor": supervisor, "ticker_owner": ticker_owner, "runtime": None, "ticker_lease_id": None})
+
+        def _lease_heartbeat(lease_id: str, stop_event: threading.Event, loss_event: threading.Event) -> None:
+            while not stop_event.wait(10):
+                if not lease_id or supervisor is None:
+                    continue
+                try:
+                    if not supervisor.heartbeat_ticker_lease(lease_id, ticker_owner):
+                        loss_event.set()
+                        return
+                except Exception:
+                    # Fail closed: the pulse loop will stop until a fresh
+                    # durable lease can be acquired.
+                    loss_event.set()
+                    return
+
+        while not stop_requested.is_set():
+            if runtime is None:
+                try:
+                    from nova.space_supervision_runtime import (
+                        NovaSpaceSupervisionRuntime,
+                        install_active_runtime,
+                        clear_active_runtime,
+                    )
+                    from nova.space_supervisor import (
+                        get_production_managed_space_supervisor,
+                        list_current_managed_space_governance,
+                    )
+
+                    supervisor = get_production_managed_space_supervisor()
+                    try:
+                        supervisor.reconcile_stale_ticker_leases(
+                            _dashboard_execution_owner_alive
+                        )
+                    except Exception:
+                        # Liveness failures are fail-closed; the normal TTL
+                        # acquisition path remains the safe fallback.
+                        _log.exception("Nova ticker lease reconciliation failed")
+                    ticker_lease_id = supervisor.acquire_ticker_lease(ticker_owner)
+                    if not ticker_lease_id:
+                        with _NOVA_SUPERVISION_TICKER_LOCK:
+                            _NOVA_SUPERVISION_TICKER_STATE["last_error"] = "ticker_lease_unavailable"
+                        time.sleep(10)
+                        continue
+                    ticker_lifecycle.update({"supervisor": supervisor, "ticker_lease_id": ticker_lease_id, "ticker_owner": ticker_owner})
+                    try:
+                        supervisor.reconcile_stale_host_runs(_dashboard_execution_owner_alive)
+                    except Exception:
+                        _log.exception("Nova stale host-run reconciliation failed")
+                    lease_stop = threading.Event()
+                    lease_lost = threading.Event()
+                    threading.Thread(
+                        target=_lease_heartbeat,
+                        args=(ticker_lease_id, lease_stop, lease_lost),
+                        daemon=True,
+                        name="nova-supervision-lease-heartbeat",
+                    ).start()
+                    from nova.notifications import build_env_notifier
+                    from nova.feedback_adapter import LocalFeedbackLedger, LocalNovaFeedbackAdapter
+                    from nova.feedback_consumer import NovaFeedbackConsumer
+                    from nova.production_verifier import ProductionReadOnlyVerifier
+                    notification_sink = build_env_notifier(supervisor)
+                    if feedback_responder is not None and not callable(feedback_responder):
+                        raise TypeError("feedback responder must be callable")
+                    feedback_ledger = LocalFeedbackLedger(get_sidekick_home() / "state" / "nova-feedback.sqlite")
+                    feedback_consumer = NovaFeedbackConsumer(feedback_ledger, feedback_responder) if callable(feedback_responder) else None
+                    runtime = NovaSpaceSupervisionRuntime(
+                        supervisor=supervisor,
+                        dispatch_run=_dispatch_run,
+                        # A real host run is admitted only when the bound
+                        # Space exposes an explicit read-only verifier. This
+                        # is a project-local test-space gate; it is unrelated
+                        # to listener readiness or ticker lease ownership.
+                        readiness_check=ProductionReadOnlyVerifier.readiness,
+                        governance_snapshots=list_current_managed_space_governance,
+                        feedback_adapter=LocalNovaFeedbackAdapter(feedback_responder, ledger=feedback_ledger),
+                        entity_event_sink=_persist_nova_feedback_entity,
+                    )
+                    ticker_lifecycle["runtime"] = runtime
+                    install_active_runtime(runtime)
+                except Exception:
+                    _log.exception("Nova supervision ticker initialization failed")
+                    # Never leave a partially installed runtime reachable from
+                    # code-owned producers after the durable lease was
+                    # released.  Such a stale callback could otherwise ingest
+                    # signals (and dispatch with an old host binding) while a
+                    # replacement dashboard owns the lease.
+                    if runtime is not None:
+                        try:
+                            clear_active_runtime(runtime)
+                        except Exception:
+                            pass
+                    lease_stop.set()
+                    if supervisor is not None and ticker_lease_id:
+                        try:
+                            supervisor.release_ticker_lease(ticker_lease_id, ticker_owner, reason="initialization_failed")
+                        except Exception:
+                            pass
+                    ticker_lease_id = None
+                    time.sleep(60)
+                    continue
+            try:
+                if lease_lost.is_set() or not ticker_lease_id:
+                    lease_stop.set()
+                    # The in-process bridge is subordinate to the durable
+                    # ticker lease.  Remove the old runtime before reacquiring
+                    # so producers cannot route work through an expired host.
+                    try:
+                        from nova.space_supervision_runtime import clear_active_runtime
+                        clear_active_runtime(runtime)
+                    except Exception:
+                        pass
+                    ticker_lease_id = None
+                    runtime = None
+                    with _NOVA_SUPERVISION_TICKER_LOCK:
+                        _NOVA_SUPERVISION_TICKER_STATE["last_error"] = "ticker_lease_lost"
+                    time.sleep(10)
+                    continue
+                try:
+                    from nova.ticker_watchdog import inspect_ticker_liveness
+                    ticker_watchdog = inspect_ticker_liveness(supervisor=supervisor)
+                    with _NOVA_SUPERVISION_TICKER_LOCK:
+                        _NOVA_SUPERVISION_TICKER_STATE["ticker_watchdog"] = {
+                            "status": ticker_watchdog.status,
+                            "alert_code": ticker_watchdog.alert_code,
+                            "last_pulse_at": ticker_watchdog.last_pulse_at,
+                            "age_seconds": ticker_watchdog.age_seconds,
+                        }
+                    if not ticker_watchdog.healthy:
+                        with _NOVA_SUPERVISION_TICKER_LOCK:
+                            _NOVA_SUPERVISION_TICKER_STATE["last_error"] = f"ticker_watchdog_{ticker_watchdog.status}"
+                        # A stale or unavailable lease is no longer a valid host generation.
+                        # Stop this heartbeat-owned generation so the next loop can reacquire.
+                        lease_lost.set()
+                        time.sleep(10)
+                        continue
+                except Exception:
+                    with _NOVA_SUPERVISION_TICKER_LOCK:
+                        _NOVA_SUPERVISION_TICKER_STATE["ticker_watchdog"] = {"status": "unavailable", "alert_code": "ticker_unavailable", "last_pulse_at": None, "age_seconds": None}
+                try:
+                    from nova.mind_watchdog import check_and_recover
+
+                    watchdog = check_and_recover(
+                        home=Path(get_sidekick_home()),
+                        lease_owned=bool(ticker_lease_id),
+                    )
+                    with _NOVA_SUPERVISION_TICKER_LOCK:
+                        _NOVA_SUPERVISION_TICKER_STATE["mind_watchdog"] = {
+                            "status": watchdog.status,
+                            "pid": watchdog.pid,
+                            "restarted": bool(watchdog.restarted),
+                            "crash_count": int(watchdog.crash_count),
+                        }
+                except Exception:
+                    # Watchdog telemetry must never stop the governed ticker.
+                    with _NOVA_SUPERVISION_TICKER_LOCK:
+                        _NOVA_SUPERVISION_TICKER_STATE["mind_watchdog"] = {
+                            "status": "error",
+                            "pid": None,
+                            "restarted": False,
+                            "crash_count": 0,
+                        }
+                    _log.warning("Nova Mind watchdog failed", exc_info=True)
+                _poll_nova_space_inputs(supervisor)
+                outcomes = ()
+                resonance_consumed = 0
+                consumer_now = time.monotonic()
+                if consumer_now - last_consumer_at >= _NOVA_SUPERVISION_CONSUMER_INTERVAL_SECONDS:
+                    last_consumer_at = consumer_now
+                    catalog_refresh_attempts = _refresh_recoverable_provider_catalogs(supervisor)
+                    with _NOVA_SUPERVISION_TICKER_LOCK:
+                        _NOVA_SUPERVISION_TICKER_STATE["last_catalog_refresh_attempts"] = catalog_refresh_attempts
+                    if feedback_consumer is not None:
+                        try:
+                            feedback_results = feedback_consumer.consume(limit=8)
+                            with _NOVA_SUPERVISION_TICKER_LOCK:
+                                _NOVA_SUPERVISION_TICKER_STATE["last_feedback_received"] = len(feedback_results)
+                                _NOVA_SUPERVISION_TICKER_STATE["feedback_last_error"] = None
+                        except Exception:
+                            with _NOVA_SUPERVISION_TICKER_LOCK:
+                                _NOVA_SUPERVISION_TICKER_STATE["feedback_last_error"] = "provider_failed"
+                            _log.debug("Nova feedback consumer failed", exc_info=True)
+                    try:
+                        from nova.ticker_handler import consume_pending_events
+                        handler_result = consume_pending_events(
+                            supervisor=supervisor,
+                            runtime=runtime,
+                            publish_entity=True,
+                        )
+                        outcomes = handler_result.outcomes
+                        resonance_consumed = max(0, min(int(getattr(handler_result, "resonance_consumed", 0) or 0), 64))
+                    except Exception:
+                        # Dashboard telemetry/consumption must never affect the
+                        # governed ticker; the next bounded interval can retry safely.
+                        _log.debug("Nova ticker event consumer failed", exc_info=True)
+                        resonance_consumed = 0
+                _notify_supervision_digest(runtime, supervisor)
+                with _NOVA_SUPERVISION_TICKER_LOCK:
+                    _NOVA_SUPERVISION_TICKER_STATE["last_pulse_at"] = time.time()
+                    _NOVA_SUPERVISION_TICKER_STATE["last_resonance_consumed"] = resonance_consumed
+                    _NOVA_SUPERVISION_TICKER_STATE["last_outcomes"] = [
+                        {"space": outcome.target_key, "status": outcome.status}
+                        for outcome in outcomes[:16]
+                    ]
+                    _NOVA_SUPERVISION_TICKER_STATE["last_error"] = None
+            except Exception:
+                # A malformed Space or unavailable ledger must never stop the
+                # existing cron ticker or the WebUI process. Store only a fixed
+                # diagnostic code; exception text may contain paths/secrets.
+                with _NOVA_SUPERVISION_TICKER_LOCK:
+                    _NOVA_SUPERVISION_TICKER_STATE["error_count"] = int(
+                        _NOVA_SUPERVISION_TICKER_STATE["error_count"]
+                    ) + 1
+                    _NOVA_SUPERVISION_TICKER_STATE["last_error"] = "pulse_failed"
+                _log.exception("Nova supervision pulse failed")
+            stop_requested.wait(60)
+
+    def _ticker_thread_entry() -> None:
+        # Keep lifecycle ownership local to this generation. The restart guard
+        # can start a replacement while the previous thread is still
+        # unwinding; sharing one outer dict would let the old finally block
+        # release the replacement's lease/runtime.
+        ticker_lifecycle: dict[str, Any] = {
+            "stop_requested": threading.Event(),
+            "lease_stop": None,
+            "supervisor": None,
+            "ticker_lease_id": None,
+            "ticker_owner": None,
+            "runtime": None,
+        }
+        try:
+            _loop(ticker_lifecycle)
+        finally:
+            _cleanup_nova_supervision_ticker_lifecycle(ticker_lifecycle)
+
+    thread_holder: dict[str, threading.Thread | None] = {"thread": None}
+    guard = None
+
+    def _request_ticker_restart() -> bool:
+        new_thread = threading.Thread(target=_ticker_thread_entry, daemon=True, name="nova-supervision-ticker-restart")
+        thread_holder["thread"] = new_thread
+        new_thread.start()
+        return True
+
+    def _guard_loop() -> None:
+        from nova.ticker_thread_guard import TickerThreadGuard
+        restart_guard = TickerThreadGuard()
+        while True:
+            result = restart_guard.inspect(
+                ticker_thread=thread_holder.get("thread"),
+                request_start=_request_ticker_restart,
+            )
+            with _NOVA_SUPERVISION_TICKER_LOCK:
+                _NOVA_SUPERVISION_TICKER_STATE["ticker_watchdog"] = {
+                    "status": result.status,
+                    "alert_code": result.alert_code,
+                    "last_pulse_at": _NOVA_SUPERVISION_TICKER_STATE.get("last_pulse_at"),
+                    "age_seconds": None,
+                    "restart_count": int(result.restart_count),
+                }
+                if result.status == "restart_escalated":
+                    first_escalation = _NOVA_SUPERVISION_TICKER_STATE.get("last_error") != "ticker_thread_escalated"
+                    if first_escalation:
+                        _NOVA_SUPERVISION_TICKER_STATE["error_count"] = int(
+                            _NOVA_SUPERVISION_TICKER_STATE.get("error_count", 0)
+                        ) + 1
+                    _NOVA_SUPERVISION_TICKER_STATE["running"] = False
+                    _NOVA_SUPERVISION_TICKER_STATE["last_error"] = "ticker_thread_escalated"
+                    if first_escalation and notification_sink is not None:
+                        try:
+                            notification_sink.send_blocker(
+                                space_id="nova",
+                                display_name="nova",
+                                run_id="ticker",
+                                blocker_code="ticker_thread_escalated",
+                            )
+                        except Exception:
+                            _log.warning("Nova ticker escalation notification failed", exc_info=True)
+            time.sleep(10)
+
+    # Publish the bootstrap state before either daemon can run. Thread.start()
+    # is allowed to schedule immediately; initializing the public state after
+    # it races with the first pulse and can erase a real ``last_pulse_at`` (or
+    # outcomes), making a freshly booted ticker look idle to Presence/watchdog
+    # consumers. This state publication is telemetry only and does not grant
+    # a lease or bypass any admission gate.
+    explicit_cloud = os.environ.get("SIDEKICK_NOVA_CLOUD_RESPONDER") == "1"
+    feedback_status = "ready" if callable(feedback_responder) else ("unavailable" if explicit_cloud else "disabled")
+    feedback_error = ("cloud_auth_missing" if explicit_cloud and not str(os.environ.get("OLLAMA_API_KEY") or "").strip() else ("responder_activation_failed" if explicit_cloud else None))
+    ticker_state = {
+        "feedback_responder": feedback_status,
+        "feedback_last_error": feedback_error,
+        "running": True,
+        "process": "cli.web_server",
+        "thread": "nova-supervision-ticker",
+        "interval_seconds": 60,
+        "consumer_interval_seconds": int(_NOVA_SUPERVISION_CONSUMER_INTERVAL_SECONDS),
+        "last_catalog_refresh_attempts": 0,
+        "last_pulse_at": None,
+        "last_outcomes": [],
+        "last_resonance_consumed": 0,
+        "error_count": 0,
+        "last_error": None,
+        "ticker_watchdog": {"status": "not_started", "alert_code": None, "last_pulse_at": None, "age_seconds": None},
+        "mind_watchdog": {"status": "not_started", "pid": None, "restarted": False, "crash_count": 0},
+    }
+    with _NOVA_SUPERVISION_TICKER_LOCK:
+        _NOVA_SUPERVISION_TICKER_STATE.clear()
+        _NOVA_SUPERVISION_TICKER_STATE.update(ticker_state)
+    app.state.nova_supervision_ticker = ticker_state
+
+    thread = threading.Thread(target=_ticker_thread_entry, daemon=True, name="nova-supervision-ticker")
+    thread_holder["thread"] = thread
+    thread.start()
+    threading.Thread(target=_guard_loop, daemon=True, name="nova-supervision-ticker-guard").start()
+
+def _release_game_mode_resources_on_startup() -> None:
+    """Release local model resources when Game Mode persisted across a restart."""
+    try:
+        from web.api import config as config_mod
+
+        if not config_mod.is_game_mode_enabled():
+            return
+    except Exception:
+        _log.warning("Game Mode startup check failed", exc_info=True)
+        return
+
+    try:
+        from web.api.game_mode import (
+            release_game_mode_resources,
+            sync_game_mode_runtime_state,
+        )
+
+        sync_game_mode_runtime_state(True, action="blocked", details={"source": "startup"})
+        release_game_mode_resources()
+    except Exception:
+        _log.warning("Game Mode startup release failed", exc_info=True)
+
+
+app.router.on_startup.append(_install_asyncio_disconnect_exception_filter)
+app.router.on_startup.append(_start_dashboard_cron_ticker)
+app.router.on_startup.append(_start_nova_space_supervision_ticker)
+app.router.on_startup.append(_release_game_mode_resources_on_startup)
+
+
+# ---------------------------------------------------------------------------
+# Shell render cache.
+#
+# ``_serve_index`` used to re-read index.html and re-scan WEB_DIST for the
+# version token on every request (~20 ms of event-loop blocking per request,
+# measured on the 118-file shell tree). Both results only change when a file on
+# disk changes, so they are cached and keyed by the mtimes they depend on:
+#   * the version token by the newest mtime in WEB_DIST,
+#   * the rendered HTML by (path, mtime, size, prefix, token).
+# ---------------------------------------------------------------------------
+_VERSION_TOKEN_CACHE: dict[str, Any] = {"key": None, "token": None}
+_INDEX_RENDER_CACHE: dict[tuple, str] = {}
+_INDEX_RENDER_CACHE_MAX = 8
+
+
+def _webui_newest_mtime() -> int:
+    """Newest file mtime under WEB_DIST, via a cheap scandir walk.
+
+    ``Path.rglob`` + ``stat`` costs ~17 ms per call on the shell tree; this
+    walk costs ~0.8 ms and yields the same value.
+    """
+    newest = 0
+    stack = [WEB_DIST]
+    while stack:
+        directory = stack.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False):
+                            mtime = int(entry.stat(follow_symlinks=False).st_mtime)
+                            if mtime > newest:
+                                newest = mtime
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return newest
+
+
+def _webui_version_token() -> str:
+    """Cache-busting token for the shell assets.
+
+    The ``-dirty`` suffix carries the newest mtime in WEB_DIST so a local
+    hotfix busts the browser cache. The result is cached under that mtime, so
+    a warm request performs no directory scan at all.
+    """
+    try:
+        from web.api.updates import WEBUI_VERSION
+
+        token = str(WEBUI_VERSION or __version__)
+    except Exception:
+        token = str(__version__)
+
+    if token.endswith("-dirty"):
+        newest_mtime = _webui_newest_mtime()
+        if newest_mtime:
+            cache_key = f"{token}:{newest_mtime:x}"
+            if _VERSION_TOKEN_CACHE["key"] == cache_key:
+                return _VERSION_TOKEN_CACHE["token"]
+            token = f"{token}-{newest_mtime:x}"
+            quoted = urllib.parse.quote(token, safe="")
+            _VERSION_TOKEN_CACHE["key"] = cache_key
+            _VERSION_TOKEN_CACHE["token"] = quoted
+            return quoted
+    return urllib.parse.quote(token, safe="")
+
+# ---------------------------------------------------------------------------
+# Session token for protecting sensitive endpoints (reveal).
+# Generated fresh on every server start Ã¢â‚¬â€ dies when the process exits.
+# Injected into the SPA HTML so only the legitimate web UI can use it.
+# ---------------------------------------------------------------------------
+_SESSION_TOKEN = secrets.token_urlsafe(32)
+_SESSION_HEADER_NAME = "X-Sidekick-Session-Token"
+
+# A dirty worktree is only a wake-up hint for the governed ticker. Never let
+# an unbounded ``git status`` payload turn the once-per-minute host pulse into
+# an accidental memory sink (large generated/untracked trees are common in
+# project Spaces). The digest remains deterministic for the retained prefix
+# and explicitly records truncation, so a later clean/full state still yields
+# a different signal identity.
+_NOVA_STATUS_DIGEST_MAX_BYTES = 64 * 1024
+_NOVA_STATUS_PROBE_CHUNK_BYTES = 8 * 1024
+
+
+def _bounded_nova_status_digest_bytes(raw: bytes, *, truncated: bool = False) -> str | None:
+    """Hash only a bounded status prefix, preserving the legacy digest format."""
+    if not raw:
+        return None
+    sample = raw[:_NOVA_STATUS_DIGEST_MAX_BYTES]
+    if truncated or len(raw) > _NOVA_STATUS_DIGEST_MAX_BYTES:
+        sample += b"\n[sidekick-status-truncated]"
+    return hashlib.sha256(sample).hexdigest()
+
+
+def _bounded_nova_status_digest(status_text: object) -> str | None:
+    """Return a bounded identity for dirty-worktree status output."""
+    if not isinstance(status_text, str) or not status_text.strip():
+        return None
+    raw = status_text.encode("utf-8", errors="replace")
+    return _bounded_nova_status_digest_bytes(raw, truncated=len(raw) > _NOVA_STATUS_DIGEST_MAX_BYTES)
+
+
+def _probe_nova_status_stream(cwd: object, *, timeout: float = 5.0) -> tuple[int, bytes, bool]:
+    """Run ``git status`` while retaining at most a small prefix in memory.
+
+    ``subprocess.run(capture_output=True)`` is unsafe for generated/untracked
+    trees because Git can emit an arbitrarily large status listing. This
+    reader drains stdout in chunks, keeps only ``limit + 1`` bytes (the extra
+    byte proves truncation), and discards the remainder. The digest therefore
+    remains deterministic while process output cannot become a memory sink.
+    """
+    process = subprocess.Popen(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=str(cwd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        bufsize=0,
+    )
+    captured = bytearray()
+    truncated = False
+    stream = process.stdout
+    try:
+        if stream is not None:
+            while True:
+                chunk = stream.read(_NOVA_STATUS_PROBE_CHUNK_BYTES)
+                if not chunk:
+                    break
+                remaining = (_NOVA_STATUS_DIGEST_MAX_BYTES + 1) - len(captured)
+                if remaining > 0:
+                    captured.extend(chunk[:remaining])
+                if len(chunk) > max(remaining, 0) or len(captured) > _NOVA_STATUS_DIGEST_MAX_BYTES:
+                    truncated = True
+        try:
+            process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=1)
+    finally:
+        if stream is not None:
+            stream.close()
+    return int(process.returncode or 0), bytes(captured), truncated
+
+_STREAMING_EXACT_PATHS: frozenset[str] = frozenset({
+    "/api/chat/stream",
+    "/api/terminal/stream",
+    "/api/sessions/gateway/stream",
+    "/api/approval/stream",
+    "/api/clarify/stream",
+    "/api/browser/events",
+    "/api/nova/events",
+    "/api/gmail/ai/summary/stream",
+    "/api/kanban/events/stream",
+    "/api/swarm/runs/events/stream",
+    "/api/subagents/events/stream",
+})
+_STREAMING_PREFIXES: tuple[str, ...] = (
+    "/api/agents/workspace/stream/",
+)
+
+
+def _is_streaming_api_path(path: str) -> bool:
+    """True for long-lived SSE endpoints that may authenticate via query token."""
+    clean_path = str(path or "").split("?", 1)[0].rstrip("/")
+    return clean_path in _STREAMING_EXACT_PATHS or any(
+        clean_path.startswith(prefix) for prefix in _STREAMING_PREFIXES
+    )
+
+
+def _allows_query_session_token(request: Request) -> bool:
+    """EventSource cannot send custom headers, so allow token= for SSE only."""
+    if request.method.upper() != "GET":
+        return False
+    return _is_streaming_api_path(request.url.path)
+
+# In-browser Chat tab (/chat, /api/pty, Ã¢â‚¬Â¦).  Off unless ``sidekick dashboard --tui``
+# Set from :func:`start_server`.
+_DASHBOARD_EMBEDDED_CHAT_ENABLED = False
+
+# Simple rate limiter for the reveal endpoint
+_reveal_timestamps: List[float] = []
+_REVEAL_MAX_PER_WINDOW = 5
+_REVEAL_WINDOW_SECONDS = 30
+
+# CORS: restrict to localhost origins only.  The web UI is intended to run
+# locally; binding to 0.0.0.0 with allow_origins=["*"] would let any website
+# read/modify config and secrets.
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------------------------------------------------------------------------
+# Endpoints that do NOT require the session token.  Everything else under
+# /api/ is gated by the auth middleware below.  Keep this list minimal Ã¢â‚¬â€
+# only truly non-sensitive, read-only endpoints belong here.
+# ---------------------------------------------------------------------------
+_PUBLIC_API_PATHS: frozenset = frozenset({
+    "/api/status",
+    "/api/config/defaults",
+    "/api/config/schema",
+    "/api/model/info",
+    "/api/dashboard/themes",
+    "/api/dashboard/plugins",
+    "/api/dashboard/plugins/rescan",
+})
+
+
+@app.get("/health")
+async def health():
+    """Lightweight readiness probe for launchers and installers.
+
+    Also reports the live agent-worker counters so supervisors (e.g. the
+    detached dashboard-restart script) can tell an idle server from one that
+    is mid-turn. ``active_runs`` tracks worker lifecycle (registered when the
+    agent thread starts, removed in its outer ``finally``), which is exactly
+    the signal a restart must wait for; ``active_streams`` tracks SSE
+    subscribers and can differ during cancel/reconnect windows.
+    """
+    payload = {
+        "ok": True,
+        "service": "sidekick-dashboard",
+        "version": __version__,
+        "web_dist": str(WEB_DIST),
+        "web_dist_ready": (WEB_DIST / "index.html").exists(),
+    }
+    try:
+        from web.api import config as _live_config
+
+        with _live_config.ACTIVE_RUNS_LOCK:
+            payload["active_runs"] = len(_live_config.ACTIVE_RUNS or {})
+        with _live_config.STREAMS_LOCK:
+            payload["active_streams"] = len(_live_config.STREAMS or {})
+    except Exception:
+        # A health probe must never fail because the counters are unavailable;
+        # callers treat a missing counter as "unknown" and fall back.
+        pass
+    return payload
+
+
+def _has_valid_session_token(request: Request) -> bool:
+    """True if the request carries a valid dashboard session token.
+
+    The dedicated session header avoids collisions with reverse proxies that
+    already use ``Authorization`` (for example Caddy ``basic_auth``). We still
+    accept the legacy Bearer path for backward compatibility with older
+    dashboard bundles.
+    """
+    session_header = request.headers.get(_SESSION_HEADER_NAME, "")
+    if session_header and hmac.compare_digest(
+        session_header.encode(),
+        _SESSION_TOKEN.encode(),
+    ):
+        return True
+
+    query_token = request.query_params.get("token", "")
+    if (
+        query_token
+        and _allows_query_session_token(request)
+        and hmac.compare_digest(query_token.encode(), _SESSION_TOKEN.encode())
+    ):
+        return True
+
+    auth = request.headers.get("authorization", "")
+    expected = f"Bearer {_SESSION_TOKEN}"
+    return hmac.compare_digest(auth.encode(), expected.encode())
+
+
+def dashboard_session_principal(request: Request) -> str | None:
+    """Return a non-reversible principal for a validated dashboard session.
+
+    The ephemeral dashboard token is already required by API middleware.  A
+    Swarm human-approval record needs a durable actor identifier, but must not
+    store or log that raw bearer/header token.  This domain-separated digest is
+    stable only for the current dashboard process and cannot be chosen through
+    profile cookies or request JSON.
+    """
+    if not _has_valid_session_token(request):
+        return None
+    material = b"sidekick-swarm-dashboard-principal\0" + _SESSION_TOKEN.encode(
+        "utf-8"
+    )
+    return f"dashboard:{hashlib.sha256(material).hexdigest()}"
+
+
+def _require_token(request: Request) -> None:
+    """Validate the ephemeral session token.  Raises 401 on mismatch."""
+    if not _has_valid_session_token(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+# Accepted Host header values for loopback binds. DNS rebinding attacks
+# point a victim browser at an attacker-controlled hostname (evil.test)
+# which resolves to 127.0.0.1 after a TTL flip Ã¢â‚¬â€ bypassing same-origin
+# checks because the browser now considers evil.test and our dashboard
+# "same origin". Validating the Host header at the app layer rejects any
+# request whose Host isn't one we bound for. See GHSA-ppp5-vxwm-4cf7.
+_LOOPBACK_HOST_VALUES: frozenset = frozenset({
+    "localhost", "127.0.0.1", "::1",
+})
+
+
+def _is_accepted_host(host_header: str, bound_host: str) -> bool:
+    """True if the Host header targets the interface we bound to.
+
+    Accepts:
+    - Exact bound host (with or without port suffix)
+    - Loopback aliases when bound to loopback
+    - Any host when bound to 0.0.0.0 (explicit opt-in to non-loopback,
+      no protection possible at this layer)
+    """
+    if not host_header:
+        return False
+    # Strip port suffix. IPv6 addresses use bracket notation:
+    #   [::1]         Ã¢â‚¬â€ no port
+    #   [::1]:9119    Ã¢â‚¬â€ with port
+    # Plain hosts/v4:
+    #   localhost:9119
+    #   127.0.0.1:9119
+    h = host_header.strip()
+    if h.startswith("["):
+        # IPv6 bracketed Ã¢â‚¬â€ port (if any) follows "]:"
+        close = h.find("]")
+        if close != -1:
+            host_only = h[1:close]  # strip brackets
+        else:
+            host_only = h.strip("[]")
+    else:
+        host_only = h.rsplit(":", 1)[0] if ":" in h else h
+    host_only = host_only.lower()
+
+    # 0.0.0.0 bind means operator explicitly opted into all-interfaces
+    # (requires --insecure per web_server.start_server). No Host-layer
+    # defence can protect that mode; rely on operator network controls.
+    if bound_host in {"0.0.0.0", "::"}:
+        return True
+
+    # Loopback bind: accept the loopback names
+    bound_lc = bound_host.lower()
+    if bound_lc in _LOOPBACK_HOST_VALUES:
+        return host_only in _LOOPBACK_HOST_VALUES
+
+    # Explicit non-loopback bind: require exact host match
+    return host_only == bound_lc
+
+
+@app.middleware("http")
+async def host_header_middleware(request: Request, call_next):
+    """Reject requests whose Host header doesn't match the bound interface.
+
+    Defends against DNS rebinding: a victim browser on a localhost
+    dashboard is tricked into fetching from an attacker hostname that
+    TTL-flips to 127.0.0.1. CORS and same-origin checks don't help Ã¢â‚¬â€
+    the browser now treats the attacker origin as same-origin with the
+    dashboard. Host-header validation at the app layer catches it.
+
+    See GHSA-ppp5-vxwm-4cf7.
+    """
+    # Store the bound host on app.state so this middleware can read it Ã¢â‚¬â€
+    # set by start_server() at listen time.
+    bound_host = getattr(app.state, "bound_host", None)
+    if bound_host:
+        host_header = request.headers.get("host", "")
+        if not _is_accepted_host(host_header, bound_host):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "detail": (
+                        "Invalid Host header. Dashboard requests must use "
+                        "the hostname the server was bound to."
+                    ),
+                },
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Require the session token on all /api/ routes except the public list."""
+    path = request.url.path
+    if path.startswith("/api/") and path not in _PUBLIC_API_PATHS:
+        if not _has_valid_session_token(request):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Unauthorized"},
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def profile_context_middleware(request: Request, call_next):
+    """Scope native FastAPI routes to the profile selected by this browser.
+
+    Legacy routes perform this setup inside their bridge thread.  Native routes
+    bypass that bridge, so without this middleware a profile switch could list
+    the process-wide default profile's Spaces, sessions, and models.
+    """
+    from web.api.helpers import get_profile_cookie
+    from web.api.profiles import clear_request_profile, set_request_profile
+
+    token = set_request_profile(get_profile_cookie(request))
+    try:
+        return await call_next(request)
+    finally:
+        clear_request_profile(token)
+
+
+def _nova_management_payload(space, trusted_project_root: Path | None = None) -> dict:
+    """Serialize governance without creating config, a Space, or a workspace."""
+    from web.api.space_engine import (
+        SpaceConfigMalformedError,
+        nova_enrollment_readiness,
+        space_root_fingerprint,
+    )
+
+    config = space.load_config()
+    if config.get("_space_config_malformed"):
+        raise SpaceConfigMalformedError("Space config is malformed; refusing to use source")
+    return {
+        "slug": space.slug,
+        "space_id": config.get("space_id", ""),
+        "nova_management": config.get("nova_management", {}),
+        "root_fingerprint": (
+            space_root_fingerprint(trusted_project_root)
+            if trusted_project_root is not None
+            else ""
+        ),
+        "enrollment_readiness": nova_enrollment_readiness(
+            space, trusted_project_root=trusted_project_root
+        ),
+    }
+
+
+# Fixed, read-only inventory consumed by Nova's entity view. It must not become
+# a general filesystem/Space discovery endpoint: get_existing_space_read_only
+# never seeds, migrates, or creates a Space.
+_NOVA_INVENTORY_TARGETS = ("nova", "finanz-junkie", "aquarium-zentrum")
+_NOVA_INVENTORY_NEXT_STEPS = frozenset({
+    "none", "repair_space_config", "persist_space_id", "configure_project_dir",
+    "restore_project_dir", "register_trusted_workspace",
+    "repair_trusted_workspace_binding", "repair_nova_management",
+    "repair_management_audit", "enable_space_yolo", "enroll_nova_management",
+    "inspect_space_registry",
+})
+
+
+def _profile_inventory_space(slug: str, profile_home: Path):
+    """Resolve one fixed inventory Space below an explicit profile home."""
+    from web.api.space_engine import Space
+    normalized = str(slug or "").strip().lower()
+    if not normalized or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", normalized):
+        return None
+    try:
+        home = Path(profile_home).expanduser().resolve()
+    except (OSError, RuntimeError, TypeError):
+        return None
+    for root_name, legacy in (("spaces", False), ("workspaces", True)):
+        root = home / root_name
+        try:
+            root = root.resolve()
+            candidate = (root / normalized).resolve()
+            candidate.relative_to(root)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if candidate.is_dir() and (candidate / "space.yaml").is_file():
+            return Space(normalized, normalized, custom_root=root)
+    return None
+
+
+def _redacted_nova_space_inventory_entry(slug: str, *, profile_home: Path | None = None) -> dict[str, object]:
+    """Return a path-free, read-only Nova enrollment diagnostic."""
+    from web.api.space_engine import (
+        get_existing_space_read_only,
+        nova_enrollment_readiness,
+        space_root_fingerprint,
+    )
+    normalized = str(slug or "").strip().lower()
+    space = (_profile_inventory_space(normalized, profile_home)
+             if profile_home is not None else get_existing_space_read_only(normalized))
+    if space is None:
+        return {
+            "slug": normalized, "exists": False,
+            "identity": {"space_id": "", "space_id_persisted": False},
+            "root": {"status": "missing", "fingerprint": ""},
+            "enrollment_readiness": {
+                "state": "blocked", "ready": False,
+                "reason_codes": ["space_not_found"],
+                "next_step_code": "inspect_space_registry",
+                "requires_explicit_write": False,
+            },
+            "next_step_codes": ["inspect_space_registry"],
+        }
+    config = space.load_config()
+    trusted_root = _trusted_space_project_root(space, enrollment=True)
+    readiness = nova_enrollment_readiness(space, trusted_project_root=trusted_root)
+    configured_project = str(config.get("project_dir") or "").strip()
+    root_status = ("not_configured" if not configured_project else
+                   "verified" if trusted_root is not None else "unverified")
+    safe_id = str(config.get("space_id") or "").strip()
+    identity = {"space_id": safe_id if readiness.get("space_id_persisted") else "",
+                "space_id_persisted": bool(readiness.get("space_id_persisted"))}
+    safe_readiness = {key: readiness.get(key) for key in (
+        "state", "ready", "space_id_persisted", "project_dir_configured",
+        "project_dir_available", "trusted_root_verified", "yolo", "enrolled",
+        "governance_revision", "reason_codes", "next_step_code",
+        "requires_explicit_write")}
+    next_step = str(safe_readiness.get("next_step_code") or "none")
+    if next_step not in _NOVA_INVENTORY_NEXT_STEPS:
+        next_step = "inspect_space_registry"
+        safe_readiness["next_step_code"] = next_step
+    fingerprint = space_root_fingerprint(trusted_root) if trusted_root is not None else ""
+    return {"slug": normalized, "exists": True, "identity": identity,
+            "root": {"status": root_status, "fingerprint": fingerprint},
+            "enrollment_readiness": safe_readiness, "next_step_codes": [next_step]}
+
+
+def _nova_space_inventory(*, profile_name: str = "default", profile_home: Path | None = None) -> dict[str, object]:
+    """Build the fixed inventory without writes, bound to one profile home."""
+    entries = [_redacted_nova_space_inventory_entry(slug, profile_home=profile_home)
+               if profile_home is not None else _redacted_nova_space_inventory_entry(slug)
+               for slug in _NOVA_INVENTORY_TARGETS]
+    return {"spaces": entries, "read_only": True,
+            "targets": list(_NOVA_INVENTORY_TARGETS),
+            "profile": {"scope": str(profile_name or "default")}}
+
+
+def _trusted_space_project_root(space, *, read_only: bool = False, enrollment: bool = False) -> Path | None:
+    """Resolve only the persisted project directory; never inspect client paths."""
+    project_dir = space.get_project_dir()
+    if not project_dir:
+        return None
+    try:
+        if enrollment:
+            resolver = resolve_enrollment_trusted_workspace_read_only
+        else:
+            resolver = resolve_trusted_workspace_read_only if read_only else resolve_trusted_workspace
+        resolved = Path(resolver(project_dir)).expanduser().resolve()
+    except Exception:
+        return None
+    return resolved if resolved.is_dir() else None
+
+
+@app.get("/api/nova/space-inventory")
+async def _get_nova_space_inventory_route(request: Request):
+    """Return fixed, redacted enrollment diagnostics without side effects."""
+    if request is None:
+        return _nova_space_inventory()
+    from web.api.profiles import get_active_profile_name, get_profile_home, _PROFILE_ID_RE
+    from web.api.helpers import get_profile_cookie_name
+    raw_profile = str(request.cookies.get(get_profile_cookie_name()) or "").strip()
+    profile_name = (raw_profile if raw_profile == "default" or _PROFILE_ID_RE.fullmatch(raw_profile)
+                    else str(get_active_profile_name() or "default"))
+    return _nova_space_inventory(profile_name=profile_name,
+                                 profile_home=get_profile_home(profile_name))
+
+
+async def get_nova_space_inventory(request: Request | None = None):
+    """Compatibility callable for tests and local read-only diagnostics."""
+    if request is None:
+        return _nova_space_inventory()
+    return await _get_nova_space_inventory_route(request)
+
+
+@app.get("/api/space/nova-management")
+async def get_space_nova_management(slug: str = ""):
+    """Read a Space's governance snapshot without triggering legacy bootstrap."""
+    from web.api.space_engine import SpaceGovernanceError, get_existing_space_read_only
+
+    space = get_existing_space_read_only(str(slug).strip().lower()) if slug else None
+    if not space:
+        raise HTTPException(status_code=404, detail="Space not found")
+    try:
+        return _nova_management_payload(
+            space, _trusted_space_project_root(space, read_only=True, enrollment=True)
+        )
+    except SpaceGovernanceError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/space/nova-management")
+async def update_space_nova_management(request: Request):
+    """Apply the explicitly confirmed, server-root-bound governance transition."""
+    from web.api.space_engine import (
+        SpaceConfigMalformedError,
+        SpaceGovernanceError,
+        get_existing_space_read_only,
+        update_nova_management,
+    )
+
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+    slug = str(body.get("slug") or "").strip().lower()
+    space = get_existing_space_read_only(slug) if slug else None
+    if not space:
+        raise HTTPException(status_code=404, detail="Space not found")
+    actor = dashboard_session_principal(request)
+    if actor is None:
+        raise HTTPException(status_code=403, detail="Authenticated dashboard actor required")
+    try:
+        update_nova_management(
+            space,
+            yolo=body.get("yolo"),
+            enrolled=body.get("enrolled"),
+            confirmation=body.get("confirmation"),
+            trusted_project_root=_trusted_space_project_root(space, enrollment=True),
+            actor=actor,
+        )
+    except SpaceConfigMalformedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SpaceGovernanceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _nova_management_payload(space, _trusted_space_project_root(space, enrollment=True))
+
+
+@app.get("/api/space/nova-management/audit")
+async def get_space_nova_management_audit(slug: str = ""):
+    """Return the append-only governance evidence without writing Space state."""
+    from web.api.space_engine import (
+        SpaceConfigMalformedError,
+        SpaceGovernanceError,
+        get_existing_space_read_only,
+        list_nova_management_audit,
+    )
+
+    space = get_existing_space_read_only(str(slug).strip().lower()) if slug else None
+    if not space:
+        raise HTTPException(status_code=404, detail="Space not found")
+    try:
+        events = list_nova_management_audit(space)
+    except (SpaceConfigMalformedError, SpaceGovernanceError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"slug": space.slug, "events": events}
+
+
+@app.get("/login", include_in_schema=False)
+async def login_page(request: Request):
+    """Serve the password-login page through the authenticated route module.
+
+    The SPA fallback cannot serve this path: its boot requests are password
+    protected and would redirect back to ``/login`` with an ever-growing
+    ``next`` value. The in-process route adapter preserves the route module's
+    explicit public-login handling.
+    """
+    return await dispatch_route(request)
+
+
+# ---------------------------------------------------------------------------
+# Config schema Ã¢â‚¬â€ auto-generated from DEFAULT_CONFIG
+# ---------------------------------------------------------------------------
+
+# Manual overrides for fields that need select options or custom types
+_SCHEMA_OVERRIDES: Dict[str, Dict[str, Any]] = {
+    "model": {
+        "type": "string",
+        "description": "Default model (e.g. anthropic/claude-sonnet-4.6)",
+        "category": "general",
+    },
+    "model_context_length": {
+        "type": "number",
+        "description": "Context window override (0 = auto-detect from model metadata)",
+        "category": "general",
+    },
+    "terminal.backend": {
+        "type": "select",
+        "description": "Terminal execution backend",
+        "options": ["local", "docker", "ssh", "modal", "daytona", "vercel_sandbox", "singularity"],
+    },
+    "terminal.vercel_runtime": {
+        "type": "select",
+        "description": "Vercel Sandbox runtime",
+        "options": ["node24", "node22", "python3.13"],  # sync with _SUPPORTED_VERCEL_RUNTIMES in terminal_tool.py
+    },
+    "terminal.modal_mode": {
+        "type": "select",
+        "description": "Modal sandbox mode",
+        "options": ["sandbox", "function"],
+    },
+    "tts.provider": {
+        "type": "select",
+        "description": "Text-to-speech provider",
+        "options": ["edge", "elevenlabs", "openai", "neutts"],
+    },
+    "stt.provider": {
+        "type": "select",
+        "description": "Speech-to-text provider",
+        "options": ["local", "openai", "mistral"],
+    },
+    "display.skin": {
+        "type": "select",
+        "description": "CLI visual theme",
+        "options": ["default", "ares", "mono", "slate"],
+    },
+    "dashboard.theme": {
+        "type": "select",
+        "description": "Web dashboard visual theme",
+        "options": ["default", "midnight", "ember", "mono", "cyberpunk", "rose"],
+    },
+    "display.resume_display": {
+        "type": "select",
+        "description": "How resumed sessions display history",
+        "options": ["minimal", "full", "off"],
+    },
+    "display.busy_input_mode": {
+        "type": "select",
+        "description": "Input behavior while agent is running",
+        "options": ["interrupt", "queue", "steer"],
+    },
+    "memory.provider": {
+        "type": "select",
+        "description": "Memory provider plugin",
+        "options": ["builtin", "honcho"],
+    },
+    "approvals.mode": {
+        "type": "select",
+        "description": "Dangerous command approval mode (manual, smart, off)",
+        "options": ["manual", "smart", "off"],
+    },
+    "context.engine": {
+        "type": "select",
+        "description": "Context management engine",
+        "options": ["default", "custom"],
+    },
+    "human_delay.mode": {
+        "type": "select",
+        "description": "Simulated typing delay mode",
+        "options": ["off", "typing", "fixed"],
+    },
+    "logging.level": {
+        "type": "select",
+        "description": "Log level for agent.log",
+        "options": ["DEBUG", "INFO", "WARNING", "ERROR"],
+    },
+    "agent.service_tier": {
+        "type": "select",
+        "description": "API service tier (OpenAI/Anthropic)",
+        "options": ["", "auto", "default", "flex"],
+    },
+    "delegation.reasoning_effort": {
+        "type": "select",
+        "description": "Reasoning effort for delegated subagents",
+        "options": ["", "low", "medium", "high"],
+    },
+}
+
+# Categories with fewer fields get merged into "general" to avoid tab sprawl.
+_CATEGORY_MERGE: Dict[str, str] = {
+    "privacy": "security",
+    "context": "agent",
+    "skills": "agent",
+    "cron": "agent",
+    "network": "agent",
+    "checkpoints": "agent",
+    "approvals": "security",
+    "human_delay": "display",
+    "dashboard": "display",
+    "code_execution": "agent",
+    "prompt_caching": "agent",
+    "goals": "agent",
+    # Only `telegram.reactions` currently lives under telegram Ã¢â‚¬â€ fold it in
+    # with the other messaging-platform config (discord) so it isn't an
+    # orphan tab of one field.
+    "telegram": "discord",
+}
+
+# Display order for tabs Ã¢â‚¬â€ unlisted categories sort alphabetically after these.
+_CATEGORY_ORDER = [
+    "general", "agent", "terminal", "display", "delegation",
+    "memory", "compression", "security", "browser", "voice",
+    "tts", "stt", "logging", "discord", "auxiliary",
+]
+
+
+def _infer_type(value: Any) -> str:
+    """Infer a UI field type from a Python value."""
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "number"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, list):
+        return "list"
+    if isinstance(value, dict):
+        return "object"
+    return "string"
+
+
+def _build_schema_from_config(
+    config: Dict[str, Any],
+    prefix: str = "",
+) -> Dict[str, Dict[str, Any]]:
+    """Walk DEFAULT_CONFIG and produce a flat dot-path Ã¢â€ â€™ field schema dict."""
+    schema: Dict[str, Dict[str, Any]] = {}
+    for key, value in config.items():
+        full_key = f"{prefix}.{key}" if prefix else key
+
+        # Skip internal / version keys
+        if full_key in {"_config_version",}:
+            continue
+
+        # Category is the first path component for nested keys, or "general"
+        # for top-level scalar fields (model, toolsets, timezone, etc.).
+        if prefix:
+            category = prefix.split(".")[0]
+        elif isinstance(value, dict):
+            category = key
+        else:
+            category = "general"
+
+        if isinstance(value, dict):
+            # Recurse into nested dicts
+            schema.update(_build_schema_from_config(value, full_key))
+        else:
+            entry: Dict[str, Any] = {
+                "type": _infer_type(value),
+                "description": full_key.replace(".", " Ã¢â€ â€™ ").replace("_", " ").title(),
+                "category": category,
+            }
+            # Apply manual overrides
+            if full_key in _SCHEMA_OVERRIDES:
+                entry.update(_SCHEMA_OVERRIDES[full_key])
+            # Merge small categories
+            entry["category"] = _CATEGORY_MERGE.get(entry["category"], entry["category"])
+            schema[full_key] = entry
+    return schema
+
+
+CONFIG_SCHEMA = _build_schema_from_config(DEFAULT_CONFIG)
+
+# Inject virtual fields that don't live in DEFAULT_CONFIG but are surfaced
+# by the normalize/denormalize cycle.  Insert model_context_length right after
+# the "model" key so it renders adjacent in the frontend.
+_mcl_entry = _SCHEMA_OVERRIDES["model_context_length"]
+_ordered_schema: Dict[str, Dict[str, Any]] = {}
+for _k, _v in CONFIG_SCHEMA.items():
+    _ordered_schema[_k] = _v
+    if _k == "model":
+        _ordered_schema["model_context_length"] = _mcl_entry
+CONFIG_SCHEMA = _ordered_schema
+
+
+class ConfigUpdate(BaseModel):
+    config: dict
+
+
+class EnvVarUpdate(BaseModel):
+    key: str
+    value: str
+
+
+class EnvVarDelete(BaseModel):
+    key: str
+
+
+class EnvVarReveal(BaseModel):
+    key: str
+
+
+class ModelAssignment(BaseModel):
+    """Payload for POST /api/model/set Ã¢â‚¬â€ assign a provider/model to a slot.
+
+    scope="main"        Ã¢â€ â€™ writes model.provider + model.default
+    scope="auxiliary"   Ã¢â€ â€™ writes auxiliary.<task>.provider + auxiliary.<task>.model
+    scope="auxiliary" with task=""  Ã¢â€ â€™ applied to every auxiliary.* slot
+    scope="auxiliary" with task="__reset__"  Ã¢â€ â€™ resets every slot to provider="auto"
+    """
+    scope: str
+    provider: str
+    model: str
+    task: str = ""
+
+
+_GATEWAY_HEALTH_URL = os.getenv("GATEWAY_HEALTH_URL")
+try:
+    _GATEWAY_HEALTH_TIMEOUT = float(os.getenv("GATEWAY_HEALTH_TIMEOUT", "3"))
+except (ValueError, TypeError):
+    _log.warning(
+        "Invalid GATEWAY_HEALTH_TIMEOUT value %r Ã¢â‚¬â€ using default 3.0s",
+        os.getenv("GATEWAY_HEALTH_TIMEOUT"),
+    )
+    _GATEWAY_HEALTH_TIMEOUT = 3.0
+
+# DEPRECATED (scheduled for removal): GATEWAY_HEALTH_URL / GATEWAY_HEALTH_TIMEOUT.
+# Cross-container / cross-host gateway liveness detection will be folded into a
+# first-class dashboard config key so it's no longer Docker-adjacent lore buried
+# in env vars.  The env vars still work for now so existing Compose deployments
+# don't break.  Do not add new callers Ã¢â‚¬â€ wire new uses through the planned
+# config surface.
+
+
+def _probe_gateway_health() -> tuple[bool, dict | None]:
+    """Probe the gateway via its HTTP health endpoint (cross-container).
+
+    .. deprecated::
+        Driven by the deprecated ``GATEWAY_HEALTH_URL`` /
+        ``GATEWAY_HEALTH_TIMEOUT`` env vars.  Scheduled for removal alongside
+        a move to a first-class dashboard config key.  See
+        :data:`_GATEWAY_HEALTH_URL` for context.
+
+    Uses ``/health/detailed`` first (returns full state), falling back to
+    the simpler ``/health`` endpoint.  Returns ``(is_alive, body_dict)``.
+
+    Accepts any of these as ``GATEWAY_HEALTH_URL``:
+    - ``http://gateway:8642``                (base URL Ã¢â‚¬â€ recommended)
+    - ``http://gateway:8642/health``         (explicit health path)
+    - ``http://gateway:8642/health/detailed`` (explicit detailed path)
+
+    This is a **blocking** call Ã¢â‚¬â€ run via ``run_in_executor`` from async code.
+    """
+    if not _GATEWAY_HEALTH_URL:
+        return False, None
+
+    # Normalise to base URL so we always probe the right paths regardless of
+    # whether the user included /health or /health/detailed in the env var.
+    base = _GATEWAY_HEALTH_URL.rstrip("/")
+    if base.endswith("/health/detailed"):
+        base = base[: -len("/health/detailed")]
+    elif base.endswith("/health"):
+        base = base[: -len("/health")]
+
+    for path in (f"{base}/health/detailed", f"{base}/health"):
+        try:
+            req = urllib.request.Request(path, method="GET")
+            with urllib.request.urlopen(req, timeout=_GATEWAY_HEALTH_TIMEOUT) as resp:
+                if resp.status == 200:
+                    body = json.loads(resp.read())
+                    return True, body
+        except Exception:
+            continue
+    return False, None
+
+
+@app.get("/api/status")
+async def get_status():
+    current_ver, latest_ver = check_config_version()
+
+    # --- Gateway liveness detection ---
+    # Try local PID check first (same-host).  If that fails and a remote
+    # GATEWAY_HEALTH_URL is configured, probe the gateway over HTTP so the
+    # dashboard works when the gateway runs in a separate container.
+    gateway_pid = get_running_pid()
+    gateway_running = gateway_pid is not None
+    remote_health_body: dict | None = None
+
+    if not gateway_running and _GATEWAY_HEALTH_URL:
+        loop = asyncio.get_running_loop()
+        alive, remote_health_body = await loop.run_in_executor(
+            None, _probe_gateway_health
+        )
+        if alive:
+            gateway_running = True
+            # PID from the remote container (display only Ã¢â‚¬â€ not locally valid)
+            if remote_health_body:
+                gateway_pid = remote_health_body.get("pid")
+
+    gateway_state = None
+    gateway_platforms: dict = {}
+    gateway_exit_reason = None
+    gateway_updated_at = None
+    configured_gateway_platforms: set[str] | None = None
+    try:
+        from gateway.config import load_gateway_config
+
+        gateway_config = load_gateway_config()
+        configured_gateway_platforms = {
+            platform.value for platform in gateway_config.get_connected_platforms()
+        }
+    except Exception:
+        configured_gateway_platforms = None
+
+    # Prefer the detailed health endpoint response (has full state) when the
+    # local runtime status file is absent or stale (cross-container).
+    runtime = read_runtime_status()
+    if runtime is None and remote_health_body and remote_health_body.get("gateway_state"):
+        runtime = remote_health_body
+
+    if runtime:
+        gateway_state = runtime.get("gateway_state")
+        gateway_platforms = runtime.get("platforms") or {}
+        if configured_gateway_platforms is not None:
+            gateway_platforms = {
+                key: value
+                for key, value in gateway_platforms.items()
+                if key in configured_gateway_platforms
+            }
+        gateway_exit_reason = runtime.get("exit_reason")
+        gateway_updated_at = runtime.get("updated_at")
+        if not gateway_running:
+            gateway_state = gateway_state if gateway_state in {"stopped", "startup_failed"} else "stopped"
+            gateway_platforms = {}
+        elif gateway_running and remote_health_body is not None:
+            # The health probe confirmed the gateway is alive, but the local
+            # runtime status file may be stale (cross-container).  Override
+            # stopped/None state so the dashboard shows the correct badge.
+            if gateway_state in {None, "stopped"}:
+                gateway_state = "running"
+
+    # If there was no runtime info at all but the health probe confirmed alive,
+    # ensure we still report the gateway as running (no shared volume scenario).
+    if gateway_running and gateway_state is None and remote_health_body is not None:
+        gateway_state = "running"
+
+    active_sessions = 0
+    try:
+        from runtime._compat.shim_state import SessionDB
+        db = SessionDB()
+        try:
+            sessions = db.list_sessions_rich(limit=50)
+            now = time.time()
+            active_sessions = sum(
+                1 for s in sessions
+                if s.get("ended_at") is None
+                and (now - s.get("last_active", s.get("started_at", 0))) < 300
+            )
+        finally:
+            db.close()
+    except Exception:
+        pass
+
+    return {
+        "version": __version__,
+        "release_date": __release_date__,
+        "sidekick_home": str(get_sidekick_home()),
+        "config_path": str(get_config_path()),
+        "env_path": str(get_env_path()),
+        "config_version": current_ver,
+        "latest_config_version": latest_ver,
+        "gateway_running": gateway_running,
+        "gateway_pid": gateway_pid,
+        "gateway_health_url": _GATEWAY_HEALTH_URL,
+        "gateway_state": gateway_state,
+        "gateway_platforms": gateway_platforms,
+        "gateway_exit_reason": gateway_exit_reason,
+        "gateway_updated_at": gateway_updated_at,
+        "active_sessions": active_sessions,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Workspace git-status endpoint.
+# ---------------------------------------------------------------------------
+
+
+def _run_git(path: Path, *args: str) -> Optional[str]:
+    """Run ``git <args>`` inside ``path`` and return stdout (stripped), or None on failure."""
+    try:
+        res = subprocess.run(
+            ["git", *args],
+            cwd=str(path),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+        if res.returncode == 0:
+            return res.stdout.strip()
+        return None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+
+
+def _resolve_workspace_path() -> Path:
+    """Resolve the workspace directory from config, falling back to sidekick_home."""
+    try:
+        raw = cfg_get("terminal.cwd", ".")
+        if raw and raw != ".":
+            expanded = os.path.expanduser(os.path.expandvars(raw))
+            if os.path.isabs(expanded):
+                return Path(expanded)
+            return PROJECT_ROOT / expanded
+    except Exception:
+        pass
+    return PROJECT_ROOT
+
+
+@app.get("/api/workspaces")
+async def list_workspaces():
+    """List all workspaces and space-engine spaces for the current profile."""
+    ws = load_workspaces()
+    last = get_last_workspace()
+    # Also include space-engine workspaces so the "Spaces" sidebar shows them.
+    # Keep this merge best-effort, but never swallow failures silently during
+    # migration debugging.
+    try:
+        from web.api.space_engine import get_all_workspaces
+        existing_space_slugs = {
+            str(s.get("slug") or "").strip().lower()
+            for s in ws
+            if isinstance(s, dict) and s.get("slug")
+        }
+        spaces = []
+        for w in get_all_workspaces():
+            slug = str(getattr(w, "slug", "") or "").strip().lower()
+            if slug and slug in existing_space_slugs:
+                continue
+            spaces.append(
+                {
+                    "path": w.get_project_dir() or "",
+                    "name": w.name,
+                    "slug": w.slug,
+                    "is_space": True,
+                }
+            )
+        ws.extend(spaces)
+    except Exception:
+        _log.exception("GET /api/workspaces: failed to merge space-engine workspaces")
+    return {"workspaces": ws, "last": last}
+
+
+@app.get("/api/spaces")
+async def list_spaces():
+    """List all spaces for the current profile."""
+    from web.api.space_engine import DEFAULT_SPACE_SLUG, get_all_workspaces
+    workspaces = [w.to_dict() for w in get_all_workspaces()]
+    return {"spaces": workspaces, "default_space": DEFAULT_SPACE_SLUG}
+
+
+@app.get("/api/workspace/git-status")
+async def get_workspace_git_status():
+    """Return git status for the current workspace directory.
+
+    Returns an object with:
+      - ``workspace_path``: absolute workspace path
+      - ``branch``: current git branch or null
+      - ``commit``: short commit hash or null
+      - ``files``: list of {path, status, staged} objects
+      - ``is_git_repo``: whether the workspace is a git repository
+    """
+    workspace = _resolve_workspace_path()
+
+    # Check if it's a git repo
+    git_dir = _run_git(workspace, "rev-parse", "--git-dir")
+    is_git_repo = git_dir is not None
+
+    if not is_git_repo:
+        return {
+            "workspace_path": str(workspace),
+            "is_git_repo": False,
+            "branch": None,
+            "commit": None,
+            "files": [],
+        }
+
+    branch = _run_git(workspace, "rev-parse", "--abbrev-ref", "HEAD")
+    commit = _run_git(workspace, "rev-parse", "--short", "HEAD")
+
+    # Parse `git status --porcelain` output
+    porcelain = _run_git(workspace, "status", "--porcelain")
+    files: List[Dict[str, Any]] = []
+    if porcelain:
+        for line in porcelain.splitlines():
+            line = line.rstrip("\n\r")
+            if not line:
+                continue
+            # --porcelain format: XY filename
+            #   X = staging area status, Y = worktree status
+            #   ???? = untracked (??)
+            xy = line[:2]
+            path_part = line[3:]  # filename starts at offset 3
+            staged = xy[0] if xy[0] != " " else ""
+            worktree = xy[1] if xy[1] != " " else ""
+            files.append({
+                "path": path_part,
+                "status": _git_status_label(staged, worktree, xy),
+                "staged": staged != "",
+            })
+
+    return {
+        "workspace_path": str(workspace),
+        "is_git_repo": True,
+        "branch": branch,
+        "commit": commit,
+        "files": files,
+    }
+
+
+def _git_status_label(staged: str, worktree: str, raw: str) -> str:
+    """Map git status codes to human-friendly single-char labels."""
+    if raw == "??":
+        return "?"
+    code = staged or worktree
+    mapping = {
+        "M": "M",
+        "A": "A",
+        "D": "D",
+        "R": "R",
+        "C": "C",
+        "U": "U",
+        "?": "?",
+    }
+    return mapping.get(code, code)
+
+
+# ---------------------------------------------------------------------------
+# Gateway + update actions (invoked from the Status page).
+#
+# Both commands are spawned as detached subprocesses so the HTTP request
+# returns immediately.  stdin is closed (``DEVNULL``) so any stray ``input()``
+# calls fail fast with EOF rather than hanging forever.  stdout/stderr are
+# streamed to a per-action log file under ``~/.sidekick/logs/<action>.log`` so
+# the dashboard can tail them back to the user.
+# ---------------------------------------------------------------------------
+
+_ACTION_LOG_DIR: Path = get_sidekick_home() / "logs"
+
+# Short ``name`` (from the URL) Ã¢â€ â€™ absolute log file path.
+_ACTION_LOG_FILES: Dict[str, str] = {
+    "gateway-restart": "gateway-restart.log",
+    "sidekick-update": "sidekick-update.log",
+}
+
+# ``name`` Ã¢â€ â€™ most recently spawned Popen handle.  Used so ``status`` can
+# report liveness and exit code without shelling out to ``ps``.
+_ACTION_PROCS: Dict[str, subprocess.Popen] = {}
+
+
+def _spawn_sidekick_action(subcommand: List[str], name: str) -> subprocess.Popen:
+    """Spawn ``sidekick <subcommand>`` detached and record the Popen handle.
+
+    Uses the running interpreter's ``sidekick_cli.main`` module so the action
+    inherits the same venv/PYTHONPATH the web server is using.
+    """
+    log_file_name = _ACTION_LOG_FILES[name]
+    _ACTION_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = _ACTION_LOG_DIR / log_file_name
+    log_file = open(log_path, "ab", buffering=0)
+    log_file.write(
+        f"\n=== {name} started {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n".encode()
+    )
+
+    cmd = [sys.executable, "-m", "sidekick_cli.main", *subcommand]
+
+    popen_kwargs: Dict[str, Any] = {
+        "cwd": str(PROJECT_ROOT),
+        "stdin": subprocess.DEVNULL,
+        "stdout": log_file,
+        "stderr": subprocess.STDOUT,
+        "env": {**os.environ, "SIDEKICK_NONINTERACTIVE": "1"},
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = (
+            subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+            | getattr(subprocess, "DETACHED_PROCESS", 0)
+        )
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    proc = subprocess.Popen(cmd, **popen_kwargs)
+    _ACTION_PROCS[name] = proc
+    return proc
+
+
+def _tail_lines(path: Path, n: int) -> List[str]:
+    """Return the last ``n`` lines of ``path``.  Reads the whole file Ã¢â‚¬â€ fine
+    for our small per-action logs.  Binary-decoded with ``errors='replace'``
+    so log corruption doesn't 500 the endpoint."""
+    if not path.exists():
+        return []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    lines = text.splitlines()
+    return lines[-n:] if n > 0 else lines
+
+
+# ---------------------------------------------------------------------------
+# Discord channel management API
+# ---------------------------------------------------------------------------
+
+# Demo guilds for the channel reorder UI. In production these would be
+# loaded from the Discord gateway's connected guild list.
+_DEMO_GUILDS: List[Dict[str, Any]] = [
+    {
+        "id": "111111111111111111",
+        "name": "Sidekick Agent HQ",
+        "icon_url": None,
+        "channel_count": 12,
+        "member_count": 48,
+    },
+    {
+        "id": "222222222222222222",
+        "name": "LTTH Community",
+        "icon_url": None,
+        "channel_count": 8,
+        "member_count": 124,
+    },
+    {
+        "id": "333333333333333333",
+        "name": "Project Alpha",
+        "icon_url": None,
+        "channel_count": 6,
+        "member_count": 27,
+    },
+]
+
+_DEMO_CHANNELS_BY_GUILD: Dict[str, List[Dict[str, Any]]] = {
+    "111111111111111111": [
+        {"id": "c01", "guild_id": "111111111111111111", "name": "announcements", "type": "announcement", "position": 0, "parent_id": None},
+        {"id": "c02", "guild_id": "111111111111111111", "name": "welcome", "type": "text", "position": 1, "parent_id": None},
+        {"id": "c03", "guild_id": "111111111111111111", "name": "general", "type": "text", "position": 2, "parent_id": None},
+        {"id": "c04", "guild_id": "111111111111111111", "name": "dev-chat", "type": "text", "position": 3, "parent_id": None},
+        {"id": "c05", "guild_id": "111111111111111111", "name": "support", "type": "forum", "position": 4, "parent_id": None},
+        {"id": "c06", "guild_id": "111111111111111111", "name": "Voice Channels", "type": "category", "position": 5, "parent_id": None},
+        {"id": "c07", "guild_id": "111111111111111111", "name": "General Voice", "type": "voice", "position": 6, "parent_id": "c06"},
+        {"id": "c08", "guild_id": "111111111111111111", "name": "Music", "type": "voice", "position": 7, "parent_id": "c06"},
+        {"id": "c09", "guild_id": "111111111111111111", "name": "AFK", "type": "voice", "position": 8, "parent_id": "c06"},
+        {"id": "c10", "guild_id": "111111111111111111", "name": "Resources", "type": "category", "position": 9, "parent_id": None},
+        {"id": "c11", "guild_id": "111111111111111111", "name": "useful-links", "type": "text", "position": 10, "parent_id": "c10"},
+        {"id": "c12", "guild_id": "111111111111111111", "name": "showcase", "type": "text", "position": 11, "parent_id": "c10"},
+    ],
+    "222222222222222222": [
+        {"id": "d01", "guild_id": "222222222222222222", "name": "rules", "type": "text", "position": 0, "parent_id": None},
+        {"id": "d02", "guild_id": "222222222222222222", "name": "general", "type": "text", "position": 1, "parent_id": None},
+        {"id": "d03", "guild_id": "222222222222222222", "name": "live-streams", "type": "text", "position": 2, "parent_id": None},
+        {"id": "d04", "guild_id": "222222222222222222", "name": "clips", "type": "text", "position": 3, "parent_id": None},
+        {"id": "d05", "guild_id": "222222222222222222", "name": "commands", "type": "text", "position": 4, "parent_id": None},
+        {"id": "d06", "guild_id": "222222222222222222", "name": "Voice", "type": "category", "position": 5, "parent_id": None},
+        {"id": "d07", "guild_id": "222222222222222222", "name": "Chat", "type": "voice", "position": 6, "parent_id": "d06"},
+        {"id": "d08", "guild_id": "222222222222222222", "name": "Stage", "type": "stage", "position": 7, "parent_id": "d06"},
+    ],
+    "333333333333333333": [
+        {"id": "e01", "guild_id": "333333333333333333", "name": "status", "type": "text", "position": 0, "parent_id": None},
+        {"id": "e02", "guild_id": "333333333333333333", "name": "bugs", "type": "forum", "position": 1, "parent_id": None},
+        {"id": "e03", "guild_id": "333333333333333333", "name": "feature-requests", "type": "text", "position": 2, "parent_id": None},
+        {"id": "e04", "guild_id": "333333333333333333", "name": "screenshots", "type": "text", "position": 3, "parent_id": None},
+        {"id": "e05", "guild_id": "333333333333333333", "name": "team-chat", "type": "text", "position": 4, "parent_id": None},
+        {"id": "e06", "guild_id": "333333333333333333", "name": "standup", "type": "voice", "position": 5, "parent_id": None},
+    ],
+}
+
+
+class DiscordReorderPayload(BaseModel):
+    position: Optional[int] = None
+    parent_id: Optional[str] = None
+
+
+@app.get("/api/discord/guilds")
+async def get_discord_guilds():
+    """
+    Return the list of Discord guilds (servers) the bot is connected to.
+    Currently returns demo data; will be replaced with Discord gateway query.
+    """
+    return {"guilds": _DEMO_GUILDS}
+
+
+@app.get("/api/discord/guilds/{guild_id}/channels")
+async def get_discord_channels(guild_id: str):
+    """
+    Return channels for a given Discord guild.
+    Currently returns demo data; will be replaced with Discord gateway query.
+    """
+    channels = _DEMO_CHANNELS_BY_GUILD.get(guild_id, [])
+    return {"channels": channels}
+
+
+@app.put("/api/discord/channels/{channel_id}")
+async def reorder_discord_channel(channel_id: str, body: DiscordReorderPayload):
+    """
+    Update a channel's position and/or parent category.
+    In production this sends a REST API call to Discord.
+    For now it's a no-op that always succeeds.
+    """
+    # In production: discord_api.modify_channel(channel_id, position=body.position, parent_id=body.parent_id)
+    return {"ok": True}
+
+
+@app.post("/api/gateway/restart")
+async def restart_gateway():
+    """Kick off a ``sidekick gateway restart`` in the background."""
+    try:
+        proc = _spawn_sidekick_action(["gateway", "restart"], "gateway-restart")
+    except Exception as exc:
+        _log.exception("Failed to spawn gateway restart")
+        raise HTTPException(status_code=500, detail=f"Failed to restart gateway: {exc}") from exc
+    return {
+        "ok": True,
+        "pid": proc.pid,
+        "name": "gateway-restart",
+    }
+
+
+@app.post("/api/sidekick/update")
+async def update_sidekick():
+    """Kick off ``sidekick update`` in the background."""
+    try:
+        proc = _spawn_sidekick_action(["update"], "sidekick-update")
+    except Exception as exc:
+        _log.exception("Failed to spawn Sidekick update")
+        raise HTTPException(status_code=500, detail=f"Failed to start update: {exc}") from exc
+    return {
+        "ok": True,
+        "pid": proc.pid,
+        "name": "sidekick-update",
+    }
+
+
+@app.get("/api/actions/{name}/status")
+async def get_action_status(name: str, lines: int = 200):
+    """Tail an action log and report whether the process is still running."""
+    log_file_name = _ACTION_LOG_FILES.get(name)
+    if log_file_name is None:
+        raise HTTPException(status_code=404, detail=f"Unknown action: {name}")
+
+    log_path = _ACTION_LOG_DIR / log_file_name
+    tail = _tail_lines(log_path, min(max(lines, 1), 2000))
+
+    proc = _ACTION_PROCS.get(name)
+    if proc is None:
+        running = False
+        exit_code: Optional[int] = None
+        pid: Optional[int] = None
+    else:
+        exit_code = proc.poll()
+        running = exit_code is None
+        pid = proc.pid
+
+    return {
+        "name": name,
+        "running": running,
+        "exit_code": exit_code,
+        "pid": pid,
+        "lines": tail,
+    }
+
+
+def _workspace_slug_from_request(request: Request) -> str:
+    """Return the active Space slug supplied by the WebUI, if any."""
+    value = (
+        request.query_params.get("workspace")
+        or request.headers.get("X-Sidekick-Workspace")
+        or ""
+    )
+    return str(value).strip().lower()
+
+
+def _get_space_workspace(slug: str):
+    from web.api.space_engine import DEFAULT_SPACE_SLUG, get_workspace
+
+    ws = get_workspace(slug)
+    if ws:
+        return ws, slug
+    if slug == "default":
+        ws = get_workspace(DEFAULT_SPACE_SLUG)
+        if ws:
+            return ws, DEFAULT_SPACE_SLUG
+    return None, slug
+
+
+def _load_space_sessions(slug: str) -> list[dict[str, Any]]:
+    """Load sessions from the filesystem-owned Space index.
+
+    The canonical Space session source is
+    ``SIDEKICK_HOME/spaces/<slug>/sessions/_index.json``.  ``state.db`` is a
+    global analytics/search store and does not carry enough Space metadata for
+    safe sidebar isolation.
+    """
+    slug = str(slug or "").strip().lower()
+    if not slug:
+        return []
+
+    ws, slug = _get_space_workspace(slug)
+    if not ws:
+        return []
+    _repair_stale_space_index(slug, ws.sessions_dir)
+    index_path = ws.sessions_dir / "_index.json"
+    try:
+        raw = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []
+    except Exception:
+        raw = []
+    if not isinstance(raw, list):
+        raw = []
+    index_changed = False
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        if not row.get("active_stream_id"):
+            continue
+        # Never strip markers for a stream that is still alive in this
+        # process — see _repair_stale_space_index for the full rationale.
+        if _stream_is_active_for_space(str(row.get("active_stream_id") or ""), slug):
+            continue
+        row["active_stream_id"] = None
+        row["pending_user_message"] = None
+        row["pending_attachments"] = []
+        row["pending_started_at"] = None
+        row["has_pending_user_message"] = False
+        row["is_streaming"] = False
+        index_changed = True
+    if index_changed:
+        try:
+            _write_json_file(index_path, raw)
+        except Exception:
+            _log.debug("Failed to update stale stream markers in %s", index_path, exc_info=True)
+    sessions: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        sid = str(item.get("session_id") or "").strip()
+        if not sid:
+            continue
+        path = ws.sessions_dir / f"{sid}.json"
+        if not path.exists():
+            continue
+        row = dict(item)
+        row.setdefault("profile", "default")
+        row["workspace_slug"] = slug
+        sessions.append(row)
+    sessions.sort(key=lambda s: (bool(s.get("pinned", False)), s.get("last_message_at") or s.get("updated_at") or 0), reverse=True)
+    sessions = [s for s in sessions if not (
+        is_default_session_title(s.get("title"))
+        and s.get("message_count", 0) == 0
+        and not s.get("active_stream_id")
+        and not s.get("has_pending_user_message")
+        and not s.get("worktree_path")
+    )]
+    return sessions
+
+
+def _repair_stale_space_index(slug: str, sessions_dir: Path) -> int:
+    index_path = sessions_dir / "_index.json"
+    if not index_path.exists():
+        return 0
+    try:
+        raw = json.loads(index_path.read_text(encoding="utf-8"))
+    except Exception:
+        return 0
+    if not isinstance(raw, list):
+        return 0
+    changed = 0
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        if not row.get("active_stream_id"):
+            continue
+        # Liveness is the ground truth — NOT the persisted is_streaming flag.
+        # Session.save() writes index rows through compact() without runtime
+        # info, so is_streaming is False even while a stream is running.  A
+        # stream that is still registered in this process must never be
+        # treated as stale: stripping its markers makes the WebUI render an
+        # actively streaming chat as idle after a refresh or Space switch
+        # (verified 2026-09-19).  This check is an in-process dict lookup, so
+        # it is safe on the listing hot path — the blocking HTTP round-trip
+        # that motivated its removal in 91331a0 no longer exists.
+        if _stream_is_active_for_space(str(row.get("active_stream_id") or ""), slug):
+            continue
+        sid = str(row.get("session_id") or "").strip()
+        path = sessions_dir / f"{sid}.json" if sid else None
+        detail = None
+        if path and path.exists():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    detail = loaded
+            except Exception:
+                detail = None
+        if detail is not None:
+            pending_text = str(detail.get("pending_user_message") or row.get("pending_user_message") or "")
+            messages = detail.setdefault("messages", [])
+            if pending_text and isinstance(messages, list):
+                normalized = " ".join(pending_text.split())
+                already_present = any(
+                    isinstance(existing, dict)
+                    and existing.get("role") == "user"
+                    and " ".join(str(existing.get("content") or "").split()) == normalized
+                    for existing in messages[-8:]
+                )
+                if normalized and not already_present:
+                    ts = detail.get("pending_started_at") or row.get("pending_started_at") or time.time()
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": pending_text,
+                            "timestamp": int(ts) if isinstance(ts, (int, float)) and ts > 0 else int(time.time()),
+                            "_recovered": True,
+                        }
+                    )
+            detail["active_stream_id"] = None
+            detail["pending_user_message"] = None
+            detail["pending_attachments"] = []
+            detail["pending_started_at"] = None
+            detail["message_count"] = _session_message_count(detail)
+            _normalize_space_session_slug(detail, slug)
+            _write_json_file(path, detail)
+            row["message_count"] = detail["message_count"]
+        row["active_stream_id"] = None
+        row["pending_user_message"] = None
+        row["pending_attachments"] = []
+        row["pending_started_at"] = None
+        row["has_pending_user_message"] = False
+        row["is_streaming"] = False
+        changed += 1
+    if changed:
+        _write_json_file(index_path, raw)
+    return changed
+
+
+def _is_space_scoped_request(request: Request) -> bool:
+    slug = _workspace_slug_from_request(request)
+    return bool(slug)
+
+
+def _space_session_path(slug: str, session_id: str) -> tuple[Path | None, str]:
+    slug = str(slug or "").strip().lower()
+    session_id = str(session_id or "").strip()
+    if not slug or not session_id:
+        return None, slug
+    ws, slug = _get_space_workspace(slug)
+    if not ws:
+        return None, slug
+    return ws.sessions_dir / f"{session_id}.json", slug
+
+
+def _json_default(value: Any):
+    if isinstance(value, Path):
+        return str(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
+def _write_json_file(path: Path, data: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=_json_default), encoding="utf-8")
+
+
+def _session_message_count(session: dict[str, Any]) -> int:
+    return len([m for m in session.get("messages") or [] if isinstance(m, dict) and m.get("role")])
+
+
+def _normalize_space_session_slug(session: dict[str, Any], slug: str) -> bool:
+    """Stamp a Space-owned session with the slug of its session directory."""
+    if not isinstance(session, dict):
+        return False
+    normalized = str(slug or "").strip().lower()
+    if not normalized:
+        return False
+    if session.get("workspace_slug") == normalized:
+        return False
+    session["workspace_slug"] = normalized
+    return True
+
+
+def _repair_space_session_slug(session: dict[str, Any], slug: str, path: Path | None = None) -> bool:
+    changed = _normalize_space_session_slug(session, slug)
+    if changed and path is not None:
+        try:
+            _write_json_file(path, session)
+        except Exception:
+            _log.debug("Failed to repair workspace_slug for %s", path, exc_info=True)
+    if changed and session.get("session_id"):
+        try:
+            _update_space_session_index(slug, session)
+        except Exception:
+            _log.debug("Failed to update repaired workspace_slug index row", exc_info=True)
+    return changed
+
+
+def _repair_stale_space_session_from_listing(session: dict[str, Any], slug: str) -> bool:
+    """Clear old interrupted stream markers before the sidebar sees them.
+
+    Older builds persisted ``active_stream_id``/``pending_user_message`` in
+    ``_index.json`` even after the worker was gone.  The browser then keeps
+    polling/reconnecting many dead streams across Spaces, which makes the UI
+    sluggish and can amplify backend 500s.  Only clear rows the index already
+    marks as not streaming and that are no longer fresh.
+    """
+    if not isinstance(session, dict) or not session.get("active_stream_id"):
+        return False
+    if bool(session.get("is_streaming")):
+        return False
+    sid = str(session.get("session_id") or "").strip()
+    if not sid:
+        return False
+    path, normalized_slug = _space_session_path(slug, sid)
+    if not path or not path.exists():
+        session["active_stream_id"] = None
+        session["pending_user_message"] = None
+        session["pending_attachments"] = []
+        session["pending_started_at"] = None
+        session["has_pending_user_message"] = False
+        session["is_streaming"] = False
+        return True
+    try:
+        detail = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(detail, dict):
+            pending_text = str(detail.get("pending_user_message") or session.get("pending_user_message") or "")
+            messages = detail.setdefault("messages", [])
+            if pending_text and isinstance(messages, list):
+                normalized = " ".join(pending_text.split())
+                already_present = False
+                for existing in reversed(messages[-8:]):
+                    if not isinstance(existing, dict) or existing.get("role") != "user":
+                        continue
+                    if " ".join(str(existing.get("content") or "").split()) == normalized:
+                        already_present = True
+                        break
+                if normalized and not already_present:
+                    now = time.time()
+                    ts = detail.get("pending_started_at") or session.get("pending_started_at") or now
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": pending_text,
+                            "timestamp": int(ts) if isinstance(ts, (int, float)) and ts > 0 else int(now),
+                            "_recovered": True,
+                        }
+                    )
+            detail["active_stream_id"] = None
+            detail["pending_user_message"] = None
+            detail["pending_attachments"] = []
+            detail["pending_started_at"] = None
+            detail["message_count"] = _session_message_count(detail)
+            _normalize_space_session_slug(detail, normalized_slug)
+            _write_json_file(path, detail)
+            _update_space_session_index(normalized_slug, detail)
+            session.update(
+                {
+                    "active_stream_id": None,
+                    "pending_user_message": None,
+                    "pending_attachments": [],
+                    "pending_started_at": None,
+                    "has_pending_user_message": False,
+                    "is_streaming": False,
+                    "message_count": detail.get("message_count", session.get("message_count", 0)),
+                }
+            )
+            return True
+    except Exception:
+        _log.debug("Failed to clear stale stream marker for %s/%s", slug, sid, exc_info=True)
+    return False
+
+
+_SPACE_STREAM_STATUS_CACHE: dict[tuple[str, str], tuple[float, bool]] = {}
+_SPACE_STREAM_STATUS_CACHE_TTL_SECONDS = 5.0
+_SPACE_STREAM_STATUS_TIMEOUT_SECONDS = 0.5
+
+
+def _stream_is_active_for_space(stream_id: str, slug: str) -> bool:
+    stream_id = str(stream_id or "").strip()
+    if not stream_id:
+        return False
+    cache_key = (str(slug or "").strip().lower(), stream_id)
+    now = time.time()
+    cached = _SPACE_STREAM_STATUS_CACHE.get(cache_key)
+    if cached and now - cached[0] < _SPACE_STREAM_STATUS_CACHE_TTL_SECONDS:
+        return cached[1]
+    try:
+        # The WebUI and route handlers now share a process.  Reading the
+        # stream registry directly avoids an internal HTTP round trip and the
+        # former random-port compatibility server.
+        from web.api.config import STREAMS
+
+        return stream_id in STREAMS
+    except Exception:
+        _log.debug("Failed to check space stream status for %s", stream_id, exc_info=True)
+        return True
+
+
+def _repair_stale_space_session_stream(session: dict[str, Any], path: Path, slug: str) -> bool:
+    stream_id = str(session.get("active_stream_id") or "").strip()
+    if not stream_id or _stream_is_active_for_space(stream_id, slug):
+        return False
+
+    pending_text = str(session.get("pending_user_message") or "")
+    messages = session.setdefault("messages", [])
+    if pending_text and isinstance(messages, list):
+        normalized = " ".join(pending_text.split())
+        already_present = False
+        if normalized:
+            for existing in reversed(messages[-8:]):
+                if not isinstance(existing, dict) or existing.get("role") != "user":
+                    continue
+                if " ".join(str(existing.get("content") or "").split()) == normalized:
+                    already_present = True
+                    break
+        if not already_present:
+            ts = session.get("pending_started_at") or time.time()
+            recovered = {
+                "role": "user",
+                "content": pending_text,
+                "timestamp": int(ts) if isinstance(ts, (int, float)) and ts > 0 else int(time.time()),
+                "_recovered": True,
+            }
+            attachments = session.get("pending_attachments")
+            if attachments:
+                recovered["attachments"] = list(attachments)
+            messages.append(recovered)
+
+    session["active_stream_id"] = None
+    session["pending_user_message"] = None
+    session["pending_attachments"] = []
+    session["pending_started_at"] = None
+    session["message_count"] = _session_message_count(session)
+    session["updated_at"] = time.time()
+    session.setdefault("workspace_slug", slug)
+    _write_json_file(path, session)
+    _update_space_session_index(slug, session)
+    return True
+
+
+def _update_space_session_index(slug: str, session: dict[str, Any]) -> None:
+    try:
+        from web.api.space_engine import get_workspace
+
+        ws = get_workspace(slug)
+        if not ws:
+            return
+        index_path = ws.sessions_dir / "_index.json"
+        index = []
+        if index_path.exists():
+            try:
+                raw = json.loads(index_path.read_text(encoding="utf-8"))
+                if isinstance(raw, list):
+                    index = raw
+            except Exception:
+                index = []
+        sid = session.get("session_id")
+        row = {
+            "session_id": sid,
+            "title": session.get("title") or "Untitled",
+            "workspace": session.get("workspace") or "",
+            "model": session.get("model") or "",
+            "model_provider": session.get("model_provider"),
+            "message_count": session.get("message_count", _session_message_count(session)),
+            "created_at": session.get("created_at") or session.get("started_at") or session.get("updated_at") or time.time(),
+            "updated_at": session.get("updated_at") or time.time(),
+            "last_message_at": session.get("last_message_at") or session.get("updated_at") or time.time(),
+            "pinned": bool(session.get("pinned", False)),
+            "archived": bool(session.get("archived", False)),
+            "project_id": session.get("project_id"),
+            "profile": session.get("profile") or "default",
+            "active_stream_id": session.get("active_stream_id"),
+            "pending_user_message": session.get("pending_user_message"),
+            "has_pending_user_message": bool(session.get("pending_user_message")),
+            "is_cli_session": False,
+            "workspace_slug": slug,
+            "composer_draft": session.get("composer_draft") or {"text": "", "files": []},
+            "is_streaming": bool(session.get("active_stream_id")),
+        }
+        next_index = [item for item in index if isinstance(item, dict) and item.get("session_id") != sid]
+        next_index.insert(0, row)
+        _write_json_file(index_path, next_index)
+    except Exception:
+        _log.debug("Failed to update space session index for %s", slug, exc_info=True)
+
+
+def _slice_session_messages(session: dict[str, Any], *, load_messages: bool, msg_limit: int | None, msg_before: int | None) -> tuple[list[Any], bool, int]:
+    if not load_messages:
+        return [], False, 0
+    messages = list(session.get("messages") or [])
+    if msg_before is not None:
+        before_idx = max(0, min(msg_before, len(messages)))
+        window = messages[:before_idx]
+        if msg_limit is not None:
+            return window[-msg_limit:], len(window) > msg_limit, max(0, before_idx - min(len(window), msg_limit))
+        return window, False, 0
+    if msg_limit is not None:
+        return messages[-msg_limit:], len(messages) > msg_limit, max(0, len(messages) - min(len(messages), msg_limit))
+    return messages, False, 0
+
+
+def _load_space_session_metadata(path: Path) -> dict[str, Any] | None:
+    """Read only the metadata prefix of a Space session JSON file.
+
+    Space session files keep ``messages`` as their final top-level field.  A
+    metadata-only boot request must not decode the complete transcript just to
+    discover the title, stream state and model.  The parser is deliberately
+    conservative and returns ``None`` for layouts it cannot prove safe.
+    """
+    if not isinstance(path, Path):
+        return None
+    try:
+        with path.open("rb") as handle:
+            prefix = handle.read(128 * 1024)
+    except OSError:
+        return None
+    key_pos = prefix.find(b'"messages"')
+    if key_pos < 0:
+        return None
+    colon = prefix.find(b":", key_pos + len(b'"messages"'))
+    if colon < 0:
+        return None
+    array_start = colon + 1
+    while array_start < len(prefix) and prefix[array_start] in b" \t\r\n":
+        array_start += 1
+    if array_start >= len(prefix) or prefix[array_start] != ord("["):
+        return None
+    head = prefix[:key_pos].rstrip()
+    if not head.endswith(b","):
+        return None
+    try:
+        session = json.loads(head[:-1].decode("utf-8") + "}")
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    if not isinstance(session, dict):
+        return None
+    session["messages"] = []
+    session["_metadata_only"] = True
+    return session
+
+
+def _space_session_index_message_count(slug: str, session_id: str) -> int | None:
+    """Return the compact message count without opening the transcript JSON."""
+    ws, _ = _get_space_workspace(str(slug or "").strip().lower())
+    if not ws:
+        return None
+    try:
+        raw = json.loads((ws.sessions_dir / "_index.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    if not isinstance(raw, list):
+        return None
+    for row in raw:
+        if isinstance(row, dict) and str(row.get("session_id") or "") == str(session_id):
+            try:
+                count = int(row.get("message_count"))
+            except (TypeError, ValueError):
+                return None
+            return max(0, count)
+    return None
+
+
+def _load_space_session_tail(path: Path, *, limit: int) -> dict[str, Any] | None:
+    """Read metadata plus a bounded tail without decoding a huge transcript.
+
+    Space session files keep ``messages`` as their final top-level field.  The
+    scanner reads a small prefix for metadata and grows a suffix window until
+    it finds ``limit + 1`` top-level message objects.  If the format is not
+    provably compatible, it returns ``None`` and callers use the safe full
+    JSON path instead. A bounded sidecar index is preferred when it matches
+    the canonical file; stale sidecars fall back to this scanner.
+    """
+    if not isinstance(path, Path) or limit < 1:
+        return None
+    try:
+        file_size = path.stat().st_size
+        with path.open("rb") as handle:
+            prefix = handle.read(min(file_size, 128 * 1024))
+    except OSError:
+        return None
+    key_pos = prefix.find(b'"messages"')
+    if key_pos < 0:
+        return None
+    colon = prefix.find(b":", key_pos + len(b'"messages"'))
+    if colon < 0:
+        return None
+    array_start = colon + 1
+    while array_start < len(prefix) and prefix[array_start] in b" \t\r\n":
+        array_start += 1
+    if array_start >= len(prefix) or prefix[array_start] != ord("["):
+        return None
+    # The message array must be the final top-level field; otherwise replacing
+    # it with a tail would silently discard metadata after the array.
+    if prefix[:key_pos].rstrip().endswith(b",") is False:
+        return None
+    sidecar = path.with_name(f"{path.stem}.tail.json")
+    try:
+        indexed = json.loads(sidecar.read_text(encoding="utf-8"))
+        stat = path.stat()
+        with path.open("rb") as handle:
+            head_bytes = handle.read(4096)
+            if stat.st_size > 4096:
+                handle.seek(max(0, stat.st_size - 4096))
+                tail_bytes = handle.read(4096)
+            else:
+                tail_bytes = head_bytes
+        fingerprint = hashlib.sha256(head_bytes + tail_bytes).hexdigest()
+        indexed_messages = indexed.get("messages")
+        indexed_count = int(indexed.get("message_count"))
+        if (
+            indexed.get("version") == 1
+            and int(indexed.get("file_size")) == stat.st_size
+            and int(indexed.get("file_mtime_ns")) == stat.st_mtime_ns
+            and indexed.get("fingerprint") == fingerprint
+            and isinstance(indexed_messages, list)
+            and indexed_count >= len(indexed_messages) >= limit
+            and all(isinstance(item, dict) for item in indexed_messages)
+        ):
+            head = prefix[:key_pos].rstrip()
+            if head.endswith(b","):
+                head = head[:-1]
+            session = json.loads(head.decode("utf-8") + "}")
+            if isinstance(session, dict):
+                session["messages"] = indexed_messages[-limit:]
+                session["_tail_message_count_unknown"] = False
+                session["_tail_messages_truncated"] = indexed_count > limit
+                session["_tail_messages_offset"] = max(0, indexed_count - limit)
+                return session
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        pass
+    suffix_size = min(max(256 * 1024, limit * 32 * 1024), 8 * 1024 * 1024)
+    decoder = json.JSONDecoder()
+    while suffix_size <= 8 * 1024 * 1024:
+        try:
+            with path.open("rb") as handle:
+                start_offset = max(0, file_size - suffix_size)
+                handle.seek(start_offset)
+                suffix = handle.read()
+        except OSError:
+            return None
+        starts: list[int] = []
+        depth = 0
+        in_string = False
+        for index in range(len(suffix) - 1, -1, -1):
+            value = suffix[index]
+            if value == ord('"'):
+                slash_count = 0
+                cursor = index - 1
+                while cursor >= 0 and suffix[cursor] == ord("\\"):
+                    slash_count += 1
+                    cursor -= 1
+                if slash_count % 2 == 0:
+                    in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if value == ord("}"):
+                depth += 1
+            elif value == ord("{") and depth:
+                depth -= 1
+                absolute = start_offset + index
+                # The enclosing session object contributes one brace while
+                # scanning backwards. A message object therefore closes when
+                # the remaining depth is exactly one; depth zero is the
+                # session itself.
+                if depth == 1 and absolute > array_start:
+                    starts.append(index)
+        if len(starts) < limit + 1 and suffix_size < 8 * 1024 * 1024:
+            suffix_size = min(suffix_size * 2, 8 * 1024 * 1024)
+            continue
+        if len(starts) < limit:
+            return None
+        start = starts[limit - 1]
+        try:
+            text = suffix[start:].decode("utf-8")
+            messages: list[dict[str, Any]] = []
+            cursor = 0
+            while len(messages) < limit:
+                while cursor < len(text) and text[cursor] in " \t\r\n,":
+                    cursor += 1
+                item, cursor = decoder.raw_decode(text, cursor)
+                if not isinstance(item, dict):
+                    return None
+                messages.append(item)
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            return None
+        try:
+            head = prefix[:key_pos].rstrip()
+            if head.endswith(b","):
+                head = head[:-1]
+            session = json.loads(head.decode("utf-8") + "}")
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            return None
+        if not isinstance(session, dict):
+            return None
+        message_count = session.get("message_count")
+        count_known = True
+        try:
+            message_count = int(message_count)
+        except (TypeError, ValueError):
+            # Older session files do not persist a count. Do not pretend the
+            # bounded tail is the complete transcript; callers can fall back
+            # to the full JSON path when an exact count is required.
+            count_known = False
+            message_count = None
+        session["messages"] = messages
+        session["_tail_message_count_unknown"] = not count_known
+        session["_tail_messages_truncated"] = (
+            (message_count > len(messages)) if count_known else bool(starts and (start_offset + starts[-1]) > array_start)
+        )
+        session["_tail_messages_offset"] = max(0, message_count - len(messages)) if count_known else 0
+        return session
+    return None
+
+
+@app.get("/api/session")
+async def get_space_session_detail(request: Request):
+    t0 = time.perf_counter()
+    workspace_slug = _workspace_slug_from_request(request)
+    if not workspace_slug:
+        return await dispatch_route(request)
+
+    sid = str(request.query_params.get("session_id") or "").strip()
+    if not sid:
+        return JSONResponse({"error": "session_id is required"}, status_code=400)
+    path, slug = _space_session_path(workspace_slug, sid)
+    t_path = time.perf_counter()
+    if not path or not path.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    load_messages = request.query_params.get("messages", "1") != "0"
+    try:
+        msg_limit_raw = request.query_params.get("msg_limit")
+        msg_limit = max(1, int(msg_limit_raw)) if msg_limit_raw else None
+    except Exception:
+        msg_limit = None
+    try:
+        msg_before_raw = request.query_params.get("msg_before")
+        msg_before = int(msg_before_raw) if msg_before_raw else None
+    except Exception:
+        msg_before = None
+
+    # Fast session switching normally asks for a bounded recent tail.  Read
+    # only that tail when the on-disk format proves safe; metadata-only and
+    # paginated/history requests retain the full JSON fallback.
+    session = None
+    tail_loaded = False
+    if load_messages and msg_limit is not None and msg_before is None:
+        session = _load_space_session_tail(path, limit=msg_limit)
+        tail_loaded = session is not None
+
+    if session is None and not load_messages:
+        session = _load_space_session_metadata(path)
+        if session is not None:
+            indexed_count = _space_session_index_message_count(slug, sid)
+            if indexed_count is not None:
+                session["message_count"] = indexed_count
+
+    if session is None:
+        try:
+            session = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            _log.exception("Failed to load space session %s", sid)
+            raise HTTPException(status_code=500, detail=f"Failed to load session: {exc}") from exc
+    if not isinstance(session, dict):
+        raise HTTPException(status_code=500, detail="Invalid session file")
+    t_load = time.perf_counter()
+
+    # A truncated tail cannot safely be repaired or written back. If it still
+    # advertises an active stream, reload the complete document instead.
+    if tail_loaded and session.get("active_stream_id"):
+        try:
+            session = json.loads(path.read_text(encoding="utf-8"))
+            tail_loaded = False
+        except Exception as exc:
+            _log.exception("Failed to reload active space session %s", sid)
+            raise HTTPException(status_code=500, detail=f"Failed to load session: {exc}") from exc
+    # A stale stream requires the full transcript for safe recovery.  Keep the
+    # metadata-only path strictly read-only unless that exceptional condition
+    # is present, then reload the complete document before repairing it.
+    if session.get("_metadata_only") and session.get("active_stream_id"):
+        try:
+            session = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            _log.exception("Failed to reload active space session %s", sid)
+            raise HTTPException(status_code=500, detail=f"Failed to load session: {exc}") from exc
+    session.pop("_metadata_only", None)
+    _repair_stale_space_session_stream(session, path, slug)
+    t_repair_stream = time.perf_counter()
+    include_tool_calls_raw = request.query_params.get("include_tool_calls")
+    if include_tool_calls_raw is None:
+        # Fast session switching uses a bounded tail window. Do not include the
+        # full legacy session-level tool_calls list in that path; modern visible
+        # messages carry per-message tool metadata and the legacy list can dwarf
+        # the requested 24-message window.
+        include_session_tool_calls = load_messages and msg_limit is None and msg_before is None
+    else:
+        include_session_tool_calls = str(include_tool_calls_raw).strip().lower() not in {"0", "false", "no", "off"}
+
+    _repair_space_session_slug(session, slug, None if tail_loaded else path)
+    t_repair_slug = time.perf_counter()
+    messages, truncated, offset = _slice_session_messages(
+        session,
+        load_messages=load_messages,
+        msg_limit=msg_limit,
+        msg_before=msg_before,
+    )
+    if tail_loaded:
+        truncated = bool(session.pop("_tail_messages_truncated", truncated))
+        offset = int(session.pop("_tail_messages_offset", offset) or 0)
+        tail_message_count_unknown = bool(session.pop("_tail_message_count_unknown", False))
+    else:
+        tail_message_count_unknown = False
+    t_slice = time.perf_counter()
+    payload = dict(session)
+    payload.pop("context_messages", None)
+    payload["messages"] = messages
+    if not include_session_tool_calls:
+        payload["tool_calls"] = []
+    if not load_messages:
+        payload["pending_attachments"] = []
+    stored_message_count = session.get("message_count")
+    if tail_message_count_unknown:
+        payload["message_count"] = None
+    elif isinstance(stored_message_count, int) and stored_message_count >= 0:
+        payload["message_count"] = stored_message_count
+    else:
+        payload["message_count"] = _session_message_count(session)
+    payload["_messages_truncated"] = truncated
+    payload["_messages_offset"] = offset
+    payload["workspace_slug"] = slug
+    payload["has_pending_user_message"] = bool(payload.get("pending_user_message"))
+    try:
+        from web.api.goals import goal_state_for_session
+
+        payload["goal"] = goal_state_for_session(sid, space_slug=slug or payload.get("workspace_slug") or payload.get("space_slug") or payload.get("space"))
+    except Exception:
+        payload["goal"] = None
+    return {"session": payload}
+
+
+@app.get("/api/sessions")
+async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
+    try:
+        include_archived_raw = str(request.query_params.get("include_archived") or "").strip().lower()
+        include_archived = include_archived_raw in {"1", "true", "yes", "on"}
+        workspace_slug = _workspace_slug_from_request(request)
+        defer_cli = str(request.query_params.get("defer_cli") or "").strip().lower() in {"1", "true", "yes", "on"}
+        startup_fallback = (
+            not workspace_slug
+            and str(request.query_params.get("startup") or "").strip().lower()
+            in {"1", "true", "yes", "on"}
+        )
+        if workspace_slug:
+            sessions = _load_space_sessions(workspace_slug)
+            archived_count = sum(1 for s in sessions if s.get("archived"))
+            visible_sessions = sessions if include_archived else [s for s in sessions if not s.get("archived")]
+            total = len(visible_sessions)
+            page = visible_sessions[offset:offset + limit]
+            now = time.time()
+            for s in page:
+                s["is_active"] = (
+                    s.get("ended_at") is None
+                    and (now - s.get("last_active", s.get("started_at", s.get("updated_at", 0)))) < 300
+                )
+            return _sessions_json_response(
+                request,
+                {"sessions": page, "total": total, "archived_count": archived_count, "limit": limit, "offset": offset},
+            )
+
+        from runtime._compat.shim_state import SessionDB
+        db = SessionDB()
+        try:
+            # The first-paint fallback is deliberately bounded.  Passing the
+            # normal sidebar limit through here still makes SessionDB inspect
+            # and normalize hundreds of legacy rows before we slice them to
+            # ten below, which can keep the UI on "Restoring conversations"
+            # for several seconds on a cold profile.  Bound the database
+            # query itself; normal non-startup callers retain their limit.
+            db_limit = min(limit, 10) if startup_fallback else limit
+            try:
+                sessions = db.list_sessions(limit=db_limit, offset=offset, derive_titles=not defer_cli)
+            except TypeError:
+                # Keep compatibility with older injected/embedded SessionDBs.
+                sessions = db.list_sessions(limit=db_limit, offset=offset)
+            if startup_fallback:
+                # A missing space during first paint must not serialize the
+                # entire global store. Normal unscoped callers keep the
+                # historical behavior; only the explicitly marked boot
+                # fallback is capped and projected.
+                sessions = sessions[:10]
+                sidebar_keys = {
+                    "session_id", "id", "title", "workspace", "workspace_slug",
+                    "model", "model_provider", "message_count", "created_at",
+                    "updated_at", "last_message_at", "pinned", "archived",
+                    "profile", "source", "source_tag", "parent_session_id",
+                    "active_stream_id", "pending_user_message", "is_streaming",
+                }
+                sessions = [
+                    {key: row.get(key) for key in sidebar_keys if key in row}
+                    for row in sessions
+                ]
+            if not include_archived:
+                sessions = [s for s in sessions if not s.get("archived")]
+            total = len(sessions)
+            if total == limit or offset > 0:
+                try:
+                    total = db._conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+                except Exception:
+                    total = len(sessions)
+            now = time.time()
+            for s in sessions:
+                s["is_active"] = (
+                    s.get("ended_at") is None
+                    and (now - s.get("last_active", s.get("started_at", 0))) < 300
+                )
+            return _sessions_json_response(
+                request,
+                {
+                    "sessions": sessions,
+                    "total": total,
+                    "limit": limit,
+                    "offset": offset,
+                    "cli_pending": bool(defer_cli),
+                },
+            )
+        finally:
+            db.close()
+    except Exception as exc:
+        _log.exception("GET /api/sessions failed")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+@app.get("/api/sessions/search")
+async def search_sessions(request: Request, q: str = "", limit: int = 20):
+    """Full-text search across session message content using FTS5."""
+    if not q or not q.strip():
+        return {"results": [], "sessions": []}
+    try:
+        if _is_space_scoped_request(request):
+            needle = q.strip().lower()
+            results = []
+            for session in _load_space_sessions(_workspace_slug_from_request(request)):
+                haystack = " ".join(
+                    str(session.get(key) or "")
+                    for key in ("title", "workspace", "model", "model_provider", "profile")
+                ).lower()
+                if needle in haystack:
+                    results.append(
+                        {
+                            "session_id": session.get("session_id"),
+                            "snippet": session.get("title") or "",
+                            "title": session.get("title") or "",
+                            "match_type": "title",
+                            "role": None,
+                            "source": session.get("source") or session.get("source_tag"),
+                            "model": session.get("model"),
+                            "session_started": session.get("created_at") or session.get("started_at"),
+                        }
+                    )
+                if len(results) >= limit:
+                    break
+            return {"results": results, "sessions": results, "query": q.strip(), "count": len(results)}
+
+        from runtime._compat.shim_state import SessionDB
+        db = SessionDB()
+        try:
+            # Auto-add prefix wildcards so partial words match
+            # e.g. "nimb" Ã¢â€ â€™ "nimb*" matches "nimby"
+            # Preserve quoted phrases and existing wildcards as-is
+            import re
+            terms = []
+            for token in re.findall(r'"[^"]*"|\S+', q.strip()):
+                if token.startswith('"') or token.endswith("*"):
+                    terms.append(token)
+                else:
+                    terms.append(token + "*")
+            prefix_query = " ".join(terms)
+            matches = db.search_messages(query=prefix_query, limit=limit)
+            # Group by session_id Ã¢â‚¬â€ return unique sessions with their best snippet
+            seen: dict = {}
+            for m in matches:
+                sid = m["session_id"]
+                if sid not in seen:
+                    seen[sid] = {
+                        "session_id": sid,
+                        "snippet": m.get("snippet", ""),
+                        "title": m.get("snippet", ""),
+                        "match_type": "content",
+                        "role": m.get("role"),
+                        "source": m.get("source"),
+                        "model": m.get("model"),
+                        "session_started": m.get("session_started"),
+                    }
+            results = list(seen.values())
+            return {"results": results, "sessions": results, "query": q.strip(), "count": len(results)}
+        finally:
+            db.close()
+    except Exception as exc:
+        _log.exception("GET /api/sessions/search failed")
+        raise HTTPException(status_code=500, detail="Search failed") from exc
+
+
+def _normalize_config_for_web(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize config for the web UI.
+
+    Sidekick supports ``model`` as either a bare string (``"anthropic/claude-sonnet-4"``)
+    or a dict (``{default: ..., provider: ..., base_url: ...}``).  The schema is built
+    from DEFAULT_CONFIG where ``model`` is a string, but user configs often have the
+    dict form.  Normalize to the string form so the frontend schema matches.
+
+    Also surfaces ``model_context_length`` as a top-level field so the web UI can
+    display and edit it.  A value of 0 means "auto-detect".
+    """
+    config = dict(config)  # shallow copy
+    model_val = config.get("model")
+    if isinstance(model_val, dict):
+        # Extract context_length before flattening the dict
+        ctx_len = model_val.get("context_length", 0)
+        config["model"] = model_val.get("default", model_val.get("name", ""))
+        config["model_context_length"] = ctx_len if isinstance(ctx_len, int) else 0
+    else:
+        config["model_context_length"] = 0
+    return config
+
+
+def _coerce_worktree_bool(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+@app.get("/api/config")
+async def get_config():
+    config = _normalize_config_for_web(load_config())
+    # Strip internal keys that the frontend shouldn't see or send back
+    return {k: v for k, v in config.items() if not k.startswith("_")}
+
+
+@app.get("/api/config/defaults")
+async def get_defaults():
+    return DEFAULT_CONFIG
+
+
+@app.get("/api/config/schema")
+async def get_schema():
+    return {"fields": CONFIG_SCHEMA, "category_order": _CATEGORY_ORDER}
+
+
+@app.get("/api/worktree/settings")
+async def get_worktree_settings_route():
+    return get_worktree_settings()
+
+
+@app.post("/api/worktree/settings")
+async def update_worktree_settings(body: Dict[str, Any] | None = None):
+    try:
+        cfg = load_config()
+        current = get_worktree_settings(cfg)
+        raw = body if isinstance(body, dict) else {}
+        worktree_body = raw.get("worktree")
+        if isinstance(worktree_body, bool):
+            worktree_body = {"enabled": worktree_body, "cleanup_on_exit": worktree_body}
+        elif not isinstance(worktree_body, dict):
+            worktree_body = raw
+        if not isinstance(worktree_body, dict):
+            worktree_body = {}
+        cfg["worktree"] = {
+            "enabled": _coerce_worktree_bool(worktree_body.get("enabled"), current["enabled"]),
+            "cleanup_on_exit": _coerce_worktree_bool(worktree_body.get("cleanup_on_exit"), current["cleanup_on_exit"]),
+        }
+        save_config(cfg)
+        return {"ok": True, **get_worktree_settings(cfg)}
+    except Exception as exc:
+        _log.exception("worktree settings save failed")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+_EMPTY_MODEL_INFO: dict = {
+    "model": "",
+    "provider": "",
+    "auto_context_length": 0,
+    "config_context_length": 0,
+    "effective_context_length": 0,
+    "capabilities": {},
+}
+
+
+class ModelRefreshRequest(BaseModel):
+    provider: Optional[str] = None
+
+
+@app.get("/api/models")
+def get_models_catalog():
+    """Return the legacy WebUI model catalog shape.
+
+    The static dashboard still calls /api/models during boot and Settings
+    hydration. Without this route FastAPI falls through to the SPA catch-all,
+    returning index.html with HTTP 200 and causing JSON parse warnings.
+    """
+    try:
+        from web.api.config import get_available_models
+
+        return get_available_models()
+    except Exception as exc:
+        _log.exception("GET /api/models failed")
+        raise HTTPException(status_code=500, detail="Failed to load model catalog") from exc
+
+
+@app.get("/api/models/live")
+def get_live_models(provider: str = ""):
+    """Best-effort live-model response compatible with the legacy WebUI.
+
+    Startup must never fall through to HTML. Prefer the already-built catalog
+    here; provider-specific refreshes can invalidate the catalog via
+    /api/models/refresh and the next /api/models request will rebuild it.
+    """
+    try:
+        from web.api.config import get_available_models
+
+        catalog = get_available_models()
+        provider_id = (provider or catalog.get("active_provider") or "").strip()
+        models: list[dict] = []
+        for group in catalog.get("groups", []) or []:
+            group_provider = str(group.get("provider_id") or group.get("provider") or "").strip()
+            if provider_id and group_provider.lower() != provider_id.lower():
+                continue
+            models.extend(group.get("models", []) or [])
+            models.extend(group.get("extra_models", []) or [])
+        return {"provider": provider_id, "models": models, "count": len(models)}
+    except Exception as exc:
+        _log.exception("GET /api/models/live failed")
+        raise HTTPException(status_code=500, detail="Failed to load live models") from exc
+
+
+@app.post("/api/models/refresh")
+def refresh_models_catalog(body: ModelRefreshRequest | None = None):
+    """Invalidate model caches and rebuild the catalog on demand."""
+    provider = (body.provider if body else None) or ""
+    try:
+        from web.api.config import (
+            get_available_models,
+            invalidate_models_cache,
+            invalidate_provider_models_cache,
+        )
+
+        if provider:
+            invalidate_provider_models_cache(provider)
+        else:
+            invalidate_models_cache()
+        catalog = get_available_models()
+        return {
+            "ok": True,
+            "provider": provider or catalog.get("active_provider") or "",
+            "active_provider": catalog.get("active_provider"),
+            "default_model": catalog.get("default_model"),
+        }
+    except Exception as exc:
+        _log.exception("POST /api/models/refresh failed")
+        return {"ok": False, "provider": provider, "error": str(exc)}
+
+
+@app.get("/api/model/info")
+def get_model_info():
+    """Return resolved model metadata for the currently configured model.
+
+    Calls the same context-length resolution chain the agent uses, so the
+    frontend can display "Auto-detected: 200K" alongside the override field.
+    Also returns model capabilities (vision, reasoning, tools) when available.
+    """
+    try:
+        cfg = load_config()
+        model_cfg = cfg.get("model", "")
+
+        # Extract model name and provider from the config
+        if isinstance(model_cfg, dict):
+            model_name = model_cfg.get("default", model_cfg.get("name", ""))
+            provider = model_cfg.get("provider", "")
+            base_url = model_cfg.get("base_url", "")
+            config_ctx = model_cfg.get("context_length")
+        else:
+            model_name = str(model_cfg) if model_cfg else ""
+            provider = ""
+            base_url = ""
+            config_ctx = None
+
+        if not model_name:
+            return dict(_EMPTY_MODEL_INFO, provider=provider)
+
+        # Resolve auto-detected context length (pass config_ctx=None to get
+        # purely auto-detected value, then separately report the override)
+        try:
+            from runtime.model_metadata import get_model_context_length
+            auto_ctx = get_model_context_length(
+                model=model_name,
+                base_url=base_url,
+                provider=provider,
+                config_context_length=None,  # ignore override Ã¢â‚¬â€ we want auto value
+            )
+        except Exception:
+            auto_ctx = 0
+
+        config_ctx_int = 0
+        if isinstance(config_ctx, int) and config_ctx > 0:
+            config_ctx_int = config_ctx
+
+        # Effective is what the agent actually uses
+        effective_ctx = config_ctx_int if config_ctx_int > 0 else auto_ctx
+
+        # Try to get model capabilities from models.dev
+        caps = {}
+        try:
+            from runtime.models_dev import get_model_capabilities
+            mc = get_model_capabilities(provider=provider, model=model_name)
+            if mc is not None:
+                caps = {
+                    "supports_tools": mc.supports_tools,
+                    "supports_vision": mc.supports_vision,
+                    "supports_reasoning": mc.supports_reasoning,
+                    "context_window": mc.context_window,
+                    "max_output_tokens": mc.max_output_tokens,
+                    "model_family": mc.model_family,
+                }
+        except Exception:
+            pass
+
+        return {
+            "model": model_name,
+            "provider": provider,
+            "auto_context_length": auto_ctx,
+            "config_context_length": config_ctx_int,
+            "effective_context_length": effective_ctx,
+            "capabilities": caps,
+        }
+    except Exception:
+        _log.exception("GET /api/model/info failed")
+        return dict(_EMPTY_MODEL_INFO)
+
+
+# ---------------------------------------------------------------------------
+# Model assignment Ã¢â‚¬â€ pick provider+model for main slot or auxiliary slots.
+# Mirrors the model.options JSON-RPC from tui_gateway but uses REST so the
+# Models page (which has no chat PTY open) can drive it.
+# ---------------------------------------------------------------------------
+
+# Canonical auxiliary task slots. Keep in sync with DEFAULT_CONFIG["auxiliary"]
+# in sidekick_cli/config.py Ã¢â‚¬â€ listed here for deterministic ordering in the UI.
+_AUX_TASK_SLOTS: Tuple[str, ...] = (
+    "vision",
+    "web_extract",
+    "compression",
+    "session_search",
+    "skills_hub",
+    "approval",
+    "mcp",
+    "title_generation",
+    "curator",
+)
+
+
+@app.get("/api/model/options")
+def get_model_options():
+    """Return authenticated providers + their curated model lists.
+
+    REST equivalent of the ``model.options`` JSON-RPC on tui_gateway, so the
+    dashboard Models page can render the picker without a live chat session.
+    The response shape matches ``model.options`` 1:1 so ``ModelPickerDialog``
+    can share the same types.
+    """
+    try:
+        from cli.model_switch import list_authenticated_providers
+
+        cfg = load_config()
+        model_cfg = cfg.get("model", {})
+        if isinstance(model_cfg, dict):
+            current_model = model_cfg.get("default", model_cfg.get("name", "")) or ""
+            current_provider = model_cfg.get("provider", "") or ""
+            current_base_url = model_cfg.get("base_url", "") or ""
+        else:
+            current_model = str(model_cfg) if model_cfg else ""
+            current_provider = ""
+            current_base_url = ""
+
+        user_providers = cfg.get("providers") if isinstance(cfg.get("providers"), dict) else {}
+        custom_providers = (
+            cfg.get("custom_providers")
+            if isinstance(cfg.get("custom_providers"), list)
+            else []
+        )
+
+        providers = list_authenticated_providers(
+            current_provider=current_provider,
+            current_base_url=current_base_url,
+            current_model=current_model,
+            user_providers=user_providers,
+            custom_providers=custom_providers,
+            max_models=50,
+        )
+        return {
+            "providers": providers,
+            "model": current_model,
+            "provider": current_provider,
+        }
+    except Exception as exc:
+        _log.exception("GET /api/model/options failed")
+        raise HTTPException(status_code=500, detail="Failed to list model options") from exc
+
+
+@app.get("/api/model/auxiliary")
+def get_auxiliary_models():
+    """Return current auxiliary task assignments.
+
+    Shape:
+      {
+        "tasks": [
+          {"task": "vision", "provider": "auto", "model": "", "base_url": ""},
+          ...
+        ],
+        "main": {"provider": "openrouter", "model": "anthropic/claude-opus-4.7"},
+      }
+    """
+    try:
+        cfg = load_config()
+        aux_cfg = cfg.get("auxiliary", {})
+        if not isinstance(aux_cfg, dict):
+            aux_cfg = {}
+
+        tasks = []
+        for slot in _AUX_TASK_SLOTS:
+            slot_cfg = aux_cfg.get(slot, {}) if isinstance(aux_cfg.get(slot), dict) else {}
+            tasks.append({
+                "task": slot,
+                "provider": str(slot_cfg.get("provider", "auto") or "auto"),
+                "model": str(slot_cfg.get("model", "") or ""),
+                "base_url": str(slot_cfg.get("base_url", "") or ""),
+            })
+
+        model_cfg = cfg.get("model", {})
+        if isinstance(model_cfg, dict):
+            main = {
+                "provider": str(model_cfg.get("provider", "") or ""),
+                "model": str(model_cfg.get("default", model_cfg.get("name", "")) or ""),
+            }
+        else:
+            main = {"provider": "", "model": str(model_cfg) if model_cfg else ""}
+
+        return {"tasks": tasks, "main": main}
+    except Exception as exc:
+        _log.exception("GET /api/model/auxiliary failed")
+        raise HTTPException(status_code=500, detail="Failed to read auxiliary config") from exc
+
+
+@app.post("/api/model/set")
+async def set_model_assignment(body: ModelAssignment):
+    """Assign a model to the main slot or an auxiliary task slot.
+
+    Writes to ``~/.sidekick/config.yaml`` Ã¢â‚¬â€ applies to **new** sessions only.
+    The currently running chat PTY (if any) is not affected; use the
+    ``/model`` slash command inside a chat to hot-swap that specific session.
+    """
+    scope = (body.scope or "").strip().lower()
+    provider = (body.provider or "").strip()
+    model = (body.model or "").strip()
+    task = (body.task or "").strip().lower()
+
+    if scope not in {"main", "auxiliary"}:
+        raise HTTPException(status_code=400, detail="scope must be 'main' or 'auxiliary'")
+
+    try:
+        cfg = load_config()
+
+        if scope == "main":
+            if not provider or not model:
+                raise HTTPException(status_code=400, detail="provider and model required for main")
+            model_cfg = cfg.get("model", {})
+            if not isinstance(model_cfg, dict):
+                model_cfg = {}
+            model_cfg["provider"] = provider
+            model_cfg["default"] = model
+            # Clear stale base_url so the resolver picks the provider's own default.
+            if "base_url" in model_cfg and model_cfg.get("base_url"):
+                model_cfg["base_url"] = ""
+            # Also clear hardcoded context_length override Ã¢â‚¬â€ new model may have
+            # a different context window.
+            if "context_length" in model_cfg:
+                model_cfg.pop("context_length", None)
+            cfg["model"] = model_cfg
+            save_config(cfg)
+            return {"ok": True, "scope": "main", "provider": provider, "model": model}
+
+        # scope == "auxiliary"
+        aux = cfg.get("auxiliary")
+        if not isinstance(aux, dict):
+            aux = {}
+
+        if task == "__reset__":
+            # Reset every slot to provider="auto", model="" Ã¢â‚¬â€ keeps other fields intact.
+            for slot in _AUX_TASK_SLOTS:
+                slot_cfg = aux.get(slot)
+                if not isinstance(slot_cfg, dict):
+                    slot_cfg = {}
+                slot_cfg["provider"] = "auto"
+                slot_cfg["model"] = ""
+                aux[slot] = slot_cfg
+            cfg["auxiliary"] = aux
+            save_config(cfg)
+            return {"ok": True, "scope": "auxiliary", "reset": True}
+
+        if not provider:
+            raise HTTPException(status_code=400, detail="provider required for auxiliary")
+
+        targets = [task] if task else list(_AUX_TASK_SLOTS)
+        for slot in targets:
+            if slot not in _AUX_TASK_SLOTS:
+                raise HTTPException(status_code=400, detail=f"unknown auxiliary task: {slot}")
+            slot_cfg = aux.get(slot)
+            if not isinstance(slot_cfg, dict):
+                slot_cfg = {}
+            slot_cfg["provider"] = provider
+            slot_cfg["model"] = model
+            aux[slot] = slot_cfg
+
+        cfg["auxiliary"] = aux
+        save_config(cfg)
+        return {
+            "ok": True,
+            "scope": "auxiliary",
+            "tasks": targets,
+            "provider": provider,
+            "model": model,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _log.exception("POST /api/model/set failed")
+        raise HTTPException(status_code=500, detail="Failed to save model assignment") from exc
+
+
+
+
+def _denormalize_config_from_web(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Reverse _normalize_config_for_web before saving.
+
+    Reconstructs ``model`` as a dict by reading the current on-disk config
+    to recover model subkeys (provider, base_url, api_mode, etc.) that were
+    stripped from the GET response.  The frontend only sees model as a flat
+    string; the rest is preserved transparently.
+
+    Also handles ``model_context_length`` Ã¢â‚¬â€ writes it back into the model dict
+    as ``context_length``.  A value of 0 or absent means "auto-detect" (omitted
+    from the dict so get_model_context_length() uses its normal resolution).
+    """
+    config = dict(config)
+    # Remove any _model_meta that might have leaked in (shouldn't happen
+    # with the stripped GET response, but be defensive)
+    config.pop("_model_meta", None)
+
+    # Extract and remove model_context_length before processing model
+    ctx_override = config.pop("model_context_length", 0)
+    if not isinstance(ctx_override, int):
+        try:
+            ctx_override = int(ctx_override)
+        except (TypeError, ValueError):
+            ctx_override = 0
+
+    model_val = config.get("model")
+    if isinstance(model_val, str) and model_val:
+        # Read the current disk config to recover model subkeys
+        try:
+            disk_config = load_config()
+            disk_model = disk_config.get("model")
+            if isinstance(disk_model, dict):
+                # Preserve all subkeys, update default with the new value
+                disk_model["default"] = model_val
+                # Write context_length into the model dict (0 = remove/auto)
+                if ctx_override > 0:
+                    disk_model["context_length"] = ctx_override
+                else:
+                    disk_model.pop("context_length", None)
+                config["model"] = disk_model
+            # Model was previously a bare string Ã¢â‚¬â€ upgrade to dict if
+            # user is setting a context_length override
+            elif ctx_override > 0:
+                config["model"] = {
+                    "default": model_val,
+                    "context_length": ctx_override,
+                }
+        except Exception:
+            pass  # can't read disk config Ã¢â‚¬â€ just use the string form
+    return config
+
+
+@app.put("/api/config")
+async def update_config(body: ConfigUpdate):
+    try:
+        save_config(_denormalize_config_from_web(body.config))
+        return {"ok": True}
+    except Exception as exc:
+        _log.exception("PUT /api/config failed")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+@app.get("/api/env")
+async def get_env_vars():
+    env_on_disk = load_env()
+    result = {}
+    for var_name, info in OPTIONAL_ENV_VARS.items():
+        value = env_on_disk.get(var_name)
+        result[var_name] = {
+            "is_set": bool(value),
+            "redacted_value": redact_key(value) if value else None,
+            "description": info.get("description", ""),
+            "url": info.get("url"),
+            "category": info.get("category", ""),
+            "is_password": info.get("password", False),
+            "tools": info.get("tools", []),
+            "advanced": info.get("advanced", False),
+        }
+    return result
+
+
+@app.put("/api/env")
+async def set_env_var(body: EnvVarUpdate):
+    try:
+        save_env_value(body.key, body.value)
+        return {"ok": True, "key": body.key}
+    except Exception as exc:
+        _log.exception("PUT /api/env failed")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+@app.delete("/api/env")
+async def remove_env_var(body: EnvVarDelete):
+    try:
+        removed = remove_env_value(body.key)
+        if not removed:
+            raise HTTPException(status_code=404, detail=f"{body.key} not found in .env")
+        return {"ok": True, "key": body.key}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _log.exception("DELETE /api/env failed")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+@app.post("/api/env/reveal")
+async def reveal_env_var(body: EnvVarReveal, request: Request):
+    """Return the real (unredacted) value of a single env var.
+
+    Protected by:
+    - Ephemeral session token (generated per server start, injected into SPA)
+    - Rate limiting (max 5 reveals per 30s window)
+    - Audit logging
+    """
+    # --- Token check ---
+    _require_token(request)
+
+    # --- Rate limit ---
+    now = time.time()
+    cutoff = now - _REVEAL_WINDOW_SECONDS
+    _reveal_timestamps[:] = [t for t in _reveal_timestamps if t > cutoff]
+    if len(_reveal_timestamps) >= _REVEAL_MAX_PER_WINDOW:
+        raise HTTPException(status_code=429, detail="Too many reveal requests. Try again shortly.")
+    _reveal_timestamps.append(now)
+
+    # --- Reveal ---
+    env_on_disk = load_env()
+    value = env_on_disk.get(body.key)
+    if value is None:
+        raise HTTPException(status_code=404, detail=f"{body.key} not found in .env")
+
+    _log.info("env/reveal: %s", body.key)
+    return {"key": body.key, "value": value}
+
+
+# ---------------------------------------------------------------------------
+# OAuth provider endpoints Ã¢â‚¬â€ status + disconnect (Phase 1)
+# ---------------------------------------------------------------------------
+#
+# Phase 1 surfaces *which OAuth providers exist* and whether each is
+# connected, plus a disconnect button. The actual login flow (PKCE for
+# Anthropic, device-code for Codex) still runs in the CLI for now;
+# Phase 2 will add in-browser flows. For unconnected providers we return
+# the canonical ``sidekick auth add <provider>`` command so the dashboard
+# can surface a one-click copy.
+
+
+def _truncate_token(value: Optional[str], visible: int = 6) -> str:
+    """Return ``...XXXXXX`` (last N chars) for safe display in the UI.
+
+    We never expose more than the trailing ``visible`` characters of an
+    OAuth access token. JWT prefixes (the part before the first dot) are
+    stripped first when present so the visible suffix is always part of
+    the signing region rather than a meaningless header chunk.
+    """
+    if not value:
+        return ""
+    s = str(value)
+    if "." in s and s.count(".") >= 2:
+        # Looks like a JWT Ã¢â‚¬â€ show the trailing piece of the signature only.
+        s = s.rsplit(".", 1)[-1]
+    if len(s) <= visible:
+        return s
+    return f"Ã¢â‚¬Â¦{s[-visible:]}"
+
+
+def _anthropic_oauth_status() -> Dict[str, Any]:
+    """Combined status across the three Anthropic credential sources we read.
+
+    Sidekick resolves Anthropic creds in this order at runtime:
+    1. ``~/.sidekick/.anthropic_oauth.json`` Ã¢â‚¬â€ Sidekick-managed PKCE flow
+    2. ``~/.claude/.credentials.json`` Ã¢â‚¬â€ Claude Code CLI credentials (auto)
+    3. ``ANTHROPIC_TOKEN`` / ``ANTHROPIC_API_KEY`` env vars
+    The dashboard reports the highest-priority source that's actually present.
+    """
+    try:
+        from runtime.anthropic_adapter import (
+            read_sidekick_oauth_credentials,
+            read_claude_code_credentials,
+            _SIDEKICK_OAUTH_FILE,
+        )
+    except ImportError:
+        read_claude_code_credentials = None  # type: ignore
+        read_sidekick_oauth_credentials = None  # type: ignore
+        _SIDEKICK_OAUTH_FILE = None  # type: ignore
+
+    sidekick_creds = None
+    if read_sidekick_oauth_credentials:
+        try:
+            sidekick_creds = read_sidekick_oauth_credentials()
+        except Exception:
+            sidekick_creds = None
+    if sidekick_creds and sidekick_creds.get("accessToken"):
+        return {
+            "logged_in": True,
+            "source": "sidekick_pkce",
+            "source_label": f"Sidekick PKCE ({_SIDEKICK_OAUTH_FILE})",
+            "token_preview": _truncate_token(sidekick_creds.get("accessToken")),
+            "expires_at": sidekick_creds.get("expiresAt"),
+            "has_refresh_token": bool(sidekick_creds.get("refreshToken")),
+        }
+
+    cc_creds = None
+    if read_claude_code_credentials:
+        try:
+            cc_creds = read_claude_code_credentials()
+        except Exception:
+            cc_creds = None
+    if cc_creds and cc_creds.get("accessToken"):
+        return {
+            "logged_in": True,
+            "source": "claude_code",
+            "source_label": "Claude Code (~/.claude/.credentials.json)",
+            "token_preview": _truncate_token(cc_creds.get("accessToken")),
+            "expires_at": cc_creds.get("expiresAt"),
+            "has_refresh_token": bool(cc_creds.get("refreshToken")),
+        }
+
+    env_token = os.getenv("ANTHROPIC_TOKEN") or os.getenv("CLAUDE_CODE_OAUTH_TOKEN")
+    if env_token:
+        return {
+            "logged_in": True,
+            "source": "env_var",
+            "source_label": "ANTHROPIC_TOKEN environment variable",
+            "token_preview": _truncate_token(env_token),
+            "expires_at": None,
+            "has_refresh_token": False,
+        }
+    return {"logged_in": False, "source": None}
+
+
+def _claude_code_only_status() -> Dict[str, Any]:
+    """Surface Claude Code CLI credentials as their own provider entry.
+
+    Independent of the Anthropic entry above so users can see whether their
+    Claude Code subscription tokens are actively flowing into Sidekick even
+    when they also have a separate Sidekick-managed PKCE login.
+    """
+    try:
+        from runtime.anthropic_adapter import read_claude_code_credentials
+        creds = read_claude_code_credentials()
+    except Exception:
+        creds = None
+    if creds and creds.get("accessToken"):
+        return {
+            "logged_in": True,
+            "source": "claude_code_cli",
+            "source_label": "~/.claude/.credentials.json",
+            "token_preview": _truncate_token(creds.get("accessToken")),
+            "expires_at": creds.get("expiresAt"),
+            "has_refresh_token": bool(creds.get("refreshToken")),
+        }
+    return {"logged_in": False, "source": None}
+
+
+# Provider catalog. The order matters Ã¢â‚¬â€ it's how we render the UI list.
+# ``cli_command`` is what the dashboard surfaces as the copy-to-clipboard
+# fallback while Phase 2 (in-browser flows) isn't built yet.
+# ``flow`` describes the OAuth shape so the future modal can pick the
+# right UI: ``pkce`` = open URL + paste callback code, ``device_code`` =
+# show code + verification URL + poll, ``external`` = read-only (delegated
+# to a third-party CLI like Claude Code or Qwen).
+_OAUTH_PROVIDER_CATALOG: tuple[Dict[str, Any], ...] = (
+    {
+        "id": "anthropic",
+        "name": "Anthropic (Claude API)",
+        "flow": "pkce",
+        "cli_command": "sidekick auth add anthropic",
+        "docs_url": "https://docs.claude.com/en/api/getting-started",
+        "status_fn": _anthropic_oauth_status,
+    },
+    {
+        "id": "claude-code",
+        "name": "Claude Code (subscription)",
+        "flow": "external",
+        "cli_command": "claude setup-token",
+        "docs_url": "https://docs.claude.com/en/docs/claude-code",
+        "status_fn": _claude_code_only_status,
+    },
+    {
+        "id": "openai-codex",
+        "name": "OpenAI Codex (ChatGPT)",
+        "flow": "device_code",
+        "cli_command": "sidekick auth add openai-codex",
+        "docs_url": "https://platform.openai.com/docs",
+        "status_fn": None,  # dispatched via auth.get_codex_auth_status
+    },
+    {
+        "id": "qwen-oauth",
+        "name": "Qwen (via Qwen CLI)",
+        "flow": "external",
+        "cli_command": "sidekick auth add qwen-oauth",
+        "docs_url": "https://github.com/QwenLM/qwen-code",
+        "status_fn": None,  # dispatched via auth.get_qwen_auth_status
+    },
+    {
+        "id": "minimax-oauth",
+        "name": "MiniMax (OAuth)",
+        # MiniMax's flow is structurally device-code (verification URI +
+        # user code, backend polls the token endpoint) with a PKCE
+        # extension for code-binding. The dashboard renders the same UX
+        # as a device-code flow; the PKCE bit is a security
+        # extension that doesn't change the operator experience.
+        "flow": "device_code",
+        "cli_command": "sidekick auth add minimax-oauth",
+        "docs_url": "https://www.minimax.io",
+        "status_fn": None,  # dispatched via auth.get_minimax_oauth_auth_status
+    },
+)
+
+
+def _resolve_provider_status(provider_id: str, status_fn) -> Dict[str, Any]:
+    """Dispatch to the right status helper for an OAuth provider entry."""
+    if status_fn is not None:
+        try:
+            return status_fn()
+        except Exception as e:
+            return {"logged_in": False, "error": str(e)}
+    try:
+        from cli import auth as hauth
+        if provider_id == "openai-codex":
+            raw = hauth.get_codex_auth_status()
+            return {
+                "logged_in": bool(raw.get("logged_in")),
+                "source": raw.get("source") or "openai_codex",
+                "source_label": raw.get("auth_mode") or "OpenAI Codex",
+                "token_preview": _truncate_token(raw.get("api_key")),
+                "expires_at": None,
+                "has_refresh_token": False,
+                "last_refresh": raw.get("last_refresh"),
+            }
+        if provider_id == "qwen-oauth":
+            raw = hauth.get_qwen_auth_status()
+            return {
+                "logged_in": bool(raw.get("logged_in")),
+                "source": "qwen_cli",
+                "source_label": raw.get("auth_store_path") or "Qwen CLI",
+                "token_preview": _truncate_token(raw.get("access_token")),
+                "expires_at": raw.get("expires_at"),
+                "has_refresh_token": bool(raw.get("has_refresh_token")),
+            }
+        if provider_id == "minimax-oauth":
+            raw = hauth.get_minimax_oauth_auth_status()
+            return {
+                "logged_in": bool(raw.get("logged_in")),
+                "source": "minimax_oauth",
+                "source_label": f"MiniMax ({raw.get('region', 'global')})",
+                "token_preview": None,
+                "expires_at": raw.get("expires_at"),
+                "has_refresh_token": True,
+            }
+    except Exception as e:
+        return {"logged_in": False, "error": str(e)}
+    return {"logged_in": False}
+
+
+@app.get("/api/providers/oauth")
+async def list_oauth_providers():
+    """Enumerate every OAuth-capable LLM provider with current status.
+
+    Response shape (per provider):
+        id              stable identifier (used in DELETE path)
+        name            human label
+        flow            "pkce" | "device_code" | "external"
+        cli_command     fallback CLI command for users to run manually
+        docs_url        external docs/portal link for the "Learn more" link
+        status:
+          logged_in        bool Ã¢â‚¬â€ currently has usable creds
+          source           short slug ("sidekick_pkce", "claude_code", ...)
+          source_label     human-readable origin (file path, env var name)
+          token_preview    last N chars of the token, never the full token
+          expires_at       ISO timestamp string or null
+          has_refresh_token bool
+    """
+    providers = []
+    for p in _OAUTH_PROVIDER_CATALOG:
+        status = _resolve_provider_status(p["id"], p.get("status_fn"))
+        providers.append({
+            "id": p["id"],
+            "name": p["name"],
+            "flow": p["flow"],
+            "cli_command": p["cli_command"],
+            "docs_url": p["docs_url"],
+            "status": status,
+        })
+    return {"providers": providers}
+
+
+@app.delete("/api/providers/oauth/{provider_id}")
+async def disconnect_oauth_provider(provider_id: str, request: Request):
+    """Disconnect an OAuth provider. Token-protected (matches /env/reveal)."""
+    _require_token(request)
+
+    valid_ids = {p["id"] for p in _OAUTH_PROVIDER_CATALOG}
+    if provider_id not in valid_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown provider: {provider_id}. "
+                   f"Available: {', '.join(sorted(valid_ids))}",
+        )
+
+    # Anthropic and claude-code clear the same Sidekick-managed PKCE file
+    # AND forget the Claude Code import. We don't touch ~/.claude/* directly
+    # Ã¢â‚¬â€ that's owned by the Claude Code CLI; users can re-auth there if they
+    # want to undo a disconnect.
+    if provider_id in {"anthropic", "claude-code"}:
+        try:
+            from runtime.anthropic_adapter import _SIDEKICK_OAUTH_FILE
+            if _SIDEKICK_OAUTH_FILE.exists():
+                _SIDEKICK_OAUTH_FILE.unlink()
+        except Exception:
+            pass
+        # Also clear the credential pool entry if present.
+        try:
+            from cli.auth import clear_provider_auth
+            clear_provider_auth("anthropic")
+        except Exception:
+            pass
+        _log.info("oauth/disconnect: %s", provider_id)
+        return {"ok": True, "provider": provider_id}
+
+    try:
+        from cli.auth import clear_provider_auth
+        cleared = clear_provider_auth(provider_id)
+        _log.info("oauth/disconnect: %s (cleared=%s)", provider_id, cleared)
+        return {"ok": bool(cleared), "provider": provider_id}
+    except Exception as e:
+        _log.exception("disconnect %s failed", provider_id)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ---------------------------------------------------------------------------
+# OAuth Phase 2 Ã¢â‚¬â€ in-browser PKCE & device-code flows
+# ---------------------------------------------------------------------------
+#
+# Two flow shapes are supported:
+#
+#   PKCE (Anthropic):
+#     1. POST /api/providers/oauth/anthropic/start
+#          Ã¢â€ â€™ server generates code_verifier + challenge, builds claude.ai
+#            authorize URL, stashes verifier in _oauth_sessions[session_id]
+#          Ã¢â€ â€™ returns { session_id, flow: "pkce", auth_url }
+#     2. UI opens auth_url in a new tab. User authorizes, copies code.
+#     3. POST /api/providers/oauth/anthropic/submit { session_id, code }
+#          Ã¢â€ â€™ server exchanges (code + verifier) Ã¢â€ â€™ tokens at console.anthropic.com
+#          Ã¢â€ â€™ persists to ~/.sidekick/.anthropic_oauth.json AND credential pool
+#          Ã¢â€ â€™ returns { ok: true, status: "approved" }
+#
+#   Device code (OpenAI Codex):
+#     1. POST /api/providers/oauth/{openai-codex}/start
+#          Ã¢â€ â€™ server hits provider's device-auth endpoint
+#          Ã¢â€ â€™ gets { user_code, verification_url, device_code, interval, expires_in }
+#          Ã¢â€ â€™ spawns background poller thread that polls the token endpoint
+#            every `interval` seconds until approved/expired
+#          Ã¢â€ â€™ stores poll status in _oauth_sessions[session_id]
+#          Ã¢â€ â€™ returns { session_id, flow: "device_code", user_code,
+#                      verification_url, expires_in, poll_interval }
+#     2. UI opens verification_url in a new tab and shows user_code.
+#     3. UI polls GET /api/providers/oauth/{provider}/poll/{session_id}
+#          every 2s until status != "pending".
+#     4. On "approved" the background thread has already saved creds; UI
+#        refreshes the providers list.
+#
+# Sessions are kept in-memory only (single-process FastAPI) and time out
+# after 15 minutes. A periodic cleanup runs on each /start call to GC
+# expired sessions so the dict doesn't grow without bound.
+
+_OAUTH_SESSION_TTL_SECONDS = 15 * 60
+_oauth_sessions: Dict[str, Dict[str, Any]] = {}
+_oauth_sessions_lock = threading.Lock()
+
+# Import OAuth constants from canonical source instead of duplicating.
+# Guarded so sidekick web still starts if anthropic_adapter is unavailable;
+# Phase 2 endpoints will return 501 in that case.
+try:
+    from runtime.anthropic_adapter import (
+        _OAUTH_CLIENT_ID as _ANTHROPIC_OAUTH_CLIENT_ID,
+        _OAUTH_TOKEN_URL as _ANTHROPIC_OAUTH_TOKEN_URL,
+        _OAUTH_REDIRECT_URI as _ANTHROPIC_OAUTH_REDIRECT_URI,
+        _OAUTH_SCOPES as _ANTHROPIC_OAUTH_SCOPES,
+        _generate_pkce as _generate_pkce_pair,
+    )
+    _ANTHROPIC_OAUTH_AVAILABLE = True
+except ImportError:
+    _ANTHROPIC_OAUTH_AVAILABLE = False
+_ANTHROPIC_OAUTH_AUTHORIZE_URL = "https://claude.ai/oauth/authorize"
+
+
+def _gc_oauth_sessions() -> None:
+    """Drop expired sessions. Called opportunistically on /start."""
+    cutoff = time.time() - _OAUTH_SESSION_TTL_SECONDS
+    with _oauth_sessions_lock:
+        stale = [sid for sid, sess in _oauth_sessions.items() if sess["created_at"] < cutoff]
+        for sid in stale:
+            _oauth_sessions.pop(sid, None)
+
+
+def _new_oauth_session(provider_id: str, flow: str) -> tuple[str, Dict[str, Any]]:
+    """Create + register a new OAuth session, return (session_id, session_dict)."""
+    sid = secrets.token_urlsafe(16)
+    sess = {
+        "session_id": sid,
+        "provider": provider_id,
+        "flow": flow,
+        "created_at": time.time(),
+        "status": "pending",  # pending | approved | denied | expired | error
+        "error_message": None,
+    }
+    with _oauth_sessions_lock:
+        _oauth_sessions[sid] = sess
+    return sid, sess
+
+
+def _save_anthropic_oauth_creds(access_token: str, refresh_token: str, expires_at_ms: int) -> None:
+    """Persist Anthropic PKCE creds to both Sidekick file AND credential pool.
+
+    Mirrors what auth_commands.add_command does so the dashboard flow leaves
+    the system in the same state as ``sidekick auth add anthropic``.
+    """
+    from runtime.anthropic_adapter import _SIDEKICK_OAUTH_FILE
+    payload = {
+        "accessToken": access_token,
+        "refreshToken": refresh_token,
+        "expiresAt": expires_at_ms,
+    }
+    _SIDEKICK_OAUTH_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _SIDEKICK_OAUTH_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    # Best-effort credential-pool insert. Failure here doesn't invalidate
+    # the file write Ã¢â‚¬â€ pool registration only matters for the rotation
+    # strategy, not for runtime credential resolution.
+    try:
+        from runtime.credential_pool import (
+            PooledCredential,
+            load_pool,
+            AUTH_TYPE_OAUTH,
+            SOURCE_MANUAL,
+        )
+        import uuid
+        pool = load_pool("anthropic")
+        # Avoid duplicate entries: delete any prior dashboard-issued OAuth entry
+        existing = [e for e in pool.entries() if getattr(e, "source", "").startswith(f"{SOURCE_MANUAL}:dashboard_pkce")]
+        for e in existing:
+            try:
+                pool.remove_entry(getattr(e, "id", ""))
+            except Exception:
+                pass
+        entry = PooledCredential(
+            provider="anthropic",
+            id=uuid.uuid4().hex[:6],
+            label="dashboard PKCE",
+            auth_type=AUTH_TYPE_OAUTH,
+            priority=0,
+            source=f"{SOURCE_MANUAL}:dashboard_pkce",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_at_ms=expires_at_ms,
+        )
+        pool.add_entry(entry)
+    except Exception as e:
+        _log.warning("anthropic pool add (dashboard) failed: %s", e)
+
+
+def _start_anthropic_pkce() -> Dict[str, Any]:
+    """Begin PKCE flow. Returns the auth URL the UI should open."""
+    if not _ANTHROPIC_OAUTH_AVAILABLE:
+        raise HTTPException(status_code=501, detail="Anthropic OAuth not available (missing adapter)")
+    verifier, challenge = _generate_pkce_pair()
+    sid, sess = _new_oauth_session("anthropic", "pkce")
+    sess["verifier"] = verifier
+    sess["state"] = verifier  # Anthropic round-trips verifier as state
+    params = {
+        "code": "true",
+        "client_id": _ANTHROPIC_OAUTH_CLIENT_ID,
+        "response_type": "code",
+        "redirect_uri": _ANTHROPIC_OAUTH_REDIRECT_URI,
+        "scope": _ANTHROPIC_OAUTH_SCOPES,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "state": verifier,
+    }
+    auth_url = f"{_ANTHROPIC_OAUTH_AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
+    return {
+        "session_id": sid,
+        "flow": "pkce",
+        "auth_url": auth_url,
+        "expires_in": _OAUTH_SESSION_TTL_SECONDS,
+    }
+
+
+def _submit_anthropic_pkce(session_id: str, code_input: str) -> Dict[str, Any]:
+    """Exchange authorization code for tokens. Persists on success."""
+    with _oauth_sessions_lock:
+        sess = _oauth_sessions.get(session_id)
+    if not sess or sess["provider"] != "anthropic" or sess["flow"] != "pkce":
+        raise HTTPException(status_code=404, detail="Unknown or expired session")
+    if sess["status"] != "pending":
+        return {"ok": False, "status": sess["status"], "message": sess.get("error_message")}
+
+    # Anthropic's redirect callback page formats the code as `<code>#<state>`.
+    # Strip the state suffix if present (we already have the verifier server-side).
+    parts = code_input.strip().split("#", 1)
+    code = parts[0].strip()
+    if not code:
+        return {"ok": False, "status": "error", "message": "No code provided"}
+    state_from_callback = parts[1] if len(parts) > 1 else ""
+
+    exchange_data = json.dumps({
+        "grant_type": "authorization_code",
+        "client_id": _ANTHROPIC_OAUTH_CLIENT_ID,
+        "code": code,
+        "state": state_from_callback or sess["state"],
+        "redirect_uri": _ANTHROPIC_OAUTH_REDIRECT_URI,
+        "code_verifier": sess["verifier"],
+    }).encode()
+    req = urllib.request.Request(
+        _ANTHROPIC_OAUTH_TOKEN_URL,
+        data=exchange_data,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "sidekick-dashboard/1.0",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            result = json.loads(resp.read().decode())
+    except Exception as e:
+        with _oauth_sessions_lock:
+            sess["status"] = "error"
+            sess["error_message"] = f"Token exchange failed: {e}"
+        return {"ok": False, "status": "error", "message": sess["error_message"]}
+
+    access_token = result.get("access_token", "")
+    refresh_token = result.get("refresh_token", "")
+    expires_in = int(result.get("expires_in") or 3600)
+    if not access_token:
+        with _oauth_sessions_lock:
+            sess["status"] = "error"
+            sess["error_message"] = "No access token returned"
+        return {"ok": False, "status": "error", "message": sess["error_message"]}
+
+    expires_at_ms = int(time.time() * 1000) + (expires_in * 1000)
+    try:
+        _save_anthropic_oauth_creds(access_token, refresh_token, expires_at_ms)
+    except Exception as e:
+        with _oauth_sessions_lock:
+            sess["status"] = "error"
+            sess["error_message"] = f"Save failed: {e}"
+        return {"ok": False, "status": "error", "message": sess["error_message"]}
+    with _oauth_sessions_lock:
+        sess["status"] = "approved"
+    _log.info("oauth/pkce: anthropic login completed (session=%s)", session_id)
+    return {"ok": True, "status": "approved"}
+
+
+async def _start_device_code_flow(provider_id: str) -> Dict[str, Any]:
+    """Initiate a device-code flow (OpenAI Codex or MiniMax).
+
+    Calls the provider's device-auth endpoint via the existing CLI helpers,
+    then spawns a background poller. Returns the user-facing display fields
+    so the UI can render the verification page link + user code.
+    """
+
+    if provider_id == "openai-codex":
+        # Codex uses fixed OpenAI device-auth endpoints; reuse the helper.
+        sid, _ = _new_oauth_session("openai-codex", "device_code")
+        # Use the helper but in a thread because it polls inline.
+        # We can't extract just the start step without refactoring auth.py,
+        # so we run the full helper in a worker and proxy the user_code +
+        # verification_url back via the session dict. The helper prints
+        # to stdout Ã¢â‚¬â€ we capture nothing here, just status.
+        threading.Thread(
+            target=_codex_full_login_worker, args=(sid,), daemon=True,
+            name=f"oauth-codex-{sid[:6]}",
+        ).start()
+        # Block briefly until the worker has populated the user_code, OR error.
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            with _oauth_sessions_lock:
+                s = _oauth_sessions.get(sid)
+            if s and (s.get("user_code") or s["status"] != "pending"):
+                break
+            await asyncio.sleep(0.1)
+        with _oauth_sessions_lock:
+            s = _oauth_sessions.get(sid, {})
+        if s.get("status") == "error":
+            raise HTTPException(status_code=500, detail=s.get("error_message") or "device-auth failed")
+        if not s.get("user_code"):
+            raise HTTPException(status_code=504, detail="device-auth timed out before returning a user code")
+        return {
+            "session_id": sid,
+            "flow": "device_code",
+            "user_code": s["user_code"],
+            "verification_url": s["verification_url"],
+            "expires_in": int(s.get("expires_in") or 900),
+            "poll_interval": int(s.get("interval") or 5),
+        }
+
+    if provider_id == "minimax-oauth":
+        # MiniMax uses a device-code-style flow (verification URI + user
+        # code + background poll) with a PKCE extension on top. From the
+        # operator's perspective it's identical to a device-code
+        # flow; the PKCE bit (verifier + challenge from
+        # _minimax_pkce_pair) is a security extension that binds the
+        # token exchange to the original session.
+        from cli.auth import (
+            _minimax_pkce_pair,
+            _minimax_request_user_code,
+            MINIMAX_OAUTH_CLIENT_ID,
+            MINIMAX_OAUTH_GLOBAL_BASE,
+        )
+        import httpx
+        verifier, challenge, state = _minimax_pkce_pair()
+        portal_base_url = (
+            os.getenv("MINIMAX_PORTAL_BASE_URL") or MINIMAX_OAUTH_GLOBAL_BASE
+        ).rstrip("/")
+        def _do_minimax_request():
+            with httpx.Client(
+                timeout=httpx.Timeout(15.0),
+                headers={"Accept": "application/json"},
+                follow_redirects=True,
+            ) as client:
+                return _minimax_request_user_code(
+                    client=client,
+                    portal_base_url=portal_base_url,
+                    client_id=MINIMAX_OAUTH_CLIENT_ID,
+                    code_challenge=challenge,
+                    state=state,
+                )
+        device_data = await asyncio.get_event_loop().run_in_executor(
+            None, _do_minimax_request
+        )
+        sid, sess = _new_oauth_session("minimax-oauth", "device_code")
+        # The CLI flow names this `interval_ms` because MiniMax's
+        # `interval` field is in milliseconds (defensive default 2000ms
+        # in _minimax_poll_token).
+        interval_raw = device_data.get("interval")
+        sess["interval_ms"] = (
+            int(interval_raw) if interval_raw is not None else None
+        )
+        sess["user_code"] = str(device_data["user_code"])
+        sess["code_verifier"] = verifier
+        sess["state"] = state
+        sess["portal_base_url"] = portal_base_url
+        sess["client_id"] = MINIMAX_OAUTH_CLIENT_ID
+        sess["region"] = "global"
+        # `expired_in` from MiniMax is overloaded Ã¢â‚¬â€ could be a unix-ms
+        # timestamp OR a seconds-from-now duration. Mirror the heuristic
+        # in _minimax_poll_token. Stash the raw value for the poller;
+        # compute a derived expires_at + UI-friendly expires_in seconds.
+        expired_in_raw = int(device_data["expired_in"])
+        sess["expired_in_raw"] = expired_in_raw
+        if expired_in_raw > 1_000_000_000_000:  # likely unix-ms
+            expires_at_ts = expired_in_raw / 1000.0
+            expires_in_seconds = max(0, int(expires_at_ts - time.time()))
+        else:
+            expires_at_ts = time.time() + expired_in_raw
+            expires_in_seconds = expired_in_raw
+        sess["expires_at"] = expires_at_ts
+        threading.Thread(
+            target=_minimax_poller,
+            args=(sid,),
+            daemon=True,
+            name=f"oauth-poll-{sid[:6]}",
+        ).start()
+        return {
+            "session_id": sid,
+            "flow": "device_code",
+            "user_code": str(device_data["user_code"]),
+            "verification_url": str(device_data["verification_uri"]),
+            "expires_in": expires_in_seconds,
+            "poll_interval": max(2, (sess["interval_ms"] or 2000) // 1000),
+        }
+
+    raise HTTPException(status_code=400, detail=f"Provider {provider_id} does not support device-code flow")
+
+
+def _minimax_poller(session_id: str) -> None:
+    """Background poller that drives a MiniMax OAuth flow to completion.
+
+    Calls the MiniMax-specific token endpoint via PKCE-style ``code_verifier``
+    + ``user_code``. On success, builds the same auth_state dict that
+    ``_minimax_oauth_login`` (the CLI flow) builds
+    and persists via ``_minimax_save_auth_state`` Ã¢â‚¬â€ so the dashboard
+    path leaves the system in the same state as
+    ``sidekick auth add minimax-oauth``.
+    """
+    from cli.auth import (
+        _minimax_poll_token,
+        _minimax_resolve_token_expiry_unix,
+        _minimax_save_auth_state,
+        MINIMAX_OAUTH_GLOBAL_INFERENCE,
+        MINIMAX_OAUTH_SCOPE,
+    )
+    from datetime import datetime, timezone
+    import httpx
+    with _oauth_sessions_lock:
+        sess = _oauth_sessions.get(session_id)
+    if not sess:
+        return
+    portal_base_url = sess["portal_base_url"]
+    client_id = sess["client_id"]
+    user_code = sess["user_code"]
+    code_verifier = sess["code_verifier"]
+    interval_ms = sess.get("interval_ms")
+    expired_in_raw = sess["expired_in_raw"]
+    try:
+        with httpx.Client(
+            timeout=httpx.Timeout(15.0),
+            headers={"Accept": "application/json"},
+            follow_redirects=True,
+        ) as client:
+            token_data = _minimax_poll_token(
+                client=client,
+                portal_base_url=portal_base_url,
+                client_id=client_id,
+                user_code=user_code,
+                code_verifier=code_verifier,
+                expired_in=expired_in_raw,
+                interval_ms=interval_ms,
+            )
+        # Build the auth_state dict in the same shape as the CLI flow's
+        # `_minimax_oauth_login` so `_minimax_save_auth_state` writes
+        # the canonical record. Region is fixed to "global" for the
+        # dashboard path; cn-region operators can still use the CLI
+        # flow which supports `--region cn`.
+        now = datetime.now(timezone.utc)
+        expires_at_ts = _minimax_resolve_token_expiry_unix(
+            int(token_data["expired_in"]), now=now,
+        )
+        expires_in_s = max(0, int(expires_at_ts - now.timestamp()))
+        auth_state = {
+            "provider": "minimax-oauth",
+            "region": sess.get("region", "global"),
+            "portal_base_url": portal_base_url,
+            "inference_base_url": MINIMAX_OAUTH_GLOBAL_INFERENCE,
+            "client_id": client_id,
+            "scope": MINIMAX_OAUTH_SCOPE,
+            "token_type": token_data.get("token_type", "Bearer"),
+            "access_token": token_data["access_token"],
+            "refresh_token": token_data["refresh_token"],
+            "resource_url": token_data.get("resource_url"),
+            "obtained_at": now.isoformat(),
+            "expires_at": datetime.fromtimestamp(
+                expires_at_ts, tz=timezone.utc
+            ).isoformat(),
+            "expires_in": expires_in_s,
+        }
+        _minimax_save_auth_state(auth_state)
+        with _oauth_sessions_lock:
+            sess["status"] = "approved"
+        _log.info("oauth/device: minimax login completed (session=%s)", session_id)
+    except Exception as e:
+        _log.warning("minimax device-code poll failed (session=%s): %s", session_id, e)
+        with _oauth_sessions_lock:
+            sess["status"] = "error"
+            sess["error_message"] = str(e)
+
+
+def _codex_full_login_worker(session_id: str) -> None:
+    """Run the complete OpenAI Codex device-code flow.
+
+    Codex doesn't use the standard OAuth device-code endpoints; it has its
+    own ``/api/accounts/deviceauth/usercode`` (JSON body, returns
+    ``device_auth_id``) and ``/api/accounts/deviceauth/token`` (JSON body
+    polled until 200). On success the response carries an
+    ``authorization_code`` + ``code_verifier`` that get exchanged at
+    CODEX_OAUTH_TOKEN_URL with grant_type=authorization_code.
+
+    The flow is replicated inline (rather than calling
+    _codex_device_code_login) because that helper prints/blocks/polls in a
+    single function Ã¢â‚¬â€ we need to surface the user_code to the dashboard the
+    moment we receive it, well before polling completes.
+    """
+    try:
+        import httpx
+        from cli.auth import (
+            CODEX_OAUTH_CLIENT_ID,
+            CODEX_OAUTH_TOKEN_URL,
+            DEFAULT_CODEX_BASE_URL,
+        )
+        issuer = "https://auth.openai.com"
+
+        # Step 1: request device code
+        with httpx.Client(timeout=httpx.Timeout(15.0)) as client:
+            resp = client.post(
+                f"{issuer}/api/accounts/deviceauth/usercode",
+                json={"client_id": CODEX_OAUTH_CLIENT_ID},
+                headers={"Content-Type": "application/json"},
+            )
+        if resp.status_code != 200:
+            raise RuntimeError(f"deviceauth/usercode returned {resp.status_code}")
+        device_data = resp.json()
+        user_code = device_data.get("user_code", "")
+        device_auth_id = device_data.get("device_auth_id", "")
+        poll_interval = max(3, int(device_data.get("interval", "5")))
+        if not user_code or not device_auth_id:
+            raise RuntimeError("device-code response missing user_code or device_auth_id")
+        verification_url = f"{issuer}/codex/device"
+        with _oauth_sessions_lock:
+            sess = _oauth_sessions.get(session_id)
+            if not sess:
+                return
+            sess["user_code"] = user_code
+            sess["verification_url"] = verification_url
+            sess["device_auth_id"] = device_auth_id
+            sess["interval"] = poll_interval
+            sess["expires_in"] = 15 * 60  # OpenAI's effective limit
+            sess["expires_at"] = time.time() + sess["expires_in"]
+
+        # Step 2: poll until authorized
+        deadline = time.monotonic() + sess["expires_in"]
+        code_resp = None
+        with httpx.Client(timeout=httpx.Timeout(15.0)) as client:
+            while time.monotonic() < deadline:
+                time.sleep(poll_interval)
+                poll = client.post(
+                    f"{issuer}/api/accounts/deviceauth/token",
+                    json={"device_auth_id": device_auth_id, "user_code": user_code},
+                    headers={"Content-Type": "application/json"},
+                )
+                if poll.status_code == 200:
+                    code_resp = poll.json()
+                    break
+                if poll.status_code in {403, 404}:
+                    continue  # user hasn't authorized yet
+                raise RuntimeError(f"deviceauth/token poll returned {poll.status_code}")
+
+        if code_resp is None:
+            with _oauth_sessions_lock:
+                sess["status"] = "expired"
+                sess["error_message"] = "Device code expired before approval"
+            return
+
+        # Step 3: exchange authorization_code for tokens
+        authorization_code = code_resp.get("authorization_code", "")
+        code_verifier = code_resp.get("code_verifier", "")
+        if not authorization_code or not code_verifier:
+            raise RuntimeError("device-auth response missing authorization_code/code_verifier")
+        with httpx.Client(timeout=httpx.Timeout(15.0)) as client:
+            token_resp = client.post(
+                CODEX_OAUTH_TOKEN_URL,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": authorization_code,
+                    "redirect_uri": f"{issuer}/deviceauth/callback",
+                    "client_id": CODEX_OAUTH_CLIENT_ID,
+                    "code_verifier": code_verifier,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        if token_resp.status_code != 200:
+            raise RuntimeError(f"token exchange returned {token_resp.status_code}")
+        tokens = token_resp.json()
+        access_token = tokens.get("access_token", "")
+        refresh_token = tokens.get("refresh_token", "")
+        if not access_token:
+            raise RuntimeError("token exchange did not return access_token")
+
+        # Persist via credential pool Ã¢â‚¬â€ same shape as auth_commands.add_command
+        from runtime.credential_pool import (
+            PooledCredential,
+            load_pool,
+            AUTH_TYPE_OAUTH,
+            SOURCE_MANUAL,
+        )
+        import uuid as _uuid
+        pool = load_pool("openai-codex")
+        base_url = (
+            (os.getenv("SIDEKICK_CODEX_BASE_URL") or "").strip().rstrip("/")
+            or DEFAULT_CODEX_BASE_URL
+        )
+        entry = PooledCredential(
+            provider="openai-codex",
+            id=_uuid.uuid4().hex[:6],
+            label="dashboard device_code",
+            auth_type=AUTH_TYPE_OAUTH,
+            priority=0,
+            source=f"{SOURCE_MANUAL}:dashboard_device_code",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            base_url=base_url,
+        )
+        pool.add_entry(entry)
+        with _oauth_sessions_lock:
+            sess["status"] = "approved"
+        _log.info("oauth/device: openai-codex login completed (session=%s)", session_id)
+    except Exception as e:
+        _log.warning("codex device-code worker failed (session=%s): %s", session_id, e)
+        with _oauth_sessions_lock:
+            s = _oauth_sessions.get(session_id)
+            if s:
+                s["status"] = "error"
+                s["error_message"] = str(e)
+
+
+@app.post("/api/providers/oauth/{provider_id}/start")
+async def start_oauth_login(provider_id: str, request: Request):
+    """Initiate an OAuth login flow. Token-protected."""
+    _require_token(request)
+    _gc_oauth_sessions()
+    valid = {p["id"] for p in _OAUTH_PROVIDER_CATALOG}
+    if provider_id not in valid:
+        raise HTTPException(status_code=400, detail=f"Unknown provider {provider_id}")
+    catalog_entry = next(p for p in _OAUTH_PROVIDER_CATALOG if p["id"] == provider_id)
+    if catalog_entry["flow"] == "external":
+        raise HTTPException(
+            status_code=400,
+            detail=f"{provider_id} uses an external CLI; run `{catalog_entry['cli_command']}` manually",
+        )
+    try:
+        # The pkce branch is gated on provider_id == "anthropic" because
+        # `_start_anthropic_pkce()` is hardcoded to the Anthropic flow.
+        # Routing any other future pkce-flagged provider through it would
+        # silently launch the Anthropic OAuth flow (the bug fixed in this
+        # change for MiniMax). New PKCE providers must add their own
+        # start function and an explicit branch here.
+        if catalog_entry["flow"] == "pkce" and provider_id == "anthropic":
+            return _start_anthropic_pkce()
+        if catalog_entry["flow"] == "device_code":
+            return await _start_device_code_flow(provider_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log.exception("oauth/start %s failed", provider_id)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    raise HTTPException(status_code=400, detail="Unsupported flow")
+
+
+class OAuthSubmitBody(BaseModel):
+    session_id: str
+    code: str
+
+
+@app.post("/api/providers/oauth/{provider_id}/submit")
+async def submit_oauth_code(provider_id: str, body: OAuthSubmitBody, request: Request):
+    """Submit the auth code for PKCE flows. Token-protected."""
+    _require_token(request)
+    if provider_id == "anthropic":
+        return await asyncio.get_running_loop().run_in_executor(
+            None, _submit_anthropic_pkce, body.session_id, body.code,
+        )
+    raise HTTPException(status_code=400, detail=f"submit not supported for {provider_id}")
+
+
+@app.get("/api/providers/oauth/{provider_id}/poll/{session_id}")
+async def poll_oauth_session(provider_id: str, session_id: str):
+    """Poll a device-code session's status (no auth Ã¢â‚¬â€ read-only state)."""
+    with _oauth_sessions_lock:
+        sess = _oauth_sessions.get(session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found or expired")
+    if sess["provider"] != provider_id:
+        raise HTTPException(status_code=400, detail="Provider mismatch for session")
+    return {
+        "session_id": session_id,
+        "status": sess["status"],
+        "error_message": sess.get("error_message"),
+        "expires_at": sess.get("expires_at"),
+    }
+
+
+@app.delete("/api/providers/oauth/sessions/{session_id}")
+async def cancel_oauth_session(session_id: str, request: Request):
+    """Cancel a pending OAuth session. Token-protected."""
+    _require_token(request)
+    with _oauth_sessions_lock:
+        sess = _oauth_sessions.pop(session_id, None)
+    if sess is None:
+        return {"ok": False, "message": "session not found"}
+    return {"ok": True, "session_id": session_id}
+
+
+# ---------------------------------------------------------------------------
+# Session detail endpoints
+# ---------------------------------------------------------------------------
+
+
+
+def _session_latest_descendant(session_id: str):
+    """Resolve a session id to the newest child leaf session.
+
+    /model may create child sessions. Dashboard refresh should continue the
+    newest child instead of reopening the old parent.
+    """
+    from runtime._compat.shim_state import SessionDB
+
+    def row_get(row, key, index):
+        if isinstance(row, dict):
+            return row.get(key)
+        try:
+            return row[key]
+        except Exception:
+            try:
+                return row[index]
+            except Exception:
+                return None
+
+    db = SessionDB()
+    try:
+        sid = db.resolve_session_id(session_id)
+        if not sid or not db.get_session(sid):
+            return None, []
+
+        conn = (
+            getattr(db, "conn", None)
+            or getattr(db, "_conn", None)
+            or getattr(db, "connection", None)
+            or getattr(db, "_connection", None)
+        )
+
+        rows = []
+        if conn is not None:
+            raw_rows = conn.execute(
+                "SELECT id, parent_session_id, started_at FROM sessions"
+            ).fetchall()
+            for row in raw_rows:
+                rows.append({
+                    "id": row_get(row, "id", 0),
+                    "parent_session_id": row_get(row, "parent_session_id", 1),
+                    "started_at": row_get(row, "started_at", 2),
+                })
+        else:
+            rows = db.list_sessions_rich(limit=10000, offset=0)
+
+        children = {}
+        for row in rows:
+            rid = row.get("id")
+            parent = row.get("parent_session_id")
+            if rid and parent:
+                children.setdefault(parent, []).append(row)
+
+        def started(row):
+            try:
+                return float(row.get("started_at") or 0)
+            except Exception:
+                return 0.0
+
+        current = sid
+        path = [sid]
+        seen = {sid}
+
+        while children.get(current):
+            candidates = [r for r in children[current] if r.get("id") not in seen]
+            if not candidates:
+                break
+            candidates.sort(key=started, reverse=True)
+            current = candidates[0]["id"]
+            path.append(current)
+            seen.add(current)
+
+        return current, path
+    finally:
+        db.close()
+
+@app.get("/api/sessions/{session_id}")
+async def get_session_detail(session_id: str):
+    from runtime._compat.shim_state import SessionDB
+    db = SessionDB()
+    try:
+        sid = db.resolve_session_id(session_id)
+        session = db.get_session(sid) if sid else None
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return session
+    finally:
+        db.close()
+
+
+
+@app.get("/api/sessions/{session_id}/latest-descendant")
+async def get_session_latest_descendant(session_id: str):
+    latest, path = _session_latest_descendant(session_id)
+    if not latest:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "requested_session_id": path[0] if path else session_id,
+        "session_id": latest,
+        "path": path,
+        "changed": bool(path and latest != path[0]),
+    }
+
+@app.get("/api/sessions/{session_id}/messages")
+async def get_session_messages(session_id: str):
+    from runtime._compat.shim_state import SessionDB
+    db = SessionDB()
+    try:
+        sid = db.resolve_session_id(session_id)
+        if not sid:
+            raise HTTPException(status_code=404, detail="Session not found")
+        messages = db.get_messages(sid)
+        return {"session_id": sid, "messages": messages}
+    finally:
+        db.close()
+
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session_endpoint(session_id: str):
+    from runtime._compat.shim_state import SessionDB
+    db = SessionDB()
+    try:
+        if not db.delete_session(session_id):
+            raise HTTPException(status_code=404, detail="Session not found")
+        return {"ok": True}
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Log viewer endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/logs")
+async def get_logs(
+    file: str = "agent",
+    lines: int = 100,
+    level: Optional[str] = None,
+    component: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    from cli.logs import _read_tail, LOG_FILES
+
+    log_name = LOG_FILES.get(file)
+    if not log_name:
+        raise HTTPException(status_code=400, detail=f"Unknown log file: {file}")
+    log_path = get_sidekick_home() / "logs" / log_name
+    if not log_path.exists():
+        return {"file": file, "lines": []}
+
+    try:
+        from runtime._compat.shim_logging import COMPONENT_PREFIXES
+    except ImportError:
+        COMPONENT_PREFIXES = {}
+
+    # Normalize "ALL" / "all" / empty Ã¢â€ â€™ no filter. _matches_filters treats an
+    # empty tuple as "must match a prefix" (startswith(()) is always False),
+    # so passing () instead of None silently drops every line.
+    min_level = level if level and level.upper() != "ALL" else None
+    if component and component.lower() != "all":
+        comp_prefixes = COMPONENT_PREFIXES.get(component)
+        if comp_prefixes is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown component: {component}. "
+                       f"Available: {', '.join(sorted(COMPONENT_PREFIXES))}",
+            )
+    else:
+        comp_prefixes = None
+
+    has_filters = bool(min_level or comp_prefixes or search)
+    result = _read_tail(
+        log_path, min(lines, 500) if not search else 2000,
+        has_filters=has_filters,
+        min_level=min_level,
+        component_prefixes=comp_prefixes,
+    )
+    # Post-filter by search term (case-insensitive substring match).
+    # _read_tail doesn't support free-text search, so we filter here and
+    # trim to the requested line count afterward.
+    if search:
+        needle = search.lower()
+        result = [l for l in result if needle in l.lower()][-min(lines, 500):]
+    return {"file": file, "lines": result}
+
+
+# ---------------------------------------------------------------------------
+# Cron job management endpoints
+# ---------------------------------------------------------------------------
+
+
+class CronJobCreate(BaseModel):
+    prompt: str
+    schedule: str
+    name: str = ""
+    deliver: str = "local"
+
+
+class CronJobUpdate(BaseModel):
+    updates: dict
+
+
+@app.get("/api/cron/jobs")
+async def list_cron_jobs():
+    from cron.jobs import list_jobs
+    return list_jobs(include_disabled=True)
+
+
+@app.get("/api/nova/status")
+async def nova_status_endpoint():
+    from web.api.nova_presence import build_status_projection
+
+    return build_status_projection()
+
+
+def _public_nova_supervision_outcomes(raw: object, *, managed_spaces: set[str] | None = None) -> list[dict[str, str]]:
+    """Project bounded ticker outcomes without run IDs, paths, or errors."""
+    allowed = {
+        "started", "auto_resumed", "coalesced", "unchanged", "completed",
+        "waiting_for_catalog", "active_limit", "admission_failed",
+        "admission_rejected", "start_failed", "ineligible", "verifier_unavailable",
+    }
+    public: list[dict[str, str]] = []
+    for item in raw if isinstance(raw, list) else ():
+        if not isinstance(item, dict):
+            continue
+        space = str(item.get("space") or "").strip()
+        status = str(item.get("status") or "").strip().lower()
+        if (
+            (managed_spaces is not None and space.lower() not in managed_spaces)
+            or not space
+            or len(space) > 128
+            or any(not (char.isalnum() or char in "_.:-") for char in space)
+            or status not in allowed
+        ):
+            continue
+        public.append({"space": space, "status": status})
+        if len(public) >= 16:
+            break
+    return public
+
+
+def _public_nova_supervision_error(raw: object) -> str | None:
+    value = str(raw or "").strip().lower()
+    allowed = {
+        "pulse_failed",
+        "ticker_lease_lost",
+        "ticker_lease_unavailable",
+        "ticker_thread_escalated",
+        "ticker_watchdog_missing",
+        "ticker_watchdog_stale",
+        "ticker_watchdog_unavailable",
+    }
+    return value if value in allowed else None
+
+
+def _bounded_presence_int(raw: object, *, default: int, minimum: int, maximum: int) -> int:
+    """Coerce ticker telemetry for the read-only presence projection.
+
+    The ticker state is process-local and may be partially initialized or
+    corrupted after a restart. A malformed telemetry field must not turn a
+    GET-only presence request into a 500 response.
+    """
+    try:
+        value = int(raw)
+    except (TypeError, ValueError, OverflowError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+@app.get("/api/nova/presence-card")
+async def nova_presence_card_endpoint():
+    """Return Nova's public card without invoking lifecycle/status helpers.
+
+    This native route deliberately precedes the generic compatibility bridge:
+    page loads must not initialise a Space, repair Nova state, or dispatch
+    background work merely to render the empty chat view.
+    """
+    from web.api.nova_presence import build_presence_card, _operational_projection
+
+    payload = build_presence_card()
+    # Keep the durable lease projection from the pure card. The host ticker
+    # state below is process-local and may be absent when the HTTP listener is
+    # offline; dropping the lease would falsely imply no owner exists.
+    ledger_supervision = payload.get("supervision") if isinstance(payload.get("supervision"), dict) else {}
+    managed_spaces = {str(item.get("space") or "").strip().lower() for item in (payload.get("managed_spaces") or []) if isinstance(item, dict) and str(item.get("space") or "").strip()}
+    with _NOVA_SUPERVISION_TICKER_LOCK:
+        raw_mind_status = str((_NOVA_SUPERVISION_TICKER_STATE.get("mind_watchdog") or {}).get("status") or "").strip().lower()
+        mind_status = raw_mind_status if raw_mind_status in {"healthy", "restart_pending", "restarted", "not_started"} else "unavailable"
+        raw_ticker_status = str((_NOVA_SUPERVISION_TICKER_STATE.get("ticker_watchdog") or {}).get("status") or "").strip().lower()
+        ticker_status = raw_ticker_status if raw_ticker_status in {"healthy", "restart_requested", "restart_backoff", "restart_failed", "restart_escalated", "not_started"} else "unavailable"
+        raw_ticker_watchdog = _NOVA_SUPERVISION_TICKER_STATE.get("ticker_watchdog") or {}
+        ticker_watchdog = {
+            "status": ticker_status,
+            "alert_code": raw_ticker_watchdog.get("alert_code") if ticker_status != "unavailable" else "ticker_unavailable",
+            "last_pulse_at": raw_ticker_watchdog.get("last_pulse_at"),
+            "age_seconds": raw_ticker_watchdog.get("age_seconds"),
+        }
+        payload["supervision"] = {
+            "running": bool(_NOVA_SUPERVISION_TICKER_STATE.get("running")),
+            "feedback_responder": str(_NOVA_SUPERVISION_TICKER_STATE.get("feedback_responder") or "disabled")[:16],
+            "feedback_last_error": str(_NOVA_SUPERVISION_TICKER_STATE.get("feedback_last_error") or "")[:32] or None,
+            "lease": ledger_supervision.get("lease") or {"state": "inactive", "liveness": "not_observed"},
+            "interval_seconds": _bounded_presence_int(_NOVA_SUPERVISION_TICKER_STATE.get("interval_seconds"), default=60, minimum=1, maximum=3600),
+            "consumer_interval_seconds": _bounded_presence_int(_NOVA_SUPERVISION_TICKER_STATE.get("consumer_interval_seconds"), default=_NOVA_SUPERVISION_CONSUMER_INTERVAL_SECONDS, minimum=1, maximum=3600),
+            "last_catalog_refresh_attempts": _bounded_presence_int(_NOVA_SUPERVISION_TICKER_STATE.get("last_catalog_refresh_attempts"), default=0, minimum=0, maximum=16),
+            "last_pulse_at": _NOVA_SUPERVISION_TICKER_STATE.get("last_pulse_at"),
+            "last_outcomes": _public_nova_supervision_outcomes(_NOVA_SUPERVISION_TICKER_STATE.get("last_outcomes", []), managed_spaces=managed_spaces),
+            "error_count": _bounded_presence_int(_NOVA_SUPERVISION_TICKER_STATE.get("error_count"), default=0, minimum=0, maximum=1000000),
+            "last_error": _public_nova_supervision_error(_NOVA_SUPERVISION_TICKER_STATE.get("last_error")),
+            "ticker_watchdog": ticker_watchdog,
+            "mind_watchdog": {"status": mind_status},
+        }
+        payload["operational"] = _operational_projection(
+            managed_spaces=payload.get("managed_spaces") or [],
+            blockers=payload.get("blockers") or [],
+            supervision=payload["supervision"],
+        )
+    return payload
+
+
+class NovaYoloToggle(BaseModel):
+    enabled: bool
+
+
+class NovaVoiceEvent(BaseModel):
+    phase: str
+    text: str = ""
+    confidence: float = 1.0
+    source: str = "push_to_talk"
+    cycle_id: str | None = None
+    response_id: str | None = None
+    continue_listening: bool = False
+
+
+@app.get("/api/nova/yolo")
+async def nova_yolo_status_endpoint():
+    from web.api.nova_lifecycle import load_nova_yolo_state
+
+    return load_nova_yolo_state()
+
+
+@app.post("/api/nova/yolo")
+async def nova_yolo_toggle_endpoint(body: NovaYoloToggle):
+    from web.api.nova_lifecycle import set_nova_yolo_enabled
+
+    return set_nova_yolo_enabled(body.enabled)
+
+
+@app.get("/api/nova/presence")
+async def nova_presence_endpoint():
+    from web.api.nova_presence import build_presence_status
+
+    return build_presence_status()
+
+
+@app.post("/api/nova/voice-event")
+async def nova_voice_event_endpoint(body: NovaVoiceEvent):
+    from nova.presence import PresenceCoordinator
+
+    coordinator = PresenceCoordinator()
+    phase = body.phase.strip().lower()
+    if phase == "transcript":
+        return coordinator.accept_transcript(
+            body.text, source=body.source, confidence=body.confidence, cycle_id=body.cycle_id,
+        )
+    if phase == "speaking":
+        return coordinator.begin_speaking(
+            body.text, cycle_id=str(body.cycle_id or ""), response_id=body.response_id, source=body.source,
+        )
+    if phase == "complete":
+        return coordinator.complete(
+            cycle_id=str(body.cycle_id or ""), continue_listening=body.continue_listening, source=body.source,
+        )
+    if phase == "interrupt":
+        return coordinator.interrupt(cycle_id=str(body.cycle_id or ""), source=body.source)
+    if phase in {"sleeping", "available", "listening", "thinking", "do_not_disturb"}:
+        return coordinator.transition(phase, source=body.source, cycle_id=body.cycle_id)
+    return {"ok": False, "reason": "unsupported_voice_phase", "phase": phase}
+
+
+@app.get("/api/nova/personality")
+async def nova_personality_endpoint(scope: str = "public"):
+    from web.api.nova_lifecycle import personality_snapshot
+
+    requested = (scope or "public").strip().lower()
+    if requested not in {"public", "private", "sensitive"}:
+        requested = "public"
+    if requested == "sensitive":
+        requested = "private"
+    return personality_snapshot(requested)
+
+
+@app.get("/api/nova/events")
+async def nova_events_endpoint(scope: str = "public", limit: int = 50):
+    from web.api.nova_lifecycle import load_events
+
+    requested = (scope or "public").strip().lower()
+    capped = max(1, min(200, int(limit or 50)))
+    return {"events": load_events(limit=capped, include_private=(requested == "private"))}
+
+
+@app.get("/api/cron/jobs/{job_id}")
+async def get_cron_job(job_id: str):
+    from cron.jobs import get_job
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@app.post("/api/cron/jobs")
+async def create_cron_job(body: CronJobCreate):
+    from cron.jobs import create_job
+    try:
+        job = create_job(prompt=body.prompt, schedule=body.schedule,
+                         name=body.name, deliver=body.deliver)
+        return job
+    except Exception as e:
+        _log.exception("POST /api/cron/jobs failed")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.put("/api/cron/jobs/{job_id}")
+async def update_cron_job(job_id: str, body: CronJobUpdate):
+    from cron.jobs import update_job
+    job = update_job(job_id, body.updates)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@app.post("/api/cron/jobs/{job_id}/pause")
+async def pause_cron_job(job_id: str):
+    from cron.jobs import pause_job
+    job = pause_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@app.post("/api/cron/jobs/{job_id}/resume")
+async def resume_cron_job(job_id: str):
+    from cron.jobs import resume_job
+    job = resume_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@app.post("/api/cron/jobs/{job_id}/trigger")
+async def trigger_cron_job(job_id: str):
+    from cron.jobs import trigger_job
+    job = trigger_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@app.delete("/api/cron/jobs/{job_id}")
+async def delete_cron_job(job_id: str):
+    from cron.jobs import remove_job
+    if not remove_job(job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Profile management endpoints (minimal Ã¢â‚¬â€ list/create/rename/delete + SOUL.md)
+# ---------------------------------------------------------------------------
+
+
+class ProfileCreate(BaseModel):
+    name: str
+    clone_from_default: bool = False
+    no_skills: bool = False
+
+
+class ProfileRename(BaseModel):
+    new_name: str
+
+
+class ProfileSoulUpdate(BaseModel):
+    content: str
+
+
+def _profile_attr(info, name: str, default: Any = None) -> Any:
+    try:
+        return getattr(info, name)
+    except Exception:
+        return default
+
+
+def _profile_to_dict(info) -> Dict[str, Any]:
+    return {
+        "name": _profile_attr(info, "name", ""),
+        "path": str(_profile_attr(info, "path", "")),
+        "is_default": bool(_profile_attr(info, "is_default", False)),
+        "model": _profile_attr(info, "model"),
+        "provider": _profile_attr(info, "provider"),
+        "has_env": bool(_profile_attr(info, "has_env", False)),
+        "skill_count": int(_profile_attr(info, "skill_count", 0) or 0),
+    }
+
+
+def _fallback_profile_dicts(profiles_mod) -> List[Dict[str, Any]]:
+    def _safe(callable_, default):
+        try:
+            return callable_()
+        except Exception:
+            return default
+
+    profiles: List[Dict[str, Any]] = []
+    default_home = profiles_mod._get_default_sidekick_home()
+    if default_home.is_dir():
+        model, provider = _safe(lambda: profiles_mod._read_config_model(default_home), (None, None))
+        profiles.append({
+            "name": "default",
+            "path": str(default_home),
+            "is_default": True,
+            "model": model,
+            "provider": provider,
+            "has_env": (default_home / ".env").exists(),
+            "skill_count": _safe(lambda: profiles_mod._count_skills(default_home), 0),
+        })
+
+    profiles_root = profiles_mod._get_profiles_root()
+    if profiles_root.is_dir():
+        for entry in sorted(profiles_root.iterdir()):
+            if not entry.is_dir() or not profiles_mod._PROFILE_ID_RE.match(entry.name):
+                continue
+            model, provider = _safe(lambda entry=entry: profiles_mod._read_config_model(entry), (None, None))
+            profiles.append({
+                "name": entry.name,
+                "path": str(entry),
+                "is_default": False,
+                "model": model,
+                "provider": provider,
+                "has_env": (entry / ".env").exists(),
+                "skill_count": _safe(lambda entry=entry: profiles_mod._count_skills(entry), 0),
+            })
+
+    return profiles
+
+
+def _resolve_profile_dir(name: str) -> Path:
+    """Validate ``name`` and resolve to its directory or raise an HTTPException."""
+    from cli import profiles as profiles_mod
+    try:
+        profiles_mod.validate_profile_name(name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if not profiles_mod.profile_exists(name):
+        raise HTTPException(status_code=404, detail=f"Profile '{name}' does not exist.")
+    return profiles_mod.get_profile_dir(name)
+
+
+def _profile_setup_command(name: str) -> str:
+    """Return the shell command used to configure a profile in the CLI."""
+    _resolve_profile_dir(name)
+    return "sidekick setup" if name == "default" else f"{name} setup"
+
+
+@app.get("/api/profiles")
+async def list_profiles_endpoint():
+    from cli import profiles as profiles_mod
+    try:
+        return {"profiles": [_profile_to_dict(p) for p in profiles_mod.list_profiles()]}
+    except Exception:
+        _log.exception("GET /api/profiles failed; falling back to profile directory scan")
+        return {"profiles": _fallback_profile_dicts(profiles_mod)}
+
+
+@app.post("/api/profiles")
+async def create_profile_endpoint(body: ProfileCreate):
+    from cli import profiles as profiles_mod
+    try:
+        path = profiles_mod.create_profile(
+            name=body.name,
+            clone_from="default" if body.clone_from_default else None,
+            clone_config=body.clone_from_default,
+            no_skills=body.no_skills,
+        )
+        # Match the CLI's profile-create flow: fresh named profiles get the
+        # bundled skills installed. When cloning from default, create_profile()
+        # has already copied the source profile's skills, including any
+        # user-installed skills. When no_skills=True, create_profile() wrote
+        # the opt-out marker and seed_profile_skills() will no-op.
+        if not body.clone_from_default:
+            profiles_mod.seed_profile_skills(path, quiet=True)
+
+        # Match the CLI's profile-create flow: named profiles should get a
+        # wrapper in ~/.local/bin when the alias is safe to create.
+        collision = profiles_mod.check_alias_collision(body.name)
+        if not collision:
+            profiles_mod.create_wrapper_script(body.name)
+    except (ValueError, FileExistsError, FileNotFoundError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        _log.exception("POST /api/profiles failed")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"ok": True, "name": body.name, "path": str(path)}
+
+
+@app.get("/api/profiles/{name}/setup-command")
+async def get_profile_setup_command(name: str):
+    return {"command": _profile_setup_command(name)}
+
+
+@app.post("/api/profiles/{name}/open-terminal")
+async def open_profile_terminal_endpoint(name: str):
+    try:
+        command = _profile_setup_command(name)
+
+        if sys.platform.startswith("win"):
+            subprocess.Popen(["cmd.exe", "/c", "start", "", command])
+        elif sys.platform == "darwin":
+            escaped = command.replace("\\", "\\\\").replace('"', '\\"')
+            applescript = (
+                'tell application "Terminal"\n'
+                "activate\n"
+                f'do script "{escaped}"\n'
+                "end tell"
+            )
+            subprocess.Popen(["osascript", "-e", applescript])
+        else:
+            terminal_commands = [
+                ("x-terminal-emulator", ["x-terminal-emulator", "-e", "sh", "-lc", command]),
+                ("gnome-terminal", ["gnome-terminal", "--", "sh", "-lc", command]),
+                ("konsole", ["konsole", "-e", "sh", "-lc", command]),
+                ("xfce4-terminal", ["xfce4-terminal", "-e", f"sh -lc '{command}'"]),
+                ("mate-terminal", ["mate-terminal", "-e", f"sh -lc '{command}'"]),
+                ("lxterminal", ["lxterminal", "-e", f"sh -lc '{command}'"]),
+                ("tilix", ["tilix", "-e", "sh", "-lc", command]),
+                ("alacritty", ["alacritty", "-e", "sh", "-lc", command]),
+                ("kitty", ["kitty", "sh", "-lc", command]),
+                ("xterm", ["xterm", "-e", "sh", "-lc", command]),
+            ]
+            for executable, popen_args in terminal_commands:
+                if subprocess.call(
+                    ["which", executable],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                ) == 0:
+                    subprocess.Popen(popen_args)
+                    break
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No supported terminal emulator found",
+                )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log.exception("POST /api/profiles/%s/open-terminal failed", name)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"ok": True, "command": command}
+
+
+@app.patch("/api/profiles/{name}")
+async def rename_profile_endpoint(name: str, body: ProfileRename):
+    from cli import profiles as profiles_mod
+    try:
+        path = profiles_mod.rename_profile(name, body.new_name)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except (ValueError, FileExistsError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        _log.exception("PATCH /api/profiles/%s failed", name)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"ok": True, "name": body.new_name, "path": str(path)}
+
+
+@app.delete("/api/profiles/{name}")
+async def delete_profile_endpoint(name: str):
+    """Delete a profile. The dashboard collects the user's confirmation in
+    its own dialog before this request, so we always pass ``yes=True`` to
+    skip the CLI's interactive prompt."""
+    from cli import profiles as profiles_mod
+    try:
+        path = profiles_mod.delete_profile(name, yes=True)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        _log.exception("DELETE /api/profiles/%s failed", name)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"ok": True, "path": str(path)}
+
+
+@app.get("/api/profiles/{name}/soul")
+async def get_profile_soul(name: str):
+    soul_path = _resolve_profile_dir(name) / "SOUL.md"
+    if soul_path.exists():
+        try:
+            return {"content": soul_path.read_text(encoding="utf-8"), "exists": True}
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=f"Could not read SOUL.md: {e}") from e
+    return {"content": "", "exists": False}
+
+
+@app.put("/api/profiles/{name}/soul")
+async def update_profile_soul(name: str, body: ProfileSoulUpdate):
+    soul_path = _resolve_profile_dir(name) / "SOUL.md"
+    try:
+        soul_path.write_text(body.content, encoding="utf-8")
+    except OSError as e:
+        _log.exception("PUT /api/profiles/%s/soul failed", name)
+        raise HTTPException(status_code=500, detail=f"Could not write SOUL.md: {e}") from e
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Skills & Tools endpoints
+# ---------------------------------------------------------------------------
+
+
+class SkillToggle(BaseModel):
+    name: str
+    enabled: bool
+
+
+@app.get("/api/skills")
+async def get_skills(include_disabled: int = 0):
+    """List skills for the WebUI panel.
+
+    Returns ``{"skills": [...]}`` — the shape every frontend consumer expects
+    (panels.js, commands.js). The previous flat-list return silently produced
+    an empty panel because ``data.skills`` was undefined on an array.
+
+    Each entry carries ``usage`` (view/use/patch counts, pin, lifecycle state)
+    and ``setup_needed`` so the panel can render badges without extra calls.
+    Delegates to the shared implementation in ``web.api.routes`` so the native
+    route and the legacy bridge agree on the payload.
+    """
+    from web.api.routes import _active_skills_dir, _skills_list_from_dir
+
+    data = _skills_list_from_dir(_active_skills_dir())
+    skills = data.get("skills", [])
+    if not include_disabled:
+        skills = [s for s in skills if not s.get("disabled")]
+    return {"skills": skills}
+
+
+@app.put("/api/skills/toggle")
+async def toggle_skill(body: SkillToggle):
+    from cli.skills_config import get_disabled_skills, save_disabled_skills
+    config = load_config()
+    disabled = get_disabled_skills(config)
+    if body.enabled:
+        disabled.discard(body.name)
+    else:
+        disabled.add(body.name)
+    save_disabled_skills(config, disabled)
+    try:
+        from web.api.routes import _invalidate_skills_list_cache
+
+        _invalidate_skills_list_cache()
+    except Exception:
+        pass
+    return {"ok": True, "name": body.name, "enabled": body.enabled}
+
+
+@app.get("/api/tools/toolsets")
+async def get_toolsets():
+    from cli.tools_config import (
+        _get_effective_configurable_toolsets,
+        _get_platform_tools,
+        _toolset_has_keys,
+    )
+    from toolsets import resolve_toolset
+
+    config = load_config()
+    enabled_toolsets = _get_platform_tools(
+        config,
+        "cli",
+        include_default_mcp_servers=False,
+    )
+    result = []
+    for name, label, desc in _get_effective_configurable_toolsets():
+        try:
+            tools = sorted(set(resolve_toolset(name)))
+        except Exception:
+            tools = []
+        is_enabled = name in enabled_toolsets
+        result.append({
+            "name": name, "label": label, "description": desc,
+            "enabled": is_enabled,
+            "available": is_enabled,
+            "configured": _toolset_has_keys(name, config),
+            "tools": tools,
+        })
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Raw YAML config endpoint
+# ---------------------------------------------------------------------------
+
+
+class RawConfigUpdate(BaseModel):
+    yaml_text: str
+
+
+@app.get("/api/config/raw")
+async def get_config_raw():
+    path = get_config_path()
+    if not path.exists():
+        return {"yaml": ""}
+    return {"yaml": path.read_text(encoding="utf-8")}
+
+
+@app.put("/api/config/raw")
+async def update_config_raw(body: RawConfigUpdate):
+    try:
+        parsed = yaml.safe_load(body.yaml_text)
+        if not isinstance(parsed, dict):
+            raise HTTPException(status_code=400, detail="YAML must be a mapping")
+        save_config(parsed)
+        return {"ok": True}
+    except yaml.YAMLError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
+
+
+# ---------------------------------------------------------------------------
+# Token / cost analytics endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/analytics/usage")
+async def get_usage_analytics(days: int = 30):
+    # InsightsEngine.generate() runs multi-second SQLite scans over state.db
+    # (438 MB here). Inline execution on the event loop froze the whole
+    # dashboard (observed 2026-09-19: py-spy showed MainThread stuck in
+    # _get_tool_usage while every request timed out, because enhancements.js
+    # polls this endpoint every 60s from every open tab). Offload the
+    # blocking work to a worker thread so the loop stays responsive.
+    return await asyncio.to_thread(_get_usage_analytics_sync, days)
+
+
+def _get_usage_analytics_sync(days: int = 30):
+    import sqlite3
+    from runtime._compat.shim_state import SessionDB
+    from runtime.insights import InsightsEngine
+
+    def _degraded_payload(reason: str = "session_db_unavailable") -> dict[str, object]:
+        return {
+            "daily": [],
+            "by_model": [],
+            "totals": {
+                "total_input": 0,
+                "total_output": 0,
+                "total_cache_read": 0,
+                "total_reasoning": 0,
+                "total_estimated_cost": 0,
+                "total_actual_cost": 0,
+                "total_sessions": 0,
+                "total_api_calls": 0,
+            },
+            "period_days": days,
+            "degraded": True,
+            "degraded_reason": reason,
+            "skills": {
+                "summary": {
+                    "total_skill_loads": 0,
+                    "total_skill_edits": 0,
+                    "total_skill_actions": 0,
+                    "distinct_skills_used": 0,
+                },
+                "top_skills": [],
+            },
+        }
+
+    try:
+        from sidekick_constants import get_sidekick_home
+        state_path = get_sidekick_home() / "state.db"
+        # Analytics is a polling surface; never let a multi-gigabyte state DB
+        # turn a read-only dashboard refresh into a long SQLite scan.
+        if state_path.stat().st_size > 1_073_741_824:
+            _log.warning("usage analytics degraded (state_db_too_large)")
+            return _degraded_payload("state_db_too_large")
+    except OSError:
+        pass
+    try:
+        db = SessionDB()
+    except (sqlite3.Error, OSError, RuntimeError) as exc:
+        _log.warning("usage analytics degraded (%s)", type(exc).__name__)
+        return _degraded_payload()
+    try:
+        cutoff = time.time() - (days * 86400)
+        session_columns = {
+            str(row[1]) for row in db._conn.execute("PRAGMA table_info(sessions)").fetchall()
+        }
+        required_columns = {
+            "started_at", "input_tokens", "output_tokens", "cache_read_tokens",
+            "reasoning_tokens", "estimated_cost_usd", "actual_cost_usd",
+            "api_call_count", "model",
+        }
+        if not required_columns.issubset(session_columns):
+            return {
+                "daily": [],
+                "by_model": [],
+                "totals": {
+                    "total_input": 0,
+                    "total_output": 0,
+                    "total_cache_read": 0,
+                    "total_reasoning": 0,
+                    "total_estimated_cost": 0,
+                    "total_actual_cost": 0,
+                    "total_sessions": 0,
+                    "total_api_calls": 0,
+                },
+                "period_days": days,
+                "skills": {
+                    "summary": {
+                        "total_skill_loads": 0,
+                        "total_skill_edits": 0,
+                        "total_skill_actions": 0,
+                        "distinct_skills_used": 0,
+                    },
+                    "top_skills": [],
+                },
+            }
+        cur = db._conn.execute("""
+            SELECT date(started_at, 'unixepoch') as day,
+                   SUM(input_tokens) as input_tokens,
+                   SUM(output_tokens) as output_tokens,
+                   SUM(cache_read_tokens) as cache_read_tokens,
+                   SUM(reasoning_tokens) as reasoning_tokens,
+                   COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost,
+                   COALESCE(SUM(actual_cost_usd), 0) as actual_cost,
+                   COUNT(*) as sessions,
+                   SUM(COALESCE(api_call_count, 0)) as api_calls
+            FROM sessions WHERE started_at > ?
+            GROUP BY day ORDER BY day
+        """, (cutoff,))
+        daily = [dict(r) for r in cur.fetchall()]
+
+        cur2 = db._conn.execute("""
+            SELECT model,
+                   SUM(input_tokens) as input_tokens,
+                   SUM(output_tokens) as output_tokens,
+                   COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost,
+                   COUNT(*) as sessions,
+                   SUM(COALESCE(api_call_count, 0)) as api_calls
+            FROM sessions WHERE started_at > ? AND model IS NOT NULL
+            GROUP BY model ORDER BY SUM(input_tokens) + SUM(output_tokens) DESC
+        """, (cutoff,))
+        by_model = [dict(r) for r in cur2.fetchall()]
+
+        cur3 = db._conn.execute("""
+            SELECT SUM(input_tokens) as total_input,
+                   SUM(output_tokens) as total_output,
+                   SUM(cache_read_tokens) as total_cache_read,
+                   SUM(reasoning_tokens) as total_reasoning,
+                   COALESCE(SUM(estimated_cost_usd), 0) as total_estimated_cost,
+                   COALESCE(SUM(actual_cost_usd), 0) as total_actual_cost,
+                   COUNT(*) as total_sessions,
+                   SUM(COALESCE(api_call_count, 0)) as total_api_calls
+            FROM sessions WHERE started_at > ?
+        """, (cutoff,))
+        totals = dict(cur3.fetchone())
+        insights_report = InsightsEngine(db).generate(days=days)
+        skills = insights_report.get("skills", {
+            "summary": {
+                "total_skill_loads": 0,
+                "total_skill_edits": 0,
+                "total_skill_actions": 0,
+                "distinct_skills_used": 0,
+            },
+            "top_skills": [],
+        })
+
+        return {
+            "daily": daily,
+            "by_model": by_model,
+            "totals": totals,
+            "period_days": days,
+            "skills": skills,
+        }
+    except (sqlite3.Error, OSError, RuntimeError) as exc:
+        _log.warning("usage analytics degraded (%s)", type(exc).__name__)
+        return _degraded_payload()
+    finally:
+        db.close()
+
+
+@app.get("/api/analytics/models")
+async def get_models_analytics(days: int = 30):
+    """Rich per-model analytics for the Models dashboard page.
+
+    Returns token/cost/session breakdown per model plus capability metadata
+    from models.dev (context window, vision, tools, reasoning, etc.).
+    """
+    from runtime._compat.shim_state import SessionDB
+
+    db = SessionDB()
+    try:
+        cutoff = time.time() - (days * 86400)
+
+        cur = db._conn.execute("""
+            SELECT model,
+                   billing_provider,
+                   SUM(input_tokens) as input_tokens,
+                   SUM(output_tokens) as output_tokens,
+                   SUM(cache_read_tokens) as cache_read_tokens,
+                   SUM(reasoning_tokens) as reasoning_tokens,
+                   COALESCE(SUM(estimated_cost_usd), 0) as estimated_cost,
+                   COALESCE(SUM(actual_cost_usd), 0) as actual_cost,
+                   COUNT(*) as sessions,
+                   SUM(COALESCE(api_call_count, 0)) as api_calls,
+                   SUM(tool_call_count) as tool_calls,
+                   MAX(started_at) as last_used_at,
+                   AVG(input_tokens + output_tokens) as avg_tokens_per_session
+            FROM sessions WHERE started_at > ? AND model IS NOT NULL AND model != ''
+            GROUP BY model, billing_provider
+            ORDER BY SUM(input_tokens) + SUM(output_tokens) DESC
+        """, (cutoff,))
+        rows = [dict(r) for r in cur.fetchall()]
+
+        models = []
+        for row in rows:
+            provider = row.get("billing_provider") or ""
+            model_name = row["model"]
+            caps = {}
+            try:
+                from runtime.models_dev import get_model_capabilities
+                mc = get_model_capabilities(provider=provider, model=model_name)
+                if mc is not None:
+                    caps = {
+                        "supports_tools": mc.supports_tools,
+                        "supports_vision": mc.supports_vision,
+                        "supports_reasoning": mc.supports_reasoning,
+                        "context_window": mc.context_window,
+                        "max_output_tokens": mc.max_output_tokens,
+                        "model_family": mc.model_family,
+                    }
+            except Exception:
+                pass
+
+            models.append({
+                "model": model_name,
+                "provider": provider,
+                "input_tokens": row["input_tokens"],
+                "output_tokens": row["output_tokens"],
+                "cache_read_tokens": row["cache_read_tokens"],
+                "reasoning_tokens": row["reasoning_tokens"],
+                "estimated_cost": row["estimated_cost"],
+                "actual_cost": row["actual_cost"],
+                "sessions": row["sessions"],
+                "api_calls": row["api_calls"],
+                "tool_calls": row["tool_calls"],
+                "last_used_at": row["last_used_at"],
+                "avg_tokens_per_session": row["avg_tokens_per_session"],
+                "capabilities": caps,
+            })
+
+        totals_cur = db._conn.execute("""
+            SELECT COUNT(DISTINCT model) as distinct_models,
+                   SUM(input_tokens) as total_input,
+                   SUM(output_tokens) as total_output,
+                   SUM(cache_read_tokens) as total_cache_read,
+                   SUM(reasoning_tokens) as total_reasoning,
+                   COALESCE(SUM(estimated_cost_usd), 0) as total_estimated_cost,
+                   COALESCE(SUM(actual_cost_usd), 0) as total_actual_cost,
+                   COUNT(*) as total_sessions,
+                   SUM(COALESCE(api_call_count, 0)) as total_api_calls
+            FROM sessions WHERE started_at > ? AND model IS NOT NULL AND model != ''
+        """, (cutoff,))
+        totals = dict(totals_cur.fetchone())
+
+        return {
+            "models": models,
+            "totals": totals,
+            "period_days": days,
+        }
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# /api/pty Ã¢â‚¬â€ PTY-over-WebSocket bridge for the dashboard "Chat" tab.
+#
+# The endpoint spawns the same ``sidekick --tui`` binary the CLI uses, behind
+# a POSIX pseudo-terminal, and forwards bytes + resize escapes across a
+# WebSocket.  The browser renders the ANSI through xterm.js (see
+# web/src/pages/ChatPage.tsx).
+#
+# Auth: ``?token=<session_token>`` query param (browsers can't set
+# Authorization on the WS upgrade).  Same ephemeral ``_SESSION_TOKEN`` as
+# REST.  Localhost-only Ã¢â‚¬â€ we defensively reject non-loopback clients even
+# though uvicorn binds to 127.0.0.1.
+# ---------------------------------------------------------------------------
+
+import re
+
+# PTY bridge is cross-platform: POSIX (ptyprocess) and Windows (winpty).
+# The import itself always succeeds; PtyBridge.is_available() tells us
+# whether a PTY can actually be spawned on this platform.
+from cli.pty_bridge import PtyBridge, PtyUnavailableError
+
+_PTY_BRIDGE_AVAILABLE = PtyBridge.is_available()
+
+_RESIZE_RE = re.compile(rb"\x1b\[RESIZE:(\d+);(\d+)\]")
+_PTY_READ_CHUNK_TIMEOUT = 0.2
+_VALID_CHANNEL_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+# Starlette's TestClient reports the peer as "testclient"; treat it as
+# loopback so tests don't need to rewrite request scope.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", "testclient"})
+
+
+def _is_public_bind() -> bool:
+    """True when bound to all-interfaces (operator used --insecure)."""
+    return getattr(app.state, "bound_host", "") in {"0.0.0.0", "::"}
+
+
+def _ws_client_is_allowed(ws: "WebSocket") -> bool:
+    """Check if the WebSocket client IP is acceptable.
+
+    Allows loopback always; allows any IP when bound to all-interfaces
+    (--insecure mode, guarded by session token auth).
+    """
+    if _is_public_bind():
+        return True
+    client_host = ws.client.host if ws.client else ""
+    if not client_host:
+        return True
+    return client_host in _LOOPBACK_HOSTS
+
+# Per-channel subscriber registry used by /api/pub (PTY-side gateway Ã¢â€ â€™ dashboard)
+# and /api/events (dashboard Ã¢â€ â€™ browser sidebar).  Keyed by an opaque channel id
+# the chat tab generates on mount; entries auto-evict when the last subscriber
+# drops AND the publisher has disconnected.
+_event_channels: dict[str, set] = {}
+_event_lock = asyncio.Lock()
+
+
+def _resolve_chat_argv(
+    resume: Optional[str] = None,
+    sidecar_url: Optional[str] = None,
+) -> tuple[list[str], Optional[str], Optional[dict]]:
+    """Resolve the argv + cwd + env for the chat PTY.
+
+    Default: whatever ``sidekick --tui`` would run.  Tests monkeypatch this
+    function to inject a tiny fake command (``cat``, ``sh -c 'printf Ã¢â‚¬Â¦'``)
+    so nothing has to build Node or the TUI bundle.
+
+    Session resume is propagated via the ``SIDEKICK_TUI_RESUME`` env var Ã¢â‚¬â€
+    matching what ``sidekick_cli.main._launch_tui`` does for the CLI path.
+    Appending ``--resume <id>`` to argv doesn't work because ``ui-tui`` does
+    not parse its argv.
+
+    `sidecar_url` (when set) is forwarded as ``SIDEKICK_TUI_SIDECAR_URL`` so
+    the spawned ``tui_gateway.entry`` can mirror dispatcher emits to the
+    dashboard's ``/api/pub`` endpoint (see :func:`pub_ws`).
+    """
+    from cli.main import PROJECT_ROOT, _make_tui_argv
+
+    argv, cwd = _make_tui_argv(PROJECT_ROOT / "ui-tui", tui_dev=False)
+    env = os.environ.copy()
+    env.setdefault("NODE_ENV", "production")
+    # Browser-embedded chat should prefer stable wheel-based scrollback over
+    # native terminal mouse tracking. When mouse tracking is enabled, wheel
+    # events are consumed by the TUI and forwarded as terminal input, which
+    # makes browser-side transcript scrolling feel broken. Keep the terminal
+    # build unchanged for native CLI usage; only disable mouse tracking for
+    # the dashboard PTY path.
+    env.setdefault("SIDEKICK_TUI_DISABLE_MOUSE", "1")
+
+    if resume:
+        latest_resume, _latest_path = _session_latest_descendant(resume)
+        if latest_resume:
+            resume = latest_resume
+        env["SIDEKICK_TUI_RESUME"] = resume
+
+    if sidecar_url:
+        env["SIDEKICK_TUI_SIDECAR_URL"] = sidecar_url
+
+    return list(argv), str(cwd) if cwd else None, env
+
+
+def _build_sidecar_url(channel: str) -> Optional[str]:
+    """ws:// URL the PTY child should publish events to, or None when unbound."""
+    host = getattr(app.state, "bound_host", None)
+    port = getattr(app.state, "bound_port", None)
+
+    if not host or not port:
+        return None
+
+    netloc = f"[{host}]:{port}" if ":" in host and not host.startswith("[") else f"{host}:{port}"
+    qs = urllib.parse.urlencode({"token": _SESSION_TOKEN, "channel": channel})
+
+    return f"ws://{netloc}/api/pub?{qs}"
+
+
+async def _broadcast_event(channel: str, payload: str) -> None:
+    """Fan out one publisher frame to every subscriber on `channel`."""
+    async with _event_lock:
+        subs = list(_event_channels.get(channel, ()))
+
+    for sub in subs:
+        try:
+            await sub.send_text(payload)
+        except Exception:
+            # Subscriber went away mid-send; the /api/events finally clause
+            # will remove it from the registry on its next iteration.
+            pass
+
+
+def _channel_or_close_code(ws: WebSocket) -> Optional[str]:
+    """Return the channel id from the query string or None if invalid."""
+    channel = ws.query_params.get("channel", "")
+
+    return channel if _VALID_CHANNEL_RE.match(channel) else None
+
+
+@app.websocket("/api/pty")
+async def pty_ws(ws: WebSocket) -> None:
+    if not _DASHBOARD_EMBEDDED_CHAT_ENABLED:
+        await ws.close(code=4403)
+        return
+
+    # --- auth + loopback check (before accept so we can close cleanly) ---
+    token = ws.query_params.get("token", "")
+    expected = _SESSION_TOKEN
+    if not hmac.compare_digest(token.encode(), expected.encode()):
+        await ws.close(code=4401)
+        return
+
+    if not _ws_client_is_allowed(ws):
+        await ws.close(code=4403)
+        return
+
+    await ws.accept()
+
+    # PTY bridge unavailable Ã¢â‚¬â€ tell the client and close cleanly.
+    if not _PTY_BRIDGE_AVAILABLE:
+        if sys.platform.startswith("win"):
+            await ws.send_text(
+                "\r\n\x1b[31mChat unavailable: the embedded terminal requires "
+                "pywinpty on Windows.\x1b[0m\r\n"
+                "\x1b[33mInstall with: pip install pywinpty\x1b[0m\r\n"
+            )
+        else:
+            await ws.send_text(
+                "\r\n\x1b[31mChat unavailable: the embedded terminal requires "
+                "ptyprocess.\x1b[0m\r\n"
+                "\x1b[33mInstall with: pip install ptyprocess\x1b[0m\r\n"
+            )
+        await ws.close(code=1011)
+        return
+
+    # --- spawn PTY ------------------------------------------------------
+    resume = ws.query_params.get("resume") or None
+    channel = _channel_or_close_code(ws)
+    sidecar_url = _build_sidecar_url(channel) if channel else None
+
+    try:
+        argv, cwd, env = _resolve_chat_argv(resume=resume, sidecar_url=sidecar_url)
+    except SystemExit as exc:
+        # _make_tui_argv calls sys.exit(1) when node/npm is missing.
+        await ws.send_text(f"\r\n\x1b[31mChat unavailable: {exc}\x1b[0m\r\n")
+        await ws.close(code=1011)
+        return
+
+
+    try:
+        bridge = PtyBridge.spawn(argv, cwd=cwd, env=env)
+    except PtyUnavailableError as exc:
+        await ws.send_text(f"\r\n\x1b[31mChat unavailable: {exc}\x1b[0m\r\n")
+        await ws.close(code=1011)
+        return
+    except (FileNotFoundError, OSError) as exc:
+        await ws.send_text(f"\r\n\x1b[31mChat failed to start: {exc}\x1b[0m\r\n")
+        await ws.close(code=1011)
+        return
+
+    loop = asyncio.get_running_loop()
+
+    # --- reader task: PTY master Ã¢â€ â€™ WebSocket ----------------------------
+    async def pump_pty_to_ws() -> None:
+        while True:
+            chunk = await loop.run_in_executor(
+                None, bridge.read, _PTY_READ_CHUNK_TIMEOUT
+            )
+            if chunk is None:  # EOF
+                return
+            if not chunk:  # no data this tick; yield control and retry
+                await asyncio.sleep(0)
+                continue
+            try:
+                await ws.send_bytes(chunk)
+            except Exception:
+                return
+
+    reader_task = asyncio.create_task(pump_pty_to_ws())
+
+    # --- writer loop: WebSocket Ã¢â€ â€™ PTY master ----------------------------
+    try:
+        while True:
+            msg = await ws.receive()
+            msg_type = msg.get("type")
+            if msg_type == "websocket.disconnect":
+                break
+            raw = msg.get("bytes")
+            if raw is None:
+                text = msg.get("text")
+                raw = text.encode("utf-8") if isinstance(text, str) else b""
+            if not raw:
+                continue
+
+            # Resize escape is consumed locally, never written to the PTY.
+            match = _RESIZE_RE.match(raw)
+            if match and match.end() == len(raw):
+                cols = int(match.group(1))
+                rows = int(match.group(2))
+                bridge.resize(cols=cols, rows=rows)
+                continue
+
+            bridge.write(raw)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        reader_task.cancel()
+        try:
+            await reader_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        bridge.close()
+
+
+# ---------------------------------------------------------------------------
+# /api/ws Ã¢â‚¬â€ JSON-RPC WebSocket sidecar for the dashboard "Chat" tab.
+#
+# Drives the same `tui_gateway.dispatch` surface Ink uses over stdio, so the
+# dashboard can render structured metadata (model badge, tool-call sidebar,
+# slash launcher, session info) alongside the xterm.js terminal that PTY
+# already paints. Both transports bind to the same session id when one is
+# active, so a tool.start emitted by the agent fans out to both sinks.
+# ---------------------------------------------------------------------------
+
+
+@app.websocket("/api/ws")
+async def gateway_ws(ws: WebSocket) -> None:
+    if not _DASHBOARD_EMBEDDED_CHAT_ENABLED:
+        await ws.close(code=4403)
+        return
+
+    token = ws.query_params.get("token", "")
+    if not hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode()):
+        await ws.close(code=4401)
+        return
+
+    if not _ws_client_is_allowed(ws):
+        await ws.close(code=4403)
+        return
+
+    from tui_gateway.ws import handle_ws
+
+    await handle_ws(ws)
+
+
+# ---------------------------------------------------------------------------
+# /api/pub + /api/events Ã¢â‚¬â€ chat-tab event broadcast.
+#
+# The PTY-side ``tui_gateway.entry`` opens /api/pub at startup (driven by
+# SIDEKICK_TUI_SIDECAR_URL set in /api/pty's PTY env) and writes every
+# dispatcher emit through it.  The dashboard fans those frames out to any
+# subscriber that opened /api/events on the same channel id.  This is what
+# gives the React sidebar its tool-call feed without breaking the PTY
+# child's stdio handshake with Ink.
+# ---------------------------------------------------------------------------
+
+
+@app.websocket("/api/pub")
+async def pub_ws(ws: WebSocket) -> None:
+    if not _DASHBOARD_EMBEDDED_CHAT_ENABLED:
+        await ws.close(code=4403)
+        return
+
+    token = ws.query_params.get("token", "")
+    if not hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode()):
+        await ws.close(code=4401)
+        return
+
+    if not _ws_client_is_allowed(ws):
+        await ws.close(code=4403)
+        return
+
+    channel = _channel_or_close_code(ws)
+    if not channel:
+        await ws.close(code=4400)
+        return
+
+    await ws.accept()
+
+    try:
+        while True:
+            await _broadcast_event(channel, await ws.receive_text())
+    except WebSocketDisconnect:
+        pass
+
+
+@app.websocket("/api/events")
+async def events_ws(ws: WebSocket) -> None:
+    if not _DASHBOARD_EMBEDDED_CHAT_ENABLED:
+        await ws.close(code=4403)
+        return
+
+    token = ws.query_params.get("token", "")
+    if not hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode()):
+        await ws.close(code=4401)
+        return
+
+    if not _ws_client_is_allowed(ws):
+        await ws.close(code=4403)
+        return
+
+    channel = _channel_or_close_code(ws)
+    if not channel:
+        await ws.close(code=4400)
+        return
+
+    await ws.accept()
+
+    async with _event_lock:
+        _event_channels.setdefault(channel, set()).add(ws)
+
+    try:
+        while True:
+            # Subscribers don't speak Ã¢â‚¬â€ the receive() just blocks until
+            # disconnect so the connection stays open as long as the
+            # browser holds it.
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        async with _event_lock:
+            subs = _event_channels.get(channel)
+
+            if subs is not None:
+                subs.discard(ws)
+
+                if not subs:
+                    _event_channels.pop(channel, None)
+
+
+def _normalise_prefix(raw: Optional[str]) -> str:
+    """Normalise an X-Forwarded-Prefix header value.
+
+    Returns a string like ``"/sidekick"`` (no trailing slash) or ``""`` when
+    no prefix is set / the header is malformed. We deliberately reject
+    anything containing ``..`` or non-printable bytes so a hostile proxy
+    can't inject HTML via the prefix.
+    """
+    if not raw:
+        return ""
+    p = raw.strip()
+    if not p:
+        return ""
+    if not p.startswith("/"):
+        p = "/" + p
+    p = p.rstrip("/")
+    if "//" in p or ".." in p or any(c in p for c in ('"', "'", "<", ">", " ", "\n", "\r", "\t")):
+        return ""
+    if len(p) > 64:
+        return ""
+    return p
+
+
+def _index_etag(html: str) -> str:
+    """Weak validator for the rendered shell document.
+
+    The shell is content-negotiated (gzip vs. identity) but byte-identical
+    once decoded, so a weak ETag over the rendered HTML is the correct
+    validator. It covers every input that changes the document: the session
+    token (per server start), the WebUI version token (per build) and the
+    forwarded prefix.
+    """
+    digest = hashlib.sha256(html.encode("utf-8")).hexdigest()[:32]
+    return f'W/"{digest}"'
+
+
+def _etag_matches(if_none_match: str, etag: str) -> bool:
+    """RFC 7232 weak comparison of an ``If-None-Match`` header value."""
+    if not if_none_match:
+        return False
+
+    def _strip(value: str) -> str:
+        value = value.strip()
+        return value[2:] if value.startswith("W/") else value
+
+    target = _strip(etag)
+    for candidate in if_none_match.split(","):
+        candidate = candidate.strip()
+        if candidate == "*" or _strip(candidate) == target:
+            return True
+    return False
+
+
+def _payload_etag(payload: Any) -> str:
+    """Weak ETag over a JSON-serialisable payload (backlog item 28).
+
+    Hashes the canonical JSON (sorted keys), so the value is stable across
+    processes and restarts rather than depending on an object id or a clock.
+    """
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
+    return f'W/"{digest}"'
+
+
+def _sessions_json_response(request: Request, payload: dict) -> Response:
+    """JSON response for /api/sessions with an ETag and 304 handling.
+
+    The sidebar polls this endpoint every 5s with a large payload, so an
+    unchanged list should cost a 304 instead of the full body.
+    """
+    etag = _payload_etag(payload)
+    headers = {
+        "ETag": etag,
+        "Cache-Control": "no-store",
+        # The native route never set these (the legacy route did); adding them
+        # here keeps the API surface consistent.
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "same-origin",
+    }
+    if _etag_matches(request.headers.get("if-none-match", ""), etag):
+        return Response(status_code=304, headers=headers)
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    return Response(content=body, media_type="application/json", headers=headers)
+
+
+# ---------------------------------------------------------------------------
+# Gzip result cache for the legacy static assets.
+#
+# ``serve_spa`` re-compressed every JS/CSS/JSON asset on every request
+# (``gzip.compress(file.read_bytes(), 5)``). A cold shell load pulls ~20
+# assets, and the compression cost blocks the event loop. Results are cached
+# keyed by (path, mtime_ns, size), so an edited file re-compresses and an
+# unchanged one is served straight from memory.
+# ---------------------------------------------------------------------------
+_GZIP_CACHE: dict[tuple, bytes] = {}
+_GZIP_CACHE_MAX_ENTRIES = 128
+_GZIP_CACHE_MAX_BYTES = 32 * 1024 * 1024
+_GZIP_CACHE_BYTES = 0
+
+
+def _gzip_cached(file_path: Path, stat_result: os.stat_result) -> bytes:
+    """Return the gzip-compressed body for ``file_path``, cached by mtime/size."""
+    global _GZIP_CACHE_BYTES
+
+    key = (str(file_path), int(stat_result.st_mtime_ns), stat_result.st_size)
+    cached = _GZIP_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    import gzip
+
+    raw = gzip.compress(file_path.read_bytes(), compresslevel=5)
+    if len(raw) <= _GZIP_CACHE_MAX_BYTES:
+        if (
+            len(_GZIP_CACHE) >= _GZIP_CACHE_MAX_ENTRIES
+            or _GZIP_CACHE_BYTES + len(raw) > _GZIP_CACHE_MAX_BYTES
+        ):
+            _GZIP_CACHE.clear()
+            _GZIP_CACHE_BYTES = 0
+        _GZIP_CACHE[key] = raw
+        _GZIP_CACHE_BYTES += len(raw)
+    return raw
+
+
+# The assets a cold shell load pulls, mirroring ``web/static/sw.js``'s
+# SHELL_ASSETS. Precompressing them at startup moves the ~80 ms of
+# compression work off the first request.
+_PRECOMPRESS_ASSETS: tuple[str, ...] = (
+    "style.css",
+    "api-auth.js",
+    "boot.js",
+    "ui.js",
+    "messages.js",
+    "sessions.js",
+    "spaces.js",
+    "spaces.css",
+    "panels-loader.js",
+    "feature-loader.js",
+    "swarm.css",
+    "commands.js",
+    "icons.js",
+    "i18n.js",
+    "workspace.js",
+    "terminal.js",
+    "enhancements.js",
+    "agents.css",
+    "agents-dashboard.css",
+    "gmail-panel.css",
+    "discord-panel.css",
+    "discord-chat.css",
+    "xterm.css",
+    "power.js",
+)
+
+
+def _precompress_shell_assets() -> None:
+    """Warm the gzip cache for the shell assets at startup.
+
+    Runs in a background thread so a slow disk cannot delay the server coming
+    up; failures are logged and ignored (the cache fills lazily on request).
+    """
+    import time as _time
+
+    started = _time.perf_counter()
+    warmed = 0
+    for name in _PRECOMPRESS_ASSETS:
+        path = WEB_DIST / name
+        try:
+            if not path.is_file():
+                continue
+            _gzip_cached(path, path.stat())
+            warmed += 1
+        except Exception:
+            _log.debug("Precompress failed for %s", name, exc_info=True)
+    _log.info(
+        "Precompressed %d shell asset(s) in %.0f ms",
+        warmed,
+        (_time.perf_counter() - started) * 1000,
+    )
+
+
+def _start_shell_precompress() -> None:
+    """Kick off the shell precompression in a daemon thread."""
+    threading.Thread(
+        target=_precompress_shell_assets, daemon=True, name="shell-precompress"
+    ).start()
+
+
+def mount_spa(application: FastAPI):
+    """Mount the built SPA. Falls back to index.html for client-side routing.
+
+    The session token is injected into index.html via a ``<script>`` tag so
+    the SPA can authenticate against protected API endpoints without a
+    separate (unauthenticated) token-dispensing endpoint.
+
+    When served behind a path-prefix reverse proxy (e.g.
+    ``mission-control.tilos.com/sidekick/*`` -> local Caddy -> :9119), the
+    proxy injects ``X-Forwarded-Prefix: /sidekick`` on every request. We
+    rewrite the served ``index.html`` so absolute asset URLs (``/assets/...``)
+    and the SPA's runtime ``__SIDEKICK_BASE_PATH__`` honours that prefix
+    without rebuilding the bundle.
+    """
+    if not WEB_DIST.exists():
+        @application.get("/{full_path:path}")
+        async def no_frontend(full_path: str):
+            return JSONResponse(
+                {"error": "Frontend not built. Run: cd web && npm run build"},
+                status_code=404,
+            )
+        return
+
+    _index_path = WEB_DIST / "index.html"
+
+    def _serve_index(prefix: str = "", request: Request | None = None):
+        """Return index.html with the session token + base-path injected.
+
+        ``prefix`` is the normalised ``X-Forwarded-Prefix`` (e.g. ``/sidekick``)
+        or empty string when served at root.
+
+        ``request`` is optional so existing callers keep working; when given,
+        the rendered HTML is gzip-compressed for clients that accept it (the
+        shell is ~274 KB uncompressed, ~47 KB gzipped).
+        """
+        token = _webui_version_token()
+        # The rendered document only changes when index.html changes on disk or
+        # when one of the injected values changes (version token, prefix). The
+        # session token and the embedded-chat flag are per-process constants.
+        try:
+            stat = _index_path.stat()
+            cache_key = (
+                str(_index_path),
+                int(stat.st_mtime_ns),
+                stat.st_size,
+                prefix,
+                token,
+            )
+        except OSError:
+            cache_key = None
+
+        html = _INDEX_RENDER_CACHE.get(cache_key) if cache_key else None
+        if html is None:
+            html = _index_path.read_text(encoding="utf-8").replace(
+                "__WEBUI_VERSION__", token
+            )
+            chat_js = "true" if _DASHBOARD_EMBEDDED_CHAT_ENABLED else "false"
+            token_script = (
+                f'<script>window.__SIDEKICK_SESSION_TOKEN__="{_SESSION_TOKEN}";'
+                f"window.__SIDEKICK_DASHBOARD_EMBEDDED_CHAT__={chat_js};"
+                f'window.__SIDEKICK_BASE_PATH__="{prefix}";</script>'
+            )
+            if prefix:
+                # Rewrite absolute asset URLs baked into the Vite build so the
+                # browser fetches them through the same proxy prefix.
+                html = html.replace('href="/assets/', f'href="{prefix}/assets/')
+                html = html.replace('src="/assets/', f'src="{prefix}/assets/')
+                html = html.replace('href="/favicon.ico"', f'href="{prefix}/favicon.ico"')
+                html = html.replace('href="/fonts/', f'href="{prefix}/fonts/')
+                html = html.replace('href="/ds-assets/', f'href="{prefix}/ds-assets/')
+                html = html.replace('src="/ds-assets/', f'src="{prefix}/ds-assets/')
+            html = html.replace("</head>", f"{token_script}</head>", 1)
+            if cache_key:
+                if len(_INDEX_RENDER_CACHE) >= _INDEX_RENDER_CACHE_MAX:
+                    _INDEX_RENDER_CACHE.clear()
+                _INDEX_RENDER_CACHE[cache_key] = html
+        etag = _index_etag(html)
+        # ``no-cache`` (not ``no-store``): the browser may keep the shell but
+        # MUST revalidate it before every use, so a stale shell can never be
+        # served — while an unchanged shell costs only a 304 instead of the
+        # ~274 KB body. ``private`` keeps shared/proxy caches out of it: the
+        # document carries the per-process session token. The ETag changes
+        # whenever the document does (session token, version token, prefix).
+        headers = {
+            "Cache-Control": "private, no-cache, must-revalidate",
+            "ETag": etag,
+        }
+        # Weak comparison is correct here: the gzip and identity encodings
+        # decode to the same bytes.
+        if request is not None and _etag_matches(
+            request.headers.get("if-none-match", ""), etag
+        ):
+            headers["Vary"] = "Accept-Encoding"
+            return Response(status_code=304, headers=headers)
+
+        # document is ~274 KB raw and ~47 KB gzipped, and it is re-fetched on
+        # every reload because it must not be cached.
+        if request is not None and "gzip" in request.headers.get(
+            "accept-encoding", ""
+        ).lower():
+            import gzip
+
+            raw = gzip.compress(html.encode("utf-8"), compresslevel=5)
+            headers["Content-Encoding"] = "gzip"
+            headers["Vary"] = "Accept-Encoding"
+            return Response(
+                content=raw,
+                media_type="text/html; charset=utf-8",
+                headers=headers,
+            )
+        return HTMLResponse(html, headers=headers)
+
+    # When served behind a path-prefix proxy, the built CSS contains
+    # absolute ``url(/fonts/...)`` and ``url(/ds-assets/...)`` references.
+    # Browsers resolve those against the document origin, which means
+    # under ``/sidekick`` they'd hit ``mission-control.tilos.com/fonts/...``
+    # (the MC Pages app), not the Sidekick backend. Intercept CSS asset
+    # requests BEFORE the StaticFiles mount and rewrite the absolute paths
+    # when a prefix is in play.
+    @application.get("/assets/{filename}.css")
+    async def serve_css(filename: str, request: Request):
+        css_path = WEB_DIST / "assets" / f"{filename}.css"
+        if not css_path.is_file() or not css_path.resolve().is_relative_to(
+            WEB_DIST.resolve()
+        ):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        prefix = _normalise_prefix(request.headers.get("x-forwarded-prefix"))
+        css = css_path.read_text(encoding="utf-8")
+        if prefix:
+            for asset_dir in ("/fonts/", "/fonts-terminal/", "/ds-assets/", "/assets/"):
+                css = css.replace(f"url({asset_dir}", f"url({prefix}{asset_dir}")
+                css = css.replace(f"url(\"{asset_dir}", f"url(\"{prefix}{asset_dir}")
+                css = css.replace(f"url('{asset_dir}", f"url('{prefix}{asset_dir}")
+        return Response(content=css, media_type="text/css")
+
+    assets_dir = WEB_DIST / "assets"
+    if assets_dir.is_dir():
+        application.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @application.get("/{full_path:path}")
+    async def serve_spa(full_path: str, request: Request):
+        prefix = _normalise_prefix(request.headers.get("x-forwarded-prefix"))
+        candidate_paths = [WEB_DIST / full_path]
+        if full_path.startswith("static/") and not (WEB_DIST / "static").is_dir():
+            candidate_paths.append(WEB_DIST / full_path[len("static/"):])
+
+        # Prevent path traversal via url-encoded sequences (%2e%2e/)
+        for file_path in candidate_paths:
+            if (
+                full_path
+                and file_path.resolve().is_relative_to(WEB_DIST.resolve())
+                and file_path.exists()
+                and file_path.is_file()
+            ):
+                if file_path.name == "sw.js":
+                    text = file_path.read_text(encoding="utf-8").replace(
+                        "__WEBUI_VERSION__", _webui_version_token()
+                    )
+                    return Response(
+                        content=text,
+                        media_type="application/javascript; charset=utf-8",
+                        headers={
+                            "Cache-Control": "no-store",
+                            "Service-Worker-Allowed": "/",
+                        },
+                    )
+                # Legacy WebUI assets carry a content/version query parameter.
+                # Cache those immutable files aggressively so Zen/Firefox does
+                # not re-download several megabytes on every reload or route
+                # transition. Keep unversioned responses revalidating while
+                # developing and never cache the HTML shell above.
+                versioned = bool(
+                    request.query_params.get("v")
+                    or request.query_params.get("version")
+                )
+                headers = {
+                    "Cache-Control": (
+                        "public, max-age=31536000, immutable"
+                        if versioned
+                        else "no-cache"
+                    )
+                }
+                # Compress the large legacy JS/CSS payloads in the active
+                # FastAPI static path. Do this only for text assets; the
+                # handler never serves SSE, so streaming responses are not
+                # buffered or delayed by compression. Results are cached by
+                # (path, mtime, size) so repeat loads skip the compression.
+                content_type = mimetypes.guess_type(str(file_path))[0] or ""
+                accepts_gzip = "gzip" in request.headers.get("accept-encoding", "").lower()
+                if accepts_gzip and file_path.suffix.lower() in {
+                    ".js", ".css", ".json", ".svg", ".txt"
+                }:
+                    raw = _gzip_cached(file_path, file_path.stat())
+                    headers["Content-Encoding"] = "gzip"
+                    headers["Vary"] = "Accept-Encoding"
+                    return Response(content=raw, media_type=content_type or None, headers=headers)
+                return FileResponse(file_path, headers=headers)
+        return _serve_index(prefix, request)
+
+
+# ---------------------------------------------------------------------------
+# Dashboard theme endpoints
+# ---------------------------------------------------------------------------
+
+# Built-in dashboard themes Ã¢â‚¬â€ label + description only.  The actual color
+# definitions live in the frontend (web/src/themes/presets.ts).
+_BUILTIN_DASHBOARD_THEMES = [
+    {"name": "default",       "label": "Sidekick Teal",         "description": "Classic dark teal Ã¢â‚¬â€ the canonical Sidekick look"},
+    {"name": "default-large", "label": "Sidekick Teal (Large)", "description": "Sidekick Teal with bigger fonts and roomier spacing"},
+    {"name": "midnight",      "label": "Midnight",            "description": "Deep blue-violet with cool accents"},
+    {"name": "ember",     "label": "Ember",          "description": "Warm crimson and bronze Ã¢â‚¬â€ forge vibes"},
+    {"name": "mono",      "label": "Mono",           "description": "Clean grayscale Ã¢â‚¬â€ minimal and focused"},
+    {"name": "cyberpunk", "label": "Cyberpunk",      "description": "Neon green on black Ã¢â‚¬â€ matrix terminal"},
+    {"name": "rose",      "label": "RosÃƒÂ©",           "description": "Soft pink and warm ivory Ã¢â‚¬â€ easy on the eyes"},
+]
+
+
+def _parse_theme_layer(value: Any, default_hex: str, default_alpha: float = 1.0) -> Optional[Dict[str, Any]]:
+    """Normalise a theme layer spec from YAML into `{hex, alpha}` form.
+
+    Accepts shorthand (a bare hex string) or full dict form.  Returns
+    ``None`` on garbage input so the caller can fall back to a built-in
+    default rather than blowing up.
+    """
+    if value is None:
+        return {"hex": default_hex, "alpha": default_alpha}
+    if isinstance(value, str):
+        return {"hex": value, "alpha": default_alpha}
+    if isinstance(value, dict):
+        hex_val = value.get("hex", default_hex)
+        alpha_val = value.get("alpha", default_alpha)
+        if not isinstance(hex_val, str):
+            return None
+        try:
+            alpha_f = float(alpha_val)
+        except (TypeError, ValueError):
+            alpha_f = default_alpha
+        return {"hex": hex_val, "alpha": max(0.0, min(1.0, alpha_f))}
+    return None
+
+
+_THEME_DEFAULT_TYPOGRAPHY: Dict[str, str] = {
+    "fontSans": 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    "fontMono": 'ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace',
+    "baseSize": "15px",
+    "lineHeight": "1.55",
+    "letterSpacing": "0",
+}
+
+_THEME_DEFAULT_LAYOUT: Dict[str, str] = {
+    "radius": "0.5rem",
+    "density": "comfortable",
+}
+
+_THEME_OVERRIDE_KEYS = {
+    "card", "cardForeground", "popover", "popoverForeground",
+    "primary", "primaryForeground", "secondary", "secondaryForeground",
+    "muted", "mutedForeground", "accent", "accentForeground",
+    "destructive", "destructiveForeground", "success", "warning",
+    "border", "input", "ring",
+}
+
+# Well-known named asset slots themes can populate.  Any other keys under
+# ``assets.custom`` are exposed as ``--theme-asset-custom-<key>`` CSS vars
+# for plugin/shell use.
+_THEME_NAMED_ASSET_KEYS = {"bg", "hero", "logo", "crest", "sidebar", "header"}
+
+# Component-style buckets themes can override.  The value under each bucket
+# is a mapping from camelCase property name to CSS string; each pair emits
+# ``--component-<bucket>-<kebab-property>`` on :root.  The frontend's shell
+# components (Card, App header, Backdrop, etc.) consume these vars so themes
+# can restyle chrome (clip-path, border-image, segmented progress, etc.)
+# without shipping their own CSS.
+_THEME_COMPONENT_BUCKETS = {
+    "card", "header", "footer", "sidebar", "tab",
+    "progress", "badge", "backdrop", "page",
+}
+
+_THEME_LAYOUT_VARIANTS = {"standard", "cockpit", "tiled"}
+
+# Cap on customCSS length so a malformed/oversized theme YAML can't blow up
+# the response payload or the <style> tag.  32 KiB is plenty for every
+# practical reskin (the Strike Freedom demo is ~2 KiB).
+_THEME_CUSTOM_CSS_MAX = 32 * 1024
+
+
+def _normalise_theme_definition(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Normalise a user theme YAML into the wire format `ThemeProvider`
+    expects.  Returns ``None`` if the theme is unusable.
+
+    Accepts both the full schema (palette/typography/layout) and a loose
+    form with bare hex strings, so hand-written YAMLs stay friendly.
+    """
+    if not isinstance(data, dict):
+        return None
+    name = data.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+
+    # Palette
+    palette_src = data.get("palette", {}) if isinstance(data.get("palette"), dict) else {}
+    # Allow top-level `colors.background` as a shorthand too.
+    colors_src = data.get("colors", {}) if isinstance(data.get("colors"), dict) else {}
+
+    def _layer(key: str, default_hex: str, default_alpha: float = 1.0) -> Dict[str, Any]:
+        spec = palette_src.get(key, colors_src.get(key))
+        parsed = _parse_theme_layer(spec, default_hex, default_alpha)
+        return parsed if parsed is not None else {"hex": default_hex, "alpha": default_alpha}
+
+    palette = {
+        "background": _layer("background", "#041c1c", 1.0),
+        "midground": _layer("midground", "#ffe6cb", 1.0),
+        "foreground": _layer("foreground", "#ffffff", 0.0),
+        "warmGlow": palette_src.get("warmGlow") or data.get("warmGlow") or "rgba(255, 189, 56, 0.35)",
+        "noiseOpacity": 1.0,
+    }
+    raw_noise = palette_src.get("noiseOpacity", data.get("noiseOpacity"))
+    try:
+        palette["noiseOpacity"] = float(raw_noise) if raw_noise is not None else 1.0
+    except (TypeError, ValueError):
+        palette["noiseOpacity"] = 1.0
+
+    # Typography
+    typo_src = data.get("typography", {}) if isinstance(data.get("typography"), dict) else {}
+    typography = dict(_THEME_DEFAULT_TYPOGRAPHY)
+    for key in ("fontSans", "fontMono", "fontDisplay", "fontUrl", "baseSize", "lineHeight", "letterSpacing"):
+        val = typo_src.get(key)
+        if isinstance(val, str) and val.strip():
+            typography[key] = val
+
+    # Layout
+    layout_src = data.get("layout", {}) if isinstance(data.get("layout"), dict) else {}
+    layout = dict(_THEME_DEFAULT_LAYOUT)
+    radius = layout_src.get("radius")
+    if isinstance(radius, str) and radius.strip():
+        layout["radius"] = radius
+    density = layout_src.get("density")
+    if isinstance(density, str) and density in {"compact", "comfortable", "spacious"}:
+        layout["density"] = density
+
+    # Color overrides Ã¢â‚¬â€ keep only valid keys with string values.
+    overrides_src = data.get("colorOverrides", {})
+    color_overrides: Dict[str, str] = {}
+    if isinstance(overrides_src, dict):
+        for key, val in overrides_src.items():
+            if key in _THEME_OVERRIDE_KEYS and isinstance(val, str) and val.strip():
+                color_overrides[key] = val
+
+    # Assets Ã¢â‚¬â€ named slots + arbitrary user-defined keys.  Values must be
+    # strings (URLs or CSS ``url(...)``/``linear-gradient(...)`` expressions).
+    # We don't fetch remote assets here; the frontend just injects them as
+    # CSS vars.  Empty values are dropped so a theme can explicitly clear a
+    # slot by setting ``hero: ""``.
+    assets_out: Dict[str, Any] = {}
+    assets_src = data.get("assets", {}) if isinstance(data.get("assets"), dict) else {}
+    for key in _THEME_NAMED_ASSET_KEYS:
+        val = assets_src.get(key)
+        if isinstance(val, str) and val.strip():
+            assets_out[key] = val
+    custom_assets_src = assets_src.get("custom")
+    if isinstance(custom_assets_src, dict):
+        custom_assets: Dict[str, str] = {}
+        for key, val in custom_assets_src.items():
+            if (
+                isinstance(key, str)
+                and key.replace("-", "").replace("_", "").isalnum()
+                and isinstance(val, str)
+                and val.strip()
+            ):
+                custom_assets[key] = val
+        if custom_assets:
+            assets_out["custom"] = custom_assets
+
+    # Custom CSS Ã¢â‚¬â€ raw CSS text the frontend injects as a scoped <style>
+    # tag on theme apply.  Clipped to _THEME_CUSTOM_CSS_MAX to keep the
+    # payload bounded.  We intentionally do NOT parse/sanitise the CSS
+    # here Ã¢â‚¬â€ the dashboard is localhost-only and themes are user-authored
+    # YAML in ~/.sidekick/, same trust level as the config file itself.
+    custom_css_val = data.get("customCSS")
+    custom_css: Optional[str] = None
+    if isinstance(custom_css_val, str) and custom_css_val.strip():
+        custom_css = custom_css_val[:_THEME_CUSTOM_CSS_MAX]
+
+    # Component style overrides Ã¢â‚¬â€ per-bucket dicts of camelCase CSS
+    # property -> CSS string.  The frontend converts these into CSS vars
+    # that shell components (Card, App header, Backdrop) consume.
+    component_styles_src = data.get("componentStyles", {})
+    component_styles: Dict[str, Dict[str, str]] = {}
+    if isinstance(component_styles_src, dict):
+        for bucket, props in component_styles_src.items():
+            if bucket not in _THEME_COMPONENT_BUCKETS or not isinstance(props, dict):
+                continue
+            clean: Dict[str, str] = {}
+            for prop, value in props.items():
+                if (
+                    isinstance(prop, str)
+                    and prop.replace("-", "").replace("_", "").isalnum()
+                    and isinstance(value, (str, int, float))
+                    and str(value).strip()
+                ):
+                    clean[prop] = str(value)
+            if clean:
+                component_styles[bucket] = clean
+
+    layout_variant_src = data.get("layoutVariant")
+    layout_variant = (
+        layout_variant_src
+        if isinstance(layout_variant_src, str) and layout_variant_src in _THEME_LAYOUT_VARIANTS
+        else "standard"
+    )
+
+    result: Dict[str, Any] = {
+        "name": name,
+        "label": data.get("label") or name,
+        "description": data.get("description", ""),
+        "palette": palette,
+        "typography": typography,
+        "layout": layout,
+        "layoutVariant": layout_variant,
+    }
+    if color_overrides:
+        result["colorOverrides"] = color_overrides
+    if assets_out:
+        result["assets"] = assets_out
+    if custom_css is not None:
+        result["customCSS"] = custom_css
+    if component_styles:
+        result["componentStyles"] = component_styles
+    return result
+
+
+def _discover_user_themes() -> list:
+    """Scan ~/.sidekick/dashboard-themes/*.yaml for user-created themes.
+
+    Returns a list of fully-normalised theme definitions ready to ship
+    to the frontend, so the client can apply them without a secondary
+    round-trip or a built-in stub.
+    """
+    themes_dir = get_sidekick_home() / "dashboard-themes"
+    if not themes_dir.is_dir():
+        return []
+    result = []
+    for f in sorted(themes_dir.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        normalised = _normalise_theme_definition(data)
+        if normalised is not None:
+            result.append(normalised)
+    return result
+
+
+@app.get("/api/dashboard/themes")
+async def get_dashboard_themes():
+    """Return available themes and the currently active one.
+
+    Built-in entries ship name/label/description only (the frontend owns
+    their full definitions in `web/src/themes/presets.ts`).  User themes
+    from `~/.sidekick/dashboard-themes/*.yaml` ship with their full
+    normalised definition under `definition`, so the client can apply
+    them without a stub.
+    """
+    config = load_config()
+    active = cfg_get(config, "dashboard", "theme", default="default")
+    user_themes = _discover_user_themes()
+    seen = set()
+    themes = []
+    for t in _BUILTIN_DASHBOARD_THEMES:
+        seen.add(t["name"])
+        themes.append(t)
+    for t in user_themes:
+        if t["name"] in seen:
+            continue
+        themes.append({
+            "name": t["name"],
+            "label": t["label"],
+            "description": t["description"],
+            "definition": t,
+        })
+        seen.add(t["name"])
+    return {"themes": themes, "active": active}
+
+
+class ThemeSetBody(BaseModel):
+    name: str
+
+
+@app.put("/api/dashboard/theme")
+async def set_dashboard_theme(body: ThemeSetBody):
+    """Set the active dashboard theme (persists to config.yaml)."""
+    config = load_config()
+    if "dashboard" not in config:
+        config["dashboard"] = {}
+    config["dashboard"]["theme"] = body.name
+    save_config(config)
+    return {"ok": True, "theme": body.name}
+
+
+# ---------------------------------------------------------------------------
+# Dashboard plugin system
+# ---------------------------------------------------------------------------
+
+def _discover_dashboard_plugins() -> list:
+    """Scan plugins/*/dashboard/manifest.json for dashboard extensions.
+
+    Checks three plugin sources (same as sidekick_cli.plugins):
+    1. User plugins:    ~/.sidekick/plugins/<name>/dashboard/manifest.json
+    2. Bundled plugins: <repo>/plugins/<name>/dashboard/manifest.json  (memory/, etc.)
+    3. Project plugins: ./.sidekick/plugins/  (only if SIDEKICK_ENABLE_PROJECT_PLUGINS)
+    """
+    plugins = []
+    seen_names: set = set()
+
+    from cli.plugins import get_bundled_plugins_dir
+    bundled_root = get_bundled_plugins_dir()
+    search_dirs = [
+        (get_sidekick_home() / "plugins", "user"),
+        (bundled_root / "memory", "bundled"),
+        (bundled_root, "bundled"),
+    ]
+    if os.environ.get("SIDEKICK_ENABLE_PROJECT_PLUGINS"):
+        search_dirs.append((Path.cwd() / ".sidekick" / "plugins", "project"))
+
+    for plugins_root, source in search_dirs:
+        if not plugins_root.is_dir():
+            continue
+        for child in sorted(plugins_root.iterdir()):
+            if not child.is_dir():
+                continue
+            manifest_file = child / "dashboard" / "manifest.json"
+            if not manifest_file.exists():
+                continue
+            try:
+                data = json.loads(manifest_file.read_text(encoding="utf-8"))
+                name = data.get("name", child.name)
+                if name in seen_names:
+                    continue
+                seen_names.add(name)
+                # Tab options: ``path`` + ``position`` for a new tab, optional
+                # ``override`` to replace a built-in route, and ``hidden`` to
+                # register the plugin component/slots without adding a tab
+                # (useful for slot-only plugins like a header-crest injector).
+                raw_tab = data.get("tab", {}) if isinstance(data.get("tab"), dict) else {}
+                tab_info = {
+                    "path": raw_tab.get("path", f"/{name}"),
+                    "position": raw_tab.get("position", "end"),
+                }
+                override_path = raw_tab.get("override")
+                if isinstance(override_path, str) and override_path.startswith("/"):
+                    tab_info["override"] = override_path
+                if bool(raw_tab.get("hidden")):
+                    tab_info["hidden"] = True
+                # Slots: list of named slot locations this plugin populates.
+                # The frontend exposes ``registerSlot(pluginName, slotName, Component)``
+                # on window; plugins with non-empty slots call it from their JS bundle.
+                slots_src = data.get("slots")
+                slots: List[str] = []
+                if isinstance(slots_src, list):
+                    slots = [s for s in slots_src if isinstance(s, str) and s]
+                plugins.append({
+                    "name": name,
+                    "label": data.get("label", name),
+                    "description": data.get("description", ""),
+                    "icon": data.get("icon", "Puzzle"),
+                    "version": data.get("version", "0.0.0"),
+                    "tab": tab_info,
+                    "slots": slots,
+                    "entry": data.get("entry", "dist/index.js"),
+                    "css": data.get("css"),
+                    "has_api": bool(data.get("api")),
+                    "source": source,
+                    "_dir": str(child / "dashboard"),
+                    "_api_file": data.get("api"),
+                })
+            except Exception as exc:
+                _log.warning("Bad dashboard plugin manifest %s: %s", manifest_file, exc)
+                continue
+    return plugins
+
+
+# Cache discovered plugins per-process (refresh on explicit re-scan).
+_dashboard_plugins_cache: Optional[list] = None
+
+
+def _get_dashboard_plugins(force_rescan: bool = False) -> list:
+    global _dashboard_plugins_cache
+    if _dashboard_plugins_cache is None or force_rescan:
+        _dashboard_plugins_cache = _discover_dashboard_plugins()
+    elif _dashboard_plugins_cache:
+        if any(not Path(p["_dir"]).is_dir() for p in _dashboard_plugins_cache):
+            _dashboard_plugins_cache = _discover_dashboard_plugins()
+    return _dashboard_plugins_cache
+
+
+@app.get("/api/dashboard/plugins")
+async def get_dashboard_plugins():
+    """Return discovered dashboard plugins (excludes user-hidden ones)."""
+    plugins = _get_dashboard_plugins()
+    # Read user's hidden plugins list from config.
+    config = load_config()
+    hidden: list = cfg_get(config, "dashboard", "hidden_plugins", default=[]) or []
+    # Strip internal fields before sending to frontend and filter out hidden.
+    return [
+        {k: v for k, v in p.items() if not k.startswith("_")}
+        for p in plugins
+        if p["name"] not in hidden
+    ]
+
+
+@app.get("/api/dashboard/plugins/rescan")
+async def rescan_dashboard_plugins():
+    """Force re-scan of dashboard plugins."""
+    plugins = _get_dashboard_plugins(force_rescan=True)
+    return {"ok": True, "count": len(plugins)}
+
+
+class _AgentPluginInstallBody(BaseModel):
+    identifier: str
+    force: bool = False
+    enable: bool = True
+
+
+def _strip_dashboard_manifest(p: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: v for k, v in p.items() if not k.startswith("_")}
+
+
+def _merged_plugins_hub() -> Dict[str, Any]:
+    """Agent discovery + dashboard manifests + optional provider picker metadata."""
+    from cli.plugins_cmd import (
+        _discover_all_plugins,
+        _get_current_context_engine,
+        _get_current_memory_provider,
+        _discover_context_engines,
+        _discover_memory_providers,
+        _get_disabled_set,
+        _get_enabled_set,
+        _read_manifest as _read_plugin_manifest_at,
+    )
+
+    dashboard_list = _get_dashboard_plugins()
+    dash_by_name = {str(p["name"]): p for p in dashboard_list}
+
+    disabled_set = _get_disabled_set()
+    enabled_set = _get_enabled_set()
+
+    # Read user-hidden plugins from config for the user_hidden field.
+    config = load_config()
+    hidden_plugins: list = cfg_get(config, "dashboard", "hidden_plugins", default=[]) or []
+
+    plugins_root_resolved = (get_sidekick_home() / "plugins").resolve()
+    rows: List[Dict[str, Any]] = []
+
+    for name, version, description, source, dir_str in _discover_all_plugins():
+        if name in disabled_set:
+            runtime_status = "disabled"
+        elif name in enabled_set:
+            runtime_status = "enabled"
+        else:
+            runtime_status = "inactive"
+
+        dir_path = Path(dir_str)
+        dm = dash_by_name.get(name)
+        has_dash_manifest = dm is not None or (dir_path / "dashboard" / "manifest.json").exists()
+
+        under_user_tree = False
+        try:
+            dir_path.resolve().relative_to(plugins_root_resolved)
+            under_user_tree = True
+        except ValueError:
+            pass
+
+        can_remove_update = (
+            source in {"user", "git"} and under_user_tree and Path(dir_str).is_dir()
+        )
+
+        # Check if this plugin provides tools that require auth
+        auth_required = False
+        auth_command = ""
+        manifest_data = _read_plugin_manifest_at(dir_path)
+        provides_tools = manifest_data.get("provides_tools") or []
+        if provides_tools:
+            try:
+                from tools.registry import registry
+                for tname in provides_tools:
+                    entry = registry.get_entry(tname)
+                    if entry and entry.check_fn and not entry.check_fn():
+                        auth_required = True
+                        auth_command = f"sidekick auth {name}"
+                        break
+            except Exception:
+                pass
+
+        rows.append({
+            "name": name,
+            "version": version or "",
+            "description": description or "",
+            "source": source,
+            "runtime_status": runtime_status,
+            "has_dashboard_manifest": has_dash_manifest,
+            "dashboard_manifest": _strip_dashboard_manifest(dm) if dm else None,
+            "path": dir_str,
+            "can_remove": can_remove_update,
+            "can_update_git": can_remove_update and (Path(dir_str) / ".git").exists(),
+            "auth_required": auth_required,
+            "auth_command": auth_command,
+            "user_hidden": name in hidden_plugins,
+        })
+
+    agent_names = {r["name"] for r in rows}
+    orphan_dashboard = [
+        _strip_dashboard_manifest(p)
+        for p in dashboard_list
+        if str(p["name"]) not in agent_names
+    ]
+
+    memory_providers: List[Dict[str, str]] = []
+    try:
+        for n, desc in _discover_memory_providers():
+            memory_providers.append({"name": n, "description": desc})
+    except Exception:
+        memory_providers = []
+
+    context_engines: List[Dict[str, str]] = []
+    try:
+        for n, desc in _discover_context_engines():
+            context_engines.append({"name": n, "description": desc})
+    except Exception:
+        context_engines = []
+
+    return {
+        "plugins": rows,
+        "orphan_dashboard_plugins": orphan_dashboard,
+        "providers": {
+            "memory_provider": _get_current_memory_provider() or "",
+            "memory_options": memory_providers,
+            "context_engine": _get_current_context_engine(),
+            "context_options": context_engines,
+        },
+    }
+
+
+@app.get("/api/dashboard/plugins/hub")
+async def get_plugins_hub(request: Request):
+    """Unified agent plugins + dashboard extension metadata (session protected)."""
+    _require_token(request)
+    try:
+        return _merged_plugins_hub()
+    except Exception as exc:
+        _log.warning("plugins/hub failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to build plugins hub.") from exc
+
+
+@app.post("/api/dashboard/agent-plugins/install")
+async def post_agent_plugin_install(request: Request, body: _AgentPluginInstallBody):
+    _require_token(request)
+    from cli.plugins_cmd import dashboard_install_plugin
+
+    result = dashboard_install_plugin(
+        body.identifier.strip(),
+        force=body.force,
+        enable=body.enable,
+    )
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=400,
+            detail=result.get("error") or "Install failed.",
+        )
+    _get_dashboard_plugins(force_rescan=True)
+    # Strip internal paths from the response
+    result.pop("after_install_path", None)
+    return result
+
+
+def _validate_plugin_name(name: str) -> str:
+    """Reject path-traversal attempts in plugin name URL parameters."""
+    if not name or "/" in name or "\\" in name or ".." in name:
+        raise HTTPException(status_code=400, detail="Invalid plugin name.")
+    return name
+
+
+@app.post("/api/dashboard/agent-plugins/{name}/enable")
+async def post_agent_plugin_enable(request: Request, name: str):
+    _require_token(request)
+    name = _validate_plugin_name(name)
+    from cli.plugins_cmd import dashboard_set_agent_plugin_enabled
+
+    result = dashboard_set_agent_plugin_enabled(name, enabled=True)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "Enable failed.")
+    return result
+
+
+@app.post("/api/dashboard/agent-plugins/{name}/disable")
+async def post_agent_plugin_disable(request: Request, name: str):
+    _require_token(request)
+    name = _validate_plugin_name(name)
+    from cli.plugins_cmd import dashboard_set_agent_plugin_enabled
+
+    result = dashboard_set_agent_plugin_enabled(name, enabled=False)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "Disable failed.")
+    return result
+
+
+@app.post("/api/dashboard/agent-plugins/{name}/update")
+async def post_agent_plugin_update(request: Request, name: str):
+    _require_token(request)
+    name = _validate_plugin_name(name)
+    from cli.plugins_cmd import dashboard_update_user_plugin
+
+    result = dashboard_update_user_plugin(name)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "Update failed.")
+    _get_dashboard_plugins(force_rescan=True)
+    return result
+
+
+@app.delete("/api/dashboard/agent-plugins/{name}")
+async def delete_agent_plugin(request: Request, name: str):
+    _require_token(request)
+    name = _validate_plugin_name(name)
+    from cli.plugins_cmd import dashboard_remove_user_plugin
+
+    result = dashboard_remove_user_plugin(name)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "Remove failed.")
+    _get_dashboard_plugins(force_rescan=True)
+    return result
+
+
+class _PluginProvidersPutBody(BaseModel):
+    memory_provider: Optional[str] = None
+    context_engine: Optional[str] = None
+
+
+@app.put("/api/dashboard/plugin-providers")
+async def put_plugin_providers(request: Request, body: _PluginProvidersPutBody):
+    """Persist memory provider / context engine selection (writes config.yaml)."""
+    _require_token(request)
+    from cli.plugins_cmd import (
+        _save_context_engine,
+        _save_memory_provider,
+    )
+
+    if body.memory_provider is not None:
+        _save_memory_provider(body.memory_provider)
+    if body.context_engine is not None:
+        _save_context_engine(body.context_engine)
+    return {"ok": True}
+
+
+class _PluginVisibilityBody(BaseModel):
+    hidden: bool
+
+
+@app.post("/api/dashboard/plugins/{name}/visibility")
+async def post_plugin_visibility(request: Request, name: str, body: _PluginVisibilityBody):
+    """Toggle a plugin's sidebar visibility (persists to config.yaml dashboard.hidden_plugins)."""
+    _require_token(request)
+    name = _validate_plugin_name(name)
+
+    config = load_config()
+    if "dashboard" not in config or not isinstance(config.get("dashboard"), dict):
+        config["dashboard"] = {}
+    hidden_list: list = config["dashboard"].get("hidden_plugins") or []
+    if not isinstance(hidden_list, list):
+        hidden_list = []
+
+    if body.hidden and name not in hidden_list:
+        hidden_list.append(name)
+    elif not body.hidden and name in hidden_list:
+        hidden_list.remove(name)
+
+    config["dashboard"]["hidden_plugins"] = hidden_list
+    save_config(config)
+    return {"ok": True, "name": name, "hidden": body.hidden}
+
+
+@app.get("/dashboard-plugins/{plugin_name}/{file_path:path}")
+async def serve_plugin_asset(plugin_name: str, file_path: str):
+    """Serve static assets from a dashboard plugin directory.
+
+    Only serves files from the plugin's ``dashboard/`` subdirectory.
+    Path traversal is blocked by checking ``resolve().is_relative_to()``.
+    """
+    plugins = _get_dashboard_plugins()
+    plugin = next((p for p in plugins if p["name"] == plugin_name), None)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+
+    base = Path(plugin["_dir"])
+    target = (base / file_path).resolve()
+
+    if not target.is_relative_to(base.resolve()):
+        raise HTTPException(status_code=403, detail="Path traversal blocked")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Guess content type
+    suffix = target.suffix.lower()
+    content_types = {
+        ".js": "application/javascript",
+        ".mjs": "application/javascript",
+        ".css": "text/css",
+        ".json": "application/json",
+        ".html": "text/html",
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".woff2": "font/woff2",
+        ".woff": "font/woff",
+    }
+    media_type = content_types.get(suffix, "application/octet-stream")
+    return FileResponse(target, media_type=media_type)
+
+
+def _mount_plugin_api_routes():
+    """Import and mount backend API routes from plugins that declare them.
+
+    Each plugin's ``api`` field points to a Python file that must expose
+    a ``router`` (FastAPI APIRouter).  Routes are mounted under
+    ``/api/plugins/<name>/``.
+    """
+    for plugin in _get_dashboard_plugins():
+        api_file_name = plugin.get("_api_file")
+        if not api_file_name:
+            continue
+        api_path = Path(plugin["_dir"]) / api_file_name
+        if not api_path.exists():
+            _log.warning("Plugin %s declares api=%s but file not found", plugin["name"], api_file_name)
+            continue
+        try:
+            module_name = f"sidekick_dashboard_plugin_{plugin['name']}"
+            spec = importlib.util.spec_from_file_location(module_name, api_path)
+            if spec is None or spec.loader is None:
+                continue
+            mod = importlib.util.module_from_spec(spec)
+            # Register in sys.modules BEFORE exec_module so pydantic/FastAPI
+            # can resolve forward references (e.g. models defined in a file
+            # that uses `from __future__ import annotations`). Without this,
+            # TypeAdapter lazy-build fails at first request with
+            # "is not fully defined" because the module namespace isn't
+            # reachable by name for string-annotation resolution.
+            sys.modules[module_name] = mod
+            try:
+                spec.loader.exec_module(mod)
+            except Exception:
+                sys.modules.pop(module_name, None)
+                raise
+            router = getattr(mod, "router", None)
+            if router is None:
+                _log.warning("Plugin %s api file has no 'router' attribute", plugin["name"])
+                continue
+            app.include_router(router, prefix=f"/api/plugins/{plugin['name']}")
+            _log.info("Mounted plugin API routes: /api/plugins/%s/", plugin["name"])
+        except Exception as exc:
+            _log.warning("Failed to load plugin %s API routes: %s", plugin["name"], exc)
+
+
+# ---------------------------------------------------------------------------
+# Discord API endpoints Ã¢â‚¬â€ Role & Member Drag & Drop
+# ---------------------------------------------------------------------------
+#
+# These endpoints provide data for the Discord role-management UI.  When the
+# Discord gateway is not running they return 503 with an informative message.
+#
+# In the current version the endpoints serve mock data for development.
+# Production integration should call the Discord gateway via run_agent.py or
+# the Discord gateway plugin.
+
+_DISCORD_GATEWAY_AVAILABLE = False  # set True once gateway IPC is wired up
+
+
+def _discord_api(method: str, path: str, data: Any | None = None):
+    from web.api.discord_bot import _api
+
+    return _api(method, path, data)
+
+
+def _raise_for_discord_api_error(result: Any) -> None:
+    if isinstance(result, dict) and result.get("error"):
+        detail = result.get("message") or result.get("detail") or "Discord API request failed"
+        raise HTTPException(status_code=502, detail=str(detail))
+
+MOCK_ROLES: List[Dict[str, Any]] = [
+    {
+        "id": "123456789012345678",
+        "name": "Admin",
+        "color": 0xFF0000,
+        "position": 0,
+        "member_count": 2,
+        "member_preview": [
+            {"id": "111111111111111111", "username": "cid", "display_name": "Cid", "avatar_url": ""},
+            {"id": "222222222222222222", "username": "alice", "display_name": "Alice", "avatar_url": ""},
+        ],
+    },
+    {
+        "id": "123456789012345679",
+        "name": "Moderator",
+        "color": 0x00FF00,
+        "position": 1,
+        "member_count": 3,
+        "member_preview": [
+            {"id": "333333333333333333", "username": "bob", "display_name": "Bob", "avatar_url": ""},
+            {"id": "444444444444444444", "username": "charlie", "display_name": "Charlie", "avatar_url": ""},
+        ],
+    },
+    {
+        "id": "123456789012345670",
+        "name": "Member",
+        "color": 0x0000FF,
+        "position": 2,
+        "member_count": 5,
+        "member_preview": [
+            {"id": "555555555555555555", "username": "dave", "display_name": "Dave", "avatar_url": ""},
+            {"id": "666666666666666666", "username": "eve", "display_name": "Eve", "avatar_url": ""},
+        ],
+    },
+    {
+        "id": "123456789012345671",
+        "name": "Bot",
+        "color": 0x808080,
+        "position": 3,
+        "member_count": 1,
+        "member_preview": [
+            {"id": "777777777777777777", "username": "sidekick", "display_name": "Sidekick Bot", "avatar_url": ""},
+        ],
+    },
+    {
+        "id": "123456789012345672",
+        "name": "VIP",
+        "color": 0xFFD700,
+        "position": 4,
+        "member_count": 2,
+        "member_preview": [
+            {"id": "888888888888888888", "username": "frank", "display_name": "Frank", "avatar_url": ""},
+        ],
+    },
+]
+
+MOCK_MEMBERS: List[Dict[str, Any]] = [
+    {"id": "111111111111111111", "username": "cid", "display_name": "Cid", "avatar_url": "", "role_ids": ["123456789012345678"]},
+    {"id": "222222222222222222", "username": "alice", "display_name": "Alice", "avatar_url": "", "role_ids": ["123456789012345678"]},
+    {"id": "333333333333333333", "username": "bob", "display_name": "Bob", "avatar_url": "", "role_ids": ["123456789012345679"]},
+    {"id": "444444444444444444", "username": "charlie", "display_name": "Charlie", "avatar_url": "", "role_ids": ["123456789012345679"]},
+    {"id": "555555555555555555", "username": "dave", "display_name": "Dave", "avatar_url": "", "role_ids": ["123456789012345670"]},
+    {"id": "666666666666666666", "username": "eve", "display_name": "Eve", "avatar_url": "", "role_ids": ["123456789012345670"]},
+    {"id": "777777777777777777", "username": "sidekick", "display_name": "Sidekick Bot", "avatar_url": "", "role_ids": ["123456789012345671"]},
+    {"id": "888888888888888888", "username": "frank", "display_name": "Frank", "avatar_url": "", "role_ids": ["123456789012345672"]},
+    {"id": "999999999999999999", "username": "grace", "display_name": "Grace", "avatar_url": "", "role_ids": ["123456789012345670", "123456789012345672"]},
+]
+
+
+class _DiscordMemberRolesBody(BaseModel):
+    guild_id: str
+    add_role_ids: Optional[List[str]] = None
+    remove_role_ids: Optional[List[str]] = None
+
+
+@app.get("/api/discord/guilds/{guild_id}/roles")
+async def get_guild_roles(guild_id: str):
+    if not _DISCORD_GATEWAY_AVAILABLE:
+        # For development: return mock data
+        return {"roles": MOCK_ROLES}
+    data = _discord_api("GET", f"/guilds/{guild_id}/roles")
+    _raise_for_discord_api_error(data)
+    if isinstance(data, list):
+        return {"roles": data}
+    return data
+
+
+@app.get("/api/discord/guilds/{guild_id}/members")
+async def get_guild_members(guild_id: str, limit: int = 200):
+    if not _DISCORD_GATEWAY_AVAILABLE:
+        members = MOCK_MEMBERS[:limit]
+        return {"members": members}
+    safe_limit = max(1, min(int(limit), 1000))
+    data = _discord_api("GET", f"/guilds/{guild_id}/members?limit={safe_limit}")
+    _raise_for_discord_api_error(data)
+    if isinstance(data, list):
+        return {"members": data}
+    return data
+
+
+@app.put("/api/discord/members/{member_id}/roles")
+async def put_member_roles(member_id: str, body: _DiscordMemberRolesBody, request: Request):
+    _require_token(request)
+    if not _DISCORD_GATEWAY_AVAILABLE:
+        # Simulated success for development
+        _log.info(
+            "Mock role change for member %s (guild %s): add=%s remove=%s",
+            member_id,
+            body.guild_id,
+            body.add_role_ids,
+            body.remove_role_ids,
+        )
+        return {"ok": True}
+    added = []
+    removed = []
+    for role_id in body.add_role_ids or []:
+        result = _discord_api("PUT", f"/guilds/{body.guild_id}/members/{member_id}/roles/{role_id}")
+        _raise_for_discord_api_error(result)
+        added.append(role_id)
+    for role_id in body.remove_role_ids or []:
+        result = _discord_api("DELETE", f"/guilds/{body.guild_id}/members/{member_id}/roles/{role_id}")
+        _raise_for_discord_api_error(result)
+        removed.append(role_id)
+    return {"ok": True, "updated": {"added": added, "removed": removed}}
+
+
+# Mount plugin API routes before the SPA catch-all.
+_mount_plugin_api_routes()
+
+# Ã¢â€â‚¬Ã¢â€â‚¬ Onboarding routes Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+
+@app.get("/api/onboarding/status")
+async def onboarding_status():
+    """Return the current onboarding/provisioning status."""
+    return get_onboarding_status()
+
+
+@app.get("/api/onboarding/oauth/poll")
+async def onboarding_oauth_poll(flow_id: str = ""):
+    """Poll the status of an ongoing onboarding OAuth flow."""
+    try:
+        return poll_onboarding_oauth_flow(flow_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@app.post("/api/onboarding/oauth/start")
+async def onboarding_oauth_start(body: dict | None = None):
+    """Start an onboarding OAuth flow (OpenAI Codex or Anthropic/Claude)."""
+    body = body or {}
+    try:
+        return start_onboarding_oauth_flow(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/api/onboarding/oauth/cancel")
+async def onboarding_oauth_cancel(body: dict | None = None):
+    """Cancel an ongoing onboarding OAuth flow."""
+    body = body or {}
+    try:
+        return cancel_onboarding_oauth_flow(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/api/onboarding/setup")
+async def onboarding_setup(body: dict | None = None):
+    """Apply onboarding setup (provider, model, API keys)."""
+    body = body or {}
+    try:
+        return apply_onboarding_setup(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/api/onboarding/complete")
+async def onboarding_complete():
+    """Mark onboarding as complete."""
+    return complete_onboarding()
+
+
+@app.post("/api/onboarding/probe")
+async def onboarding_probe(body: dict | None = None):
+    """Probe a provider endpoint for reachability and model catalog."""
+    body = body or {}
+    provider = str(body.get("provider") or "").strip().lower()
+    base_url = str(body.get("base_url") or "")
+    api_key = str(body.get("api_key") or "").strip() or None
+    try:
+        return probe_provider_endpoint(provider, base_url, api_key)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"probe failed: {e}") from e
+
+
+# Ã¢â€â‚¬Ã¢â€â‚¬ API proxy / fallback Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+@app.api_route(
+    "/api/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"],
+    include_in_schema=False,
+)
+async def api_route_bridge(request: Request, path: str):
+    """Run unmatched API routes through the in-process FastAPI bridge."""
+    return await dispatch_route(request)
+
+
+mount_spa(app)
+
+# Registered here (not with the other startup hooks above) because
+# ``_start_shell_precompress`` is defined further down in this module.
+app.router.on_startup.append(_start_shell_precompress)
+
+
+def start_server(
+    host: str = "127.0.0.1",
+    port: int = 9119,
+    open_browser: bool = True,
+    allow_public: bool = False,
+    *,
+    embedded_chat: bool = False,
+):
+    """Start the web UI server."""
+    import uvicorn
+
+    global _DASHBOARD_EMBEDDED_CHAT_ENABLED
+    _DASHBOARD_EMBEDDED_CHAT_ENABLED = embedded_chat
+
+    _LOCALHOST = ("127.0.0.1", "localhost", "::1")
+    if host not in _LOCALHOST and not allow_public:
+        raise SystemExit(
+            f"Refusing to bind to {host} Ã¢â‚¬â€ the dashboard exposes API keys "
+            f"and config without robust authentication.\n"
+            f"Use --insecure to override (NOT recommended on untrusted networks)."
+        )
+    if host not in _LOCALHOST:
+        _log.warning(
+            "Binding to %s with --insecure Ã¢â‚¬â€ the dashboard has no robust "
+            "authentication. Only use on trusted networks.", host,
+        )
+
+    # Record the bound host so host_header_middleware can validate incoming
+    # Host headers against it. Defends against DNS rebinding (GHSA-ppp5-vxwm-4cf7).
+    # bound_port is also stashed so /api/pty can build the back-WS URL the
+    # PTY child uses to publish events to the dashboard sidebar.
+    app.state.bound_host = host
+    app.state.bound_port = port
+
+    if open_browser:
+        import webbrowser
+
+        def _open():
+            time.sleep(1.0)
+            webbrowser.open(f"http://{host}:{port}")
+
+        threading.Thread(target=_open, daemon=True).start()
+
+    print(f"  Sidekick Web UI Ã¢â€ â€™ http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port, log_level="warning")

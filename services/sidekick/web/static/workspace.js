@@ -1,0 +1,887 @@
+// Default timeout for api() calls (backlog item 26). Without one, a request
+// that never answers (half-open socket, stalled provider stream) leaves the
+// caller's promise pending forever and the UI stuck on its loading state.
+// Callers can override per request with opts.timeoutMs, or disable it with
+// opts.timeoutMs = 0.
+const API_DEFAULT_TIMEOUT_MS = 30000;
+
+async function api(path,opts={}){
+  // Strip leading slash so URL resolves relative to location.href (supports subpath mounts)
+  const rel = path.startsWith('/') ? path.slice(1) : path;
+  const url=new URL(rel,document.baseURI||location.href);
+  const fetchOpts=Object.assign({},opts||{});
+  const logApiError=fetchOpts.logError!==false;
+  delete fetchOpts.logError;
+  // A caller-supplied signal wins; otherwise apply the default timeout.
+  const timeoutMs = fetchOpts.timeoutMs === undefined ? API_DEFAULT_TIMEOUT_MS : fetchOpts.timeoutMs;
+  delete fetchOpts.timeoutMs;
+  let timeoutTimer=null;
+  let timeoutController=null;
+  if(timeoutMs>0 && !fetchOpts.signal){
+    timeoutController=new AbortController();
+    fetchOpts.signal=timeoutController.signal;
+    timeoutTimer=setTimeout(()=>timeoutController.abort(),timeoutMs);
+  }
+  // Retry up to 2 times on network errors (e.g. stale keep-alive after long idle).
+  // Server errors (4xx/5xx) are NOT retried — only connection failures.
+  let lastErr;
+  try{
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      const headers = _headersWithWorkspace(fetchOpts.headers, url, {defaultJson:true});
+      const res=await fetch(url.href,{credentials:'include',...fetchOpts,headers});
+      if(!res.ok){
+        // 401 means the auth session expired. Redirect to login so the user can
+        // re-authenticate. This is especially important for iOS PWA (standalone mode)
+        // and for subpath mounts like /sidekick/, where /login escapes to the site root.
+        if(res.status===401){
+          const hasDashboardToken = !!_dashboardSessionToken();
+          const onLoginPage = /\/login\/?$/.test(window.location.pathname);
+          if(!hasDashboardToken && !onLoginPage){
+            window.location.href='login?next='+encodeURIComponent(window.location.pathname+window.location.search);
+          }
+        }
+        const text=await res.text();
+        // Parse JSON error body and surface the human-readable message,
+        // rather than showing raw JSON like {"error":"Profile 'x' does not exist."}
+        let message=text;
+        let data=null;
+        try{const j=JSON.parse(text);message=j.detail||j.message||j.error||text;}catch(e){}
+        try{data=JSON.parse(text);}catch(_){}
+        if(data&&typeof data==='object'){
+          const errorValue=data.error;
+          if(typeof errorValue==='string'){
+            message=data.message||errorValue; // prefer human message over code
+          }else if(errorValue&&typeof errorValue==='object'){
+            message=errorValue.message||errorValue.code||data.message||text;
+          }else{
+            message=data.message||text;
+          }
+        }
+        // Attach the raw HTTP context so callers can branch on status (404 stale-session
+        // cleanup, 401 redirect, 503 retry, etc.) without re-parsing the message string.
+        const err=new Error(message);
+        err.status=res.status;
+        err.statusText=res.statusText;
+        err.body=text;
+        err.data=data;
+
+        // Auto-log failed API calls (but skip error-logging endpoints to avoid loops)
+        const isExpectedGameModeBlock=res.status===409&&data&&data.error&&data.error.code==='game_mode_enabled';
+        if(logApiError&&!isExpectedGameModeBlock&&!path.startsWith('api/errors/') && !path.startsWith('/api/errors/')){
+          try{
+            var _xhr=new XMLHttpRequest();
+            _xhr.open('POST','api/errors/log',true);
+            _xhr.setRequestHeader('Content-Type','application/json');
+            var _token=_dashboardSessionToken();
+            if(_token)_xhr.setRequestHeader('X-Sidekick-Session-Token',_token);
+            _xhr.send(JSON.stringify({
+              type:'api_error',
+              message:String(message).slice(0,4000),
+              stack:err.stack||'',
+              path:window.location.pathname,
+              status:res.status,
+              method:(fetchOpts.method||'GET').toUpperCase(),
+              body:String(text).slice(0,4000),
+              url:path,
+              meta:{attempt:attempt+1}
+            }));
+          }catch(_e){}
+        }
+
+        throw err;
+      }
+      const ct=res.headers.get('content-type')||'';
+      return ct.includes('application/json')?res.json():res.text();
+    }catch(e){
+      lastErr=e;
+      // A timeout abort must not be retried: the request already had its full
+      // budget, and retrying would triple the wait before the caller sees it.
+      if(e && e.name==='AbortError'){
+        const timeoutErr=new Error(`Request timed out after ${timeoutMs} ms`);
+        timeoutErr.name='TimeoutError';
+        timeoutErr.timeoutMs=timeoutMs;
+        timeoutErr.url=path;
+        throw timeoutErr;
+      }
+      // Only retry on network errors (TypeError from fetch), not on HTTP errors
+      // that were already thrown above. Re-throw 401 redirects immediately.
+      if(e.message&&/401/.test(e.message)) throw e;
+      if(attempt<2 && e instanceof TypeError) continue;
+      throw e;
+    }
+  }
+  throw lastErr;
+  }finally{
+    if(timeoutTimer) clearTimeout(timeoutTimer);
+  }
+}
+
+// Persist/restore expanded directory state per workspace in localStorage
+let _loadDirRev = 0;
+let _gitBadgeRequestRev = 0;
+const _LOAD_DIR_TIMEOUT_MS = 8000;
+const _MAX_EXPANDED_DIR_PREFETCH = 16;
+
+async function _workspaceApiWithTimeout(path, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs || _LOAD_DIR_TIMEOUT_MS);
+  try {
+    return await api(path, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+window._workspaceApiWithTimeout = window._workspaceApiWithTimeout || _apiWithTimeout;
+
+function _isCurrentLoadDir(loadRev, sessionId, workspace) {
+  return loadRev === _loadDirRev
+    && S.session
+    && S.session.session_id === sessionId
+    && (workspace === undefined || S.session.workspace === workspace);
+}
+
+function _wsExpandKey(){
+  const ws=S.session&&S.session.workspace;
+  return ws?'sidekick-webui-expanded:'+ws:null;
+}
+function _saveExpandedDirs(){
+  const key=_wsExpandKey();if(!key)return;
+  try{localStorage.setItem(key,JSON.stringify([...(S._expandedDirs||new Set())]));}catch(e){}
+}
+function _restoreExpandedDirs(){
+  const key=_wsExpandKey();
+  if(!key){S._expandedDirs=new Set();return;}
+  try{
+    const raw=localStorage.getItem(key);
+    S._expandedDirs=raw?new Set(JSON.parse(raw)):new Set();
+  }catch(e){S._expandedDirs=new Set();}
+}
+
+let _pendingWorkspaceTreeRefresh = null;
+
+function _workspaceTreeVisibleForAutoRefresh(){
+  const panel = $('chatFileTreePanel');
+  if (panel && panel.classList.contains('file-tree-panel--minimized')) return false;
+  if (document.body && document.body.classList.contains('browser-drawer-open') && !document.body.classList.contains('browser-split') && !document.body.classList.contains('browser-maximized')) return false;
+  const box = $('fileTree');
+  if (!box) return false;
+  const style = getComputedStyle(box);
+  if (style.display === 'none' || style.visibility === 'hidden') return false;
+  const rect = box.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function flushPendingWorkspaceTreeRefresh(){
+  const pending = _pendingWorkspaceTreeRefresh;
+  if (!pending || !S.session || pending.session_id !== S.session.session_id) return false;
+  if (!_workspaceTreeVisibleForAutoRefresh()) return false;
+  _pendingWorkspaceTreeRefresh = null;
+  void loadDir(pending.path || '.');
+  return true;
+}
+
+async function loadDir(path){
+  const opts = arguments[1];
+  if(!S.session)return;
+  const requestedPath = path || '.';
+  if (opts && opts.auto && !_workspaceTreeVisibleForAutoRefresh()) {
+    _pendingWorkspaceTreeRefresh = {session_id: S.session.session_id, path: requestedPath};
+    S.currentDir = requestedPath;
+    return;
+  }
+  const loadRev = ++_loadDirRev;
+  const sessionId = S.session.session_id;
+  const workspace = S.session.workspace;
+  try{
+    if(!requestedPath||requestedPath==='.'){
+      S._dirCache={};
+      _restoreExpandedDirs();  // restore per-workspace expanded state on root load
+    }
+    S.currentDir=requestedPath;
+    const data=await _workspaceApiWithTimeout(`/api/list?session_id=${encodeURIComponent(sessionId)}&path=${encodeURIComponent(requestedPath)}`, _LOAD_DIR_TIMEOUT_MS);
+    if(!_isCurrentLoadDir(loadRev, sessionId, workspace)) return;
+    S.entries=data.entries||[];renderBreadcrumb();renderFileTree();
+    // Pre-fetch contents of restored expanded dirs so they render without a second click
+    // (parallelized — avoids serial waterfall when multiple dirs are expanded)
+    if(!requestedPath||requestedPath==='.'){
+      const expanded=S._expandedDirs||new Set();
+      const pending=[...expanded].filter(dirPath=>!S._dirCache[dirPath]).slice(0, _MAX_EXPANDED_DIR_PREFETCH);
+      if(pending.length){
+        const results=await Promise.all(pending.map(dirPath=>
+          _workspaceApiWithTimeout(`/api/list?session_id=${encodeURIComponent(sessionId)}&path=${encodeURIComponent(dirPath)}`, _LOAD_DIR_TIMEOUT_MS)
+            .then(dc=>({dirPath,entries:dc.entries||[]}))
+            .catch(()=>({dirPath,entries:[]}))
+        ));
+        if(!_isCurrentLoadDir(loadRev, sessionId, workspace)) return;
+        for(const {dirPath,entries} of results) S._dirCache[dirPath]=entries;
+      }
+      if(expanded.size>0)renderFileTree();
+    }
+    if(typeof clearPreview==='function'){
+      if(typeof _previewDirty!=='undefined'&&_previewDirty){
+        showConfirmDialog({title:t('unsaved_confirm'),message:'',confirmLabel:'Discard',danger:true,focusCancel:true}).then(ok=>{if(ok)clearPreview({keepPanelOpen:true});});
+      }else{
+        clearPreview({keepPanelOpen:true});
+      }
+    }
+    // Fetch git info for workspace root (non-blocking)
+    if(!requestedPath||requestedPath==='.') _refreshGitBadge();
+  }catch(e){
+    // A failed older request must not blank the directory that a newer path
+    // load (or a workspace switch on the same session) has already rendered.
+    if (!_isCurrentLoadDir(loadRev, sessionId, workspace)) return;
+    const currentSessionId = S.session && S.session.session_id;
+    const msg = String((e && e.message) || '');
+    if (
+      (e && e.name === 'AbortError') ||
+      (currentSessionId && currentSessionId !== sessionId) ||
+      (e && e.status === 404 && /session not found/i.test(msg))
+    ) {
+      return;
+    }
+    const emptyEl = $('wsEmptyState');
+    const box = $('fileTree');
+    if (emptyEl) {
+      const detail = msg ? ` ${msg}` : '';
+      emptyEl.textContent = (typeof t === 'function' ? t('workspace_load_failed') : 'Could not load this workspace.') + detail;
+      emptyEl.style.display = 'flex';
+    }
+    if (box) {
+      box.innerHTML = '';
+      box.style.display = 'none';
+    }
+    console.warn('loadDir',e);
+  }
+}
+
+window.flushPendingWorkspaceTreeRefresh = flushPendingWorkspaceTreeRefresh;
+
+async function _refreshGitBadge(){
+  const badges=[$('gitBadge'),$('composerGitBadge')].filter(Boolean);
+  if(!badges.length||!S.session)return;
+  const sessionId = S.session.session_id;
+  const workspace = S.session.workspace;
+  const requestRev = ++_gitBadgeRequestRev;
+  const isCurrent = () => (
+    requestRev === _gitBadgeRequestRev
+    && S.session
+    && S.session.session_id === sessionId
+    && S.session.workspace === workspace
+  );
+  try{
+    const data=await api(`/api/git-info?session_id=${encodeURIComponent(sessionId)}`);
+    if(!isCurrent()) return;
+    if(data.git&&data.git.is_git){
+      const g=data.git;
+      let text=g.branch||'git';
+      if(g.dirty>0) text+=` \u00b7 ${g.dirty}\u2206`; // middot + delta
+      if(g.behind>0) text+=` \u2193${g.behind}`;
+      if(g.ahead>0) text+=` \u2191${g.ahead}`;
+      badges.forEach(badge=>{
+        badge.textContent=text;
+        badge.className='git-badge'+(g.dirty>0?' dirty':'');
+        badge.style.display='';
+      });
+    } else {
+      badges.forEach(badge=>{
+        badge.style.display='none';
+        badge.textContent='';
+      });
+    }
+  }catch(e){
+    if(!isCurrent()) return;
+    badges.forEach(badge=>{badge.style.display='none';});
+  }
+}
+
+function navigateUp(){
+  if(!S.session||S.currentDir==='.')return;
+  const parts=S.currentDir.split('/');
+  parts.pop();
+  loadDir(parts.length?parts.join('/'):'.');
+}
+
+// File extension sets for preview routing (must match server-side sets)
+const IMAGE_EXTS  = new Set(['.png','.jpg','.jpeg','.gif','.svg','.webp','.ico','.bmp']);
+const MD_EXTS     = new Set(['.md','.markdown','.mdown']);
+const HTML_EXTS   = new Set(['.html','.htm']);
+const PDF_EXTS    = new Set(['.pdf']);
+const AUDIO_EXTS  = new Set(['.mp3','.wav','.m4a','.aac','.ogg','.oga','.opus','.flac']);
+const VIDEO_EXTS  = new Set(['.mp4','.mov','.m4v','.webm','.ogv','.avi','.mkv']);
+// Binary formats that should download rather than preview
+const DOWNLOAD_EXTS = new Set([
+  '.docx','.doc','.xlsx','.xls','.pptx','.ppt','.odt','.ods','.odp',
+  '.zip','.tar','.gz','.bz2','.7z','.rar',
+  '.exe','.dmg','.pkg','.deb','.rpm',
+  '.woff','.woff2','.ttf','.otf','.eot',
+  '.bin','.dat','.db','.sqlite','.pyc','.class','.so','.dylib','.dll',
+]);
+
+function fileExt(p){ const i=p.lastIndexOf('.'); return i>=0?p.slice(i).toLowerCase():''; }
+
+let _previewCurrentPath = '';  // relative path of currently previewed file
+let _previewCurrentMode = '';  // 'code' | 'md' | 'image' | 'html' | 'pdf' | 'audio' | 'video'
+let _previewDirty = false;     // true when edits are unsaved
+
+function showPreview(mode){
+  // mode: 'code' | 'image' | 'md' | 'html' | 'pdf' | 'audio' | 'video'
+  $('previewCode').style.display     = mode==='code'  ? '' : 'none';
+  $('previewImgWrap').style.display  = mode==='image' ? '' : 'none';
+  const mediaWrap=$('previewMediaWrap'); if(mediaWrap) mediaWrap.style.display = (mode==='audio'||mode==='video') ? '' : 'none';
+  const pdfWrap=$('previewPdfWrap'); if(pdfWrap) pdfWrap.style.display = mode==='pdf' ? '' : 'none';
+  $('previewMd').style.display       = mode==='md'    ? '' : 'none';
+  $('previewHtmlWrap').style.display = mode==='html'  ? '' : 'none';
+  $('previewEditArea').style.display = 'none';  // start in read-only
+  const badge=$('previewBadge');
+  badge.className='preview-badge '+mode;
+  badge.textContent = mode==='image'?'image':mode==='audio'?'audio':mode==='video'?'video':mode==='pdf'?'pdf':mode==='md'?'md':mode==='html'?'html':fileExt($('previewPathText').textContent)||'text';
+  _previewCurrentMode = mode;
+  _previewDirty = false;
+  updateEditBtn();
+  // Show "Open in browser" button for iframe-backed document previews
+  const openBtn=$('btnOpenInBrowser');
+  if(openBtn) openBtn.style.display = (mode==='html'||mode==='pdf')?'inline-flex':'none';
+}
+
+function updateEditBtn(){
+  const btn=$('btnEditFile');
+  if(!btn)return;
+  const editable = _previewCurrentMode==='code'||_previewCurrentMode==='md';
+  btn.style.display = editable?'':'none';
+  const editing = $('previewEditArea').style.display!=='none';
+  btn.innerHTML = editing ? `&#128190; ${t('save')}` : `&#9998; ${t('edit')}`;
+  btn.title = editing ? t('save_title') : t('edit_title');
+  btn.style.color = editing ? 'var(--blue)' : '';
+  if(_previewDirty) btn.innerHTML = '&#128190; Save*';
+}
+
+async function toggleEditMode(){
+  const editing = $('previewEditArea').style.display!=='none';
+  if(editing){
+    // Save
+    if(!S.session||!_previewCurrentPath)return;
+    const content=$('previewEditArea').value;
+    try{
+      await api('/api/file/save',{method:'POST',body:JSON.stringify({
+        session_id:S.session.session_id, path:_previewCurrentPath, content
+      })});
+      _previewDirty=false;
+      // Update read-only views with proper syntax highlighting
+      if(_previewCurrentMode==='code') _highlightPreviewCode(_previewCurrentPath, content);
+      else { $('previewMd').innerHTML=renderMd(content); requestAnimationFrame(()=>{if(typeof renderKatexBlocks==='function')renderKatexBlocks();}); }
+      $('previewEditArea').style.display='none';
+      if(_previewCurrentMode==='code') $('previewCode').style.display='';
+      else $('previewMd').style.display='';
+      showToast(t('saved'));
+    }catch(e){setStatus(t('save_failed')+e.message);}
+  }else{
+    // Enter edit mode: populate textarea with current content
+    const currentText = _previewCurrentMode==='code'
+      ? $('previewCode').textContent
+      : _previewRawContent||'';
+    $('previewEditArea').value=currentText;
+    $('previewEditArea').style.display='';
+    if(_previewCurrentMode==='code') $('previewCode').style.display='none';
+    else $('previewMd').style.display='none';
+    // Escape cancels the edit without saving
+    $('previewEditArea').onkeydown=e=>{
+      if(e.key==='Escape'){e.preventDefault();cancelEditMode();}
+    };
+  }
+  updateEditBtn();
+}
+
+let _previewRawContent = '';  // raw text for md files (to populate editor)
+
+function cancelEditMode(){
+  // Discard changes and return to read-only view
+  $('previewEditArea').style.display='none';
+  $('previewEditArea').onkeydown=null;
+  if(_previewCurrentMode==='code') $('previewCode').style.display='';
+  else $('previewMd').style.display='';
+  _previewDirty=false;
+  updateEditBtn();
+}
+
+async function openFile(path){
+  // Track in open-files bar: add manually opened files too
+  if (typeof _openFilesMap !== 'undefined' && _openFilesMap && !_openFilesMap.has(path)) {
+    _openFilesMap.set(path, { path: path, filename: path.split('/').pop() || path });
+    if (_openFilesMap.size > 10) {
+      const entries = [..._openFilesMap.entries()];
+      _openFilesMap = new Map(entries.slice(0, 10));
+    }
+    if (typeof _renderOpenFilesBar === 'function') _renderOpenFilesBar();
+  }
+  if(!S.session)return;
+  const ext=fileExt(path);
+
+  // Binary/download-only formats: trigger browser download, don't preview
+  if(DOWNLOAD_EXTS.has(ext)){
+    downloadFile(path);
+    return;
+  }
+
+  $('previewPathText').textContent=path;
+  $('previewArea').classList.add('visible');
+  // 2026-09-19: the file tree stays visible — tree and preview now share a
+  // vertical split (see initRightpanelVSplit). Hiding the tree here broke the
+  // split layout and made the tree vanish until clearPreview().
+  if($('fileTree')) $('fileTree').style.display='';
+  const _rpContent=$('previewArea')&&$('previewArea').closest('.rightpanel-content--workspace');
+  if(_rpContent) _rpContent.classList.add('has-visible-preview');
+
+  _previewCurrentPath = path;
+  renderFileBreadcrumb(path);
+  if(IMAGE_EXTS.has(ext)){
+    // Image: load via raw endpoint, show as <img>
+    showPreview('image');
+    const url=`api/file/raw?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(path)}`;
+    $('previewImg').alt=path;
+    $('previewImg').src=url;
+    $('previewImg').onerror=()=>setStatus(t('image_load_failed'));
+  } else if(AUDIO_EXTS.has(ext)||VIDEO_EXTS.has(ext)){
+    const mode=VIDEO_EXTS.has(ext)?'video':'audio';
+    showPreview(mode);
+    const url=`api/file/raw?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(path)}&inline=1`;
+    const wrap=$('previewMediaWrap');
+    if(wrap){
+      wrap.innerHTML=(typeof _mediaPlayerHtml==='function')
+        ? _mediaPlayerHtml(mode,url,path.split('/').pop()||path)
+        : `<${mode} src="${url.replace(/"/g,'%22')}" controls preload="metadata"></${mode}>`;
+      if(typeof _applyMediaPlaybackPreferences==='function') _applyMediaPlaybackPreferences(wrap);
+    }
+  } else if(PDF_EXTS.has(ext)){
+    showPreview('pdf');
+    const url=`api/file/raw?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(path)}&inline=1`;
+    const frame=$('previewPdfFrame');
+    if(frame){
+      frame.src=''; // clear first to avoid stale content
+      frame.src=url;
+      frame.title=`PDF preview: ${path.split('/').pop()||path}`;
+    }
+  } else if(MD_EXTS.has(ext)){
+    // Markdown: fetch text, render with renderMd, display as formatted HTML
+    try{
+      const data=await api(`/api/file?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(path)}`);
+      showPreview('md');
+      _previewRawContent = data.content;
+      $('previewMd').innerHTML=renderMd(data.content);
+      requestAnimationFrame(()=>{if(typeof renderKatexBlocks==='function')renderKatexBlocks();});
+    }catch(e){setStatus(t('file_open_failed'));}
+  } else if(HTML_EXTS.has(ext)){
+    // HTML: render in sandboxed iframe via raw endpoint.
+    // SECURITY TRADEOFF: We use sandbox="allow-scripts" which lets inline JS run
+    // but prevents access to the parent frame (origin isolation). This is a
+    // deliberate choice — the user is previewing their own workspace files, so
+    // blocking scripts entirely would break most HTML documents. The sandbox
+    // still prevents the preview from navigating the parent, accessing cookies,
+    // or reading other origin data. If a stricter mode is needed, remove
+    // allow-scripts (or add sandbox="") to disable all JS execution.
+    showPreview('html');
+    const url=`api/file/raw?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(path)}&inline=1`;
+    const iframe=$('previewHtmlIframe');
+    if(iframe){
+      iframe.src=''; // clear first to avoid stale content
+      iframe.src=url;
+    }
+  } else {
+    // Plain code / text -- but fall back to download if server signals binary
+    try{
+      const data=await api(`/api/file?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(path)}`);
+      if(data.binary){
+        // Server flagged this as binary content
+        downloadFile(path);
+        return;
+      }
+      showPreview('code');
+      _highlightPreviewCode(path, data.content);
+      _addPreviewCopyBtn();
+    }catch(e){
+      // If it's a 400/too-large error, offer download instead
+      downloadFile(path);
+    }
+  }
+}
+
+function downloadFile(path){
+  if(!S.session)return;
+  // Trigger browser download via the raw file endpoint with content-disposition attachment
+  const url=`api/file/raw?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(path)}&download=1`;
+  const filename=path.split('/').pop();
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>document.body.removeChild(a),100);
+  showToast(t('downloading',filename),2000);
+}
+
+
+// ── Render breadcrumb for file preview mode ──────────────────────────────────
+function renderFileBreadcrumb(filePath) {
+  const bar = $('breadcrumbBar');
+  if (!bar) return;
+  bar.style.display = 'flex';
+  const upBtn = $('btnUpDir');
+  if (upBtn) upBtn.style.display = '';
+
+  bar.innerHTML = '';
+  // Root
+  const root = document.createElement('span');
+  root.className = 'breadcrumb-seg breadcrumb-link';
+  root.textContent = '~';
+  root.onclick = () => { loadDir('.'); };
+  bar.appendChild(root);
+
+  const parts = filePath.split('/');
+  let accumulated = '';
+  for (let i = 0; i < parts.length; i++) {
+    const sep = document.createElement('span');
+    sep.className = 'breadcrumb-sep';
+    sep.textContent = '/';
+    bar.appendChild(sep);
+
+    accumulated += (accumulated ? '/' : '') + parts[i];
+    const seg = document.createElement('span');
+    seg.textContent = parts[i];
+    if (i < parts.length - 1) {
+      seg.className = 'breadcrumb-seg breadcrumb-link';
+      const target = accumulated;
+      seg.onclick = () => { loadDir(target); };
+    } else {
+      seg.className = 'breadcrumb-seg breadcrumb-current';
+    }
+    bar.appendChild(seg);
+  }
+}
+
+function openInBrowser(){
+  if(!_previewCurrentPath||!S.session) return;
+  const url=`api/file/raw?session_id=${encodeURIComponent(S.session.session_id)}&path=${encodeURIComponent(_previewCurrentPath)}`;
+  window.open(url,'_blank');
+}
+
+// ── File extension → Prism language map for syntax highlighting ──────────────
+const _CODE_LANG_MAP = {
+  js:'javascript',   mjs:'javascript',  cjs:'javascript',  es:'javascript',
+  ts:'typescript',   tsx:'tsx',
+  py:'python',       rb:'ruby',          rs:'rust',         go:'go',
+  java:'java',       kt:'kotlin',        scala:'scala',
+  cs:'csharp',       fs:'fsharp',
+  php:'php',         pl:'perl',          pm:'perl',
+  c:'c',             cpp:'cpp',          h:'c',             hpp:'cpp',
+  css:'css',         scss:'scss',        less:'less',
+  html:'html',       htm:'html',         svg:'svg',
+  xml:'xml',         xhtml:'xml',        xsl:'xml',
+  json:'json',       jsonc:'json',       yaml:'yaml',       yml:'yaml',
+  toml:'toml',       ini:'ini',          cfg:'ini',         env:'ini',
+  sh:'bash',         bash:'bash',        zsh:'bash',        fish:'bash',
+  ps1:'powershell',  psd1:'powershell',  psm1:'powershell',
+  sql:'sql',         graphql:'graphql',  gql:'graphql',
+  md:'markdown',     rmd:'markdown',
+  dockerfile:'docker',Dockerfile:'docker',
+  diff:'diff',       patch:'diff',
+  makefile:'makefile',mk:'makefile',
+  lua:'lua',         swift:'swift',      r:'r',
+  vue:'vue',         svelte:'svelte',
+  dart:'dart',       elm:'elm',
+  erl:'erlang',      ex:'elixir',        exs:'elixir',
+  hs:'haskell',      lhs:'haskell',
+  clj:'clojure',     cljs:'clojure',
+  cmake:'cmake',     bat:'batch',
+  tf:'hcl',          hcl:'hcl',
+  nix:'nix',
+};
+
+function _detectCodeLang(filePath){
+  const i=filePath.lastIndexOf('.'); if(i<0)return '';
+  const base=filePath.split('/').pop()||'';
+  const lower=base.toLowerCase();
+  if(lower==='dockerfile') return 'docker';
+  if(lower==='makefile') return 'makefile';
+  const ext=base.slice(i).toLowerCase().replace(/^\./,'');
+  return _CODE_LANG_MAP[ext]||'';
+}
+
+function _highlightPreviewCode(filePath, content){
+  const el=$('previewCode');
+  if(!el)return;
+  const lang=_detectCodeLang(filePath);
+  let trimmed=content;
+  while(trimmed.endsWith('\n')) trimmed=trimmed.slice(0,-1);
+  const classes=['preview-code','line-numbers'];
+  if(lang) classes.push('language-'+lang);
+  el.className=classes.join(' ');
+  let codeEl=el.querySelector('code');
+  if(!codeEl){
+    codeEl=document.createElement('code');
+    el.textContent='';
+    el.appendChild(codeEl);
+  }
+  codeEl.textContent=trimmed;
+  if(lang) codeEl.className='language-'+lang;
+  if(typeof Prism!=='undefined' && Prism.highlightElement){
+    requestAnimationFrame(()=>{
+      Prism.highlightElement(codeEl);
+    });
+  }
+}
+
+function _addPreviewCopyBtn(){
+  const existing=$('previewCopyBtn');
+  if(existing) existing.remove();
+  const pathEl=$('previewPath');
+  if(!pathEl)return;
+  const el=$('previewCode');
+  if(!el||!el.textContent)return;
+  const codeEl=el.querySelector('code');
+  const copyText=codeEl?codeEl.textContent:el.textContent;
+  if(!copyText)return;
+  const btn=document.createElement('button');
+  btn.id='previewCopyBtn';
+  btn.className='panel-icon-btn';
+  btn.style.cssText='font-size:12px;width:auto;padding:2px 8px;display:inline-flex;align-items:center;gap:4px';
+  btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> '+(typeof t==='function'?t('copy'):'Copy');
+  btn.onclick=async(e)=>{
+    e.stopPropagation();
+    try{
+      await _copyText(copyText);
+      btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> '+(typeof t==='function'?t('copied'):'Copied!');
+      setTimeout(()=>{btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> '+(typeof t==='function'?t('copy'):'Copy');},1500);
+    }catch(err){
+      btn.textContent='Failed';
+      setTimeout(()=>{btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> '+(typeof t==='function'?t('copy'):'Copy');},1500);
+    }
+  };
+  const ref=$('btnEditFile');
+  if(ref && ref.parentNode===pathEl){
+    pathEl.insertBefore(btn, ref);
+  }else{
+    pathEl.appendChild(btn);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WebUI Error Reporting — catches JS errors and sends them to the backend
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(function() {
+  'use strict';
+
+  // ── Helper: POST an error record to the backend ──────────────────────────
+  function _logError(type, message, extra) {
+    extra = extra || {};
+    try {
+      var payload = JSON.stringify({
+        type: type,
+        message: String(message || '').slice(0, 4000),
+        stack: extra.stack || '',
+        url: extra.url || window.location.href,
+        line: extra.line || 0,
+        col: extra.col || 0,
+        path: window.location.pathname,
+        status: extra.status || 0,
+        method: extra.method || '',
+        body: extra.body || '',
+        meta: extra.meta || {}
+      });
+      // Use plain fetch so we don't create an infinite loop via the patched api()
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', 'api/errors/log', true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.send(payload);
+    } catch(e) {
+      // Silently ignore — we're already in error territory
+    }
+  }
+
+  // ── 1. Global uncaught JS exceptions ─────────────────────────────────────
+  window.onerror = function(msg, url, line, col, err) {
+    _logError('js_error', msg, {
+      url: url || '',
+      line: line || 0,
+      col: col || 0,
+      stack: err && err.stack ? err.stack : '',
+      meta: {
+        errorName: err && err.name ? err.name : '',
+        event: 'window.onerror'
+      }
+    });
+    return false;  // let default handler run (browser console still shows it)
+  };
+
+  // ── 2. Unhandled Promise rejections ──────────────────────────────────────
+  window.addEventListener('unhandledrejection', function(e) {
+    var reason = e.reason;
+    var message = '';
+    var stack = '';
+    if (reason instanceof Error) {
+      message = reason.message;
+      stack = reason.stack || '';
+    } else if (typeof reason === 'string') {
+      message = reason;
+    } else if (reason && typeof reason === 'object') {
+      message = String(reason.message || reason.error || JSON.stringify(reason).slice(0, 500));
+    } else {
+      message = String(reason);
+    }
+    _logError('unhandled_promise', message, {
+      stack: stack,
+      meta: {
+        event: 'unhandledrejection',
+        reasonType: typeof reason
+      }
+    });
+  });
+
+  // ── 3. console.error interceptor ─────────────────────────────────────────
+  var _origConsoleError = console.error;
+  console.error = function() {
+    // Forward to original first so the console always shows the error
+    try { _origConsoleError.apply(console, arguments); } catch(e) {}
+
+    try {
+      var parts = [];
+      for (var i = 0; i < arguments.length; i++) {
+        var arg = arguments[i];
+        if (arg instanceof Error) {
+          parts.push(arg.message);
+        } else if (typeof arg === 'object') {
+          try { parts.push(JSON.stringify(arg).slice(0, 500)); }
+          catch(e) { parts.push(String(arg)); }
+        } else {
+          parts.push(String(arg));
+        }
+      }
+      var message = parts.join(' ').slice(0, 4000);
+
+      // Extract stack from any Error argument
+      var stack = '';
+      for (var j = 0; j < arguments.length; j++) {
+        if (arguments[j] instanceof Error && arguments[j].stack) {
+          stack = arguments[j].stack;
+          break;
+        }
+      }
+      // Auto-generate stack trace from call site
+      if (!stack) {
+        try { throw new Error(); } catch(e) { stack = e.stack || ''; }
+      }
+
+      _logError('console_error', message, {
+        stack: stack,
+        meta: { consoleMethod: 'error' }
+      });
+    } catch(e) {
+      // Don't re-enter error handling
+    }
+  };
+})();
+
+
+// ── Rightpanel inner split + section collapse (2026-09-19) ──────────────────
+// File-Tree and preview share the workspace panel as a vertical split with a
+// draggable handle. Section collapse states persist per localStorage.
+const _RP_VSPLIT_KEY='sidekick-rightpanel-vsplit';
+const _RP_TREE_COLLAPSE_KEY='sidekick-rightpanel-tree-collapsed';
+const _RP_PREVIEW_COLLAPSE_KEY='sidekick-rightpanel-preview-collapsed';
+
+function _rpSetTreeFlex(v){
+  const clamped=Math.min(0.9,Math.max(0.1,v));
+  const content=document.querySelector('.rightpanel-content--workspace');
+  const root=content||document.documentElement;
+  root.style.setProperty('--rightpanel-tree-flex',clamped.toFixed(3));
+  return clamped;
+}
+
+function initRightpanelVSplit(){
+  const handle=document.getElementById('rightpanelVSplitHandle');
+  const tree=document.getElementById('fileTree');
+  const preview=document.getElementById('previewArea');
+  if(!handle||!tree||!preview) return;
+  if(handle.dataset.rpVSplitBound==='1') return;
+  handle.dataset.rpVSplitBound='1';
+  const saved=parseFloat(localStorage.getItem(_RP_VSPLIT_KEY));
+  if(!Number.isNaN(saved)) _rpSetTreeFlex(saved);
+  let dragging=false;
+  handle.addEventListener('mousedown',e=>{
+    e.preventDefault();
+    dragging=true;
+    document.body.classList.add('rp-vsplit-resizing');
+    const onMove=ev=>{
+      if(!dragging) return;
+      const content=handle.parentElement;
+      if(!content) return;
+      const rect=content.getBoundingClientRect();
+      const headerH=(content.querySelector('.panel-header')||{}).offsetHeight||0;
+      const crumbH=(content.querySelector('.breadcrumb-bar')||{}).offsetHeight||0;
+      const usable=rect.height-headerH-crumbH;
+      if(usable<=0) return;
+      const frac=(ev.clientY-rect.top-headerH-crumbH)/usable;
+      _rpSetTreeFlex(frac);
+    };
+    const onUp=()=>{
+      dragging=false;
+      document.body.classList.remove('rp-vsplit-resizing');
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+      const content=document.querySelector('.rightpanel-content--workspace');
+      const cur=parseFloat((content||document.documentElement).style.getPropertyValue('--rightpanel-tree-flex'));
+      if(!Number.isNaN(cur)){
+        try{localStorage.setItem(_RP_VSPLIT_KEY,cur.toFixed(3));}catch(_){}
+      }
+    };
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  });
+  handle.addEventListener('keydown',e=>{
+    if(e.key!=='ArrowUp'&&e.key!=='ArrowDown') return;
+    e.preventDefault();
+    const content=document.querySelector('.rightpanel-content--workspace');
+    const cur=parseFloat((content||document.documentElement).style.getPropertyValue('--rightpanel-tree-flex'))||0.45;
+    const next=_rpSetTreeFlex(cur+(e.key==='ArrowUp'?-0.05:0.05));
+    try{localStorage.setItem(_RP_VSPLIT_KEY,next.toFixed(3));}catch(_){}
+  });
+}
+
+function toggleRightpanelSectionCollapse(sectionId){
+  const el=document.getElementById(sectionId);
+  if(!el) return;
+  const collapsed=el.classList.toggle('section-collapsed');
+  const key=sectionId==='fileTree'?_RP_TREE_COLLAPSE_KEY:_RP_PREVIEW_COLLAPSE_KEY;
+  try{localStorage.setItem(key,collapsed?'1':'0');}catch(_){}
+  const btnId=sectionId==='fileTree'?'btnTreeCollapse':'btnPreviewCollapse';
+  const btn=document.getElementById(btnId);
+  if(btn){
+    btn.setAttribute('aria-expanded',collapsed?'false':'true');
+    btn.classList.toggle('is-collapsed',collapsed);
+  }
+}
+
+function restoreRightpanelSectionState(){
+  const tree=document.getElementById('fileTree');
+  const preview=document.getElementById('previewArea');
+  try{
+    if(localStorage.getItem(_RP_TREE_COLLAPSE_KEY)==='1'&&tree){
+      tree.classList.add('section-collapsed');
+      const btn=document.getElementById('btnTreeCollapse');
+      if(btn){btn.setAttribute('aria-expanded','false');btn.classList.add('is-collapsed');}
+    }
+    if(localStorage.getItem(_RP_PREVIEW_COLLAPSE_KEY)==='1'&&preview){
+      preview.classList.add('section-collapsed');
+      const btn=document.getElementById('btnPreviewCollapse');
+      if(btn){btn.setAttribute('aria-expanded','false');btn.classList.add('is-collapsed');}
+    }
+  }catch(_){}
+  initRightpanelVSplit();
+}
+
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',restoreRightpanelSectionState,{once:true});
+}else{
+  restoreRightpanelSectionState();
+}
+window.toggleRightpanelSectionCollapse=toggleRightpanelSectionCollapse;
+window.initRightpanelVSplit=initRightpanelVSplit;

@@ -1,0 +1,1698 @@
+"""
+Sidekick — Space Engine v2.
+
+Each Space owns everything: sessions, agents, kanban, memory.
+Agents are roles INSIDE a space — no more global profiles.
+
+Directory layout::
+
+    SIDEKICK_HOME/spaces/
+      nova/                     → fresh-install default Sidekick space
+        space.yaml              → model, provider, color, project_dir
+        agents/
+          default/
+            SOUL.md             → system prompt (Persönlichkeit)
+            skills.toml         → skill selection
+          architect/
+            SOUL.md
+            skills.toml
+        sessions/               → chat logs
+        kanban.db               → tasks
+        memory/                 → future: vector store per space
+
+Backward-compat: reads old ``workspaces/`` dir as fallback.
+"""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import logging
+import math
+import json
+import os
+import re
+import shutil
+import threading
+import time
+import uuid
+import tempfile
+from contextlib import contextmanager
+from pathlib import Path
+
+from web.api._home import get_active_webui_home, get_webui_home
+
+logger = logging.getLogger(__name__)
+
+# ── Constants ───────────────────────────────────────────────────────────────
+
+_SPACES_ROOT_KEY = "SIDEKICK_WEBUI_SPACES_DIR"
+_OLD_WORKSPACES_KEY = "SIDEKICK_WEBUI_WORKSPACES_DIR"
+
+_DEFAULT_SPACES_ROOT: Path = (get_webui_home() / "spaces").expanduser().resolve()
+SPACES_ROOT: Path = _DEFAULT_SPACES_ROOT
+
+# Old workspaces dir for backward compat
+_DEFAULT_OLD_ROOT: Path = (get_webui_home() / "workspaces").expanduser().resolve()
+_OLD_ROOT: Path = _DEFAULT_OLD_ROOT
+
+
+def _spaces_root() -> Path:
+    configured = os.getenv("SIDEKICK_WEBUI_SPACES_DIR") or os.getenv(_SPACES_ROOT_KEY, "")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    if SPACES_ROOT != _DEFAULT_SPACES_ROOT:
+        return SPACES_ROOT
+    try:
+        return Path(get_active_webui_home()).expanduser().resolve() / "spaces"
+    except Exception:
+        return get_webui_home() / "spaces"
+
+
+def _old_root() -> Path:
+    configured = os.getenv("SIDEKICK_WEBUI_WORKSPACES_DIR") or os.getenv(_OLD_WORKSPACES_KEY, "")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    if _OLD_ROOT != _DEFAULT_OLD_ROOT:
+        return _OLD_ROOT
+    try:
+        return Path(get_active_webui_home()).expanduser().resolve() / "workspaces"
+    except Exception:
+        return get_webui_home() / "workspaces"
+
+_AGENT_SLUG_RE = None  # lazy import
+
+DEFAULT_SPACE_SLUG = (
+    (os.getenv("SIDEKICK_WEBUI_DEFAULT_SPACE", "").strip()
+     or os.getenv("SIDEKICK_WEBUI_DEFAULT_SPACE", "nova").strip()).lower()
+    or "nova"
+)
+DEFAULT_SPACE_NAME = (
+    os.getenv("SIDEKICK_WEBUI_DEFAULT_SPACE_NAME", "").strip()
+    or os.getenv("SIDEKICK_WEBUI_DEFAULT_SPACE_NAME", "Nova").strip()
+    or "Nova"
+)
+DEFAULT_SPACE_ALIASES = {
+    alias.strip().lower()
+    for alias in (
+        os.getenv("SIDEKICK_WEBUI_DEFAULT_SPACE_ALIASES", "")
+        or os.getenv("SIDEKICK_WEBUI_DEFAULT_SPACE_ALIASES", "novaspace,nova-space,nova_space")
+    ).split(",")
+    if alias.strip()
+}
+DEFAULT_SPACE_ALIASES.discard(DEFAULT_SPACE_SLUG)
+LEGACY_DEFAULT_SPACE_SLUG = "default"
+PROTECTED_SPACE_SLUGS = {DEFAULT_SPACE_SLUG, LEGACY_DEFAULT_SPACE_SLUG}
+CONSCIOUSNESS_SOURCE_SPACE_SLUG = (
+    os.getenv("SIDEKICK_WEBUI_CONSCIOUSNESS_SPACE", "").strip().lower()
+    or os.getenv("SIDEKICK_WEBUI_CONSCIOUSNESS_SPACE", "bewusstsein").strip().lower()
+    or "bewusstsein"
+)
+DEFAULT_NOVA_CHARACTER = (
+    os.getenv("SIDEKICK_WEBUI_DEFAULT_NOVA_CHARACTER", "").strip()
+    or os.getenv("SIDEKICK_WEBUI_DEFAULT_NOVA_CHARACTER", "nova").strip()
+    or "nova"
+)
+_GENERIC_DEFAULT_SOUL_MARKER = "Customize this SOUL.md to define your personality and behavior."
+_SPACE_SLUG_RE = re.compile(r"[a-z0-9][a-z0-9_-]*\Z")
+_SYSTEM_SPACE_LIFECYCLE_ACTOR = "system:space-lifecycle"
+
+
+def _normalize_space_slug(slug: str) -> str:
+    value = str(slug or "").strip().lower()
+    if value in DEFAULT_SPACE_ALIASES:
+        return DEFAULT_SPACE_SLUG
+    return value
+
+
+def _is_valid_space_slug(slug: str) -> bool:
+    """Return whether a normalized slug is safe to join below a Space root."""
+    return _SPACE_SLUG_RE.fullmatch(slug) is not None
+
+
+def _is_empty_configless_space_dir(path: Path) -> bool:
+    """Return True for migration artefacts such as an empty ``novaspace`` dir."""
+    if not path.is_dir():
+        return False
+    if (path / "space.yaml").exists() or (path / "workspace.yaml").exists():
+        return False
+    sessions_dir = path / "sessions"
+    if sessions_dir.is_dir() and any(sessions_dir.glob("*.json")):
+        return False
+    allowed_dirs = {"agents", "memory", "sessions"}
+    allowed_files = {"nul"}
+    for child in path.iterdir():
+        if child.is_dir() and child.name in allowed_dirs:
+            continue
+        if child.is_file() and child.name.lower() in allowed_files:
+            continue
+        return False
+    return True
+
+# ── Exceptions ──────────────────────────────────────────────────────────────
+
+class SpaceError(Exception):
+    """Base exception for space operations."""
+
+
+class SpaceNotFound(SpaceError):
+    """Requested space does not exist."""
+
+
+class SpaceExists(SpaceError):
+    """Space slug already taken."""
+
+
+class SpaceGovernanceError(SpaceError):
+    """A requested Nova management change is not safe to persist."""
+
+
+class SpaceConfigMalformedError(SpaceGovernanceError):
+    """The persisted top-level Space configuration cannot safely be rewritten."""
+
+
+def _raise_if_space_config_malformed(config: dict) -> None:
+    if config.get("_space_config_malformed"):
+        raise SpaceConfigMalformedError("Space config is malformed; refusing to overwrite source")
+
+
+def _is_empty_yaml_document(source: str) -> bool:
+    """Treat only blank/comment/document-marker YAML as an empty config."""
+    for line in source.splitlines():
+        token = line.split("#", 1)[0].strip()
+        if token and token not in {"---", "..."}:
+            return False
+    return True
+
+
+def _normalized_space_id(value: object) -> str:
+    """Return a persisted UUID identity, or empty when a read sees none."""
+    if not isinstance(value, str):
+        return ""
+    candidate = value.strip()
+    try:
+        return uuid.UUID(candidate).hex
+    except (AttributeError, ValueError):
+        return ""
+
+
+def _normalized_nova_management(value: object) -> dict[str, bool | int]:
+    """Parse the governance record strictly so malformed config fails closed."""
+    defaults: dict[str, bool | int] = {"yolo": False, "enrolled": False, "revision": 0}
+    if value is None or not isinstance(value, dict):
+        return defaults
+    yolo = value.get("yolo", False)
+    enrolled = value.get("enrolled", False)
+    revision = value.get("revision", 0)
+    if type(yolo) is not bool or type(enrolled) is not bool:
+        return defaults
+    if type(revision) is not int or revision < 0:
+        return defaults
+    if enrolled and yolo is not True:
+        return defaults
+    return {"yolo": yolo, "enrolled": enrolled, "revision": revision}
+
+
+_AUDIT_ROOT_FINGERPRINT_RE = re.compile(r"[0-9a-f]{64}")
+_DASHBOARD_ACTOR_RE = re.compile(r"dashboard:[0-9a-f]{64}")
+_AUDIT_EVENT_FIELDS = {
+    "actor", "timestamp", "space_id", "root_fingerprint", "policy_revision",
+    "governance_revision", "previous", "next",
+}
+
+
+def _strict_nova_management_record(value: object) -> dict[str, bool | int] | None:
+    """Return a management record only when every field has its exact type."""
+    if not isinstance(value, dict) or set(value) != {"yolo", "enrolled", "revision"}:
+        return None
+    yolo = value.get("yolo")
+    enrolled = value.get("enrolled")
+    revision = value.get("revision")
+    if type(yolo) is not bool or type(enrolled) is not bool:
+        return None
+    if type(revision) is not int or revision < 0 or (enrolled and not yolo):
+        return None
+    return {"yolo": yolo, "enrolled": enrolled, "revision": revision}
+
+
+def space_root_fingerprint(root: str | Path) -> str:
+    """Return the stable opaque confirmation value for a trusted project root."""
+    canonical = str(Path(root).expanduser().resolve())
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def validate_project_dir(raw: object) -> str:
+    """Validate a project_dir value for space config writes.
+
+    The dashboard's space create/update endpoints used to persist any string
+    unchecked, so a typo'd or hostile value (a deleted temp path, a system
+    directory) silently poisoned the space config - every later request then
+    logged 'project_dir ... does not exist' and the space's project binding
+    was dead. Enforce the same baseline rules the workspace resolver applies
+    to every workspace path:
+
+      1. the path must exist and be a directory,
+      2. it must not be a known OS/system directory.
+
+    Returns the resolved absolute path string; raises SpaceGovernanceError
+    on violation. Empty/None stays legal (an unset project_dir is valid).
+    """
+    if raw in (None, ""):
+        return ""
+    candidate = Path(str(raw)).expanduser().resolve()
+    if not candidate.is_dir():
+        raise SpaceGovernanceError(
+            f"project_dir does not exist or is not a directory: {candidate}"
+        )
+    try:
+        from web.api.workspace import _is_blocked_workspace_path
+        if _is_blocked_workspace_path(candidate, raw):
+            raise SpaceGovernanceError(
+                f"project_dir points to a system directory: {candidate}"
+            )
+    except SpaceGovernanceError:
+        raise
+    except Exception:
+        # Trust resolver unavailable - fall back to existence-only validation.
+        pass
+    return str(candidate)
+
+
+def nova_enrollment_readiness(
+    space: "Space",
+    *,
+    trusted_project_root: str | Path | None = None,
+) -> dict[str, object]:
+    """Describe whether a Space can be explicitly enrolled for Nova.
+
+    This is a pure, fail-closed diagnostic. It never mints an identity,
+    rewrites ``space.yaml`` or registers a workspace.
+    """
+    config = space.load_config()
+    reasons: list[str] = []
+    malformed_config = bool(config.get("_space_config_malformed"))
+    malformed_management = bool(config.get("_nova_management_malformed"))
+    malformed_audit = bool(config.get("_nova_management_audit_malformed"))
+    if malformed_config:
+        reasons.append("space_config_malformed")
+
+    space_id_persisted = bool(_normalized_space_id(config.get("space_id")))
+    if not space_id_persisted:
+        reasons.append("space_id_missing")
+
+    configured_project = str(config.get("project_dir") or "").strip()
+    project_dir_configured = bool(configured_project)
+    project_dir_available = False
+    configured_root: Path | None = None
+    if configured_project:
+        try:
+            configured_root = Path(configured_project).expanduser().resolve()
+            project_dir_available = configured_root.is_dir()
+        except (TypeError, OSError, RuntimeError):
+            project_dir_available = False
+    if not project_dir_configured:
+        reasons.append("project_dir_missing")
+    elif not project_dir_available:
+        reasons.append("project_dir_unavailable")
+
+    trusted_root_verified = False
+    if trusted_project_root is not None:
+        try:
+            candidate_root = Path(trusted_project_root).expanduser().resolve()
+            trusted_root_available = candidate_root.is_dir()
+        except (TypeError, OSError, RuntimeError):
+            candidate_root = None
+            trusted_root_available = False
+        if not trusted_root_available:
+            reasons.append("trusted_workspace_unavailable")
+        elif configured_root is None or candidate_root != configured_root:
+            reasons.append("trusted_root_mismatch")
+        else:
+            trusted_root_verified = True
+    else:
+        reasons.append("trusted_workspace_unavailable")
+
+    if malformed_management:
+        reasons.append("nova_management_malformed")
+    if malformed_audit:
+        reasons.append("management_audit_malformed")
+    elif not malformed_config and not malformed_management:
+        try:
+            _effective_audit_events(space, config)
+        except SpaceGovernanceError:
+            reasons.append("management_audit_invalid")
+            malformed_audit = True
+    management = _strict_nova_management_record(config.get("nova_management"))
+    if management is None and not malformed_management:
+        management = _normalized_nova_management(config.get("nova_management"))
+    yolo = bool(management and management["yolo"] is True)
+    enrolled = bool(management and management["enrolled"] is True)
+    if not yolo:
+        reasons.append("yolo_not_enabled")
+
+    core_ready = (
+        not malformed_config and not malformed_management and not malformed_audit
+        and space_id_persisted and project_dir_available and trusted_root_verified
+    )
+    can_enroll = core_ready and yolo
+    if can_enroll and not enrolled:
+        reasons.append("nova_enrollment_not_enabled")
+    reasons = list(dict.fromkeys(reasons))
+    next_steps = (
+        ("space_config_malformed", "repair_space_config"),
+        ("space_id_missing", "persist_space_id"),
+        ("project_dir_missing", "configure_project_dir"),
+        ("project_dir_unavailable", "restore_project_dir"),
+        ("trusted_workspace_unavailable", "register_trusted_workspace"),
+        ("trusted_root_mismatch", "repair_trusted_workspace_binding"),
+        ("nova_management_malformed", "repair_nova_management"),
+        ("management_audit_malformed", "repair_management_audit"),
+        ("management_audit_invalid", "repair_management_audit"),
+        ("yolo_not_enabled", "enable_space_yolo"),
+        ("nova_enrollment_not_enabled", "enroll_nova_management"),
+    )
+    next_step_code = next((step for reason, step in next_steps if reason in reasons), "none")
+    if enrolled and core_ready and yolo and not malformed_audit:
+        state = "enrolled"
+    elif can_enroll:
+        state = "ready"
+    else:
+        state = "blocked"
+    return {
+        "state": state,
+        "ready": can_enroll,
+        "space_id_persisted": space_id_persisted,
+        "project_dir_configured": project_dir_configured,
+        "project_dir_available": project_dir_available,
+        "trusted_root_verified": trusted_root_verified,
+        "yolo": yolo,
+        "enrolled": enrolled,
+        "governance_revision": int(management["revision"]) if management else 0,
+        "reason_codes": reasons,
+        "next_step_code": next_step_code,
+        "requires_explicit_write": bool(reasons),
+    }
+
+
+class AgentNotFound(SpaceError):
+    """Agent does not exist in this space."""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Space Model
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class Space:
+    """A single Space with its own agents, sessions, kanban, memory."""
+
+    def __init__(self, slug: str, name: str = "", *, custom_root: Path | None = None) -> None:
+        self.slug = slug.strip().lower()
+        self.name = name or slug
+        self._custom_root = custom_root
+
+    # ── Paths ────────────────────────────────────────────────────────────────
+
+    @property
+    def root(self) -> Path:
+        return (self._custom_root or _spaces_root()) / self.slug
+
+    @property
+    def config_path(self) -> Path:
+        return self.root / "space.yaml"
+
+    @property
+    def agents_dir(self) -> Path:
+        return self.root / "agents"
+
+    @property
+    def sessions_dir(self) -> Path:
+        return self.root / "sessions"
+
+    @property
+    def kanban_path(self) -> Path:
+        return self.root / "kanban.db"
+
+    @property
+    def memory_dir(self) -> Path:
+        configured = str(self.load_config().get("memory_path") or "").strip()
+        if not configured:
+            return self.root / "memory"
+        raw = Path(configured).expanduser()
+        if raw.is_absolute():
+            return raw.resolve()
+        resolved = (self.root / raw).resolve()
+        root = self.root.resolve()
+        if not resolved.is_relative_to(root):
+            raise ValueError(f"memory_path for space {self.slug!r} must stay inside the space directory")
+        return resolved
+
+    # ── Config ──────────────────────────────────────────────────────────────
+
+    CONFIG_DEFAULTS = {
+        "name": "",
+        "model": {"default": "", "provider": ""},
+        "reasoning_effort": "",
+        "personality": "",
+        "description": "",
+        "project_dir": "",
+        "memory_path": "",
+        "color": "#4FC3F7",
+        "emoji": "📁",
+        "nova": {
+            "enabled": False,
+            "character": "",
+            "source_space": CONSCIOUSNESS_SOURCE_SPACE_SLUG,
+            "communication_mode": "pingpong",
+        },
+        "space_id": "",
+        "nova_management": {"yolo": False, "enrolled": False, "revision": 0},
+        "nova_management_audit": [],
+    }
+
+    def load_config(self) -> dict:
+        """Load space.yaml with sensible defaults for missing fields."""
+        if not self.config_path.exists():
+            return copy.deepcopy(self.CONFIG_DEFAULTS)
+        try:
+            import yaml
+            source = self.config_path.read_text("utf-8")
+            raw = yaml.safe_load(source)
+        except Exception:
+            logger.exception("failed to parse %s", self.config_path)
+            result = copy.deepcopy(self.CONFIG_DEFAULTS)
+            result["_space_config_malformed"] = True
+            return result
+
+        if raw is None:
+            if _is_empty_yaml_document(source):
+                raw = {}
+            else:
+                result = copy.deepcopy(self.CONFIG_DEFAULTS)
+                result["_space_config_malformed"] = True
+                return result
+        if not isinstance(raw, dict):
+            logger.warning("invalid space config in %s", self.config_path)
+            result = copy.deepcopy(self.CONFIG_DEFAULTS)
+            result["_space_config_malformed"] = True
+            return result
+
+        result = copy.deepcopy(self.CONFIG_DEFAULTS)
+        if isinstance(raw.get("model"), dict):
+            result["model"].update(raw["model"])
+        for key in self.CONFIG_DEFAULTS:
+            if key == "model":
+                continue
+            if key == "nova":
+                if isinstance(raw.get("nova"), dict):
+                    result["nova"].update(raw["nova"])
+                continue
+            if key == "space_id":
+                result["space_id"] = _normalized_space_id(raw.get("space_id"))
+                continue
+            if key == "nova_management":
+                raw_management = raw.get("nova_management")
+                result["nova_management"] = _normalized_nova_management(raw_management)
+                # Preserve evidence that a governance record was present but
+                # invalid. Reads remain side-effect free, while governance
+                # gates can fail closed instead of silently accepting defaults.
+                if raw_management is not None and _strict_nova_management_record(raw_management) is None:
+                    result["_nova_management_malformed"] = True
+                continue
+            if key == "nova_management_audit":
+                audit = raw.get("nova_management_audit")
+                result["nova_management_audit"] = audit if isinstance(audit, list) else []
+                if audit is not None and not isinstance(audit, list):
+                    result["_nova_management_audit_malformed"] = True
+                continue
+            if key in raw:
+                result[key] = raw[key]
+        # Pass through app configs (per-space accounts/bots)
+        if "gmail" in raw:
+            result["gmail"] = raw["gmail"]
+        if "discord" in raw:
+            result["discord"] = raw["discord"]
+        # A legacy JSONL audit beside a config without a YAML audit must stay
+        # visibly un-migrated on pure reads; the evidence is merged only by
+        # the audit reader/gate.
+        if "nova_management_audit" not in raw and _legacy_audit_path(self).exists():
+            result.pop("nova_management_audit", None)
+        return result
+
+    def save_config(self, config: dict, *, mint_space_id: bool = False) -> None:
+        """Persist space.yaml (only known fields)."""
+        import yaml
+        self.root.mkdir(parents=True, exist_ok=True)
+        out: dict = {}
+        # Identity is minted only by an explicit create/write path. Reads of
+        # legacy config must not silently persist a migration.
+        existing_id = _normalized_space_id(config.get("space_id"))
+        if existing_id or mint_space_id:
+            out["space_id"] = existing_id or uuid.uuid4().hex
+        # Save name if present and differs from slug
+        if "name" in config:
+            out["name"] = config["name"]
+        if "model" in config:
+            out["model"] = config["model"]
+        for key in self.CONFIG_DEFAULTS:
+            if key in ("name", "model"):
+                continue
+            if key == "nova":
+                nova_cfg = config.get("nova")
+                if isinstance(nova_cfg, dict):
+                    out["nova"] = dict(self.CONFIG_DEFAULTS["nova"])
+                    out["nova"].update(nova_cfg)
+                continue
+            if key == "space_id":
+                continue
+            if key == "nova_management":
+                out["nova_management"] = _normalized_nova_management(
+                    config.get("nova_management")
+                )
+                continue
+            if key == "nova_management_audit":
+                # Do not materialize an empty audit list on ordinary writes;
+                # this keeps legacy read/migration paths side-effect free.
+                if key in config:
+                    out[key] = config.get(key) if isinstance(config.get(key), list) else []
+                continue
+            if key in config:
+                out[key] = config[key]
+        # App configs saved as top-level keys
+        if "gmail" in config:
+            out["gmail"] = config["gmail"]
+        if "discord" in config:
+            out["discord"] = config["discord"]
+        self._atomic_write_config(yaml.dump(out, default_flow_style=False).encode("utf-8"))
+
+    def _atomic_write_config(self, payload: bytes) -> None:
+        fd, temp_path = tempfile.mkstemp(prefix="space-", suffix=".tmp", dir=self.root)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, self.config_path)
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    def get_project_dir(self) -> str | None:
+        """Return project_dir from config, or None if not set/invalid."""
+        pdir = self.load_config().get("project_dir", "").strip()
+        if not pdir:
+            # Legacy compatibility: the old "default" space historically pointed
+            # at the software root. The fresh-install default is now "nova" and
+            # intentionally stays naked unless the user sets a project_dir.
+            if self.slug == LEGACY_DEFAULT_SPACE_SLUG:
+                from web.api.config import REPO_ROOT
+                return str(REPO_ROOT)
+            return None
+        p = Path(pdir).expanduser().resolve()
+        if p.is_dir():
+            return str(p)
+        logger.warning("project_dir %r for space %r does not exist", pdir, self.slug)
+        return None
+
+    # ── Agent Discovery ─────────────────────────────────────────────────────
+
+    def list_agents(self) -> list[str]:
+        """Discover agent slugs in this space's agents/ directory."""
+        if not self.agents_dir.is_dir():
+            return []
+        return sorted(
+            d.name for d in self.agents_dir.iterdir()
+            if d.is_dir() and not d.name.startswith("_")
+        )
+
+    def agent_path(self, agent_slug: str) -> Path:
+        """Return the directory for an agent. Does NOT check existence."""
+        slug = agent_slug.strip().lower()
+        return self.agents_dir / slug
+
+    def agent_soul_path(self, agent_slug: str) -> Path:
+        return self.agent_path(agent_slug) / "SOUL.md"
+
+    def agent_skills_path(self, agent_slug: str) -> Path:
+        return self.agent_path(agent_slug) / "skills.toml"
+
+    def agent_model_override_path(self, agent_slug: str) -> Path:
+        return self.agent_path(agent_slug) / "model-override.yaml"
+
+    def get_agent_soul(self, agent_slug: str) -> str:
+        """Read an agent's SOUL.md, return empty string if missing."""
+        p = self.agent_soul_path(agent_slug)
+        if p.exists():
+            return p.read_text("utf-8")
+        return ""
+
+    def get_agent_skills(self, agent_slug: str) -> list[str]:
+        """Read agent's skills.toml → list of skill names. Empty list = all."""
+        p = self.agent_skills_path(agent_slug)
+        if not p.exists():
+            return []  # empty = inherit global skills
+        try:
+            import tomllib
+            data = tomllib.loads(p.read_text("utf-8"))
+            return data.get("skills", []) or []
+        except Exception:
+            logger.exception("failed to parse %s", p)
+            return []
+
+    def ensure_agent(self, agent_slug: str, *, create_soul: bool = True) -> Path:
+        """Create agent directory + default SOUL.md if missing. Returns path."""
+        ap = self.agent_path(agent_slug)
+        ap.mkdir(parents=True, exist_ok=True)
+        soul = ap / "SOUL.md"
+        if create_soul and not soul.exists():
+            soul.write_text(
+                f"# {agent_slug} — Agent in space {self.slug}\n\n"
+                f"You are the **{agent_slug}** agent working in the **{self.name or self.slug}** space.\n"
+                f"Customize this SOUL.md to define your personality and behavior.\n",
+                "utf-8",
+            )
+        return ap
+
+    # ── Serialization ──────────────────────────────────────────────────────
+
+    def to_dict(self) -> dict:
+        cfg = self.load_config()
+        session_counts = self._session_counts()
+        return {
+            "slug": self.slug,
+            "name": cfg.get("name") or self.name or self.slug,
+            "description": cfg.get("description", ""),
+            "model": cfg.get("model", {}),
+            "reasoning_effort": cfg.get("reasoning_effort", ""),
+            "personality": cfg.get("personality", ""),
+            "project_dir": cfg.get("project_dir", ""),
+            "space_id": cfg.get("space_id", ""),
+            "nova_management": cfg.get("nova_management", {}),
+            "color": cfg.get("color", "#4FC3F7"),
+            "emoji": cfg.get("emoji", "📁"),
+            "agents": self.list_agents(),
+            "session_count": session_counts["active"],
+            "active_session_count": session_counts["active"],
+            "archived_session_count": session_counts["archived"],
+            "total_session_count": session_counts["total"],
+            "raw_session_count": session_counts["raw"],
+        }
+
+    def _session_count(self) -> int:
+        return self._session_counts()["active"]
+
+    def _session_counts(self) -> dict[str, int]:
+        if not self.sessions_dir.exists():
+            return {"active": 0, "archived": 0, "total": 0, "raw": 0}
+        raw = len([p for p in self.sessions_dir.glob("*.json") if not p.name.startswith("_")])
+        index_path = self.sessions_dir / "_index.json"
+        if not index_path.exists():
+            return {"active": raw, "archived": 0, "total": raw, "raw": raw}
+        try:
+            entries = json.loads(index_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {"active": raw, "archived": 0, "total": raw, "raw": raw}
+        if not isinstance(entries, list):
+            return {"active": raw, "archived": 0, "total": raw, "raw": raw}
+        visible = []
+        for item in entries:
+            if not isinstance(item, dict):
+                continue
+            sid = str(item.get("session_id") or "").strip()
+            if not sid or not (self.sessions_dir / f"{sid}.json").exists():
+                continue
+            message_count = int(item.get("message_count") or 0)
+            active_stream_id = item.get("active_stream_id")
+            has_pending_user_message = item.get("has_pending_user_message") or item.get("pending_user_message")
+            if message_count <= 0 and not active_stream_id and not has_pending_user_message:
+                continue
+            visible.append(item)
+        archived = sum(1 for item in visible if item.get("archived"))
+        total = len(visible)
+        return {"active": max(0, total - archived), "archived": archived, "total": total, "raw": raw}
+
+    def __repr__(self) -> str:
+        return f"<Space slug={self.slug!r} name={self.name!r}>"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Registry (cached)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_SPACE_CONFIG_THREAD_LOCK = threading.RLock()
+
+
+def _legacy_audit_path(space: Space) -> Path:
+    return space.root / "nova-management-audit.jsonl"
+
+
+def _read_legacy_audit_events(space: Space) -> list[object]:
+    """Read JSONL evidence only; callers decide whether it is safe to persist."""
+    path = _legacy_audit_path(space)
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise SpaceGovernanceError("management audit cannot be read") from exc
+    events: list[object] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            events.append(json.loads(line))
+        except (TypeError, ValueError) as exc:
+            raise SpaceGovernanceError("legacy management audit is malformed") from exc
+    return events
+
+
+def _validate_and_merge_audit_events(
+    *sources: list[object],
+    expected_space_id: str = "",
+    expected_management: object = None,
+) -> list[dict]:
+    """Strictly validate and merge YAML/JSONL evidence by revision.
+
+    JSONL is retained after migration. A repeated revision is acceptable only
+    when its canonical JSON representation is identical; otherwise evidence
+    conflicts and no write may proceed.
+    """
+    by_revision: dict[int, dict] = {}
+    canonical_by_revision: dict[int, str] = {}
+    canonical_space_id = ""
+    for source in sources:
+        if not isinstance(source, list):
+            raise SpaceGovernanceError("management audit is malformed")
+        for raw_event in source:
+            if not isinstance(raw_event, dict) or set(raw_event) != _AUDIT_EVENT_FIELDS:
+                raise SpaceGovernanceError("management audit event is malformed")
+            actor = raw_event.get("actor")
+            timestamp = raw_event.get("timestamp")
+            event_space_id = raw_event.get("space_id")
+            root_fingerprint = raw_event.get("root_fingerprint")
+            policy_revision = raw_event.get("policy_revision")
+            governance_revision = raw_event.get("governance_revision")
+            previous = _strict_nova_management_record(raw_event.get("previous"))
+            next_record = _strict_nova_management_record(raw_event.get("next"))
+            if not isinstance(actor, str) or not _DASHBOARD_ACTOR_RE.fullmatch(actor):
+                raise SpaceGovernanceError("management audit actor is malformed")
+            if type(timestamp) not in (int, float) or not math.isfinite(timestamp):
+                raise SpaceGovernanceError("management audit timestamp is malformed")
+            normalized_event_id = _normalized_space_id(event_space_id)
+            if not normalized_event_id:
+                raise SpaceGovernanceError("management audit Space identity is malformed")
+            if canonical_space_id and normalized_event_id != canonical_space_id:
+                raise SpaceGovernanceError("management audit Space identities conflict")
+            canonical_space_id = normalized_event_id
+            if expected_space_id and normalized_event_id != _normalized_space_id(expected_space_id):
+                raise SpaceGovernanceError("management audit Space identity conflicts")
+            if root_fingerprint != "" and (
+                not isinstance(root_fingerprint, str)
+                or not _AUDIT_ROOT_FINGERPRINT_RE.fullmatch(root_fingerprint)
+            ):
+                raise SpaceGovernanceError("management audit root fingerprint is malformed")
+            if type(policy_revision) is not int or type(governance_revision) is not int:
+                raise SpaceGovernanceError("management audit revision is malformed")
+            if previous is None or next_record is None:
+                raise SpaceGovernanceError("management audit state is malformed")
+            revision = next_record["revision"]
+            if (
+                policy_revision != revision
+                or governance_revision != revision
+                or previous["revision"] + 1 != revision
+            ):
+                raise SpaceGovernanceError("management audit revision chain is malformed")
+            event = copy.deepcopy(raw_event)
+            canonical_event = json.dumps(
+                event,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+                allow_nan=False,
+            )
+            existing = canonical_by_revision.get(revision)
+            if existing is not None and existing != canonical_event:
+                raise SpaceGovernanceError("management audit contains conflicting revisions")
+            by_revision[revision] = event
+            canonical_by_revision[revision] = canonical_event
+
+    events = [by_revision[revision] for revision in sorted(by_revision)]
+    for index, event in enumerate(events):
+        previous = event["previous"]
+        if index == 0:
+            if previous["revision"] != 0:
+                raise SpaceGovernanceError("management audit revision chain is incomplete")
+            continue
+        prior_next = events[index - 1]["next"]
+        if previous != prior_next:
+            raise SpaceGovernanceError("management audit revision chain is broken")
+    if events and expected_management is not None:
+        current = _strict_nova_management_record(expected_management)
+        if current is None or current != events[-1]["next"]:
+            raise SpaceGovernanceError("management audit does not match current governance")
+    return events
+
+
+def _effective_audit_events(space: Space, config: dict) -> list[dict]:
+    """Merge strict YAML and legacy evidence without taking a write lock."""
+    _raise_if_space_config_malformed(config)
+    if config.get("_nova_management_malformed"):
+        raise SpaceGovernanceError("current Nova management record is malformed")
+    if config.get("_nova_management_audit_malformed"):
+        raise SpaceGovernanceError("management audit is malformed")
+    yaml_events = config.get("nova_management_audit", [])
+    legacy_events = _read_legacy_audit_events(space)
+    return _validate_and_merge_audit_events(
+        yaml_events,
+        legacy_events,
+        expected_space_id=config.get("space_id", ""),
+        expected_management=config.get("nova_management"),
+    )
+
+
+def _audited_space_id(events: list[dict]) -> str:
+    return _normalized_space_id(events[0].get("space_id")) if events else ""
+
+
+def _prepare_audit_for_write(
+    space: Space,
+    config: dict,
+    *,
+    expected_space_id: str,
+) -> list[dict]:
+    """Carry all valid historical evidence into the next atomic YAML write."""
+    persisted = space.load_config()
+    _raise_if_space_config_malformed(persisted)
+    if persisted.get("_nova_management_malformed"):
+        raise SpaceGovernanceError("current Nova management record is malformed")
+    if persisted.get("_nova_management_audit_malformed"):
+        raise SpaceGovernanceError("management audit is malformed")
+    return _validate_and_merge_audit_events(
+        persisted.get("nova_management_audit", []),
+        _read_legacy_audit_events(space),
+        config.get("nova_management_audit", []),
+        expected_space_id=expected_space_id,
+        expected_management=config.get("nova_management"),
+    )
+
+
+@contextmanager
+def space_config_lock(space: Space):
+    """Lock one Space's governance transaction across threads and processes.
+
+    The lock file is deliberately opened only by the management write path.
+    Management reads and all ordinary Space reads therefore remain side-effect
+    free.  A process-local re-entrant lock also protects platforms whose file
+    locks do not reliably serialize two handles in the same process.
+    """
+    with _SPACE_CONFIG_THREAD_LOCK:
+        space.root.mkdir(parents=True, exist_ok=True)
+        lock_path = space.root / ".space-config.lock"
+        fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        locked = False
+        try:
+            # msvcrt locks byte ranges; ensure the first byte exists before
+            # locking it. POSIX flock locks the descriptor as a whole.
+            if os.name == "nt":
+                import msvcrt
+
+                if os.fstat(fd).st_size == 0:
+                    os.write(fd, b"\\0")
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            locked = True
+            yield
+        finally:
+            if locked:
+                if os.name == "nt":
+                    import msvcrt
+
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+
+def update_nova_management(
+    space: Space,
+    **kwargs,
+) -> dict[str, bool | int]:
+    """Apply one fully serialized governance and audit transaction."""
+    with space_config_lock(space):
+        return _update_nova_management(space, **kwargs)
+
+
+def _update_nova_management(
+    space: Space,
+    *,
+    yolo: object,
+    enrolled: object,
+    confirmation: object,
+    trusted_project_root: str | Path | None,
+    actor: str,
+) -> dict[str, bool | int]:
+    """Persist a validated management transition for one existing Space."""
+    if not isinstance(actor, str) or not _DASHBOARD_ACTOR_RE.fullmatch(actor):
+        raise SpaceGovernanceError("management transition requires an authenticated dashboard actor")
+    if type(yolo) is not bool or type(enrolled) is not bool:
+        raise SpaceGovernanceError("yolo and enrolled must be literal booleans")
+    if enrolled is True and yolo is not True:
+        raise SpaceGovernanceError("enrollment requires yolo to be true")
+
+    config = space.load_config()
+    config["nova_management_audit"] = _effective_audit_events(space, config)
+    if not _normalized_space_id(config.get("space_id")):
+        config["space_id"] = _audited_space_id(config["nova_management_audit"]) or uuid.uuid4().hex
+    if enrolled is True:
+        configured_project = space.get_project_dir()
+        if not configured_project:
+            raise SpaceGovernanceError("enrollment requires an existing project_dir")
+        try:
+            trusted_root = Path(trusted_project_root).expanduser().resolve()
+        except (TypeError, OSError, RuntimeError):
+            raise SpaceGovernanceError("enrollment requires a trusted project root") from None
+        if not trusted_root.is_dir():
+            raise SpaceGovernanceError("enrollment requires a trusted project root")
+        if trusted_root != Path(configured_project).expanduser().resolve():
+            raise SpaceGovernanceError("trusted project root does not match this Space")
+        space_id = _normalized_space_id(config.get("space_id"))
+        if not space_id:
+            raise SpaceGovernanceError("Space identity must be persisted before enrollment")
+        if not isinstance(confirmation, dict):
+            raise SpaceGovernanceError("enrollment requires explicit confirmation")
+        if confirmation.get("space_id") != space_id:
+            raise SpaceGovernanceError("confirmation Space identity does not match")
+        if confirmation.get("root_fingerprint") != space_root_fingerprint(trusted_root):
+            raise SpaceGovernanceError("confirmation root fingerprint does not match")
+
+    current = _normalized_nova_management(config.get("nova_management"))
+    if _managed_space_requires_pause(config):
+        _pause_managed_space_before_change(
+            space,
+            config,
+            reason="governance_changed",
+            actor=actor,
+        )
+    next_record: dict[str, bool | int] = {
+        "yolo": yolo,
+        "enrolled": enrolled,
+        "revision": int(current["revision"]) + 1,
+    }
+    config["nova_management"] = next_record
+    root_fingerprint = ""
+    if trusted_project_root is not None:
+        try:
+            independent_root = Path(trusted_project_root).expanduser().resolve()
+            if independent_root.is_dir():
+                root_fingerprint = space_root_fingerprint(independent_root)
+        except (TypeError, OSError, RuntimeError):
+            pass
+    event = {
+        "actor": actor,
+        "timestamp": time.time(),
+        "space_id": config["space_id"],
+        "root_fingerprint": root_fingerprint,
+        "policy_revision": next_record["revision"],
+        "governance_revision": next_record["revision"],
+        "previous": current,
+        "next": next_record,
+    }
+    config["nova_management_audit"] = list(config.get("nova_management_audit") or []) + [event]
+    space.save_config(config, mint_space_id=True)
+    return next_record
+
+
+def update_space_config(
+    space: Space,
+    patch: dict,
+    *,
+    actor: str | None = _SYSTEM_SPACE_LIFECYCLE_ACTOR,
+) -> dict:
+    """Apply an ordinary config patch without racing governance evidence."""
+    if not isinstance(patch, dict):
+        raise SpaceGovernanceError("Space config patch must be an object")
+    with space_config_lock(space):
+        config = space.load_config()
+        config["nova_management_audit"] = _effective_audit_events(space, config)
+        if (
+            "project_dir" in patch
+            and patch.get("project_dir") != config.get("project_dir")
+            and _managed_space_requires_pause(config)
+        ):
+            _pause_managed_space_before_change(
+                space,
+                config,
+                reason="root_changed",
+                actor=actor,
+            )
+        config.update(patch)
+        space.save_config(config)
+        return space.load_config()
+
+
+def _managed_space_requires_pause(config: dict) -> bool:
+    """Return whether a Space write can invalidate managed-run authority."""
+    if any(
+        config.get(marker)
+        for marker in (
+            "_space_config_malformed",
+            "_nova_management_malformed",
+            "_nova_management_audit_malformed",
+        )
+    ):
+        return True
+    management = _strict_nova_management_record(config.get("nova_management"))
+    return bool(
+        management is not None
+        and management["yolo"] is True
+        and management["enrolled"] is True
+    )
+
+
+def _pause_managed_space_before_change(
+    space: Space,
+    config: dict,
+    *,
+    reason: str,
+    actor: str | None = None,
+) -> None:
+    """Pause the ledger-owned child before invalidating Space authority.
+
+    This dynamic host import keeps ordinary Space reads/writes independent of
+    Nova.  A missing or unreadable ledger is handled fail-closed by the
+    supervisor method, so a managed root/governance change never races an
+    executing child.
+    """
+    del config
+    try:
+        from nova.space_supervisor import get_production_managed_space_supervisor
+
+        paused = get_production_managed_space_supervisor().pause_for_space_change(
+            space.slug,
+            reason=reason,
+            actor=actor,
+        )
+    except Exception:
+        # Nova is optional for ordinary Spaces, but a managed Space must not
+        # downgrade an unavailable host authority into an unchecked write.
+        # Preserve process-control exceptions by not catching BaseException.
+        paused = False
+    if paused is not True:
+        raise SpaceGovernanceError(
+            "managed Space supervision could not be paused before this change"
+        )
+
+
+def list_nova_management_audit(space: Space) -> list[dict]:
+    """Read append-only governance evidence without creating missing files."""
+    config = space.load_config()
+    events = _effective_audit_events(space, config)
+    return [dict(event) for event in events]
+
+
+_SPACE_CACHE: list[Space] | None = None
+_SPACE_CACHE_ROOTS: tuple[str, str] | None = None
+_SPACE_CACHE_TS: float = 0.0
+_CACHE_TTL: float = 5.0
+
+
+def _invalidate_space_cache() -> None:
+    global _SPACE_CACHE, _SPACE_CACHE_ROOTS, _SPACE_CACHE_TS
+    _SPACE_CACHE = None
+    _SPACE_CACHE_ROOTS = None
+    _SPACE_CACHE_TS = 0.0
+
+
+def _safe_read_text(path: Path) -> str:
+    try:
+        return path.read_text("utf-8")
+    except Exception:
+        return ""
+
+
+def _is_generic_default_agent_soul(path: Path) -> bool:
+    text = _safe_read_text(path)
+    return bool(text and _GENERIC_DEFAULT_SOUL_MARKER in text)
+
+
+def ensure_bundled_nova_template(space: "Space") -> list[Path]:
+    """Install sanitized bundled Nova template files into a space if missing."""
+    try:
+        from web.api.nova_template_distribution import install_bundled_nova_template
+
+        return install_bundled_nova_template(space.root)
+    except Exception:
+        logger.exception("failed to install bundled Nova template into %s", space.root)
+        return []
+
+
+def _resolve_consciousness_source_slug() -> str:
+    canonical_default = Space(DEFAULT_SPACE_SLUG, DEFAULT_SPACE_NAME)
+    if (canonical_default.root / "SOUL.md").exists():
+        return DEFAULT_SPACE_SLUG
+    return CONSCIOUSNESS_SOURCE_SPACE_SLUG
+
+
+def _uses_legacy_consciousness_alias() -> bool:
+    if CONSCIOUSNESS_SOURCE_SPACE_SLUG == DEFAULT_SPACE_SLUG:
+        return False
+    canonical_default = Space(DEFAULT_SPACE_SLUG, DEFAULT_SPACE_NAME)
+    legacy_space = Space(CONSCIOUSNESS_SOURCE_SPACE_SLUG, CONSCIOUSNESS_SOURCE_SPACE_SLUG)
+    return canonical_default.root.is_dir() and legacy_space.root.is_dir()
+
+
+def _seed_default_space_from_consciousness() -> None:
+    """Bootstrap the canonical Nova space from the consciousness source.
+
+    This is intentionally conservative:
+    - never overwrites an existing non-generic target file
+    - only copies a minimal identity/config set
+    - keeps the source space untouched
+    """
+    source_slug = _resolve_consciousness_source_slug()
+    if source_slug == DEFAULT_SPACE_SLUG:
+        target = Space(DEFAULT_SPACE_SLUG, DEFAULT_SPACE_NAME)
+        ensure_bundled_nova_template(target)
+        if target.root.is_dir():
+            cfg = target.load_config()
+            changed = False
+            nova_cfg = dict(cfg.get("nova") or {})
+            desired_nova = {
+                "enabled": True,
+                "character": nova_cfg.get("character", "") or DEFAULT_NOVA_CHARACTER,
+                "source_space": DEFAULT_SPACE_SLUG,
+                "communication_mode": "pingpong",
+            }
+            if nova_cfg != desired_nova:
+                cfg["nova"] = desired_nova
+                changed = True
+            if not cfg.get("name"):
+                cfg["name"] = DEFAULT_SPACE_NAME
+                changed = True
+            if changed:
+                target.save_config(cfg, mint_space_id=True)
+        return
+
+    source = Space(source_slug, source_slug)
+    if not source.root.is_dir():
+        target = Space(DEFAULT_SPACE_SLUG, DEFAULT_SPACE_NAME)
+        ensure_bundled_nova_template(target)
+        cfg = target.load_config()
+        nova_cfg = dict(cfg.get("nova") or {})
+        cfg["name"] = cfg.get("name") or DEFAULT_SPACE_NAME
+        cfg["description"] = cfg.get("description") or "Canonical Nova space seeded from the bundled Sidekick template."
+        cfg["nova"] = {
+            "enabled": True,
+            "character": nova_cfg.get("character", "") or DEFAULT_NOVA_CHARACTER,
+            "source_space": DEFAULT_SPACE_SLUG,
+            "communication_mode": "pingpong",
+        }
+        target.save_config(cfg, mint_space_id=True)
+        return
+
+    target = Space(DEFAULT_SPACE_SLUG, DEFAULT_SPACE_NAME)
+    target.root.mkdir(parents=True, exist_ok=True)
+    target.memory_dir.mkdir(parents=True, exist_ok=True)
+    target.ensure_agent("default", create_soul=True)
+    ensure_bundled_nova_template(target)
+
+    source_config = source.config_path
+    target_config = target.config_path
+    if source_config.exists() and not target_config.exists():
+        shutil.copy2(source_config, target_config)
+
+    source_root_soul = source.root / "SOUL.md"
+    target_root_soul = target.root / "SOUL.md"
+    if source_root_soul.exists() and not target_root_soul.exists():
+        shutil.copy2(source_root_soul, target_root_soul)
+
+    source_agent_soul = source_root_soul
+    target_agent_soul = target.agent_soul_path("default")
+    if source_agent_soul.exists() and (
+        not target_agent_soul.exists() or _is_generic_default_agent_soul(target_agent_soul)
+    ):
+        shutil.copy2(source_agent_soul, target_agent_soul)
+
+    cfg = target.load_config()
+    changed = False
+    if not cfg.get("name"):
+        cfg["name"] = DEFAULT_SPACE_NAME
+        changed = True
+    if not cfg.get("description"):
+        cfg["description"] = (
+            f"Canonical Nova space bootstrapped from {source_slug}."
+        )
+        changed = True
+    nova_cfg = dict(cfg.get("nova") or {})
+    desired_nova = {
+        "enabled": True,
+        "character": nova_cfg.get("character", "") or DEFAULT_NOVA_CHARACTER,
+        "source_space": DEFAULT_SPACE_SLUG,
+        "communication_mode": "pingpong",
+    }
+    if nova_cfg != desired_nova:
+        cfg["nova"] = desired_nova
+        changed = True
+    if changed:
+        target.save_config(cfg, mint_space_id=True)
+
+
+def seed_space_with_nova(
+    space: Space,
+    *,
+    character: str = "",
+    source_slug: str | None = None,
+) -> None:
+    """Attach a Nova instance to an arbitrary space without clobbering custom files."""
+    source_slug = source_slug or _resolve_consciousness_source_slug()
+    source = Space(source_slug, source_slug)
+    if not source.root.is_dir():
+        ensure_bundled_nova_template(space)
+        current = space.load_config()
+        nova_cfg = dict(current.get("nova") or {})
+        nova_cfg.update(
+            {
+                "enabled": True,
+                "character": character or nova_cfg.get("character", "") or DEFAULT_NOVA_CHARACTER,
+                "source_space": DEFAULT_SPACE_SLUG,
+                "communication_mode": "pingpong",
+            }
+        )
+        current["nova"] = nova_cfg
+        if not current.get("description"):
+            current["description"] = "Space with its own Nova instance seeded from the bundled Sidekick template."
+        space.save_config(current, mint_space_id=True)
+        return
+
+    space.root.mkdir(parents=True, exist_ok=True)
+    space.memory_dir.mkdir(parents=True, exist_ok=True)
+    space.ensure_agent("default", create_soul=True)
+    ensure_bundled_nova_template(space)
+
+    source_root_soul = source.root / "SOUL.md"
+    target_root_soul = space.root / "SOUL.md"
+    if source_root_soul.exists() and not target_root_soul.exists():
+        shutil.copy2(source_root_soul, target_root_soul)
+
+    target_agent_soul = space.agent_soul_path("default")
+    if source_root_soul.exists() and (
+        not target_agent_soul.exists() or _is_generic_default_agent_soul(target_agent_soul)
+    ):
+        shutil.copy2(source_root_soul, target_agent_soul)
+
+    current = space.load_config()
+    nova_cfg = dict(current.get("nova") or {})
+    nova_cfg.update(
+        {
+            "enabled": True,
+            "character": character or nova_cfg.get("character", ""),
+            "source_space": source_slug,
+            "communication_mode": "pingpong",
+        }
+    )
+    current["nova"] = nova_cfg
+    if not current.get("description"):
+        current["description"] = f"Space with its own Nova instance seeded from {source_slug}."
+    space.save_config(current, mint_space_id=True)
+
+
+def _scan_fs_for_spaces() -> list[Space]:
+    """Scan SPACES_ROOT for space directories + fallback to OLD_ROOT."""
+    _seed_default_space_from_consciousness()
+    seen_slugs: set[str] = set()
+    spaces: list[Space] = []
+
+    # Primary: new spaces/ dir
+    current_spaces_root = _spaces_root()
+    current_old_root = _old_root()
+    roots_to_scan = [(current_spaces_root, False)]
+    # Backward compat: old workspaces/ dir (never-create)
+    if current_old_root != current_spaces_root and current_old_root.is_dir():
+        roots_to_scan.append((current_old_root, True))
+
+    for root, is_legacy in roots_to_scan:
+        if not root.is_dir():
+            continue
+        for child in sorted(root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+            if not child.is_dir():
+                continue
+            slug = child.name.strip().lower()
+            if slug in DEFAULT_SPACE_ALIASES and _is_empty_configless_space_dir(child):
+                continue
+            slug = _normalize_space_slug(slug)
+            if slug in seen_slugs:
+                continue  # new-format wins over old-format
+            if not _is_valid_space_slug(slug):
+                # Infrastructure/archive dirs (e.g. ``_bridge``,
+                # ``_bewusstsein_archived_20260605``) are not spaces: the API
+                # layer rejects their slug, so advertising them only produced
+                # HTTP 400s on every per-space call.
+                continue
+            if slug == CONSCIOUSNESS_SOURCE_SPACE_SLUG and _uses_legacy_consciousness_alias():
+                continue
+            seen_slugs.add(slug)
+            space = Space(slug, slug, custom_root=root if is_legacy else None)
+            # If this is an old-format dir with workspace.yaml, migrate on read
+            old_config = child / "workspace.yaml"
+            if is_legacy and old_config.exists() and not space.config_path.exists():
+                _soft_migrate_workspace(space, old_config)
+            spaces.append(space)
+
+    # Fresh install: create a naked Nova space. Existing installs keep their
+    # previously scanned spaces (including legacy "default" or user-renamed ones)
+    # and are not force-migrated.
+    if not spaces:
+        space = Space(DEFAULT_SPACE_SLUG, DEFAULT_SPACE_NAME)
+        space.root.mkdir(parents=True, exist_ok=True)
+        space.memory_dir.mkdir(parents=True, exist_ok=True)
+        space.ensure_agent("default", create_soul=True)
+        cfg = space.load_config()
+        cfg.update({
+            "name": DEFAULT_SPACE_NAME,
+            "description": "Fresh Sidekick space for Nova. Add a project directory when you want to attach files.",
+            "emoji": "✨",
+            "color": "#7c5cfc",
+        })
+        space.save_config(cfg, mint_space_id=True)
+        spaces.append(space)
+
+    return spaces
+
+
+def _soft_migrate_workspace(space: Space, old_yaml: Path) -> None:
+    """Copy workspace.yaml → space.yaml on first read (does not delete old)."""
+    try:
+        import yaml
+        data = yaml.safe_load(old_yaml.read_text("utf-8")) or {}
+        space.root.mkdir(parents=True, exist_ok=True)
+        space.save_config(data, mint_space_id=True)
+        logger.info("migrated workspace.yaml → space.yaml for %s", space.slug)
+    except Exception:
+        logger.debug("soft-migrate failed for %s", space.slug)
+
+
+# ── Public Registry API ─────────────────────────────────────────────────────
+
+def get_all_spaces() -> list[Space]:
+    """List all spaces (cached)."""
+    global _SPACE_CACHE, _SPACE_CACHE_ROOTS, _SPACE_CACHE_TS
+    now = time.time()
+    current_roots = (str(_spaces_root()), str(_old_root()))
+    if (
+        _SPACE_CACHE is not None
+        and _SPACE_CACHE_ROOTS == current_roots
+        and (now - _SPACE_CACHE_TS) < _CACHE_TTL
+    ):
+        return _SPACE_CACHE
+    _SPACE_CACHE = _scan_fs_for_spaces()
+    _SPACE_CACHE_ROOTS = current_roots
+    _SPACE_CACHE_TS = now
+    return _SPACE_CACHE
+
+
+def get_space(slug: str) -> Space | None:
+    """Look up a space by slug."""
+    slug = _normalize_space_slug(slug)
+    if slug == CONSCIOUSNESS_SOURCE_SPACE_SLUG and _uses_legacy_consciousness_alias():
+        slug = DEFAULT_SPACE_SLUG
+    for s in get_all_spaces():
+        if s.slug == slug:
+            return s
+    return None
+
+
+def get_existing_space_read_only(slug: str) -> Space | None:
+    """Find an already-saved Space without cache scans, seeding, or migration."""
+    normalized = _normalize_space_slug(slug)
+    if not normalized:
+        return None
+    roots: list[tuple[Path, bool]] = [(_spaces_root(), False)]
+    old_root = _old_root()
+    if old_root != roots[0][0]:
+        roots.append((old_root, True))
+    for root, is_legacy in roots:
+        try:
+            resolved_root = root.resolve()
+            candidate = (resolved_root / normalized).resolve()
+            candidate.relative_to(resolved_root)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if not candidate.is_dir() or not (candidate / "space.yaml").is_file():
+            continue
+        return Space(normalized, normalized, custom_root=root if is_legacy else None)
+    return None
+
+
+def get_or_create_space(slug: str, name: str = "") -> Space:
+    """Return existing space or create a new one with default agent."""
+    slug = _normalize_space_slug(slug)
+    if not _is_valid_space_slug(slug):
+        raise SpaceError(f"invalid space slug: {slug!r}")
+    existing = get_space(slug)
+    if existing:
+        existing.memory_dir.mkdir(parents=True, exist_ok=True)
+        # Selecting an existing Space is an explicit lifecycle path. Repair
+        # only this legacy identity here; registry reads remain side-effect
+        # free and do not silently mutate every Space on the server.
+        with space_config_lock(existing):
+            config = existing.load_config()
+            if not _normalized_space_id(config.get("space_id")):
+                existing.save_config(config, mint_space_id=True)
+        if existing.slug == DEFAULT_SPACE_SLUG:
+            _seed_default_space_from_consciousness()
+        return existing
+    space = Space(slug, name or slug)
+    space.root.mkdir(parents=True, exist_ok=True)
+    space.memory_dir.mkdir(parents=True, exist_ok=True)
+    space.ensure_agent("default", create_soul=True)
+    cfg = space.load_config()
+    cfg["name"] = name or (DEFAULT_SPACE_NAME if space.slug == DEFAULT_SPACE_SLUG else space.slug)
+    space.save_config(cfg, mint_space_id=True)
+    if space.slug == DEFAULT_SPACE_SLUG:
+        _seed_default_space_from_consciousness()
+    _invalidate_space_cache()
+    return space
+
+
+def create_space(
+    slug: str,
+    name: str = "",
+    color: str = "",
+    *,
+    nova_instance: bool = False,
+    nova_character: str = "",
+) -> Space:
+    """Create a brand-new space. Raises SpaceExists if slug taken."""
+    slug = _normalize_space_slug(slug)
+    if not _is_valid_space_slug(slug):
+        raise SpaceError(f"invalid space slug: {slug!r}")
+    if get_space(slug):
+        raise SpaceExists(f"space {slug!r} already exists")
+    space = Space(slug, name or slug)
+    space.root.mkdir(parents=True, exist_ok=True)
+    space.memory_dir.mkdir(parents=True, exist_ok=True)
+    space.ensure_agent("default", create_soul=True)
+    cfg = space.load_config()
+    cfg["name"] = name or (DEFAULT_SPACE_NAME if space.slug == DEFAULT_SPACE_SLUG else space.slug)
+    if color:
+        cfg["color"] = color
+    space.save_config(cfg, mint_space_id=True)
+    if space.slug == DEFAULT_SPACE_SLUG:
+        _seed_default_space_from_consciousness()
+    elif nova_instance:
+        seed_space_with_nova(space, character=nova_character)
+    _invalidate_space_cache()
+    return space
+
+
+def delete_space(
+    slug: str,
+    *,
+    actor: str | None = _SYSTEM_SPACE_LIFECYCLE_ACTOR,
+) -> bool:
+    """Remove a space entirely. The fresh default and legacy default are protected."""
+    slug = _normalize_space_slug(slug)
+    if not _is_valid_space_slug(slug):
+        logger.warning("refusing to delete invalid Space slug %r", slug)
+        return False
+    if slug in PROTECTED_SPACE_SLUGS:
+        logger.warning("refusing to delete protected default space %s", slug)
+        return False
+    existing = get_existing_space_read_only(slug)
+    if existing is not None:
+        try:
+            config = existing.load_config()
+            if _managed_space_requires_pause(config):
+                _pause_managed_space_before_change(
+                    existing,
+                    config,
+                    reason="space_deleted",
+                    actor=actor,
+                )
+        except SpaceGovernanceError:
+            logger.error("refusing to delete managed Space %s before safe pause", slug)
+            return False
+    candidates = []
+    for root in (_spaces_root(), _old_root()):
+        try:
+            resolved_root = root.resolve()
+            requested = resolved_root / slug
+            if requested.is_symlink() or (
+                hasattr(requested, "is_junction") and requested.is_junction()
+            ):
+                logger.warning("refusing to delete reparse-point Space %s", requested)
+                continue
+            path = requested.resolve()
+            path.relative_to(resolved_root)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if path.is_dir() and path not in candidates:
+            candidates.append(path)
+    if not candidates:
+        return False
+    import shutil
+    for path in candidates:
+        try:
+            shutil.rmtree(path)
+        except Exception:
+            logger.exception("failed to delete space directory %s", path)
+            _invalidate_space_cache()
+            return False
+    _invalidate_space_cache()
+    remaining = [path for path in candidates if path.exists()]
+    if remaining:
+        logger.error("space delete reported incomplete for %s: %s", slug, remaining)
+        return False
+    return get_space(slug) is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent CRUD within a Space
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def list_space_agents(slug: str) -> list[str]:
+    """List agent slugs in a space."""
+    space = get_space(slug)
+    if not space:
+        raise SpaceNotFound(f"space {slug!r} not found")
+    return space.list_agents()
+
+
+def ensure_space_agent(slug: str, agent_slug: str) -> Path:
+    """Ensure an agent directory exists within a space."""
+    space = get_or_create_space(slug)
+    return space.ensure_agent(agent_slug)
+
+
+def delete_space_agent(slug: str, agent_slug: str) -> bool:
+    """Delete an agent from a space. 'default' agent is protected."""
+    if agent_slug.strip().lower() == "default":
+        return False
+    space = get_space(slug)
+    if not space:
+        return False
+    ap = space.agent_path(agent_slug)
+    if not ap.is_dir():
+        return False
+    import shutil
+    shutil.rmtree(ap, ignore_errors=True)
+    return True
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Thread-local active space (for request context)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_ACTIVE_SPACE_LOCAL = threading.local()
+
+
+def set_active_space(slug_or_none: str | None) -> None:
+    _ACTIVE_SPACE_LOCAL.slug = slug_or_none.strip().lower() if slug_or_none else None
+
+
+def clear_active_space() -> None:
+    try:
+        del _ACTIVE_SPACE_LOCAL.slug
+    except AttributeError:
+        pass
+
+
+def get_active_space_slug() -> str | None:
+    return getattr(_ACTIVE_SPACE_LOCAL, "slug", None)
+
+
+def resolve_active_space() -> Space:
+    """Resolve the active space (never returns None)."""
+    slug = get_active_space_slug()
+    if not slug:
+        slug = (os.getenv("SIDEKICK_WEBUI_ACTIVE_WORKSPACE") or "").strip().lower() or DEFAULT_SPACE_SLUG
+    return get_or_create_space(slug)
+
+
+# ── Backward compat aliases ────────────────────────────────────────────────
+# Keep the old names working so existing imports (streaming.py, routes.py)
+# don't break during migration. These will be removed in a future cleanup.
+
+def get_all_workspaces() -> list:
+    """Alias — delegates to get_all_spaces()."""
+    return get_all_spaces()
+
+
+def get_workspace(slug: str):
+    """Alias — delegates to get_space()."""
+    return get_space(slug)
+
+
+def get_or_create_workspace(slug: str, name: str = ""):
+    """Alias — delegates to get_or_create_space()."""
+    return get_or_create_space(slug, name)
+
+
+def create_workspace(slug: str, name: str = "", color: str = "", **extra):
+    """Alias — delegates to create_space(). Forward extra kwargs (nova_instance, nova_character)."""
+    return create_space(slug, name, color, **extra)
+
+
+def delete_workspace(
+    slug: str,
+    *,
+    actor: str | None = _SYSTEM_SPACE_LIFECYCLE_ACTOR,
+) -> bool:
+    """Alias — delegates to delete_space()."""
+    return delete_space(slug, actor=actor)
+
+
+def set_active_workspace(slug_or_none: str | None) -> None:
+    """Alias — delegates to set_active_space() + workspace_isolation()."""
+    set_active_space(slug_or_none)
+    try:
+        from web.api.workspace_isolation import set_active_workspace as _ws_set_active
+        _ws_set_active(slug_or_none)
+    except Exception:
+        pass
+
+
+def clear_active_workspace() -> None:
+    """Alias — delegates to clear_active_space() + workspace_isolation()."""
+    clear_active_space()
+    try:
+        from web.api.workspace_isolation import clear_active_workspace as _ws_clear_active
+        _ws_clear_active()
+    except Exception:
+        pass
+
+
+def get_active_workspace_slug() -> str | None:
+    """Alias — delegates to get_active_space_slug()."""
+    return get_active_space_slug()
+
+
+def resolve_active_workspace():
+    """Alias — delegates to resolve_active_space()."""
+    return resolve_active_space()

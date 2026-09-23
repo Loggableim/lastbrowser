@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { createPermissionController } from '../src/main/permissions.js';
 
 describe('permission controller', () => {
-  it('allows page-local permissions', () => {
+  it('allows page-local permissions and DRM protected-media-identifier', () => {
     const c = createPermissionController();
     expect(c.decide('fullscreen', 'https://example.com')).toBe('allow');
     expect(c.decide('pointerLock', 'https://example.com')).toBe('allow');
     expect(c.decide('clipboard-sanitized-write', 'https://example.com')).toBe('allow');
+    expect(c.decide('protected-media-identifier', 'https://www.netflix.com')).toBe('allow');
+    expect(c.decide('protected-media-identifier', 'https://open.spotify.com')).toBe('allow');
   });
 
   it('denies camera and microphone by default', () => {

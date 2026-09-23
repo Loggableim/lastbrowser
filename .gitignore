@@ -34,3 +34,4 @@ Thumbs.db
 installer/build/
 installer/dist/
 smoke-output/
+.agents/

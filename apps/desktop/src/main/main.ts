@@ -148,6 +148,7 @@ import { createSidekickUpdater } from './sidekick-updater.js';
 import { subscribeChatStream, type ChatStreamHandle } from './chat-stream.js';
 import { createDownloadTracker } from './downloads.js';
 import { createPermissionController, loadTrustedOrigins, saveTrustedOrigins, trustedOriginsFileName } from './permissions.js';
+import { configureDrmWidevine } from './drm.js';
 import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTerminalIds, closeAllTerminals } from './terminal-process.js';
@@ -796,6 +797,9 @@ if (!gotSingleInstanceLock) {
   }
 }
 
+// Auto-detect and register system Widevine CDM before app is ready (Ansatz 3)
+configureDrmWidevine(app);
+
 // Must run before whenReady: registering a scheme as privileged afterwards has
 // no effect on storage partitioning, and localStorage would stay ephemeral.
 registerAppScheme();
@@ -832,7 +836,7 @@ app.whenReady().then(() => {
   registerIpc();
   createWindow();
   startAutoUpdateChecks();
-  activeSessions.add(session.defaultSession);
+  attachSessionHandlers(session.defaultSession);
   void extensionManager.init();
   appTray = createAppTray({
     getMainWindow: () => mainWindow,
@@ -849,29 +853,33 @@ app.whenReady().then(() => {
   });
 });
 
-// Attach ad blocking, download tracking and permission handling to every
-// browser session (webviews use per-profile `persist:` partitions, so each
-// profile gets its own).
-app.on('session-created', (session) => {
-  // Only attach browser features to persistent profile sessions or incognito webviews.
-  // Utility partitions (like electron-updater) have no storagePath and must not be polluted.
-  if (!session.storagePath) {
-    return;
-  }
-  activeSessions.add(session);
-  void adblock.attach(session);
-  downloads.attach(session);
-  const isIncognito = (session as unknown as { isInMemory?: () => boolean }).isInMemory?.() ?? false;
-  void extensionManager.attachToSession(session, isIncognito);
-  // Deny-by-default: Electron grants every permission silently otherwise, which
-  // would hand any website the camera, microphone and location.
-  session.setPermissionRequestHandler((_contents, permission, callback, details) => {
+function attachSessionHandlers(targetSession: Session): void {
+  activeSessions.add(targetSession);
+  void adblock.attach(targetSession);
+  downloads.attach(targetSession);
+  const isIncognito = (targetSession as unknown as { isInMemory?: () => boolean }).isInMemory?.() ?? false;
+  void extensionManager.attachToSession(targetSession, isIncognito);
+  // Deny-by-default with whitelist (permissions.ts): Electron grants every permission silently
+  // otherwise, which would hand any website the camera, microphone, and location.
+  targetSession.setPermissionRequestHandler((_contents, permission, callback, details) => {
     const origin = String((details as { requestingUrl?: string })?.requestingUrl || '');
     callback(permissions.decide(String(permission), origin) === 'allow');
   });
-  session.setPermissionCheckHandler((_contents, permission, requestingOrigin) => {
+  targetSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) => {
     return permissions.decide(String(permission), String(requestingOrigin || '')) === 'allow';
   });
+}
+
+// Attach ad blocking, download tracking and permission handling to every
+// browser session (webviews use per-profile `persist:` partitions, so each
+// profile gets its own).
+app.on('session-created', (sess) => {
+  // Only attach browser features to persistent profile sessions or incognito webviews.
+  // Utility partitions (like electron-updater) have no storagePath and must not be polluted.
+  if (!sess.storagePath) {
+    return;
+  }
+  attachSessionHandlers(sess);
 });
 
 function cleanupServices(): void {

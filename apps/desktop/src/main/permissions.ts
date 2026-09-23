@@ -27,7 +27,8 @@ const ALLOWED_PERMISSIONS = new Set([
   'fullscreen',
   'pointerLock',
   'clipboard-sanitized-write',
-  'notifications'
+  'notifications',
+  'protected-media-identifier'
 ]);
 
 /**

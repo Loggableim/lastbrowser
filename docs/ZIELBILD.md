@@ -463,7 +463,39 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
 
 ---
 
-## 11. Checkliste für umsetzende Agenten
+## 11. Spezifikation Phase 15: DRM & Protected Media Streaming (Widevine System-Auto-Discovery) [x] (Umgesetzt v0.1.31 - Ansatz 3)
+
+### 15.1 Ursachenanalyse: Netflix NSES-UHX & EME-Permissions
+1. **Das Problem beim DRM-Streaming:**
+   - Beim Aufruf geschützter Streaming-Dienste (Netflix, Spotify, Disney+, Prime Video) fragt die Web-Applikation über die W3C EME-Schnittstelle (`navigator.requestMediaKeySystemAccess('com.widevine.alpha', ...)`) nach einem Content Decryption Module (CDM).
+   - Chromium verlangt dafür die Berechtigung `protected-media-identifier`.
+   - In einer Deny-by-Default-Architektur (`permissions.ts`) wurde dieser Request bisher stillschweigend abgelehnt (`deny`), was im Web-Player von Netflix sofort zum Abbruch mit dem Fehlercode **`NSES-UHX`** führte.
+2. **Standard-Electron ohne Bundled Widevine:**
+   - Standard-Electron-Releases enthalten aus Lizenzgründen kein Widevine CDM von Google.
+   - Ein direktes Hineinkopieren/Bundlen von Googles Binaries (`widevinecdm.dll`) in den Installer verletzt Googles Distributions-Vereinbarung und führt zu Ablehnungen bei der Microsoft Store-Zertifizierung.
+
+### 15.2 Architektur Ansatz 3: System-Widevine Auto-Discovery
+1. **Nutzung vorhandener OS-Lizenzen (Zero Store Risk):**
+   - Auf Windows-Systemen ist Microsoft Edge zu 100% vorinstalliert und enthält ein vollwertiges, Google-signiertes und kontinuierlich aktualisiertes Widevine CDM unter:
+     `C:\Program Files (x86)\Microsoft\Edge\Application\<Version>\WidevineCdm`
+   - Ebenso hält Google Chrome (sofern installiert) eine signierte Kopie unter:
+     `C:\Program Files\Google\Chrome\Application\<Version>\WidevineCdm`
+   - Beide Quellen werden in Lastbrowser zur Laufzeit dynamisch inspiziert, ohne urheberrechtlich geschützte Fremd-Binaries im eigenen Installer auszuliefern.
+2. **Erkennungs- & Registrierungs-Engine (`drm.ts`):**
+   - Vor `app.whenReady()` durchsucht die Engine die bekannten Installationspfade nach `WidevineCdm/manifest.json`.
+   - Die Versionsnummer wird geparst und das zur Plattform-Architektur passende CDM (`_platform_specific/win_x64/widevinecdm.dll` bzw. `win_arm64` / `win_x86`) ermittelt.
+   - Bei Auffinden wird die Komponente über die Chromium-Switches registriert:
+     ```ts
+     app.commandLine.appendSwitch('widevine-cdm-path', cdmPath);
+     app.commandLine.appendSwitch('widevine-cdm-version', cdmVersion);
+     ```
+3. **Permission-Whitelisting (`permissions.ts`):**
+   - Aufnahme von `'protected-media-identifier'` in `ALLOWED_PERMISSIONS`.
+   - Webseiten erhalten Zugriff auf die DRM-Decryption-Schnittstelle, ohne dass sicherheitskritische Rechte (Webcam, Mikrofon, Geolocation) unbemerkt geöffnet werden.
+
+---
+
+## 12. Checkliste für umsetzende Agenten
 
 Jeder nachfolgende Agent arbeitet nach folgenden Regeln:
 
@@ -474,4 +506,5 @@ Jeder nachfolgende Agent arbeitet nach folgenden Regeln:
 5. **Typensicherheit & Import-Integrität:** `npm run build` (`build:main` und `build:renderer`) müssen 0 TypeScript- und Vite-Fehler aufweisen. Keine ungebundenen JSX-Komponenten verwenden (jeder verwendete Bezeichner muss explizit importiert sein).
 6. **Dokumentenpflege:** Nach erfolgreicher Umsetzung den Haken in diesem Zielbild (`[x]`) und im Backlog setzen.
 7. **Panel-Integrität:** Beim Bearbeiten oder Refaktorisieren von Panels sicherstellen, dass alle Sub-Komponenten (z. B. `AdvancedWebUiTools`) sauber importiert sind und beim Mounten keine ReferenceErrors werfen.
+
 

@@ -179,7 +179,7 @@ export function NativeBrowserStartPage({
         <div className="startpage-hero-aside">
           <div className="browser-start-badge">
             <Sparkles size={14} />
-            <span>Nova AI</span>
+            <span>Nova AI Copilot</span>
           </div>
           <button
             type="button"

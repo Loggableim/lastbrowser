@@ -714,6 +714,8 @@ export type ModernTitlebarProps = {
   sidebarMode: 'slim' | 'expanded' | 'hidden';
   onToggleSidebar: () => void;
   children: React.ReactNode;
+  /** Optional Research Action Bar trigger & flyout when docked in topbar */
+  topbarActionStrip?: React.ReactNode;
   blockedAdsCount?: number;
   onToggleShieldPopover?: () => void;
   onToggleFind: () => void;
@@ -738,6 +740,7 @@ export function ModernTitlebar({
   sidebarMode,
   onToggleSidebar,
   children,
+  topbarActionStrip,
   blockedAdsCount = 3420,
   onToggleShieldPopover,
   onToggleFind,
@@ -810,6 +813,7 @@ export function ModernTitlebar({
 
       {/* Center: Integrated Omnibox + Quick Action Chips + Live Stats Pill */}
       <div className="modern-titlebar-center">
+        {topbarActionStrip}
         {children}
 
         {quickActions && quickActions.length > 0 && onExecuteQuickAction && (

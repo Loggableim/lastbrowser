@@ -69,6 +69,8 @@ describe('shortcuts system', () => {
     expect(matchBrowserShortcut({ type: 'keyDown', key: 'h', control: true })).toEqual({ action: 'open-history' });
     expect(matchBrowserShortcut({ type: 'keyDown', key: 'j', control: true })).toEqual({ action: 'open-downloads' });
     expect(matchBrowserShortcut({ type: 'keyDown', key: ',', control: true })).toEqual({ action: 'open-settings' });
+    expect(matchBrowserShortcut({ type: 'keyDown', key: 'x', control: true, shift: true })).toEqual({ action: 'open-extensions' });
+    expect(matchBrowserShortcut({ type: 'keyDown', key: 'X', meta: true, shift: true })).toEqual({ action: 'open-extensions' });
     expect(matchBrowserShortcut({ type: 'keyDown', key: 'b', control: true })).toEqual({ action: 'toggle-sidebar' });
     expect(matchBrowserShortcut({ type: 'keyDown', key: 'F12' })).toEqual({ action: 'toggle-devtools' });
     expect(matchBrowserShortcut({ type: 'keyDown', key: 'i', control: true, shift: true })).toEqual({ action: 'toggle-devtools' });

@@ -58,7 +58,7 @@ const TOOLS_DRAWER_ITEMS: DrawerItem[] = [
   { id: 'terminal', title: 'Terminal', desc: 'Integrierte Entwickler-Shell', iconSrc: brandAssets.sidebarIcons.spark },
   { id: 'gmail', title: 'Gmail AI', desc: 'E-Mail Triage & Entwürfe', iconSrc: brandAssets.sidebarIcons.gmail },
   { id: 'discord', title: 'Discord Agent', desc: 'Community & Bot Moderation', iconSrc: brandAssets.sidebarIcons.discord },
-  { id: 'appstore', title: 'App Store', desc: 'Extensions & Web Apps', iconSrc: brandAssets.sidebarIcons.appstore },
+  { id: 'appstore', title: 'Extension & Skill Hub', desc: 'Chrome MV3 & Nova MCP Skills', iconSrc: brandAssets.sidebarIcons.appstore },
   { id: 'logs', title: 'System Logs', desc: 'Echtzeit-Debugging & Events', iconSrc: brandAssets.sidebarIcons.logs },
   { id: 'settings', title: 'Einstellungen', desc: 'Design, Provider & System', iconSrc: brandAssets.sidebarIcons.settings }
 ];
@@ -667,14 +667,14 @@ export function SidekickSidebar({
                   type="button"
                   className="sidebar-drawer-card"
                   onClick={() => onOpenExtensions ? onOpenExtensions() : undefined}
-                  title="Erweiterungen (Manifest V3)"
+                  title="Unified Extension & Skill Hub (Ctrl+Shift+X)"
                 >
                   <div className="drawer-card-icon-box">
                     <Puzzle size={16} className="drawer-utility-icon" />
                   </div>
                   <div className="drawer-card-text">
-                    <span className="drawer-card-title">Erweiterungen</span>
-                    <span className="drawer-card-desc">Chrome & Manifest V3 Add-ons</span>
+                    <span className="drawer-card-title">Extension & Skill Hub</span>
+                    <span className="drawer-card-desc">Chrome MV3 & Nova MCP Skills</span>
                   </div>
                 </button>
                 <button

@@ -210,6 +210,7 @@ import {
 import { SidekickSidebar } from './components/SidekickSidebar.js';
 import { InPageActionBar } from './components/InPageActionBar.js';
 import { PinnedAppModal } from './components/PinnedAppModal.js';
+import { UnifiedExtensionHub } from './components/UnifiedExtensionHub.js';
 
 import { usePinnedAppStore } from './stores/usePinnedAppStore.js';
 import type { PinnedApp } from './components/PinnedAppGrid.js';
@@ -836,6 +837,9 @@ export function App(): JSX.Element {
           break;
         case 'open-settings':
           setActivePanel('settings');
+          break;
+        case 'open-extensions':
+          usePanelStore.getState().toggleExtensionHub();
           break;
         case 'toggle-sidebar':
           cycleSidebarMode();
@@ -2028,8 +2032,7 @@ export function App(): JSX.Element {
             onToggleDownloads={() => usePanelStore.getState().setDownloadsOpen(!usePanelStore.getState().downloadsOpen)}
             hasActiveDownloads={hasActiveDownloads}
             onToggleExtensions={() => {
-              setActivePanel('settings');
-              setActiveContextItem('extensions');
+              usePanelStore.getState().toggleExtensionHub();
             }}
             copilotOpen={copilotOpen}
             onToggleCopilot={toggleCopilot}
@@ -2037,6 +2040,37 @@ export function App(): JSX.Element {
             quickActions={quickActions}
             onExecuteQuickAction={handleExecuteQuickAction}
             botName={setupState.botName || 'Nova'}
+            topbarActionStrip={
+              activePanel === 'browser' ? (
+                <InPageActionBar
+                  variant="topbar"
+                  busy={sidekickBusy}
+                  onAction={runSidekickAction}
+                  zoomFactor={1}
+                  onResetZoom={() => {
+                    const view = webviewRef.current;
+                    if (view && typeof view.setZoomFactor === 'function') {
+                      view.setZoomFactor(1);
+                    }
+                  }}
+                  onFindOpen={() => usePanelStore.getState().setFindOpen(!usePanelStore.getState().findOpen)}
+                  downloadsOpen={usePanelStore.getState().downloadsOpen}
+                  hasActiveDownloads={hasActiveDownloads}
+                  onToggleDownloads={() => usePanelStore.getState().setDownloadsOpen(!usePanelStore.getState().downloadsOpen)}
+                  historyOpen={usePanelStore.getState().historyOpen}
+                  onToggleHistory={() => usePanelStore.getState().setHistoryOpen(!usePanelStore.getState().historyOpen)}
+                  muted={false}
+                  onToggleMute={() => {
+                    const view = webviewRef.current;
+                    if (view && typeof view.isAudioMuted === 'function' && typeof view.setAudioMuted === 'function') {
+                      view.setAudioMuted(!view.isAudioMuted());
+                    }
+                  }}
+                  dockMode={actionBarDock}
+                  onSetDockMode={setActionBarDock}
+                />
+              ) : undefined
+            }
           >
             {activePanel === 'browser' ? (
               <AddressBar
@@ -2099,8 +2133,7 @@ export function App(): JSX.Element {
               onOpenHistory={() => usePanelStore.getState().setHistoryOpen(true)}
               onOpenDownloads={() => usePanelStore.getState().setDownloadsOpen(true)}
               onOpenExtensions={() => {
-                setActivePanel('settings');
-                setActiveContextItem('extensions');
+                usePanelStore.getState().setExtensionHubOpen(true);
               }}
               onOpenPermissions={() => usePanelStore.getState().setPermissionsOpen(true)}
               onOpenApp={(app, opts) => {
@@ -2915,6 +2948,12 @@ function BrowserMain({
       if ((event.ctrlKey || event.metaKey) && (event.key === 'm' || event.key === 'M')) {
         event.preventDefault();
         toggleMute();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === 'x' || event.key === 'X')) {
+        event.preventDefault();
+        usePanelStore.getState().toggleExtensionHub();
+        return;
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -2932,7 +2971,9 @@ function BrowserMain({
     historyOpen,
     setHistoryOpen,
     permissionsOpen,
-    setPermissionsOpen
+    setPermissionsOpen,
+    extensionHubOpen,
+    setExtensionHubOpen
   } = usePanelStore();
   const [findQuery, setFindQuery] = useState('');
   const [findResult, setFindResult] = useState<{ matches: number; active: number } | null>(null);
@@ -3193,6 +3234,11 @@ function BrowserMain({
         onOpen={(url) => onNavigate(url)}
         onRemove={(url) => onRemoveVisit(url)}
         onClear={() => onClearHistory()}
+      />
+      <UnifiedExtensionHub
+        open={extensionHubOpen}
+        onClose={() => setExtensionHubOpen(false)}
+        activeSpace={activeSpacePath}
       />
       <div className="browser-webview-frame" ref={browserFrameRef}>
         <LiveAutomationBanner webview={webviewRef.current} />

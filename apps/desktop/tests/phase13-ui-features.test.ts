@@ -21,7 +21,7 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
       expect(['tabs', 'ai', 'workflows', 'tools']).toContain(store.sidebarDrawerTab);
 
       expect(store.actionBarDock).toBeDefined();
-      expect(['top-left', 'top-center', 'top-right', 'bottom-center', 'free']).toContain(store.actionBarDock);
+      expect(['topbar', 'sidebar', 'bottom', 'bottom-center', 'top-left', 'top-center', 'top-right', 'free']).toContain(store.actionBarDock);
 
       // Change zen exit mode to expanded
       store.setZenExitDefaultMode('expanded');
@@ -46,6 +46,8 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
       expect(usePanelStore.getState().sidebarDrawerTab).toBe('workflows');
 
       // Test action bar dock
+      store.setActionBarDock('topbar');
+      expect(usePanelStore.getState().actionBarDock).toBe('topbar');
       store.setActionBarDock('top-center');
       expect(usePanelStore.getState().actionBarDock).toBe('top-center');
     });
@@ -124,16 +126,22 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
       expect(source).toContain('onToggleMute');
       expect(source).toContain('action-strip-dock-anchor');
       expect(source).toContain('action-strip-dock-dropdown');
+      expect(source).toContain('topbar');
+      expect(source).toContain('sidebar');
+      expect(source).toContain('bottom');
       expect(source).toContain('top-left');
       expect(source).toContain('top-center');
       expect(source).toContain('top-right');
       expect(source).toContain('bottom-center');
       expect(source).toContain('free');
+      expect(source).toContain('titlebar-research-flyout');
+      expect(source).toContain('titlebar-research-trigger-btn');
     });
 
-    it('integrates InPageActionBar in App.tsx inside BrowserMain', () => {
+    it('integrates InPageActionBar in App.tsx inside BrowserMain and ModernTitlebar', () => {
       const source = readRendererFile('App.tsx');
       expect(source).toContain('<InPageActionBar');
+      expect(source).toContain('variant="topbar"');
       expect(source).toContain('onAction={onAction}');
       expect(source).toContain('dockMode={usePanelStore.getState().actionBarDock}');
     });

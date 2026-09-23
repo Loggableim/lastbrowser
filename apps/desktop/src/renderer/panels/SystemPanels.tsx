@@ -2235,16 +2235,17 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       </div>
                       <div className="settings-dock-buttons-row">
                         {[
+                          { id: 'topbar', label: 'Topleiste (Icon + Ausklapper)' },
+                          { id: 'sidebar', label: 'Seitenmenü' },
+                          { id: 'bottom', label: 'Unten Mitte' },
                           { id: 'top-left', label: 'Oben Links' },
-                          { id: 'top-center', label: 'Oben Mitte' },
                           { id: 'top-right', label: 'Oben Rechts' },
-                          { id: 'bottom-center', label: 'Unten Mitte' },
                           { id: 'free', label: 'Frei schwebend' }
                         ].map((d) => (
                           <button
                             key={d.id}
                             type="button"
-                            className={actionBarDock === d.id ? 'settings-dock-btn active' : 'settings-dock-btn'}
+                            className={actionBarDock === d.id || (d.id === 'bottom' && actionBarDock === 'bottom-center') ? 'settings-dock-btn active' : 'settings-dock-btn'}
                             onClick={() => {
                               const typed = d.id as ActionBarDock;
                               setActionBarDockState(typed);

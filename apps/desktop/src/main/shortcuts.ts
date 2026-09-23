@@ -16,6 +16,7 @@ export type BrowserShortcutAction =
   | 'open-history'
   | 'open-downloads'
   | 'open-settings'
+  | 'open-extensions'
   | 'toggle-sidebar'
   | 'toggle-command-palette'
   | 'toggle-devtools'
@@ -128,6 +129,9 @@ export function matchBrowserShortcut(input: InputLike): BrowserShortcutEvent | n
     }
     if (key === 'Tab') {
       return { action: 'prev-tab' };
+    }
+    if (key === 'x' || key === 'X') {
+      return { action: 'open-extensions' };
     }
   }
 

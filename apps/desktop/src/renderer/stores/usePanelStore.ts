@@ -31,7 +31,15 @@ function clamp(value: number, min: number, max: number): number {
 export type SidebarMode = 'slim' | 'expanded' | 'hidden';
 export type ZenExitDefaultMode = 'slim' | 'expanded';
 export type SidebarDrawerTab = 'tabs' | 'ai' | 'workflows' | 'tools';
-export type ActionBarDock = 'top-left' | 'top-center' | 'top-right' | 'bottom-center' | 'free';
+export type ActionBarDock =
+  | 'topbar'
+  | 'sidebar'
+  | 'bottom'
+  | 'bottom-center'
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'free';
 export type ThemeAccent = 'neon-cyan' | 'electric-violet' | 'emerald-flow' | 'solar-amber' | 'monochrome-slate';
 export type GlassLevel = 'solid' | 'subtle' | 'modern' | 'deep';
 export type UiDensity = 'compact' | 'standard' | 'comfortable';
@@ -56,6 +64,8 @@ export interface PanelState {
   historyOpen: boolean;
   permissionsOpen: boolean;
   commandPaletteOpen: boolean;
+  extensionHubOpen: boolean;
+  extensionHubTab: 'webextensions' | 'skills';
   themeAccent: ThemeAccent;
   glassLevel: GlassLevel;
   uiDensity: UiDensity;
@@ -83,6 +93,9 @@ export interface PanelState {
   setPermissionsOpen(open: boolean): void;
   setCommandPaletteOpen(open: boolean | ((current: boolean) => boolean)): void;
   toggleCommandPalette(): void;
+  setExtensionHubOpen(open: boolean | ((current: boolean) => boolean)): void;
+  toggleExtensionHub(): void;
+  setExtensionHubTab(tab: 'webextensions' | 'skills'): void;
   setThemeAccent(accent: ThemeAccent): void;
   setGlassLevel(level: GlassLevel): void;
   setUiDensity(density: UiDensity): void;
@@ -148,13 +161,22 @@ function loadSidebarDrawerTab(): SidebarDrawerTab {
 function loadActionBarDock(): ActionBarDock {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      const raw = window.localStorage.getItem(actionBarDockStorageKey);
-      if (raw === 'top-left' || raw === 'top-center' || raw === 'top-right' || raw === 'bottom-center' || raw === 'free') return raw;
+      const raw = window.localStorage.getItem(actionBarDockStorageKey) as ActionBarDock;
+      if (
+        raw === 'topbar' ||
+        raw === 'sidebar' ||
+        raw === 'bottom' ||
+        raw === 'bottom-center' ||
+        raw === 'top-left' ||
+        raw === 'top-center' ||
+        raw === 'top-right' ||
+        raw === 'free'
+      ) return raw;
     }
   } catch {
     // ignore
   }
-  return 'top-left';
+  return 'topbar';
 }
 
 function loadThemeAccent(): ThemeAccent {
@@ -245,6 +267,8 @@ export const usePanelStore = create<PanelState>((set) => ({
   historyOpen: false,
   permissionsOpen: false,
   commandPaletteOpen: false,
+  extensionHubOpen: false,
+  extensionHubTab: 'webextensions',
 
   setActivePanel: (activePanel) => {
     saveActivePanel(undefined, activePanel);
@@ -414,6 +438,13 @@ export const usePanelStore = create<PanelState>((set) => ({
     }));
   },
   toggleCommandPalette: () => set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
+  setExtensionHubOpen: (input) => {
+    set((state) => ({
+      extensionHubOpen: typeof input === 'function' ? input(state.extensionHubOpen) : input
+    }));
+  },
+  toggleExtensionHub: () => set((state) => ({ extensionHubOpen: !state.extensionHubOpen })),
+  setExtensionHubTab: (extensionHubTab) => set({ extensionHubTab }),
 
   setThemeAccent: (accent) => {
     try {

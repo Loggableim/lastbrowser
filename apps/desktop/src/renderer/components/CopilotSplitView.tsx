@@ -44,6 +44,9 @@ export interface AvailableModelItem {
   badge: string;
   badgeClass: string;
   isDefault?: boolean;
+  remainingPercent?: number;
+  remainingFraction?: number;
+  account?: string;
 }
 
 export const AVAILABLE_MODELS: AvailableModelItem[] = [
@@ -56,6 +59,38 @@ export const AVAILABLE_MODELS: AvailableModelItem[] = [
     badge: 'Standard • Schnell (CLI)',
     badgeClass: 'gemini',
     isDefault: true
+  },
+  {
+    id: 'gemini-2.5-flash',
+    label: 'Gemini 2.5 Flash',
+    provider: 'Google',
+    category: 'gemini',
+    badge: 'Schnell & Effizient (CLI)',
+    badgeClass: 'gemini'
+  },
+  {
+    id: 'gemini-2.5-pro',
+    label: 'Gemini 2.5 Pro',
+    provider: 'Google',
+    category: 'gemini',
+    badge: 'Ultra Reasoning (CLI)',
+    badgeClass: 'gemini'
+  },
+  {
+    id: 'gemini-3.1-pro-preview',
+    label: 'Gemini 3.1 Pro Preview',
+    provider: 'Google',
+    category: 'gemini',
+    badge: 'Next-Gen Reasoning (CLI)',
+    badgeClass: 'gemini'
+  },
+  {
+    id: 'gemini-3-flash-preview',
+    label: 'Gemini 3 Flash Preview',
+    provider: 'Google',
+    category: 'gemini',
+    badge: 'High-Speed Preview (CLI)',
+    badgeClass: 'gemini'
   },
   {
     id: 'gemini-1.5-pro',
@@ -71,14 +106,6 @@ export const AVAILABLE_MODELS: AvailableModelItem[] = [
     provider: 'Google',
     category: 'gemini',
     badge: 'High-Speed (CLI)',
-    badgeClass: 'gemini'
-  },
-  {
-    id: 'gemini-2.5-pro',
-    label: 'Gemini 2.5 Pro',
-    provider: 'Google',
-    category: 'gemini',
-    badge: 'Ultra Reasoning (CLI)',
     badgeClass: 'gemini'
   },
 
@@ -210,6 +237,67 @@ export function CopilotSplitView({
   const currentGeminiAccount = activeAccount();
   const { selectedModel, setSelectedModel } = useChatStore();
 
+  const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS);
+
+  // Phase 13.6: Dynamic live discovery via /api/models with quota status
+  useEffect(() => {
+    let alive = true;
+    async function loadLiveModels() {
+      try {
+        if (!window?.lastbrowser?.sidekick?.requestWebui) return;
+        const res = (await window.lastbrowser.sidekick.requestWebui({
+          method: 'GET',
+          path: '/api/models'
+        })) as { groups?: Array<{ provider_id?: string; provider?: string; account?: string; models?: Array<any> }> } | null;
+        if (!alive || !res || !Array.isArray(res.groups)) return;
+
+        const dynamicGeminiModels: AvailableModelItem[] = [];
+
+        for (const g of res.groups) {
+          const pid = (g.provider_id || g.provider || '').toLowerCase();
+          const gAccount = g.account || currentGeminiAccount?.email;
+          if (pid.includes('gemini') || pid.includes('google')) {
+            for (const m of g.models || []) {
+              const rawId = String(m.id || '');
+              const cleanId = rawId.startsWith('@') && rawId.includes(':') ? rawId.split(':')[1] : rawId;
+              const pct = typeof m.remaining_percent === 'number' ? m.remaining_percent : undefined;
+              const frac = typeof m.remaining_fraction === 'number' ? m.remaining_fraction : undefined;
+              const account = m.account || gAccount;
+              dynamicGeminiModels.push({
+                id: cleanId,
+                label: m.label || cleanId,
+                provider: 'Google',
+                category: 'gemini',
+                badge: pct !== undefined ? `${pct}% Kontingent verfügbar` : 'Live Quota Discovery',
+                badgeClass: 'gemini',
+                remainingPercent: pct,
+                remainingFraction: frac,
+                account,
+                isDefault: cleanId === 'gemini-3.8-flash' || cleanId === 'gemini-2.5-flash'
+              });
+            }
+          }
+        }
+
+        if (dynamicGeminiModels.length > 0) {
+          setModelList((prev) => {
+            const nonGemini = prev.filter((m) => m.category !== 'gemini');
+            const fallbackRequired = AVAILABLE_MODELS.filter(
+              (req) => req.category === 'gemini' && !dynamicGeminiModels.some((d) => d.id === req.id)
+            );
+            return [...dynamicGeminiModels, ...fallbackRequired, ...nonGemini];
+          });
+        }
+      } catch {
+        // Retain baseline AVAILABLE_MODELS on offline/network errors
+      }
+    }
+    void loadLiveModels();
+    return () => {
+      alive = false;
+    };
+  }, [currentGeminiAccount]);
+
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workflowDropdownRef = useRef<HTMLDivElement | null>(null);
   const modelPickerRef = useRef<HTMLDivElement | null>(null);
@@ -218,14 +306,14 @@ export function CopilotSplitView({
   const activeModelId = selectedModel || modelName;
   const activeModelItem = useMemo(() => {
     return (
-      AVAILABLE_MODELS.find(
+      modelList.find(
         (m) =>
           m.id === activeModelId ||
           m.label.toLowerCase() === activeModelId.toLowerCase() ||
           activeModelId.toLowerCase().includes(m.id.toLowerCase())
-      ) || AVAILABLE_MODELS[0]
+      ) || modelList[0] || AVAILABLE_MODELS[0]
     );
-  }, [activeModelId]);
+  }, [activeModelId, modelList]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -290,6 +378,13 @@ export function CopilotSplitView({
       modelName.toLowerCase().includes(m.id.toLowerCase()) ||
       (m.id === 'gemini-3.8-flash' && modelName.toLowerCase().includes('gemini'));
 
+    const quotaBadge =
+      m.remainingPercent !== undefined ? (
+        <span className={`quota-percent-pill ${m.remainingPercent < 20 ? 'low' : 'ok'}`}>
+          {m.remainingPercent}% Quota
+        </span>
+      ) : null;
+
     return (
       <button
         key={m.id}
@@ -301,8 +396,15 @@ export function CopilotSplitView({
         <div className="model-option-left">
           <span className={`model-provider-badge ${m.badgeClass}`}>{m.provider}</span>
           <div className="model-option-text">
-            <span className="model-option-name">{m.label}</span>
-            <span className="model-option-desc">{m.badge}</span>
+            <div className="model-name-row">
+              <span className="model-option-name">{m.label}</span>
+              {quotaBadge}
+            </div>
+            <span className="model-option-desc">
+              {m.remainingPercent !== undefined
+                ? `${m.remainingPercent}% Kontingent verfügbar${m.account ? ` (${m.account})` : ''}`
+                : m.badge}
+            </span>
           </div>
         </div>
         {isSelected && <Check size={14} className="model-check-icon" />}
@@ -339,25 +441,25 @@ export function CopilotSplitView({
               <span className="account-tag">({currentGeminiAccount.email})</span>
             )}
           </div>
-          {AVAILABLE_MODELS.filter((m) => m.category === 'gemini').map(renderModelItem)}
+          {modelList.filter((m) => m.category === 'gemini').map(renderModelItem)}
 
           {/* 2. Anthropic */}
           <div className="model-group-title">Anthropic</div>
-          {AVAILABLE_MODELS.filter((m) => m.category === 'claude').map(renderModelItem)}
+          {modelList.filter((m) => m.category === 'claude').map(renderModelItem)}
 
           {/* 3. OpenAI */}
           <div className="model-group-title">OpenAI</div>
-          {AVAILABLE_MODELS.filter((m) => m.category === 'openai').map(renderModelItem)}
+          {modelList.filter((m) => m.category === 'openai').map(renderModelItem)}
 
           {/* 4. Lokale Modelle */}
           <div className="model-group-title">Lokale Modelle (Ollama / LocalAI)</div>
-          {AVAILABLE_MODELS.filter((m) => m.category === 'local').map(renderModelItem)}
+          {modelList.filter((m) => m.category === 'local').map(renderModelItem)}
 
           {/* 5. Weitere Engines */}
-          {AVAILABLE_MODELS.some((m) => m.category === 'other') && (
+          {modelList.some((m) => m.category === 'other') && (
             <>
               <div className="model-group-title">Weitere Engines</div>
-              {AVAILABLE_MODELS.filter((m) => m.category === 'other').map(renderModelItem)}
+              {modelList.filter((m) => m.category === 'other').map(renderModelItem)}
             </>
           )}
         </div>

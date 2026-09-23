@@ -295,6 +295,13 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
    - **Ansatz B („Integrated Modular Multi-Tier Sidebar & Workspace HUD“):**
      - Integrierte Drawer-Tabs direkt in der Sidebar (`Tabs`, `AI & Agents`, `Workflows`, `Tools`).
      - Modulare Untermenüs, die sich bei Bedarf andocken oder als Split-View neben der Webseite einblenden lassen.
+3. **Panel-Integrität & Fehlerbehebung (Fix-Plan `AdvancedWebUiTools` in `SystemPanels.tsx`):**
+   - **Fehlerbild:** Beim Aufruf der Panels `insights`, `logs` oder `settings` bricht das Rendering mit `ReferenceError: AdvancedWebUiTools is not defined` ab.
+   - **Ursache:** In `apps/desktop/src/renderer/panels/SystemPanels.tsx` fehlt der Import `import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';`, obwohl die Komponente an drei Stellen (`insights` Z. 380, `logs` Z. 557, `settings` Z. 2872) im JSX gerendert wird. Vite kompiliert ungebundene JSX-Bezeichner standardmäßig ohne Transpilierungsfehler, was erst zur Laufzeit beim Mounten zum Absturz führt.
+   - **Fix-Maßnahme für umsetzenden Agenten:**
+     1. Import `import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';` im Kopf von `apps/desktop/src/renderer/panels/SystemPanels.tsx` einfügen.
+     2. Statischen Import-Integritätscheck in `apps/desktop/tests/browser-layout.test.ts` ergänzen, der automatisiert verifiziert, dass jede Panel-Datei, die `<AdvancedWebUiTools` verwendet, diesen Import auch explizit deklariert.
+     3. Alle 17+ Panels auf sauberes Mounten ohne fehlende/ungebundene Runtime-Variablen prüfen (`npm --workspace apps/desktop run build:renderer` & `npm test`).
 
 ### 13.3 Pinned Apps: Top-64-Katalog & Custom Apps Popup
 1. **Kuratierter App-Katalog (Top 64):**
@@ -464,6 +471,7 @@ Jeder nachfolgende Agent arbeitet nach folgenden Regeln:
 2. **Einklappbarkeit bewahren:** Die Ein-/Ausklapp-Logik der Sidebar niemals entfernen, sondern auf die 3 definierten Modi (Expanded, 48px Slim, Hidden) optimieren.
 3. **Keine Regressionen:** Nach jeder Änderung `npm run test:run` ausführen; alle bestehenden 528+ Tests müssen grün bleiben.
 4. **Unit-Tests für neue UI-Logik:** Neue Komponenten, Workflows und Store-Zustände in `tests/` mit Vitest abdecken.
-5. **Typensicherheit:** `npm run build` (`build:main` und `build:renderer`) müssen 0 TypeScript- und Vite-Fehler aufweisen.
+5. **Typensicherheit & Import-Integrität:** `npm run build` (`build:main` und `build:renderer`) müssen 0 TypeScript- und Vite-Fehler aufweisen. Keine ungebundenen JSX-Komponenten verwenden (jeder verwendete Bezeichner muss explizit importiert sein).
 6. **Dokumentenpflege:** Nach erfolgreicher Umsetzung den Haken in diesem Zielbild (`[x]`) und im Backlog setzen.
+7. **Panel-Integrität:** Beim Bearbeiten oder Refaktorisieren von Panels sicherstellen, dass alle Sub-Komponenten (z. B. `AdvancedWebUiTools`) sauber importiert sind und beim Mounten keine ReferenceErrors werfen.
 

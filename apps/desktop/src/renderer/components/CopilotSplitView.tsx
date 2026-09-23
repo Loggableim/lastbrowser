@@ -434,7 +434,7 @@ export function CopilotSplitView({
   }
 
   return (
-    <aside className="copilot-split-panel" aria-label={`${botName} AI Workspace (Sidekick AI Copilot)`}>
+    <aside className="copilot-split-panel" aria-label={`${botName} AI Workspace`}>
       {/* Top Header */}
       <div className="copilot-header">
         <div className="copilot-header-brand">

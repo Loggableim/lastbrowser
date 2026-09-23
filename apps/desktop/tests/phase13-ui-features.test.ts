@@ -186,5 +186,126 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
       expect(source).toContain('In-Page AI Action Bar Andockung');
       expect(source).toContain('settings-dock-btn');
     });
+
+    it('provides Theme Accents, Glassmorphism, and UI Density settings in SystemPanels.tsx', () => {
+      const source = readRendererFile('panels/SystemPanels.tsx');
+
+      expect(source).toContain('Akzentfarben & Glassmorphism (Phase 13.8)');
+      expect(source).toContain('Neon Cyan');
+      expect(source).toContain('Electric Violet');
+      expect(source).toContain('Emerald Flow');
+      expect(source).toContain('Solar Amber');
+      expect(source).toContain('Monochrome Slate');
+      expect(source).toContain('Solid (Opak)');
+      expect(source).toContain('Subtil (8px)');
+      expect(source).toContain('Modern (16px)');
+      expect(source).toContain('Deep Glass (24px)');
+      expect(source).toContain('settings-accent-btn');
+      expect(source).toContain('setThemeAccent');
+      expect(source).toContain('setGlassLevel');
+      expect(source).toContain('setUiDensity');
+    });
+
+    it('manages themeAccent, glassLevel, and uiDensity state and persistence in usePanelStore', () => {
+      const store = usePanelStore.getState();
+
+      expect(store.themeAccent).toBeDefined();
+      expect(['neon-cyan', 'electric-violet', 'emerald-flow', 'solar-amber', 'monochrome-slate']).toContain(store.themeAccent);
+      expect(store.glassLevel).toBeDefined();
+      expect(['solid', 'subtle', 'modern', 'deep']).toContain(store.glassLevel);
+      expect(store.uiDensity).toBeDefined();
+      expect(['compact', 'standard', 'comfortable']).toContain(store.uiDensity);
+
+      store.setThemeAccent('electric-violet');
+      expect(usePanelStore.getState().themeAccent).toBe('electric-violet');
+
+      store.setGlassLevel('deep');
+      expect(usePanelStore.getState().glassLevel).toBe('deep');
+
+      store.setUiDensity('compact');
+      expect(usePanelStore.getState().uiDensity).toBe('compact');
+    });
+  });
+
+  describe('Panel Synthesis & Zen Workspace Standard (Ansatz B)', () => {
+    it('integrates all 17 panels and browser utilities into SidekickSidebar.tsx', () => {
+      const source = readRendererFile('components/SidekickSidebar.tsx');
+
+      // AI items (chat, agents, skills, memory, profiles)
+      expect(source).toContain('AI_DRAWER_ITEMS');
+      expect(source).toContain("'chat'");
+      expect(source).toContain("'agents'");
+      expect(source).toContain("'skills'");
+      expect(source).toContain("'memory'");
+      expect(source).toContain("'profiles'");
+
+      // Workflow items (kanban, tasks, workspaces, todos, insights)
+      expect(source).toContain('WORKFLOW_DRAWER_ITEMS');
+      expect(source).toContain("'kanban'");
+      expect(source).toContain("'tasks'");
+      expect(source).toContain("'workspaces'");
+      expect(source).toContain("'todos'");
+      expect(source).toContain("'insights'");
+
+      // Tools items (browser, terminal, gmail, discord, appstore, logs, settings)
+      expect(source).toContain('TOOLS_DRAWER_ITEMS');
+      expect(source).toContain("'browser'");
+      expect(source).toContain("'terminal'");
+      expect(source).toContain("'gmail'");
+      expect(source).toContain("'discord'");
+      expect(source).toContain("'appstore'");
+      expect(source).toContain("'logs'");
+      expect(source).toContain("'settings'");
+
+      // Browser utilities
+      expect(source).toContain('BROWSER UTILITIES');
+      expect(source).toContain('onOpenDownloads');
+      expect(source).toContain('onOpenHistory');
+      expect(source).toContain('onOpenExtensions');
+      expect(source).toContain('onOpenPermissions');
+    });
+
+    it('renders modern titlebar tool banner in App.tsx when non-browser panel is active', () => {
+      const source = readRendererFile('App.tsx');
+      expect(source).toContain('modern-titlebar-tool-banner');
+      expect(source).toContain('modern-back-to-web-btn');
+      expect(source).toContain('modern-tool-active-badge');
+      expect(source).toContain('Zurück zum Web');
+      expect(source).toContain("const isModernBrowser = layoutMode === 'modern';");
+    });
+  });
+
+  describe('Nova AI Clean Re-branding', () => {
+    it('uses Nova AI branding across CommandPalette, CopilotSplitView, and Startpage', () => {
+      const cmdPalette = readRendererFile('components/CommandPalette.tsx');
+      expect(cmdPalette).toContain("category: 'Nova AI'");
+      expect(cmdPalette).toContain('Nova: Neuer Chat');
+      expect(cmdPalette).not.toContain("category: 'Sidekick AI'");
+
+      const copilot = readRendererFile('components/CopilotSplitView.tsx');
+      expect(copilot).not.toContain('(Sidekick AI Copilot)');
+
+      const startPage = readRendererFile('panels/NativeBrowserStartPage.tsx');
+      expect(startPage).toContain('Nova AI Copilot');
+      expect(startPage).toContain('Frag Nova');
+      expect(startPage).toContain('Nova Schnellaktionen');
+      expect(startPage).not.toContain('Sidekick AI Copilot');
+    });
+  });
+
+  describe('CSS Variables for Modern Appearance', () => {
+    it('defines CSS variables for theme accents, glass levels, and UI density in styles.css', () => {
+      const css = readRendererFile('styles.css');
+
+      expect(css).toContain('[data-theme-accent="neon-cyan"]');
+      expect(css).toContain('[data-theme-accent="electric-violet"]');
+      expect(css).toContain('[data-theme-accent="emerald-flow"]');
+      expect(css).toContain('[data-glass-level="solid"]');
+      expect(css).toContain('[data-glass-level="deep"]');
+      expect(css).toContain('[data-ui-density="compact"]');
+      expect(css).toContain('.modern-titlebar-tool-banner');
+      expect(css).toContain('.settings-accent-palette');
+      expect(css).toContain('.settings-accent-btn');
+    });
   });
 });

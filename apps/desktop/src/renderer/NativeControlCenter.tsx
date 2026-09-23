@@ -148,7 +148,7 @@ export function ControlCenter({
             {tab === 'import' && (
               <div className="control-center-tab-content">
                 <h3>Import Session</h3>
-                <p>Upload a JSON file exported from the Hermes WebUI.</p>
+                <p>Upload a JSON file exported from a previous session backup.</p>
                 <input ref={importInputRef} type="file" accept=".json,.md" className="control-center-file-input" />
                 <button type="button" className="primary-action compact" onClick={handleImport} disabled={!ready || importing}>
                   {importing ? <Loader2 size={15} className="spin" /> : <Upload size={15} />}

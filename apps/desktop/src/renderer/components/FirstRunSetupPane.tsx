@@ -351,7 +351,7 @@ export function FirstRunSetupPane({
                   type="text"
                   value={botName}
                   onChange={(e) => setBotName(e.target.value)}
-                  placeholder="z. B. Nova, Sidekick, Hermes..."
+                  placeholder="z. B. Nova, Jarvis, Aura..."
                   maxLength={32}
                   className="assistant-name-input"
                 />

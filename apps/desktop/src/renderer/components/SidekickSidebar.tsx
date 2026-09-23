@@ -2,16 +2,20 @@ import React, { useState } from 'react';
 import {
   Bell,
   ChevronDown,
+  Download,
   EyeOff,
   Globe2,
   HelpCircle,
+  History,
   Layers,
   Loader2,
   Menu,
   Moon,
   PanelLeftClose,
   Plus,
+  Puzzle,
   Settings,
+  ShieldCheck,
   Sparkles,
   Volume2,
   VolumeX,
@@ -78,6 +82,9 @@ export interface SidekickSidebarProps {
   onSelectSpace: (path: string) => void;
   onOpenSettings: () => void;
   onOpenHistory?: () => void;
+  onOpenDownloads?: () => void;
+  onOpenExtensions?: () => void;
+  onOpenPermissions?: () => void;
   onOpenApp: (app: PinnedApp, options?: { newTab?: boolean }) => void;
   onAddPinnedApp?: () => void;
   onEditPinnedApp?: (app: PinnedApp) => void;
@@ -118,6 +125,9 @@ export function SidekickSidebar({
   onSelectSpace,
   onOpenSettings,
   onOpenHistory,
+  onOpenDownloads,
+  onOpenExtensions,
+  onOpenPermissions,
   onOpenApp,
   onAddPinnedApp,
   onEditPinnedApp,
@@ -546,6 +556,66 @@ export function SidekickSidebar({
                     </button>
                   );
                 })}
+              </div>
+
+              <div className="drawer-section-title" style={{ marginTop: 14 }}>BROWSER UTILITIES</div>
+              <div className="drawer-cards-list">
+                <button
+                  type="button"
+                  className="sidebar-drawer-card"
+                  onClick={() => onOpenDownloads ? onOpenDownloads() : undefined}
+                  title="Downloads-Manager (Ctrl+J)"
+                >
+                  <div className="drawer-card-icon-box">
+                    <Download size={16} className="drawer-utility-icon" />
+                  </div>
+                  <div className="drawer-card-text">
+                    <span className="drawer-card-title">Downloads</span>
+                    <span className="drawer-card-desc">Aktive und beendete Downloads</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-drawer-card"
+                  onClick={() => onOpenHistory ? onOpenHistory() : undefined}
+                  title="Verlauf & Chronik"
+                >
+                  <div className="drawer-card-icon-box">
+                    <History size={16} className="drawer-utility-icon" />
+                  </div>
+                  <div className="drawer-card-text">
+                    <span className="drawer-card-title">Verlauf</span>
+                    <span className="drawer-card-desc">Chronik und besuchte Webseiten</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-drawer-card"
+                  onClick={() => onOpenExtensions ? onOpenExtensions() : undefined}
+                  title="Erweiterungen (Manifest V3)"
+                >
+                  <div className="drawer-card-icon-box">
+                    <Puzzle size={16} className="drawer-utility-icon" />
+                  </div>
+                  <div className="drawer-card-text">
+                    <span className="drawer-card-title">Erweiterungen</span>
+                    <span className="drawer-card-desc">Chrome & Manifest V3 Add-ons</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-drawer-card"
+                  onClick={() => onOpenPermissions ? onOpenPermissions() : undefined}
+                  title="Website-Berechtigungen"
+                >
+                  <div className="drawer-card-icon-box">
+                    <ShieldCheck size={16} className="drawer-utility-icon" />
+                  </div>
+                  <div className="drawer-card-text">
+                    <span className="drawer-card-title">Berechtigungen</span>
+                    <span className="drawer-card-desc">Kamera, Mikrofon & Seitenrechte</span>
+                  </div>
+                </button>
               </div>
             </div>
           )}

@@ -54,7 +54,7 @@ export interface CommandItem {
   id: string;
   title: string;
   description?: string;
-  category: 'Sidekick AI' | 'Tabs' | 'Navigation' | 'System' | 'Offene Tabs' | 'Workflows' | 'Apps';
+  category: 'Nova AI' | 'Tabs' | 'Navigation' | 'System' | 'Offene Tabs' | 'Workflows' | 'Apps';
   icon: React.ReactNode;
   shortcut?: string;
   keywords?: string[];
@@ -105,12 +105,12 @@ export function CommandPalette(): JSX.Element | null {
   // Build command catalog
   const staticCommands = useMemo<CommandItem[]>(() => {
     const cmds: CommandItem[] = [
-      // --- Sidekick AI ---
+      // --- Nova AI ---
       {
         id: 'sidekick-chat',
-        title: 'Sidekick: Neuer Chat',
+        title: 'Nova: Neuer Chat',
         description: 'Öffnet den KI-Chat-Arbeitsbereich',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Sparkles size={16} />,
         keywords: ['ai', 'chat', 'sidekick', 'gpt', 'claude', 'gemini', 'frage', 'dialog'],
         action: () => {
@@ -121,7 +121,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'ai-discover-form',
         title: 'KI-Assistent: Formularfelder analysieren',
         description: 'Scannt alle Formularfelder, Eingaben und Submit-Buttons der aktuellen Seite',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Sparkles size={16} />,
         keywords: ['formular', 'form', 'felder', 'inputs', 'ausfüllen', 'analyse', 'autofill'],
         action: () => {
@@ -133,7 +133,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'ai-paginate',
         title: 'KI-Assistent: Nächste Seite aufrufen (Paginieren)',
         description: 'Findet den nächsten Seitenlink und blättert live mit visuellem Marker weiter',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <ExternalLink size={16} />,
         keywords: ['paginieren', 'weiter', 'nächste seite', 'next', 'pagination', 'blättern'],
         action: () => {
@@ -145,7 +145,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'ai-abort-automation',
         title: 'KI-Assistent: Automatisierung abbrechen',
         description: 'Bricht jede laufende Live-Aktion sofort ab und entfernt visuelle Marker',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <X size={16} />,
         shortcut: 'Esc',
         keywords: ['abbrechen', 'stop', 'abort', 'cancel', 'halt'],
@@ -158,7 +158,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-doctor',
         title: 'Doctor: Systemdiagnose ausführen',
         description: 'Prüft Status aller KI-Runtimes, Profile und Services',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Cpu size={16} />,
         keywords: ['doctor', 'health', 'diagnose', 'system', 'check', 'status', 'prüfen'],
         action: () => {
@@ -169,7 +169,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-supermemory',
         title: 'Supermemory: Reindizieren & Suchen',
         description: 'Verwaltet Fakten, Kontext und Langzeitgedächtnis',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Database size={16} />,
         keywords: ['memory', 'gedächtnis', 'supermemory', 'fakten', 'kontext', 'vektor'],
         action: () => {
@@ -180,7 +180,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-profiles',
         title: 'Profil wechseln / Profile verwalten',
         description: 'Wechselt Identitäten, isolierte Cookies und Profile',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Users size={16} />,
         keywords: ['profil', 'profile', 'identität', 'user', 'persona', 'account'],
         action: () => {
@@ -191,7 +191,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-models',
         title: 'Modell & Provider konfigurieren',
         description: 'Öffnet KI-Modellauswahl (Claude, OpenAI, Gemini, Ollama)',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Bot size={16} />,
         keywords: ['modell', 'model', 'provider', 'ollama', 'anthropic', 'openai', 'gemini', 'openrouter'],
         action: () => {
@@ -202,7 +202,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-google-accounts',
         title: 'Google Accounts & Round-Robin verwalten',
         description: 'Multi-Account OAuth für Google Gemini CLI (Antigravity) konfigurieren',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Users size={16} />,
         keywords: ['google', 'account', 'oauth', 'round-robin', 'gemini', 'gravity', 'antigravity', 'token', 'verbrauch'],
         action: () => {
@@ -214,7 +214,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-gemini-cli-flash-38',
         title: 'Modell: Gemini 3.8 Flash (Google CLI / Antigravity - Standard)',
         description: 'Neuestes Standardmodell von Google mit extrem hoher Geschwindigkeit & 1M Kontext',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Zap size={16} />,
         keywords: ['gemini', '3.8', 'flash', 'google', 'cli', 'antigravity', 'gravity', 'modell', 'default', 'standard'],
         action: () => {
@@ -225,7 +225,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-gemini-cli-flash',
         title: 'Modell: Gemini 2.5 Flash (Google CLI / Antigravity)',
         description: 'Schnelles KI-Modell mit Google OAuth & 1M Token Kontext',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Zap size={16} />,
         keywords: ['gemini', 'flash', 'google', 'cli', 'antigravity', 'gravity', 'modell'],
         action: () => {
@@ -236,7 +236,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-gemini-cli-pro',
         title: 'Modell: Gemini 2.5 Pro (Google CLI / Antigravity)',
         description: 'Tiefes Reasoning & komplexes Coding mit Google OAuth',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Bot size={16} />,
         keywords: ['gemini', 'pro', 'google', 'cli', 'antigravity', 'gravity', 'reasoning', 'modell'],
         action: () => {
@@ -247,7 +247,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-gemini-round-robin-toggle',
         title: 'Google Round-Robin: Token-Rotation umschalten',
         description: 'Gleichmäßigen Tokenverbrauch über alle Google-Konten ein-/ausschalten',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Shuffle size={16} />,
         keywords: ['round-robin', 'google', 'rotation', 'token', 'balance', 'wechseln'],
         action: () => {
@@ -259,7 +259,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-gemini-round-robin-next',
         title: 'Google Round-Robin: Nächstes Konto aktivieren',
         description: 'Sofort zum nächsten verbundenen Google-Konto rotieren',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <RefreshCw size={16} />,
         keywords: ['round-robin', 'nächstes', 'konto', 'account', 'wechseln', 'rotieren'],
         action: () => {
@@ -270,7 +270,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-terminal',
         title: 'TUI / Terminal öffnen',
         description: 'Integriertes Developer-Terminal und Shell starten',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Terminal size={16} />,
         keywords: ['terminal', 'tui', 'shell', 'bash', 'cmd', 'powershell', 'cli'],
         action: () => {
@@ -281,7 +281,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-agents',
         title: 'Agenten Dashboard anzeigen',
         description: 'Autonome Hintergrund-Agenten und Aufgaben steuern',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Bot size={16} />,
         keywords: ['agent', 'agenten', 'worker', 'subagent', 'aufgaben', 'bot'],
         action: () => {
@@ -292,7 +292,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-skills',
         title: 'Skills verwalten & bearbeiten',
         description: 'Agent Skills, Tool-Integrationen und Workflows anpassen',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Puzzle size={16} />,
         keywords: ['skill', 'fähigkeiten', 'mcp', 'tools', 'werkzeuge'],
         action: () => {
@@ -303,7 +303,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-kanban',
         title: 'Kanban Board öffnen',
         description: 'Aufgaben-Pipeline und Projekt-Board ansehen',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Kanban size={16} />,
         keywords: ['kanban', 'tasks', 'board', 'aufgaben', 'triage', 'todo'],
         action: () => {
@@ -314,7 +314,7 @@ export function CommandPalette(): JSX.Element | null {
         id: 'sidekick-workspaces',
         title: 'Workspaces & Spaces durchsuchen',
         description: 'Lokale Verzeichnisse, Projekte und Arbeitsbereiche öffnen',
-        category: 'Sidekick AI',
+        category: 'Nova AI',
         icon: <Folder size={16} />,
         keywords: ['workspace', 'spaces', 'verzeichnis', 'projekt', 'dateien'],
         action: () => {

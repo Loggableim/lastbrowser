@@ -13057,6 +13057,177 @@ body.sidebar-resizing * {
   color: #00e5ff;
 }
 
+/* ─── Phase 13.8: Theme Accents, Glassmorphism & UI Density ────────────────── */
+:root {
+  --accent-primary: #00d9ff;
+  --accent-glow: rgba(0, 217, 255, 0.4);
+  --glass-blur: 16px;
+  --glass-bg-opacity: 0.72;
+  --titlebar-height: 42px;
+  --dock-width: 48px;
+}
+
+[data-theme-accent="neon-cyan"] {
+  --accent-primary: #00d9ff;
+  --accent-glow: rgba(0, 217, 255, 0.4);
+}
+
+[data-theme-accent="electric-violet"] {
+  --accent-primary: #a855f7;
+  --accent-glow: rgba(168, 85, 247, 0.4);
+}
+
+[data-theme-accent="emerald-flow"] {
+  --accent-primary: #10b981;
+  --accent-glow: rgba(16, 185, 129, 0.4);
+}
+
+[data-theme-accent="solar-amber"] {
+  --accent-primary: #f59e0b;
+  --accent-glow: rgba(245, 158, 11, 0.4);
+}
+
+[data-theme-accent="monochrome-slate"] {
+  --accent-primary: #94a3b8;
+  --accent-glow: rgba(148, 163, 184, 0.4);
+}
+
+[data-glass-level="solid"] {
+  --glass-blur: 0px;
+  --glass-bg-opacity: 0.98;
+}
+
+[data-glass-level="subtle"] {
+  --glass-blur: 8px;
+  --glass-bg-opacity: 0.88;
+}
+
+[data-glass-level="modern"] {
+  --glass-blur: 16px;
+  --glass-bg-opacity: 0.72;
+}
+
+[data-glass-level="deep"] {
+  --glass-blur: 24px;
+  --glass-bg-opacity: 0.52;
+}
+
+[data-ui-density="compact"] {
+  --titlebar-height: 36px;
+  --dock-width: 40px;
+}
+
+[data-ui-density="standard"] {
+  --titlebar-height: 42px;
+  --dock-width: 48px;
+}
+
+[data-ui-density="comfortable"] {
+  --titlebar-height: 48px;
+  --dock-width: 56px;
+}
+
+/* Modern Titlebar Tool Banner (for non-browser panels in Zen workspace) */
+.modern-titlebar-tool-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  max-width: 620px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 3px 8px;
+  backdrop-filter: blur(12px);
+}
+
+.modern-back-to-web-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.modern-back-to-web-btn:hover {
+  background: rgba(0, 217, 255, 0.18);
+  border-color: rgba(0, 217, 255, 0.4);
+  color: var(--accent-primary, #00d9ff);
+}
+
+.modern-tool-active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.modern-tool-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-primary, #00d9ff);
+  box-shadow: 0 0 8px var(--accent-glow, rgba(0, 217, 255, 0.4));
+}
+
+/* Appearance Settings Controls */
+.settings-modern-appearance-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-accent-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-accent-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.45);
+  color: rgba(226, 232, 240, 0.85);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.settings-accent-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.settings-accent-btn.active {
+  border-color: var(--accent-primary, #00d9ff);
+  background: rgba(0, 217, 255, 0.12);
+  color: #ffffff;
+  box-shadow: 0 0 12px var(--accent-glow, rgba(0, 217, 255, 0.3));
+}
+
+.accent-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
 
 
 

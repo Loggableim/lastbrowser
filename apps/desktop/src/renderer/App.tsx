@@ -1996,7 +1996,7 @@ export function App(): JSX.Element {
     });
   }, [activeTab, setCopilotOpen, startNativeChat]);
 
-  const isModernBrowser = layoutMode === 'modern' && activePanel === 'browser';
+  const isModernBrowser = layoutMode === 'modern';
 
   return (
     <DesktopI18nProvider>
@@ -2038,18 +2038,38 @@ export function App(): JSX.Element {
             onExecuteQuickAction={handleExecuteQuickAction}
             botName={setupState.botName || 'Nova'}
           >
-            <AddressBar
-              value={addressValue}
-              onChange={setAddressValue}
-              onSubmit={navigate}
-              bookmarks={bookmarks}
-              visits={visitedSites}
-              searchEngineId={searchEngineId}
-              activeBookmarkable={activeBookmarkable}
-              activeBookmarked={activeBookmarked}
-              onToggleBookmark={toggleActiveBookmark}
-              inputRef={addressInputRef}
-            />
+            {activePanel === 'browser' ? (
+              <AddressBar
+                value={addressValue}
+                onChange={setAddressValue}
+                onSubmit={navigate}
+                bookmarks={bookmarks}
+                visits={visitedSites}
+                searchEngineId={searchEngineId}
+                activeBookmarkable={activeBookmarkable}
+                activeBookmarked={activeBookmarked}
+                onToggleBookmark={toggleActiveBookmark}
+                inputRef={addressInputRef}
+              />
+            ) : (
+              <div className="modern-titlebar-tool-banner">
+                <button
+                  type="button"
+                  className="modern-back-to-web-btn"
+                  onClick={() => setActivePanel('browser')}
+                  title="Zurück zum Web-Browser (Tabs)"
+                >
+                  <ChevronLeft size={14} />
+                  <span>Zurück zum Web</span>
+                </button>
+                <div className="modern-tool-active-badge">
+                  <span className="modern-tool-dot" />
+                  <span className="modern-tool-title">
+                    {lastbrowserPanels.find((p) => p.id === activePanel)?.label || activePanel}
+                  </span>
+                </div>
+              </div>
+            )}
           </ModernTitlebar>
 
           <div className={`browser-zen-workspace mode-${sidebarMode}`}>
@@ -2077,6 +2097,12 @@ export function App(): JSX.Element {
               onSelectSpace={setActiveSpacePath}
               onOpenSettings={() => setActivePanel('settings')}
               onOpenHistory={() => usePanelStore.getState().setHistoryOpen(true)}
+              onOpenDownloads={() => usePanelStore.getState().setDownloadsOpen(true)}
+              onOpenExtensions={() => {
+                setActivePanel('settings');
+                setActiveContextItem('extensions');
+              }}
+              onOpenPermissions={() => usePanelStore.getState().setPermissionsOpen(true)}
               onOpenApp={(app, opts) => {
                 if (app.panel) {
                   setActivePanel(app.panel);

@@ -179,7 +179,7 @@ export function NativeBrowserStartPage({
         <div className="startpage-hero-aside">
           <div className="browser-start-badge">
             <Sparkles size={14} />
-            <span>Sidekick AI Copilot</span>
+            <span>Nova AI Copilot</span>
           </div>
           <button
             type="button"
@@ -198,7 +198,7 @@ export function NativeBrowserStartPage({
         <Search size={18} />
         <input
           value={query}
-          placeholder="Web-Adresse eingeben oder Frage an Sidekick richten..."
+          placeholder="Web-Adresse eingeben oder Frage an Nova richten..."
           onChange={(event) => setQuery(event.target.value)}
           data-testid="dashboard-search-input"
         />
@@ -208,10 +208,10 @@ export function NativeBrowserStartPage({
             className="secondary-action compact startpage-ask-ai-btn"
             disabled={!query.trim()}
             onClick={handleAskAi}
-            title="Frage an Sidekick AI Copilot senden"
+            title="Frage an Nova AI Copilot senden"
           >
             <Bot size={15} />
-            <span>Frag Sidekick</span>
+            <span>Frag Nova</span>
           </button>
           <button type="submit" className="primary-action compact" disabled={!query.trim()}>
             <Globe2 size={15} />
@@ -221,7 +221,7 @@ export function NativeBrowserStartPage({
       </form>
 
       {/* Quick Action Chips */}
-      <div className="startpage-quick-chips" aria-label="Sidekick Schnellaktionen">
+      <div className="startpage-quick-chips" aria-label="Nova Schnellaktionen">
         <span className="quick-chips-label">
           <Wand2 size={13} />
           <span>Schnellaktionen:</span>

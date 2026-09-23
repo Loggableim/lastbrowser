@@ -37,8 +37,14 @@ import { cloudProviderOptions, type OnboardingStatus, type ProviderOption } from
 import { providerPresentation } from '../provider-presentation.js';
 import { searchEngines } from '../tabs.js';
 import { type ExtensionRecord, type ExtensionPreset } from '../bridge.js';
-import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
-import { usePanelStore, type ZenExitDefaultMode, type ActionBarDock } from '../stores/usePanelStore.js';
+import {
+  usePanelStore,
+  type ZenExitDefaultMode,
+  type ActionBarDock,
+  type ThemeAccent,
+  type GlassLevel,
+  type UiDensity
+} from '../stores/usePanelStore.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -1743,6 +1749,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     return 'top-left';
   });
 
+  const themeAccent = usePanelStore((s) => s.themeAccent);
+  const glassLevel = usePanelStore((s) => s.glassLevel);
+  const uiDensity = usePanelStore((s) => s.uiDensity);
+
   const [defaultBrowserStatus, setDefaultBrowserStatus] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -1832,7 +1842,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         ...settings,
         ...draft
       });
-      payload.bot_name = settingsText(payload.bot_name, 'Hermes').trim() || 'Hermes';
+      payload.bot_name = settingsText(payload.bot_name, 'Nova').trim() || 'Nova';
       if (passwordDraft.trim()) {
         payload._set_password = passwordDraft.trim();
       }
@@ -2141,7 +2151,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       <input value={settingsText(draft.profile ?? settings.profile, '')} onChange={(event) => updateDraftField('profile', event.target.value)} placeholder="default" />
                     </SettingsField>
                     <SettingsField label="Assistant name" description="Display name across the UI.">
-                      <input value={settingsText(draft.bot_name ?? settings.bot_name, 'Hermes')} onChange={(event) => updateDraftField('bot_name', event.target.value)} placeholder="Hermes" />
+                      <input value={settingsText(draft.bot_name ?? settings.bot_name, 'Nova')} onChange={(event) => updateDraftField('bot_name', event.target.value)} placeholder="Nova" />
                     </SettingsField>
                   </div>
                 </SettingsCard>
@@ -2241,6 +2251,87 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                             }}
                           >
                             {d.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </SettingsCard>
+
+                <SettingsCard title="Akzentfarben & Glassmorphism (Phase 13.8)" description="Wähle dein bevorzugtes Farbschema, den Unschärfe-Grad der Oberflächen und die visuelle Dichte.">
+                  <div className="settings-modern-appearance-grid">
+                    {/* Theme Accents */}
+                    <div className="settings-field-row">
+                      <div className="settings-field-info">
+                        <strong>Farben-Akzent (Neon / Minimal)</strong>
+                        <small>Steuert Primär-Highlights, Icons, Status-Glow und Cursor.</small>
+                      </div>
+                      <div className="settings-accent-palette">
+                        {[
+                          { id: 'neon-cyan', name: 'Neon Cyan', color: '#00d9ff' },
+                          { id: 'electric-violet', name: 'Electric Violet', color: '#a855f7' },
+                          { id: 'emerald-flow', name: 'Emerald Flow', color: '#10b981' },
+                          { id: 'solar-amber', name: 'Solar Amber', color: '#f59e0b' },
+                          { id: 'monochrome-slate', name: 'Monochrome Slate', color: '#94a3b8' }
+                        ].map((acc) => (
+                          <button
+                            key={acc.id}
+                            type="button"
+                            className={`settings-accent-btn ${themeAccent === acc.id ? 'active' : ''}`}
+                            onClick={() => usePanelStore.getState().setThemeAccent(acc.id as ThemeAccent)}
+                            title={acc.name}
+                          >
+                            <span className="accent-swatch" style={{ background: acc.color, boxShadow: `0 0 10px ${acc.color}66` }} />
+                            <span>{acc.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Glassmorphism Levels */}
+                    <div className="settings-field-row">
+                      <div className="settings-field-info">
+                        <strong>Glassmorphism & Frosted Blur</strong>
+                        <small>Transparenz- und Blur-Effekte der Titelleiste, Seitenleiste und Drawer.</small>
+                      </div>
+                      <div className="settings-segmented-group">
+                        {[
+                          { id: 'solid', label: 'Solid (Opak)' },
+                          { id: 'subtle', label: 'Subtil (8px)' },
+                          { id: 'modern', label: 'Modern (16px)' },
+                          { id: 'deep', label: 'Deep Glass (24px)' }
+                        ].map((gl) => (
+                          <button
+                            key={gl.id}
+                            type="button"
+                            className={`settings-seg-btn ${glassLevel === gl.id ? 'active' : ''}`}
+                            onClick={() => usePanelStore.getState().setGlassLevel(gl.id as GlassLevel)}
+                          >
+                            {gl.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* UI Density */}
+                    <div className="settings-field-row">
+                      <div className="settings-field-info">
+                        <strong>UI Dichte (Kompaktheit)</strong>
+                        <small>Höhe der Navigation, Abstände in der Tab-Leiste und Icon-Raster.</small>
+                      </div>
+                      <div className="settings-segmented-group">
+                        {[
+                          { id: 'compact', label: 'Kompakt' },
+                          { id: 'standard', label: 'Standard' },
+                          { id: 'comfortable', label: 'Großzügig' }
+                        ].map((den) => (
+                          <button
+                            key={den.id}
+                            type="button"
+                            className={`settings-seg-btn ${uiDensity === den.id ? 'active' : ''}`}
+                            onClick={() => usePanelStore.getState().setUiDensity(den.id as UiDensity)}
+                          >
+                            {den.label}
                           </button>
                         ))}
                       </div>

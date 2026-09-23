@@ -32,6 +32,9 @@ export type SidebarMode = 'slim' | 'expanded' | 'hidden';
 export type ZenExitDefaultMode = 'slim' | 'expanded';
 export type SidebarDrawerTab = 'tabs' | 'ai' | 'workflows' | 'tools';
 export type ActionBarDock = 'top-left' | 'top-center' | 'top-right' | 'bottom-center' | 'free';
+export type ThemeAccent = 'neon-cyan' | 'electric-violet' | 'emerald-flow' | 'solar-amber' | 'monochrome-slate';
+export type GlassLevel = 'solid' | 'subtle' | 'modern' | 'deep';
+export type UiDensity = 'compact' | 'standard' | 'comfortable';
 
 export interface PanelState {
   activePanel: LastbrowserPanelId;
@@ -53,6 +56,9 @@ export interface PanelState {
   historyOpen: boolean;
   permissionsOpen: boolean;
   commandPaletteOpen: boolean;
+  themeAccent: ThemeAccent;
+  glassLevel: GlassLevel;
+  uiDensity: UiDensity;
 
   setActivePanel(panel: LastbrowserPanelId): void;
   setLeftSidebarCollapsed(collapsed: boolean | ((current: boolean) => boolean)): void;
@@ -77,6 +83,9 @@ export interface PanelState {
   setPermissionsOpen(open: boolean): void;
   setCommandPaletteOpen(open: boolean | ((current: boolean) => boolean)): void;
   toggleCommandPalette(): void;
+  setThemeAccent(accent: ThemeAccent): void;
+  setGlassLevel(level: GlassLevel): void;
+  setUiDensity(density: UiDensity): void;
 }
 
 export const sidebarModeStorageKey = 'lastbrowser.sidebarMode.v1';
@@ -84,6 +93,9 @@ export const copilotOpenStorageKey = 'lastbrowser.copilotOpen.v1';
 export const zenExitDefaultModeStorageKey = 'lastbrowser.zenExitDefaultMode.v1';
 export const sidebarDrawerTabStorageKey = 'lastbrowser.sidebarDrawerTab.v1';
 export const actionBarDockStorageKey = 'lastbrowser.actionBarDock.v1';
+export const themeAccentStorageKey = 'lastbrowser.themeAccent.v1';
+export const glassLevelStorageKey = 'lastbrowser.glassLevel.v1';
+export const uiDensityStorageKey = 'lastbrowser.uiDensity.v1';
 
 function loadSidebarMode(): SidebarMode {
   try {
@@ -145,6 +157,55 @@ function loadActionBarDock(): ActionBarDock {
   return 'top-left';
 }
 
+function loadThemeAccent(): ThemeAccent {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(themeAccentStorageKey);
+      if (raw === 'neon-cyan' || raw === 'electric-violet' || raw === 'emerald-flow' || raw === 'solar-amber' || raw === 'monochrome-slate') return raw;
+    }
+  } catch {
+    // ignore
+  }
+  return 'neon-cyan';
+}
+
+function loadGlassLevel(): GlassLevel {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(glassLevelStorageKey);
+      if (raw === 'solid' || raw === 'subtle' || raw === 'modern' || raw === 'deep') return raw;
+    }
+  } catch {
+    // ignore
+  }
+  return 'modern';
+}
+
+function loadUiDensity(): UiDensity {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(uiDensityStorageKey);
+      if (raw === 'compact' || raw === 'standard' || raw === 'comfortable') return raw;
+    }
+  } catch {
+    // ignore
+  }
+  return 'standard';
+}
+
+function syncAppearanceToDom(accent: ThemeAccent, glass: GlassLevel, density: UiDensity): void {
+  if (typeof document !== 'undefined' && document.documentElement) {
+    document.documentElement.dataset.themeAccent = accent;
+    document.documentElement.dataset.glassLevel = glass;
+    document.documentElement.dataset.uiDensity = density;
+  }
+}
+
+const initialThemeAccent = loadThemeAccent();
+const initialGlassLevel = loadGlassLevel();
+const initialUiDensity = loadUiDensity();
+syncAppearanceToDom(initialThemeAccent, initialGlassLevel, initialUiDensity);
+
 export const usePanelStore = create<PanelState>((set) => ({
   activePanel: loadInitialPanel(),
   leftSidebarCollapsed: loadBooleanPreference(undefined, leftSidebarCollapsedStorageKey, false),
@@ -153,6 +214,9 @@ export const usePanelStore = create<PanelState>((set) => ({
   sidebarDrawerTab: loadSidebarDrawerTab(),
   actionBarDock: loadActionBarDock(),
   copilotOpen: loadCopilotOpen(),
+  themeAccent: initialThemeAccent,
+  glassLevel: initialGlassLevel,
+  uiDensity: initialUiDensity,
   contextSidebarCollapsed: false,
   contextSidebarWidth: loadNumericPreference(
     undefined,
@@ -349,5 +413,47 @@ export const usePanelStore = create<PanelState>((set) => ({
       commandPaletteOpen: typeof input === 'function' ? input(state.commandPaletteOpen) : input
     }));
   },
-  toggleCommandPalette: () => set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen }))
+  toggleCommandPalette: () => set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
+
+  setThemeAccent: (accent) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(themeAccentStorageKey, accent);
+      }
+    } catch {
+      // ignore
+    }
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.dataset.themeAccent = accent;
+    }
+    set({ themeAccent: accent });
+  },
+
+  setGlassLevel: (glassLevel) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(glassLevelStorageKey, glassLevel);
+      }
+    } catch {
+      // ignore
+    }
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.dataset.glassLevel = glassLevel;
+    }
+    set({ glassLevel });
+  },
+
+  setUiDensity: (uiDensity) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(uiDensityStorageKey, uiDensity);
+      }
+    } catch {
+      // ignore
+    }
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.dataset.uiDensity = uiDensity;
+    }
+    set({ uiDensity });
+  }
 }));

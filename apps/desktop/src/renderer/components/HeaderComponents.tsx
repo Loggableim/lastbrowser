@@ -895,7 +895,6 @@ export function ModernTitlebar({
           onClick={onToggleCopilot}
         >
           <img src={brandAssets.sidekickAvatar} alt="" className="copilot-btn-avatar" draggable={false} />
-          <span className="copilot-btn-label">{botName}</span>
         </button>
 
         <WindowControls />

@@ -505,21 +505,26 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
           <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
         ))}
       </div>
-      <section className="native-work-card detail-json-card">
-        <header><strong>{section}</strong></header>
-        <pre>{jsonPreview({
-          profileCount: profiles.length,
-          activeProfile: activeProfile ? titleOf(activeProfile) : null,
-          section,
-          hint: section === 'Gateway'
-            ? 'Gateway settings and provider bindings for the active profile.'
-            : section === 'Model defaults'
-              ? 'Default model and fallback model data.'
-              : section === 'Active profile'
-                ? 'The selected profile that will be applied to the session.'
-                : 'Browse and manage agent profiles.'
-        })}</pre>
-      </section>
+      <div className="profile-overview-strip">
+        <div className="profile-stat-box">
+          <span className="profile-stat-label">ACTIVE PROFILE</span>
+          <strong className="profile-stat-value profile-active-name">{text(state.data?.active || (profiles.find((p) => p.is_active) ? idOf(profiles.find((p) => p.is_active)!) : 'default'))}</strong>
+        </div>
+        <div className="profile-stat-box">
+          <span className="profile-stat-label">TOTAL PROFILES</span>
+          <strong className="profile-stat-value">{profiles.length}</strong>
+        </div>
+        <div className="profile-stat-box">
+          <span className="profile-stat-label">GATEWAY STATUS</span>
+          <strong className="profile-stat-value">{current?.gateway_running ? 'Online' : 'Standby'}</strong>
+        </div>
+        <div className="profile-stat-box" style={{ marginLeft: 'auto' }}>
+          <button type="button" className="profile-create-quick-btn" onClick={() => void create()} disabled={!ready}>
+            <Plus size={14} />
+            <span>Neues Profil</span>
+          </button>
+        </div>
+      </div>
       <div className="native-rest-split">
         <aside className="integration-list">
           <button type="button" className="new-session-button" onClick={() => void create()} disabled={!ready}><Plus size={15} />New profile</button>
@@ -533,23 +538,115 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
         </aside>
         <main className="native-rest-detail">
           <ErrorLine error={state.error} />
-          <section className="native-work-card detail-json-card">
-            <header>
-              <strong>{section}: {current ? titleOf(current) : 'No profile selected'}</strong>
+          <section className="native-work-card profile-detail-card">
+            <header className="profile-card-header">
+              <div className="profile-title-area">
+                <strong className="profile-display-name">{current ? titleOf(current) : 'Kein Profil ausgewählt'}</strong>
+                {current && (idOf(current) === text(state.data?.active) || current.is_active) && (
+                  <span className="profile-active-tag"><CheckCircle2 size={12} /> Aktiv</span>
+                )}
+                {current?.is_default && (
+                  <span className="profile-default-tag">Standard</span>
+                )}
+              </div>
               <div className="native-card-actions">
-                <button type="button" onClick={() => void activate()} disabled={!ready || !selected}><CheckCircle2 size={13} /><span>Activate</span></button>
-                <button type="button" className="danger" onClick={() => void remove()} disabled={!ready || !selected}><Trash2 size={13} /><span>Delete</span></button>
+                <button
+                  type="button"
+                  onClick={() => void activate()}
+                  disabled={!ready || !selected || idOf(current) === text(state.data?.active)}
+                  title="Dieses Profil aktivieren"
+                >
+                  <CheckCircle2 size={13} />
+                  <span>Aktivieren</span>
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => void remove()}
+                  disabled={!ready || !selected || current?.is_default}
+                  title="Profil löschen"
+                >
+                  <Trash2 size={13} />
+                  <span>Löschen</span>
+                </button>
               </div>
             </header>
-            <pre>{jsonPreview(
-              section === 'Gateway'
-                ? { gateway: current?.gateway || current?.provider || state.data?.gateway || state.data?.provider || current }
-                : section === 'Model defaults'
-                  ? { model: current?.model || state.data?.default_model, defaults: current?.defaults || state.data?.defaults || state.data }
-                  : section === 'Active profile'
-                    ? { active: current, current: state.data?.current || state.data?.active || current }
-                    : current || state.data || {}
-            )}</pre>
+
+            {section === 'Profiles' && current && (
+              <div className="profile-specs-grid">
+                <div className="profile-spec-item">
+                  <span className="spec-label">Modell</span>
+                  <strong className="spec-value">{text(current.model) || 'gpt-5.5 (Standard)'}</strong>
+                </div>
+                <div className="profile-spec-item">
+                  <span className="spec-label">Provider</span>
+                  <strong className="spec-value">{text(current.provider) || 'Automatischer Fallback'}</strong>
+                </div>
+                <div className="profile-spec-item">
+                  <span className="spec-label">Aktive Skills</span>
+                  <strong className="spec-value">{current.skill_count !== undefined ? `${current.skill_count} Skills geladen` : 'Standard'}</strong>
+                </div>
+                <div className="profile-spec-item">
+                  <span className="spec-label">Umgebungsvariablen</span>
+                  <strong className="spec-value">{current.has_env ? 'Eigenes .env konfiguriert' : 'Global geerbt'}</strong>
+                </div>
+                <div className="profile-spec-item full-width">
+                  <span className="spec-label">Speicherpfad</span>
+                  <code className="spec-code-path">{text(current.path) || `~/.lastbrowser/profiles/${idOf(current)}`}</code>
+                </div>
+              </div>
+            )}
+
+            {section === 'Active profile' && (
+              <div className="profile-specs-grid">
+                <div className="profile-spec-item">
+                  <span className="spec-label">Aktives System-Profil</span>
+                  <strong className="spec-value highlight-cyan">{text(state.data?.active || idOf(activeProfile) || 'default')}</strong>
+                </div>
+                <div className="profile-spec-item">
+                  <span className="spec-label">Status</span>
+                  <strong className="spec-value">Bereit für Agenten-Sessions</strong>
+                </div>
+                <div className="profile-spec-item full-width">
+                  <span className="spec-label">Hinweis</span>
+                  <p className="spec-desc">Das aktive Profil bestimmt, welches Home-Verzeichnis, welche MCP-Skills, welches Langzeitgedächtnis und welche API-Keys von Sidekick-Sessions verwendet werden.</p>
+                </div>
+              </div>
+            )}
+
+            {section === 'Gateway' && (
+              <div className="profile-specs-grid">
+                <div className="profile-spec-item">
+                  <span className="spec-label">Gateway Status</span>
+                  <strong className="spec-value">{current?.gateway_running ? 'Online & Verbunden' : 'Standby / Aus'}</strong>
+                </div>
+                <div className="profile-spec-item">
+                  <span className="spec-label">Gateway Bindung</span>
+                  <strong className="spec-value">{text(current?.gateway || current?.provider) || 'Lokaler HTTP Bridge'}</strong>
+                </div>
+                <div className="profile-spec-item full-width">
+                  <span className="spec-label">Gateway Architektur</span>
+                  <p className="spec-desc">Der Gateway-Dienst ermöglicht es externen Plattformen (Telegram, Discord, Webhooks), direkt mit der Sidekick-Instanz dieses Profils zu interagieren.</p>
+                </div>
+              </div>
+            )}
+
+            {section === 'Model defaults' && (
+              <div className="profile-specs-grid">
+                <div className="profile-spec-item">
+                  <span className="spec-label">Primäres Modell</span>
+                  <strong className="spec-value">{text(current?.model) || 'gpt-5.5'}</strong>
+                </div>
+                <div className="profile-spec-item">
+                  <span className="spec-label">Fallback-Modell</span>
+                  <strong className="spec-value">gemini-3.8-flash</strong>
+                </div>
+                <div className="profile-spec-item full-width">
+                  <span className="spec-label">Auflösung</span>
+                  <p className="spec-desc">Anfragen ohne explizite Modellangabe nutzen das hier hinterlegte Modell. Bei Ratelimits oder Ausfällen greift automatisch der Fallback-Kanal.</p>
+                </div>
+              </div>
+            )}
           </section>
         </main>
       </div>
@@ -620,7 +717,11 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
     <section className="browser-main native-rest-main memory-main">
       <NativeHeader icon={<Brain size={21} />} title="Memory" kicker="Memory" detail="Core memory sections, Supermemory status/list/search and hybrid search in native UI." loading={memoryState.loading} ready={ready} onRefresh={memoryState.refresh} />
       <AdvancedWebUiTools panel="memory" serviceStatus={serviceStatus} compact />
-      <ErrorLine error={memoryState.error || superState.error || docsState.error} />
+      <ErrorLine
+        error={[memoryState.error, superState.error, docsState.error]
+          .filter((err): err is string => Boolean(err && !err.toLowerCase().includes('not configured')))
+          .join(' | ')}
+      />
       <div className="native-card-actions insights-tabs">
         {['Core memory', 'User facts', 'Supermemory', 'Hybrid search'].map((item) => (
           <button
@@ -646,14 +747,24 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
                 <button type="button" className="danger" onClick={() => void forgetDocument()} disabled={!ready || !selectedDocument}><Trash2 size={13} />Forget</button>
               </div>
             </header>
-            <pre>{jsonPreview(superState.data || {})}</pre>
+            {superState.data?.configured === false ? (
+              <div className="memory-unconfigured-note">
+                <Brain size={16} />
+                <span>Supermemory ist noch nicht konfiguriert. Du kannst Standard-Notizen speichern oder einen API-Schlüssel in den Einstellungen hinterlegen.</span>
+              </div>
+            ) : (
+              <div className="memory-status-badge">
+                <span className="online-dot" />
+                <span>Supermemory verbunden ({arrayFrom(docsState.data, ['results', 'documents', 'items']).length} Dokumente)</span>
+              </div>
+            )}
             <div className="native-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search memory..." /></div>
             <div className="native-card-actions">
               <button type="button" onClick={() => void runSearch('super')} disabled={!ready || !search.trim()}><Search size={13} /><span>Super Search</span></button>
               <button type="button" onClick={() => void runSearch('hybrid')} disabled={!ready || !search.trim()}><Sparkles size={13} /><span>Hybrid Search</span></button>
             </div>
             <div className="compact-list">
-              {[...results, ...arrayFrom(docsState.data, ['documents', 'items']).slice(0, results.length ? 0 : 8)].map((item) => (
+              {[...results, ...arrayFrom(docsState.data, ['results', 'documents', 'items']).slice(0, results.length ? 0 : 8)].map((item) => (
                 <article key={idOf(item)} className={idOf(item) === idOf(selectedDocument || {}) ? 'active' : ''} onClick={() => void openDocument(item)}><strong>{titleOf(item)}</strong><span>{text(item.content || item.text || item.id)}</span></article>
               ))}
             </div>
@@ -685,7 +796,7 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
               <button type="button" onClick={() => void runSearch('hybrid')} disabled={!ready || !search.trim()}><Sparkles size={13} /><span>Hybrid Search</span></button>
             </div>
             <div className="compact-list">
-              {[...results, ...arrayFrom(docsState.data, ['documents', 'items']).slice(0, results.length ? 0 : 8)].map((item) => (
+              {[...results, ...arrayFrom(docsState.data, ['results', 'documents', 'items']).slice(0, results.length ? 0 : 8)].map((item) => (
                 <article key={idOf(item)} className={idOf(item) === idOf(selectedDocument || {}) ? 'active' : ''} onClick={() => void openDocument(item)}><strong>{titleOf(item)}</strong><span>{text(item.content || item.text || item.id)}</span></article>
               ))}
             </div>

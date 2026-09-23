@@ -33,6 +33,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { GeminiAccountsPanel } from './GeminiAccountsPanel.js';
+import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { cloudProviderOptions, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
 import { providerPresentation } from '../provider-presentation.js';
 import { searchEngines } from '../tabs.js';
@@ -2389,6 +2390,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       </button>
                     ))}
                   </div>
+                  <SettingsField label="Message layout" description="Visual style and arrangement of messages in AI chat sessions.">
+                    <select value={settingsText(draft.message_layout ?? settings.message_layout, 'bubbles')} onChange={(event) => updateDraftField('message_layout', event.target.value)}>
+                      <option value="bubbles">Chat Bubbles (Modern)</option>
+                      <option value="compact">Compact Flow</option>
+                      <option value="expanded">Expanded Canvas</option>
+                    </select>
+                  </SettingsField>
                   <SettingsField label="Syntax theme" description="Code block theme for transcript and previews.">
                     <select value={settingsText(draft.syntax_theme ?? settings.syntax_theme, '')} onChange={(event) => updateDraftField('syntax_theme', event.target.value)}>
                       <option value="">Default</option>

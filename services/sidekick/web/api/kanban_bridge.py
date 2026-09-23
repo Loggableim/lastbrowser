@@ -133,7 +133,7 @@ def _conn(board=None):
             try:
                 kb.init_db(board=board)
                 return kb.connect(board=board)
-            except OSError as exc:
+            except Exception as exc:
                 logger.warning("Failed to open kanban DB in %r: %s; falling back to global DB", _ws_home, exc)
         finally:
             if old_home:
@@ -248,42 +248,60 @@ def _board_payload(parsed):
             profile = "default"
         assignee = profile
 
-    with _conn(board=board) as conn:
-        latest_event_id = _latest_event_id(conn)
-        if since is not None and since >= latest_event_id:
-            return {"changed": False, "latest_event_id": latest_event_id, "read_only": False}
+    try:
+        with _conn(board=board) as conn:
+            latest_event_id = _latest_event_id(conn)
+            if since is not None and since >= latest_event_id:
+                return {"changed": False, "latest_event_id": latest_event_id, "read_only": False}
 
-        tasks = kb.list_tasks(
-            conn,
-            tenant=tenant,
-            assignee=assignee,
-            include_archived=include_archived,
-        )
-        link_counts = _task_link_counts(conn, tasks)
-        comment_counts = _comment_counts(conn)
+            tasks = kb.list_tasks(
+                conn,
+                tenant=tenant,
+                assignee=assignee,
+                include_archived=include_archived,
+            )
+            link_counts = _task_link_counts(conn, tasks)
+            comment_counts = _comment_counts(conn)
 
-        def row(task):
-            data = _task_dict(task)
-            data["link_counts"] = link_counts.get(task.id, {"parents": 0, "children": 0})
-            data["comment_count"] = comment_counts.get(task.id, 0)
-            return data
+            def row(task):
+                data = _task_dict(task)
+                data["link_counts"] = link_counts.get(task.id, {"parents": 0, "children": 0})
+                data["comment_count"] = comment_counts.get(task.id, 0)
+                return data
 
-        columns = [
-            {"name": name, "tasks": [row(task) for task in tasks if task.status == name]}
-            for name in BOARD_COLUMNS
-        ]
-        if include_archived:
-            columns.append({
-                "name": "archived",
-                "tasks": [row(task) for task in tasks if task.status == "archived"],
-            })
+            columns = [
+                {"name": name, "tasks": [row(task) for task in tasks if task.status == name]}
+                for name in BOARD_COLUMNS
+            ]
+            if include_archived:
+                columns.append({
+                    "name": "archived",
+                    "tasks": [row(task) for task in tasks if task.status == "archived"],
+                })
+            return {
+                "columns": columns,
+                "tenants": sorted({task.tenant for task in tasks if getattr(task, "tenant", None)}),
+                "assignees": sorted({task.assignee for task in tasks if getattr(task, "assignee", None)}),
+                "latest_event_id": latest_event_id,
+                "changed": True,
+                "read_only": False,
+                "filters": {
+                    "tenant": tenant,
+                    "assignee": assignee,
+                    "include_archived": include_archived,
+                    "only_mine": only_mine,
+                    "profile": profile,
+                },
+            }
+    except Exception as exc:
+        logger.exception("Failed to build kanban board payload: %s", exc)
         return {
-            "columns": columns,
-            "tenants": sorted({task.tenant for task in tasks if getattr(task, "tenant", None)}),
-            "assignees": sorted({task.assignee for task in tasks if getattr(task, "assignee", None)}),
-            "latest_event_id": latest_event_id,
+            "columns": [{"name": name, "tasks": []} for name in BOARD_COLUMNS],
+            "tenants": [],
+            "assignees": [],
+            "latest_event_id": 0,
             "changed": True,
-            "read_only": False,
+            "read_only": True,
             "filters": {
                 "tenant": tenant,
                 "assignee": assignee,
@@ -291,6 +309,7 @@ def _board_payload(parsed):
                 "only_mine": only_mine,
                 "profile": profile,
             },
+            "error": str(exc),
         }
 
 
@@ -1173,7 +1192,7 @@ def handle_kanban_get(handler, parsed) -> bool | None:
         # on a single board's tasks.
         if path == "/api/kanban/boards":
             return j(handler, _list_boards_payload(parsed)) or True
-        if path == "/api/kanban/board":
+        if path in ("/api/kanban", "/api/kanban/", "/api/kanban/board"):
             return j(handler, _board_payload(parsed)) or True
         if path == "/api/kanban/config":
             return j(handler, _config_payload(board=_resolve_board(parsed))) or True

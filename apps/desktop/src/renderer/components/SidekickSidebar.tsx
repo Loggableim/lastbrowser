@@ -28,6 +28,7 @@ import { spaceDisplayName } from '../shell-state.js';
 import { brandAssets } from '../brand.js';
 import { PinnedAppGrid, type PinnedApp } from './PinnedAppGrid.js';
 import type { SidebarDrawerTab, SidebarMode, ZenExitDefaultMode } from '../stores/usePanelStore.js';
+import type { DesktopSessionSummary } from '../sidekick-client.js';
 
 export interface DrawerItem {
   id: LastbrowserPanelId;
@@ -103,6 +104,14 @@ export interface SidekickSidebarProps {
   onSelectDrawerTab?: (tab: SidebarDrawerTab) => void;
   /** Default mode when exiting Zen mode */
   zenExitDefaultMode?: ZenExitDefaultMode;
+  /** Recent Sidekick chat sessions */
+  sessions?: DesktopSessionSummary[];
+  /** Current active session id */
+  activeSessionId?: string | null;
+  /** Callback when a session is selected */
+  onSelectSession?: (sessionId: string) => void;
+  /** Callback when a new session is requested */
+  onCreateSession?: () => void;
 }
 
 export function SidekickSidebar({
@@ -139,7 +148,11 @@ export function SidekickSidebar({
   onSelectPanel,
   drawerTab = 'tabs',
   onSelectDrawerTab,
-  zenExitDefaultMode = 'slim'
+  zenExitDefaultMode = 'slim',
+  sessions = [],
+  activeSessionId = null,
+  onSelectSession,
+  onCreateSession
 }: SidekickSidebarProps): React.JSX.Element {
   const [internalDrawerTab, setInternalDrawerTab] = useState<SidebarDrawerTab>(drawerTab);
   const currentDrawerTab = onSelectDrawerTab ? drawerTab : internalDrawerTab;
@@ -186,7 +199,6 @@ export function SidekickSidebar({
                   (e.currentTarget as HTMLElement).style.display = 'none';
                 }}
               />
-              <span className="dock-brand-letter">N</span>
             </div>
             <span className="dock-visually-hidden">Chat</span>
             <span className="dock-online-dot" />
@@ -356,7 +368,20 @@ export function SidekickSidebar({
               <div className="expanded-tabs-section">
                 <div className="expanded-section-header">
                   <span className="section-title">TABS</span>
-                  <span className="tab-count-badge">{tabs.length}</span>
+                  <div className="expanded-section-actions">
+                    {onOpenDownloads && (
+                      <button
+                        type="button"
+                        className="sidebar-header-icon-btn"
+                        onClick={onOpenDownloads}
+                        title="Downloads (Ctrl+J)"
+                        aria-label="Downloads"
+                      >
+                        <Download size={12} />
+                      </button>
+                    )}
+                    <span className="tab-count-badge">{tabs.length}</span>
+                  </div>
                 </div>
 
                 <div className="vertical-tab-list" role="tablist">
@@ -449,17 +474,30 @@ export function SidekickSidebar({
                   })}
                 </div>
 
-                {/* New Tab Button */}
-                <button
-                  type="button"
-                  className="vertical-new-tab-btn"
-                  onClick={() => onNewTab()}
-                  title="New Tab (Ctrl+T)"
-                >
-                  <Plus size={14} />
-                  <span>New Tab</span>
-                  <kbd className="shortcut-hint">Ctrl+T</kbd>
-                </button>
+                {/* Tabs Action Buttons */}
+                <div className="tabs-tier-actions-row">
+                  <button
+                    type="button"
+                    className="vertical-new-tab-btn"
+                    onClick={() => onNewTab()}
+                    title="New Tab (Ctrl+T)"
+                  >
+                    <Plus size={14} />
+                    <span>New Tab</span>
+                    <kbd className="shortcut-hint">Ctrl+T</kbd>
+                  </button>
+                  {onOpenDownloads && (
+                    <button
+                      type="button"
+                      className="vertical-downloads-btn"
+                      onClick={onOpenDownloads}
+                      title="Downloads (Ctrl+J)"
+                    >
+                      <Download size={13} />
+                      <span>Downloads</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </>
           )}
@@ -467,7 +505,44 @@ export function SidekickSidebar({
           {/* AI Drawer Items */}
           {currentDrawerTab === 'ai' && (
             <div className="sidebar-drawer-content" role="region" aria-label="AI & Agents">
-              <div className="drawer-section-title">NOVA AI & AGENTS</div>
+              {/* Prominent + New Chat button */}
+              <div className="sidebar-ai-actions">
+                <button
+                  type="button"
+                  className="sidebar-new-chat-btn"
+                  onClick={() => onCreateSession?.()}
+                  title="Neuen Chat starten"
+                >
+                  <Plus size={15} />
+                  <span>+ Neuer Chat</span>
+                </button>
+              </div>
+
+              {/* Recent Sessions List */}
+              {sessions && sessions.length > 0 && (
+                <div className="sidebar-recent-sessions">
+                  <div className="drawer-section-title">LETZTE CHATS</div>
+                  <div className="sidebar-session-list">
+                    {sessions.slice(0, 5).map((session) => {
+                      const isActive = session.session_id === activeSessionId && activePanel === 'chat';
+                      return (
+                        <button
+                          key={session.session_id}
+                          type="button"
+                          className={`sidebar-session-item ${isActive ? 'is-active' : ''}`}
+                          onClick={() => onSelectSession?.(session.session_id)}
+                          title={session.title || 'Chat'}
+                        >
+                          <Sparkles size={12} className="session-item-icon" />
+                          <span className="session-item-title">{session.title || 'Neuer Chat'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="drawer-section-title" style={{ marginTop: 12 }}>NOVA AI & AGENTS</div>
               <div className="drawer-cards-list">
                 {AI_DRAWER_ITEMS.map((item) => {
                   const isCurrent = activePanel === item.id;

@@ -1,4 +1,4 @@
-﻿import hashlib
+import hashlib
 import hmac
 import json
 import time
@@ -769,6 +769,7 @@ def test_generic_space_config_uses_dashboard_actor_for_lifecycle_writes(monkeypa
 
     monkeypatch.setattr(routes, "_setup_workspace_from_request", lambda *_args: None)
     monkeypatch.setattr(routes, "_teardown_workspace_context", lambda: None)
+    monkeypatch.setattr(space_engine, "validate_project_dir", lambda p: p)
     monkeypatch.setattr(space_engine, "get_workspace", lambda _slug: space)
     monkeypatch.setattr(space_engine, "update_space_config", fake_update)
 

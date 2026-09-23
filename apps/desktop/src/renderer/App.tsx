@@ -2143,6 +2143,13 @@ export function App(): JSX.Element {
               drawerTab={sidebarDrawerTab}
               onSelectDrawerTab={setSidebarDrawerTab}
               zenExitDefaultMode={zenExitDefaultMode}
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+              onSelectSession={(sessionId) => {
+                setActiveSessionId(sessionId);
+                setActivePanel('chat');
+              }}
+              onCreateSession={() => void createNativeSession()}
             />
 
             <div className={`browser-content-area ${copilotOpen ? 'with-copilot-split' : 'full-canvas'}`}>

@@ -488,7 +488,20 @@ async function jsonRequest<T>(webuiUrl: string, path: string, init: RequestInit 
   const text = await response.text();
   const payload = text ? JSON.parse(text) : {};
   if (!response.ok) {
-    throw new Error(String(payload.error || payload.message || `HTTP ${response.status}`));
+    const errorDetail = payload?.error;
+    let message = '';
+    if (typeof errorDetail === 'string' && errorDetail.trim()) {
+      message = errorDetail;
+    } else if (errorDetail && typeof errorDetail === 'object') {
+      message = errorDetail.message || errorDetail.error || errorDetail.detail || JSON.stringify(errorDetail);
+    } else if (typeof payload?.message === 'string' && payload.message.trim()) {
+      message = payload.message;
+    } else if (typeof payload?.detail === 'string' && payload.detail.trim()) {
+      message = payload.detail;
+    } else {
+      message = `HTTP ${response.status}`;
+    }
+    throw new Error(String(message));
   }
   return payload as T;
 }
@@ -1115,12 +1128,32 @@ function queryString(params: Record<string, string | number | undefined | null> 
   return text ? `?${text}` : '';
 }
 
-export function getKanbanBoard(
+export async function getKanbanBoard(
   webuiUrl: string,
   options: { workspace?: string; board?: string } = {},
   fetchImpl: FetchLike = fetch
 ): Promise<KanbanBoardResponse> {
-  return jsonRequest(webuiUrl, `/api/kanban/board${kanbanQuery(options)}`, {}, fetchImpl);
+  try {
+    return await jsonRequest(webuiUrl, `/api/kanban/board${kanbanQuery(options)}`, {}, fetchImpl);
+  } catch (error) {
+    if (options.workspace) {
+      try {
+        return await jsonRequest(webuiUrl, `/api/kanban/board${kanbanQuery({ board: options.board })}`, {}, fetchImpl);
+      } catch {
+        // fallback below
+      }
+    }
+    return {
+      columns: [
+        { name: 'triage', tasks: [] },
+        { name: 'todo', tasks: [] },
+        { name: 'ready', tasks: [] },
+        { name: 'running', tasks: [] },
+        { name: 'blocked', tasks: [] },
+        { name: 'done', tasks: [] }
+      ]
+    };
+  }
 }
 
 export function createKanbanTask(
@@ -1592,23 +1625,35 @@ export function getSupermemoryStatus(webuiUrl: string, fetchImpl: FetchLike = fe
   return jsonRequest(webuiUrl, '/api/memory/supermemory/status', {}, fetchImpl);
 }
 
-export function listSupermemoryDocuments(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
-  return jsonRequest(webuiUrl, '/api/memory/supermemory/list', {}, fetchImpl);
+export async function listSupermemoryDocuments(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  try {
+    return await jsonRequest(webuiUrl, '/api/memory/supermemory/list', {}, fetchImpl);
+  } catch (error) {
+    return { ok: false, configured: false, results: [], error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
-export function getSupermemoryDocument(
+export async function getSupermemoryDocument(
   webuiUrl: string,
   request: SupermemoryDocumentRequest,
   fetchImpl: FetchLike = fetch
 ): Promise<Record<string, unknown>> {
-  return jsonRequest(webuiUrl, `/api/memory/supermemory/document${queryString({ id: request.id })}`, {}, fetchImpl);
+  try {
+    return await jsonRequest(webuiUrl, `/api/memory/supermemory/document${queryString({ id: request.id })}`, {}, fetchImpl);
+  } catch (error) {
+    return { ok: false, configured: false, document: null, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
-export function searchSupermemory(webuiUrl: string, request: MemorySearchRequest, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
-  return jsonRequest(webuiUrl, '/api/memory/supermemory/search', {
-    method: 'POST',
-    body: JSON.stringify({ query: request.query, limit: request.limit })
-  }, fetchImpl);
+export async function searchSupermemory(webuiUrl: string, request: MemorySearchRequest, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  try {
+    return await jsonRequest(webuiUrl, '/api/memory/supermemory/search', {
+      method: 'POST',
+      body: JSON.stringify({ query: request.query, limit: request.limit })
+    }, fetchImpl);
+  } catch (error) {
+    return { ok: false, configured: false, results: [], error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 export function addSupermemoryDocument(
@@ -1633,11 +1678,15 @@ export function forgetSupermemoryDocument(
   }, fetchImpl);
 }
 
-export function hybridMemorySearch(webuiUrl: string, request: MemorySearchRequest, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
-  return jsonRequest(webuiUrl, '/api/memory/hybrid/search', {
-    method: 'POST',
-    body: JSON.stringify({ query: request.query, limit: request.limit })
-  }, fetchImpl);
+export async function hybridMemorySearch(webuiUrl: string, request: MemorySearchRequest, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  try {
+    return await jsonRequest(webuiUrl, '/api/memory/hybrid/search', {
+      method: 'POST',
+      body: JSON.stringify({ query: request.query, limit: request.limit })
+    }, fetchImpl);
+  } catch (error) {
+    return { ok: false, configured: false, results: [], error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 export function getInsights(webuiUrl: string, request: InsightsRequest = {}, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {

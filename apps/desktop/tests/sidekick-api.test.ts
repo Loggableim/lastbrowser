@@ -539,6 +539,25 @@ describe('sidekick api client', () => {
     expect(JSON.parse(String(calls[2].init?.body))).toEqual({ status: 'done' });
   });
 
+  it('falls back to canonical columns when getKanbanBoard encounters an error', async () => {
+    const fetchImpl = async () => {
+      return new Response(JSON.stringify({ error: 'Internal server error' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' }
+      });
+    };
+
+    const board = await getKanbanBoard('http://127.0.0.1:8787', { workspace: 'invalid' }, fetchImpl);
+    expect(board.columns.map((c) => c.name)).toEqual([
+      'triage',
+      'todo',
+      'ready',
+      'running',
+      'blocked',
+      'done'
+    ]);
+  });
+
   it('renames, deletes, and duplicates sessions through native session commands', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = async (url: string | URL, init?: RequestInit) => {

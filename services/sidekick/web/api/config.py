@@ -1357,10 +1357,10 @@ def _apply_provider_prefix(
     result = []
     for m in raw_models:
         mid = m["id"]
-        if mid.startswith("@") or "/" in mid:
-            result.append({"id": mid, "label": m["label"]})
-        else:
-            result.append({"id": f"@{provider_id}:{mid}", "label": m["label"]})
+        entry = dict(m)
+        if not (mid.startswith("@") or "/" in mid):
+            entry["id"] = f"@{provider_id}:{mid}"
+        result.append(entry)
     return result
 
 
@@ -2325,7 +2325,7 @@ def _current_webui_version() -> str | None:
 # guarantees that even if a future release accidentally reuses the same
 # WebUI version string (or a debug build doesn't have a version), a structural
 # change still invalidates the cache.
-_MODELS_CACHE_SCHEMA_VERSION = 4
+_MODELS_CACHE_SCHEMA_VERSION = 5
 
 
 _models_cache_path = STATE_DIR / "models_cache.json"
@@ -3230,10 +3230,27 @@ def get_available_models() -> dict:
                     detected_providers.add("nous")
             except Exception:
                 logger.debug("Failed to check Nous Portal auth status")
+            try:
+                if _gas("google-gemini-cli").get("logged_in"):
+                    detected_providers.add("google-gemini-cli")
+            except Exception:
+                pass
+            try:
+                from runtime.google_oauth import load_credentials
+                if load_credentials():
+                    detected_providers.add("google-gemini-cli")
+            except Exception:
+                pass
         except Exception:
             logger.debug("Failed to detect auth providers from sidekick")
 
         if not _sidekick_auth_used:
+            try:
+                from runtime.google_oauth import load_credentials
+                if load_credentials():
+                    detected_providers.add("google-gemini-cli")
+            except Exception:
+                pass
             try:
                 from web.api.profiles import get_active_profile_home as _gah2
 
@@ -3837,6 +3854,58 @@ def get_available_models() -> dict:
                                 "provider": provider_name,
                                 "provider_id": pid,
                                 "models": models,
+                            }
+                        )
+                elif pid == "google-gemini-cli":
+                    raw_models = []
+                    quota_buckets = []
+                    active_email = None
+                    try:
+                        from runtime.google_oauth import get_valid_access_token, load_credentials
+                        from runtime.google_code_assist import retrieve_user_quota
+                        creds = load_credentials()
+                        if creds:
+                            active_email = getattr(creds, "email", None)
+                            token = get_valid_access_token()
+                            proj_id = getattr(creds, "project_id", "") or getattr(creds, "managed_project_id", "")
+                            quota_buckets = retrieve_user_quota(token, project_id=proj_id)
+                    except Exception as exc:
+                        logger.debug("Failed to retrieve live user quota for google-gemini-cli: %s", exc)
+
+                    if quota_buckets:
+                        for b in quota_buckets:
+                            mid = getattr(b, "model_id", "") or ""
+                            if not mid:
+                                continue
+                            rem_frac = getattr(b, "remaining_fraction", 1.0)
+                            pct = int(max(0, min(100, round(rem_frac * 100))))
+                            raw_models.append({
+                                "id": mid,
+                                "label": _get_label_for_model(mid, []) or mid,
+                                "remaining_fraction": rem_frac,
+                                "remaining_percent": pct,
+                                "reset_at": getattr(b, "reset_time_iso", "") or None,
+                                "account": active_email,
+                            })
+
+                    if not raw_models:
+                        for m in _PROVIDER_MODELS.get("google-gemini-cli", []):
+                            raw_models.append({
+                                "id": m["id"],
+                                "label": m["label"],
+                                "remaining_fraction": 1.0,
+                                "remaining_percent": 100,
+                                "account": active_email,
+                            })
+
+                    if raw_models:
+                        models = _apply_provider_prefix(raw_models, pid, active_provider)
+                        groups.append(
+                            {
+                                "provider": provider_name,
+                                "provider_id": pid,
+                                "models": models,
+                                "account": active_email,
                             }
                         )
                 elif pid == "nous":

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -350,5 +350,25 @@ describe('browser shell layout', () => {
     expect(css).toContain('.advanced-webui-tools');
     expect(css).toContain('.browser-load-error');
     expect(css).toContain('html.theme-light .app-shell');
+  });
+
+  it('enforces static import integrity for AdvancedWebUiTools across all panel files', () => {
+    const panelsDir = path.resolve(process.cwd(), 'src/renderer/panels');
+    const panelFiles = readdirSync(panelsDir).filter((file) => file.endsWith('.tsx'));
+
+    expect(panelFiles.length).toBeGreaterThan(0);
+
+    for (const file of panelFiles) {
+      const content = readFileSync(path.resolve(panelsDir, file), 'utf8');
+      if (content.includes('<AdvancedWebUiTools')) {
+        const hasImport =
+          content.includes("import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';") ||
+          content.includes('export function AdvancedWebUiTools');
+        expect(
+          hasImport,
+          `File ${file} renders <AdvancedWebUiTools but is missing import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';`
+        ).toBe(true);
+      }
+    }
   });
 });

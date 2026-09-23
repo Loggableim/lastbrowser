@@ -665,7 +665,7 @@ export function FirstRunSetupPane({
 
             {/* Model picker within chosen provider */}
             <div className="model-selection-area">
-              <label className="input-label">Bevorzugtes Modell für Sidekick:</label>
+              <label className="input-label">Bevorzugtes Modell für Nova AI:</label>
               <div className="models-pills-row">
                 {models.map((m) => {
                   const note = modelNote(m.id);
@@ -693,7 +693,7 @@ export function FirstRunSetupPane({
             <div className="footer-left">
               <span className={`runtime-status-indicator ${status?.sidekick === 'ready' ? 'ready' : 'starting'}`}>
                 <span className="dot" />
-                <span>Sidekick Runtime: {status?.sidekick === 'ready' ? 'Bereit' : 'Startet...'}</span>
+                <span>Nova AI Runtime: {status?.sidekick === 'ready' ? 'Bereit' : 'Startet...'}</span>
               </span>
             </div>
 

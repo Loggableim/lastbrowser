@@ -4603,7 +4603,7 @@ def handle_get(handler, parsed) -> bool:
             return _kanban_unknown_endpoint(handler, parsed, "GET")
         return True
 
-    if parsed.path.startswith("/api/kanban/"):
+    if parsed.path == "/api/kanban" or parsed.path.startswith("/api/kanban/"):
         from web.api.kanban_bridge import handle_kanban_get
 
         # Only treat an explicit False as "no route matched". None means the
@@ -6700,7 +6700,7 @@ def handle_post(handler, parsed) -> bool:
             return _kanban_unknown_endpoint(handler, parsed, "POST")
         return True
 
-    if parsed.path.startswith("/api/kanban/"):
+    if parsed.path == "/api/kanban" or parsed.path.startswith("/api/kanban/"):
         from web.api.kanban_bridge import handle_kanban_post
 
         _setup_workspace_from_request(handler, parsed)
@@ -8665,7 +8665,7 @@ def handle_patch(handler, parsed) -> bool:
     if not _check_csrf(handler):
         return j(handler, {"error": "Cross-origin request rejected"}, status=403)
     body = read_body(handler)
-    if parsed.path.startswith("/api/kanban/"):
+    if parsed.path == "/api/kanban" or parsed.path.startswith("/api/kanban/"):
         from web.api.kanban_bridge import handle_kanban_patch
 
         _setup_workspace_from_request(handler, parsed)
@@ -8689,7 +8689,7 @@ def handle_delete(handler, parsed) -> bool:
     if not _check_csrf(handler):
         return j(handler, {"error": "Cross-origin request rejected"}, status=403)
     body = read_body(handler)
-    if parsed.path.startswith("/api/kanban/"):
+    if parsed.path == "/api/kanban" or parsed.path.startswith("/api/kanban/"):
         from web.api.kanban_bridge import handle_kanban_delete
 
         _setup_workspace_from_request(handler, parsed)
@@ -10851,10 +10851,12 @@ def _handle_supermemory_status(handler):
         configured = sm_path.exists()
     except Exception:
         pass
+    import datetime
     return j(handler, {
         "configured": configured,
         "connected": client is not None,
         "config_path": config_path,
+        "timestamp": str(datetime.datetime.now()),
     })
 
 def _handle_supermemory_search(handler, body):
@@ -10866,7 +10868,8 @@ def _handle_supermemory_search(handler, body):
     limit = int(body.get("limit", 10))
     container_tag = body.get("container_tag") or None
     if not q:
-        return bad(handler, "Query 'q' is required")
+        return j(handler, {"results": [], "hits": [], "configured": False, "ok": False, "error": "Query 'q' is required"}, status=400)
+    import uuid
     try:
         kwargs = {"q": q, "limit": limit}
         if container_tag:
@@ -10878,10 +10881,22 @@ def _handle_supermemory_search(handler, body):
             data = result.dict()
         else:
             data = result
-        return j(handler, {"results": data, "ok": True})
+        items = data.get("data", data.get("memories", data.get("results", []))) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+        results = []
+        for item in items if isinstance(items, list) else []:
+            if isinstance(item, dict):
+                tags = item.get("metadata", {}).get("tags", ["Allgemein"]) if isinstance(item.get("metadata"), dict) else ["Allgemein"]
+                results.append({
+                    "id": f"sm-{str(item.get('id', item.get('_id', uuid.uuid4().hex)))[:8]}",
+                    "source": "supermemory",
+                    "score": float(item.get("score", item.get("relevance", 0.5))),
+                    "category": tags[0] if isinstance(tags, list) and tags else "Allgemein",
+                    "content": item.get("content") or item.get("text") or item.get("snippet", ""),
+                })
+        return j(handler, {"results": results, "hits": results, "configured": True, "ok": True})
     except Exception as e:
         logger.exception("Supermemory search failed")
-        return bad(handler, f"Supermemory search failed: {e}")
+        return j(handler, {"results": [], "hits": [], "configured": False, "ok": False, "error": str(e)})
 
 def _handle_supermemory_add(handler, body):
     """POST /api/memory/supermemory/add"""
@@ -11017,8 +11032,9 @@ def _handle_supermemory_list(handler, parsed):
     """GET /api/memory/supermemory/list"""
     client = _get_supermemory_client()
     if client is None:
-        return j(handler, {"results": [], "configured": False, "ok": True, "message": "Supermemory is not configured."})
-    qs = parse_qs(parsed.query)
+        return j(handler, {"results": [], "documents": [], "configured": False, "ok": True, "message": "Supermemory is not configured."})
+    from urllib.parse import parse_qs
+    qs = parse_qs(parsed.query or "")
     limit = int(qs.get("limit", ["20"])[0])
     page = int(qs.get("page", ["1"])[0])
     container_tag = qs.get("container_tag", [None])[0]
@@ -11033,10 +11049,11 @@ def _handle_supermemory_list(handler, parsed):
             data = result.dict()
         else:
             data = result
-        return j(handler, {"results": data, "configured": True, "ok": True})
+        docs = data if isinstance(data, list) else (data.get("documents", data.get("results", [])) if isinstance(data, dict) else [])
+        return j(handler, {"results": docs, "documents": docs, "configured": True, "ok": True})
     except Exception as e:
         logger.exception("Supermemory list failed")
-        return j(handler, {"results": [], "configured": False, "ok": False, "error": str(e)})
+        return j(handler, {"results": [], "documents": [], "configured": False, "ok": False, "error": str(e)})
 
 
 def _handle_supermemory_document(handler, parsed):
@@ -11044,10 +11061,11 @@ def _handle_supermemory_document(handler, parsed):
     client = _get_supermemory_client()
     if client is None:
         return j(handler, {"document": None, "configured": False, "ok": True, "message": "Supermemory is not configured."})
-    qs = parse_qs(parsed.query)
+    from urllib.parse import parse_qs
+    qs = parse_qs(parsed.query or "")
     doc_id = qs.get("id", [None])[0]
     if not doc_id:
-        return bad(handler, "id query param is required")
+        return j(handler, {"document": None, "configured": False, "ok": False, "error": "id query param is required"}, status=400)
     try:
         result = client.documents.get(id=doc_id)
         if hasattr(result, "model_dump"):
@@ -14841,265 +14859,5 @@ def _handle_mcp_server_update(handler, name, body):
     _save_yaml_config_file(_get_config_path(), cfg)
     reload_config()
     return j(handler, {"ok": True, "server": _server_summary(name, server_cfg)})
-
-
-# â”€â”€ Supermemory & Hybrid Search Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-_SUPERMEMORY_CLIENT = None
-_SUPERMEMORY_LOCK = __import__("threading").Lock()
-
-
-def _get_supermemory_client():
-    """Create a Supermemory client for the active profile on demand."""
-    with _SUPERMEMORY_LOCK:
-        try:
-            sm_home = Path(get_active_webui_home()).expanduser().resolve()
-        except Exception:
-            sm_home = Path(get_webui_home()).expanduser().resolve()
-        sm_path = sm_home / "supermemory.json"
-        if not sm_path.exists():
-            alt = Path(os.environ.get("LOCALAPPDATA", "")) / "sidekick" / "supermemory.json"
-            if alt.exists():
-                sm_path = alt
-        if not sm_path.exists():
-            return None
-        try:
-            cfg = json.loads(sm_path.read_text(encoding="utf-8"))
-            api_key = cfg.get("api_key", "")
-            if not api_key:
-                return None
-            from supermemory import Supermemory
-            return Supermemory(api_key=api_key, max_retries=1, timeout=15)
-        except Exception:
-            logger.exception("Failed to init Supermemory client")
-            return None
-
-
-def _handle_supermemory_status(handler):
-    """GET /api/memory/supermemory/status"""
-    client = _get_supermemory_client()
-    configured = False
-    config_path = None
-    try:
-        sm_path = Path(get_active_webui_home()).expanduser().resolve() / "supermemory.json"
-        if not sm_path.exists():
-            sm_path = get_webui_home() / "supermemory.json"
-        if sm_path.exists():
-            configured = True
-            config_path = str(sm_path)
-    except Exception:
-        pass
-    import datetime
-    return j(handler, {
-        "configured": configured,
-        "connected": client is not None,
-        "config_path": config_path,
-        "timestamp": str(datetime.datetime.now()),
-    })
-
-
-def _handle_supermemory_list(handler, parsed):
-    """GET /api/memory/supermemory/list"""
-    client = _get_supermemory_client()
-    if client is None:
-        return j(handler, {"results": [], "configured": False, "ok": True, "message": "Supermemory is not configured."})
-    from urllib.parse import parse_qs
-    qs = parse_qs(parsed.query)
-    limit = int(qs.get("limit", ["20"])[0])
-    page = int(qs.get("page", ["1"])[0])
-    container_tag = qs.get("container_tag", [None])[0]
-    try:
-        kwargs = {"limit": limit, "page": page, "order": "desc", "sort": "updatedAt", "include_content": True}
-        if container_tag:
-            kwargs["container_tags"] = [container_tag]
-        result = client.documents.list(**kwargs)
-        if hasattr(result, "model_dump"):
-            data = result.model_dump()
-        elif hasattr(result, "dict"):
-            data = result.dict()
-        else:
-            data = result
-        return j(handler, {"results": data, "configured": True, "ok": True})
-    except Exception as e:
-        logger.exception("Supermemory list failed")
-        return j(handler, {"results": [], "configured": False, "ok": False, "error": str(e)})
-
-
-def _handle_supermemory_document(handler, parsed):
-    """GET /api/memory/supermemory/document"""
-    client = _get_supermemory_client()
-    if client is None:
-        return j(handler, {"document": None, "configured": False, "ok": True, "message": "Supermemory is not configured."})
-    from urllib.parse import parse_qs
-    qs = parse_qs(parsed.query)
-    doc_id = qs.get("id", [None])[0]
-    if not doc_id:
-        return bad(handler, "id query param is required")
-    try:
-        result = client.documents.get(id=doc_id)
-        if hasattr(result, "model_dump"):
-            data = result.model_dump()
-        elif hasattr(result, "dict"):
-            data = result.dict()
-        else:
-            data = result
-        return j(handler, {"document": data, "configured": True, "ok": True})
-    except Exception as e:
-        logger.exception("Supermemory document get failed")
-        return j(handler, {"document": None, "configured": False, "ok": False, "error": str(e)})
-
-
-def _handle_supermemory_search(handler, body):
-    """POST /api/memory/supermemory/search"""
-    client = _get_supermemory_client()
-    if client is None:
-        return j(handler, {"hits": [], "results": [], "configured": False, "ok": True, "message": "Supermemory is not configured."})
-    q = body.get("q", "").strip()
-    limit = int(body.get("limit", 20))
-    if not q:
-        return bad(handler, "Query 'q' is required")
-    import uuid
-    try:
-        sm_result = client.search.memories(q=q, limit=limit)
-        if hasattr(sm_result, "model_dump"):
-            data = sm_result.model_dump()
-        elif hasattr(sm_result, "dict"):
-            data = sm_result.dict()
-        else:
-            data = sm_result
-        # Ensure list format
-        items = data.get("data", data.get("memories", data.get("results", [])))
-        results = []
-        for item in items if isinstance(items, list) else []:
-            results.append({
-                "id": f"sm-{str(item.get('id', item.get('_id', uuid.uuid4().hex)))[:8]}",
-                "source": "supermemory",
-                "score": float(item.get("score", item.get("relevance", 0.5))),
-                "category": (item.get("metadata", {}).get("tags", ["Allgemein"]))[0],
-                "content": item.get("content") or item.get("text") or item.get("snippet", ""),
-            })
-        return j(handler, {"hits": results})
-    except Exception as e:
-        logger.exception("Supermemory search failed")
-        return bad(handler, f"Supermemory search failed: {e}")
-
-
-def _handle_supermemory_add(handler, body):
-    """POST /api/memory/supermemory/add"""
-    client = _get_supermemory_client()
-    if client is None:
-        return bad(handler, "Supermemory is not configured.")
-    content = body.get("content", "").strip()
-    tags = body.get("tags", [])
-    container_tag = body.get("container_tag", "default")
-    if not content:
-        return bad(handler, "content is required")
-    try:
-        client.documents.add(content=content, tags=tags, container_tag=container_tag)
-        return j(handler, {"ok": True, "result": "added"})
-    except Exception as e:
-        logger.exception("Supermemory add failed")
-        return bad(handler, f"Supermemory add failed: {e}")
-
-
-def _handle_supermemory_forget(handler, body):
-    """POST /api/memory/supermemory/forget"""
-    client = _get_supermemory_client()
-    if client is None:
-        return bad(handler, "Supermemory is not configured.")
-    memory_id = body.get("id", "").strip()
-    container_tag = body.get("container_tag", "default")
-    if not memory_id:
-        return bad(handler, "id is required")
-    try:
-        client.memories.forget(container_tag=container_tag, id=memory_id)
-        return j(handler, {"ok": True, "result": "forgotten"})
-    except Exception as e:
-        logger.exception("Supermemory forget failed")
-        return bad(handler, f"Supermemory forget failed: {e}")
-
-
-def _handle_hybrid_search(handler, body):
-    """POST /api/memory/hybrid/search â€” hybrid search across local + supermemory"""
-    import uuid
-
-    q = body.get("q", "").strip()
-    limit = int(body.get("limit", 15))
-    if not q:
-        return bad(handler, "Query 'q' is required")
-
-    results = []
-
-    # 1. Local search: search the active space's MEMORY.md notes
-    try:
-        from web.api.space_engine import resolve_active_space
-        memory_file = resolve_active_space().memory_dir / "MEMORY.md"
-    except Exception:
-        try:
-            from web.api.profiles import get_active_profile_home
-            home = get_active_profile_home()
-        except Exception:
-            home = get_webui_home()
-        memory_file = home / "MEMORY.md"
-    if memory_file.exists():
-        try:
-            text = memory_file.read_text(encoding="utf-8")
-            lines = text.split("\n")
-            for line in lines:
-                if q.lower() in line.lower():
-                    tag = "Allgemein"
-                    import re as _re
-                    m = _re.search(r"#tag:\\s*([\\w\\-]+)", line, _re.IGNORECASE)
-                    if m:
-                        tag = m.group(1)
-                    results.append({
-                        "id": f"local-{uuid.uuid4().hex[:8]}",
-                        "source": "local",
-                        "score": 9.0,
-                        "category": tag,
-                        "content": line.strip(),
-                    })
-        except Exception:
-            logger.exception("Local memory search failed")
-
-    # 2. Supermemory search
-    client = _get_supermemory_client()
-    if client is not None:
-        try:
-            sm_result = client.search.memories(q=q, limit=limit)
-            if hasattr(sm_result, "model_dump"):
-                sm_data = sm_result.model_dump()
-            elif hasattr(sm_result, "dict"):
-                sm_data = sm_result.dict()
-            else:
-                sm_data = sm_result
-
-            raw_items = sm_data.get("data", sm_data.get("memories", sm_data.get("results", [])))
-            if isinstance(raw_items, list):
-                for item in raw_items:
-                    content = item.get("content") or item.get("text") or item.get("snippet", "")
-                    score = item.get("score") or item.get("relevance") or 0.5
-                    tags = item.get("metadata", {}).get("tags", [])
-                    category = tags[0] if isinstance(tags, list) and tags else "Allgemein"
-                    item_id = item.get("id") or item.get("_id") or uuid.uuid4().hex[:8]
-                    results.append({
-                        "id": f"sm-{str(item_id)[:8]}",
-                        "source": "supermemory",
-                        "score": float(score) if score else 0.5,
-                        "category": category,
-                        "content": content,
-                    })
-        except Exception:
-            logger.exception("Hybrid: Supermemory search failed")
-
-    # Deduplicate by content, sort by score desc
-    seen = {}
-    for r in results:
-        key = r["content"][:100]
-        if key not in seen or r["score"] > seen[key]["score"]:
-            seen[key] = r
-    sorted_results = sorted(seen.values(), key=lambda x: x["score"], reverse=True)[:limit]
-
-    return j(handler, {"hits": sorted_results})
 
 

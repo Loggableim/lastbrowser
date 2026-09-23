@@ -116,12 +116,10 @@ def test_google_start_is_non_blocking_and_profile_scoped(monkeypatch, tmp_path):
     assert "access_token" not in payload
     assert "refresh_token" not in payload
 
-    try:
-        oauth.start_onboarding_oauth_flow({"provider": "google-gemini-cli"})
-    except ValueError as exc:
-        assert "already in progress" in str(exc)
-    else:
-        raise AssertionError("parallel Google OAuth flow was accepted")
+    second_payload = oauth.start_onboarding_oauth_flow({"provider": "google-gemini-cli"})
+    assert second_payload["flow_id"] == payload["flow_id"]
+    assert second_payload["status"] == "pending"
+    assert "reusing" in second_payload.get("message", "").lower()
 
 
 def test_google_cancel_drops_pending_flow_without_secrets(monkeypatch, tmp_path):
@@ -197,3 +195,36 @@ def test_google_disconnect_clears_runtime_and_pool(monkeypatch):
     result = oauth.disconnect_google_oauth()
     assert result["disconnected"] is True
     assert calls == ["runtime", ("google-gemini-cli", [])]
+
+
+def test_google_gemini_models_catalog_with_quota(monkeypatch):
+    from runtime.google_code_assist import QuotaBucket
+    from web.api.config import get_available_models, invalidate_models_cache
+    from types import SimpleNamespace
+
+    from runtime import google_code_assist
+    dummy_creds = SimpleNamespace(email="tester@example.com", project_id="test-proj", managed_project_id=None)
+    monkeypatch.setattr(google_oauth, "load_credentials", lambda: dummy_creds)
+    monkeypatch.setattr(google_oauth, "get_valid_access_token", lambda: "fake-token")
+
+    def mock_quota(token, *, project_id="", user_agent_model=""):
+        return [
+            QuotaBucket(model_id="gemini-2.5-flash", remaining_fraction=0.85, reset_time_iso="2026-09-24T00:00:00Z"),
+            QuotaBucket(model_id="gemini-2.5-pro", remaining_fraction=0.50, reset_time_iso="2026-09-24T00:00:00Z"),
+        ]
+
+    monkeypatch.setattr(google_code_assist, "retrieve_user_quota", mock_quota)
+    invalidate_models_cache()
+
+    catalog = get_available_models()
+    group = next((g for g in catalog.get("groups", []) if g.get("provider_id") == "google-gemini-cli"), None)
+    assert group is not None, "google-gemini-cli group missing from /api/models"
+    model_ids = [m["id"] for m in group.get("models", [])]
+    assert any("gemini-2.5-flash" in mid for mid in model_ids)
+    flash_model = next(m for m in group["models"] if "gemini-2.5-flash" in m["id"])
+    print("FLASH MODEL:", flash_model)
+    print("GROUP:", group)
+    assert flash_model.get("remaining_percent") == 85
+    assert flash_model.get("account") == "tester@example.com"
+
+

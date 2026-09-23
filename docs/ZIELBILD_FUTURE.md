@@ -4,7 +4,7 @@
 
 ---
 
-## 1. Prioritäten-Matrix im Überblick
+## 1. Strategische Prioritäten-Matrix im Überblick
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -13,9 +13,10 @@
 │ PRIORITÄT    │ MEILENSTEIN-BEREICH                             │ KERNZIEL              │
 ├──────────────┼─────────────────────────────────────────────────┼───────────────────────┤
 │ **PRIO 1**   │ **Nova Teamwork (Multi-Agenten-System)**        │ 3-Stufen-Architektur  │
-│ **PRIO 2**   │ **Advanced Power-Browsing & Ergonomie**         │ Splitscreen, Workspaces│
-│ **PRIO 3**   │ **Agentic Automation & Voice Intelligence**     │ Auto-Pilot, Live-Voice│
-│ **PRIO 4**   │ **Local-First Souveränität & Zero-Cloud Sync**  │ P2P Sync, Offline-Hub │
+│ **PRIO 2**   │ **Advanced Power-Browsing & Ergonomie**         │ Splitscreen, Canvas   │
+│ **PRIO 3**   │ **Agentic Automation & Intelligent Helpers**    │ Page Watcher, Auto-Run│
+│ **PRIO 4**   │ **Next-Gen Interaktion: Voice & Vision**        │ Live-Voice, Snipping  │
+│ **PRIO 5**   │ **Local-First Souveränität & Zero-Cloud Sync**  │ P2P Sync, Containers  │
 └──────────────┴─────────────────────────────────────────────────┴───────────────────────┘
 ```
 
@@ -74,22 +75,38 @@ Funktionen, die Lastbrowser zum produktivsten und ergonomischsten Browser auf Wi
 * **Lokale Persistenz:** Die Hervorhebungen und Notizen bleiben lokal in `sqlite` gespeichert und werden beim erneuten Aufruf der URL automatisch wieder über das DOM gelegt.
 * **Supermemory-Sync:** Jedes Highlight fließt automatisch in das persönliche Wissensnetzwerk von Nova AI ein.
 
+### 2.4 Infinite Research Canvas & Visual Mindmap
+* **Visuelles Wissens-Board:** Umschaltung von der linearen Tab-Liste auf ein 2D-Whiteboard (Infinite Canvas).
+* Geöffnete Webseiten, extrahierte Bilder und Nova-Zusammenfassungen werden als frei verschiebbare Kacheln mit Pfeilverbindungen dargestellt – ideal für komplexe Forschungsarbeiten und Planungen.
+
 ---
 
-## 4. Priorität 3: Agentic Automation & Next-Gen Interaktion
+## 4. Priorität 3: Agentic Automation & Intelligent Background Helpers
 
-### 3.1 Autonomer Web-Autopilot mit CDP
-* **Mehrschrittige Formular- & Workflow-Automation:**
-  - *„Lade die letzten 3 Rechnungen von Anbieter X herunter und lege sie im Ordner Rechnungen ab.“*
-  - *„Fülle dieses Bewerbungsformular mit den Daten aus meinem hinterlegten Profil aus.“*
-* **Sicherheits-Beacon:** Optische Hervorhebung jedes Klicks und Eingabefelds mit animierten Zielmarkern und Abbruchmöglichkeit per `Esc`.
+### 3.1 Live Page Watcher & Diff Tracker (Hintergrund-Überwachung)
+* **Konzept:** Nutzer markiert ein beliebiges DOM-Element (z. B. Preis, Status *„Ausverkauft“*, Ticket-Verfügbarkeit, Release-Datum).
+* **Ausführung:** Lastbrowser prüft die Seite periodisch im Hintergrund (z. B. stündlich via Tray-Runner) und sendet eine Desktop-Benachrichtigung mit semantischem KI-Diff (*„Preis von 899 € auf 749 € gefallen!“* oder *„Neues Update verfügbar“*).
 
-### 3.2 Live Audio & Voice Copilot (Gemini Live API)
+### 3.2 Contextual Magic Paste & Form Autofill
+* **Smartes Clipboard:** Kopieren unstrukturierter Notizen, E-Mails oder Chatnachrichten.
+* Beim Klick in ein Webformular (z. B. Überweisung, Anmeldung, Reisebuchung) erkennt Nova die Semantik und füllt alle passenden Felder automatisch fehlerfrei aus.
+
+### 3.3 Smart Download Organizer & Auto-Renamer
+* **Schluss mit Download-Chaos:** Heruntergeladene PDFs, Rechnungen und Dokumente werden von Nova analysiert, sprechend umbenannt (z. B. `2026-09_Rechnung_Telekom.pdf` statt `download_182746.pdf`) und automatisch in passende Ordner einsortiert.
+
+### 3.4 ConPTY Code-Execution Sandbox
+* **Sicheres Testen:** Auf GitHub, StackOverflow oder in Dokumentationen gefundene Code-Snippets können mit 1 Klick in einem isolierten Terminal-Container ausgeführt und getestet werden, ohne das Hauptsystem zu gefährden.
+
+---
+
+## 5. Priorität 4: Next-Gen Interaktion – Live Voice & Vision
+
+### 5.1 Live Audio & Voice Copilot (Gemini Live API)
 * **Bidirektionales Sprach-Surfen:**
   - Freihändiges Steuern und Erfragen von Inhalten über das Mikrofon mit extrem geringer Latenz (<500ms via Gemini Live WebSocket API).
-  - Befehle wie: *„Lies mir die Zusammenfassung vor“*, *„Scrolle nach unten zur Preistabelle“*, *„Öffne den zweiten Link aus dem Artikel“*.
+  - Befehle wie: *„Lies mir den zweiten Abschnitt vor“*, *„Scrolle nach unten zur Preistabelle“*, *„Was steht im Impressum?“*.
 
-### 3.3 Visual Screen & Video Intelligence
+### 5.2 Visual Screen & Video Intelligence
 * **Optische Screenshot-Analyse:**
   - Tastenkombination `Ctrl+Shift+S` für einen rechteckigen Snipping-Ausschnitt, der direkt an Nova AI übergeben wird.
   - Analyse von Diagrammen, Infografiken, komplexen Web-Apps (Figma, Canva) oder Fehler-Popups.
@@ -98,30 +115,35 @@ Funktionen, die Lastbrowser zum produktivsten und ergonomischsten Browser auf Wi
 
 ---
 
-## 5. Priorität 4: Datenschutz, Souveränität & Zero-Cloud Sync
+## 6. Priorität 5: Local-First Souveränität, Sandbox & Zero-Cloud Sync
 
-### 4.1 Vollständiger Offline-Modus & Local-LLM Hub (Ollama / ONNX)
+### 6.1 Multi-Account Containers & Disposable Ghost Sessions
+* **Isolierte Identitäten:** Jeder Tab kann in einem isolierten Profil-Container laufen (z. B. Container *Privat*, Container *Arbeit*, Container *Shopping*), sodass Cookies und Sessions strikt getrennt bleiben.
+* **Ephemeral Ghost Mode:** Ein 1-Klick Einweg-Tab, der nach dem Schließen sämtliche Spuren, Cache und Fingerprints restlos aus dem RAM tilgt.
+
+### 6.2 Vollständiger Offline-Modus & Local-LLM Hub (Ollama / ONNX)
 * **Air-Gapped Browsing:** Ein Modus, in dem Lastbrowser garantiert keine externen Netzwerkverbindungen für KI-Aufgaben öffnet.
 * **1-Klick Ollama-Verwaltung:** Herunterladen, Starten und Verwalten lokaler Open-Source-Modelle (`llama3.2`, `deepseek-r1:8b`, `qwen2.5-coder`, `nomic-embed-text`) direkt aus dem Einstellungs-Panel.
 
-### 4.2 Verschlüsselter P2P-Sync (Zero-Cloud)
+### 6.3 Verschlüsselter P2P-Sync (Zero-Cloud)
 * **Geräte-Synchronisation ohne fremde Server:**
   - Abgleich von Lesezeichen, Einstellungen, Workspaces und Pinned Apps zwischen mehreren PCs über verschlüsselte Peer-to-Peer-Verbindungen (WebRTC / lokales Netzwerk / Tailscale).
   - Kein Account-Zwang, keine Speicherung auf Lastbrowser- oder Cloud-Servern.
 
-### 4.3 Content Shield & Smart Reader Mode
+### 6.4 Content Shield & Smart Reader Mode
 * **Anti-Clutter Engine:**
-  - Bereinigung von Cookie-Bannern, Paywall-Overlays, aggressiven Popups und animierter Werbung über native Rust-/WASM-Filterlisten.
+  - Bereinigung von Cookie-Bannern, Paywall-Overlays, aggressiven Popups und animierter Werbung über native Filterlisten.
   - Eleganter Reader Mode mit anpassbarer Typografie, Zeilenbreite und automatischem Inhaltsverzeichnis (TOC).
 
 ---
 
-## 6. Umsetzungs-Reihenfolge & Roadmap-Phasen
+## 7. Umsetzungs-Reihenfolge & Roadmap-Phasen
 
 | Phase | Fokus | Kern-Deliverables | Status |
 | :--- | :--- | :--- | :---: |
 | **Phase 15** | **Nova Teamwork Stufe 1** | Deep Research Multi-Agent (Lead + 2 Worker + Reviewer) in Sidebar | 🟡 Geplant (Start) |
 | **Phase 16** | **Power Splitscreen & Zen Polish** | 2–4 Tab Splitscreen Drag & Drop, Zen Omnibox Autohide | ⚪ Ausstehend |
 | **Phase 17** | **Nova Teamwork Stufe 2 & 3** | Kanban Task-Board Live-Verdrahtung, MCP-Worker & Background Webviews | ⚪ Ausstehend |
-| **Phase 18** | **Voice & Vision Intelligence** | Gemini Live Audio Streaming & Visual Screenshot Snipping Tool | ⚪ Ausstehend |
-| **Phase 19** | **Local Sovereignty & P2P Sync** | Integrierter Ollama Hub & verschlüsselter Local-First Geräte-Sync | ⚪ Ausstehend |
+| **Phase 18** | **Automation & Background Helpers** | Page Watcher / Change Monitor, Download Organizer, Magic Autofill | ⚪ Ausstehend |
+| **Phase 19** | **Voice & Vision Intelligence** | Gemini Live Audio Streaming & Visual Screenshot Snipping Tool | ⚪ Ausstehend |
+| **Phase 20** | **Local Sovereignty & P2P Sync** | Multi-Account Containers, Ollama Hub & verschlüsselter P2P-Sync | ⚪ Ausstehend |

@@ -23,8 +23,8 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 - [x] **Phase 10: Agentic Browsing & Deep Tab Intelligence (Comet-Parität)** (10.1 Cross-Tab Context Synthesis `@tabs`, 10.6 CometJacking & Prompt-Injection Guardrails, Clickable Citation Badges)
 - [x] **Phase 11: Agentic Workflow Templates & Quick Action Hub** (Kuratierte 1-Klick Recherche- & Analyse-Workflows, Empty-State Quick-Launcher, Command Palette Integration)
 - [x] **Phase 12: Google Gemini CLI Provider & Multi-Account Round-Robin** (Gemini CLI Anbindung, Multi-Account Round-Robin, Auto-Failover, Default-Modell `gemini-3.8-flash`)
-- [ ] **Phase 13: UI-Synthese, Nova AI Branding & Power-Tools Integration** (Re-Branding zu Nova AI, Menü-Synthese der 17+ Power-Panels, Top-64 Pinned-Apps-Katalog, Draggable AI-Action-Bar, dynamische Live-Modellauswahl via Google CLI Quota-Discovery, 48 Spezial-Skills, Phasing-out des Classic Layouts)
-- [ ] **Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)** (Konsolidierung von Chrome MV3 WebExtensions und nativen Nova MCP-Skills, Ablösung des alten „App Store“-Begriffs, Workspace-Scoping, Berechtigungs-Sandboxing)
+- [x] **Phase 13: UI-Synthese, Nova AI Branding & Power-Tools Integration (v0.1.31)** (Re-Branding zu Nova AI, Menü-Synthese der 17+ Power-Panels, Top-64 Pinned-Apps-Katalog, Draggable AI-Action-Bar, dynamische Live-Modellauswahl via Google CLI Quota-Discovery, 48 Spezial-Skills, Phasing-out des Classic Layouts)
+- [x] **Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur) (v0.1.31)** (Konsolidierung von Chrome MV3 WebExtensions und nativen Nova MCP-Skills, Ablösung des alten „App Store“-Begriffs, Workspace-Scoping, Berechtigungs-Sandboxing)
 - [x] **Store-Release Readiness: Microsoft Partner Center (Win32 / NSIS)** (27/27 Preflight Checks, WACK / Silent-Install `/S` Compliance, Store-Listing DE/EN, IARC-Guide, Local-First Privacy Policy)
 
 ---
@@ -275,9 +275,9 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
 
 ---
 
-## 9. Spezifikation Phase 13: UI-Synthese, Nova AI Branding & Power-Tools Integration [ ] (In Planung)
+## 9. Spezifikation Phase 13: UI-Synthese, Nova AI Branding & Power-Tools Integration [x] (Umgesetzt v0.1.31)
 
-### 13.1 Re-Branding: Nova AI & konfigurierbare Mentalität
+### 13.1 Re-Branding: Nova AI & konfigurierbare Mentalität [x]
 1. **Abschaffung von „Copilot“ und „Sidekick“ im UI-Wording:**
    - Die Begriffe „Copilot“ und „Sidekick“ werden aus sämtlichen Labels, Tooltips, Platzhaltern und Benachrichtigungen entfernt.
    - Die integrierte KI heißt standardmäßig **„Nova“** (bzw. Home Space / Nova Space).
@@ -285,7 +285,7 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
    - Im Onboarding-Wizard legt der Nutzer den **Namen** (z. B. Nova, Jarvis, Aria) und die **Mentalität / Persönlichkeit** (z. B. „Pragmatisch & Direkt“, „Forschend & Gründlich“, „Kreativ & Visionär“, „Technisch & Präzise“) der Home Space AI fest.
    - Diese Einstellungen fließen direkt in den System-Prompt und die Begrüßung auf der Startseite ein.
 
-### 13.2 Intelligente Menü-Synthese: Alle Power-Tools im neuen Overlay
+### 13.2 Intelligente Menü-Synthese: Alle Power-Tools im neuen Overlay [x]
 1. **Vollständige Parität der Panels aus der alten UI:**
    - Alle 17+ Panels (`agents`, `kanban`, `skills`, `memory`, `workspaces`, `profiles`, `todos`, `insights`, `logs`, `gmail`, `discord`, `appstore`, `terminal`, `history`, `downloads`, `extensions`, `permissions`) werden nahtlos in die moderne Navigation integriert.
 2. **Entscheidungsgrundlage via Mockups:**
@@ -303,7 +303,7 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
      2. Statischen Import-Integritätscheck in `apps/desktop/tests/browser-layout.test.ts` ergänzen, der automatisiert verifiziert, dass jede Panel-Datei, die `<AdvancedWebUiTools` verwendet, diesen Import auch explizit deklariert.
      3. Alle 17+ Panels auf sauberes Mounten ohne fehlende/ungebundene Runtime-Variablen prüfen (`npm --workspace apps/desktop run build:renderer` & `npm test`).
 
-### 13.3 Pinned Apps: Top-64-Katalog & Custom Apps Popup
+### 13.3 Pinned Apps: Top-64-Katalog & Custom Apps Popup [x]
 1. **Kuratierter App-Katalog (Top 64):**
    - Klick auf das `+`-Icon bei den Pinned Apps öffnet ein modales Auswahl-Grid mit den 64 gängigsten Web-Apps (Gmail, Discord, WhatsApp, Signal, Telegram, Notion, Slack, Spotify, GitHub, YouTube, X/Twitter, ChatGPT, Claude, Linear, Figma, Reddit, Google Calendar, Google Drive, Trello, Jira, Asana, Miro, GitLab, Outlook, Microsoft 365, Netflix, etc.).
    - Kategorisierte Filter (Produktivität, Dev, Messaging, Media, AI).
@@ -311,20 +311,20 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
 2. **Custom App Erstellung:**
    - Formularfeld im Modal für eigene URLs, benutzerdefinierte Namen und Farbakzente.
 
-### 13.4 Draggable & Dockable AI-Aktionsleiste
+### 13.4 Draggable & Dockable AI-Aktionsleiste [x]
 1. **Frei verschiebbare Aktions-Pill beim Browsen:**
    - Die Overlay-Aktionsleiste (*Summarize*, *Explain*, *Deep Research*, *Extract Actions*) wird mit Drag-Handle ausgestattet.
    - Kann per Drag & Drop frei auf dem Viewport positioniert werden (mit persistenter Position).
 2. **Andockbare Zonen:**
    - Andocken an die obere Navigationsleiste, an den unteren Viewport-Rand oder an die Sidebar.
 
-### 13.5 Konfigurierbarer Default-Zustand nach Zen-Modus
+### 13.5 Konfigurierbarer Default-Zustand nach Zen-Modus [x]
 1. **Einstellbare Rückkehr aus dem Zen-Modus:**
    - In den Einstellungen (und per Shortcut-Option) kann definiert werden, welcher Modus nach dem Verlassen des Zen-Fokusmodus (0px) standardmäßig eingenommen wird:
      - Standardzustand A: **Kompakter Mini-Mode / Slim Dock (48px)**.
      - Standardzustand B: **Vollständig Ausgeklappt (~240px)**.
 
-### 13.6 Universelle Modellauswahl & Dynamische Live-Discovery (Gemini CLI & Provider-Sync)
+### 13.6 Universelle Modellauswahl & Dynamische Live-Discovery (Gemini CLI & Provider-Sync) [x]
 1. **Ablösung des statischen Hardcodings:**
    - Die bisherigen, statisch im Frontend hinterlegten Mock-Arrays (`AVAILABLE_MODELS` in `CopilotSplitView.tsx`, `setup-state.ts`, etc.) werden vollständig durch eine dynamische Anbindung an die Backend-API (`/api/models` / `/api/models/live`) ersetzt.
    - Veraltete oder nicht mehr im Code-Assist-Endpoint existierende Modell-IDs (wie `gemini-1.5-*`) werden aus allen Katalogen entfernt.
@@ -346,7 +346,7 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
      - **Lokale Modelle:** Erkannte Ollama- / LocalAI-Instanzen.
    - Auto-Failover: Ist ein Modell oder Account quota-erschöpft (HTTP 429 / `remainingFraction == 0`), wechselt der Provider-Runner nahtlos zum nächsten konfigurierten Google-Account oder bietet einen automatischen Modell-Fallback an.
 
-### 13.7 Agentic Workflows: Kategorisiertes Dropout-Menü mit 12+ Skills pro Kategorie
+### 13.7 Agentic Workflows: Kategorisiertes Dropout-Menü mit 12+ Skills pro Kategorie [x]
 1. **Erweitertes Dropout-Menü:**
    - Umwandlung des einfachen Dropdowns in ein strukturiertes, zweistufiges Mega-Menü mit Kategorien.
 2. **Mindestens 12 spezialisierte Skills pro Kategorie:**
@@ -403,7 +403,7 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
      11. Cookie- & DSGVO-Banner Tracker Auditor
      12. Webhook & Alert Trigger Generator
 
-### 13.8 Phasing-out des Classic Layouts & Moderne Appearance-Settings
+### 13.8 Phasing-out des Classic Layouts & Moderne Appearance-Settings [x]
 1. **Ablösung des Classic-Layouts:**
    - Sobald die Menü-Synthese (13.2) abgeschlossen ist, wird der Schalter „Classic vs. New Mode“ entfernt und das alte redundante 3-Spalten-Layout entfällt ersatzlos.
 2. **Neue Appearance-Optionen in Settings:**
@@ -414,15 +414,15 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
 
 ---
 
-## 10. Spezifikation Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur) [ ] (In Planung)
+## 10. Spezifikation Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur) [x] (Umgesetzt v0.1.31)
 
-### 14.1 Fundamentale Dichotomie & Architekturvision
+### 14.1 Fundamentale Dichotomie & Architekturvision [x]
 1. **Warum native Plugins keineswegs obsolet sind:**
    - **Chrome WebExtensions (Manifest V3):** Konzipiert für den isolierten Browser-DOM- und Web-Netzwerk-Kontext (Adblocker wie uBlock Origin Lite, Passwort-Manager wie Bitwarden, Stylesheets wie Dark Reader, Userscripts wie Violentmonkey). Durch die strikte Chromium-Extension-Sandbox können sie prinzipbedingt **keine lokalen Betriebssystemprozesse** starten, keine Python- oder Node-Toolchains ausführen, kein ConPTY-Terminal manipulieren und keine externen Messenger-Dienste steuern.
    - **Native Nova AI Skills / Sidekick Plugins:** Konzipiert für autonome System- und Agentic-Workflows (Shell-Ausführung, ComfyUI Bild-Pipelines, lokales SQLite/Supermemory-Gedächtnis, Docker/Git-Steuerung, lokale LLM-Runtimes via Ollama, Multi-Platform Messaging Gateway Daemon). Dies bildet das **Kern-Alleinstellungsmerkmal** von Lastbrowser gegenüber herkömmlichen Browsern.
    - **Synthese statt Redundanz:** Beide Systeme sind komplementär. Das bisherige Problem lag ausschließlich in der irreführenden Benennung („App Store“) und fragmentierten UI. Der alte Begriff „App Store“ entfällt vollständig zugunsten des **„Unified Extension & Skill Hub“**.
 
-### 14.2 Der Unified Extension & Skill Hub (Zwei-Säulen-UI)
+### 14.2 Der Unified Extension & Skill Hub (Zwei-Säulen-UI) [x]
 1. **Zentraler Einstiegspunkt:**
    - Einheitlicher Tastatur-Shortcut: `Ctrl+Shift+X` (Industriestandard aus VS Code und modernen Browser-Shells) sowie als permanenter Schnellzugriff in der Sidebar („Extensions & Skills“).
    - Einheitliches Modal- / Drawer-Interface mit zwei klar getrennten Haupt-Reitern:
@@ -439,7 +439,7 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
    - **Beliebige externe MCP-Server anbinden:** 1-Klick-Import oder Konfiguration über `mcp_servers.json` (kompatibel zum Claude Desktop / Codex Ökosystem) für lokale Prozesse (`stdio`) und Remote-Dienste (`sse`).
    - Visuelle Übersicht aller registrierten Tools, Ressourcen und Prompt-Templates pro Skill.
 
-### 14.3 Workspace- & Kontext-Scoping
+### 14.3 Workspace- & Kontext-Scoping [x]
 1. **Säulen-spezifisches Scoping:**
    - **WebExtensions:** Global aktiv oder granular pro Tab/Profil isolierbar (z. B. Developer-Tools nur im Dev-Workspace, strikte Privacy-Erweiterungen im Default-Workspace).
    - **Nova AI Skills / MCP-Server:** Workspace-weises Aktivieren/Deaktivieren:
@@ -449,7 +449,7 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
 2. **Dynamische Tool-Injektion in Nova AI:**
    - Nova lädt im aktiven Kontext nur die für den jeweiligen Workspace freigeschalteten Tools, um Context-Window-Bloat zu verhindern und Halluzinationen zu minimieren.
 
-### 14.4 Granulares Sandboxing & Berechtigungsmanagement (Security First)
+### 14.4 Granulares Sandboxing & Berechtigungsmanagement (Security First) [x]
 1. **Transparente Berechtigungs-Klassifizierung:**
    - Jeder native Skill und MCP-Server deklariert seine benötigten Berechtigungen explizit:
      - `🛡️ read_only` (Dateien lesen, Suchen ausführen, Webseiten abfragen).

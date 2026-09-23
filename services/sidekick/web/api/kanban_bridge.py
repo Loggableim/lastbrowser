@@ -14,6 +14,7 @@ Supported operations:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
@@ -21,6 +22,8 @@ from dataclasses import asdict, is_dataclass
 from urllib.parse import parse_qs, unquote
 
 from web.api.helpers import bad, j
+
+logger = logging.getLogger(__name__)
 
 
 # ── Thread-local workspace kanban isolation ────────────────────────────────────
@@ -127,8 +130,11 @@ def _conn(board=None):
             os.environ["SIDEKICK_KANBAN_HOME"] = _ws_home
             os.environ["SIDEKICK_KANBAN_HOME"] = _ws_home
             kb = _kb()
-            kb.init_db(board=board)
-            return kb.connect(board=board)
+            try:
+                kb.init_db(board=board)
+                return kb.connect(board=board)
+            except OSError as exc:
+                logger.warning("Failed to open kanban DB in %r: %s; falling back to global DB", _ws_home, exc)
         finally:
             if old_home:
                 os.environ["SIDEKICK_KANBAN_HOME"] = old_home
@@ -1207,6 +1213,9 @@ def handle_kanban_get(handler, parsed) -> bool | None:
         return bad(handler, str(exc))
     except RuntimeError as exc:
         return bad(handler, str(exc), status=409)
+    except Exception as exc:
+        logger.exception("Kanban GET failed")
+        return bad(handler, f"kanban error: {exc}", status=500)
 
 
 def handle_kanban_post(handler, parsed, body) -> bool | None:
@@ -1259,6 +1268,9 @@ def handle_kanban_post(handler, parsed, body) -> bool | None:
         return bad(handler, str(exc))
     except RuntimeError as exc:
         return bad(handler, str(exc), status=409)
+    except Exception as exc:
+        logger.exception("Kanban POST failed")
+        return bad(handler, f"kanban error: {exc}", status=500)
     return False
 
 
@@ -1297,6 +1309,9 @@ def handle_kanban_patch(handler, parsed, body) -> bool | None:
         return bad(handler, str(exc))
     except RuntimeError as exc:
         return bad(handler, str(exc), status=409)
+    except Exception as exc:
+        logger.exception("Kanban PATCH failed")
+        return bad(handler, f"kanban error: {exc}", status=500)
     return False
 
 
@@ -1326,4 +1341,7 @@ def handle_kanban_delete(handler, parsed, body) -> bool | None:
         return bad(handler, str(exc))
     except RuntimeError as exc:
         return bad(handler, str(exc), status=409)
+    except Exception as exc:
+        logger.exception("Kanban DELETE failed")
+        return bad(handler, f"kanban error: {exc}", status=500)
     return False

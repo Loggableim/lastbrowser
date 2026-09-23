@@ -1,4 +1,4 @@
-﻿"""
+"""
 Sidekick -- Route handlers for GET and POST endpoints.
 Extracted from server.py (Sprint 11) so server.py is a thin shell.
 """
@@ -121,7 +121,7 @@ from web.api.profiles import _profiles_match  # noqa: F401, E402  (re-export)
 # â”€â”€ Workspace isolation helpers (per-request thread-local context) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _workspace_slug_from_request(handler, parsed=None) -> str | None:
-    """Extract the workspace slug from the current request.
+    """Extract the workspace slug or path from the current request.
 
     Resolution order:
       1. ``?workspace=<slug>`` query parameter
@@ -135,13 +135,20 @@ def _workspace_slug_from_request(handler, parsed=None) -> str | None:
         qs = _parse_qs(parsed.query or "")
         raw = qs.get("workspace") or qs.get("space")
         if raw and raw[0].strip():
-            return raw[0].strip().lower()
+            val = raw[0].strip()
+            if "/" not in val and "\\" not in val and ":" not in val:
+                return val.lower()
+            return val
     if handler:
-        slug = handler.headers.get("X-Sidekick-Workspace", "").strip().lower()
+        slug = handler.headers.get("X-Sidekick-Workspace", "").strip()
         if slug:
+            if "/" not in slug and "\\" not in slug and ":" not in slug:
+                return slug.lower()
             return slug
-    slug = os.environ.get("SIDEKICK_WEBUI_ACTIVE_WORKSPACE", "").strip().lower()
+    slug = os.environ.get("SIDEKICK_WEBUI_ACTIVE_WORKSPACE", "").strip()
     if slug:
+        if "/" not in slug and "\\" not in slug and ":" not in slug:
+            return slug.lower()
         return slug
     return None
 
@@ -155,7 +162,10 @@ def _setup_workspace_from_request(handler, parsed=None) -> None:
     from web.api.kanban_bridge import set_workspace_kanban
     from web.api.space_engine import (
         DEFAULT_SPACE_SLUG,
+        get_all_workspaces,
         get_or_create_workspace,
+        get_space,
+        _is_valid_space_slug,
         set_active_workspace,
     )
 
@@ -164,19 +174,75 @@ def _setup_workspace_from_request(handler, parsed=None) -> None:
         slug = None
     else:
         slug = _workspace_slug_from_request(handler, parsed)
+
     if slug:
-        ws = get_or_create_workspace(slug)
-        set_active_workspace(ws.slug)
-        ws.sessions_dir.mkdir(parents=True, exist_ok=True)
-        set_session_dir(str(ws.sessions_dir))
-        set_workspace_kanban(str(ws.root))
-    else:
-        # No explicit workspace â†’ use the fresh-install default Nova space.
+        # 1. Match existing space by slug
+        try:
+            ws = get_space(slug)
+            if ws:
+                set_active_workspace(ws.slug)
+                ws.sessions_dir.mkdir(parents=True, exist_ok=True)
+                set_session_dir(str(ws.sessions_dir))
+                set_workspace_kanban(str(ws.root))
+                return
+        except Exception:
+            pass
+
+        # 2. Match existing space by project_dir or root path
+        try:
+            norm_slug = os.path.normcase(os.path.realpath(slug))
+            for candidate in get_all_workspaces():
+                pdir = candidate.get_project_dir()
+                if (pdir and os.path.normcase(os.path.realpath(pdir)) == norm_slug) or (
+                    os.path.normcase(os.path.realpath(str(candidate.root))) == norm_slug
+                ):
+                    set_active_workspace(candidate.slug)
+                    candidate.sessions_dir.mkdir(parents=True, exist_ok=True)
+                    set_session_dir(str(candidate.sessions_dir))
+                    set_workspace_kanban(str(candidate.root))
+                    return
+        except Exception:
+            pass
+
+        # 3. Valid space slug that doesn't exist yet
+        try:
+            if _is_valid_space_slug(slug):
+                ws = get_or_create_workspace(slug)
+                set_active_workspace(ws.slug)
+                ws.sessions_dir.mkdir(parents=True, exist_ok=True)
+                set_session_dir(str(ws.sessions_dir))
+                set_workspace_kanban(str(ws.root))
+                return
+        except Exception:
+            pass
+
+        # 4. Filesystem path for direct workspace folder
+        try:
+            target_path = Path(slug).expanduser().resolve()
+            if target_path.is_dir() or ("/" in slug or "\\" in slug or ":" in slug):
+                set_active_workspace(DEFAULT_SPACE_SLUG)
+                sessions_dir = target_path / ".sidekick" / "sessions"
+                try:
+                    sessions_dir.mkdir(parents=True, exist_ok=True)
+                    set_session_dir(str(sessions_dir))
+                except OSError:
+                    default_ws = get_or_create_workspace(DEFAULT_SPACE_SLUG)
+                    default_ws.sessions_dir.mkdir(parents=True, exist_ok=True)
+                    set_session_dir(str(default_ws.sessions_dir))
+                set_workspace_kanban(str(target_path))
+                return
+        except Exception:
+            pass
+
+    # No explicit workspace or fallback → use the fresh-install default Nova space.
+    try:
         default_ws = get_or_create_workspace(DEFAULT_SPACE_SLUG)
         set_active_workspace(default_ws.slug)
         default_ws.sessions_dir.mkdir(parents=True, exist_ok=True)
         set_session_dir(str(default_ws.sessions_dir))
         set_workspace_kanban(str(default_ws.root))
+    except Exception:
+        logger.exception("Failed to setup default workspace context")
 
 
 def _teardown_workspace_context() -> None:
@@ -10795,7 +10861,7 @@ def _handle_supermemory_search(handler, body):
     """POST /api/memory/supermemory/search"""
     client = _get_supermemory_client()
     if client is None:
-        return bad(handler, "Supermemory is not configured. Check supermemory.json.")
+        return j(handler, {"results": [], "hits": [], "configured": False, "ok": True, "message": "Supermemory is not configured."})
     q = body.get("q", "").strip()
     limit = int(body.get("limit", 10))
     container_tag = body.get("container_tag") or None
@@ -10951,7 +11017,7 @@ def _handle_supermemory_list(handler, parsed):
     """GET /api/memory/supermemory/list"""
     client = _get_supermemory_client()
     if client is None:
-        return bad(handler, "Supermemory is not configured.")
+        return j(handler, {"results": [], "configured": False, "ok": True, "message": "Supermemory is not configured."})
     qs = parse_qs(parsed.query)
     limit = int(qs.get("limit", ["20"])[0])
     page = int(qs.get("page", ["1"])[0])
@@ -10967,17 +11033,17 @@ def _handle_supermemory_list(handler, parsed):
             data = result.dict()
         else:
             data = result
-        return j(handler, {"results": data, "ok": True})
+        return j(handler, {"results": data, "configured": True, "ok": True})
     except Exception as e:
         logger.exception("Supermemory list failed")
-        return bad(handler, f"Supermemory list failed: {e}")
+        return j(handler, {"results": [], "configured": False, "ok": False, "error": str(e)})
 
 
 def _handle_supermemory_document(handler, parsed):
     """GET /api/memory/supermemory/document"""
     client = _get_supermemory_client()
     if client is None:
-        return bad(handler, "Supermemory is not configured.")
+        return j(handler, {"document": None, "configured": False, "ok": True, "message": "Supermemory is not configured."})
     qs = parse_qs(parsed.query)
     doc_id = qs.get("id", [None])[0]
     if not doc_id:
@@ -10990,10 +11056,10 @@ def _handle_supermemory_document(handler, parsed):
             data = result.dict()
         else:
             data = result
-        return j(handler, {"document": data, "ok": True})
+        return j(handler, {"document": data, "configured": True, "ok": True})
     except Exception as e:
         logger.exception("Supermemory document get failed")
-        return bad(handler, f"Supermemory document get failed: {e}")
+        return j(handler, {"document": None, "configured": False, "ok": False, "error": str(e)})
 
 
 # â”€â”€ POST route helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -14836,7 +14902,7 @@ def _handle_supermemory_list(handler, parsed):
     """GET /api/memory/supermemory/list"""
     client = _get_supermemory_client()
     if client is None:
-        return bad(handler, "Supermemory is not configured.")
+        return j(handler, {"results": [], "configured": False, "ok": True, "message": "Supermemory is not configured."})
     from urllib.parse import parse_qs
     qs = parse_qs(parsed.query)
     limit = int(qs.get("limit", ["20"])[0])
@@ -14853,17 +14919,17 @@ def _handle_supermemory_list(handler, parsed):
             data = result.dict()
         else:
             data = result
-        return j(handler, {"results": data, "ok": True})
+        return j(handler, {"results": data, "configured": True, "ok": True})
     except Exception as e:
         logger.exception("Supermemory list failed")
-        return bad(handler, f"Supermemory list failed: {e}")
+        return j(handler, {"results": [], "configured": False, "ok": False, "error": str(e)})
 
 
 def _handle_supermemory_document(handler, parsed):
     """GET /api/memory/supermemory/document"""
     client = _get_supermemory_client()
     if client is None:
-        return bad(handler, "Supermemory is not configured.")
+        return j(handler, {"document": None, "configured": False, "ok": True, "message": "Supermemory is not configured."})
     from urllib.parse import parse_qs
     qs = parse_qs(parsed.query)
     doc_id = qs.get("id", [None])[0]
@@ -14877,17 +14943,17 @@ def _handle_supermemory_document(handler, parsed):
             data = result.dict()
         else:
             data = result
-        return j(handler, {"document": data, "ok": True})
+        return j(handler, {"document": data, "configured": True, "ok": True})
     except Exception as e:
         logger.exception("Supermemory document get failed")
-        return bad(handler, f"Supermemory document get failed: {e}")
+        return j(handler, {"document": None, "configured": False, "ok": False, "error": str(e)})
 
 
 def _handle_supermemory_search(handler, body):
     """POST /api/memory/supermemory/search"""
     client = _get_supermemory_client()
     if client is None:
-        return bad(handler, "Supermemory is not configured.")
+        return j(handler, {"hits": [], "results": [], "configured": False, "ok": True, "message": "Supermemory is not configured."})
     q = body.get("q", "").strip()
     limit = int(body.get("limit", 20))
     if not q:

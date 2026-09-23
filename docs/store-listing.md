@@ -262,3 +262,93 @@ All data is stored locally in %APPDATA%\Lastbrowser.
 1. Auf **An den Store übermitteln** (Submit to the Store) klicken.
 2. Die automatische Vorprüfung (WACK) und die Microsoft-Prüfung laufen im Hintergrund (typische Dauer: 24–48 Stunden).
 3. Nach erfolgreicher Zertifizierung ist Lastbrowser live im Microsoft Store verfügbar!
+
+---
+
+## 8. What's New in v0.1.31 (Changelog für Store-Einreichung)
+
+> **Hinweis zu Zeichenlimits:** Das Microsoft Partner Center begrenzt das
+> „What's New“-Feld typischerweise auf **1500 Zeichen**. Beide Varianten unten
+> bleiben sicher darunter. Subtitle (max. 30 Zeichen) und Short Description
+> (max. 100 Zeichen) bleiben unverändert gültig — aktualisierte Varianten
+> mit Zeichen-Nachweis stehen in 8.3.
+
+### 8.1 What's New (Deutsch – de-DE)
+
+```text
+Nova AI & Unified Extension & Skill Hub (v0.1.31)
+
+🤖 Nova AI – Ihre KI, Ihre Mentalität
+• Re-Branding: Die integrierte KI heißt Nova. Name (Nova, Jarvis, Aria …)
+  und Mentalität („Pragmatisch & Direkt“, „Forschend & Gründlich“,
+  „Kreativ & Visionär“, „Technisch & Präzise“) legen Sie im Setup-Assistenten fest.
+• Dynamische Live-Modellauswahl: Modelle werden live via Google CLI Quota-API
+  entdeckt – inklusive Kontingent-Badges und Auto-Failover bei Erschöpfung.
+
+⚡ 48 kuratierte Agentic Workflows
+• 4 Kategorien à 12 Spezial-Skills im neuen Mega-Menü:
+  Recherche & Deep Analysis · Content & Dokumentation ·
+  Code & Engineering · Daten & Automatisierung.
+• Draggable AI-Action-Bar, Top-64 Pinned-Apps, Menü-Synthese
+  aller 17+ Power-Panels.
+
+🧩 Unified Extension & Skill Hub (Ctrl+Shift+X)
+• Zwei Säulen unter einem Dach: 🌐 Chrome MV3 WebExtensions (1-Klick-Store,
+  Web-Store-URL-Install, Drag & Drop .crx/.zip) und ⚡ Nova AI Skills &
+  MCP-Tools (offener MCP-Standard, mcp_servers.json, stdio & sse).
+• Workspace-Scoping: Skills pro Workspace (Coding / Recherche / Design)
+  aktivieren – schlankes Context-Window, weniger Halluzinationen.
+• Granulares Sandboxing: Berechtigungen (read_only, filesystem_write,
+  terminal_execute, network_outbound, agent_autonomy) transparent
+  einsehbar, Human-in-the-Loop für kritische Aktionen, 1-Klick-Widerruf.
+
+🧹 Das alte Classic-Layout und der Begriff „App Store“ entfallen
+zugunsten des Unified Extension & Skill Hub.
+```
+
+### 8.2 What's New (Englisch – en-US)
+
+```text
+Nova AI & Unified Extension & Skill Hub (v0.1.31)
+
+🤖 Nova AI – Your Assistant, Your Personality
+• Rebranding: The built-in AI is now Nova. Choose its name (Nova, Jarvis,
+  Aria …) and personality ("Pragmatic & Direct", "Inquisitive & Thorough",
+  "Creative & Visionary", "Technical & Precise") in the setup wizard.
+• Dynamic live model discovery via the Google CLI quota API, including
+  quota badges and automatic failover when a model runs dry.
+
+⚡ 48 Curated Agentic Workflows
+• 4 categories with 12 specialist skills each in the new mega-menu:
+  Research & Deep Analysis · Content & Documentation ·
+  Code & Engineering · Data & Automation.
+• Draggable AI action bar, Top-64 pinned apps, menu synthesis of all
+  17+ power panels.
+
+🧩 Unified Extension & Skill Hub (Ctrl+Shift+X)
+• Two pillars under one roof: 🌐 Chrome MV3 WebExtensions (1-click store,
+  Web Store URL install, drag & drop .crx/.zip) and ⚡ Nova AI Skills &
+  MCP Tools (open MCP standard, mcp_servers.json, stdio & sse).
+• Workspace scoping: enable skills per workspace (Coding / Research /
+  Design) for a lean context window and fewer hallucinations.
+• Granular sandboxing: permissions (read_only, filesystem_write,
+  terminal_execute, network_outbound, agent_autonomy) are fully
+  transparent, with human-in-the-loop for critical actions and
+  1-click revocation.
+
+🧹 The legacy Classic layout and the "App Store" term are retired in
+favor of the Unified Extension & Skill Hub.
+```
+
+### 8.3 Aktualisierte Kurzangaben (v0.1.31)
+
+| Feld | Sprache | Text | Zeichen |
+| :--- | :--- | :--- | :--- |
+| **Subtitle** | de-DE | `Nova AI & Skill Hub Browser` | 27/30 |
+| **Subtitle** | en-US | `Nova AI & Skill Hub Browser` | 27/30 |
+| **Short Description** | de-DE | `Schneller, privater Chromium-Browser mit Nova AI, 48 Workflows & MCP-Skill-Hub.` | 79/100 |
+| **Short Description** | en-US | `Fast, private Chromium browser with Nova AI, 48 workflows & MCP skill hub.` | 74/100 |
+
+Die bisherigen Werte aus 2.1/3.1 (`AI-Native Web Browser` / „Nova KI-Copilot“-Formulierungen)
+bleiben als Fallback gültig; für die v0.1.31-Einreichung sind die obigen Varianten
+empfohlen, da sie das Re-Branding und die Hub-Architektur widerspiegeln.

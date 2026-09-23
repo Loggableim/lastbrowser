@@ -136,5 +136,22 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
       expect(source).toContain('Immer vertrauen (Auto-Approve)');
       expect(source).toContain('skills-scope-chips');
     });
+
+    it('persists WebExtension workspace scoping and updates state per extension', () => {
+      const source = readRendererFile('components/UnifiedExtensionHub.tsx');
+      expect(source).toContain('lastbrowser.extension_scopes.v1');
+      expect(source).toContain('handleUpdateExtensionScope');
+      expect(source).toContain('extensionScopes[ext.id]');
+    });
+
+    it('validates MCP JSON configuration, rejects malformed input and registers external servers', () => {
+      const source = readRendererFile('components/UnifiedExtensionHub.tsx');
+      expect(source).toContain('handleApplyMcpConfig');
+      expect(source).toContain('lastbrowser.mcp_config.v1');
+      expect(source).toContain('JSON.parse(mcpConfigJson)');
+      expect(source).toContain('Ungültiges JSON-Format');
+      expect(source).toContain('mcp-ext-');
+    });
   });
 });
+

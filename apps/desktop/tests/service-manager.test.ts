@@ -24,6 +24,7 @@ describe('sidecar service layout', () => {
     expect(env.HERMES_WEBUI_PORT).toBe('8787');
     expect(env.LASTBROWSER_WEBUI_AGENT_DIR).toContain('services');
     expect(env.HERMES_WEBUI_AGENT_DIR).toBe(env.LASTBROWSER_WEBUI_AGENT_DIR);
+    expect(env.PYTHONPATH).toContain('services');
   });
 
   it('keeps services inside the packaged resources directory', () => {

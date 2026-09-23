@@ -12,7 +12,10 @@ describe('startpage atmospheric dashboard helpers', () => {
     const d = new Date(2026, 8, 21, 8, 30);
     const res = getDashboardGreeting(d);
     expect(res.greeting).toBe('Guten Morgen');
-    expect(res.subline).toContain('Sidekick');
+    expect(res.subline).toContain('Nova');
+
+    const customRes = getDashboardGreeting(d, 'Aria');
+    expect(customRes.subline).toContain('Aria');
   });
 
   it('returns afternoon greeting between 12:00 and 17:59', () => {

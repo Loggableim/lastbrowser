@@ -43,10 +43,10 @@ export interface DashboardGreeting {
   subline: string;
 }
 
-export function getDashboardGreeting(date: Date = new Date()): DashboardGreeting {
+export function getDashboardGreeting(date: Date = new Date(), botName = 'Nova'): DashboardGreeting {
   const hours = date.getHours();
   if (hours >= 5 && hours < 12) {
-    return { greeting: 'Guten Morgen', subline: 'Bereit für den Tag? Womit kann Sidekick helfen?' };
+    return { greeting: 'Guten Morgen', subline: `Bereit für den Tag? Womit kann ${botName} helfen?` };
   }
   if (hours >= 12 && hours < 18) {
     return { greeting: 'Guten Tag', subline: 'Was recherchieren wir als Nächstes?' };
@@ -54,7 +54,7 @@ export function getDashboardGreeting(date: Date = new Date()): DashboardGreeting
   if (hours >= 18 && hours < 23) {
     return { greeting: 'Guten Abend', subline: 'Den Tag abschließen oder noch ein Thema vertiefen?' };
   }
-  return { greeting: 'Gute Nacht', subline: 'Nachtsession aktiv. Sidekick steht bereit.' };
+  return { greeting: 'Gute Nacht', subline: `Nachtsession aktiv. ${botName} steht bereit.` };
 }
 
 export function formatDashboardTime(date: Date = new Date()): string {
@@ -97,13 +97,15 @@ export function NativeBrowserStartPage({
   visits,
   onNavigate,
   onAskAi,
-  onOpenCommandPalette
+  onOpenCommandPalette,
+  botName = 'Nova'
 }: {
   bookmarks: BrowserBookmark[];
   visits: BrowserVisit[];
   onNavigate: (url: string) => void;
   onAskAi?: (prompt: string) => void;
   onOpenCommandPalette?: () => void;
+  botName?: string;
 }): JSX.Element {
   const [query, setQuery] = useState('');
   const [currentTime, setCurrentTime] = useState(() => new Date());
@@ -115,7 +117,8 @@ export function NativeBrowserStartPage({
     return () => clearInterval(timer);
   }, []);
 
-  const greeting = useMemo(() => getDashboardGreeting(currentTime), [currentTime]);
+  const effectiveBotName = botName.trim() || 'Nova';
+  const greeting = useMemo(() => getDashboardGreeting(currentTime, effectiveBotName), [currentTime, effectiveBotName]);
   const timeString = useMemo(() => formatDashboardTime(currentTime), [currentTime]);
   const dateString = useMemo(() => formatDashboardDate(currentTime), [currentTime]);
 
@@ -179,7 +182,7 @@ export function NativeBrowserStartPage({
         <div className="startpage-hero-aside">
           <div className="browser-start-badge">
             <Sparkles size={14} />
-            <span>Nova AI Copilot</span>
+            <span>{effectiveBotName} AI</span>
           </div>
           <button
             type="button"

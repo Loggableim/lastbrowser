@@ -1726,13 +1726,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const [passwordDraft, setPasswordDraft] = useState('');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [layoutMode, setLayoutMode] = useState<'modern' | 'classic'>(() => {
-    try {
-      const val = window.localStorage.getItem('lastbrowser.layoutMode.v1');
-      if (val === 'classic' || val === 'modern') return val;
-    } catch {}
-    return 'modern';
-  });
 
   const [zenExitMode, setZenExitModeState] = useState<ZenExitDefaultMode>(() => {
     try {

@@ -170,7 +170,10 @@ export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number
     HERMES_WEBUI_BROWSER_BASE_URL: webuiBaseUrl,
     HERMES_WEBUI_PYTHON: layout.pythonExe,
     HERMES_PYTHON: layout.pythonExe,
-    HERMES_WEBUI_NO_BROWSER: '1'
+    HERMES_WEBUI_NO_BROWSER: '1',
+    PYTHONPATH: process.env.PYTHONPATH
+      ? `${layout.sidekickDir}${path.delimiter}${process.env.PYTHONPATH}`
+      : layout.sidekickDir
   };
   return env;
 }

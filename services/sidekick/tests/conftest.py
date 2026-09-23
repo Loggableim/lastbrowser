@@ -10,8 +10,14 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import sys
 import time
 from pathlib import Path
+
+# Ensure in-tree services/sidekick is always the first lookup in sys.path
+_REPO_SIDEKICK_DIR = Path(__file__).resolve().parent.parent
+if str(_REPO_SIDEKICK_DIR) not in sys.path:
+    sys.path.insert(0, str(_REPO_SIDEKICK_DIR))
 
 import pytest
 

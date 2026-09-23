@@ -3175,6 +3175,7 @@ function BrowserMain({
           bookmarks={bookmarks}
           visits={visitedSites}
           onNavigate={onNavigate}
+          botName={setupState.botName || 'Nova'}
           onAskAi={(prompt) => {
             setCopilotOpen(true);
             void onSendChat(prompt);

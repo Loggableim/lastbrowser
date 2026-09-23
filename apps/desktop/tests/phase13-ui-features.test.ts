@@ -294,9 +294,10 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
       expect(copilot).not.toContain('(Sidekick AI Copilot)');
 
       const startPage = readRendererFile('panels/NativeBrowserStartPage.tsx');
-      expect(startPage).toContain('Nova AI Copilot');
+      expect(startPage).toContain('effectiveBotName');
       expect(startPage).toContain('Frag Nova');
       expect(startPage).toContain('Nova Schnellaktionen');
+      expect(startPage).not.toContain('Nova AI Copilot');
       expect(startPage).not.toContain('Sidekick AI Copilot');
     });
   });

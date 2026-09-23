@@ -97,7 +97,8 @@ const quota=actions.children.find(x=>x.textContent==='Quota prüfen');
   await quota.events.click();assert.equal(rendered,payload);
 })().catch(e=>{console.error(e);process.exitCode=1});
 """
-    result = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=20)
+    _sidekick_root = Path(__file__).resolve().parent.parent
+    result = subprocess.run([node, "-e", script], cwd=str(_sidekick_root), capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stdout + result.stderr
 
 
@@ -135,9 +136,10 @@ def test_google_cancel_drops_pending_flow_without_secrets(monkeypatch, tmp_path)
 
 
 def test_google_webui_contract_surfaces_exist():
-    routes = Path("web/api/routes.py").read_text(encoding="utf-8")
-    panels = Path("web/static/panels.js").read_text(encoding="utf-8")
-    onboarding = Path("web/static/onboarding.js").read_text(encoding="utf-8")
+    _sidekick_root = Path(__file__).resolve().parent.parent
+    routes = (_sidekick_root / "web/api/routes.py").read_text(encoding="utf-8")
+    panels = (_sidekick_root / "web/static/panels.js").read_text(encoding="utf-8")
+    onboarding = (_sidekick_root / "web/static/onboarding.js").read_text(encoding="utf-8")
     assert "/api/oauth/google/start" in routes
     assert "/api/oauth/google/status" in routes
     assert "/api/oauth/google/disconnect" in routes

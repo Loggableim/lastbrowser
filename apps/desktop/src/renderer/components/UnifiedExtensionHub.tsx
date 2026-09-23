@@ -165,7 +165,8 @@ export function UnifiedExtensionHub({
   });
   const [skillSearch, setSkillSearch] = useState('');
   const [skillWorkspaceFilter, setSkillWorkspaceFilter] = useState<'all' | 'coding' | 'recherche' | 'design'>('all');
-  const [mcpConfigJson, setMcpConfigJson] = useState(`{
+
+  const DEFAULT_MCP_CONFIG = `{
   "mcpServers": {
     "git": {
       "command": "npx",
@@ -176,7 +177,24 @@ export function UnifiedExtensionHub({
       "args": ["-m", "sidekick.runtime.mcp_memory"]
     }
   }
-}`);
+}`;
+
+  const [mcpConfigJson, setMcpConfigJson] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem('lastbrowser.mcp_config.v1');
+      if (stored) return stored;
+    } catch {}
+    return DEFAULT_MCP_CONFIG;
+  });
+
+  const [extensionScopes, setExtensionScopes] = useState<Record<string, 'all' | 'coding' | 'recherche' | 'design'>>(() => {
+    try {
+      const stored = localStorage.getItem('lastbrowser.extension_scopes.v1');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return {};
+  });
+
   const [showMcpConfig, setShowMcpConfig] = useState(false);
 
   // Sync tab with store
@@ -224,6 +242,74 @@ export function UnifiedExtensionHub({
   const notify = (text: string, error = false) => {
     setFeedback({ text, error });
     setTimeout(() => setFeedback(null), 3000);
+  };
+
+  const handleUpdateExtensionScope = (extId: string, scope: 'all' | 'coding' | 'recherche' | 'design') => {
+    setExtensionScopes((prev) => {
+      const next = { ...prev, [extId]: scope };
+      try {
+        localStorage.setItem('lastbrowser.extension_scopes.v1', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleApplyMcpConfig = () => {
+    try {
+      const parsed = JSON.parse(mcpConfigJson);
+      if (!parsed || typeof parsed !== 'object') {
+        notify('JSON-Konfiguration muss ein valides Objekt sein', true);
+        return;
+      }
+      try {
+        localStorage.setItem('lastbrowser.mcp_config.v1', mcpConfigJson);
+      } catch {}
+
+      const servers = (parsed.mcpServers || parsed.servers) as Record<string, any> | undefined;
+      let registeredCount = 0;
+      if (servers && typeof servers === 'object') {
+        setSkills((prev) => {
+          const next = [...prev];
+          for (const [serverKey, config] of Object.entries(servers)) {
+            const skillId = `mcp-ext-${serverKey}`;
+            const existingIdx = next.findIndex((s) => s.id === skillId);
+            const serverConf = (config && typeof config === 'object') ? config : {};
+            const isStdio = Boolean(serverConf.command);
+            const permissions: McpPermissionType[] = isStdio
+              ? ['terminal_execute', 'filesystem_write']
+              : ['network_outbound', 'read_only'];
+            const newSkill: McpSkillItem = {
+              id: skillId,
+              name: `MCP: ${serverKey}`,
+              description: `Externer ${isStdio ? 'stdio' : 'sse'} Server (${serverConf.command || serverConf.url || 'custom'}).`,
+              category: 'system',
+              icon: isStdio ? '⚙️' : '🌐',
+              workspaceScope: 'coding',
+              permissions,
+              autoApprove: false,
+              enabled: existingIdx >= 0 ? next[existingIdx].enabled : true,
+              type: 'mcp_server',
+              serverType: isStdio ? 'stdio' : 'sse',
+              endpoint: serverConf.url || serverConf.command
+            };
+            if (existingIdx >= 0) {
+              next[existingIdx] = { ...next[existingIdx], ...newSkill };
+            } else {
+              next.push(newSkill);
+            }
+            registeredCount++;
+          }
+          try {
+            localStorage.setItem('lastbrowser.mcp_skills.v1', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+      }
+
+      notify(`mcp_servers.json erfolgreich validiert & ${registeredCount} MCP-Server registriert!`);
+    } catch (err) {
+      notify(`Ungültiges JSON-Format: ${err instanceof Error ? err.message : String(err)}`, true);
+    }
   };
 
   // Preset install
@@ -526,7 +612,8 @@ export function UnifiedExtensionHub({
                         <div className="ext-scope-control">
                           <label>Workspace:</label>
                           <select
-                            defaultValue="all"
+                            value={extensionScopes[ext.id] || 'all'}
+                            onChange={(e) => handleUpdateExtensionScope(ext.id, e.target.value as any)}
                             className="ext-workspace-select"
                             title="Workspace-Scoping"
                           >
@@ -627,7 +714,7 @@ export function UnifiedExtensionHub({
                   <button
                     type="button"
                     className="save-mcp-btn"
-                    onClick={() => notify('mcp_servers.json erfolgreich validiert und geladen!')}
+                    onClick={handleApplyMcpConfig}
                   >
                     <Check size={14} />
                     <span>Konfiguration anwenden</span>

@@ -34,6 +34,7 @@ import {
 } from '../workflow-templates.js';
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
+import { brandAssets } from '../brand.js';
 
 export interface AvailableModelItem {
   id: string;
@@ -438,7 +439,7 @@ export function CopilotSplitView({
       <div className="copilot-header">
         <div className="copilot-header-brand">
           <div className="copilot-logo-circle">
-            <Sparkles size={14} className="copilot-sparkle-icon" />
+            <img src={brandAssets.sidekickAvatar} alt="" className="copilot-header-avatar" draggable={false} />
           </div>
           <span className="copilot-header-title">{botName} AI</span>
         </div>
@@ -593,7 +594,7 @@ export function CopilotSplitView({
         {messages.length === 0 ? (
           <div className="copilot-empty-state">
             <div className="copilot-empty-icon">
-              <Bot size={28} />
+              <img src={brandAssets.sidekickAvatar} alt={botName} className="copilot-empty-avatar" draggable={false} />
             </div>
             <h4>Frag {botName} zur aktuellen Seite</h4>
             <p>
@@ -630,7 +631,7 @@ export function CopilotSplitView({
                 >
                   {!isUser && (
                     <div className="copilot-avatar-circle" title={botName}>
-                      <Sparkles size={13} />
+                      <img src={brandAssets.sidekickAvatar} alt="" className="copilot-msg-avatar" draggable={false} />
                     </div>
                   )}
 

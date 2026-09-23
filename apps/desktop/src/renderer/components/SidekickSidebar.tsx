@@ -169,7 +169,7 @@ export function SidekickSidebar({
           >
             <div className="dock-brand-circle">
               <img
-                src={brandAssets.sidebarIcons.chat}
+                src={brandAssets.sidekickAvatar}
                 alt={botName}
                 className="dock-popart-avatar"
                 onError={(e) => {

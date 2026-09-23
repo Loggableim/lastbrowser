@@ -894,7 +894,7 @@ export function ModernTitlebar({
           aria-label={`Toggle ${botName} AI`}
           onClick={onToggleCopilot}
         >
-          <Sparkles size={15} />
+          <img src={brandAssets.sidekickAvatar} alt="" className="copilot-btn-avatar" draggable={false} />
           <span className="copilot-btn-label">{botName}</span>
         </button>
 

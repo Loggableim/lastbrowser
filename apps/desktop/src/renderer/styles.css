@@ -8596,6 +8596,21 @@ body.sidebar-resizing * {
   letter-spacing: 0.3px;
 }
 
+.copilot-btn-avatar {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  object-fit: contain;
+  flex-shrink: 0;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.copilot-toggle-btn:hover .copilot-btn-avatar,
+.copilot-toggle-btn.active .copilot-btn-avatar {
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 5px rgba(0, 217, 255, 0.85));
+}
+
 /* ─── Zen Workspace Layout ────────────────────────────────────────────────── */
 .browser-zen-workspace {
   display: flex;
@@ -10041,14 +10056,23 @@ body.sidebar-resizing * {
 }
 
 .copilot-logo-circle {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #00d9ff, #0066cc);
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: rgba(0, 217, 255, 0.12);
+  border: 1px solid rgba(0, 217, 255, 0.28);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #050811;
+  overflow: hidden;
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.25);
+}
+
+.copilot-header-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  object-fit: contain;
 }
 
 .copilot-header-title {
@@ -10636,17 +10660,36 @@ body.sidebar-resizing * {
 }
 
 .copilot-empty-icon {
-  width: 48px;
-  height: 48px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
   background: rgba(0, 217, 255, 0.1);
-  border: 1px solid rgba(0, 217, 255, 0.25);
+  border: 1px solid rgba(0, 217, 255, 0.28);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #00d9ff;
-  margin-bottom: 12px;
-  box-shadow: 0 0 16px rgba(0, 217, 255, 0.2);
+  margin-bottom: 14px;
+  box-shadow: 0 0 20px rgba(0, 217, 255, 0.25);
+  animation: copilot-pulse 3.5s ease-in-out infinite;
+}
+
+.copilot-empty-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(0, 217, 255, 0.65));
+}
+
+@keyframes copilot-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(0, 217, 255, 0.25);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(0, 217, 255, 0.45);
+  }
 }
 
 .copilot-empty-state h4 {
@@ -10709,13 +10752,21 @@ body.sidebar-resizing * {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #00d9ff;
-  color: #050811;
+  background: rgba(0, 217, 255, 0.15);
+  border: 1px solid rgba(0, 217, 255, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   margin-top: 2px;
+  overflow: hidden;
+}
+
+.copilot-msg-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: contain;
 }
 
 .copilot-bubble {

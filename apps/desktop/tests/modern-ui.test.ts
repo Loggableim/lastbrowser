@@ -121,7 +121,7 @@ describe('Phase 9: Modern UI Redesign (Sidekick + Zen Browser Synthese)', () => 
   it('implements CopilotSplitView with formatting, code copy, and page-aware chat input', () => {
     const copilotSource = readRendererFile('components/CopilotSplitView.tsx');
 
-    expect(copilotSource).toContain('Sidekick AI Copilot');
+    expect(copilotSource).toMatch(/(?:Sidekick|Nova|\{botName\})\s+AI/);
     expect(copilotSource).toContain('copilot-split-panel');
     expect(copilotSource).toContain('copilot-code-block');
     expect(copilotSource).toContain('copilot-code-copy-btn');

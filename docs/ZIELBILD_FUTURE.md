@@ -16,7 +16,8 @@
 │ **PRIO 2**   │ **Advanced Power-Browsing & Ergonomie**         │ Splitscreen, Canvas   │
 │ **PRIO 3**   │ **Agentic Automation & Intelligent Helpers**    │ Page Watcher, Auto-Run│
 │ **PRIO 4**   │ **Next-Gen Interaktion: Voice & Vision**        │ Live-Voice, Snipping  │
-│ **PRIO 5**   │ **Local-First Souveränität & Zero-Cloud Sync**  │ P2P Sync, Containers  │
+│ **PRIO 5**   │ **Local-First Souveränität, Privacy & Sandbox** │ Containers, P2P Sync  │
+│ **PRIO 6**   │ **Developer & Knowledge Tools**                 │ API Explorer, Graphs  │
 └──────────────┴─────────────────────────────────────────────────┴───────────────────────┘
 ```
 
@@ -87,7 +88,7 @@ Funktionen, die Lastbrowser zum produktivsten und ergonomischsten Browser auf Wi
 * **Konzept:** Nutzer markiert ein beliebiges DOM-Element (z. B. Preis, Status *„Ausverkauft“*, Ticket-Verfügbarkeit, Release-Datum).
 * **Ausführung:** Lastbrowser prüft die Seite periodisch im Hintergrund (z. B. stündlich via Tray-Runner) und sendet eine Desktop-Benachrichtigung mit semantischem KI-Diff (*„Preis von 899 € auf 749 € gefallen!“* oder *„Neues Update verfügbar“*).
 
-### 3.2 Contextual Magic Paste & Form Autofill
+### 3.2 Contextual Magic Paste & Semantic Autofill
 * **Smartes Clipboard:** Kopieren unstrukturierter Notizen, E-Mails oder Chatnachrichten.
 * Beim Klick in ein Webformular (z. B. Überweisung, Anmeldung, Reisebuchung) erkennt Nova die Semantik und füllt alle passenden Felder automatisch fehlerfrei aus.
 
@@ -130,14 +131,24 @@ Funktionen, die Lastbrowser zum produktivsten und ergonomischsten Browser auf Wi
   - Abgleich von Lesezeichen, Einstellungen, Workspaces und Pinned Apps zwischen mehreren PCs über verschlüsselte Peer-to-Peer-Verbindungen (WebRTC / lokales Netzwerk / Tailscale).
   - Kein Account-Zwang, keine Speicherung auf Lastbrowser- oder Cloud-Servern.
 
-### 6.4 Content Shield & Smart Reader Mode
-* **Anti-Clutter Engine:**
-  - Bereinigung von Cookie-Bannern, Paywall-Overlays, aggressiven Popups und animierter Werbung über native Filterlisten.
-  - Eleganter Reader Mode mit anpassbarer Typografie, Zeilenbreite und automatischem Inhaltsverzeichnis (TOC).
+### 6.4 Content Shield & Anti-Dark-Pattern Engine
+* **Heuristischer Schutz:**
+  - Automatische Neutralisierung von manipulativer Cookie-Banner-Psychologie ("Zustimmen" grün, "Ablehnen" versteckt grau).
+  - Bereinigung gefälschter Countdown-Timer und künstlicher Verknappungshinweise auf Shopping-Websites.
 
 ---
 
-## 7. Umsetzungs-Reihenfolge & Roadmap-Phasen
+## 7. Priorität 6: Developer & Deep Knowledge Tools
+
+### 7.1 In-Page REST / GraphQL API Explorer
+* **Automatische API-Erkennung:** Wenn der Nutzer auf Entwickler-Dokus (z. B. Stripe, Supabase, GitHub) surft, parst Nova die Codebeispiele und bietet ein ausklappbares Test-Panel zum direkten Ausführen von GET/POST-Requests an.
+
+### 7.2 Semantischer Bookmark Knowledge Graph
+* **Keine toten Ordner mehr:** Lesezeichen werden automatisch semantisch indiziert und als interaktiver Wissensgraph visualisiert. Nova findet Lesezeichen nicht nur über den exakten Titel, sondern über thematische Zusammenhänge.
+
+---
+
+## 8. Umsetzungs-Reihenfolge & Roadmap-Phasen
 
 | Phase | Fokus | Kern-Deliverables | Status |
 | :--- | :--- | :--- | :---: |
@@ -146,4 +157,5 @@ Funktionen, die Lastbrowser zum produktivsten und ergonomischsten Browser auf Wi
 | **Phase 17** | **Nova Teamwork Stufe 2 & 3** | Kanban Task-Board Live-Verdrahtung, MCP-Worker & Background Webviews | ⚪ Ausstehend |
 | **Phase 18** | **Automation & Background Helpers** | Page Watcher / Change Monitor, Download Organizer, Magic Autofill | ⚪ Ausstehend |
 | **Phase 19** | **Voice & Vision Intelligence** | Gemini Live Audio Streaming & Visual Screenshot Snipping Tool | ⚪ Ausstehend |
-| **Phase 20** | **Local Sovereignty & P2P Sync** | Multi-Account Containers, Ollama Hub & verschlüsselter P2P-Sync | ⚪ Ausstehend |
+| **Phase 20** | **Local Sovereignty & Containers** | Multi-Account Containers, Ghost Sessions & Ollama Hub | ⚪ Ausstehend |
+| **Phase 21** | **Developer Tools & Knowledge Graph** | In-Page API Explorer & Semantischer Bookmark-Graph | ⚪ Ausstehend |

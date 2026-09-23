@@ -90,6 +90,10 @@ describe('Single-Instance URL Dispatcher (extractUrlFromArgs)', () => {
     expect(extracted?.startsWith('file:///')).toBe(true);
     expect(extracted?.endsWith('README.html')).toBe(true);
   });
+
+  it('extracts URL when provided as a single standalone argument', () => {
+    expect(extractUrlFromArgs(['https://lastbrowser.com'])).toBe('https://lastbrowser.com');
+  });
 });
 
 describe('Microsoft Store & Windows Default Browser Configuration (package.json)', () => {

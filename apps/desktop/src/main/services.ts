@@ -398,6 +398,7 @@ export class SidecarServices {
     lastError: null,
     startedAt: null
   };
+  private isStopping = false;
 
   constructor(
     private readonly layout: ServiceLayout,
@@ -597,6 +598,7 @@ export class SidecarServices {
   }
 
   private async startInternal(): Promise<ServiceStatus> {
+    this.isStopping = false;
     this.status = { ...this.status, sidekick: 'starting' };
 
     let webuiPort: number;
@@ -665,7 +667,7 @@ export class SidecarServices {
     this.webuiProcess.once('exit', (code, signal) => {
       this.stopHealthLoop();
       this.webuiProcess = null;
-      const wasRunning = this.status.sidekick === 'ready';
+      const wasRunning = this.status.sidekick === 'ready' && !this.isStopping;
       this.status = {
         ...this.status,
         sidekick: 'stopped',
@@ -673,10 +675,10 @@ export class SidecarServices {
         lastError: `Sidekick service stopped (code=${code}, signal=${signal}).`
       };
       // Auto-restart if the process crashed (not a clean stop)
-      if (wasRunning && code !== 0 && code !== null) {
+      if (wasRunning && code !== 0 && code !== null && !this.isStopping) {
         console.warn(`[lastbrowser] WebUI process crashed (code=${code}), restarting in 2s...`);
         setTimeout(() => {
-          if (!this.webuiProcess) {
+          if (!this.webuiProcess && !this.isStopping) {
             void this.start();
           }
         }, 2000);
@@ -718,6 +720,7 @@ export class SidecarServices {
   }
 
   stop(): void {
+    this.isStopping = true;
     this.startPromise = null;
     this.stopHealthLoop();
     if (this.gatewayProcess) {
@@ -736,7 +739,9 @@ export class SidecarServices {
       this.status = { ...this.status, sidekick: 'stopped' };
       return;
     }
-    this.webuiProcess.kill();
+    try {
+      this.webuiProcess.kill();
+    } catch {}
     this.webuiProcess = null;
     this.status = { ...this.status, sidekick: 'stopped' };
   }

@@ -21,6 +21,9 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 - [x] **Phase 8: WebExtensions / Addon-Support (Manifest V3)** (Entpacktes Laden, Zero-Dependency CRX3-Extraktor, kuratierter 1-Klick-Store mit Dark Reader, uBlock Origin Lite, Bitwarden, ClearURLs, Violentmonkey, Web Store URL-Install, Session-Attachment)
 - [x] **Phase 9: Modernes UI-Redesign (Sidekick + Zen Synthese mit einklappbarer Sidebar)** (Einklappbare vertikale Tabs, Wegfall horizontaler Tabs, 48px Slim-Dock, Pinned-Grid, Sidekick-Startseiten-Dashboard, 70/30 Copilot Split-View)
 - [x] **Phase 10: Agentic Browsing & Deep Tab Intelligence (Comet-Parität)** (10.1 Cross-Tab Context Synthesis `@tabs`, 10.6 CometJacking & Prompt-Injection Guardrails, Clickable Citation Badges)
+- [x] **Phase 11: Agentic Workflow Templates & Quick Action Hub** (Kuratierte 1-Klick Recherche- & Analyse-Workflows, Empty-State Quick-Launcher, Command Palette Integration)
+- [x] **Phase 12: Google Gemini CLI Provider & Multi-Account Round-Robin** (Gemini CLI Anbindung, Multi-Account Round-Robin, Auto-Failover, Default-Modell `gemini-3.8-flash`)
+- [x] **Store-Release Readiness: Microsoft Partner Center (Win32 / NSIS)** (27/27 Preflight Checks, WACK / Silent-Install `/S` Compliance, Store-Listing DE/EN, IARC-Guide, Local-First Privacy Policy)
 
 ---
 

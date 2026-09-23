@@ -150,7 +150,7 @@ import { createDownloadTracker } from './downloads.js';
 import { createPermissionController, loadTrustedOrigins, saveTrustedOrigins, trustedOriginsFileName } from './permissions.js';
 import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
 import { registerWindowControlIpc } from './window-controls.js';
-import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTerminalIds } from './terminal-process.js';
+import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTerminalIds, closeAllTerminals } from './terminal-process.js';
 import { createAppTray, setupMinimizeToTray, type TrayController } from './tray.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
@@ -874,13 +874,40 @@ app.on('session-created', (session) => {
   });
 });
 
+function cleanupServices(): void {
+  try {
+    for (const controller of agentWorkspaceStreams.values()) controller.abort();
+    agentWorkspaceStreams.clear();
+  } catch {}
+  try {
+    closeAllTerminals();
+  } catch {}
+  try {
+    services?.stop();
+  } catch {}
+}
+
 app.on('before-quit', () => {
   isQuitting = true;
-  appTray?.destroy();
-  for (const controller of agentWorkspaceStreams.values()) controller.abort();
-  agentWorkspaceStreams.clear();
-  services?.stop();
+  try { appTray?.destroy(); } catch {}
+  cleanupServices();
 });
+
+app.on('will-quit', () => {
+  cleanupServices();
+});
+
+const handleTerminationSignal = () => {
+  if (isQuitting) return;
+  isQuitting = true;
+  cleanupServices();
+  if (typeof app?.quit === 'function') {
+    app.quit();
+  }
+};
+
+process.on('SIGINT', handleTerminationSignal);
+process.on('SIGTERM', handleTerminationSignal);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

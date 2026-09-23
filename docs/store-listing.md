@@ -72,8 +72,17 @@ KERNFEATURES:
 6. **WebExtensions (Manifest V3):** Integrierter 1-Klick-Store für uBlock, Dark Reader, Bitwarden & mehr.
 7. **Pinned Apps Hub:** Direkter Zugriff auf bis zu 64 beliebte Web-Dienste mit Shortcuts.
 
-### 2.4 Suchbegriffe & Keywords (Such-Tags)
-`browser`, `webbrowser`, `chromium`, `ai browser`, `ki`, `copilot`, `sidekick`, `zen browser`, `vertikale tabs`, `adblocker`, `produktivität`, `terminal`, `powershell`, `local-first`
+### 2.4 Suchbegriffe & Keywords (Top 7 – je max. 30 Zeichen)
+Das Microsoft Partner Center erlaubt bis zu 7 Suchbegriffe. Diese 7 optimierten Begriffe direkt ins Formular übernehmen:
+1. `browser` (7/30 Zeichen)
+2. `webbrowser` (10/30 Zeichen)
+3. `ai browser` (10/30 Zeichen)
+4. `zen browser` (11/30 Zeichen)
+5. `vertikale tabs` (14/30 Zeichen)
+6. `ki copilot` (10/30 Zeichen)
+7. `local-first` (11/30 Zeichen)
+
+*Weitere relevante Schlagworte:* `chromium`, `adblocker`, `powershell`, `sidekick`, `terminal`
 
 ---
 
@@ -125,8 +134,17 @@ KEY CAPABILITIES:
 6. **Manifest V3 Extensions:** Curated 1-click add-on store (Dark Reader, Bitwarden, uBlock Origin).
 7. **Pinned Web Apps Hub:** Instant access to 64+ curated web apps with quick-launch shortcuts.
 
-### 3.4 Keywords / Tags
-`browser`, `web browser`, `chromium`, `ai browser`, `copilot`, `sidekick`, `zen browser`, `vertical tabs`, `adblocker`, `productivity`, `terminal`, `local-first`, `gemini`, `privacy`
+### 3.4 Keywords / Search Terms (Top 7 – max 30 characters each)
+The Microsoft Partner Center allows up to 7 search keywords. Use these 7 optimized keywords:
+1. `browser` (7/30 chars)
+2. `web browser` (11/30 chars)
+3. `ai browser` (10/30 chars)
+4. `zen browser` (11/30 chars)
+5. `vertical tabs` (13/30 chars)
+6. `ai copilot` (10/30 chars)
+7. `local-first` (11/30 chars)
+
+*Additional relevant terms:* `chromium`, `productivity`, `terminal`, `powershell`, `sidekick`
 
 ---
 
@@ -172,3 +190,75 @@ Der Fragebogen der **International Age Rating Coalition (IARC)** im Partner Cent
 * [x] **Feedback- & Melde-Mechanismus:** Jede KI-Nachricht verfügt über einen Daumen-Runter- / Melde-Button mit Auswahlmenü (`AiFeedbackModal.tsx`), protokolliert in `lastbrowser.aiFeedback.v1`.
 * [x] **Prompt-Injection Guardrails:** Automatische Neutralisierung von Jailbreak-Vektoren (`[⚠️ Guardrail: Untrusted instruction block sanitized]`).
 * [x] **Benutzerkontrolle:** Anfragen an externe KI-Modelle erfolgen nur auf expliziten Nutzerbefehl.
+
+---
+
+## 7. Schritt-für-Schritt Einreichungsanleitung für das Microsoft Partner Center
+
+Folgen Sie dieser präzisen Anleitung zur Einreichung von Lastbrowser im Microsoft Partner Center:
+
+### Schritt 1: Anmelden & Produkt anlegen
+1. Im [Microsoft Partner Center](https://partner.microsoft.com/dashboard) mit dem Entwicklerkonto anmelden.
+2. Im Menü auf **Apps und Spiele** (Apps and games) klicken.
+3. Auf **Neues Produkt erstellen** &rarr; **Windows-Desktopanwendung (Installationsprogramm)** (Windows desktop application - installer) klicken.
+4. Den reservierten Namen **„Lastbrowser“** auswählen oder neu reservieren.
+
+### Schritt 2: Paket & Installationsparameter konfigurieren
+Unter dem Punkt **Pakete** (Packages) bzw. **Installationsprogramm**:
+1. **Download-URL des Installers:**
+   `https://github.com/Loggableim/lastbrowser/releases/download/v0.1.31/Lastbrowser-0.1.31-x64-setup.exe`
+2. **Befehlszeilenargumente für automatische Installation (Silent Install):**
+   `/S`
+3. **Befehlszeilenargumente für automatische Deinstallation (Silent Uninstall):**
+   `/S`
+4. **Rückgabecode für erfolgreiche Installation:**
+   `0`
+5. **Architektur:**
+   `x64`
+6. **Mindestversion des Betriebssystems:**
+   `Windows 10 Version 1809 (Build 17763)` oder `Windows 11`
+
+### Schritt 3: Eigenschaften & Rechtliches (Properties)
+1. **Kategorie:** `Produktivität` &rsaquo; `Web-Browser` (oder `Dienstprogramme & Tools` &rsaquo; `Web-Browser`).
+2. **Datenschutz-URL (Privacy Policy):**
+   `https://lastbrowser.com/privacy/`
+3. **Support-URL:**
+   `https://lastbrowser.com/support/`
+4. **Support-Kontakt-E-Mail:**
+   `support@lastbrowser.com`
+5. **Copyright:**
+   `© 2026 Dominik Rainer / Lastbrowser Project`
+
+### Schritt 4: Altersfreigabe (IARC Rating Questionnaire)
+1. Den Online-Fragebogen starten.
+2. Antworten gemäß **Abschnitt 5** dieses Dokuments ausfüllen:
+   - Kategorie: Web-Browser.
+   - Uneingeschränkter Internetzugriff: **Ja**.
+   - Generative KI mit Guardrails: **Ja**.
+   - Standortweitergabe & In-App-Käufe: **Nein**.
+3. Altersfreigaben generieren und speichern (führt zu PEGI 12/16).
+
+### Schritt 5: Store-Einträge (Store Listings)
+Für **Deutsch (de-DE)** und **Englisch (en-US)**:
+1. **App-Titel:** `Lastbrowser`
+2. **Untertitel:** `AI-Native Web Browser`
+3. **Kurzbeschreibung:** Aus Abschnitt 2.1 bzw. 3.1 kopieren.
+4. **Ausführliche Beschreibung:** Vollständigen Markdown-Text aus Abschnitt 2.2 bzw. 3.2 einfügen.
+5. **Suchbegriffe (Keywords):** Die Top 7 Begriffe aus Abschnitt 2.4 bzw. 3.4 eintragen.
+6. **Grafiken hochladen:**
+   - App-Icon: `assets/store/icon-512.png` und `assets/store/icon-1024.png`
+   - Screenshots: Alle 6 Screenshots aus `assets/store/` hochladen (`store-screen-1-zen-sidebar.png` bis `store-screen-6-privacy-shield.png`).
+
+### Schritt 6: Hinweise für Zertifizierungsprüfer (Notes for Certification)
+Folgenden Text in das Feld für Notizen an die Microsoft-Prüfer eintragen:
+```text
+Lastbrowser is a standalone, local-first Chromium web browser for Windows with an integrated local Python runtime. 
+No login, product key, or cloud account is required to test and evaluate the application. 
+Silent installation and uninstallation can be performed with the '/S' parameter (exit code 0). 
+All data is stored locally in %APPDATA%\Lastbrowser.
+```
+
+### Schritt 7: Einreichen & Verfolgen
+1. Auf **An den Store übermitteln** (Submit to the Store) klicken.
+2. Die automatische Vorprüfung (WACK) und die Microsoft-Prüfung laufen im Hintergrund (typische Dauer: 24–48 Stunden).
+3. Nach erfolgreicher Zertifizierung ist Lastbrowser live im Microsoft Store verfügbar!

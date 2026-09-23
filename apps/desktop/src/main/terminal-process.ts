@@ -205,6 +205,19 @@ export function getTerminalIds(): string[] {
   return Array.from(terminals.keys());
 }
 
+/**
+ * Terminate all running terminal sessions.
+ * Called during app shutdown to prevent orphaned ConPTY / shell processes.
+ */
+export function closeAllTerminals(): void {
+  for (const [id, instance] of terminals.entries()) {
+    try {
+      instance.pty.kill();
+    } catch {}
+    terminals.delete(id);
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function resolveShell(): string {

@@ -28,6 +28,7 @@ import {
   resizeTerminal,
   closeTerminal,
   getTerminalIds,
+  closeAllTerminals,
   type TerminalOptions
 } from '../src/main/terminal-process.js';
 import * as nodePty from 'node-pty';
@@ -116,5 +117,17 @@ describe('terminal-process', () => {
     const closeRes = closeTerminal(id);
     expect(closeRes.ok).toBe(true);
     expect(getTerminalIds()).not.toContain(id);
+  });
+
+  it('closes all terminal sessions cleanly via closeAllTerminals', () => {
+    const onData = vi.fn();
+    const term1 = startTerminal('C:\\workspace1', onData);
+    const term2 = startTerminal('C:\\workspace2', onData);
+
+    expect(getTerminalIds()).toContain(term1.id);
+    expect(getTerminalIds()).toContain(term2.id);
+
+    closeAllTerminals();
+    expect(getTerminalIds()).toEqual([]);
   });
 });

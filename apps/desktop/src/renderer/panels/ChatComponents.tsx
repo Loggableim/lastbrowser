@@ -424,16 +424,21 @@ export function ChatComposer({
               value={model}
               disabled={!ready || running}
               onChange={(event) => onModelChange(event.target.value)}
+              style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}
             >
               {/* Keep the current model visible even when the catalog has not
                   loaded yet or the model is no longer offered. */}
               {!modelOptions.some((group) => group.models.some((m) => m.id === model)) && (
-                <option value={model}>{model || 'default'}</option>
+                <option value={model} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                  {model || 'default'}
+                </option>
               )}
               {modelOptions.map((group) => (
-                <optgroup key={group.provider} label={group.provider}>
+                <optgroup key={group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
                   {group.models.map((m) => (
-                    <option key={m.id} value={m.id}>{m.label}</option>
+                    <option key={m.id} value={m.id} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                      {m.label}
+                    </option>
                   ))}
                 </optgroup>
               ))}

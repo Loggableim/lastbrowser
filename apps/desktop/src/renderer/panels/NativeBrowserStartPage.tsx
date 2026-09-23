@@ -179,7 +179,7 @@ export function NativeBrowserStartPage({
         <div className="startpage-hero-aside">
           <div className="browser-start-badge">
             <Sparkles size={14} />
-            <span>Nova AI Copilot</span>
+            <span>Nova AI</span>
           </div>
           <button
             type="button"
@@ -208,7 +208,7 @@ export function NativeBrowserStartPage({
             className="secondary-action compact startpage-ask-ai-btn"
             disabled={!query.trim()}
             onClick={handleAskAi}
-            title="Frage an Nova AI Copilot senden"
+            title="Frage an Nova AI senden"
           >
             <Bot size={15} />
             <span>Frag Nova</span>

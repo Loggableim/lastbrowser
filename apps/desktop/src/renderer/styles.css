@@ -1718,27 +1718,73 @@ body.sidebar-resizing * {
 .composer-model {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border: 1px solid var(--lb-border);
-  border-radius: 0;
-  background: var(--lb-surface);
-  color: var(--lb-muted);
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #00d9ff;
   min-width: 0;
+  transition: all 0.15s ease;
+}
+
+.composer-model:hover {
+  border-color: rgba(0, 217, 255, 0.4);
+  background: rgba(0, 217, 255, 0.08);
 }
 
 .composer-model select {
   border: 0;
-  background: transparent;
-  color: var(--lb-text);
-  font-size: 12px;
-  max-width: 220px;
+  background-color: #0b1325;
+  color: #e8f2ff;
+  font-size: 11.5px;
+  font-weight: 500;
+  max-width: 240px;
   cursor: pointer;
+  outline: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.composer-model select option,
+.composer-model select optgroup {
+  background-color: #0b1325 !important;
+  color: #e8f2ff !important;
+}
+
+.composer-model select optgroup {
+  font-weight: 700;
+  color: #00d9ff !important;
+  background-color: #070c18 !important;
 }
 
 .composer-model select:disabled {
   opacity: .55;
   cursor: not-allowed;
+}
+
+/* Global select option styling to prevent white-on-white text in Chromium dropdowns */
+select option,
+select optgroup {
+  background-color: #0b1325 !important;
+  color: #e8f2ff !important;
+}
+
+select optgroup {
+  font-weight: 700;
+  color: #00d9ff !important;
+  background-color: #070c18 !important;
+}
+
+html.theme-light select option,
+html.theme-light select optgroup {
+  background-color: #ffffff !important;
+  color: #1a202c !important;
+}
+
+html.theme-light select optgroup {
+  color: #0284c7 !important;
+  background-color: #f1f5f9 !important;
 }
 
 /* Zoom indicator in the browser toolbar. */

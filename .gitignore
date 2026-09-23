@@ -7,10 +7,12 @@ release/
 .env
 .env.*
 !.env.example
-home/
-runtime/
-python/
-venv/
+/home/
+/runtime/
+apps/desktop/runtime/
+/python/
+/venv/
+*.BACKUP*
 llama/models/
 llama/bin/
 *.gguf

@@ -23,7 +23,7 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 - [x] **Phase 10: Agentic Browsing & Deep Tab Intelligence (Comet-Parität)** (10.1 Cross-Tab Context Synthesis `@tabs`, 10.6 CometJacking & Prompt-Injection Guardrails, Clickable Citation Badges)
 - [x] **Phase 11: Agentic Workflow Templates & Quick Action Hub** (Kuratierte 1-Klick Recherche- & Analyse-Workflows, Empty-State Quick-Launcher, Command Palette Integration)
 - [x] **Phase 12: Google Gemini CLI Provider & Multi-Account Round-Robin** (Gemini CLI Anbindung, Multi-Account Round-Robin, Auto-Failover, Default-Modell `gemini-3.8-flash`)
-- [ ] **Phase 13: UI-Synthese, Nova AI Branding & Power-Tools Integration** (Re-Branding zu Nova AI, Menü-Synthese der 17+ Power-Panels, Top-64 Pinned-Apps-Katalog, Draggable AI-Action-Bar, 48 Spezial-Skills, Phasing-out des Classic Layouts)
+- [ ] **Phase 13: UI-Synthese, Nova AI Branding & Power-Tools Integration** (Re-Branding zu Nova AI, Menü-Synthese der 17+ Power-Panels, Top-64 Pinned-Apps-Katalog, Draggable AI-Action-Bar, dynamische Live-Modellauswahl via Google CLI Quota-Discovery, 48 Spezial-Skills, Phasing-out des Classic Layouts)
 - [ ] **Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)** (Konsolidierung von Chrome MV3 WebExtensions und nativen Nova MCP-Skills, Ablösung des alten „App Store“-Begriffs, Workspace-Scoping, Berechtigungs-Sandboxing)
 - [x] **Store-Release Readiness: Microsoft Partner Center (Win32 / NSIS)** (27/27 Preflight Checks, WACK / Silent-Install `/S` Compliance, Store-Listing DE/EN, IARC-Guide, Local-First Privacy Policy)
 
@@ -317,14 +317,27 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
      - Standardzustand A: **Kompakter Mini-Mode / Slim Dock (48px)**.
      - Standardzustand B: **Vollständig Ausgeklappt (~240px)**.
 
-### 13.6 Universelle Modellauswahl in Nova AI
-1. **Entsperrung des Modell-Pickers:**
-   - Beseitigung der starren Einschränkung auf „Sidekick Pro“.
-   - Dynamischer Dropdown-Picker mit allen aktiven und konfigurierten Modellen:
-     - **Gemini CLI:** `gemini-3.8-flash` (Default), `gemini-1.5-pro`, `gemini-1.5-flash` (inkl. Anzeige des aktiven Round-Robin Google-Accounts).
+### 13.6 Universelle Modellauswahl & Dynamische Live-Discovery (Gemini CLI & Provider-Sync)
+1. **Ablösung des statischen Hardcodings:**
+   - Die bisherigen, statisch im Frontend hinterlegten Mock-Arrays (`AVAILABLE_MODELS` in `CopilotSplitView.tsx`, `setup-state.ts`, etc.) werden vollständig durch eine dynamische Anbindung an die Backend-API (`/api/models` / `/api/models/live`) ersetzt.
+   - Veraltete oder nicht mehr im Code-Assist-Endpoint existierende Modell-IDs (wie `gemini-1.5-*`) werden aus allen Katalogen entfernt.
+2. **Dynamische Live-Discovery über Google Cloud Code Assist API:**
+   - **Backend (`services/sidekick/`):**
+     - Bei aktivem Google-CLI-Login (`google-gemini-cli`) ruft das Backend über `retrieve_user_quota()` in `services/sidekick/runtime/google_code_assist.py` den Endpunkt `POST https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota` mit dem OAuth-Bearer-Token auf.
+     - Google liefert ein `buckets[]`-Array mit den exakten, für das angemeldete Google-Konto provisionierten `modelId`s (z. B. `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3-flash-preview`, `gemini-3.1-pro-preview`) sowie dem aktuellen Kontingentstand (`remainingFraction`).
+     - Der API-Endpunkt `/api/models` spiegelt diese Liste direkt in der Gruppe `google-gemini-cli` mit Quota-Informationen wider.
+3. **Pre-Login & Offline-Fallback:**
+   - Vor dem Login (`GOOGLE CLI CONNECT`) oder bei Netzwerkunterbrechung zeigt der Picker eine verifizierte Standardauswahl der stabilen Produktionsmodelle:
+     - `gemini-2.5-flash` (Standard • Schnell & Kosteneffizient)
+     - `gemini-2.5-pro` (Tiefes Reasoning & Komplexe Analyse)
+   - Sobald das Konto verbunden ist (`GOOGLE CLI READY`), aktualisiert sich das Dropdown in Echtzeit mit den real verfügbaren Modellen des Accounts.
+4. **UI-Darstellung & Quota-Badges:**
+   - Dynamischer Dropdown-Picker im Chat- und Copilot-SplitView:
+     - **Google Gemini CLI:** Anzeige der live entdeckten Modelle inkl. Kontingent-Badge (z. B. *„Gemini 2.5 Flash • 85% Kontingent verfügbar“*) und des aktiven Round-Robin Google-Accounts.
      - **Anthropic:** `claude-3-5-sonnet`, `claude-3-opus`, `claude-3-5-haiku`.
      - **OpenAI:** `gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini`.
-     - **Lokale Modelle:** Ollama / LocalAI Instanzen.
+     - **Lokale Modelle:** Erkannte Ollama- / LocalAI-Instanzen.
+   - Auto-Failover: Ist ein Modell oder Account quota-erschöpft (HTTP 429 / `remainingFraction == 0`), wechselt der Provider-Runner nahtlos zum nächsten konfigurierten Google-Account oder bietet einen automatischen Modell-Fallback an.
 
 ### 13.7 Agentic Workflows: Kategorisiertes Dropout-Menü mit 12+ Skills pro Kategorie
 1. **Erweitertes Dropout-Menü:**

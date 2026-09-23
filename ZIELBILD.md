@@ -21,6 +21,11 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 - [x] **Phase 8: WebExtensions / Addon-Support (Manifest V3)** (Entpacktes Laden, Zero-Dependency CRX3-Extraktor, kuratierter 1-Klick-Store mit Dark Reader, uBlock Origin Lite, Bitwarden, ClearURLs, Violentmonkey, Web Store URL-Install, Session-Attachment)
 - [x] **Phase 9: Modernes UI-Redesign (Sidekick + Zen Synthese mit einklappbarer Sidebar)** (Einklappbare vertikale Tabs, Wegfall horizontaler Tabs, 48px Slim-Dock, Pinned-Grid, Sidekick-Startseiten-Dashboard, 70/30 Copilot Split-View)
 - [x] **Phase 10: Agentic Browsing & Deep Tab Intelligence (Comet-Parität)** (10.1 Cross-Tab Context Synthesis `@tabs`, 10.6 CometJacking & Prompt-Injection Guardrails, Clickable Citation Badges)
+- [x] **Phase 11: Agentic Workflow Templates & Quick Action Hub** (Kuratierte 1-Klick Recherche- & Analyse-Workflows, Empty-State Quick-Launcher, Command Palette Integration)
+- [x] **Phase 12: Google Gemini CLI Provider & Multi-Account Round-Robin** (Gemini CLI Anbindung, Multi-Account Round-Robin, Auto-Failover, Default-Modell `gemini-3.8-flash`)
+- [ ] **Phase 13: UI-Synthese, Nova AI Branding & Power-Tools Integration** (Re-Branding zu Nova AI, Menü-Synthese der 17+ Power-Panels, Top-64 Pinned-Apps-Katalog, Draggable AI-Action-Bar, dynamische Live-Modellauswahl via Google CLI Quota-Discovery, 48 Spezial-Skills, Phasing-out des Classic Layouts)
+- [ ] **Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)** (Konsolidierung von Chrome MV3 WebExtensions und nativen Nova MCP-Skills, Ablösung des alten „App Store“-Begriffs, Workspace-Scoping, Berechtigungs-Sandboxing)
+- [x] **Store-Release Readiness: Microsoft Partner Center (Win32 / NSIS)** (27/27 Preflight Checks, WACK / Silent-Install `/S` Compliance, Store-Listing DE/EN, IARC-Guide, Local-First Privacy Policy)
 
 ---
 
@@ -312,14 +317,27 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
      - Standardzustand A: **Kompakter Mini-Mode / Slim Dock (48px)**.
      - Standardzustand B: **Vollständig Ausgeklappt (~240px)**.
 
-### 13.6 Universelle Modellauswahl in Nova AI
-1. **Entsperrung des Modell-Pickers:**
-   - Beseitigung der starren Einschränkung auf „Sidekick Pro“.
-   - Dynamischer Dropdown-Picker mit allen aktiven und konfigurierten Modellen:
-     - **Gemini CLI:** `gemini-3.8-flash` (Default), `gemini-1.5-pro`, `gemini-1.5-flash` (inkl. Anzeige des aktiven Round-Robin Google-Accounts).
+### 13.6 Universelle Modellauswahl & Dynamische Live-Discovery (Gemini CLI & Provider-Sync)
+1. **Ablösung des statischen Hardcodings:**
+   - Die bisherigen, statisch im Frontend hinterlegten Mock-Arrays (`AVAILABLE_MODELS` in `CopilotSplitView.tsx`, `setup-state.ts`, etc.) werden vollständig durch eine dynamische Anbindung an die Backend-API (`/api/models` / `/api/models/live`) ersetzt.
+   - Veraltete oder nicht mehr im Code-Assist-Endpoint existierende Modell-IDs (wie `gemini-1.5-*`) werden aus allen Katalogen entfernt.
+2. **Dynamische Live-Discovery über Google Cloud Code Assist API:**
+   - **Backend (`services/sidekick/`):**
+     - Bei aktivem Google-CLI-Login (`google-gemini-cli`) ruft das Backend über `retrieve_user_quota()` in `services/sidekick/runtime/google_code_assist.py` den Endpunkt `POST https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota` mit dem OAuth-Bearer-Token auf.
+     - Google liefert ein `buckets[]`-Array mit den exakten, für das angemeldete Google-Konto provisionierten `modelId`s (z. B. `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3-flash-preview`, `gemini-3.1-pro-preview`) sowie dem aktuellen Kontingentstand (`remainingFraction`).
+     - Der API-Endpunkt `/api/models` spiegelt diese Liste direkt in der Gruppe `google-gemini-cli` mit Quota-Informationen wider.
+3. **Pre-Login & Offline-Fallback:**
+   - Vor dem Login (`GOOGLE CLI CONNECT`) oder bei Netzwerkunterbrechung zeigt der Picker eine verifizierte Standardauswahl der stabilen Produktionsmodelle:
+     - `gemini-2.5-flash` (Standard • Schnell & Kosteneffizient)
+     - `gemini-2.5-pro` (Tiefes Reasoning & Komplexe Analyse)
+   - Sobald das Konto verbunden ist (`GOOGLE CLI READY`), aktualisiert sich das Dropdown in Echtzeit mit den real verfügbaren Modellen des Accounts.
+4. **UI-Darstellung & Quota-Badges:**
+   - Dynamischer Dropdown-Picker im Chat- und Copilot-SplitView:
+     - **Google Gemini CLI:** Anzeige der live entdeckten Modelle inkl. Kontingent-Badge (z. B. *„Gemini 2.5 Flash • 85% Kontingent verfügbar“*) und des aktiven Round-Robin Google-Accounts.
      - **Anthropic:** `claude-3-5-sonnet`, `claude-3-opus`, `claude-3-5-haiku`.
      - **OpenAI:** `gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini`.
-     - **Lokale Modelle:** Ollama / LocalAI Instanzen.
+     - **Lokale Modelle:** Erkannte Ollama- / LocalAI-Instanzen.
+   - Auto-Failover: Ist ein Modell oder Account quota-erschöpft (HTTP 429 / `remainingFraction == 0`), wechselt der Provider-Runner nahtlos zum nächsten konfigurierten Google-Account oder bietet einen automatischen Modell-Fallback an.
 
 ### 13.7 Agentic Workflows: Kategorisiertes Dropout-Menü mit 12+ Skills pro Kategorie
 1. **Erweitertes Dropout-Menü:**
@@ -389,13 +407,62 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
 
 ---
 
-## 10. Checkliste für umsetzende Agenten
+## 10. Spezifikation Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur) [ ] (In Planung)
+
+### 14.1 Fundamentale Dichotomie & Architekturvision
+1. **Warum native Plugins keineswegs obsolet sind:**
+   - **Chrome WebExtensions (Manifest V3):** Konzipiert für den isolierten Browser-DOM- und Web-Netzwerk-Kontext (Adblocker wie uBlock Origin Lite, Passwort-Manager wie Bitwarden, Stylesheets wie Dark Reader, Userscripts wie Violentmonkey). Durch die strikte Chromium-Extension-Sandbox können sie prinzipbedingt **keine lokalen Betriebssystemprozesse** starten, keine Python- oder Node-Toolchains ausführen, kein ConPTY-Terminal manipulieren und keine externen Messenger-Dienste steuern.
+   - **Native Nova AI Skills / Sidekick Plugins:** Konzipiert für autonome System- und Agentic-Workflows (Shell-Ausführung, ComfyUI Bild-Pipelines, lokales SQLite/Supermemory-Gedächtnis, Docker/Git-Steuerung, lokale LLM-Runtimes via Ollama, Multi-Platform Messaging Gateway Daemon). Dies bildet das **Kern-Alleinstellungsmerkmal** von Lastbrowser gegenüber herkömmlichen Browsern.
+   - **Synthese statt Redundanz:** Beide Systeme sind komplementär. Das bisherige Problem lag ausschließlich in der irreführenden Benennung („App Store“) und fragmentierten UI. Der alte Begriff „App Store“ entfällt vollständig zugunsten des **„Unified Extension & Skill Hub“**.
+
+### 14.2 Der Unified Extension & Skill Hub (Zwei-Säulen-UI)
+1. **Zentraler Einstiegspunkt:**
+   - Einheitlicher Tastatur-Shortcut: `Ctrl+Shift+X` (Industriestandard aus VS Code und modernen Browser-Shells) sowie als permanenter Schnellzugriff in der Sidebar („Extensions & Skills“).
+   - Einheitliches Modal- / Drawer-Interface mit zwei klar getrennten Haupt-Reitern:
+     - `[ 🌐 Web-Erweiterungen (Chrome MV3) ]`
+     - `[ ⚡ Nova AI Skills & Tools (MCP) ]`
+2. **Säule 1: Web-Erweiterungen (Chromium / MV3):**
+   - Nahtlose Anbindung an die bestehende Zero-Dependency CRX3-Engine (`extensions.ts`).
+   - Kuratierter 1-Klick-Install-Showcase (Dark Reader, uBlock Origin Lite, Bitwarden, ClearURLs, Violentmonkey).
+   - Direkte Installation beliebiger Erweiterungen via Chrome Web Store URL (`chromewebstore.google.com/detail/...`) oder lokaler `.crx`- / `.zip`-Datei per Drag & Drop.
+   - Management installierter Add-ons: Aktivieren/Deaktivieren, Berechtigungen einsehen, Pin-to-Toolbar, Update-Prüfung, Deinstallation.
+3. **Säule 2: Nova AI Skills & MCP-Tools (Open Standard):**
+   - Standardisierung des nativen Plugin-Systems auf das offene **Model Context Protocol (MCP)** der Linux Foundation / Anthropic.
+   - **Kuratierte Built-in Skills:** ComfyUI Image Generation, ConPTY Terminal Executor, Supermemory Vector Search, Web Scraper, DevTools Inspector, File System Automator.
+   - **Beliebige externe MCP-Server anbinden:** 1-Klick-Import oder Konfiguration über `mcp_servers.json` (kompatibel zum Claude Desktop / Codex Ökosystem) für lokale Prozesse (`stdio`) und Remote-Dienste (`sse`).
+   - Visuelle Übersicht aller registrierten Tools, Ressourcen und Prompt-Templates pro Skill.
+
+### 14.3 Workspace- & Kontext-Scoping
+1. **Säulen-spezifisches Scoping:**
+   - **WebExtensions:** Global aktiv oder granular pro Tab/Profil isolierbar (z. B. Developer-Tools nur im Dev-Workspace, strikte Privacy-Erweiterungen im Default-Workspace).
+   - **Nova AI Skills / MCP-Server:** Workspace-weises Aktivieren/Deaktivieren:
+     - *Coding-Workspace:* Aktiviert ConPTY, Git-MCP, GitHub-MCP, Terminal-Tools.
+     - *Recherche-Workspace:* Aktiviert Deep-Scraper, Per-Tab Summarizer, Memory-Synthesis, Arxiv-MCP.
+     - *Design-Workspace:* Aktiviert ComfyUI, Image-Inspection, Color-Palette-Extractor.
+2. **Dynamische Tool-Injektion in Nova AI:**
+   - Nova lädt im aktiven Kontext nur die für den jeweiligen Workspace freigeschalteten Tools, um Context-Window-Bloat zu verhindern und Halluzinationen zu minimieren.
+
+### 14.4 Granulares Sandboxing & Berechtigungsmanagement (Security First)
+1. **Transparente Berechtigungs-Klassifizierung:**
+   - Jeder native Skill und MCP-Server deklariert seine benötigten Berechtigungen explizit:
+     - `🛡️ read_only` (Dateien lesen, Suchen ausführen, Webseiten abfragen).
+     - `⚠️ filesystem_write` (Dateien im Workspace anlegen oder ändern).
+     - `🚨 terminal_execute` (Shell-Befehle oder ConPTY-Kommandos ausführen).
+     - `🌐 network_outbound` (Externe HTTP/WebSocket-Anfragen außerhalb des Browsers senden).
+     - `🤖 agent_autonomy` (Unüberwachte Multi-Step-Toolchains ausführen).
+2. **Sicherheits-Gateways & Human-in-the-Loop:**
+   - Kritische Werkzeuge (`terminal_execute`, Destructive File Writes) verlangen standardmäßig eine interaktive Bestätigung im Chat, es sei denn, der Nutzer setzt den Skill explizit auf *„Immer vertrauen (Auto-Approve)“*.
+   - Übersicht aller gewährten Berechtigungen direkt im Hub mit 1-Klick-Widerruf.
+
+---
+
+## 11. Checkliste für umsetzende Agenten
 
 Jeder nachfolgende Agent arbeitet nach folgenden Regeln:
 
-1. **Ein Fokus pro Durchlauf:** Genau einen Teilbereich (z. B. 13.1, 13.3, 13.6) bearbeiten.
+1. **Ein Fokus pro Durchlauf:** Genau einen Teilbereich (z. B. 13.1, 13.3, 14.2) bearbeiten.
 2. **Einklappbarkeit bewahren:** Die Ein-/Ausklapp-Logik der Sidebar niemals entfernen, sondern auf die 3 definierten Modi (Expanded, 48px Slim, Hidden) optimieren.
-3. **Keine Regressionen:** Nach jeder Änderung `npm run test:run` ausführen; alle bestehenden 499+ Tests müssen grün bleiben.
+3. **Keine Regressionen:** Nach jeder Änderung `npm run test:run` ausführen; alle bestehenden 528+ Tests müssen grün bleiben.
 4. **Unit-Tests für neue UI-Logik:** Neue Komponenten, Workflows und Store-Zustände in `tests/` mit Vitest abdecken.
 5. **Typensicherheit:** `npm run build` (`build:main` und `build:renderer`) müssen 0 TypeScript- und Vite-Fehler aufweisen.
 6. **Dokumentenpflege:** Nach erfolgreicher Umsetzung den Haken in diesem Zielbild (`[x]`) und im Backlog setzen.

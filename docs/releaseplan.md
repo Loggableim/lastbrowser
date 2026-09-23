@@ -228,3 +228,19 @@ Microsoft lässt im Win32-Store-Weg nur digital signierte Binaries und Installer
 | **4.2** | Store-Listing-Texte finalisieren (DE/EN) | Marketing | [x] |
 | **5.1** | Partner Center Formular & Installationsparameter vorbereiten | Engineering | [x] |
 | **5.2** | Preflight, WACK & Silent-Install Verifikation (27/27 PASS) | QA / Release | [x] |
+
+---
+
+## 9. Release v0.1.31 Feature Summary & Store Scope
+
+Das Release **v0.1.31** bündelt folgende Kern-Meilensteine:
+
+1. **Nova AI Re-Branding & Persönlichkeit:**
+   - Freie Wahl von Name (Nova, Jarvis, Aria …) und Mentalität (*Pragmatisch & Direkt*, *Forschend & Gründlich*, *Kreativ & Visionär*, *Technisch & Präzise*).
+2. **48 Agentic Workflows:**
+   - Strukturiert in 4 Hauptkategorien (Recherche & Deep Analysis, Content & Doku, Code & Engineering, Daten & Automatisierung) mit je 12 Spezial-Skills.
+3. **Unified Extension & Skill Hub (Phase 14):**
+   - Zwei-Säulen-Architektur: Chromium MV3 WebExtensions für den DOM-Kontext + offener MCP-Standard (stdio/sse) für System- & Agenten-Workflows über `mcp_servers.json`.
+4. **Live Quota Discovery & Multi-Account Round-Robin:**
+   - Zyklisches Load Balancing über mehrere Google Gemini CLI-Accounts hinweg mit automatischem Failover bei Quota-Limits (HTTP 429) und visuellen Quota-Badges.
+

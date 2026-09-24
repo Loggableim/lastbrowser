@@ -10,7 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Settings } from 'lucide-react';
+import { Eye, EyeOff, Plus, Settings } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import { canCallSidekickApi } from '../runtime-readiness.js';
 import { partitionChatMessages } from '../chat-display.js';
@@ -212,6 +212,15 @@ export function NativeChatMain({
           </div>
         </div>
         <div className="native-chat-header-actions">
+          <button
+            type="button"
+            className="secondary-action compact new-chat-btn"
+            onClick={onCreateSession}
+            title="Neuen Chat starten (+)"
+          >
+            <Plus size={14} />
+            <span>Neuer Chat</span>
+          </button>
           <CompressButton activeSessionId={activeSessionId} ready={ready} onResult={setStatusMessage} />
           <QueueIndicator queue={queue} onDrain={() => {
             if (running) { setStatusMessage('Wait for current turn to finish first.'); return; }

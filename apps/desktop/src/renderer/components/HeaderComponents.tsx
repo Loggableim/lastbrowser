@@ -731,6 +731,12 @@ export type ModernTitlebarProps = {
   /** RAM saved by discarded (sleeping) tabs in MB. */
   savedMemoryMb?: number;
   botName?: string;
+  /** Whether Zen mode is active (omnibox autohides to top edge). Defaults to sidebarMode === 'hidden'. */
+  zenMode?: boolean;
+  /** Externally controlled revealed state for Zen mode (e.g. from Ctrl+L). */
+  zenRevealed?: boolean;
+  /** Callback when Zen titlebar visibility changes. */
+  onZenRevealChange?: (revealed: boolean) => void;
 };
 
 export function ModernTitlebar({
@@ -754,9 +760,37 @@ export function ModernTitlebar({
   quickActions,
   onExecuteQuickAction,
   savedMemoryMb = 0,
-  botName = 'Nova'
+  botName = 'Nova',
+  zenMode,
+  zenRevealed,
+  onZenRevealChange
 }: ModernTitlebarProps): React.JSX.Element {
   const { isMaximized, handleDoubleClick, handleMouseDown } = useWindowDrag();
+  const isZen = zenMode ?? sidebarMode === 'hidden';
+  const [internalZenHover, setInternalZenHover] = useState(false);
+  const hoverLeaveTimerRef = useRef<number | null>(null);
+
+  const isRevealed = Boolean(zenRevealed || internalZenHover);
+
+  const handleMouseEnter = () => {
+    if (hoverLeaveTimerRef.current) {
+      window.clearTimeout(hoverLeaveTimerRef.current);
+      hoverLeaveTimerRef.current = null;
+    }
+    setInternalZenHover(true);
+    onZenRevealChange?.(true);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverLeaveTimerRef.current) {
+      window.clearTimeout(hoverLeaveTimerRef.current);
+    }
+    hoverLeaveTimerRef.current = window.setTimeout(() => {
+      setInternalZenHover(false);
+      onZenRevealChange?.(false);
+    }, 350);
+  };
+
   const adRamSavedGb = Math.max(1.2, (blockedAdsCount * 0.35) / 1000).toFixed(1);
   const totalRamSavedLabel =
     savedMemoryMb > 0
@@ -764,15 +798,26 @@ export function ModernTitlebar({
       : `${adRamSavedGb} GB`;
 
   return (
-    <header
-      className={`modern-titlebar ${isMaximized ? 'is-maximized' : ''}`}
-      onDoubleClick={handleDoubleClick}
-      onMouseDown={handleMouseDown}
-    >
-      {/* Left controls: Sidebar toggle & Traffic navigation */}
-      <div className="modern-titlebar-left">
-        <button
-          type="button"
+    <>
+      {isZen && (
+        <div
+          className="zen-top-hover-sensor"
+          onMouseEnter={handleMouseEnter}
+          title="Kante berühren, um Adressleiste einzublenden"
+          aria-hidden="true"
+        />
+      )}
+      <header
+        className={`modern-titlebar ${isMaximized ? 'is-maximized' : ''} ${isZen ? 'zen-autohide' : ''} ${isRevealed ? 'zen-revealed' : ''}`}
+        onDoubleClick={handleDoubleClick}
+        onMouseDown={handleMouseDown}
+        onMouseEnter={isZen ? handleMouseEnter : undefined}
+        onMouseLeave={isZen ? handleMouseLeave : undefined}
+      >
+        {/* Left controls: Sidebar toggle & Traffic navigation */}
+        <div className="modern-titlebar-left">
+          <button
+            type="button"
           className="titlebar-tool-btn sidebar-toggle"
           title={`Toggle Sidebar (${sidebarMode === 'hidden' ? 'Show' : 'Collapse'}) - Ctrl+B`}
           aria-label="Toggle Sidebar"
@@ -905,6 +950,7 @@ export function ModernTitlebar({
         <WindowControls />
       </div>
     </header>
+    </>
   );
 }
 

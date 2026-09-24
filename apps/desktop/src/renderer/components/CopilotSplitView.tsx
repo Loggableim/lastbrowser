@@ -8,8 +8,10 @@ import {
   Cpu,
   FileText,
   Filter,
+  History,
   Minus,
   Paperclip,
+  Plus,
   Scale,
   Search,
   Send,
@@ -24,6 +26,7 @@ import {
   Zap
 } from 'lucide-react';
 import type { DesktopChatMessage } from '../bridge.js';
+import type { DesktopSessionSummary } from '../sidekick-client.js';
 import { RichTextRenderer } from '../NativeRichText.js';
 import { AiFeedbackModal } from './AiFeedbackModal.js';
 import type { QuickActionChip } from '../quick-actions.js';
@@ -205,6 +208,10 @@ export interface CopilotSplitViewProps {
   quickActions?: QuickActionChip[];
   onExecuteQuickAction?: (chip: QuickActionChip) => void;
   onSelectModel?: (modelId: string) => void;
+  onNewChat?: () => void;
+  sessions?: DesktopSessionSummary[];
+  activeSessionId?: string | null;
+  onSelectSession?: (sessionId: string) => void;
 }
 
 export function CopilotSplitView({
@@ -221,12 +228,18 @@ export function CopilotSplitView({
   activeTitle,
   quickActions,
   onExecuteQuickAction,
-  onSelectModel
+  onSelectModel,
+  onNewChat,
+  sessions = [],
+  activeSessionId = null,
+  onSelectSession
 }: CopilotSplitViewProps): React.JSX.Element | null {
   const [inputText, setInputText] = useState('');
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [workflowsMenuOpen, setWorkflowsMenuOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [historyMenuOpen, setHistoryMenuOpen] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
   const [workflowCategory, setWorkflowCategory] = useState<string>('all');
   const [workflowSearch, setWorkflowSearch] = useState<string>('');
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
@@ -302,6 +315,7 @@ export function CopilotSplitView({
   const workflowDropdownRef = useRef<HTMLDivElement | null>(null);
   const modelPickerRef = useRef<HTMLDivElement | null>(null);
   const footerModelRef = useRef<HTMLDivElement | null>(null);
+  const historyDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const activeModelId = selectedModel || modelName;
   const activeModelItem = useMemo(() => {
@@ -349,6 +363,26 @@ export function CopilotSplitView({
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [modelPickerOpen]);
+
+  // Click outside history dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (historyDropdownRef.current && !historyDropdownRef.current.contains(event.target as Node)) {
+        setHistoryMenuOpen(false);
+      }
+    }
+    if (historyMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [historyMenuOpen]);
+
+  const filteredSessions = useMemo(() => {
+    if (!sessions) return [];
+    if (!historySearch.trim()) return sessions;
+    const q = historySearch.toLowerCase();
+    return sessions.filter((s) => (s.title || '').toLowerCase().includes(q));
+  }, [sessions, historySearch]);
 
   const filteredWorkflows = useMemo(() => {
     return WORKFLOW_TEMPLATES.filter((tmpl) => {
@@ -669,6 +703,106 @@ export function CopilotSplitView({
             </div>
           )}
           </div>
+
+          {/* New Chat Button */}
+          {onNewChat && (
+            <button
+              type="button"
+              className="copilot-action-btn copilot-new-chat-btn"
+              title="Neuen Chat starten (+)"
+              onClick={onNewChat}
+            >
+              <Plus size={13} />
+              <span>Neu</span>
+            </button>
+          )}
+
+          {/* Session History Dropdown */}
+          {sessions && sessions.length > 0 && (
+            <div className="copilot-history-wrapper" ref={historyDropdownRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className={`copilot-action-btn ${historyMenuOpen ? 'active' : ''}`}
+                title={`Chat-Historie (${sessions.length} Chats)`}
+                onClick={() => setHistoryMenuOpen((prev) => !prev)}
+                aria-label="Chat-Historie"
+                aria-haspopup="menu"
+                aria-expanded={historyMenuOpen}
+              >
+                <History size={13} />
+              </button>
+
+              {historyMenuOpen && (
+                <div className="copilot-history-dropdown" role="menu">
+                  <div className="history-dropdown-header">
+                    <span className="history-dropdown-title">Chat-Historie</span>
+                    <button
+                      type="button"
+                      className="history-new-btn"
+                      onClick={() => {
+                        setHistoryMenuOpen(false);
+                        onNewChat?.();
+                      }}
+                      title="Neuen Chat starten"
+                    >
+                      <Plus size={11} />
+                      <span>Neu</span>
+                    </button>
+                  </div>
+
+                  <div className="history-search-box">
+                    <Search size={11} />
+                    <input
+                      type="text"
+                      placeholder="Chats durchsuchen..."
+                      value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
+                      className="history-search-input"
+                      autoFocus
+                    />
+                    {historySearch && (
+                      <button type="button" className="clear-search-btn" onClick={() => setHistorySearch('')}>
+                        <X size={10} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="history-items-list">
+                    {filteredSessions.length === 0 ? (
+                      <div className="history-empty-search">
+                        <span>Keine Chats gefunden</span>
+                      </div>
+                    ) : (
+                      filteredSessions.map((s) => {
+                        const isCurrent = s.session_id === activeSessionId;
+                        return (
+                          <button
+                            key={s.session_id}
+                            type="button"
+                            className={`history-session-item ${isCurrent ? 'active' : ''}`}
+                            onClick={() => {
+                              setHistoryMenuOpen(false);
+                              onSelectSession?.(s.session_id);
+                            }}
+                          >
+                            <div className="history-session-info">
+                              <span className="history-session-title">
+                                {s.title || 'Chat ohne Titel'}
+                              </span>
+                              <span className="history-session-time">
+                                {s.updated_at ? new Date(s.updated_at).toLocaleDateString() : ''}
+                              </span>
+                            </div>
+                            {isCurrent && <Check size={12} className="history-check-icon" />}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {onMinimize && (
             <button

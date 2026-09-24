@@ -371,4 +371,28 @@ describe('browser shell layout', () => {
       }
     }
   });
+
+  it('supports Zen-Mode Omnibox autohide with sensor and full 100vh workspace', () => {
+    const css = readRendererFile('styles.css');
+    expect(css).toContain('.zen-top-hover-sensor');
+    expect(css).toContain('.modern-titlebar.zen-autohide');
+    expect(css).toContain('transform: translateY(-100%)');
+    expect(css).toContain('.modern-titlebar.zen-autohide:hover');
+    expect(css).toContain('.modern-titlebar.zen-autohide:focus-within');
+    expect(css).toContain('.modern-titlebar.zen-autohide.zen-revealed');
+    expect(css).toContain('transform: translateY(0)');
+    expect(css).toContain('.app-shell.zen-mode .browser-zen-workspace');
+  });
+
+  it('supports Multi-Tab Splitscreen with 2, 3, 4 viewport grids and dropzone', () => {
+    const css = readRendererFile('styles.css');
+    expect(css).toContain('.browser-split-container');
+    expect(css).toContain('.browser-split-pane');
+    expect(css).toContain('.split-pane-header');
+    expect(css).toContain('.browser-split-dropzone-overlay');
+    expect(css).toContain('.vtab-split-btn');
+    expect(css).toContain('.browser-split-container.count-2');
+    expect(css).toContain('.browser-split-container.count-3');
+    expect(css).toContain('.browser-split-container.count-4');
+  });
 });

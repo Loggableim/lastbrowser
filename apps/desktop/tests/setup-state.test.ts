@@ -172,4 +172,30 @@ describe('cloud first-run setup state', () => {
       personality: 'developer'
     });
   });
+
+  it('highlights the top-3 LLMs with detailed benefits and recommended badges (Paket 2.1)', async () => {
+    const { PROVIDER_RECOMMENDATIONS } = await import('../src/renderer/provider-presentation.js');
+    expect(PROVIDER_RECOMMENDATIONS['google-gemini-cli']).toBeDefined();
+    expect(PROVIDER_RECOMMENDATIONS['google-gemini-cli'].badgeType).toBe('recommended');
+    expect(PROVIDER_RECOMMENDATIONS['google-gemini-cli'].benefits.some((b) => b.includes('Multi-Account'))).toBe(true);
+
+    expect(PROVIDER_RECOMMENDATIONS['openai-codex']).toBeDefined();
+    expect(PROVIDER_RECOMMENDATIONS['openai-codex'].badgeType).toBe('popular');
+    expect(PROVIDER_RECOMMENDATIONS['openai-codex'].benefits.some((b) => b.includes('o3-mini') || b.includes('Coding-Parität'))).toBe(true);
+
+    expect(PROVIDER_RECOMMENDATIONS['ollama']).toBeDefined();
+    expect(PROVIDER_RECOMMENDATIONS['ollama'].badgeType).toBe('private');
+    expect(PROVIDER_RECOMMENDATIONS['ollama'].benefits.some((b) => b.includes('100% Offline-Privatsphäre'))).toBe(true);
+  });
+
+  it('provides browser choices for external profile import (Paket 2.2)', async () => {
+    const { BROWSER_CHOICES } = await import('../src/renderer/components/FirstRunSetupPane.js');
+    expect(BROWSER_CHOICES).toHaveLength(4);
+    const ids = BROWSER_CHOICES.map((b) => b.id);
+    expect(ids).toContain('chrome');
+    expect(ids).toContain('edge');
+    expect(ids).toContain('firefox');
+    expect(ids).toContain('brave');
+  });
 });
+

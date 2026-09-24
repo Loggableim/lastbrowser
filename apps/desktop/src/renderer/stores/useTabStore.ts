@@ -41,6 +41,8 @@ export interface TabState {
   addressValue: string;
   browserMode: BrowserMode;
   browserLoadError: string;
+  splitTabIds: string[];
+  splitLayout: 'columns' | 'rows' | 'grid';
 
   // Setters
   setTabs(tabs: BrowserTab[] | ((prev: BrowserTab[]) => BrowserTab[])): void;
@@ -51,6 +53,12 @@ export interface TabState {
   setAddressValue(value: string | ((prev: string) => string)): void;
   setBrowserMode(mode: BrowserMode | ((prev: BrowserMode) => BrowserMode)): void;
   setBrowserLoadError(error: string | ((prev: string) => string)): void;
+  setSplitLayout(layout: 'columns' | 'rows' | 'grid'): void;
+
+  // Splitscreen actions
+  addSplitTab(tabId: string): void;
+  removeSplitTab(tabId: string): void;
+  clearSplitTabs(): void;
 
   // Compound actions
   addTab(url?: string, options?: { incognito?: boolean }): void;
@@ -106,6 +114,8 @@ export const useTabStore = create<TabState>((set, get) => {
     addressValue: isAiBrowserHomeUrl(firstTab.url) ? '' : firstTab.url,
     browserMode: isAiBrowserHomeUrl(firstTab.url) ? 'home' : 'web',
     browserLoadError: '',
+    splitTabIds: [],
+    splitLayout: 'columns',
 
     setTabs: (tabs) =>
       set((state) => ({
@@ -138,6 +148,42 @@ export const useTabStore = create<TabState>((set, get) => {
       set((state) => ({
         browserLoadError: typeof browserLoadError === 'function' ? browserLoadError(state.browserLoadError) : browserLoadError
       })),
+    setSplitLayout: (splitLayout) => set({ splitLayout }),
+
+    addSplitTab: (tabId: string) => {
+      const { tabs, activeTabId, splitTabIds } = get();
+      if (!tabs.some((t) => t.id === tabId)) return;
+      if (splitTabIds.includes(tabId)) {
+        // If already in split, just activate it
+        set({ activeTabId: tabId });
+        return;
+      }
+      if (splitTabIds.length === 0) {
+        const baseTabId = activeTabId && activeTabId !== tabId ? activeTabId : tabs.find((t) => t.id !== tabId)?.id;
+        if (baseTabId) {
+          set({ splitTabIds: [baseTabId, tabId], splitLayout: 'columns', activeTabId: tabId });
+        }
+        return;
+      }
+      if (splitTabIds.length >= 4) return;
+      const nextSplit = [...splitTabIds, tabId];
+      const nextLayout = nextSplit.length >= 4 ? 'grid' : get().splitLayout;
+      set({ splitTabIds: nextSplit, splitLayout: nextLayout, activeTabId: tabId });
+    },
+
+    removeSplitTab: (tabId: string) => {
+      const { splitTabIds, activeTabId, tabs } = get();
+      const nextSplit = splitTabIds.filter((id) => id !== tabId);
+      if (nextSplit.length <= 1) {
+        const fallback = nextSplit[0] || (activeTabId !== tabId ? activeTabId : tabs[0]?.id || '');
+        set({ splitTabIds: [], activeTabId: fallback });
+      } else {
+        const nextActive = activeTabId === tabId ? nextSplit[0] : activeTabId;
+        set({ splitTabIds: nextSplit, activeTabId: nextActive });
+      }
+    },
+
+    clearSplitTabs: () => set({ splitTabIds: [] }),
 
     addTab: (url, options) => {
       const newTab = createInitialTab(url || browserStartUrl, options);
@@ -150,7 +196,10 @@ export const useTabStore = create<TabState>((set, get) => {
     },
 
     closeTab: (id) => {
-      const { tabs, activeTabId, closedTabs } = get();
+      const { tabs, activeTabId, closedTabs, splitTabIds } = get();
+      if (splitTabIds.includes(id)) {
+        get().removeSplitTab(id);
+      }
       const tabToClose = tabs.find((t) => t.id === id);
       const remaining = tabs.filter((t) => t.id !== id);
 

@@ -11,6 +11,7 @@ import {
   ClipboardCopy,
   Clock,
   Code2,
+  Columns2,
   Columns3,
   Cpu,
   Copy,
@@ -403,7 +404,13 @@ export function App(): JSX.Element {
     browserMode,
     setBrowserMode,
     browserLoadError,
-    setBrowserLoadError
+    setBrowserLoadError,
+    splitTabIds,
+    splitLayout,
+    setSplitLayout,
+    addSplitTab,
+    removeSplitTab,
+    clearSplitTabs
   } = useTabStore();
 
   const {
@@ -523,6 +530,7 @@ export function App(): JSX.Element {
   const [setupLoading, setSetupLoading] = useState(true);
   const [setupError, setSetupError] = useState('');
   const [setupSaving, setSetupSaving] = useState(false);
+  const [zenTitlebarRevealed, setZenTitlebarRevealed] = useState(false);
   const [sessions, setSessions] = useState<DesktopSessionSummary[]>([]);
   const [sessionSearch, setSessionSearch] = useState('');
   const [sessionError, setSessionError] = useState('');
@@ -770,6 +778,7 @@ export function App(): JSX.Element {
           setActivePanel('browser');
           break;
         case 'focus-address':
+          setZenTitlebarRevealed(true);
           addressInputRef.current?.focus();
           addressInputRef.current?.select();
           break;
@@ -1420,6 +1429,15 @@ export function App(): JSX.Element {
     }
   }
 
+  function handleNewChat(): void {
+    setChatMessages([]);
+    setMessages([]);
+    setActiveSessionId(null);
+    setComposerText('');
+    setChatError('');
+    void createNativeSession();
+  }
+
   function pinNativeSession(session: DesktopSessionSummary): void {
     void window.lastbrowser.sidekick
       .requestWebui({
@@ -1615,6 +1633,27 @@ export function App(): JSX.Element {
           ? { ...item, content: answer || 'Sidekick finished.', pending: false }
           : item
       )));
+
+      // Auto-generate a concise session title from first user prompt if untitled or generic
+      const currentSessionSummary = sessions.find((s) => s.session_id === response.sessionId);
+      const isUntitled = !currentSessionSummary?.title ||
+        currentSessionSummary.title === 'New chat' ||
+        currentSessionSummary.title.startsWith('Chat 20') ||
+        currentSessionSummary.title === 'Sidekick';
+
+      if (isUntitled && trimmed) {
+        const cleanPrompt = trimmed.replace(/\n+/g, ' ').trim();
+        const autoTitle = cleanPrompt.length > 36 ? `${cleanPrompt.slice(0, 36)}…` : cleanPrompt;
+        void window.lastbrowser.sidekick.renameSession({
+          sessionId: response.sessionId,
+          title: autoTitle
+        }).then(() => {
+          setSessions((current) =>
+            current.map((s) => (s.session_id === response.sessionId ? { ...s, title: autoTitle } : s))
+          );
+        }).catch(() => null);
+      }
+
       void refreshSessions();
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
@@ -2004,7 +2043,7 @@ export function App(): JSX.Element {
 
   return (
     <DesktopI18nProvider>
-    <div className={`app-shell panel-${activePanel} ${isModernBrowser ? 'modern-mode' : ''} ${windowMaximized ? 'is-maximized' : ''}`}>
+    <div className={`app-shell panel-${activePanel} ${isModernBrowser ? 'modern-mode' : ''} ${windowMaximized ? 'is-maximized' : ''} ${sidebarMode === 'hidden' ? 'zen-mode' : ''}`}>
       {isModernBrowser ? (
         <>
           <ModernTitlebar
@@ -2025,6 +2064,9 @@ export function App(): JSX.Element {
             }}
             sidebarMode={sidebarMode}
             onToggleSidebar={cycleSidebarMode}
+            zenMode={sidebarMode === 'hidden'}
+            zenRevealed={zenTitlebarRevealed}
+            onZenRevealChange={setZenTitlebarRevealed}
             blockedAdsCount={3420}
             savedMemoryMb={savedMemoryMb}
             onToggleShieldPopover={() => {}}
@@ -2183,6 +2225,9 @@ export function App(): JSX.Element {
                 setActivePanel('chat');
               }}
               onCreateSession={() => void createNativeSession()}
+              splitTabIds={splitTabIds}
+              onAddSplitTab={addSplitTab}
+              onRemoveSplitTab={removeSplitTab}
             />
 
             <div className={`browser-content-area ${copilotOpen ? 'with-copilot-split' : 'full-canvas'}`}>
@@ -2194,6 +2239,17 @@ export function App(): JSX.Element {
                   activeTab={activeTab}
                   activeProfile={activeProfile}
                   onboardingStatus={onboardingStatus}
+                  tabs={tabs}
+                  splitTabIds={splitTabIds}
+                  splitLayout={splitLayout}
+                  draggedTabId={draggedTabId}
+                  onActivateTab={(tabId) => {
+                    activeTabIdRef.current = tabId;
+                    setActiveTabId(tabId);
+                  }}
+                  onAddSplitTab={addSplitTab}
+                  onRemoveSplitTab={removeSplitTab}
+                  onSetSplitLayout={setSplitLayout}
                   onReopenSetup={() => {
                     setSetupDismissed(false);
                     try {
@@ -2265,6 +2321,13 @@ export function App(): JSX.Element {
                   activeTitle={activeTab.title}
                   quickActions={quickActions}
                   onExecuteQuickAction={handleExecuteQuickAction}
+                  onNewChat={handleNewChat}
+                  sessions={sessions}
+                  activeSessionId={activeSessionId}
+                  onSelectSession={(sid) => {
+                    setActiveSessionId(sid);
+                    void loadActiveSession(sid);
+                  }}
                   onSelectModel={(modelId) => {
                     setSetupState((prev) => {
                       const next = { ...prev, model: modelId };
@@ -2604,7 +2667,15 @@ function BrowserMain({
   onClearHistory,
   onReopenClosedTab,
   searchEngineId,
-  onSearchEngineChange
+  onSearchEngineChange,
+  tabs,
+  splitTabIds = [],
+  splitLayout = 'columns',
+  draggedTabId,
+  onActivateTab,
+  onAddSplitTab,
+  onRemoveSplitTab,
+  onSetSplitLayout
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -2658,6 +2729,14 @@ function BrowserMain({
   onReopenClosedTab: () => void;
   searchEngineId: string;
   onSearchEngineChange: (id: string) => void;
+  tabs?: BrowserTab[];
+  splitTabIds?: string[];
+  splitLayout?: 'columns' | 'rows' | 'grid';
+  draggedTabId?: string | null;
+  onActivateTab?: (tabId: string) => void;
+  onAddSplitTab?: (tabId: string) => void;
+  onRemoveSplitTab?: (tabId: string) => void;
+  onSetSplitLayout?: (layout: 'columns' | 'rows' | 'grid') => void;
 }): JSX.Element {
   const browserWebviewStyle = {
     width: '100%',
@@ -2676,6 +2755,7 @@ function BrowserMain({
   // has been laid out — that second mount is the one that sticks.
   const [webviewReady, setWebviewReady] = useState(false);
   const [webviewMountKey, setWebviewMountKey] = useState(0);
+  const splitWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
   useLayoutEffect(() => {
     setWebviewReady(false);
     let cancelled = false;
@@ -3298,7 +3378,101 @@ function BrowserMain({
             <span>{browserLoadError}</span>
           </div>
         )}
-        {webviewReady && (
+        {draggedTabId && onAddSplitTab && (
+          <div
+            className="browser-split-dropzone-overlay"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              onAddSplitTab(draggedTabId);
+            }}
+          >
+            <div className="split-dropzone-banner">
+              <Columns2 size={24} />
+              <span>Hier ablegen für Splitscreen-Ansicht</span>
+            </div>
+          </div>
+        )}
+        {webviewReady && splitTabIds && splitTabIds.length > 1 ? (
+          <div className={`browser-split-container split-layout-${splitLayout || (splitTabIds.length === 4 ? 'grid' : 'columns')} count-${splitTabIds.length}`}>
+            {splitTabIds.map((sTabId) => {
+              const tab = tabs?.find((t) => t.id === sTabId);
+              if (!tab) return null;
+              const isPaneActive = tab.id === activeTab.id;
+              return (
+                <div
+                  key={tab.id}
+                  className={`browser-split-pane ${isPaneActive ? 'active-pane' : ''}`}
+                  onClick={() => onActivateTab?.(tab.id)}
+                >
+                  <div className="split-pane-header">
+                    <div className="split-pane-info">
+                      {tab.favicon ? (
+                        <img src={tab.favicon} alt="" className="split-pane-favicon" />
+                      ) : (
+                        <Globe2 size={13} className="split-pane-favicon-fallback" />
+                      )}
+                      <span className="split-pane-title" title={tab.title}>{tab.title}</span>
+                    </div>
+                    <div className="split-pane-controls">
+                      <button
+                        type="button"
+                        className="split-pane-btn"
+                        title="Aktualisieren"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const vw = splitWebviewRefs.current[tab.id];
+                          vw?.reload();
+                        }}
+                      >
+                        <RefreshCw size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        className="split-pane-btn close-split"
+                        title="Splitscreen für diesen Tab beenden"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveSplitTab?.(tab.id);
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                  <webview
+                    key={`${activeProfile.id}:${tab.id}:${webviewMountKey}`}
+                    ref={(el) => {
+                      if (el) {
+                        splitWebviewRefs.current[tab.id] = el;
+                        if (tab.id === activeTab.id) {
+                          webviewRef.current = el;
+                        }
+                      } else {
+                        delete splitWebviewRefs.current[tab.id];
+                      }
+                    }}
+                    src={tab.url}
+                    className="browser-view split-webview"
+                    style={browserWebviewStyle}
+                    partition={tab.incognito ? 'in-memory-incognito' : profilePartition(activeProfile.id)}
+                    allowpopups="false"
+                    onDidStartLoading={() => onClearBrowserError()}
+                    onDomReady={(event) => {
+                      void hideWebviewScrollbars(event.currentTarget);
+                    }}
+                    onDidFailLoad={(event) => {
+                      if (!event.isMainFrame || event.errorCode === -3) return;
+                      if (event.errorCode < -100) {
+                        onSetBrowserError(`Connection failed (${event.errorDescription})`);
+                      }
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        ) : webviewReady && (
         <webview
           key={`${activeProfile.id}:${activeTab.id}:${webviewMountKey}`}
           ref={webviewRef}

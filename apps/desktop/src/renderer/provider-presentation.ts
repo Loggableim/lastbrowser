@@ -228,10 +228,10 @@ export const PROVIDER_RECOMMENDATIONS: Record<string, ProviderRecommendation> = 
     badgeType: 'recommended',
     headline: 'Google Gemini (Schnell & Riesiges Kontextfenster)',
     benefits: [
-      'Kein API-Key oder Kreditkarte nötig – Login direkt mit Google-Konto',
+      'Kostenlose Kontingente, Multi-Account Round-Robin & Live-Discovery',
       'Bis zu 1 Million Tokens Kontext – erfasst ganze Websites, PDFs & lange Dokumente',
       'Optimiert für Live-Browsing, Web-Zusammenfassungen und Recherche',
-      'Zugriff auf Gemini 3.8 Flash & Gemini Pro'
+      'Zugriff auf Gemini 3.8 Flash, Gemini 2.5 Pro & Gemini 3.1 Pro'
     ],
     bestFor: 'Beste Wahl für die meisten Nutzer: Sofort startklar ohne Kosten',
     actionPrompt: 'In Lastbrowser mit Google anmelden'
@@ -243,8 +243,8 @@ export const PROVIDER_RECOMMENDATIONS: Record<string, ProviderRecommendation> = 
     headline: 'ChatGPT / OpenAI (Bestehendes Abo nutzen)',
     benefits: [
       'Nutze dein vorhandenes ChatGPT Plus-, Team- oder Enterprise-Abonnement',
-      'Keine separaten API-Token-Abrechnungen',
-      'Zugriff auf GPT-4o und OpenAI Reasoning-Modelle',
+      'Zugriff auf GPT-4o, o3-mini und OpenAI Reasoning-Modelle',
+      'Volle Coding-Parität ohne zusätzliche API-Token-Abrechnung',
       'Sicherer Device-Login ohne Passworteingabe in der App'
     ],
     bestFor: 'Ideal, wenn du bereits ein monatliches ChatGPT-Abo nutzt',
@@ -256,10 +256,10 @@ export const PROVIDER_RECOMMENDATIONS: Record<string, ProviderRecommendation> = 
     badgeType: 'private',
     headline: 'Ollama (Lokale Open-Source KI)',
     benefits: [
-      'Vollständiger Datenschutz: Keine Daten verlassen deinen Computer',
+      '100% Offline-Privatsphäre: Keine Daten verlassen deinen Computer',
       'Funktioniert offline und komplett ohne Internetverbindung',
       '100% kostenlos ohne Limits oder Account-Pflicht',
-      'Unterstützt Llama 3.3, Mistral, Qwen 2.5 und DeepSeek-R1'
+      'Unterstützt Llama 3.3, DeepSeek-R1, Mistral und Qwen 2.5'
     ],
     bestFor: 'Für maximale Privatsphäre, Offline-Arbeit und Entwickler',
     actionPrompt: 'Ollama lokal verbinden'

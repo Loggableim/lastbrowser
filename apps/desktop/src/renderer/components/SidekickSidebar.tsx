@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Bell,
   ChevronDown,
+  Columns2,
   Download,
   EyeOff,
   Globe2,
@@ -112,6 +113,12 @@ export interface SidekickSidebarProps {
   onSelectSession?: (sessionId: string) => void;
   /** Callback when a new session is requested */
   onCreateSession?: () => void;
+  /** Active split tabs (up to 4) */
+  splitTabIds?: string[];
+  /** Callback to add tab to splitscreen */
+  onAddSplitTab?: (tabId: string) => void;
+  /** Callback to remove tab from splitscreen */
+  onRemoveSplitTab?: (tabId: string) => void;
 }
 
 export function SidekickSidebar({
@@ -152,7 +159,10 @@ export function SidekickSidebar({
   sessions = [],
   activeSessionId = null,
   onSelectSession,
-  onCreateSession
+  onCreateSession,
+  splitTabIds = [],
+  onAddSplitTab,
+  onRemoveSplitTab
 }: SidekickSidebarProps): React.JSX.Element {
   const [internalDrawerTab, setInternalDrawerTab] = useState<SidebarDrawerTab>(drawerTab);
   const currentDrawerTab = onSelectDrawerTab ? drawerTab : internalDrawerTab;
@@ -454,6 +464,25 @@ export function SidekickSidebar({
                             }}
                           >
                             {tab.isMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                          </button>
+                        )}
+
+                        {/* Splitscreen Toggle button */}
+                        {onAddSplitTab && (
+                          <button
+                            type="button"
+                            className={`vtab-split-btn ${splitTabIds.includes(tab.id) ? 'active' : ''}`}
+                            title={splitTabIds.includes(tab.id) ? "Splitscreen für diesen Tab beenden" : "In Splitscreen öffnen (bis zu 4 Tabs)"}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (splitTabIds.includes(tab.id)) {
+                                onRemoveSplitTab?.(tab.id);
+                              } else {
+                                onAddSplitTab(tab.id);
+                              }
+                            }}
+                          >
+                            <Columns2 size={12} />
                           </button>
                         )}
 

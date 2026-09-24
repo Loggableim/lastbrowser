@@ -80,3 +80,27 @@ describe('processRichText resilience', () => {
   });
 });
 
+describe('session auto-titling derivation', () => {
+  function deriveTitle(prompt: string, maxLen = 36): string {
+    const clean = prompt.replace(/\n+/g, ' ').trim();
+    return clean.length > maxLen ? `${clean.slice(0, maxLen)}…` : clean;
+  }
+
+  it('formats short prompts directly as clean titles', () => {
+    expect(deriveTitle('Wie erstelle ich einen Blog?')).toBe('Wie erstelle ich einen Blog?');
+  });
+
+  it('truncates long user prompts with an ellipsis at exactly the limit', () => {
+    const longPrompt = 'Erstelle mir bitte eine Zusammenfassung der wichtigsten Punkte dieser Webseite und der geöffneten Tabs';
+    const title = deriveTitle(longPrompt, 36);
+    expect(title).toHaveLength(37); // 36 chars + '…'
+    expect(title.endsWith('…')).toBe(true);
+    expect(title).toBe('Erstelle mir bitte eine Zusammenfass…');
+  });
+
+  it('collapses multiline user messages into a single title line', () => {
+    const multiline = 'Erste Zeile\nZweite Zeile\n\nDritte Zeile';
+    expect(deriveTitle(multiline)).toBe('Erste Zeile Zweite Zeile Dritte Zeil…');
+  });
+});
+

@@ -2036,7 +2036,7 @@ export function App(): JSX.Element {
             }}
             copilotOpen={copilotOpen}
             onToggleCopilot={toggleCopilot}
-            onOpenGithub={() => addTab('https://github.com/Loggableim/lastbrowser')}
+            onOpenGithub={() => addTab('https://github.com/Loggableim/lastbrowser/issues')}
             quickActions={quickActions}
             onExecuteQuickAction={handleExecuteQuickAction}
             botName={setupState.botName || 'Nova'}
@@ -2540,6 +2540,12 @@ export function App(): JSX.Element {
             }}
           />
         )}
+        <PinnedAppModal
+          isOpen={pinnedModalOpen}
+          onClose={() => { setPinnedModalOpen(false); setPinnedEditApp(null); }}
+          editApp={pinnedEditApp}
+          activeTab={activeTab ? { title: activeTab.title, url: activeTab.url, favicon: activeTab.favicon } : null}
+        />
         <CommandPalette />
     </div>
     </DesktopI18nProvider>

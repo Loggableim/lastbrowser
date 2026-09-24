@@ -12,6 +12,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Bug,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -882,12 +883,12 @@ export function ModernTitlebar({
         {onOpenGithub && (
           <button
             type="button"
-            className="titlebar-tool-btn github-btn"
-            title="GitHub / Community"
-            aria-label="GitHub"
+            className="titlebar-tool-btn bug-report-btn"
+            title="Problem melden / GitHub Issues"
+            aria-label="Problem melden"
             onClick={onOpenGithub}
           >
-            <Github size={15} />
+            <Bug size={15} />
           </button>
         )}
 

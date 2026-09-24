@@ -13219,6 +13219,26 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
   overflow-y: auto;
 }
 
+.model-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #00d9ff;
+  letter-spacing: 0.05em;
+  padding: 6px 8px 3px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.model-group-title .account-tag {
+  font-size: 9px;
+  color: rgba(232, 242, 255, 0.6);
+  text-transform: none;
+  font-weight: 500;
+}
+
 .model-option-item {
   display: flex;
   align-items: center;

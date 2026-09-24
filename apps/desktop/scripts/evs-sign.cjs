@@ -3,8 +3,10 @@ const path = require('path');
 const fs = require('fs');
 
 /**
- * electron-builder afterPack hook for Castlabs EVS (Electron VMP Signing).
- * Signs the packaged Windows executable with Google Widevine VMP.
+ * electron-builder afterSign hook for Castlabs EVS (Electron VMP Signing).
+ * Signs the packaged and Authenticode-signed Windows executable with Google Widevine VMP.
+ * Note: On Windows, VMP signing MUST run in afterSign (after signtool) so that
+ * Authenticode certificate injection does not alter the PE header and invalidate the VMP signature.
  */
 exports.default = async function (context) {
   if (context.electronPlatformName !== 'win32') {
@@ -12,7 +14,7 @@ exports.default = async function (context) {
   }
 
   const appOutDir = context.appOutDir;
-  console.log(`\n[EVS/VMP] Executing afterPack hook: Widevine VMP signing for ${appOutDir}`);
+  console.log(`\n[EVS/VMP] Executing afterSign hook: Widevine VMP signing for ${appOutDir}`);
 
   const targetExe = path.join(appOutDir, 'Lastbrowser.exe');
   if (!fs.existsSync(targetExe)) {

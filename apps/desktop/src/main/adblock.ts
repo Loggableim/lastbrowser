@@ -48,6 +48,79 @@ export type AdblockOptions = {
 
 const CACHE_FILE = 'adblocker-engine.bin';
 
+export const STREAMING_DOMAIN_SUFFIXES = [
+  'netflix.com',
+  'nflxvideo.net',
+  'nflxext.com',
+  'nflximg.net',
+  'nflxso.net',
+  'disneyplus.com',
+  'dssott.com',
+  'bamgrid.com',
+  'disney-plus.net',
+  'primevideo.com',
+  'aiv-cdn.net',
+  'aiv-delivery.net',
+  'spotify.com',
+  'scdn.co'
+];
+
+export function isStreamingUrl(rawUrl?: string): boolean {
+  if (!rawUrl) return false;
+  try {
+    const hostname = new URL(rawUrl).hostname.toLowerCase();
+    return STREAMING_DOMAIN_SUFFIXES.some(
+      (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isStreamingRequest(details: { url?: string; initiator?: string; referrer?: string }): boolean {
+  return isStreamingUrl(details.url) || isStreamingUrl(details.initiator) || isStreamingUrl(details.referrer);
+}
+
+export function patchBlockerForStreaming(instance: unknown): void {
+  const blocker = instance as {
+    onBeforeRequest?: (details: any, callback: (resp: any) => void) => void;
+    onHeadersReceived?: (details: any, callback: (resp: any) => void) => void;
+    onInjectCosmeticFilters?: (event: any, url: string, msg?: any) => Promise<void>;
+  };
+
+  if (typeof blocker.onBeforeRequest === 'function') {
+    const origOnBeforeRequest = blocker.onBeforeRequest.bind(blocker);
+    blocker.onBeforeRequest = (details, callback) => {
+      if (isStreamingRequest(details)) {
+        callback({});
+        return;
+      }
+      origOnBeforeRequest(details, callback);
+    };
+  }
+
+  if (typeof blocker.onHeadersReceived === 'function') {
+    const origOnHeadersReceived = blocker.onHeadersReceived.bind(blocker);
+    blocker.onHeadersReceived = (details, callback) => {
+      if (isStreamingRequest(details)) {
+        callback({});
+        return;
+      }
+      origOnHeadersReceived(details, callback);
+    };
+  }
+
+  if (typeof blocker.onInjectCosmeticFilters === 'function') {
+    const origOnInject = blocker.onInjectCosmeticFilters.bind(blocker);
+    blocker.onInjectCosmeticFilters = async (event, url, msg) => {
+      if (isStreamingUrl(url)) {
+        return;
+      }
+      return origOnInject(event, url, msg);
+    };
+  }
+}
+
 export function createAdblockController(options: AdblockOptions = {}): AdblockController {
   let enabled = options.enabled !== false;
   let state: AdblockState = 'idle';
@@ -83,6 +156,7 @@ export function createAdblockController(options: AdblockOptions = {}): AdblockCo
         instance.on('request-blocked', () => {
           blockedCount += 1;
         });
+        patchBlockerForStreaming(instance);
         blocker = instance;
         state = 'ready';
         return instance;

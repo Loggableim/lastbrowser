@@ -2762,6 +2762,9 @@ function BrowserMain({
   const [webviewMountKey, setWebviewMountKey] = useState(0);
   const [netflixDismissed, setNetflixDismissed] = useState(false);
   const isNetflix = Boolean(activeTab.url && /netflix\.com/i.test(activeTab.url));
+  const isDisney = Boolean(activeTab.url && /disneyplus\.com/i.test(activeTab.url));
+  const isStreamingDrmSite = isNetflix || isDisney;
+  const streamingServiceName = isNetflix ? 'Netflix' : 'Disney+';
   const splitWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
   const allWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
 
@@ -3412,12 +3415,12 @@ function BrowserMain({
             </div>
           </div>
         )}
-        {isNetflix && !netflixDismissed && (
+        {isStreamingDrmSite && !netflixDismissed && (
           <div className="netflix-drm-notice-banner">
             <div className="netflix-drm-notice-content">
               <span className="netflix-drm-icon">🎬</span>
               <div className="netflix-drm-text">
-                <strong>Netflix DRM-Hinweis:</strong> Netflix erfordert Google VMP-Zertifizierung. Bei Wiedergabeproblemen kannst du den Stream direkt in deinem Systembrowser (Chrome/Edge) fortsetzen.
+                <strong>{streamingServiceName} DRM-Hinweis:</strong> Streaming-Dienste erfordern für geschützte Streams Google VMP-Zertifizierung. Bei Wiedergabeproblemen oder Fehlern (z. B. NSES-UHX) kannst du den Stream mit 1 Klick in deinem Systembrowser (Chrome/Edge) fortsetzen.
               </div>
             </div>
             <div className="netflix-drm-actions">

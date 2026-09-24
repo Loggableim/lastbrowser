@@ -56,7 +56,7 @@ export interface TabState {
   setSplitLayout(layout: 'columns' | 'rows' | 'grid'): void;
 
   // Splitscreen actions
-  addSplitTab(tabId: string): void;
+  addSplitTab(tabId: string, baseTabIdOverride?: string): void;
   removeSplitTab(tabId: string): void;
   clearSplitTabs(): void;
 
@@ -150,7 +150,7 @@ export const useTabStore = create<TabState>((set, get) => {
       })),
     setSplitLayout: (splitLayout) => set({ splitLayout }),
 
-    addSplitTab: (tabId: string) => {
+    addSplitTab: (tabId: string, baseTabIdOverride?: string) => {
       const { tabs, activeTabId, splitTabIds } = get();
       if (!tabs.some((t) => t.id === tabId)) return;
       if (splitTabIds.includes(tabId)) {
@@ -159,7 +159,9 @@ export const useTabStore = create<TabState>((set, get) => {
         return;
       }
       if (splitTabIds.length === 0) {
-        const baseTabId = activeTabId && activeTabId !== tabId ? activeTabId : tabs.find((t) => t.id !== tabId)?.id;
+        const baseTabId = (baseTabIdOverride && baseTabIdOverride !== tabId)
+          ? baseTabIdOverride
+          : (activeTabId && activeTabId !== tabId ? activeTabId : tabs.find((t) => t.id !== tabId)?.id);
         if (baseTabId) {
           set({ splitTabIds: [baseTabId, tabId], splitLayout: 'columns', activeTabId: tabId });
         }

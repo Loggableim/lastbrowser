@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Columns2,
   Copy,
   Download,
   EyeOff,
@@ -589,6 +590,7 @@ export type WindowTitlebarProps = {
   onNewTab?: () => void;
   onPinTab?: (tabId: string) => void;
   onToggleTabMute?: (tabId: string) => void;
+  onAddSplitTab?: (tabId: string, baseTabId?: string) => void;
 };
 
 export function WindowTitlebar({
@@ -602,9 +604,11 @@ export function WindowTitlebar({
   onMoveTab,
   onNewTab,
   onPinTab,
-  onToggleTabMute
+  onToggleTabMute,
+  onAddSplitTab
 }: WindowTitlebarProps): React.JSX.Element {
   const { isMaximized, handleDoubleClick, handleMouseDown } = useWindowDrag();
+  const [dragOverInfo, setDragOverInfo] = useState<{ id: string; mode: 'before' | 'after' | 'split' } | null>(null);
 
   return (
     <header
@@ -618,59 +622,100 @@ export function WindowTitlebar({
       </div>
       {tabs && activeTabId && onActivateTab && onCloseTab && onNewTab ? (
         <nav className="tabbar" aria-label="Browser tabs">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              role="button"
-              tabIndex={0}
-              draggable
-              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.incognito ? 'incognito' : ''} ${draggedTabId === tab.id ? 'dragging' : ''}`}
-              onClick={() => onActivateTab(tab.id)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
+          {tabs.map((tab) => {
+            const isDragTarget = dragOverInfo?.id === tab.id;
+            const dragMode = isDragTarget ? dragOverInfo.mode : null;
+            return (
+              <div
+                key={tab.id}
+                role="button"
+                tabIndex={0}
+                draggable
+                className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.incognito ? 'incognito' : ''} ${draggedTabId === tab.id ? 'dragging' : ''} ${dragMode ? `drag-over-${dragMode}` : ''}`}
+                onClick={() => onActivateTab(tab.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onActivateTab(tab.id);
+                  }
+                }}
+                onDragStart={() => {
+                  setDragOverInfo(null);
+                  onDragStartTab?.(tab.id);
+                }}
+                onDragEnd={() => {
+                  setDragOverInfo(null);
+                  onDragEndTab?.();
+                }}
+                onDragOver={(event) => {
                   event.preventDefault();
-                  onActivateTab(tab.id);
-                }
-              }}
-              onDragStart={() => onDragStartTab?.(tab.id)}
-              onDragEnd={() => onDragEndTab?.()}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                if (draggedTabId && draggedTabId !== tab.id) onMoveTab?.(draggedTabId, tab.id);
-                onDragEndTab?.();
-              }}
-            >
-              <button
-                type="button"
-                className={`tab-favorite ${tab.pinned ? 'active' : ''}`}
-                aria-label={tab.pinned ? `Unfavorite ${tab.title}` : `Favorite ${tab.title}`}
-                aria-pressed={Boolean(tab.pinned)}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onPinTab?.(tab.id);
+                  event.dataTransfer.dropEffect = 'move';
+                  if (!draggedTabId || draggedTabId === tab.id) return;
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const relX = (event.clientX - rect.left) / rect.width;
+                  let mode: 'before' | 'after' | 'split' = 'split';
+                  if (relX < 0.25) mode = 'before';
+                  else if (relX > 0.75) mode = 'after';
+                  if (!dragOverInfo || dragOverInfo.id !== tab.id || dragOverInfo.mode !== mode) {
+                    setDragOverInfo({ id: tab.id, mode });
+                  }
+                }}
+                onDragLeave={(event) => {
+                  if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+                  if (dragOverInfo?.id === tab.id) {
+                    setDragOverInfo(null);
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const currentDrop = dragOverInfo;
+                  setDragOverInfo(null);
+                  if (draggedTabId && draggedTabId !== tab.id) {
+                    if (currentDrop?.id === tab.id && currentDrop.mode === 'split') {
+                      onAddSplitTab?.(draggedTabId, tab.id);
+                    } else {
+                      onMoveTab?.(draggedTabId, tab.id);
+                    }
+                  }
+                  onDragEndTab?.();
                 }}
               >
-                <Star size={11} fill={tab.pinned ? 'currentColor' : 'none'} />
-              </button>
-              {tab.incognito && (
-                <EyeOff size={11} className="tab-incognito-icon" title="Private tab" />
-              )}
-              {tab.isLoading ? (
-                <Loader2 size={12} className="tab-spinner" />
-              ) : tab.favicon ? (
-                <img
-                  src={tab.favicon}
-                  alt=""
-                  className="tab-favicon"
-                  onError={(event) => {
-                    (event.currentTarget as HTMLElement).style.display = 'none';
+                <button
+                  type="button"
+                  className={`tab-favorite ${tab.pinned ? 'active' : ''}`}
+                  aria-label={tab.pinned ? `Unfavorite ${tab.title}` : `Favorite ${tab.title}`}
+                  aria-pressed={Boolean(tab.pinned)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onPinTab?.(tab.id);
                   }}
-                />
-              ) : (
-                <Globe2 size={12} className="tab-fallback-icon" />
-              )}
-              <span className="tab-title">{tab.title}</span>
+                >
+                  <Star size={11} fill={tab.pinned ? 'currentColor' : 'none'} />
+                </button>
+                {tab.incognito && (
+                  <EyeOff size={11} className="tab-incognito-icon" title="Private tab" />
+                )}
+                {tab.isLoading ? (
+                  <Loader2 size={12} className="tab-spinner" />
+                ) : tab.favicon ? (
+                  <img
+                    src={tab.favicon}
+                    alt=""
+                    className="tab-favicon"
+                    onError={(event) => {
+                      (event.currentTarget as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <Globe2 size={12} className="tab-fallback-icon" />
+                )}
+                <span className="tab-title">{tab.title}</span>
+                {dragMode === 'split' && (
+                  <div className="vtab-split-drop-badge">
+                    <Columns2 size={11} />
+                    <span>Split</span>
+                  </div>
+                )}
               {(tab.isPlayingAudio || tab.isMuted) && (
                 <button
                   type="button"
@@ -693,7 +738,8 @@ export function WindowTitlebar({
                 }}
               />
             </div>
-          ))}
+            );
+          })}
           <button type="button" className="new-tab" onClick={onNewTab} aria-label="New tab"><Plus size={16} /></button>
           <div className="tabbar-drag-spacer" />
         </nav>

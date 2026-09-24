@@ -1,4 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { useTabStore } from '../src/renderer/stores/useTabStore.js';
 import { createInitialTab } from '../src/renderer/tabs.js';
 
@@ -98,5 +100,28 @@ describe('Multi-Tab Splitscreen State & Mechanics', () => {
     expect(useTabStore.getState().splitLayout).toBe('rows');
     setSplitLayout('grid');
     expect(useTabStore.getState().splitLayout).toBe('grid');
+  });
+
+  it('supports baseTabIdOverride to split dropped tab directly into target tab (tab-in-tab drag)', () => {
+    const { tabs, addSplitTab } = useTabStore.getState();
+    // Active tab is tabs[0], but user drags tabs[3] onto tabs[2]
+    addSplitTab(tabs[3].id, tabs[2].id);
+
+    const state = useTabStore.getState();
+    expect(state.splitTabIds).toEqual([tabs[2].id, tabs[3].id]);
+    expect(state.activeTabId).toBe(tabs[3].id);
+    expect(state.splitLayout).toBe('columns');
+  });
+
+  it('defines styles for tab drag-over-split badge and multi-webview viewport preservation', () => {
+    const cssPath = resolve(__dirname, '../src/renderer/styles.css');
+    const css = readFileSync(cssPath, 'utf8');
+    expect(css).toContain('.vertical-tab-item.drag-over-split');
+    expect(css).toContain('.tab.drag-over-split');
+    expect(css).toContain('.vtab-split-drop-badge');
+    expect(css).toContain('.browser-tabs-viewport');
+    expect(css).toContain('.browser-tab-pane.active-tab-pane');
+    expect(css).toContain('.browser-tab-pane.inactive-tab-pane');
+    expect(css).toContain('.browser-mode-overlay');
   });
 });

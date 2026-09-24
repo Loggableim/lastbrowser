@@ -116,7 +116,7 @@ export interface SidekickSidebarProps {
   /** Active split tabs (up to 4) */
   splitTabIds?: string[];
   /** Callback to add tab to splitscreen */
-  onAddSplitTab?: (tabId: string) => void;
+  onAddSplitTab?: (tabId: string, baseTabId?: string) => void;
   /** Callback to remove tab from splitscreen */
   onRemoveSplitTab?: (tabId: string) => void;
 }
@@ -164,6 +164,7 @@ export function SidekickSidebar({
   onAddSplitTab,
   onRemoveSplitTab
 }: SidekickSidebarProps): React.JSX.Element {
+  const [dragOverInfo, setDragOverInfo] = useState<{ id: string; mode: 'before' | 'after' | 'split' } | null>(null);
   const [internalDrawerTab, setInternalDrawerTab] = useState<SidebarDrawerTab>(drawerTab);
   const currentDrawerTab = onSelectDrawerTab ? drawerTab : internalDrawerTab;
 
@@ -397,6 +398,8 @@ export function SidekickSidebar({
                 <div className="vertical-tab-list" role="tablist">
                   {tabs.map((tab) => {
                     const isActive = tab.id === activeTabId && activePanel === 'browser';
+                    const isDragTarget = dragOverInfo?.id === tab.id;
+                    const dragMode = isDragTarget ? dragOverInfo.mode : null;
                     return (
                       <div
                         key={tab.id}
@@ -404,7 +407,7 @@ export function SidekickSidebar({
                         tabIndex={0}
                         draggable
                         aria-selected={isActive}
-                        className={`vertical-tab-item ${isActive ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.incognito ? 'incognito' : ''} ${tab.isDiscarded ? 'discarded' : ''} ${draggedTabId === tab.id ? 'dragging' : ''}`}
+                        className={`vertical-tab-item ${isActive ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.incognito ? 'incognito' : ''} ${tab.isDiscarded ? 'discarded' : ''} ${draggedTabId === tab.id ? 'dragging' : ''} ${dragMode ? `drag-over-${dragMode}` : ''}`}
                         onClick={() => {
                           if (tab.isDiscarded) onWakeTab?.(tab.id);
                           onActivateTab(tab.id);
@@ -416,12 +419,44 @@ export function SidekickSidebar({
                             onActivateTab(tab.id);
                           }
                         }}
-                        onDragStart={() => onDragStartTab?.(tab.id)}
-                        onDragEnd={() => onDragEndTab?.()}
-                        onDragOver={(event) => event.preventDefault()}
+                        onDragStart={() => {
+                          setDragOverInfo(null);
+                          onDragStartTab?.(tab.id);
+                        }}
+                        onDragEnd={() => {
+                          setDragOverInfo(null);
+                          onDragEndTab?.();
+                        }}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = 'move';
+                          if (!draggedTabId || draggedTabId === tab.id) return;
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          const relY = (event.clientY - rect.top) / rect.height;
+                          let mode: 'before' | 'after' | 'split' = 'split';
+                          if (relY < 0.25) mode = 'before';
+                          else if (relY > 0.75) mode = 'after';
+                          if (!dragOverInfo || dragOverInfo.id !== tab.id || dragOverInfo.mode !== mode) {
+                            setDragOverInfo({ id: tab.id, mode });
+                          }
+                        }}
+                        onDragLeave={(event) => {
+                          if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+                          if (dragOverInfo?.id === tab.id) {
+                            setDragOverInfo(null);
+                          }
+                        }}
                         onDrop={(event) => {
                           event.preventDefault();
-                          if (draggedTabId && draggedTabId !== tab.id) onMoveTab?.(draggedTabId, tab.id);
+                          const currentDrop = dragOverInfo;
+                          setDragOverInfo(null);
+                          if (draggedTabId && draggedTabId !== tab.id) {
+                            if (currentDrop?.id === tab.id && currentDrop.mode === 'split') {
+                              onAddSplitTab?.(draggedTabId, tab.id);
+                            } else {
+                              onMoveTab?.(draggedTabId, tab.id);
+                            }
+                          }
                           onDragEndTab?.();
                         }}
                       >
@@ -451,6 +486,13 @@ export function SidekickSidebar({
                         <span className="vtab-title" title={tab.title}>
                           {tab.title}
                         </span>
+
+                        {dragMode === 'split' && (
+                          <div className="vtab-split-drop-badge">
+                            <Columns2 size={11} />
+                            <span>Splitscreen</span>
+                          </div>
+                        )}
 
                         {/* Audio Mute button if playing or muted */}
                         {(tab.isPlayingAudio || tab.isMuted) && (

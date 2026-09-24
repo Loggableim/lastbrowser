@@ -2363,6 +2363,7 @@ export function App(): JSX.Element {
             onToggleTabMute={toggleTabMute}
             onDragStartTab={setDraggedTabId}
             onDragEndTab={() => setDraggedTabId(null)}
+            onAddSplitTab={addSplitTab}
           />
           <div className="browser-chrome">
             <header
@@ -2756,6 +2757,15 @@ function BrowserMain({
   const [webviewReady, setWebviewReady] = useState(false);
   const [webviewMountKey, setWebviewMountKey] = useState(0);
   const splitWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
+  const allWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
+
+  useLayoutEffect(() => {
+    const activeEl = allWebviewRefs.current[activeTab.id] || splitWebviewRefs.current[activeTab.id];
+    if (activeEl) {
+      webviewRef.current = activeEl;
+    }
+  }, [activeTab.id]);
+
   useLayoutEffect(() => {
     setWebviewReady(false);
     let cancelled = false;
@@ -2778,7 +2788,7 @@ function BrowserMain({
     return () => {
       cancelled = true;
     };
-  }, [activeTab.id, activeProfile.id, activePanel]);
+  }, [activeProfile.id, activePanel]);
 
   // Browsers are unusable without zoom: dense pages need scaling down, small
   // text needs scaling up. The guest webContents owns the zoom factor, so it
@@ -3250,68 +3260,52 @@ function BrowserMain({
     }
   }
 
-  if (browserMode === 'search') {
-    return <PanelErrorBoundary panel="browser" key="browser-search"><NativeAiBrowserMain serviceStatus={serviceStatus} onNavigate={onNavigate} /></PanelErrorBoundary>;
-  }
-
-  if (browserMode === 'home' || isAiBrowserHomeUrl(activeTab.url)) {
-    return (
-      <PanelErrorBoundary panel="browser" key="browser-home">
-        <NativeBrowserStartPage
-          bookmarks={bookmarks}
-          visits={visitedSites}
-          onNavigate={onNavigate}
-          botName={setupState.botName || 'Nova'}
-          onAskAi={(prompt) => {
-            setCopilotOpen(true);
-            void onSendChat(prompt);
-          }}
-          onOpenCommandPalette={() => usePanelStore.getState().setCommandPaletteOpen(true)}
-        />
-      </PanelErrorBoundary>
-    );
-  }
+  const isHomeOrSearch = browserMode === 'search' || browserMode === 'home' || isAiBrowserHomeUrl(activeTab.url);
 
   return (
-    <PanelErrorBoundary panel="browser" key={activeTab.id}>
+    <PanelErrorBoundary panel="browser" key="browser-page">
     <section className="browser-main browser-page-main">
-      <InPageActionBar
-        busy={busy}
-        onAction={onAction}
-        zoomFactor={zoomFactor}
-        onResetZoom={() => applyZoom(1)}
-        onFindOpen={() => setFindOpen(true)}
-        downloadsOpen={downloadsOpen}
-        hasActiveDownloads={hasActiveDownloads}
-        onToggleDownloads={() => setDownloadsOpen((current) => !current)}
-        historyOpen={historyOpen}
-        onToggleHistory={() => setHistoryOpen((current) => !current)}
-        muted={muted}
-        onToggleMute={toggleMute}
-        dockMode={usePanelStore.getState().actionBarDock}
-        onSetDockMode={(dock) => usePanelStore.getState().setActionBarDock(dock)}
-      />
+      {!isHomeOrSearch && (
+        <InPageActionBar
+          busy={busy}
+          onAction={onAction}
+          zoomFactor={zoomFactor}
+          onResetZoom={() => applyZoom(1)}
+          onFindOpen={() => setFindOpen(true)}
+          downloadsOpen={downloadsOpen}
+          hasActiveDownloads={hasActiveDownloads}
+          onToggleDownloads={() => setDownloadsOpen((current) => !current)}
+          historyOpen={historyOpen}
+          onToggleHistory={() => setHistoryOpen((current) => !current)}
+          muted={muted}
+          onToggleMute={toggleMute}
+          dockMode={usePanelStore.getState().actionBarDock}
+          onSetDockMode={(dock) => usePanelStore.getState().setActionBarDock(dock)}
+        />
+      )}
 
-      <div className="browser-page-corner-actions">
-        <button
-          type="button"
-          className={`devtools-trigger ${devToolsOpen ? 'active' : ''}`}
-          title="Toggle DevTools (F12)"
-          aria-pressed={devToolsOpen}
-          onClick={toggleDevTools}
-        >
-          <Code2 size={14} />
-        </button>
-        <SitePermissionButton url={activeTab.url} />
-        <button
-          type="button"
-          className="permissions-trigger"
-          title="Site permissions"
-          onClick={() => setPermissionsOpen((current) => !current)}
-        >
-          <ShieldCheck size={14} />
-        </button>
-      </div>
+      {!isHomeOrSearch && (
+        <div className="browser-page-corner-actions">
+          <button
+            type="button"
+            className={`devtools-trigger ${devToolsOpen ? 'active' : ''}`}
+            title="Toggle DevTools (F12)"
+            aria-pressed={devToolsOpen}
+            onClick={toggleDevTools}
+          >
+            <Code2 size={14} />
+          </button>
+          <SitePermissionButton url={activeTab.url} />
+          <button
+            type="button"
+            className="permissions-trigger"
+            title="Site permissions"
+            onClick={() => setPermissionsOpen((current) => !current)}
+          >
+            <ShieldCheck size={14} />
+          </button>
+        </div>
+      )}
       <PermissionsPanel open={permissionsOpen} onClose={() => setPermissionsOpen(false)} />
       <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />
       <HistoryPanel
@@ -3378,6 +3372,25 @@ function BrowserMain({
             <span>{browserLoadError}</span>
           </div>
         )}
+        {browserMode === 'search' ? (
+          <div className="browser-mode-overlay" style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'var(--bg-main, #12141a)' }}>
+            <NativeAiBrowserMain serviceStatus={serviceStatus} onNavigate={onNavigate} />
+          </div>
+        ) : (browserMode === 'home' || isAiBrowserHomeUrl(activeTab.url)) ? (
+          <div className="browser-mode-overlay" style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'var(--bg-main, #12141a)', overflowY: 'auto' }}>
+            <NativeBrowserStartPage
+              bookmarks={bookmarks}
+              visits={visitedSites}
+              onNavigate={onNavigate}
+              botName={setupState.botName || 'Nova'}
+              onAskAi={(prompt) => {
+                setCopilotOpen(true);
+                void onSendChat(prompt);
+              }}
+              onOpenCommandPalette={() => usePanelStore.getState().setCommandPaletteOpen(true)}
+            />
+          </div>
+        ) : null}
         {draggedTabId && onAddSplitTab && (
           <div
             className="browser-split-dropzone-overlay"
@@ -3445,11 +3458,13 @@ function BrowserMain({
                     ref={(el) => {
                       if (el) {
                         splitWebviewRefs.current[tab.id] = el;
+                        allWebviewRefs.current[tab.id] = el;
                         if (tab.id === activeTab.id) {
                           webviewRef.current = el;
                         }
                       } else {
                         delete splitWebviewRefs.current[tab.id];
+                        delete allWebviewRefs.current[tab.id];
                       }
                     }}
                     src={tab.url}
@@ -3472,32 +3487,71 @@ function BrowserMain({
               );
             })}
           </div>
-        ) : webviewReady && (
-        <webview
-          key={`${activeProfile.id}:${activeTab.id}:${webviewMountKey}`}
-          ref={webviewRef}
-          src={activeTab.url}
-          className="browser-view"
-          style={browserWebviewStyle}
-          partition={activeTab.incognito ? 'in-memory-incognito' : profilePartition(activeProfile.id)}
-          allowpopups="false"
-          onDidStartLoading={() => onClearBrowserError()}
-          onDomReady={(event) => {
-            void hideWebviewScrollbars(event.currentTarget);
-          }}
-          onDidFailLoad={(event) => {
-            if (!event.isMainFrame || event.errorCode === -3) return;
-            // Reset to start page on serious load failures to prevent grey screen
-            if (event.errorCode < -100) {
-              onSetBrowserError(`Connection failed (${event.errorDescription}). Returning to start page.`);
-              setTimeout(() => {
-                onNavigate(browserStartUrl);
-              }, 1500);
-            } else {
-              onSetBrowserError(`${event.errorCode}: ${event.errorDescription}`);
-            }
-          }}
-        />
+        ) : (
+          <div className="browser-tabs-viewport" style={{ position: 'relative', width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
+            {(tabs && tabs.length > 0 ? tabs : [activeTab]).map((tab) => {
+              const isCurrent = tab.id === activeTab.id;
+              if (tab.isDiscarded && !isCurrent) return null;
+              if (isAiBrowserHomeUrl(tab.url) && !isCurrent) return null;
+              return (
+                <div
+                  key={tab.id}
+                  className={`browser-tab-pane ${isCurrent ? 'active-tab-pane' : 'inactive-tab-pane'}`}
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    minWidth: 0,
+                    minHeight: 0,
+                    visibility: isCurrent ? 'visible' : 'hidden',
+                    pointerEvents: isCurrent ? 'auto' : 'none',
+                    zIndex: isCurrent ? 1 : 0
+                  }}
+                >
+                  {webviewReady && (
+                    <webview
+                      key={`${activeProfile.id}:${tab.id}:${webviewMountKey}`}
+                      ref={(el) => {
+                        if (el) {
+                          allWebviewRefs.current[tab.id] = el;
+                          if (tab.id === activeTab.id) {
+                            webviewRef.current = el;
+                          }
+                        } else {
+                          delete allWebviewRefs.current[tab.id];
+                        }
+                      }}
+                      src={tab.url}
+                      className="browser-view"
+                      style={browserWebviewStyle}
+                      partition={tab.incognito ? 'in-memory-incognito' : profilePartition(activeProfile.id)}
+                      allowpopups="false"
+                      onDidStartLoading={() => {
+                        if (tab.id === activeTab.id) onClearBrowserError();
+                      }}
+                      onDomReady={(event) => {
+                        void hideWebviewScrollbars(event.currentTarget);
+                      }}
+                      onDidFailLoad={(event) => {
+                        if (!event.isMainFrame || event.errorCode === -3) return;
+                        if (tab.id === activeTab.id) {
+                          if (event.errorCode < -100) {
+                            onSetBrowserError(`Connection failed (${event.errorDescription}). Returning to start page.`);
+                            setTimeout(() => {
+                              onNavigate(browserStartUrl);
+                            }, 1500);
+                          } else {
+                            onSetBrowserError(`${event.errorCode}: ${event.errorDescription}`);
+                          }
+                        }
+                      }}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </section>

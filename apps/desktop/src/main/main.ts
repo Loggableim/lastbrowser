@@ -162,7 +162,7 @@ import { createAppTray, setupMinimizeToTray, type TrayController } from './tray.
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
 import { registerBrowserShortcuts } from './shortcuts.js';
-import { openAuthConnectWindow } from './auth-window.js';
+import { openAuthConnectWindow, cleanOAuthUserAgent } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
 
 process.on('uncaughtException', (err, origin) => {
@@ -812,6 +812,12 @@ if (!gotSingleInstanceLock) {
 // Auto-detect and register system Widevine CDM before app is ready (Ansatz 3)
 configureDrmWidevine(app);
 
+// Strip Electron and Lastbrowser tokens from default User-Agent to avoid Google
+// disallowed_useragent, Disney+ login block, and DRM playback rejections.
+if (app.userAgentFallback) {
+  app.userAgentFallback = cleanOAuthUserAgent(app.userAgentFallback);
+}
+
 // Must run before whenReady: registering a scheme as privileged afterwards has
 // no effect on storage partitioning, and localStorage would stay ephemeral.
 registerAppScheme();
@@ -867,6 +873,10 @@ app.whenReady().then(() => {
 
 function attachSessionHandlers(targetSession: Session): void {
   activeSessions.add(targetSession);
+  const currentUa = targetSession.getUserAgent();
+  if (currentUa) {
+    targetSession.setUserAgent(cleanOAuthUserAgent(currentUa));
+  }
   void adblock.attach(targetSession);
   downloads.attach(targetSession);
   const isIncognito = (targetSession as unknown as { isInMemory?: () => boolean }).isInMemory?.() ?? false;
@@ -888,7 +898,7 @@ function attachSessionHandlers(targetSession: Session): void {
 app.on('session-created', (sess) => {
   // Only attach browser features to persistent profile sessions or incognito webviews.
   // Utility partitions (like electron-updater) have no storagePath and must not be polluted.
-  if (!sess.storagePath) {
+  if (!sess.storagePath && !(sess as unknown as { isInMemory?: () => boolean }).isInMemory?.()) {
     return;
   }
   attachSessionHandlers(sess);

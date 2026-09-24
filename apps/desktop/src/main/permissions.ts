@@ -26,9 +26,17 @@ export type PermissionDecision = 'allow' | 'deny';
 const ALLOWED_PERMISSIONS = new Set([
   'fullscreen',
   'pointerLock',
+  'keyboardLock',
   'clipboard-sanitized-write',
   'notifications',
-  'protected-media-identifier'
+  'protected-media-identifier',
+  'protectedMediaIdentifier',
+  'mediaKeySystem',
+  'storage-access',
+  'top-level-storage-access',
+  'window-management',
+  'window-placement',
+  'local-fonts'
 ]);
 
 /**
@@ -96,7 +104,7 @@ export function createPermissionController(
         const normalized = originOf(origin);
         return normalized && trusted.has(normalized) ? 'allow' : 'deny';
       }
-      // Everything else (geolocation, storage-access, unknown names) is denied.
+      // Everything else (geolocation, sensors, unknown names) is denied.
       return 'deny';
     },
 

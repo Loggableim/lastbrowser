@@ -149,6 +149,63 @@ describe('DRM Widevine module', () => {
       expect(result?.version).toBe('4.10.3050.0');
     });
 
+    it('prefers higher version when both Edge and Chrome are installed', () => {
+      const edgeBase = path.normalize('C:/Program Files (x86)/Microsoft/Edge/Application');
+      const edgeVer = '153.0.4234.48';
+      const edgeWv = path.join(edgeBase, edgeVer, 'WidevineCdm');
+      const edgeManifest = path.join(edgeWv, 'manifest.json');
+      const edgeDll = path.join(edgeWv, '_platform_specific', 'win_x64', 'widevinecdm.dll');
+
+      const chromeBase = path.normalize('C:/Program Files/Google/Chrome/Application');
+      const chromeVer = '153.0.8010.53';
+      const chromeWv = path.join(chromeBase, chromeVer, 'WidevineCdm');
+      const chromeManifest = path.join(chromeWv, 'manifest.json');
+      const chromeDll = path.join(chromeWv, '_platform_specific', 'win_x64', 'widevinecdm.dll');
+
+      const mockFs: DrmFs = {
+        existsSync: vi.fn((p: string) => {
+          const norm = path.normalize(p);
+          return (
+            norm === edgeBase ||
+            norm === edgeWv ||
+            norm === edgeManifest ||
+            norm === edgeDll ||
+            norm === chromeBase ||
+            norm === chromeWv ||
+            norm === chromeManifest ||
+            norm === chromeDll
+          );
+        }),
+        readdirSync: vi.fn((p: string) => {
+          const norm = path.normalize(p);
+          if (norm === edgeBase) return [edgeVer];
+          if (norm === chromeBase) return [chromeVer];
+          return [];
+        }),
+        readFileSync: vi.fn((p: string) => {
+          const norm = path.normalize(p);
+          if (norm === edgeManifest) return JSON.stringify({ version: '4.10.3050.1' });
+          if (norm === chromeManifest) return JSON.stringify({ version: '4.10.3112.0' });
+          return '';
+        })
+      };
+
+      const result = findSystemWidevine(
+        mockFs,
+        {
+          'ProgramFiles(x86)': 'C:\\Program Files (x86)',
+          ProgramFiles: 'C:\\Program Files',
+          TEST_PLATFORM: 'win32'
+        },
+        'win32',
+        'x64'
+      );
+
+      expect(result).not.toBeNull();
+      expect(result?.source).toBe('chrome');
+      expect(result?.version).toBe('4.10.3112.0');
+    });
+
     it('supports direct dll location without platform subdirectory', () => {
       const edgeBase = path.normalize('C:/Program Files (x86)/Microsoft/Edge/Application');
       const versionDir = '120.0.0.0';

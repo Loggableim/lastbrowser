@@ -155,6 +155,8 @@ export function findSystemWidevine(
     ] : [])
   ];
 
+  const allFound: WidevineCdmInfo[] = [];
+
   for (const candidate of candidates) {
     if (!fileSystem.existsSync(candidate.baseDir)) {
       continue;
@@ -176,7 +178,8 @@ export function findSystemWidevine(
         if (fileSystem.existsSync(widevineTarget)) {
           const info = inspectWidevineDirectory(widevineTarget, candidate.source, fileSystem, targetArch);
           if (info) {
-            return info;
+            allFound.push(info);
+            break;
           }
         }
       }
@@ -184,6 +187,11 @@ export function findSystemWidevine(
       // Unreadable directory or permissions failure, proceed to next candidate
       continue;
     }
+  }
+
+  if (allFound.length > 0) {
+    allFound.sort((a, b) => compareVersionsDesc(a.version, b.version));
+    return allFound[0];
   }
 
   return null;

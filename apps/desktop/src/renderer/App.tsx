@@ -3471,7 +3471,9 @@ function BrowserMain({
                     className="browser-view split-webview"
                     style={browserWebviewStyle}
                     partition={tab.incognito ? 'in-memory-incognito' : profilePartition(activeProfile.id)}
-                    allowpopups="false"
+                    allowpopups="true"
+                    plugins="true"
+                    webpreferences="contextIsolation=yes, plugins=yes"
                     onDidStartLoading={() => onClearBrowserError()}
                     onDomReady={(event) => {
                       void hideWebviewScrollbars(event.currentTarget);
@@ -3526,7 +3528,9 @@ function BrowserMain({
                       className="browser-view"
                       style={browserWebviewStyle}
                       partition={tab.incognito ? 'in-memory-incognito' : profilePartition(activeProfile.id)}
-                      allowpopups="false"
+                      allowpopups="true"
+                      plugins="true"
+                      webpreferences="contextIsolation=yes, plugins=yes"
                       onDidStartLoading={() => {
                         if (tab.id === activeTab.id) onClearBrowserError();
                       }}

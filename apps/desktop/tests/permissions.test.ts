@@ -6,8 +6,14 @@ describe('permission controller', () => {
     const c = createPermissionController();
     expect(c.decide('fullscreen', 'https://example.com')).toBe('allow');
     expect(c.decide('pointerLock', 'https://example.com')).toBe('allow');
+    expect(c.decide('keyboardLock', 'https://example.com')).toBe('allow');
     expect(c.decide('clipboard-sanitized-write', 'https://example.com')).toBe('allow');
     expect(c.decide('protected-media-identifier', 'https://www.netflix.com')).toBe('allow');
+    expect(c.decide('protectedMediaIdentifier', 'https://www.netflix.com')).toBe('allow');
+    expect(c.decide('mediaKeySystem', 'https://www.netflix.com')).toBe('allow');
+    expect(c.decide('storage-access', 'https://www.disneyplus.com')).toBe('allow');
+    expect(c.decide('top-level-storage-access', 'https://www.disneyplus.com')).toBe('allow');
+    expect(c.decide('window-management', 'https://www.netflix.com')).toBe('allow');
     expect(c.decide('protected-media-identifier', 'https://open.spotify.com')).toBe('allow');
   });
 

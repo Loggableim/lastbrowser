@@ -18,6 +18,7 @@ import {
   Plus,
   Puzzle,
   RefreshCw,
+  RotateCcw,
   Save,
   Search,
   Send,
@@ -44,7 +45,10 @@ import {
   type ActionBarDock,
   type ThemeAccent,
   type GlassLevel,
-  type UiDensity
+  type UiDensity,
+  type NovaDockPosition,
+  type NovaDockAnimation,
+  type NovaDockPreset
 } from '../stores/usePanelStore.js';
 import {
   type ServiceStatus,
@@ -314,17 +318,30 @@ export function cleanSettingsPayload(payload: AnyRecord): AnyRecord {
   return next;
 }
 
-export function applyDesktopAppearancePreview(themeValue: string, skinValue: string): void {
+export function applyDesktopAppearancePreview(
+  themeValue: string,
+  skinValue: string,
+  fontSizeValue: string = 'default',
+  messageLayoutValue: string = 'bubbles',
+  syntaxThemeValue: string = ''
+): void {
   if (typeof document === 'undefined') return;
   const theme = normalizeAppearanceTheme(themeValue);
   const resolvedTheme = theme === 'system'
     ? (window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
     : theme;
   const skin = normalizeAppearanceSkin(skinValue);
+  const fontSize = String(fontSizeValue || 'default').trim().toLowerCase() || 'default';
+  const messageLayout = String(messageLayoutValue || 'bubbles').trim().toLowerCase() || 'bubbles';
+  const syntaxTheme = String(syntaxThemeValue || '').trim();
+
   const root = document.documentElement;
   root.dataset.theme = resolvedTheme;
   root.dataset.themeMode = theme;
   root.dataset.skin = skin;
+  root.dataset.fontSize = fontSize;
+  root.dataset.messageLayout = messageLayout;
+  root.dataset.syntaxTheme = syntaxTheme;
   root.classList.toggle('theme-light', resolvedTheme === 'light');
   root.classList.toggle('theme-dark', resolvedTheme !== 'light');
   root.classList.toggle('theme-system', theme === 'system');
@@ -1746,6 +1763,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const themeAccent = usePanelStore((s) => s.themeAccent);
   const glassLevel = usePanelStore((s) => s.glassLevel);
   const uiDensity = usePanelStore((s) => s.uiDensity);
+  const dockSettings = usePanelStore((s) => s.dockSettings);
+  const setDockSettings = usePanelStore((s) => s.setDockSettings);
+  const applyDockPreset = usePanelStore((s) => s.applyDockPreset);
+  const resetFloatingDockPos = usePanelStore((s) => s.resetFloatingDockPos);
 
   const [defaultBrowserStatus, setDefaultBrowserStatus] = useState<boolean | null>(null);
 
@@ -2248,6 +2269,195 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                             {d.label}
                           </button>
                         ))}
+                      </div>
+                    </div>
+                  </div>
+                </SettingsCard>
+
+                <SettingsCard
+                  title="Nova Dock (Interaktive Leiste & Fisheye-Effekt)"
+                  description="Wähle die Position des Docks (Unten, Oben, Links, Rechts oder frei Schwebend), passe die macOS-ähnliche Fisheye-Wellenvergrößerung und das automatische Ausblenden an."
+                >
+                  <div className="settings-modern-layout-config">
+                    {/* 1-Klick-Presets */}
+                    <div className="settings-field-row">
+                      <div className="settings-field-info">
+                        <strong>1-Klick-Presets</strong>
+                        <small>Wähle eine vorkonfigurierte Nova-Dock-Einstellung für schnellen Start.</small>
+                      </div>
+                      <div className="settings-dock-buttons-row" style={{ flexWrap: 'wrap' }}>
+                        {[
+                          { id: 'bottom-dock', label: '🌟 Nova Dock Unten' },
+                          { id: 'classic-left', label: '📐 Klassisch Links' },
+                          { id: 'floating-widget', label: '🎈 Schwebendes Widget' },
+                          { id: 'minimalist-autohide', label: '⚡ Minimalist (Auto-Hide)' }
+                        ].map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="settings-dock-btn"
+                            onClick={() => applyDockPreset(p.id as NovaDockPreset)}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Dock Position */}
+                    <div className="settings-field-row">
+                      <div className="settings-field-info">
+                        <strong>Dock-Position</strong>
+                        <small>Position der eingeklappten Nova-Leiste im Browserfenster.</small>
+                      </div>
+                      <div className="settings-segmented-group">
+                        {[
+                          { id: 'left', label: 'Links' },
+                          { id: 'right', label: 'Rechts' },
+                          { id: 'bottom', label: 'Unten' },
+                          { id: 'top', label: 'Oben' },
+                          { id: 'floating', label: 'Schwebend' }
+                        ].map((pos) => (
+                          <button
+                            key={pos.id}
+                            type="button"
+                            className={dockSettings.position === pos.id ? 'settings-seg-btn active' : 'settings-seg-btn'}
+                            onClick={() => setDockSettings({ position: pos.id as NovaDockPosition })}
+                          >
+                            {pos.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* If floating: Orientation and Reset position */}
+                    {dockSettings.position === 'floating' && (
+                      <div className="settings-field-row">
+                        <div className="settings-field-info">
+                          <strong>Schwebend: Ausrichtung & Position</strong>
+                          <small>Horizontale oder vertikale Ausrichtung des freischwebenden Docks.</small>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <div className="settings-segmented-group">
+                            <button
+                              type="button"
+                              className={dockSettings.orientation === 'horizontal' ? 'settings-seg-btn active' : 'settings-seg-btn'}
+                              onClick={() => setDockSettings({ orientation: 'horizontal' })}
+                            >
+                              Horizontal
+                            </button>
+                            <button
+                              type="button"
+                              className={dockSettings.orientation === 'vertical' ? 'settings-seg-btn active' : 'settings-seg-btn'}
+                              onClick={() => setDockSettings({ orientation: 'vertical' })}
+                            >
+                              Vertikal
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            className="secondary-action compact"
+                            onClick={resetFloatingDockPos}
+                            title="Setzt die Schwebeposition zurück"
+                          >
+                            <RotateCcw size={13} />
+                            <span>Position zurücksetzen</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Auto-Hide Toggle */}
+                    <div className="settings-field-row">
+                      <div className="settings-field-info">
+                        <strong>Automatisches Ausblenden (Auto-Hide)</strong>
+                        <small>Das Dock verbirgt sich automatisch und erscheint bei Mouseover am Bildschirmrand.</small>
+                      </div>
+                      <div className="settings-segmented-group">
+                        <button
+                          type="button"
+                          className={dockSettings.autoHide ? 'settings-seg-btn active' : 'settings-seg-btn'}
+                          onClick={() => setDockSettings({ autoHide: true })}
+                        >
+                          Aktiviert
+                        </button>
+                        <button
+                          type="button"
+                          className={!dockSettings.autoHide ? 'settings-seg-btn active' : 'settings-seg-btn'}
+                          onClick={() => setDockSettings({ autoHide: false })}
+                        >
+                          Deaktiviert
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Reveal Animation Style & Duration */}
+                    <div className="settings-field-row">
+                      <div className="settings-field-info">
+                        <strong>Einblend-Animation & Dauer</strong>
+                        <small>Animationsstil und Geschwindigkeit beim Einblenden ({dockSettings.animationDuration}ms).</small>
+                      </div>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div className="settings-segmented-group">
+                          {[
+                            { id: 'slide', label: 'Slide-in' },
+                            { id: 'fade', label: 'Fade' },
+                            { id: 'instant', label: 'Sofort' }
+                          ].map((anim) => (
+                            <button
+                              key={anim.id}
+                              type="button"
+                              className={dockSettings.animation === anim.id ? 'settings-seg-btn active' : 'settings-seg-btn'}
+                              onClick={() => setDockSettings({ animation: anim.id as NovaDockAnimation })}
+                            >
+                              {anim.label}
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          type="range"
+                          min="100"
+                          max="600"
+                          step="50"
+                          value={dockSettings.animationDuration}
+                          onChange={(e) => setDockSettings({ animationDuration: Number(e.target.value) })}
+                          style={{ width: '110px' }}
+                        />
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{dockSettings.animationDuration} ms</span>
+                      </div>
+                    </div>
+
+                    {/* Fisheye Magnification Sliders */}
+                    <div className="settings-field-row">
+                      <div className="settings-field-info">
+                        <strong>Fisheye-Vergrößerung (Fokus: {dockSettings.magnification}x, Nachbarn: {dockSettings.neighborScale}x)</strong>
+                        <small>Stärke der Icon-Vergrößerung bei Mouseover (macOS Fisheye Wave).</small>
+                      </div>
+                      <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Fokus-Icon</label>
+                          <input
+                            type="range"
+                            min="1.0"
+                            max="2.0"
+                            step="0.05"
+                            value={dockSettings.magnification}
+                            onChange={(e) => setDockSettings({ magnification: Number(e.target.value) })}
+                            style={{ width: '100px' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Nachbar-Icons</label>
+                          <input
+                            type="range"
+                            min="1.0"
+                            max="1.5"
+                            step="0.05"
+                            value={dockSettings.neighborScale}
+                            onChange={(e) => setDockSettings({ neighborScale: Number(e.target.value) })}
+                            style={{ width: '100px' }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>

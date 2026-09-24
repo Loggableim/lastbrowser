@@ -8873,6 +8873,39 @@ html.theme-light select optgroup {
   padding: 2px;
 }
 
+.browser-split-container.is-resizable {
+  display: flex !important;
+  flex-direction: row;
+  gap: 0;
+}
+
+.split-resize-divider {
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  flex-shrink: 0;
+  z-index: 15;
+  user-select: none;
+}
+
+.split-resize-divider::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background 0.15s ease;
+}
+
+.split-resize-divider:hover::after,
+.split-resize-divider.is-dragging::after {
+  background: rgba(0, 217, 255, 0.9);
+  box-shadow: 0 0 8px rgba(0, 217, 255, 0.6);
+}
+
 .browser-split-container.split-layout-columns.count-2,
 .browser-split-container.count-2 {
   grid-template-columns: 1fr 1fr;
@@ -9360,6 +9393,469 @@ html.theme-light select optgroup {
   box-shadow: 0 0 8px #00d9ff;
 }
 
+/* ─── Nova Dock (Interaktive Leiste, Fisheye-Magnification & Floating) ───── */
+
+/* Workspace layout adaptability */
+.browser-zen-workspace.dock-pos-right .sidekick-sidebar {
+  order: 10;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: none;
+}
+
+.browser-zen-workspace.dock-pos-bottom .sidekick-sidebar.slim,
+.browser-zen-workspace.dock-pos-top .sidekick-sidebar.slim,
+.browser-zen-workspace.dock-pos-floating .sidekick-sidebar.slim {
+  width: 0 !important;
+  min-width: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  overflow: visible !important;
+}
+
+/* Base Nova Dock container */
+.nova-dock {
+  display: flex;
+  background: rgba(10, 16, 32, 0.82);
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 1px rgba(255, 255, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  user-select: none;
+  z-index: 1000;
+  box-sizing: border-box;
+}
+
+/* Vertical Dock (left, right, or floating vertical) */
+.nova-dock.is-vertical {
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 6px;
+  gap: 6px;
+  width: 52px;
+}
+
+/* Horizontal Dock (bottom, top, or floating horizontal) */
+.nova-dock.is-horizontal {
+  flex-direction: row;
+  align-items: center;
+  padding: 6px 12px;
+  gap: 6px;
+  height: 52px;
+}
+
+/* Position: Left */
+.nova-dock.pos-left {
+  height: calc(100% - 20px);
+  margin: 10px 0 10px 8px;
+  border-radius: 16px;
+}
+
+/* Position: Right */
+.nova-dock.pos-right {
+  height: calc(100% - 20px);
+  margin: 10px 8px 10px 0;
+  border-radius: 16px;
+}
+
+/* Position: Bottom (macOS style dock) */
+.nova-dock.pos-bottom {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 24px;
+}
+
+/* Position: Top */
+.nova-dock.pos-top {
+  position: fixed;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 24px;
+}
+
+/* Position: Floating */
+.nova-dock.pos-floating {
+  position: fixed;
+  border-radius: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 217, 255, 0.25);
+}
+
+.nova-dock.pos-floating.is-dragging {
+  cursor: grabbing;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75), 0 0 20px rgba(0, 217, 255, 0.5);
+  transition: none !important;
+}
+
+/* Floating Drag Handle */
+.nova-dock-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: rgba(255, 255, 255, 0.35);
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.nova-dock-drag-handle:hover {
+  color: #00d9ff;
+  background: rgba(0, 217, 255, 0.1);
+}
+
+/* Separators */
+.nova-dock-separator {
+  background: rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+}
+
+.nova-dock.is-vertical .nova-dock-separator {
+  width: 24px;
+  height: 1px;
+  margin: 4px 0;
+}
+
+.nova-dock.is-horizontal .nova-dock-separator {
+  width: 1px;
+  height: 24px;
+  margin: 0 4px;
+}
+
+/* Groups */
+.nova-dock-pinned-group,
+.nova-dock-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nova-dock.is-vertical .nova-dock-pinned-group,
+.nova-dock.is-vertical .nova-dock-actions-group {
+  flex-direction: column;
+}
+
+.nova-dock.is-horizontal .nova-dock-pinned-group,
+.nova-dock.is-horizontal .nova-dock-actions-group {
+  flex-direction: row;
+}
+
+/* Fisheye Magnification Item Wrapper */
+.nova-dock-item-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: scale(var(--item-scale, 1));
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.nova-dock.pos-bottom .nova-dock-item-wrapper {
+  transform-origin: center bottom;
+}
+
+.nova-dock.pos-top .nova-dock-item-wrapper {
+  transform-origin: center top;
+}
+
+.nova-dock.pos-left .nova-dock-item-wrapper {
+  transform-origin: left center;
+}
+
+.nova-dock.pos-right .nova-dock-item-wrapper {
+  transform-origin: right center;
+}
+
+/* Dock Buttons */
+.nova-dock-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: rgba(232, 242, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nova-dock-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.nova-dock-btn.is-active {
+  background: rgba(0, 217, 255, 0.2);
+  color: #00d9ff;
+  box-shadow: 0 0 12px rgba(0, 217, 255, 0.35);
+}
+
+.nova-dock-btn.avatar-btn {
+  width: 34px;
+  height: 34px;
+}
+
+.nova-dock-btn.pinned-app-btn {
+  position: relative;
+}
+
+.nova-dock-btn.toggle-expand-btn {
+  color: #00d9ff;
+}
+
+/* ─── Animated Label Reveal Pill ────────────────────────────────────────── */
+.nova-dock-label-pill {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  white-space: nowrap;
+  background: rgba(8, 14, 28, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 217, 255, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), 0 0 12px rgba(0, 217, 255, 0.2);
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0;
+  z-index: 10000;
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nova-dock-label-pill .label-text {
+  letter-spacing: 0.2px;
+}
+
+.nova-dock-label-pill .label-badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  background: rgba(0, 217, 255, 0.2);
+  color: #00d9ff;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.nova-dock-label-pill .label-status {
+  font-size: 9px;
+  background: rgba(0, 255, 136, 0.2);
+  color: #00ff88;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Directional Label Animations */
+.nova-dock-item-wrapper:hover .nova-dock-label-pill {
+  opacity: 1;
+}
+
+.nova-dock-label-pill.label-pos-right {
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-8px);
+}
+.nova-dock-item-wrapper:hover .nova-dock-label-pill.label-pos-right {
+  transform: translateY(-50%) translateX(0);
+}
+
+.nova-dock-label-pill.label-pos-left {
+  right: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(8px);
+}
+.nova-dock-item-wrapper:hover .nova-dock-label-pill.label-pos-left {
+  transform: translateY(-50%) translateX(0);
+}
+
+.nova-dock-label-pill.label-pos-top {
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+}
+.nova-dock-item-wrapper:hover .nova-dock-label-pill.label-pos-top {
+  transform: translateX(-50%) translateY(0);
+}
+
+.nova-dock-label-pill.label-pos-bottom {
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+}
+.nova-dock-item-wrapper:hover .nova-dock-label-pill.label-pos-bottom {
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ─── Auto-Hide Animations ──────────────────────────────────────────────── */
+/* Slide Animation */
+.nova-dock.anim-slide.pos-bottom.is-hidden {
+  transform: translateX(-50%) translateY(calc(100% + 24px));
+  opacity: 0;
+  pointer-events: none;
+}
+.nova-dock.anim-slide.pos-bottom.is-revealed {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1), opacity var(--dock-anim-duration, 250ms) ease;
+}
+
+.nova-dock.anim-slide.pos-top.is-hidden {
+  transform: translateX(-50%) translateY(calc(-100% - 24px));
+  opacity: 0;
+  pointer-events: none;
+}
+.nova-dock.anim-slide.pos-top.is-revealed {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1), opacity var(--dock-anim-duration, 250ms) ease;
+}
+
+.nova-dock.anim-slide.pos-left.is-hidden {
+  transform: translateX(calc(-100% - 20px));
+  opacity: 0;
+  pointer-events: none;
+}
+.nova-dock.anim-slide.pos-left.is-revealed {
+  transform: translateX(0);
+  opacity: 1;
+  transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1), opacity var(--dock-anim-duration, 250ms) ease;
+}
+
+.nova-dock.anim-slide.pos-right.is-hidden {
+  transform: translateX(calc(100% + 20px));
+  opacity: 0;
+  pointer-events: none;
+}
+.nova-dock.anim-slide.pos-right.is-revealed {
+  transform: translateX(0);
+  opacity: 1;
+  transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1), opacity var(--dock-anim-duration, 250ms) ease;
+}
+
+.nova-dock.anim-slide.pos-floating.is-hidden {
+  transform: scale(0.8);
+  opacity: 0;
+  pointer-events: none;
+}
+.nova-dock.anim-slide.pos-floating.is-revealed {
+  transform: scale(1);
+  opacity: 1;
+  transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1), opacity var(--dock-anim-duration, 250ms) ease;
+}
+
+/* Fade Animation */
+.nova-dock.anim-fade.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.96);
+}
+.nova-dock.anim-fade.is-revealed {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+  transition: opacity var(--dock-anim-duration, 200ms) ease, transform var(--dock-anim-duration, 200ms) ease;
+}
+
+/* Instant Animation */
+.nova-dock.anim-instant.is-hidden {
+  display: none !important;
+}
+.nova-dock.anim-instant.is-revealed {
+  display: flex !important;
+}
+
+/* ─── Auto-Hide Hover Trigger Zone ──────────────────────────────────────── */
+.nova-dock-trigger-zone {
+  position: fixed;
+  z-index: 999;
+}
+
+.nova-dock-trigger-zone.trigger-bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
+}
+
+.nova-dock-trigger-zone.trigger-top {
+  top: 42px;
+  left: 0;
+  right: 0;
+  height: 14px;
+}
+
+.nova-dock-trigger-zone.trigger-left {
+  top: 42px;
+  bottom: 0;
+  left: 0;
+  width: 14px;
+}
+
+.nova-dock-trigger-zone.trigger-right {
+  top: 42px;
+  bottom: 0;
+  right: 0;
+  width: 14px;
+}
+
+.nova-dock-trigger-zone.trigger-floating {
+  display: none;
+}
+
+.nova-dock-peek-indicator {
+  position: absolute;
+  border-radius: 4px;
+  background: rgba(0, 217, 255, 0.35);
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.5);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.nova-dock-trigger-zone:hover .nova-dock-peek-indicator,
+.nova-dock-trigger-zone.is-peeking:hover .nova-dock-peek-indicator {
+  opacity: 1;
+}
+
+.nova-dock-trigger-zone.trigger-bottom .nova-dock-peek-indicator {
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 4px;
+}
+
+.nova-dock-trigger-zone.trigger-top .nova-dock-peek-indicator {
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 4px;
+}
+
+.nova-dock-trigger-zone.trigger-left .nova-dock-peek-indicator {
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 80px;
+}
+
+.nova-dock-trigger-zone.trigger-right .nova-dock-peek-indicator {
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 80px;
+}
+
 /* Slim Dock Inner */
 .sidekick-dock-inner {
   display: flex;
@@ -9564,6 +10060,164 @@ html.theme-light select optgroup {
   justify-content: center;
   font-size: 10px;
   font-weight: 800;
+}
+
+.expanded-workspace-pill.is-open {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.workspace-chevron {
+  transition: transform 0.2s ease;
+}
+
+.workspace-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.workspace-picker-flyout {
+  position: absolute;
+  top: 100%;
+  left: 8px;
+  right: 8px;
+  margin-top: 4px;
+  background: #0f1422;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.workspace-picker-header {
+  padding: 8px 10px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(232, 242, 255, 0.4);
+}
+
+.workspace-picker-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+  gap: 2px;
+}
+
+.workspace-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: #e8f2ff;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.workspace-picker-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.workspace-picker-item.active {
+  background: rgba(0, 217, 255, 0.15);
+  color: #00d9ff;
+  font-weight: 600;
+}
+
+.workspace-item-letter {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.workspace-picker-item.active .workspace-item-letter {
+  background: #00d9ff;
+  color: #000;
+}
+
+.workspace-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-active-check {
+  color: #00d9ff;
+  flex-shrink: 0;
+}
+
+.workspace-picker-footer {
+  padding: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.workspace-create-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: rgba(232, 242, 255, 0.8);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.workspace-create-btn:hover {
+  background: rgba(0, 217, 255, 0.1);
+  color: #00d9ff;
+}
+
+.titlebar-summarize-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  margin-left: 6px;
+  background: rgba(0, 217, 255, 0.1);
+  border: 1px solid rgba(0, 217, 255, 0.25);
+  border-radius: 6px;
+  color: #00d9ff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.titlebar-summarize-btn:hover {
+  background: rgba(0, 217, 255, 0.2);
+  border-color: rgba(0, 217, 255, 0.5);
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.25);
+}
+
+.titlebar-summarize-btn .summarize-btn-sparkles {
+  color: #00d9ff;
 }
 
 .sidebar-collapse-icon-btn {
@@ -15463,6 +16117,227 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
   color: rgba(232, 242, 255, 0.7);
   cursor: pointer;
   user-select: none;
+}
+
+/* ==========================================================================
+   Phase 3: Appearance, Skins, Font Scaling & Message Layout
+   ========================================================================== */
+
+/* Skins */
+[data-skin="ares"] { --accent-primary: #ff4444; --accent-glow: rgba(255, 68, 68, 0.4); }
+[data-skin="poseidon"] { --accent-primary: #0ea5e9; --accent-glow: rgba(14, 165, 233, 0.4); }
+[data-skin="sisyphus"] { --accent-primary: #a78bfa; --accent-glow: rgba(167, 139, 250, 0.4); }
+[data-skin="charizard"] { --accent-primary: #f97316; --accent-glow: rgba(249, 115, 22, 0.4); }
+[data-skin="matrix"] { --accent-primary: #00ff41; --accent-glow: rgba(0, 255, 65, 0.4); }
+[data-skin="slate"] { --accent-primary: #64748b; --accent-glow: rgba(100, 116, 139, 0.4); }
+[data-skin="mono"] { --accent-primary: #cccccc; --accent-glow: rgba(204, 204, 204, 0.3); }
+[data-skin="sienna"] { --accent-primary: #d97757; --accent-glow: rgba(217, 119, 87, 0.4); }
+
+/* Font Scaling */
+[data-font-size="small"] { --base-font-size: 13px; --chat-font-size: 13px; --app-font-scale: 0.92; }
+[data-font-size="default"] { --base-font-size: 14px; --chat-font-size: 14px; --app-font-scale: 1; }
+[data-font-size="large"] { --base-font-size: 16px; --chat-font-size: 16px; --app-font-scale: 1.12; }
+
+body {
+  font-size: var(--base-font-size, 14px);
+}
+
+/* Message Layout */
+[data-message-layout="compact"] .chat-turn-item { padding: 6px 10px; margin-bottom: 4px; }
+[data-message-layout="compact"] .chat-turn-bubble,
+[data-message-layout="compact"] .copilot-bubble { border-radius: 6px; padding: 8px 12px; }
+[data-message-layout="expanded"] .chat-turn-item { padding: 16px 24px; max-width: 100%; }
+[data-message-layout="expanded"] .chat-turn-bubble,
+[data-message-layout="expanded"] .copilot-bubble { border-radius: 14px; padding: 16px 22px; width: 100%; }
+[data-message-layout="bubbles"] .chat-turn-bubble,
+[data-message-layout="bubbles"] .copilot-bubble { border-radius: 12px; padding: 12px 16px; }
+
+/* ==========================================================================
+   Phase 3: Accessibility (A11y)
+   ========================================================================== */
+
+/* High Contrast (>= 7:1) */
+[data-a11y-high-contrast="true"] {
+  --lb-bg: #000000 !important;
+  --lb-bg-alt: #000000 !important;
+  --lb-surface: #000000 !important;
+  --lb-surface-strong: #000000 !important;
+  --lb-surface-panel: #000000 !important;
+  --lb-border: #ffffff !important;
+  --lb-text: #ffffff !important;
+  --lb-muted: #ffff88 !important;
+  --accent-primary: #ffff00 !important;
+  --accent-glow: rgba(255, 255, 0, 0.6) !important;
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+[data-a11y-high-contrast="true"] body {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+[data-a11y-high-contrast="true"] button,
+[data-a11y-high-contrast="true"] input,
+[data-a11y-high-contrast="true"] select,
+[data-a11y-high-contrast="true"] textarea {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border: 2px solid #ffffff !important;
+}
+
+[data-a11y-high-contrast="true"] button:hover,
+[data-a11y-high-contrast="true"] button:focus,
+[data-a11y-high-contrast="true"] button.active,
+[data-a11y-high-contrast="true"] .active {
+  border-color: #ffff00 !important;
+  color: #ffff00 !important;
+}
+
+[data-a11y-high-contrast="true"] a {
+  color: #ffff00 !important;
+  text-decoration: underline !important;
+}
+
+[data-a11y-high-contrast="true"] .app-shell,
+[data-a11y-high-contrast="true"] .browser-titlebar,
+[data-a11y-high-contrast="true"] .browser-chrome,
+[data-a11y-high-contrast="true"] .shell-rail,
+[data-a11y-high-contrast="true"] .context-sidebar,
+[data-a11y-high-contrast="true"] .workspace-panel,
+[data-a11y-high-contrast="true"] .native-work-card,
+[data-a11y-high-contrast="true"] .settings-card,
+[data-a11y-high-contrast="true"] .browser-start-page {
+  background: #000000 !important;
+  border-color: #ffffff !important;
+}
+
+/* Dyslexia-friendly Font */
+[data-a11y-dyslexia="true"] body,
+[data-a11y-dyslexia="true"] * {
+  font-family: 'OpenDyslexic', 'Comic Sans MS', 'Trebuchet MS', system-ui, sans-serif !important;
+  letter-spacing: 0.05em !important;
+  line-height: 1.6 !important;
+}
+
+/* High-Visibility Focus Rings */
+[data-a11y-focus-rings="true"] *:focus-visible {
+  outline: 3px solid #ffff00 !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 10px rgba(255, 255, 0, 0.8) !important;
+}
+
+/* Minimum Font Size Enforcement */
+body, p, span, div, button, input {
+  font-size: max(var(--min-font-size, 0px), inherit);
+}
+
+/* Ollama Configuration Modal */
+.ollama-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: pinned-modal-fade 0.18s ease-out;
+}
+
+.ollama-modal-card {
+  width: 520px;
+  max-width: 95vw;
+  background: var(--lb-surface-panel, #121927);
+  border: 1px solid var(--lb-border, rgba(255, 255, 255, 0.12));
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--lb-text, #f0f6fc);
+}
+
+.ollama-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--lb-border, rgba(255, 255, 255, 0.08));
+  padding-bottom: 12px;
+}
+
+.ollama-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ollama-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ollama-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ollama-modal-field label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--lb-text, #f0f6fc);
+}
+
+.ollama-modal-field small {
+  font-size: 11.5px;
+  color: var(--lb-muted, rgba(232, 242, 255, 0.65));
+}
+
+.ollama-modal-field input {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--lb-border, rgba(255, 255, 255, 0.15));
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--lb-text, #f0f6fc);
+  font-size: 13px;
+}
+
+.ollama-modal-field input:focus {
+  outline: 2px solid var(--accent-primary, #00d9ff);
+  border-color: transparent;
+}
+
+.ollama-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--lb-border, rgba(255, 255, 255, 0.08));
+  padding-top: 14px;
+  margin-top: 4px;
+}
+
+.ollama-test-status {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ollama-test-status.success {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.ollama-test-status.error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
 }
 
 

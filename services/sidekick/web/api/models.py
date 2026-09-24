@@ -1523,6 +1523,7 @@ def new_session(workspace=None, model=None, profile=None, model_provider=None, p
         SESSIONS.move_to_end(s.session_id)
         while len(SESSIONS) > SESSIONS_MAX:
             SESSIONS.popitem(last=False)
+    _SESSION_LIST_CACHE.clear()
     if wt:
         s.save()
     return s
@@ -1630,6 +1631,7 @@ def all_sessions(diag=None):
             _diag_stage(diag, "all_sessions.overlay_lock")
             index_map = {s['session_id']: s for s in index}
             with LOCK:
+                in_memory_ids = set(SESSIONS.keys())
                 for s in SESSIONS.values():
                     index_map[s.session_id] = s.compact(
                         include_runtime=True,
@@ -1639,9 +1641,7 @@ def all_sessions(diag=None):
             result = sorted(index_map.values(), key=lambda s: (s.get('pinned', False), _session_sort_timestamp(s)), reverse=True)
             # Hide empty default-title sessions from the UI entirely — they are ephemeral
             # scratch pads that only become real once the first message is sent (#1171).
-            # No grace window: a 0-message default session is never shown in the list
-            # regardless of age. This means page refreshes and accidental New Conversation
-            # clicks never leave orphan entries in the sidebar.
+            # Exception: recent in-memory sessions (< 300s) are retained so new chats don't disappear before the first message.
             #
             # Exception: sessions with active_stream_id set are actively streaming (#1327).
             # #1184 deferred the first save() until the first message, so during the
@@ -1654,6 +1654,10 @@ def all_sessions(diag=None):
                 and not s.get('active_stream_id')
                 and not s.get('has_pending_user_message')
                 and not s.get('worktree_path')
+                and not (
+                    s.get('session_id') in in_memory_ids
+                    and (now - float(s.get('created_at') or now)) < 300
+                )
             )]
             result = [s for s in result if not _hide_from_default_sidebar(s)]
             # Backfill: sessions created before Sprint 22 have no profile tag.
@@ -1679,19 +1683,25 @@ def all_sessions(diag=None):
         except Exception:
             logger.debug("Failed to load session from %s", p)
     _diag_stage(diag, "all_sessions.full_scan_overlay")
-    for s in SESSIONS.values():
+    with LOCK:
+        in_memory_ids = set(SESSIONS.keys())
+        in_memory_sessions = list(SESSIONS.values())
+    for s in in_memory_sessions:
         if all(s.session_id != x.session_id for x in out): out.append(s)
     _diag_stage(diag, "all_sessions.full_scan_sort_filter")
     out.sort(key=lambda s: (getattr(s, 'pinned', False), _session_sort_timestamp(s)), reverse=True)
     # Hide empty default-title sessions from the UI entirely — kept consistent with the
-    # index-path filter above. No grace window: a 0-message default session is
-    # never shown regardless of age (#1171).  Same streaming exemption as above (#1327).
+    # index-path filter above. Exception: recent in-memory sessions (< 300s) are retained.
     result = [s.compact(include_runtime=True, active_stream_ids=active_stream_ids) for s in out if not (
         is_default_session_title(s.title)
         and len(s.messages) == 0
         and not s.active_stream_id
         and not s.pending_user_message
         and not getattr(s, 'worktree_path', None)
+        and not (
+            s.session_id in in_memory_ids
+            and (now - float(getattr(s, 'created_at', None) or now)) < 300
+        )
     )]
     result = [s for s in result if not _hide_from_default_sidebar(s)]
     for s in result:

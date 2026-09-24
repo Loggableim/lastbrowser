@@ -763,6 +763,8 @@ export type ModernTitlebarProps = {
   children: React.ReactNode;
   /** Optional Research Action Bar trigger & flyout when docked in topbar */
   topbarActionStrip?: React.ReactNode;
+  /** Callback to trigger page AI summarization */
+  onTriggerSummarize?: () => void;
   blockedAdsCount?: number;
   onToggleShieldPopover?: () => void;
   onToggleFind: () => void;
@@ -794,6 +796,7 @@ export function ModernTitlebar({
   onToggleSidebar,
   children,
   topbarActionStrip,
+  onTriggerSummarize,
   blockedAdsCount = 3420,
   onToggleShieldPopover,
   onToggleFind,
@@ -907,6 +910,19 @@ export function ModernTitlebar({
       <div className="modern-titlebar-center">
         {topbarActionStrip}
         {children}
+
+        {onTriggerSummarize && (
+          <button
+            type="button"
+            className="titlebar-summarize-btn"
+            title="Seite mit KI zusammenfassen"
+            aria-label="Seite mit KI zusammenfassen"
+            onClick={onTriggerSummarize}
+          >
+            <Sparkles size={13} className="summarize-btn-sparkles" />
+            <span className="summarize-btn-label">Summarize</span>
+          </button>
+        )}
 
         {quickActions && quickActions.length > 0 && onExecuteQuickAction && (
           <div className="titlebar-quick-actions" role="toolbar" aria-label="Contextual Quick Actions">

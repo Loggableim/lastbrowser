@@ -240,6 +240,12 @@ type KanbanTaskSummary = NonNullable<KanbanColumnSummary['tasks']>[number];
 type DesktopSettingsRecord = Record<string, unknown>;
 const desktopSettingsStorageKey = 'lastbrowser.desktopSettings.v1';
 
+export function computeSpacePartition(profileId: string, spacePath?: string | null, incognito?: boolean): string {
+  if (incognito) return 'in-memory-incognito';
+  const safeSpace = (spacePath || 'home').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+  return `persist:space_${safeSpace}_${profileId}`;
+}
+
 function isRecord(value: unknown): value is DesktopSettingsRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -291,9 +297,16 @@ function applyDesktopAppearance(settings: DesktopSettingsRecord | null): void {
     ? (window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
     : theme;
   const skin = normalizeAppearanceSkin(String(settings?.skin || 'default'));
+  const fontSize = String(settings?.font_size || 'default').trim().toLowerCase() || 'default';
+  const messageLayout = String(settings?.message_layout || 'bubbles').trim().toLowerCase() || 'bubbles';
+  const syntaxTheme = String(settings?.syntax_theme || '').trim();
+
   root.dataset.theme = resolvedTheme;
   root.dataset.themeMode = theme;
   root.dataset.skin = skin;
+  root.dataset.fontSize = fontSize;
+  root.dataset.messageLayout = messageLayout;
+  root.dataset.syntaxTheme = syntaxTheme;
   root.classList.toggle('theme-light', resolvedTheme === 'light');
   root.classList.toggle('theme-dark', resolvedTheme !== 'light');
   root.classList.toggle('theme-system', theme === 'system');
@@ -441,7 +454,8 @@ export function App(): JSX.Element {
     sidebarDrawerTab,
     setSidebarDrawerTab,
     actionBarDock,
-    setActionBarDock
+    setActionBarDock,
+    dockSettings
   } = usePanelStore();
 
   const [layoutMode, setLayoutMode] = useState<'modern' | 'classic'>(() => {
@@ -568,7 +582,7 @@ export function App(): JSX.Element {
   ]);
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) || tabs[0], [activeTabId, tabs]);
   const activeProfile = useMemo(() => profileById(profiles, activeProfileId), [profiles, activeProfileId]);
-  const activePartition = useMemo(() => profilePartition(activeProfile.id), [activeProfile.id]);
+  const activePartition = useMemo(() => computeSpacePartition(activeProfile.id, activeSpacePath), [activeProfile.id, activeSpacePath]);
 
   // Keep the active profile's tab session and auto-recovery snapshot up to date.
   useEffect(() => {
@@ -579,6 +593,8 @@ export function App(): JSX.Element {
   const activeBookmarkable = isBookmarkableUrl(activeTab.url);
   const activeBookmarked = useMemo(() => isBookmarked(bookmarks, activeTab.url), [activeTab.url, bookmarks]);
   const activeTabIdRef = useRef(activeTabId);
+  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  const isCreatingSessionRef = useRef(false);
   const browserFrameRef = useRef<HTMLDivElement | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
@@ -642,6 +658,10 @@ export function App(): JSX.Element {
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
+
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
 
   useEffect(() => {
     setAddressValue(isAiBrowserHomeUrl(activeTab.url) ? '' : activeTab.url);
@@ -1026,7 +1046,14 @@ export function App(): JSX.Element {
     try {
       const result = await window.lastbrowser.sidekick.listSessions();
       const nextSessions = Array.isArray(result.sessions) ? result.sessions : [];
-      setSessions(nextSessions);
+      setSessions((prevSessions) => {
+        const currentId = activeSessionIdRef.current;
+        const currentActive = currentId ? prevSessions.find((s) => s.session_id === currentId) : null;
+        if (currentActive && !nextSessions.some((s) => s.session_id === currentId)) {
+          return [currentActive, ...nextSessions];
+        }
+        return nextSessions;
+      });
       setSessionError('');
       // Fetch projects
       try {
@@ -1034,7 +1061,9 @@ export function App(): JSX.Element {
         if (Array.isArray(projData?.projects)) setProjects(projData.projects);
       } catch { /* ignore */ }
       setActiveSessionId((current) => {
-        if (current && nextSessions.some((session) => session.session_id === current)) return current;
+        // Wenn aktuell eine Session aktiv ist, behalte sie UNBEDINGT bei! Niemals zurück auf nextSessions[0] springen!
+        if (current) return current;
+        if (isCreatingSessionRef.current) return null;
         return nextSessions[0]?.session_id || null;
       });
     } catch (error) {
@@ -1167,7 +1196,7 @@ export function App(): JSX.Element {
     navigate(addressValue.trim() ? addressValue : browserStartUrl);
   }
 
-  function addTab(url = browserStartUrl, options?: { incognito?: boolean }): void {
+  function addTab(url = browserStartUrl, options?: { incognito?: boolean; pinned?: boolean }): void {
     const next = createInitialTab(url, options);
     setTabs((current) => [...current, next]);
     setBrowserMode(isAiBrowserHomeUrl(url) ? 'home' : 'web');
@@ -1392,8 +1421,10 @@ export function App(): JSX.Element {
   }
 
   async function createNativeSession(): Promise<void> {
+    isCreatingSessionRef.current = true;
     if (status?.sidekick !== 'ready') {
       setSessionError('Sidekick is still starting.');
+      isCreatingSessionRef.current = false;
       return;
     }
 
@@ -1417,6 +1448,7 @@ export function App(): JSX.Element {
       const result = await window.lastbrowser.sidekick.createSession(sessionOpts);
       const session = result.session;
       if (session?.session_id) {
+        activeSessionIdRef.current = session.session_id;
         setSessions((current) => [
           session,
           ...current.filter((item) => item.session_id !== session.session_id)
@@ -1427,13 +1459,17 @@ export function App(): JSX.Element {
       }
     } catch (error) {
       setSessionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      isCreatingSessionRef.current = false;
     }
   }
 
   function handleNewChat(): void {
+    isCreatingSessionRef.current = true;
     setChatMessages([]);
     setMessages([]);
     setActiveSessionId(null);
+    activeSessionIdRef.current = null;
     setComposerText('');
     setChatError('');
     void createNativeSession();
@@ -1725,7 +1761,9 @@ export function App(): JSX.Element {
       setSessions((current) => {
         const next = current.filter((item) => item.session_id !== session.session_id);
         if (activeSessionId === session.session_id) {
-          setActiveSessionId(next[0]?.session_id || null);
+          const nextActiveId = next[0]?.session_id || null;
+          activeSessionIdRef.current = nextActiveId;
+          setActiveSessionId(nextActiveId);
         }
         return next;
       });
@@ -2082,6 +2120,7 @@ export function App(): JSX.Element {
             onOpenGithub={() => addTab('https://github.com/Loggableim/lastbrowser/issues')}
             quickActions={quickActions}
             onExecuteQuickAction={handleExecuteQuickAction}
+            onTriggerSummarize={() => void runSidekickAction('summarize-page')}
             botName={setupState.botName || 'Nova'}
             topbarActionStrip={
               activePanel === 'browser' ? (
@@ -2149,7 +2188,7 @@ export function App(): JSX.Element {
             )}
           </ModernTitlebar>
 
-          <div className={`browser-zen-workspace mode-${sidebarMode}`}>
+          <div className={`browser-zen-workspace mode-${sidebarMode} dock-pos-${dockSettings.position}`}>
             <SidekickSidebar
               mode={sidebarMode}
               tabs={tabs}
@@ -2171,7 +2210,8 @@ export function App(): JSX.Element {
               onSetMode={setSidebarMode}
               activeSpacePath={activeSpacePath}
               spaces={spaces}
-              onSelectSpace={setActiveSpacePath}
+              onSelectSpace={(spacePath) => setActiveSpacePath(spacePath)}
+              onCreateSpace={() => setActivePanel('workspaces')}
               onOpenSettings={() => setActivePanel('settings')}
               onOpenHistory={() => usePanelStore.getState().setHistoryOpen(true)}
               onOpenDownloads={() => usePanelStore.getState().setDownloadsOpen(true)}
@@ -2184,7 +2224,7 @@ export function App(): JSX.Element {
                   setActivePanel(app.panel);
                 } else if (app.url) {
                   if (opts?.newTab) {
-                    addTab(app.url);
+                    addTab(app.url, { pinned: true });
                   } else {
                     // Singleton routing: focus existing tab if domain matches
                     const existingTabs = useTabStore.getState().tabs;
@@ -2199,11 +2239,11 @@ export function App(): JSX.Element {
                       } catch { return false; }
                     });
                     if (match) {
-                      if (match.discarded) wakeTab(match.id);
+                      if (match.isDiscarded) wakeTab(match.id);
                       setActiveTabId(match.id);
                       setActivePanel('browser');
                     } else {
-                      addTab(app.url);
+                      addTab(app.url, { pinned: true });
                     }
                   }
                 }
@@ -2762,6 +2802,87 @@ function BrowserMain({
   const [webviewMountKey, setWebviewMountKey] = useState(0);
   const splitWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
   const allWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
+  const [splitRatios, setSplitRatios] = useState<number[]>(() => {
+    const n = Math.max(1, splitTabIds.length);
+    return Array(n).fill(100 / n);
+  });
+  const [resizingDividerIndex, setResizingDividerIndex] = useState<number | null>(null);
+  const resizeInfoRef = useRef<{
+    dividerIndex: number;
+    startX: number;
+    containerWidth: number;
+    initialRatios: number[];
+  } | null>(null);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+  const resizeRafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const n = Math.max(1, splitTabIds.length);
+    setSplitRatios(Array(n).fill(100 / n));
+  }, [splitTabIds.length]);
+
+  useEffect(() => {
+    if (resizingDividerIndex === null) return;
+
+    function handleMouseMove(e: MouseEvent) {
+      if (!resizeInfoRef.current) return;
+      const { dividerIndex, startX, containerWidth, initialRatios } = resizeInfoRef.current;
+      const deltaX = e.clientX - startX;
+      const deltaPercent = (deltaX / containerWidth) * 100;
+
+      if (resizeRafRef.current) {
+        cancelAnimationFrame(resizeRafRef.current);
+      }
+
+      resizeRafRef.current = requestAnimationFrame(() => {
+        setSplitRatios(() => {
+          const next = [...initialRatios];
+          const combined = next[dividerIndex] + next[dividerIndex + 1];
+          const minRatio = 10;
+          let newA = initialRatios[dividerIndex] + deltaPercent;
+          newA = Math.max(minRatio, Math.min(combined - minRatio, newA));
+          const newB = combined - newA;
+          next[dividerIndex] = newA;
+          next[dividerIndex + 1] = newB;
+          return next;
+        });
+      });
+    }
+
+    function handleMouseUp() {
+      if (resizeRafRef.current) {
+        cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = null;
+      }
+      setResizingDividerIndex(null);
+      resizeInfoRef.current = null;
+    }
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      if (resizeRafRef.current) {
+        cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = null;
+      }
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizingDividerIndex]);
+
+  function handleSplitResizeStart(dividerIndex: number, e: React.MouseEvent) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    if (!splitContainerRef.current) return;
+    const rect = splitContainerRef.current.getBoundingClientRect();
+    resizeInfoRef.current = {
+      dividerIndex,
+      startX: e.clientX,
+      containerWidth: rect.width || 1,
+      initialRatios: [...splitRatios]
+    };
+    setResizingDividerIndex(dividerIndex);
+  }
 
   useLayoutEffect(() => {
     const activeEl = allWebviewRefs.current[activeTab.id] || splitWebviewRefs.current[activeTab.id];
@@ -3410,89 +3531,115 @@ function BrowserMain({
             </div>
           </div>
         )}
-        {webviewReady && splitTabIds && splitTabIds.length > 1 ? (
-          <div className={`browser-split-container split-layout-${splitLayout || (splitTabIds.length === 4 ? 'grid' : 'columns')} count-${splitTabIds.length}`}>
-            {splitTabIds.map((sTabId) => {
-              const tab = tabs?.find((t) => t.id === sTabId);
-              if (!tab) return null;
-              const isPaneActive = tab.id === activeTab.id;
-              return (
-                <div
-                  key={tab.id}
-                  className={`browser-split-pane ${isPaneActive ? 'active-pane' : ''}`}
-                  onClick={() => onActivateTab?.(tab.id)}
-                >
-                  <div className="split-pane-header">
-                    <div className="split-pane-info">
-                      {tab.favicon ? (
-                        <img src={tab.favicon} alt="" className="split-pane-favicon" />
-                      ) : (
-                        <Globe2 size={13} className="split-pane-favicon-fallback" />
-                      )}
-                      <span className="split-pane-title" title={tab.title}>{tab.title}</span>
-                    </div>
-                    <div className="split-pane-controls">
-                      <button
-                        type="button"
-                        className="split-pane-btn"
-                        title="Aktualisieren"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const vw = splitWebviewRefs.current[tab.id];
-                          vw?.reload();
+        {webviewReady && splitTabIds && splitTabIds.length > 1 && splitTabIds.includes(activeTab.id) ? (
+          <>
+            {resizingDividerIndex !== null && (
+              <div
+                className="split-resize-overlay"
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  zIndex: 99999,
+                  cursor: 'col-resize',
+                  background: 'transparent'
+                }}
+              />
+            )}
+            <div
+              ref={splitContainerRef}
+              className={`browser-split-container is-resizable split-layout-${splitLayout || (splitTabIds.length === 4 ? 'grid' : 'columns')} count-${splitTabIds.length}`}
+              style={{ display: 'flex', flexDirection: 'row', width: '100%', height: '100%' }}
+            >
+              {splitTabIds.map((sTabId, index) => {
+                const tab = tabs?.find((t) => t.id === sTabId);
+                if (!tab) return null;
+                const isPaneActive = tab.id === activeTab.id;
+                return (
+                  <React.Fragment key={tab.id}>
+                    {index > 0 && (
+                      <div
+                        className={`split-resize-divider ${resizingDividerIndex === index - 1 ? 'is-dragging' : ''}`}
+                        onMouseDown={(e) => handleSplitResizeStart(index - 1, e)}
+                      />
+                    )}
+                    <div
+                      className={`browser-split-pane ${isPaneActive ? 'active-pane' : ''}`}
+                      style={{ flex: `${splitRatios[index] ?? (100 / splitTabIds.length)} 1 0` }}
+                      onClick={() => onActivateTab?.(tab.id)}
+                    >
+                      <div className="split-pane-header">
+                        <div className="split-pane-info">
+                          {tab.favicon ? (
+                            <img src={tab.favicon} alt="" className="split-pane-favicon" />
+                          ) : (
+                            <Globe2 size={13} className="split-pane-favicon-fallback" />
+                          )}
+                          <span className="split-pane-title" title={tab.title}>{tab.title}</span>
+                        </div>
+                        <div className="split-pane-controls">
+                          <button
+                            type="button"
+                            className="split-pane-btn"
+                            title="Aktualisieren"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const vw = splitWebviewRefs.current[tab.id];
+                              vw?.reload();
+                            }}
+                          >
+                            <RefreshCw size={11} />
+                          </button>
+                          <button
+                            type="button"
+                            className="split-pane-btn close-split"
+                            title="Splitscreen für diesen Tab beenden"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRemoveSplitTab?.(tab.id);
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      </div>
+                      <webview
+                        key={`${activeProfile.id}:${tab.id}:${webviewMountKey}`}
+                        ref={(el) => {
+                          if (el) {
+                            splitWebviewRefs.current[tab.id] = el;
+                            allWebviewRefs.current[tab.id] = el;
+                            if (tab.id === activeTab.id) {
+                              webviewRef.current = el;
+                            }
+                          } else {
+                            delete splitWebviewRefs.current[tab.id];
+                            delete allWebviewRefs.current[tab.id];
+                          }
                         }}
-                      >
-                        <RefreshCw size={11} />
-                      </button>
-                      <button
-                        type="button"
-                        className="split-pane-btn close-split"
-                        title="Splitscreen für diesen Tab beenden"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemoveSplitTab?.(tab.id);
+                        src={tab.url}
+                        className="browser-view split-webview"
+                        style={browserWebviewStyle}
+                        partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito)}
+                        allowpopups="true"
+                        plugins="true"
+                        webpreferences="contextIsolation=yes, plugins=yes"
+                        onDidStartLoading={() => onClearBrowserError()}
+                        onDomReady={(event) => {
+                          void hideWebviewScrollbars(event.currentTarget);
                         }}
-                      >
-                        <X size={12} />
-                      </button>
+                        onDidFailLoad={(event) => {
+                          if (!event.isMainFrame || event.errorCode === -3) return;
+                          if (event.errorCode < -100) {
+                            onSetBrowserError(`Connection failed (${event.errorDescription})`);
+                          }
+                        }}
+                      />
                     </div>
-                  </div>
-                  <webview
-                    key={`${activeProfile.id}:${tab.id}:${webviewMountKey}`}
-                    ref={(el) => {
-                      if (el) {
-                        splitWebviewRefs.current[tab.id] = el;
-                        allWebviewRefs.current[tab.id] = el;
-                        if (tab.id === activeTab.id) {
-                          webviewRef.current = el;
-                        }
-                      } else {
-                        delete splitWebviewRefs.current[tab.id];
-                        delete allWebviewRefs.current[tab.id];
-                      }
-                    }}
-                    src={tab.url}
-                    className="browser-view split-webview"
-                    style={browserWebviewStyle}
-                    partition={tab.incognito ? 'in-memory-incognito' : profilePartition(activeProfile.id)}
-                    allowpopups="true"
-                    plugins="true"
-                    webpreferences="contextIsolation=yes, plugins=yes"
-                    onDidStartLoading={() => onClearBrowserError()}
-                    onDomReady={(event) => {
-                      void hideWebviewScrollbars(event.currentTarget);
-                    }}
-                    onDidFailLoad={(event) => {
-                      if (!event.isMainFrame || event.errorCode === -3) return;
-                      if (event.errorCode < -100) {
-                        onSetBrowserError(`Connection failed (${event.errorDescription})`);
-                      }
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </>
         ) : (
           <div className="browser-tabs-viewport" style={{ position: 'relative', width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
             {(tabs && tabs.length > 0 ? tabs : [activeTab]).map((tab) => {
@@ -3531,7 +3678,7 @@ function BrowserMain({
                       src={tab.url}
                       className="browser-view"
                       style={browserWebviewStyle}
-                      partition={tab.incognito ? 'in-memory-incognito' : profilePartition(activeProfile.id)}
+                      partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito)}
                       allowpopups="true"
                       plugins="true"
                       webpreferences="contextIsolation=yes, plugins=yes"

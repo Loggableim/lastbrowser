@@ -117,6 +117,8 @@ export function InPageActionBar({
   const [isPinned, setIsPinned] = useState(false);
 
   const dragStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number } | null>(null);
+  const pendingCoordsRef = useRef<{ x: number; y: number } | null>(null);
+  const rafRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -183,21 +185,41 @@ export function InPageActionBar({
 
       const nextX = Math.min(Math.max(8, dragStartRef.current.initX + dx), maxX);
       const nextY = Math.min(Math.max(8, dragStartRef.current.initY + dy), maxY);
-      setCoords({ x: nextX, y: nextY });
+      pendingCoordsRef.current = { x: nextX, y: nextY };
+
+      if (!rafRef.current) {
+        rafRef.current = requestAnimationFrame(() => {
+          if (pendingCoordsRef.current) {
+            setCoords(pendingCoordsRef.current);
+          }
+          rafRef.current = null;
+        });
+      }
     }
 
     function handleMouseUp() {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      if (pendingCoordsRef.current) {
+        setCoords(pendingCoordsRef.current);
+        try {
+          window.localStorage.setItem('lastbrowser.actionBarCoords.v1', JSON.stringify(pendingCoordsRef.current));
+        } catch {}
+      }
       setIsDragging(false);
       dragStartRef.current = null;
-      try {
-        window.localStorage.setItem('lastbrowser.actionBarCoords.v1', JSON.stringify(coords));
-      } catch {}
     }
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
 
     return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
@@ -446,12 +468,26 @@ export function InPageActionBar({
     : {};
 
   return (
-    <div
-      ref={containerRef}
-      className={`browser-action-strip dock-${activeDock} ${isDragging ? 'is-dragging' : ''}`}
-      style={styleObj}
-      aria-label="Nova In-Page AI Actions"
-    >
+    <>
+      {isDragging && (
+        <div
+          className="action-bar-drag-capture-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
+            cursor: 'grabbing',
+            background: 'transparent',
+            pointerEvents: 'auto'
+          }}
+        />
+      )}
+      <div
+        ref={containerRef}
+        className={`browser-action-strip dock-${activeDock} ${isDragging ? 'is-dragging' : ''}`}
+        style={styleObj}
+        aria-label="Nova In-Page AI Actions"
+      >
       {/* Drag Grip Handle */}
       <div
         className="action-strip-drag-handle"
@@ -578,6 +614,7 @@ export function InPageActionBar({
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

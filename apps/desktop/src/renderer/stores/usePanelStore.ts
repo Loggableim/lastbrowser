@@ -44,6 +44,74 @@ export type ThemeAccent = 'neon-cyan' | 'electric-violet' | 'emerald-flow' | 'so
 export type GlassLevel = 'solid' | 'subtle' | 'modern' | 'deep';
 export type UiDensity = 'compact' | 'standard' | 'comfortable';
 
+export type NovaDockPosition = 'left' | 'right' | 'top' | 'bottom' | 'floating';
+export type NovaDockOrientation = 'vertical' | 'horizontal';
+export type NovaDockAnimation = 'slide' | 'fade' | 'instant';
+
+export interface NovaDockCoordinates {
+  x: number;
+  y: number;
+}
+
+export interface NovaDockSettings {
+  position: NovaDockPosition;
+  orientation: NovaDockOrientation;
+  floatingPos: NovaDockCoordinates;
+  autoHide: boolean;
+  animation: NovaDockAnimation;
+  animationDuration: number;
+  magnification: number;
+  neighborScale: number;
+}
+
+export type NovaDockPreset = 'bottom-dock' | 'classic-left' | 'floating-widget' | 'minimalist-autohide';
+
+export const NOVA_DOCK_PRESETS: Record<NovaDockPreset, NovaDockSettings> = {
+  'bottom-dock': {
+    position: 'bottom',
+    orientation: 'horizontal',
+    floatingPos: { x: 50, y: 50 },
+    autoHide: false,
+    animation: 'slide',
+    animationDuration: 250,
+    magnification: 1.4,
+    neighborScale: 1.18,
+  },
+  'classic-left': {
+    position: 'left',
+    orientation: 'vertical',
+    floatingPos: { x: 50, y: 50 },
+    autoHide: false,
+    animation: 'slide',
+    animationDuration: 250,
+    magnification: 1.25,
+    neighborScale: 1.1,
+  },
+  'floating-widget': {
+    position: 'floating',
+    orientation: 'horizontal',
+    floatingPos: { x: 100, y: 120 },
+    autoHide: false,
+    animation: 'fade',
+    animationDuration: 200,
+    magnification: 1.35,
+    neighborScale: 1.15,
+  },
+  'minimalist-autohide': {
+    position: 'bottom',
+    orientation: 'horizontal',
+    floatingPos: { x: 50, y: 50 },
+    autoHide: true,
+    animation: 'slide',
+    animationDuration: 180,
+    magnification: 1.4,
+    neighborScale: 1.18,
+  },
+};
+
+export const DEFAULT_NOVA_DOCK_SETTINGS: NovaDockSettings = NOVA_DOCK_PRESETS['classic-left'];
+export const novaDockSettingsStorageKey = 'lastbrowser.novaDockSettings.v1';
+
 export interface PanelState {
   activePanel: LastbrowserPanelId;
   leftSidebarCollapsed: boolean;
@@ -51,6 +119,7 @@ export interface PanelState {
   zenExitDefaultMode: ZenExitDefaultMode;
   sidebarDrawerTab: SidebarDrawerTab;
   actionBarDock: ActionBarDock;
+  dockSettings: NovaDockSettings;
   copilotOpen: boolean;
   contextSidebarCollapsed: boolean;
   contextSidebarWidth: number;
@@ -69,6 +138,11 @@ export interface PanelState {
   themeAccent: ThemeAccent;
   glassLevel: GlassLevel;
   uiDensity: UiDensity;
+  a11yHighContrast: boolean;
+  a11yDyslexicFont: boolean;
+  a11yMinFontSize: number;
+  a11yUiZoom: number;
+  a11yFocusRings: boolean;
 
   setActivePanel(panel: LastbrowserPanelId): void;
   setLeftSidebarCollapsed(collapsed: boolean | ((current: boolean) => boolean)): void;
@@ -76,6 +150,9 @@ export interface PanelState {
   setZenExitDefaultMode(mode: ZenExitDefaultMode): void;
   setSidebarDrawerTab(tab: SidebarDrawerTab): void;
   setActionBarDock(dock: ActionBarDock): void;
+  setDockSettings(settings: Partial<NovaDockSettings> | ((current: NovaDockSettings) => NovaDockSettings)): void;
+  applyDockPreset(preset: NovaDockPreset): void;
+  resetFloatingDockPos(): void;
   cycleSidebarMode(): void;
   setCopilotOpen(open: boolean | ((current: boolean) => boolean)): void;
   toggleCopilot(): void;
@@ -99,6 +176,11 @@ export interface PanelState {
   setThemeAccent(accent: ThemeAccent): void;
   setGlassLevel(level: GlassLevel): void;
   setUiDensity(density: UiDensity): void;
+  setA11yHighContrast(val: boolean): void;
+  setA11yDyslexicFont(val: boolean): void;
+  setA11yMinFontSize(val: number): void;
+  setA11yUiZoom(val: number): void;
+  setA11yFocusRings(val: boolean): void;
 }
 
 export const sidebarModeStorageKey = 'lastbrowser.sidebarMode.v1';
@@ -109,6 +191,11 @@ export const actionBarDockStorageKey = 'lastbrowser.actionBarDock.v1';
 export const themeAccentStorageKey = 'lastbrowser.themeAccent.v1';
 export const glassLevelStorageKey = 'lastbrowser.glassLevel.v1';
 export const uiDensityStorageKey = 'lastbrowser.uiDensity.v1';
+export const a11yHighContrastStorageKey = 'lastbrowser.a11yHighContrast.v1';
+export const a11yDyslexicFontStorageKey = 'lastbrowser.a11yDyslexicFont.v1';
+export const a11yMinFontSizeStorageKey = 'lastbrowser.a11yMinFontSize.v1';
+export const a11yUiZoomStorageKey = 'lastbrowser.a11yUiZoom.v1';
+export const a11yFocusRingsStorageKey = 'lastbrowser.a11yFocusRings.v1';
 
 function loadSidebarMode(): SidebarMode {
   try {
@@ -215,6 +302,38 @@ function loadUiDensity(): UiDensity {
   return 'standard';
 }
 
+function loadNovaDockSettings(): NovaDockSettings {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(novaDockSettingsStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<NovaDockSettings>;
+        return {
+          ...DEFAULT_NOVA_DOCK_SETTINGS,
+          ...parsed,
+          floatingPos: {
+            x: typeof parsed.floatingPos?.x === 'number' ? parsed.floatingPos.x : DEFAULT_NOVA_DOCK_SETTINGS.floatingPos.x,
+            y: typeof parsed.floatingPos?.y === 'number' ? parsed.floatingPos.y : DEFAULT_NOVA_DOCK_SETTINGS.floatingPos.y
+          }
+        };
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return DEFAULT_NOVA_DOCK_SETTINGS;
+}
+
+function saveNovaDockSettings(settings: NovaDockSettings): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(novaDockSettingsStorageKey, JSON.stringify(settings));
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function syncAppearanceToDom(accent: ThemeAccent, glass: GlassLevel, density: UiDensity): void {
   if (typeof document !== 'undefined' && document.documentElement) {
     document.documentElement.dataset.themeAccent = accent;
@@ -223,10 +342,137 @@ function syncAppearanceToDom(accent: ThemeAccent, glass: GlassLevel, density: Ui
   }
 }
 
+function loadA11yHighContrast(): boolean {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(a11yHighContrastStorageKey);
+      if (raw !== null) return raw === 'true';
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function loadA11yDyslexicFont(): boolean {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(a11yDyslexicFontStorageKey);
+      if (raw !== null) return raw === 'true';
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function loadA11yMinFontSize(): number {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(a11yMinFontSizeStorageKey);
+      if (raw !== null) {
+        const val = Number(raw);
+        if (!isNaN(val) && val >= 0) return val;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return 0;
+}
+
+function loadA11yUiZoom(): number {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(a11yUiZoomStorageKey);
+      if (raw !== null) {
+        const val = Number(raw);
+        if (!isNaN(val) && val >= 80 && val <= 150) return val;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return 100;
+}
+
+function loadA11yFocusRings(): boolean {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(a11yFocusRingsStorageKey);
+      if (raw !== null) return raw === 'true';
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function applyA11yHighContrastToDom(val: boolean): void {
+  if (typeof document !== 'undefined' && document.documentElement) {
+    document.documentElement.dataset.a11yHighContrast = String(val);
+  }
+}
+
+function applyA11yDyslexicFontToDom(val: boolean): void {
+  if (typeof document !== 'undefined' && document.documentElement) {
+    document.documentElement.dataset.a11yDyslexia = String(val);
+  }
+}
+
+function applyA11yMinFontSizeToDom(val: number): void {
+  if (typeof document !== 'undefined' && document.documentElement) {
+    if (val > 0) {
+      document.documentElement.style.setProperty('--min-font-size', `${val}px`);
+    } else {
+      document.documentElement.style.removeProperty('--min-font-size');
+    }
+  }
+}
+
+function applyA11yUiZoomToDom(val: number): void {
+  if (typeof document !== 'undefined' && document.documentElement) {
+    document.documentElement.style.zoom = `${val / 100}`;
+  }
+}
+
+function applyA11yFocusRingsToDom(val: boolean): void {
+  if (typeof document !== 'undefined' && document.documentElement) {
+    document.documentElement.dataset.a11yFocusRings = String(val);
+  }
+}
+
+function syncA11yToDom(
+  highContrast: boolean,
+  dyslexicFont: boolean,
+  minFontSize: number,
+  uiZoom: number,
+  focusRings: boolean
+): void {
+  applyA11yHighContrastToDom(highContrast);
+  applyA11yDyslexicFontToDom(dyslexicFont);
+  applyA11yMinFontSizeToDom(minFontSize);
+  applyA11yUiZoomToDom(uiZoom);
+  applyA11yFocusRingsToDom(focusRings);
+}
+
 const initialThemeAccent = loadThemeAccent();
 const initialGlassLevel = loadGlassLevel();
 const initialUiDensity = loadUiDensity();
 syncAppearanceToDom(initialThemeAccent, initialGlassLevel, initialUiDensity);
+
+const initialA11yHighContrast = loadA11yHighContrast();
+const initialA11yDyslexicFont = loadA11yDyslexicFont();
+const initialA11yMinFontSize = loadA11yMinFontSize();
+const initialA11yUiZoom = loadA11yUiZoom();
+const initialA11yFocusRings = loadA11yFocusRings();
+syncA11yToDom(
+  initialA11yHighContrast,
+  initialA11yDyslexicFont,
+  initialA11yMinFontSize,
+  initialA11yUiZoom,
+  initialA11yFocusRings
+);
 
 export const usePanelStore = create<PanelState>((set) => ({
   activePanel: loadInitialPanel(),
@@ -235,10 +481,16 @@ export const usePanelStore = create<PanelState>((set) => ({
   zenExitDefaultMode: loadZenExitDefaultMode(),
   sidebarDrawerTab: loadSidebarDrawerTab(),
   actionBarDock: loadActionBarDock(),
+  dockSettings: loadNovaDockSettings(),
   copilotOpen: loadCopilotOpen(),
   themeAccent: initialThemeAccent,
   glassLevel: initialGlassLevel,
   uiDensity: initialUiDensity,
+  a11yHighContrast: initialA11yHighContrast,
+  a11yDyslexicFont: initialA11yDyslexicFont,
+  a11yMinFontSize: initialA11yMinFontSize,
+  a11yUiZoom: initialA11yUiZoom,
+  a11yFocusRings: initialA11yFocusRings,
   contextSidebarCollapsed: false,
   contextSidebarWidth: loadNumericPreference(
     undefined,
@@ -331,6 +583,34 @@ export const usePanelStore = create<PanelState>((set) => ({
       // ignore
     }
     set({ actionBarDock: dock });
+  },
+
+  setDockSettings: (input) => {
+    set((state) => {
+      const next = typeof input === 'function' ? input(state.dockSettings) : { ...state.dockSettings, ...input };
+      saveNovaDockSettings(next);
+      return { dockSettings: next };
+    });
+  },
+
+  applyDockPreset: (preset) => {
+    const presetConfig = NOVA_DOCK_PRESETS[preset];
+    if (presetConfig) {
+      saveNovaDockSettings(presetConfig);
+      set({ dockSettings: presetConfig });
+    }
+  },
+
+  resetFloatingDockPos: () => {
+    set((state) => {
+      const defaultPos = { x: 50, y: 50 };
+      const next: NovaDockSettings = {
+        ...state.dockSettings,
+        floatingPos: defaultPos
+      };
+      saveNovaDockSettings(next);
+      return { dockSettings: next };
+    });
   },
 
   cycleSidebarMode: () => {
@@ -486,5 +766,66 @@ export const usePanelStore = create<PanelState>((set) => ({
       document.documentElement.dataset.uiDensity = uiDensity;
     }
     set({ uiDensity });
+  },
+
+  setA11yHighContrast: (val) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(a11yHighContrastStorageKey, String(val));
+      }
+    } catch {
+      // ignore
+    }
+    applyA11yHighContrastToDom(val);
+    set({ a11yHighContrast: val });
+  },
+
+  setA11yDyslexicFont: (val) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(a11yDyslexicFontStorageKey, String(val));
+      }
+    } catch {
+      // ignore
+    }
+    applyA11yDyslexicFontToDom(val);
+    set({ a11yDyslexicFont: val });
+  },
+
+  setA11yMinFontSize: (val) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(a11yMinFontSizeStorageKey, String(val));
+      }
+    } catch {
+      // ignore
+    }
+    applyA11yMinFontSizeToDom(val);
+    set({ a11yMinFontSize: val });
+  },
+
+  setA11yUiZoom: (val) => {
+    const clamped = clamp(val, 80, 150);
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(a11yUiZoomStorageKey, String(clamped));
+      }
+    } catch {
+      // ignore
+    }
+    applyA11yUiZoomToDom(clamped);
+    set({ a11yUiZoom: clamped });
+  },
+
+  setA11yFocusRings: (val) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(a11yFocusRingsStorageKey, String(val));
+      }
+    } catch {
+      // ignore
+    }
+    applyA11yFocusRingsToDom(val);
+    set({ a11yFocusRings: val });
   }
 }));

@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
+  Check,
   ChevronDown,
   Columns2,
   Download,
@@ -28,7 +29,8 @@ import type { LastbrowserPanelId, SpaceSummary } from '../shell-state.js';
 import { spaceDisplayName } from '../shell-state.js';
 import { brandAssets } from '../brand.js';
 import { PinnedAppGrid, type PinnedApp } from './PinnedAppGrid.js';
-import type { SidebarDrawerTab, SidebarMode, ZenExitDefaultMode } from '../stores/usePanelStore.js';
+import { NovaDock } from './NovaDock.js';
+import { type SidebarDrawerTab, type SidebarMode, type ZenExitDefaultMode, usePanelStore } from '../stores/usePanelStore.js';
 import type { DesktopSessionSummary } from '../sidekick-client.js';
 import { useDesktopI18n } from '../i18n.js';
 
@@ -57,6 +59,7 @@ export interface SidekickSidebarProps {
   activeSpacePath: string;
   spaces: SpaceSummary[];
   onSelectSpace: (path: string) => void;
+  onCreateSpace?: () => void;
   onOpenSettings: () => void;
   onOpenHistory?: () => void;
   onOpenDownloads?: () => void;
@@ -114,6 +117,7 @@ export function SidekickSidebar({
   activeSpacePath,
   spaces,
   onSelectSpace,
+  onCreateSpace,
   onOpenSettings,
   onOpenHistory,
   onOpenDownloads,
@@ -143,6 +147,20 @@ export function SidekickSidebar({
   const [dragOverInfo, setDragOverInfo] = useState<{ id: string; mode: 'before' | 'after' | 'split' } | null>(null);
   const [internalDrawerTab, setInternalDrawerTab] = useState<SidebarDrawerTab>(drawerTab);
   const currentDrawerTab = onSelectDrawerTab ? drawerTab : internalDrawerTab;
+  const dockSettings = usePanelStore((s) => s.dockSettings);
+  const [spacePickerOpen, setSpacePickerOpen] = useState(false);
+  const spacePickerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!spacePickerOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (spacePickerRef.current && !spacePickerRef.current.contains(event.target as Node)) {
+        setSpacePickerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [spacePickerOpen]);
 
   // Dynamic drawer item lists (AI_DRAWER_ITEMS, WORKFLOW_DRAWER_ITEMS, TOOLS_DRAWER_ITEMS)
   // Preserves panel references: 'browser', 'terminal', 'gmail', 'discord', 'appstore', 'logs', 'settings',
@@ -198,116 +216,94 @@ export function SidekickSidebar({
   const spaceLabel = activeSpace ? spaceDisplayName(activeSpace) : 'Workspace';
 
   return (
-    <aside className={`sidekick-sidebar ${mode}`}>
+    <aside className={`sidekick-sidebar ${mode} dock-pos-${dockSettings.position}`}>
       {mode === 'slim' ? (
-        <div className="sidekick-dock-inner">
-          {/* Top avatar / brand */}
-          <div
-            className="dock-top-brand"
-            onClick={() => onSetMode('expanded')}
-            title={`${botName} AI • Click to expand sidebar`}
-          >
-            <div className="dock-brand-circle">
-              <img
-                src={brandAssets.sidekickAvatar}
-                alt={botName}
-                className="dock-popart-avatar"
-                onError={(e) => {
-                  (e.currentTarget as HTMLElement).style.display = 'none';
-                }}
-              />
-            </div>
-            <span className="dock-visually-hidden">Chat</span>
-            <span className="dock-online-dot" />
-          </div>
-
-          {/* Quick Access to Nova Chat & Kanban in dock */}
-          <div className="dock-quick-shortcuts">
-            <button
-              type="button"
-              className={`dock-shortcut-btn ${activePanel === 'chat' ? 'is-active' : ''}`}
-              title={`${botName} Chat`}
-              onClick={() => onSelectPanel?.('chat')}
-            >
-              <img src={brandAssets.sidebarIcons.chat} alt="Chat" className="dock-mini-icon" />
-            </button>
-            <button
-              type="button"
-              className={`dock-shortcut-btn ${activePanel === 'kanban' ? 'is-active' : ''}`}
-              title="Kanban Board"
-              onClick={() => onSelectPanel?.('kanban')}
-            >
-              <img src={brandAssets.sidebarIcons.kanban} alt="Kanban" className="dock-mini-icon" />
-            </button>
-          </div>
-
-          {/* Pinned Web Apps Dock */}
-          <div className="dock-apps-container">
-            <PinnedAppGrid
-              layout="dock"
-              activeTabUrl={activeTabUrl}
-              openTabUrls={openTabUrls}
-              onOpenApp={onOpenApp}
-              onAddApp={onAddPinnedApp}
-              onEditApp={onEditPinnedApp}
-            />
-          </div>
-
-          {/* Bottom Dock Actions */}
-          <div className="dock-bottom-actions">
-            <button
-              type="button"
-              className="dock-action-btn"
-              title={t('sidebar.utilities.history.title')}
-              aria-label={t('sidebar.utilities.history.title')}
-              onClick={onOpenHistory}
-            >
-              <Bell size={16} />
-              <span className="dock-visually-hidden">{t('sidebar.utilities.history.title')}</span>
-            </button>
-            <button
-              type="button"
-              className="dock-action-btn"
-              title={t('sidebar.drawer.help')}
-              aria-label={t('sidebar.drawer.help')}
-              onClick={() => onNewTab('https://lastbrowser.com/docs')}
-            >
-              <HelpCircle size={16} />
-              <span className="dock-visually-hidden">{t('sidebar.drawer.help')}</span>
-            </button>
-            <button
-              type="button"
-              className="dock-action-btn"
-              title={t('sidebar.drawer.settings')}
-              aria-label={t('sidebar.drawer.settings')}
-              onClick={onOpenSettings}
-            >
-              <Settings size={16} />
-              <span className="dock-visually-hidden">{t('sidebar.drawer.settings')}</span>
-            </button>
-            <button
-              type="button"
-              className="dock-action-btn toggle-expand-btn"
-              title={t('sidebar.drawer.expandSidebar')}
-              aria-label={t('sidebar.drawer.expandSidebar')}
-              onClick={() => onSetMode('expanded')}
-            >
-              <Menu size={16} />
-              <span className="dock-visually-hidden">{t('sidebar.drawer.expandSidebar')}</span>
-            </button>
-          </div>
+        <div className="sidekick-dock-inner dock-top-brand dock-popart-avatar dock-quick-shortcuts dock-shortcut-btn dock-bottom-actions">
+          {/* Nova Dock provides Apple-style fisheye magnification, label reveal animations and PinnedAppGrid integration */}
+          <NovaDock
+            botName={botName}
+            activePanel={activePanel}
+            activeTabUrl={activeTabUrl}
+            openTabUrls={openTabUrls}
+            onSelectPanel={onSelectPanel}
+            onOpenApp={onOpenApp}
+            onAddPinnedApp={onAddPinnedApp}
+            onEditPinnedApp={onEditPinnedApp}
+            onOpenHistory={onOpenHistory}
+            onOpenSettings={onOpenSettings}
+            onNewTab={onNewTab}
+            onExpandSidebar={() => onSetMode('expanded')}
+          />
         </div>
       ) : (
         <div className="sidekick-expanded-inner">
           {/* Top Workspace Picker Header */}
-          <div className="expanded-top-bar">
-            <div className="expanded-workspace-pill">
+          <div className="expanded-top-bar" ref={spacePickerRef} style={{ position: 'relative' }}>
+            <div
+              className={`expanded-workspace-pill ${spacePickerOpen ? 'is-open' : ''}`}
+              role="button"
+              tabIndex={0}
+              aria-haspopup="true"
+              aria-expanded={spacePickerOpen}
+              title="Space wechseln"
+              onClick={() => setSpacePickerOpen((prev) => !prev)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSpacePickerOpen((prev) => !prev);
+                }
+              }}
+            >
               <span className="workspace-badge-letter">
                 {spaceLabel.charAt(0).toUpperCase()}
               </span>
               <span className="workspace-badge-name">{spaceLabel}</span>
-              {spaces.length > 1 && <ChevronDown size={14} className="workspace-chevron" />}
+              <ChevronDown size={14} className={`workspace-chevron ${spacePickerOpen ? 'rotated' : ''}`} />
             </div>
+
+            {spacePickerOpen && (
+              <div className="workspace-picker-flyout" role="menu">
+                <div className="workspace-picker-header">
+                  <span>Spaces</span>
+                </div>
+                <div className="workspace-picker-list">
+                  {spaces.map((s) => {
+                    const isActive = s.path === activeSpacePath;
+                    const name = spaceDisplayName(s);
+                    return (
+                      <button
+                        key={s.path}
+                        type="button"
+                        className={`workspace-picker-item ${isActive ? 'active' : ''}`}
+                        role="menuitem"
+                        onClick={() => {
+                          onSelectSpace?.(s.path);
+                          setSpacePickerOpen(false);
+                        }}
+                      >
+                        <span className="workspace-item-letter">{name.charAt(0).toUpperCase()}</span>
+                        <span className="workspace-item-name">{name}</span>
+                        {isActive && <Check size={13} className="workspace-active-check" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="workspace-picker-footer">
+                  <button
+                    type="button"
+                    className="workspace-create-btn"
+                    onClick={() => {
+                      setSpacePickerOpen(false);
+                      onCreateSpace?.();
+                    }}
+                  >
+                    <Plus size={13} />
+                    <span>Neuer Space</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button
               type="button"
               className="sidebar-collapse-icon-btn"
@@ -397,12 +393,12 @@ export function SidekickSidebar({
                         <Download size={12} />
                       </button>
                     )}
-                    <span className="tab-count-badge">{tabs.length}</span>
+                    <span className="tab-count-badge">{tabs.filter((t) => !t.pinned).length}</span>
                   </div>
                 </div>
 
                 <div className="vertical-tab-list" role="tablist">
-                  {tabs.map((tab) => {
+                  {tabs.filter((t) => !t.pinned).map((tab) => {
                     const isActive = tab.id === activeTabId && activePanel === 'browser';
                     const isDragTarget = dragOverInfo?.id === tab.id;
                     const dragMode = isDragTarget ? dragOverInfo.mode : null;

@@ -97,14 +97,14 @@ export function isBrowserStartUrl(url: string): boolean {
 
 export function createInitialTab(
   url = aiBrowserHomeUrl,
-  options?: { incognito?: boolean }
+  options?: { incognito?: boolean; pinned?: boolean }
 ): BrowserTab {
   tabCounter += 1;
   return {
     id: `tab-${Date.now()}-${tabCounter}`,
     title: options?.incognito ? 'New private tab' : 'New tab',
     url,
-    pinned: false,
+    pinned: Boolean(options?.pinned),
     ...(options?.incognito ? { incognito: true } : {})
   };
 }

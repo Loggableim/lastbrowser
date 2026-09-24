@@ -1077,6 +1077,19 @@ _PROVIDER_MODELS = {
     "gemini-router": [
         {"id": "gemini-router", "label": "Gemini Router (Free Tier)"},
     ],
+    "ollama": [
+        {"id": "qwen3:32b", "label": "Qwen 3 (32B)"},
+        {"id": "llama3.3", "label": "Llama 3.3 (70B)"},
+        {"id": "deepseek-r1", "label": "DeepSeek R1 (32B)"},
+        {"id": "mistral", "label": "Mistral (7B)"},
+    ],
+    "ollama-cloud": [
+        {"id": "deepseek-v4-flash", "label": "DeepSeek V4 Flash"},
+        {"id": "qwen3:32b", "label": "Qwen 3 (32B)"},
+        {"id": "kimi-k3", "label": "Kimi K3"},
+        {"id": "glm-5.3", "label": "GLM 5.3"},
+        {"id": "nemotron-3-nano:30b", "label": "Nemotron 3 Nano (30B)"},
+    ],
     "deepseek": [
     ],
     "nous": [

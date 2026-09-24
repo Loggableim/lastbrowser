@@ -162,7 +162,7 @@ import { createAppTray, setupMinimizeToTray, type TrayController } from './tray.
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
 import { registerBrowserShortcuts } from './shortcuts.js';
-import { openAuthConnectWindow, cleanOAuthUserAgent } from './auth-window.js';
+import { openAuthConnectWindow, cleanOAuthUserAgent, sanitizeSecChUa } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
 
 process.on('uncaughtException', (err, origin) => {
@@ -785,6 +785,12 @@ export const cdpPort = resolveCdpPort();
 if (!process.argv.some((a) => a.startsWith('--remote-debugging-port'))) {
   app.commandLine.appendSwitch('remote-debugging-port', String(cdpPort));
 }
+// Disable AutomationControlled blink feature to prevent navigator.webdriver = true
+// so Google / Gmail BotGuard does not block sign-in with "Dieser Browser oder diese App ist unter Umständen nicht sicher".
+app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
+
+// Enable Widevine DRM feature flag in Chromium
+app.commandLine.appendSwitch('enable-features', 'WidevineCdm');
 
 app.setName('Lastbrowser');
 
@@ -877,6 +883,24 @@ function attachSessionHandlers(targetSession: Session): void {
   if (currentUa) {
     targetSession.setUserAgent(cleanOAuthUserAgent(currentUa));
   }
+  // Sanitize outgoing request headers: clean User-Agent and remove Electron tokens from Sec-CH-UA
+  // client hints so Google Accounts / Gmail BotGuard, Disney+, and streaming providers recognize
+  // standard Chrome client hints instead of rejecting embedded webviews.
+  targetSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    const requestHeaders = { ...details.requestHeaders };
+    for (const key of Object.keys(requestHeaders)) {
+      const lower = key.toLowerCase();
+      if (lower === 'user-agent') {
+        requestHeaders[key] = cleanOAuthUserAgent(requestHeaders[key]);
+      } else if (lower === 'sec-ch-ua') {
+        requestHeaders[key] = sanitizeSecChUa(requestHeaders[key]);
+      } else if (lower === 'sec-ch-ua-full-version-list') {
+        requestHeaders[key] = sanitizeSecChUa(requestHeaders[key]);
+      }
+    }
+    callback({ requestHeaders });
+  });
+
   void adblock.attach(targetSession);
   downloads.attach(targetSession);
   const isIncognito = (targetSession as unknown as { isInMemory?: () => boolean }).isInMemory?.() ?? false;
@@ -891,6 +915,16 @@ function attachSessionHandlers(targetSession: Session): void {
     return permissions.decide(String(permission), String(requestingOrigin || '')) === 'allow';
   });
 }
+
+// Ensure every webContents (including guest webviews) uses clean User-Agent without Electron tokens
+app.on('web-contents-created', (_event, contents) => {
+  try {
+    const ua = contents.getUserAgent?.();
+    if (ua) {
+      contents.setUserAgent(cleanOAuthUserAgent(ua));
+    }
+  } catch {}
+});
 
 // Attach ad blocking, download tracking and permission handling to every
 // browser session (webviews use per-profile `persist:` partitions, so each

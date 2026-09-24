@@ -64,6 +64,7 @@ export type SetupForm = {
   provider: string;
   model: string;
   apiKey: string;
+  baseUrl?: string;
   botName: string;
   personality: string;
   defaultBrowser?: boolean;
@@ -128,6 +129,7 @@ export function FirstRunSetupPane({
 
   // Setup mode tab: 'recommended' (Gemini, ChatGPT, Ollama) vs 'custom-key' (OpenRouter, DeepSeek, etc.)
   const [activeTab, setActiveTab] = useState<'featured' | 'custom'>('featured');
+  const [baseUrl, setBaseUrl] = useState<string>('');
 
   const readiness = firstRunStatus(status, onboardingStatus);
   const canSubmit = canSubmitCloudSetup(readiness);
@@ -265,6 +267,7 @@ export function FirstRunSetupPane({
         provider,
         model: modelToUse,
         apiKey: apiKey.trim() || undefined,
+        baseUrl: baseUrl.trim() || undefined,
         confirmOverwrite: true
       });
       await onRefreshOnboarding();
@@ -401,6 +404,7 @@ export function FirstRunSetupPane({
       provider,
       model,
       apiKey,
+      baseUrl: baseUrl.trim() || undefined,
       botName: botName.trim() || 'Nova',
       personality: personality || 'nova',
       defaultBrowser: Boolean(isDefaultBrowser || defaultBrowserDone),
@@ -782,6 +786,21 @@ export function FirstRunSetupPane({
                     </small>
                   )}
                 </label>
+                {(activeProviderOption?.id === 'ollama' || activeProviderOption?.id === 'ollama-cloud' || activeProviderOption?.requires_base_url) && (
+                  <label className="input-group" style={{ marginTop: '0.75rem' }}>
+                    <span className="input-label">Server-Adresse / Endpoint (Optional)</span>
+                    <input
+                      type="text"
+                      value={baseUrl}
+                      onChange={(e) => setBaseUrl(e.target.value)}
+                      placeholder={activeProviderOption?.default_base_url || 'http://localhost:11434/v1'}
+                      className="key-input"
+                    />
+                    <small className="field-hint">
+                      Für Standard ({activeProviderOption?.default_base_url || 'http://localhost:11434/v1'}) leer lassen. Für Ollama Cloud oder Remote-Server hier die URL eintragen.
+                    </small>
+                  </label>
+                )}
               </div>
             )}
 

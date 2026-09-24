@@ -87,17 +87,24 @@ _SUPPORTED_PROVIDER_SETUPS = {
     },
     # ── Open / self-hosted ─────────────────────────────────────────────
     "ollama": {
-        "label": "Ollama",
+        "label": "Ollama (Lokal)",
         "env_var": "OLLAMA_API_KEY",
         "default_model": "qwen3:32b",
         "default_base_url": "http://localhost:11434/v1",
-        "requires_base_url": True,
-        # Local Ollama runs keyless by default — only Ollama Cloud requires
-        # OLLAMA_API_KEY.  The wizard accepts an empty api_key for this
-        # provider; users with auth enabled can still type one.  See #1499.
+        "requires_base_url": False,
         "key_optional": True,
-        "models": [],
+        "models": list(_PROVIDER_MODELS.get("ollama", [])),
         "category": "self_hosted",
+    },
+    "ollama-cloud": {
+        "label": "Ollama Cloud",
+        "env_var": "OLLAMA_API_KEY",
+        "default_model": "deepseek-v4-flash",
+        "default_base_url": "https://ollama.com/v1",
+        "requires_base_url": False,
+        "key_optional": False,
+        "models": list(_PROVIDER_MODELS.get("ollama-cloud", [])),
+        "category": "cloud",
     },
     "lmstudio": {
         "label": "LM Studio",
@@ -973,6 +980,9 @@ def apply_onboarding_setup(body: dict) -> dict:
         raise ValueError("model is required")
 
     provider_meta = _SUPPORTED_PROVIDER_SETUPS[provider]
+    if not base_url and provider_meta.get("default_base_url"):
+        base_url = _normalize_base_url(provider_meta["default_base_url"])
+
     if provider_meta.get("requires_base_url"):
         if not base_url:
             raise ValueError("base_url is required for custom endpoints")
@@ -1017,7 +1027,7 @@ def apply_onboarding_setup(body: dict) -> dict:
     model_cfg["provider"] = provider
     model_cfg["default"] = _normalize_model_for_provider(provider, model)
 
-    if provider_meta.get("requires_base_url"):
+    if base_url:
         model_cfg["base_url"] = base_url
     elif provider_meta.get("default_base_url"):
         model_cfg["base_url"] = provider_meta["default_base_url"]

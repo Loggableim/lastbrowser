@@ -1370,7 +1370,8 @@ export function App(): JSX.Element {
       const nextStatus = await window.lastbrowser.sidekick.applyCloudSetup({
         provider: form.provider,
         model: form.model,
-        apiKey: form.apiKey
+        apiKey: form.apiKey,
+        baseUrl: form.baseUrl
       });
       const completeStatus = await window.lastbrowser.sidekick.completeCloudSetup().catch(() => nextStatus);
       const nextState = await window.lastbrowser.setup.save({
@@ -2759,6 +2760,8 @@ function BrowserMain({
   // has been laid out — that second mount is the one that sticks.
   const [webviewReady, setWebviewReady] = useState(false);
   const [webviewMountKey, setWebviewMountKey] = useState(0);
+  const [netflixDismissed, setNetflixDismissed] = useState(false);
+  const isNetflix = Boolean(activeTab.url && /netflix\.com/i.test(activeTab.url));
   const splitWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
   const allWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
 
@@ -3406,6 +3409,33 @@ function BrowserMain({
             <div className="split-dropzone-banner">
               <Columns2 size={24} />
               <span>Hier ablegen für Splitscreen-Ansicht</span>
+            </div>
+          </div>
+        )}
+        {isNetflix && !netflixDismissed && (
+          <div className="netflix-drm-notice-banner">
+            <div className="netflix-drm-notice-content">
+              <span className="netflix-drm-icon">🎬</span>
+              <div className="netflix-drm-text">
+                <strong>Netflix DRM-Hinweis:</strong> Netflix erfordert Google VMP-Zertifizierung. Bei Wiedergabeproblemen kannst du den Stream direkt in deinem Systembrowser (Chrome/Edge) fortsetzen.
+              </div>
+            </div>
+            <div className="netflix-drm-actions">
+              <button
+                type="button"
+                className="netflix-open-external-btn"
+                onClick={() => void window.lastbrowser?.shell?.openExternal?.(activeTab.url)}
+              >
+                In Systembrowser abspielen
+              </button>
+              <button
+                type="button"
+                className="netflix-dismiss-btn"
+                onClick={() => setNetflixDismissed(true)}
+                title="Hinweis schließen"
+              >
+                ✕
+              </button>
             </div>
           </div>
         )}

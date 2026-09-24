@@ -50,7 +50,8 @@ export const defaultSetupState: SetupState = {
 const fallbackCloudProviders = [
   { id: 'openai-codex', label: 'OpenAI Codex (ChatGPT)', oauth_provider: 'openai-codex', oauth_label: 'ChatGPT Account' },
   { id: 'google-gemini-cli', label: 'Google Gemini (CLI)', oauth_provider: 'google-gemini-cli', oauth_label: 'Google-Konto (Gemini CLI)', key_optional: true },
-  { id: 'ollama', label: 'Ollama (Lokal)', requires_base_url: true, key_optional: true, default_base_url: 'http://127.0.0.1:11434' },
+  { id: 'ollama', label: 'Ollama (Lokal)', requires_base_url: false, key_optional: true, default_base_url: 'http://127.0.0.1:11434/v1' },
+  { id: 'ollama-cloud', label: 'Ollama Cloud', requires_base_url: false, key_optional: false, default_base_url: 'https://ollama.com/v1' },
   { id: 'openrouter', label: 'OpenRouter' },
   { id: 'openai', label: 'OpenAI' },
   { id: 'anthropic', label: 'Anthropic' },
@@ -72,6 +73,13 @@ const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string
     { id: 'qwen2.5', label: 'Qwen 2.5' },
     { id: 'deepseek-r1', label: 'DeepSeek-R1 (Local)' },
     { id: 'mistral', label: 'Mistral (7B)' }
+  ],
+  'ollama-cloud': [
+    { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    { id: 'qwen3:32b', label: 'Qwen 3 (32B)' },
+    { id: 'kimi-k3', label: 'Kimi K3' },
+    { id: 'glm-5.3', label: 'GLM 5.3' },
+    { id: 'nemotron-3-nano:30b', label: 'Nemotron 3 Nano (30B)' }
   ],
   deepseek: [
     { id: 'deepseek-chat', label: 'DeepSeek V3 (Chat)' },

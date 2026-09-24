@@ -17,6 +17,7 @@ export type CloudSetupRequest = {
   provider: string;
   model: string;
   apiKey?: string;
+  baseUrl?: string;
   /**
    * Acknowledge overwriting an existing config.yaml. The setup endpoint
    * refuses with "config_exists" otherwise, which silently prevents switching
@@ -682,6 +683,7 @@ export function applyCloudSetup(webuiUrl: string, request: CloudSetupRequest, fe
     model: request.model
   };
   if (request.apiKey?.trim()) body.api_key = request.apiKey.trim();
+  if (request.baseUrl?.trim()) body.base_url = request.baseUrl.trim();
   if (request.confirmOverwrite) body.confirm_overwrite = true;
   return jsonRequest(webuiUrl, '/api/onboarding/setup', {
     method: 'POST',

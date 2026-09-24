@@ -32,10 +32,29 @@ export function isLocalhostCallback(url: string): boolean {
  * 403 disallowed_useragent error. Stripping the token lets Google accept the connection.
  */
 export function cleanOAuthUserAgent(rawUserAgent: string): string {
+  if (!rawUserAgent) return '';
   return rawUserAgent
-    .replace(/\s*Electron\/[^\s]+/i, '')
-    .replace(/\s*Lastbrowser\/[^\s]+/i, '')
+    .replace(/Electron\/[^\s]+/gi, '')
+    .replace(/Lastbrowser\/[^\s]+/gi, '')
+    .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+/**
+ * Sanitize Sec-CH-UA client hints headers by removing Electron tokens and ensuring standard browser brands.
+ */
+export function sanitizeSecChUa(headerValue: string): string {
+  if (!headerValue) return headerValue;
+  const parts = headerValue.split(',').map((p) => p.trim());
+  const filtered = parts.filter((part) => !/electron|lastbrowser/i.test(part));
+  const hasChromium = filtered.some((p) => /"Chromium"/i.test(p));
+  const hasChrome = filtered.some((p) => /"Google Chrome"/i.test(p));
+  if (hasChromium && !hasChrome) {
+    const match = /"Chromium";v="([^"]+)"/i.exec(headerValue);
+    const ver = match ? match[1] : '134';
+    filtered.push(`"Google Chrome";v="${ver}"`);
+  }
+  return filtered.join(', ');
 }
 
 /**

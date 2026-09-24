@@ -72,6 +72,7 @@ describe('cloud first-run setup state', () => {
       'openai-codex',
       'google-gemini-cli',
       'ollama',
+      'ollama-cloud',
       'openrouter',
       'openai',
       'anthropic',

@@ -232,7 +232,7 @@ declare global {
       };
       sidekick: {
         onboardingStatus: () => Promise<Record<string, unknown>>;
-        applyCloudSetup: (request: { provider: string; model: string; apiKey?: string; confirmOverwrite?: boolean }) => Promise<Record<string, unknown>>;
+        applyCloudSetup: (request: { provider: string; model: string; apiKey?: string; baseUrl?: string; confirmOverwrite?: boolean }) => Promise<Record<string, unknown>>;
         setDefaultModel: (request: { model: string }) => Promise<Record<string, unknown>>;
         completeCloudSetup: () => Promise<Record<string, unknown>>;
         startOAuth: (request: { provider: string }) => Promise<{

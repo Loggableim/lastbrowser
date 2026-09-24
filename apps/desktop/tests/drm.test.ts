@@ -5,6 +5,8 @@ import {
   getWidevinePlatformSubdir,
   findSystemWidevine,
   configureDrmWidevine,
+  isCastlabsElectron,
+  initializeCastlabsWidevine,
   type DrmFs,
   type AppLike,
   type WidevineCdmInfo
@@ -283,6 +285,55 @@ describe('DRM Widevine module', () => {
 
       const configured = configureDrmWidevine(mockApp, null);
       expect(configured).toBe(false);
+      expect(mockApp.commandLine.appendSwitch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Castlabs Electron Widevine Integration', () => {
+    it('detects Castlabs Electron when components object is present', () => {
+      expect(isCastlabsElectron({ components: {} })).toBe(true);
+      expect(isCastlabsElectron({})).toBe(false);
+      expect(isCastlabsElectron(null)).toBe(false);
+    });
+
+    it('initializes Widevine via components.whenReady()', async () => {
+      const whenReadyMock = vi.fn().mockResolvedValue(undefined);
+      const statusMock = vi.fn().mockReturnValue('installed');
+      const mockElectron = {
+        components: {
+          whenReady: whenReadyMock,
+          status: statusMock
+        }
+      };
+
+      const result = await initializeCastlabsWidevine(mockElectron);
+      expect(result).toBe(true);
+      expect(whenReadyMock).toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalled();
+    });
+
+    it('returns false when components.whenReady is not available', async () => {
+      const result = await initializeCastlabsWidevine({});
+      expect(result).toBe(false);
+    });
+
+    it('prefers native components when Castlabs Electron is detected in configureDrmWidevine', () => {
+      const mockApp: AppLike = {
+        commandLine: {
+          appendSwitch: vi.fn()
+        }
+      };
+
+      const mockCastlabsElectron = {
+        components: {
+          whenReady: vi.fn(),
+          status: vi.fn()
+        }
+      };
+
+      const result = configureDrmWidevine(mockApp, undefined, undefined, undefined, mockCastlabsElectron);
+      expect(result).toBe(true);
+      // Legacy switches must NOT be appended when native component updater is present
       expect(mockApp.commandLine.appendSwitch).not.toHaveBeenCalled();
     });
   });

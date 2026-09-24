@@ -154,7 +154,7 @@ import { createSidekickUpdater } from './sidekick-updater.js';
 import { subscribeChatStream, type ChatStreamHandle } from './chat-stream.js';
 import { createDownloadTracker } from './downloads.js';
 import { createPermissionController, loadTrustedOrigins, saveTrustedOrigins, trustedOriginsFileName } from './permissions.js';
-import { configureDrmWidevine } from './drm.js';
+import { configureDrmWidevine, initializeCastlabsWidevine } from './drm.js';
 import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTerminalIds, closeAllTerminals } from './terminal-process.js';
@@ -834,7 +834,10 @@ if (app.userAgentFallback) {
 // Must run before whenReady: registering a scheme as privileged afterwards has
 // no effect on storage partitioning, and localStorage would stay ephemeral.
 registerAppScheme();
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Initialize native Widevine CDM if running under Castlabs Electron
+  await initializeCastlabsWidevine();
+
   // Register Lastbrowser as protocol client for standard web links
   if (typeof app?.isDefaultProtocolClient === 'function') {
     if (!app.isDefaultProtocolClient('http')) {

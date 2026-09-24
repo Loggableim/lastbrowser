@@ -39,7 +39,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "electron": "37.10.3",
+    "electron": "github:castlabs/electron-releases#v37.10.3+wvcus",
     "electron-builder": "^26.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
@@ -48,6 +48,11 @@
     "appId": "com.lastbrowser.desktop",
     "productName": "Lastbrowser",
     "npmRebuild": false,
+    "electronVersion": "37.10.3+wvcus",
+    "electronDownload": {
+      "mirror": "https://github.com/castlabs/electron-releases/releases/download/v"
+    },
+    "afterPack": "scripts/evs-sign.cjs",
     "directories": {
       "output": "release"
     },

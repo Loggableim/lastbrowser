@@ -198,6 +198,38 @@ export function findSystemWidevine(
 }
 
 /**
+ * Detect whether Castlabs Electron with native components support is active.
+ */
+export function isCastlabsElectron(electronModule?: unknown): boolean {
+  try {
+    const mod = electronModule || require('electron');
+    return Boolean(mod && typeof (mod as { components?: unknown }).components === 'object');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Initialize Widevine CDM via Castlabs Electron components API.
+ * Must be called in or after app.whenReady().
+ */
+export async function initializeCastlabsWidevine(electronModule?: unknown): Promise<boolean> {
+  try {
+    const mod = electronModule || (await import('electron'));
+    const components = (mod as unknown as { components?: { whenReady?: () => Promise<void>; status?: () => unknown } }).components;
+    if (components && typeof components.whenReady === 'function') {
+      await components.whenReady();
+      const status = typeof components.status === 'function' ? components.status() : 'ready';
+      console.log('[DRM/Widevine] Castlabs Widevine CDM components ready:', status);
+      return true;
+    }
+  } catch (err) {
+    console.warn('[DRM/Widevine] Failed to initialize Castlabs Widevine components:', err);
+  }
+  return false;
+}
+
+/**
  * Configure Chromium command-line switches with system Widevine CDM before app is ready.
  * Must be called before app.whenReady().
  */
@@ -205,9 +237,17 @@ export function configureDrmWidevine(
   appInstance: AppLike,
   customInfo?: WidevineCdmInfo | null,
   customFs?: DrmFs,
-  customEnv?: NodeJS.ProcessEnv
+  customEnv?: NodeJS.ProcessEnv,
+  electronModule?: unknown
 ): boolean {
   try {
+    // If Castlabs Electron is running, it uses the native component updater
+    // instead of legacy command-line switches (which could conflict).
+    if (customInfo === undefined && isCastlabsElectron(electronModule)) {
+      console.log('[DRM/Widevine] Castlabs Electron detected — using native Component Updater (components.whenReady).');
+      return true;
+    }
+
     const info = customInfo !== undefined ? customInfo : findSystemWidevine(customFs, customEnv);
     if (!info) {
       console.log('[DRM/Widevine] No system Widevine CDM found on host.');

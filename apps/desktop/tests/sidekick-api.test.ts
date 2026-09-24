@@ -156,6 +156,38 @@ describe('sidekick api client', () => {
     });
   });
 
+  it('forwards baseUrl and confirmOverwrite in applyCloudSetup', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    };
+
+    await applyCloudSetup(
+      'http://127.0.0.1:8787',
+      {
+        provider: 'ollama-cloud',
+        model: 'deepseek-v4-flash',
+        apiKey: 'ollama-key',
+        baseUrl: 'https://ollama.com/v1',
+        confirmOverwrite: true
+      },
+      fetchImpl
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      provider: 'ollama-cloud',
+      model: 'deepseek-v4-flash',
+      api_key: 'ollama-key',
+      base_url: 'https://ollama.com/v1',
+      confirm_overwrite: true
+    });
+  });
+
   it('falls back to bundled skills when the WebUI skill catalog is empty', async () => {
     const fetchImpl = async (url: string | URL) => {
       const href = String(url);

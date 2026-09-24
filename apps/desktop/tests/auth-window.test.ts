@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   cleanOAuthUserAgent,
+  sanitizeSecChUa,
   isLocalhostCallback,
   isOAuthUrl,
   openAuthConnectWindow
@@ -37,6 +38,17 @@ describe('auth-window logic', () => {
     expect(cleaned).not.toContain('Lastbrowser');
     expect(cleaned).toContain('Chrome/132.0.0.0');
     expect(cleaned).toContain('Safari/537.36');
+    expect(cleaned).not.toContain('  ');
+  });
+
+  it('sanitizes Sec-CH-UA client hints by removing Electron and adding Google Chrome brand', () => {
+    const rawSecChUa = '"Chromium";v="134", "Not:A-Brand";v="24", "Electron";v="37"';
+    const sanitized = sanitizeSecChUa(rawSecChUa);
+
+    expect(sanitized).not.toContain('Electron');
+    expect(sanitized).toContain('"Chromium";v="134"');
+    expect(sanitized).toContain('"Google Chrome";v="134"');
+    expect(sanitized).toContain('"Not:A-Brand";v="24"');
   });
 
   it('instantiates auth connect window with clean User-Agent and loads URL', () => {

@@ -7,7 +7,7 @@
 
 ## 1. Übersicht der Aufgabenpakete
 
-- [ ] **Paket 1: Kern-Architektur & System-Engine** (MCP Runtime, CLI Palette, Supermemory Embeddings)
+- [x] **Paket 1: Kern-Architektur & System-Engine** (MCP Runtime, CLI Palette, Supermemory Embeddings)
 - [x] **Paket 2: First-Launch Wizard & Onboarding Route** (Top-3 LLMs, Browser-Import, Default-Browser, Pinned-Apps Setup)
 - [x] **Paket 3: Nova AI Chat Experience & Model Resolution** (Chat-Management, Reset/Neuer Chat, Kontrast-Fix, Live-Modell-Sync)
 - [x] **Paket 4: Shell-Ergonomie, Navigation & Tab-Splitscreen** (Top-Bar Bug-Icon, Nova Icon-Only, Zen-Mode Omnibox-Autohide, 4-Way Tab Splitscreen, Pinned-Apps Modal)

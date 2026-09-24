@@ -1678,6 +1678,43 @@ export function forgetSupermemoryDocument(
   }, fetchImpl);
 }
 
+export function reindexSupermemory(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/memory/supermemory/index', {
+    method: 'POST',
+    body: JSON.stringify({})
+  }, fetchImpl);
+}
+
+export function dumpSupermemory(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/memory/supermemory/dump', {}, fetchImpl);
+}
+
+export function listMcpServers(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/mcp/servers', {}, fetchImpl);
+}
+
+export function saveMcpServers(webuiUrl: string, config: unknown, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/mcp/servers', {
+    method: 'POST',
+    body: JSON.stringify(config)
+  }, fetchImpl);
+}
+
+export function listMcpTools(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/mcp/tools', {}, fetchImpl);
+}
+
+export function callMcpTool(
+  webuiUrl: string,
+  request: { server: string; tool: string; arguments?: unknown },
+  fetchImpl: FetchLike = fetch
+): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/mcp/tools/call', {
+    method: 'POST',
+    body: JSON.stringify(request)
+  }, fetchImpl);
+}
+
 export async function hybridMemorySearch(webuiUrl: string, request: MemorySearchRequest, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
   try {
     return await jsonRequest(webuiUrl, '/api/memory/hybrid/search', {

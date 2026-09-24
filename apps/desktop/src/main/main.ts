@@ -88,6 +88,12 @@ import {
   listSpaces,
   listSessions,
   listSupermemoryDocuments,
+  reindexSupermemory,
+  dumpSupermemory,
+  listMcpServers,
+  saveMcpServers,
+  listMcpTools,
+  callMcpTool,
   listWorkspace,
   moveGmailMessage,
   pauseCron,
@@ -480,7 +486,13 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:searchSupermemory', (_event, request) => searchSupermemory(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:addSupermemoryDocument', (_event, request) => addSupermemoryDocument(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:forgetSupermemoryDocument', (_event, request) => forgetSupermemoryDocument(requireWebuiUrl(), request));
+  ipcMain.handle('lastbrowser:sidekick:reindexSupermemory', () => reindexSupermemory(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:sidekick:dumpSupermemory', () => dumpSupermemory(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:hybridMemorySearch', (_event, request) => hybridMemorySearch(requireWebuiUrl(), request));
+  ipcMain.handle('lastbrowser:mcp:listServers', () => listMcpServers(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:mcp:saveServers', (_event, request) => saveMcpServers(requireWebuiUrl(), request));
+  ipcMain.handle('lastbrowser:mcp:listTools', () => listMcpTools(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:mcp:callTool', (_event, request) => callMcpTool(requireWebuiUrl(), request || { server: '', tool: '' }));
   ipcMain.handle('lastbrowser:sidekick:getInsights', (_event, request) => getInsights(requireWebuiUrl(), request || {}));
   ipcMain.handle('lastbrowser:sidekick:getWikiStatus', () => getWikiStatus(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:getLogs', (_event, request) => getLogs(requireWebuiUrl(), request || {}));

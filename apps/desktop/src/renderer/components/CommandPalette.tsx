@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Activity,
   ArrowUpDown,
   BookOpen,
   Bookmark,
@@ -13,15 +14,20 @@ import {
   ExternalLink,
   Folder,
   FolderPlus,
+  HardDrive,
   History,
   Kanban,
+  Layers,
   Maximize,
   Pin,
   Plus,
   Printer,
   Puzzle,
   RefreshCw,
+  RotateCcw,
   Search,
+  Server,
+  Shield,
   CheckSquare,
   FileText,
   Scale,
@@ -36,6 +42,7 @@ import {
   Users,
   Volume2,
   VolumeX,
+  Wrench,
   X,
   Zap
 } from 'lucide-react';
@@ -54,11 +61,475 @@ export interface CommandItem {
   id: string;
   title: string;
   description?: string;
-  category: 'Nova AI' | 'Tabs' | 'Navigation' | 'System' | 'Offene Tabs' | 'Workflows' | 'Apps';
+  category: 'Nova AI' | 'Tabs' | 'Navigation' | 'System' | 'Offene Tabs' | 'Workflows' | 'Apps' | 'Sidekick CLI';
   icon: React.ReactNode;
   shortcut?: string;
   keywords?: string[];
   action: () => void;
+}
+
+function dispatchCliEvent(command: string) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('lastbrowser:cli:execute', { detail: { command } }));
+  }
+}
+
+export function buildSidekickCliCommands(setActivePanel: (p: LastbrowserPanelId) => void): CommandItem[] {
+  return [
+    {
+      id: 'sidekick-cli-fix',
+      title: '> Sidekick: fix',
+      description: 'Systemzustand, beschädigte Caches und lokale Lockfiles automatisch reparieren',
+      category: 'Sidekick CLI',
+      icon: <Wrench size={16} />,
+      keywords: ['fix', 'repair', 'reparatur', 'lockfile', 'cache', 'bereinigen', 'clean'],
+      action: () => {
+        dispatchCliEvent('sidekick fix');
+      }
+    },
+    {
+      id: 'sidekick-cli-doctor',
+      title: '> Sidekick: doctor',
+      description: 'Systemdiagnose, Umgebungsvariablen, Python-Engine und API-Konnektivität prüfen',
+      category: 'Sidekick CLI',
+      icon: <Activity size={16} />,
+      keywords: ['doctor', 'diagnose', 'health', 'system', 'status', 'api', 'prüfen'],
+      action: () => {
+        setActivePanel('settings');
+        dispatchCliEvent('sidekick doctor');
+      }
+    },
+    {
+      id: 'sidekick-cli-supermemory-index',
+      title: '> Sidekick: supermemory index',
+      description: 'Supermemory Vektor-Index mit 3-Tier Fallback (Gemini / Ollama / BM25) neu indizieren',
+      category: 'Sidekick CLI',
+      icon: <Database size={16} />,
+      keywords: ['supermemory', 'index', 'vektor', 'vector', 'embedding', 'reindex', 'suche'],
+      action: () => {
+        if (typeof window !== 'undefined') {
+          void window.lastbrowser?.sidekick?.reindexSupermemory?.();
+        }
+      }
+    },
+    {
+      id: 'sidekick-cli-supermemory-dump',
+      title: '> Sidekick: supermemory dump',
+      description: 'Vollständigen Snapshot der Supermemory Vektor- und Wissensdatenbank exportieren',
+      category: 'Sidekick CLI',
+      icon: <HardDrive size={16} />,
+      keywords: ['supermemory', 'dump', 'export', 'backup', 'snapshot', 'json', 'sqlite'],
+      action: () => {
+        if (typeof window !== 'undefined') {
+          void window.lastbrowser?.sidekick?.dumpSupermemory?.();
+        }
+      }
+    },
+    {
+      id: 'sidekick-cli-mcp-list',
+      title: '> Sidekick: mcp list',
+      description: 'Konfigurierte MCP-Server und deren JSON-RPC Verbindungsstatus (stdio / sse) anzeigen',
+      category: 'Sidekick CLI',
+      icon: <Server size={16} />,
+      keywords: ['mcp', 'list', 'servers', 'stdio', 'sse', 'json-rpc', 'tools'],
+      action: () => {
+        setActivePanel('settings');
+        if (typeof window !== 'undefined') {
+          void window.lastbrowser?.mcp?.listServers?.();
+        }
+      }
+    },
+    {
+      id: 'sidekick-cli-mcp-tools',
+      title: '> Sidekick: mcp tools',
+      description: 'Registrierte MCP-Tools und Nova Function-Calling Schemas mit Sicherheitsmodell einsehen',
+      category: 'Sidekick CLI',
+      icon: <Code2 size={16} />,
+      keywords: ['mcp', 'tools', 'schema', 'nova', 'functions', 'permissions', 'security'],
+      action: () => {
+        setActivePanel('chat');
+        if (typeof window !== 'undefined') {
+          void window.lastbrowser?.mcp?.listTools?.();
+        }
+      }
+    },
+    {
+      id: 'sidekick-cli-config-show',
+      title: '> Sidekick: config show',
+      description: 'Aktuelle Sidekick-Konfiguration, Profile und aktive Einstellungen einsehen',
+      category: 'Sidekick CLI',
+      icon: <Settings size={16} />,
+      keywords: ['config', 'show', 'yaml', 'einstellungen', 'profil', 'parameter'],
+      action: () => {
+        setActivePanel('settings');
+      }
+    },
+    {
+      id: 'sidekick-cli-config-edit',
+      title: '> Sidekick: config edit',
+      description: 'Konfigurationsdatei config.yaml im Standard-Editor oder Einstellungsfenster öffnen',
+      category: 'Sidekick CLI',
+      icon: <FileText size={16} />,
+      keywords: ['config', 'edit', 'bearbeiten', 'yaml', 'editor', 'anpassen'],
+      action: () => {
+        setActivePanel('settings');
+      }
+    },
+    {
+      id: 'sidekick-cli-config-set',
+      title: '> Sidekick: config set',
+      description: 'Einen Konfigurationsparameter (Modell, Provider, Fallback, Pfade) festlegen',
+      category: 'Sidekick CLI',
+      icon: <Settings size={16} />,
+      keywords: ['config', 'set', 'ändern', 'setzen', 'konfiguration', 'parameter'],
+      action: () => {
+        setActivePanel('settings');
+      }
+    },
+    {
+      id: 'sidekick-cli-gateway-start',
+      title: '> Sidekick: gateway start',
+      description: 'Messaging Gateway Daemon für externe Kanäle (WhatsApp, Slack, Telegram) im Hintergrund starten',
+      category: 'Sidekick CLI',
+      icon: <Zap size={16} />,
+      keywords: ['gateway', 'start', 'daemon', 'hintergrund', 'service', 'messaging'],
+      action: () => {
+        dispatchCliEvent('sidekick gateway start');
+      }
+    },
+    {
+      id: 'sidekick-cli-gateway-stop',
+      title: '> Sidekick: gateway stop',
+      description: 'Laufenden Sidekick Gateway Daemon sauber anhalten',
+      category: 'Sidekick CLI',
+      icon: <X size={16} />,
+      keywords: ['gateway', 'stop', 'beenden', 'stoppen', 'anhalten', 'kill'],
+      action: () => {
+        dispatchCliEvent('sidekick gateway stop');
+      }
+    },
+    {
+      id: 'sidekick-cli-gateway-status',
+      title: '> Sidekick: gateway status',
+      description: 'Betriebszustand und Verbindungsmetriken des Gateway Daemons abfragen',
+      category: 'Sidekick CLI',
+      icon: <Activity size={16} />,
+      keywords: ['gateway', 'status', 'health', 'abfrage', 'daemon', 'ping'],
+      action: () => {
+        dispatchCliEvent('sidekick gateway status');
+      }
+    },
+    {
+      id: 'sidekick-cli-gateway-restart',
+      title: '> Sidekick: gateway restart',
+      description: 'Gateway Daemon neu starten und alle WebSocket-/Polling-Verbindungen erneuern',
+      category: 'Sidekick CLI',
+      icon: <RefreshCw size={16} />,
+      keywords: ['gateway', 'restart', 'neustart', 'reload', 'erneuern'],
+      action: () => {
+        dispatchCliEvent('sidekick gateway restart');
+      }
+    },
+    {
+      id: 'sidekick-cli-gateway-install',
+      title: '> Sidekick: gateway install',
+      description: 'Sidekick Gateway als persistenten Systemdienst für automatischen Systemstart registrieren',
+      category: 'Sidekick CLI',
+      icon: <Server size={16} />,
+      keywords: ['gateway', 'install', 'service', 'autostart', 'dienst', 'systemd'],
+      action: () => {
+        dispatchCliEvent('sidekick gateway install');
+      }
+    },
+    {
+      id: 'sidekick-cli-token-count',
+      title: '> Sidekick: token count',
+      description: 'Token-Verbrauch und Kontextfenster-Auslastung der aktuellen Konversation berechnen',
+      category: 'Sidekick CLI',
+      icon: <Scale size={16} />,
+      keywords: ['token', 'count', 'tokens', 'verbrauch', 'auslastung', 'kontext', 'kosten'],
+      action: () => {
+        setActivePanel('chat');
+      }
+    },
+    {
+      id: 'sidekick-cli-rag-update',
+      title: '> Sidekick: rag update',
+      description: 'Lokalen RAG-Wissensindex aus Workspace-Dateien und Notizen aktualisieren',
+      category: 'Sidekick CLI',
+      icon: <BookOpen size={16} />,
+      keywords: ['rag', 'update', 'wissen', 'retrieval', 'dokumente', 'workspace', 'embed'],
+      action: () => {
+        if (typeof window !== 'undefined') {
+          void window.lastbrowser?.sidekick?.reindexSupermemory?.();
+        }
+      }
+    },
+    {
+      id: 'sidekick-cli-model-list',
+      title: '> Sidekick: model list',
+      description: 'Alle verfügbaren KI-Modelle (Gemini, Claude, GPT, Ollama) auflisten',
+      category: 'Sidekick CLI',
+      icon: <Cpu size={16} />,
+      keywords: ['model', 'list', 'modelle', 'gemini', 'claude', 'ollama', 'gpt', 'anbieter'],
+      action: () => {
+        setActivePanel('settings');
+      }
+    },
+    {
+      id: 'sidekick-cli-model-switch',
+      title: '> Sidekick: model switch',
+      description: 'Standard-Inferenzmodell für Nova AI interaktiv wechseln',
+      category: 'Sidekick CLI',
+      icon: <Shuffle size={16} />,
+      keywords: ['model', 'switch', 'wechseln', 'auswahl', 'standard', 'umschalten'],
+      action: () => {
+        setActivePanel('settings');
+      }
+    },
+    {
+      id: 'sidekick-cli-fallback-list',
+      title: '> Sidekick: fallback list',
+      description: 'Aktuelle Provider-Ausfallkette (Fallback Chain) für Ausfallsicherheit anzeigen',
+      category: 'Sidekick CLI',
+      icon: <Layers size={16} />,
+      keywords: ['fallback', 'list', 'ausfall', 'kette', 'chain', 'provider', 'backup'],
+      action: () => {
+        setActivePanel('settings');
+      }
+    },
+    {
+      id: 'sidekick-cli-sessions-list',
+      title: '> Sidekick: sessions list',
+      description: 'Alle protokollierten Chat- und Agentensitzungen mit Metadaten auflisten',
+      category: 'Sidekick CLI',
+      icon: <History size={16} />,
+      keywords: ['sessions', 'list', 'sitzungen', 'verlauf', 'historie', 'chats'],
+      action: () => {
+        setActivePanel('chat');
+      }
+    },
+    {
+      id: 'sidekick-cli-sessions-browse',
+      title: '> Sidekick: sessions browse',
+      description: 'Interaktiver Sitzungs-Browser zum Durchsuchen und Wiederaufnehmen vergangener Aufgaben',
+      category: 'Sidekick CLI',
+      icon: <Search size={16} />,
+      keywords: ['sessions', 'browse', 'durchsuchen', 'wiederaufnahme', 'resume'],
+      action: () => {
+        setActivePanel('chat');
+      }
+    },
+    {
+      id: 'sidekick-cli-sessions-rename',
+      title: '> Sidekick: sessions rename',
+      description: 'Titel einer bestehenden Agentensitzung für bessere Übersicht umbenennen',
+      category: 'Sidekick CLI',
+      icon: <FileText size={16} />,
+      keywords: ['sessions', 'rename', 'titel', 'umbenennen', 'name', 'sitzung'],
+      action: () => {
+        setActivePanel('chat');
+      }
+    },
+    {
+      id: 'sidekick-cli-auth-status',
+      title: '> Sidekick: auth status',
+      description: 'Gültigkeit und Quoten aller hinterlegten API-Schlüssel und OAuth-Tokens prüfen',
+      category: 'Sidekick CLI',
+      icon: <ShieldCheck size={16} />,
+      keywords: ['auth', 'status', 'token', 'quota', 'guthaben', 'prüfung', 'oauth'],
+      action: () => {
+        setActivePanel('settings');
+      }
+    },
+    {
+      id: 'sidekick-cli-auth-list',
+      title: '> Sidekick: auth list',
+      description: 'Alle im Schlüsselbund gespeicherten Provider-Anmeldedaten und Pools einsehen',
+      category: 'Sidekick CLI',
+      icon: <Shield size={16} />,
+      keywords: ['auth', 'list', 'keys', 'schlüssel', 'credentials', 'pool'],
+      action: () => {
+        setActivePanel('settings');
+      }
+    },
+    {
+      id: 'sidekick-cli-auth-reset',
+      title: '> Sidekick: auth reset',
+      description: 'Erschöpfungsstatus (Rate Limit / Quota Exhaustion) für einen Provider zurücksetzen',
+      category: 'Sidekick CLI',
+      icon: <RotateCcw size={16} />,
+      keywords: ['auth', 'reset', 'rate limit', 'entsperren', 'exhaustion', 'zurücksetzen'],
+      action: () => {
+        dispatchCliEvent('sidekick auth reset');
+      }
+    },
+    {
+      id: 'sidekick-cli-auth-logout',
+      title: '> Sidekick: auth logout',
+      description: 'Gespeicherte Authentifizierungsschlüssel und Anmelde-Tokens sicher aus dem Speicher löschen',
+      category: 'Sidekick CLI',
+      icon: <Trash2 size={16} />,
+      keywords: ['auth', 'logout', 'abmelden', 'entfernen', 'löschen', 'clear'],
+      action: () => {
+        setActivePanel('settings');
+      }
+    },
+    {
+      id: 'sidekick-cli-cron-list',
+      title: '> Sidekick: cron list',
+      description: 'Geplante periodische Agenten-Aufgaben, Ausführungszeiten und Trigger anzeigen',
+      category: 'Sidekick CLI',
+      icon: <Kanban size={16} />,
+      keywords: ['cron', 'list', 'zeitplan', 'jobs', 'zeitgesteuert', 'scheduler'],
+      action: () => {
+        setActivePanel('kanban');
+      }
+    },
+    {
+      id: 'sidekick-cli-cron-status',
+      title: '> Sidekick: cron status',
+      description: 'Betriebsbereitschaft des integrierten Cron-Schedulers prüfen',
+      category: 'Sidekick CLI',
+      icon: <Activity size={16} />,
+      keywords: ['cron', 'status', 'scheduler', 'laufend', 'aktiv', 'trigger'],
+      action: () => {
+        dispatchCliEvent('sidekick cron status');
+      }
+    },
+    {
+      id: 'sidekick-cli-cron-pause',
+      title: '> Sidekick: cron pause',
+      description: 'Ausführung aller anstehenden Cron-Jobs vorübergehend unterbrechen',
+      category: 'Sidekick CLI',
+      icon: <X size={16} />,
+      keywords: ['cron', 'pause', 'anhalten', 'unterbrechen', 'pausieren'],
+      action: () => {
+        dispatchCliEvent('sidekick cron pause');
+      }
+    },
+    {
+      id: 'sidekick-cli-cron-resume',
+      title: '> Sidekick: cron resume',
+      description: 'Pausierte Cron-Jobs und Zeitplaner wieder aufnehmen',
+      category: 'Sidekick CLI',
+      icon: <Zap size={16} />,
+      keywords: ['cron', 'resume', 'fortsetzen', 'wiederaufnehmen', 'aktivieren'],
+      action: () => {
+        dispatchCliEvent('sidekick cron resume');
+      }
+    },
+    {
+      id: 'sidekick-cli-logs-tail',
+      title: '> Sidekick: logs',
+      description: 'Neueste System- und Agenten-Ereignisse aus agent.log in Echtzeit verfolgen',
+      category: 'Sidekick CLI',
+      icon: <Terminal size={16} />,
+      keywords: ['logs', 'tail', 'agent.log', 'protokoll', 'terminal', 'ausgabe'],
+      action: () => {
+        setActivePanel('settings');
+      }
+    },
+    {
+      id: 'sidekick-cli-logs-errors',
+      title: '> Sidekick: logs errors',
+      description: 'Gefilterte Fehlerprotokolle und Exception-Stacktraces aus errors.log anzeigen',
+      category: 'Sidekick CLI',
+      icon: <ShieldAlert size={16} />,
+      keywords: ['logs', 'errors', 'fehler', 'exception', 'errors.log', 'crash'],
+      action: () => {
+        setActivePanel('settings');
+      }
+    },
+    {
+      id: 'sidekick-cli-backup-create',
+      title: '> Sidekick: backup create',
+      description: 'Vollständige Sicherung aller Konfigurationen, Memories und Arbeitsstände erstellen',
+      category: 'Sidekick CLI',
+      icon: <Download size={16} />,
+      keywords: ['backup', 'create', 'sicherung', 'export', 'archiv', 'erstellen'],
+      action: () => {
+        dispatchCliEvent('sidekick backup create');
+      }
+    },
+    {
+      id: 'sidekick-cli-backup-restore',
+      title: '> Sidekick: backup restore',
+      description: 'Systemzustand und Datenbestände aus einem früheren Sicherungsarchiv wiederherstellen',
+      category: 'Sidekick CLI',
+      icon: <RotateCcw size={16} />,
+      keywords: ['backup', 'restore', 'wiederherstellen', 'archiv', 'import', 'laden'],
+      action: () => {
+        dispatchCliEvent('sidekick backup restore');
+      }
+    },
+    {
+      id: 'sidekick-cli-checkpoints-list',
+      title: '> Sidekick: checkpoints list',
+      description: 'Automatische Dateisystem-Wiederherstellungspunkte vor Dateiänderungen anzeigen',
+      category: 'Sidekick CLI',
+      icon: <Bookmark size={16} />,
+      keywords: ['checkpoints', 'list', 'prüfpunkte', 'wiederherstellung', 'dateien', 'stände'],
+      action: () => {
+        setActivePanel('workspaces');
+      }
+    },
+    {
+      id: 'sidekick-cli-checkpoints-rollback',
+      title: '> Sidekick: checkpoints rollback',
+      description: 'Dateisystem auf den unmittelbar vorherigen Sicherheits-Checkpoint zurücksetzen',
+      category: 'Sidekick CLI',
+      icon: <RotateCcw size={16} />,
+      keywords: ['checkpoints', 'rollback', 'zurücksetzen', 'undo', 'revert', 'sicherheit'],
+      action: () => {
+        dispatchCliEvent('sidekick checkpoints rollback');
+      }
+    },
+    {
+      id: 'sidekick-cli-skills-list',
+      title: '> Sidekick: skills list',
+      description: 'Übersicht aller aktiven und erweiterbaren Agenten-Skills im integrierten Katalog',
+      category: 'Sidekick CLI',
+      icon: <Puzzle size={16} />,
+      keywords: ['skills', 'list', 'fähigkeiten', 'katalog', 'prompts', 'werkzeuge'],
+      action: () => {
+        setActivePanel('chat');
+      }
+    },
+    {
+      id: 'sidekick-cli-kanban-diagnostics',
+      title: '> Sidekick: kanban diagnostics',
+      description: 'Datenbank-Integritätsprüfung für Kanban-Board und Task-Pipelines durchführen',
+      category: 'Sidekick CLI',
+      icon: <Kanban size={16} />,
+      keywords: ['kanban', 'diagnostics', 'board', 'aufgaben', 'pipeline', 'datenbank'],
+      action: () => {
+        setActivePanel('kanban');
+      }
+    },
+    {
+      id: 'sidekick-cli-insights-report',
+      title: '> Sidekick: insights',
+      description: 'Produktivitäts-Kennzahlen, Token-Statistiken und Agenten-Erfolgsraten einsehen',
+      category: 'Sidekick CLI',
+      icon: <Table size={16} />,
+      keywords: ['insights', 'analytics', 'metriken', 'statistik', 'bericht', 'produktivität'],
+      action: () => {
+        setActivePanel('chat');
+      }
+    },
+    {
+      id: 'sidekick-cli-version',
+      title: '> Sidekick: version',
+      description: 'Installierte Engine-Version, Commit-Hash und Umgebungsinformationen abfragen',
+      category: 'Sidekick CLI',
+      icon: <Terminal size={16} />,
+      keywords: ['version', 'build', 'commit', 'info', 'release', 'stand'],
+      action: () => {
+        dispatchCliEvent('sidekick version');
+      }
+    }
+  ];
 }
 
 export function CommandPalette(): JSX.Element | null {
@@ -321,6 +792,9 @@ export function CommandPalette(): JSX.Element | null {
           setActivePanel('workspaces');
         }
       },
+
+      // --- Sidekick CLI Subcommands (Paket 1.2) ---
+      ...buildSidekickCliCommands(setActivePanel),
 
       // --- Agentic Workflow Templates (Phase 11.2) ---
       ...WORKFLOW_TEMPLATES.map((tmpl): CommandItem => ({

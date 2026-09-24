@@ -388,6 +388,8 @@ declare global {
         searchSupermemory: (request: { query: string; limit?: number }) => Promise<Record<string, unknown>>;
         addSupermemoryDocument: (request: Record<string, unknown>) => Promise<Record<string, unknown>>;
         forgetSupermemoryDocument: (request: { id?: string }) => Promise<Record<string, unknown>>;
+        reindexSupermemory: () => Promise<Record<string, unknown>>;
+        dumpSupermemory: () => Promise<Record<string, unknown>>;
         hybridMemorySearch: (request: { query: string; limit?: number }) => Promise<Record<string, unknown>>;
         getInsights: (request?: { days?: number }) => Promise<Record<string, unknown>>;
         getWikiStatus: () => Promise<Record<string, unknown>>;
@@ -566,6 +568,12 @@ declare global {
       system?: {
         isDefaultBrowser: () => Promise<boolean>;
         setDefaultBrowser: () => Promise<boolean>;
+      };
+      mcp: {
+        listServers: () => Promise<Record<string, unknown>>;
+        saveServers: (config: unknown) => Promise<Record<string, unknown>>;
+        listTools: () => Promise<Record<string, unknown>>;
+        callTool: (request: { server: string; tool: string; arguments?: unknown }) => Promise<Record<string, unknown>>;
       };
     };
   }

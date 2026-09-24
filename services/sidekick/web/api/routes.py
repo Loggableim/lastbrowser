@@ -5793,6 +5793,12 @@ def handle_get(handler, parsed) -> bool:
         return _handle_supermemory_list(handler, parsed)
     if parsed.path == "/api/memory/supermemory/document":
         return _handle_supermemory_document(handler, parsed)
+    if parsed.path == "/api/memory/supermemory/dump":
+        return _handle_supermemory_dump(handler)
+    if parsed.path == "/api/mcp/servers":
+        return _handle_mcp_servers_list(handler)
+    if parsed.path == "/api/mcp/tools":
+        return _handle_mcp_tools_list(handler)
 
     # â”€â”€ Profile API (GET) â”€â”€
     if parsed.path == "/api/profiles":
@@ -7917,8 +7923,14 @@ def handle_post(handler, parsed) -> bool:
         return _handle_supermemory_add(handler, body)
     if parsed.path == "/api/memory/supermemory/forget":
         return _handle_supermemory_forget(handler, body)
+    if parsed.path == "/api/memory/supermemory/index":
+        return _handle_supermemory_index(handler, body)
     if parsed.path == "/api/memory/hybrid/search":
         return _handle_hybrid_search(handler, body)
+    if parsed.path == "/api/mcp/servers":
+        return _handle_mcp_servers_save(handler, body)
+    if parsed.path == "/api/mcp/tools/call":
+        return _handle_mcp_tool_call(handler, body)
 
     # â”€â”€ Profile API (POST) â”€â”€
     if parsed.path == "/api/profile/switch":
@@ -10837,111 +10849,157 @@ def _get_supermemory_client():
 
 def _handle_supermemory_status(handler):
     """GET /api/memory/supermemory/status"""
-    client = _get_supermemory_client()
-    configured = False
-    config_path = None
-    try:
-        from web.api.profiles import get_active_profile_home
-        sm_path = get_active_profile_home() / "supermemory.json"
-        if not sm_path.exists():
-            alt = Path(os.environ.get("LOCALAPPDATA", "")) / "sidekick" / "supermemory.json"
-            if alt.exists():
-                sm_path = alt
-        config_path = str(sm_path) if sm_path.exists() else None
-        configured = sm_path.exists()
-    except Exception:
-        pass
-    import datetime
-    return j(handler, {
-        "configured": configured,
-        "connected": client is not None,
-        "config_path": config_path,
-        "timestamp": str(datetime.datetime.now()),
-    })
+    from runtime.supermemory_engine import get_supermemory_engine
+    engine = get_supermemory_engine()
+    stat = engine.status()
+    stat["config_path"] = stat.get("db_path")
+    return j(handler, stat)
 
 def _handle_supermemory_search(handler, body):
     """POST /api/memory/supermemory/search"""
-    client = _get_supermemory_client()
-    if client is None:
-        return j(handler, {"results": [], "hits": [], "configured": False, "ok": True, "message": "Supermemory is not configured."})
-    q = body.get("q", "").strip()
+    q = (body.get("q") or body.get("query") or "").strip()
     limit = int(body.get("limit", 10))
     container_tag = body.get("container_tag") or None
     if not q:
-        return j(handler, {"results": [], "hits": [], "configured": False, "ok": False, "error": "Query 'q' is required"}, status=400)
-    import uuid
+        return j(handler, {"results": [], "hits": [], "configured": True, "ok": False, "error": "Query 'q' is required"}, status=400)
     try:
-        kwargs = {"q": q, "limit": limit}
-        if container_tag:
-            kwargs["container_tag"] = container_tag
-        result = client.search.memories(**kwargs)
-        if hasattr(result, "model_dump"):
-            data = result.model_dump()
-        elif hasattr(result, "dict"):
-            data = result.dict()
-        else:
-            data = result
-        items = data.get("data", data.get("memories", data.get("results", []))) if isinstance(data, dict) else (data if isinstance(data, list) else [])
-        results = []
-        for item in items if isinstance(items, list) else []:
-            if isinstance(item, dict):
-                tags = item.get("metadata", {}).get("tags", ["Allgemein"]) if isinstance(item.get("metadata"), dict) else ["Allgemein"]
-                results.append({
-                    "id": f"sm-{str(item.get('id', item.get('_id', uuid.uuid4().hex)))[:8]}",
-                    "source": "supermemory",
-                    "score": float(item.get("score", item.get("relevance", 0.5))),
-                    "category": tags[0] if isinstance(tags, list) and tags else "Allgemein",
-                    "content": item.get("content") or item.get("text") or item.get("snippet", ""),
-                })
+        from runtime.supermemory_engine import get_supermemory_engine
+        engine = get_supermemory_engine()
+        results = engine.search(q, limit=limit, container_tag=container_tag)
         return j(handler, {"results": results, "hits": results, "configured": True, "ok": True})
     except Exception as e:
         logger.exception("Supermemory search failed")
-        return j(handler, {"results": [], "hits": [], "configured": False, "ok": False, "error": str(e)})
+        return j(handler, {"results": [], "hits": [], "configured": True, "ok": False, "error": str(e)})
 
 def _handle_supermemory_add(handler, body):
     """POST /api/memory/supermemory/add"""
-    client = _get_supermemory_client()
-    if client is None:
-        return bad(handler, "Supermemory is not configured. Check supermemory.json.")
-    content = body.get("content", "").strip()
+    content = (body.get("content") or "").strip()
     if not content:
         return bad(handler, "content is required")
-    container_tag = body.get("container_tag") or None
-    metadata = body.get("metadata") or None
+    title = (body.get("title") or "").strip()
+    metadata = body.get("metadata") or {}
+    tags = body.get("tags") or None
     try:
-        kwargs = {"content": content}
-        if container_tag:
-            kwargs["container_tag"] = container_tag
-        if metadata:
-            kwargs["metadata"] = metadata
-        result = client.documents.add(**kwargs)
-        if hasattr(result, "model_dump"):
-            data = result.model_dump()
-        elif hasattr(result, "dict"):
-            data = result.dict()
-        else:
-            data = {"ok": True}
-        return j(handler, {"result": data, "ok": True})
+        from runtime.supermemory_engine import get_supermemory_engine
+        engine = get_supermemory_engine()
+        result = engine.add_document(content, title=title, metadata=metadata, tags=tags)
+        return j(handler, {"result": result, "ok": True})
     except Exception as e:
         logger.exception("Supermemory add failed")
         return bad(handler, f"Supermemory add failed: {e}")
 
-
 def _handle_supermemory_forget(handler, body):
     """POST /api/memory/supermemory/forget"""
-    client = _get_supermemory_client()
-    if client is None:
-        return bad(handler, "Supermemory is not configured.")
-    memory_id = body.get("id", "").strip()
-    container_tag = body.get("container_tag", "default")
+    memory_id = (body.get("id") or "").strip()
     if not memory_id:
         return bad(handler, "id is required")
     try:
-        client.memories.forget(container_tag=container_tag, id=memory_id)
-        return j(handler, {"ok": True, "result": "forgotten"})
+        from runtime.supermemory_engine import get_supermemory_engine
+        engine = get_supermemory_engine()
+        deleted = engine.forget_document(memory_id)
+        return j(handler, {"ok": True, "result": "forgotten", "deleted": deleted})
     except Exception as e:
         logger.exception("Supermemory forget failed")
         return bad(handler, f"Supermemory forget failed: {e}")
+
+def _handle_supermemory_index(handler, body):
+    """POST /api/memory/supermemory/index"""
+    try:
+        from runtime.supermemory_engine import get_supermemory_engine
+        engine = get_supermemory_engine()
+        res = engine.reindex()
+        return j(handler, res)
+    except Exception as e:
+        logger.exception("Supermemory reindex failed")
+        return bad(handler, f"Supermemory reindex failed: {e}")
+
+def _handle_supermemory_dump(handler):
+    """GET /api/memory/supermemory/dump"""
+    try:
+        from runtime.supermemory_engine import get_supermemory_engine
+        engine = get_supermemory_engine()
+        return j(handler, engine.dump())
+    except Exception as e:
+        logger.exception("Supermemory dump failed")
+        return bad(handler, f"Supermemory dump failed: {e}")
+
+
+def _handle_mcp_servers_list(handler):
+    """GET /api/mcp/servers"""
+    try:
+        from runtime.mcp_client import get_mcp_manager, resolve_default_mcp_config_path
+        from dataclasses import asdict
+        mgr = get_mcp_manager()
+        servers = {}
+        for name, cfg in mgr.configs.items():
+            servers[name] = asdict(cfg)
+        return j(handler, {
+            "ok": True,
+            "servers": servers,
+            "config_path": str(resolve_default_mcp_config_path()),
+            "count": len(servers),
+        })
+    except Exception as e:
+        logger.exception("MCP servers list failed")
+        return bad(handler, f"MCP servers list failed: {e}")
+
+
+def _handle_mcp_servers_save(handler, body):
+    """POST /api/mcp/servers"""
+    try:
+        from runtime.mcp_client import get_mcp_manager, resolve_default_mcp_config_path
+        cfg_path = resolve_default_mcp_config_path()
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_config = body.get("mcpServers") or body.get("servers") or body
+        cfg_data = {"mcpServers": raw_config} if not ("mcpServers" in body or "servers" in body) else body
+        cfg_path.write_text(json.dumps(cfg_data, indent=2), encoding="utf-8")
+        mgr = get_mcp_manager()
+        mgr.load_config(cfg_path)
+        return j(handler, {"ok": True, "config_path": str(cfg_path), "server_count": len(mgr.configs)})
+    except Exception as e:
+        logger.exception("MCP servers save failed")
+        return bad(handler, f"MCP servers save failed: {e}")
+
+
+def _handle_mcp_tools_list(handler):
+    """GET /api/mcp/tools"""
+    import asyncio
+    try:
+        from runtime.mcp_client import get_mcp_manager
+        mgr = get_mcp_manager()
+        loop = asyncio.new_event_loop()
+        try:
+            tools = loop.run_until_complete(mgr.list_nova_tools())
+        finally:
+            loop.close()
+        return j(handler, {"ok": True, "tools": tools, "count": len(tools)})
+    except Exception as e:
+        logger.exception("MCP tools list failed")
+        return bad(handler, f"MCP tools list failed: {e}")
+
+
+def _handle_mcp_tool_call(handler, body):
+    """POST /api/mcp/tools/call"""
+    import asyncio
+    server_name = (body.get("server") or body.get("server_name") or "").strip()
+    tool_name = (body.get("tool") or body.get("tool_name") or "").strip()
+    arguments = body.get("arguments") or body.get("args") or {}
+    if not server_name or not tool_name:
+        return bad(handler, "server and tool are required")
+
+    try:
+        from runtime.mcp_client import get_mcp_manager
+        mgr = get_mcp_manager()
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(mgr.call_tool(server_name, tool_name, arguments))
+        finally:
+            loop.close()
+        return j(handler, {"ok": True, "result": result})
+    except Exception as e:
+        logger.exception("MCP tool call failed")
+        return bad(handler, f"MCP tool call failed: {e}")
+
 
 
 def _handle_hybrid_search(handler, body):
@@ -11030,54 +11088,35 @@ def _handle_hybrid_search(handler, body):
     return j(handler, {"hits": sorted_results})
 def _handle_supermemory_list(handler, parsed):
     """GET /api/memory/supermemory/list"""
-    client = _get_supermemory_client()
-    if client is None:
-        return j(handler, {"results": [], "documents": [], "configured": False, "ok": True, "message": "Supermemory is not configured."})
     from urllib.parse import parse_qs
     qs = parse_qs(parsed.query or "")
-    limit = int(qs.get("limit", ["20"])[0])
-    page = int(qs.get("page", ["1"])[0])
-    container_tag = qs.get("container_tag", [None])[0]
+    limit = int(qs.get("limit", ["50"])[0])
+    offset = int(qs.get("offset", ["0"])[0])
     try:
-        kwargs = {"limit": limit, "page": page, "order": "desc", "sort": "updatedAt", "include_content": True}
-        if container_tag:
-            kwargs["container_tags"] = [container_tag]
-        result = client.documents.list(**kwargs)
-        if hasattr(result, "model_dump"):
-            data = result.model_dump()
-        elif hasattr(result, "dict"):
-            data = result.dict()
-        else:
-            data = result
-        docs = data if isinstance(data, list) else (data.get("documents", data.get("results", [])) if isinstance(data, dict) else [])
+        from runtime.supermemory_engine import get_supermemory_engine
+        engine = get_supermemory_engine()
+        docs = engine.list_documents(limit=limit, offset=offset)
         return j(handler, {"results": docs, "documents": docs, "configured": True, "ok": True})
     except Exception as e:
         logger.exception("Supermemory list failed")
-        return j(handler, {"results": [], "documents": [], "configured": False, "ok": False, "error": str(e)})
+        return j(handler, {"results": [], "documents": [], "configured": True, "ok": False, "error": str(e)})
 
 
 def _handle_supermemory_document(handler, parsed):
     """GET /api/memory/supermemory/document"""
-    client = _get_supermemory_client()
-    if client is None:
-        return j(handler, {"document": None, "configured": False, "ok": True, "message": "Supermemory is not configured."})
     from urllib.parse import parse_qs
     qs = parse_qs(parsed.query or "")
     doc_id = qs.get("id", [None])[0]
     if not doc_id:
-        return j(handler, {"document": None, "configured": False, "ok": False, "error": "id query param is required"}, status=400)
+        return j(handler, {"document": None, "configured": True, "ok": False, "error": "id query param is required"}, status=400)
     try:
-        result = client.documents.get(id=doc_id)
-        if hasattr(result, "model_dump"):
-            data = result.model_dump()
-        elif hasattr(result, "dict"):
-            data = result.dict()
-        else:
-            data = result
-        return j(handler, {"document": data, "configured": True, "ok": True})
+        from runtime.supermemory_engine import get_supermemory_engine
+        engine = get_supermemory_engine()
+        doc = engine.get_document(doc_id)
+        return j(handler, {"document": doc, "configured": True, "ok": True})
     except Exception as e:
         logger.exception("Supermemory document get failed")
-        return j(handler, {"document": None, "configured": False, "ok": False, "error": str(e)})
+        return j(handler, {"document": None, "configured": True, "ok": False, "error": str(e)})
 
 
 # â”€â”€ POST route helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -140,6 +140,8 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     searchSupermemory: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:searchSupermemory', request),
     addSupermemoryDocument: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:addSupermemoryDocument', request),
     forgetSupermemoryDocument: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:forgetSupermemoryDocument', request),
+    reindexSupermemory: () => ipcRenderer.invoke('lastbrowser:sidekick:reindexSupermemory'),
+    dumpSupermemory: () => ipcRenderer.invoke('lastbrowser:sidekick:dumpSupermemory'),
     hybridMemorySearch: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:hybridMemorySearch', request),
     getInsights: (request?: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:getInsights', request),
     getWikiStatus: () => ipcRenderer.invoke('lastbrowser:sidekick:getWikiStatus'),
@@ -288,5 +290,12 @@ contextBridge.exposeInMainWorld('lastbrowser', {
   cdp: {
     status: () => ipcRenderer.invoke('lastbrowser:cdp:status'),
     execute: (request: unknown) => ipcRenderer.invoke('lastbrowser:cdp:execute', request)
+  },
+  mcp: {
+    listServers: () => ipcRenderer.invoke('lastbrowser:mcp:listServers'),
+    saveServers: (config: unknown) => ipcRenderer.invoke('lastbrowser:mcp:saveServers', config),
+    listTools: () => ipcRenderer.invoke('lastbrowser:mcp:listTools'),
+    callTool: (request: { server: string; tool: string; arguments?: unknown }) =>
+      ipcRenderer.invoke('lastbrowser:mcp:callTool', request)
   }
 });

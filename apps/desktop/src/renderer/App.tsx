@@ -2516,6 +2516,7 @@ export function App(): JSX.Element {
               serviceStatus={status}
               sessionLoading={activeSessionLoading}
               setupModel={setupState.model}
+              botName={setupState.botName || 'Nova'}
               spaces={spaces}
               activeSpacePath={activeSpacePath}
               browserMode={browserMode}
@@ -2676,7 +2677,8 @@ function BrowserMain({
   onActivateTab,
   onAddSplitTab,
   onRemoveSplitTab,
-  onSetSplitLayout
+  onSetSplitLayout,
+  botName = 'Nova'
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -2738,6 +2740,7 @@ function BrowserMain({
   onAddSplitTab?: (tabId: string) => void;
   onRemoveSplitTab?: (tabId: string) => void;
   onSetSplitLayout?: (layout: 'columns' | 'rows' | 'grid') => void;
+  botName?: string;
 }): JSX.Element {
   const browserWebviewStyle = {
     width: '100%',
@@ -3382,9 +3385,9 @@ function BrowserMain({
               bookmarks={bookmarks}
               visits={visitedSites}
               onNavigate={onNavigate}
-              botName={setupState.botName || 'Nova'}
+              botName={botName}
               onAskAi={(prompt) => {
-                setCopilotOpen(true);
+                usePanelStore.getState().setCopilotOpen(true);
                 void onSendChat(prompt);
               }}
               onOpenCommandPalette={() => usePanelStore.getState().setCommandPaletteOpen(true)}

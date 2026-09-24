@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   getDashboardGreeting,
   formatDashboardTime,
@@ -71,5 +73,11 @@ describe('startpage atmospheric dashboard helpers', () => {
 
   it('maintains compatibility with default speed dial items', () => {
     expect(DEFAULT_SPEED_DIAL_ITEMS.length).toBe(8);
+  });
+
+  it('does not reference undefined setupState in BrowserMain', () => {
+    const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+    const browserMainSection = appTsx.slice(appTsx.indexOf('function BrowserMain('));
+    expect(browserMainSection).not.toContain('setupState.');
   });
 });

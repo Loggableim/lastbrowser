@@ -56,6 +56,7 @@ import { getActiveWebview } from '../grounding-anchors.js';
 import { WORKFLOW_TEMPLATES, formatWorkflowPrompt } from '../workflow-templates.js';
 import type { LastbrowserPanelId } from '../shell-state.js';
 import { usePinnedAppStore } from '../stores/usePinnedAppStore.js';
+import { useDesktopI18n } from '../i18n.js';
 
 export interface CommandItem {
   id: string;
@@ -74,13 +75,20 @@ function dispatchCliEvent(command: string) {
   }
 }
 
-export function buildSidekickCliCommands(setActivePanel: (p: LastbrowserPanelId) => void): CommandItem[] {
+export function buildSidekickCliCommands(
+  setActivePanel: (p: LastbrowserPanelId) => void,
+  t?: (key: any) => string
+): CommandItem[] {
+  const cliCategory = (t ? t('commands.category.cli') : 'Sidekick CLI') as any;
+  const fixDesc = t ? t('commands.fix.desc') : 'Systemzustand, beschädigte Caches und lokale Lockfiles automatisch reparieren';
+  const doctorDesc = t ? t('commands.doctor.desc') : 'Systemdiagnose, Umgebungsvariablen, Python-Engine und API-Konnektivität prüfen';
+
   return [
     {
       id: 'sidekick-cli-fix',
       title: '> Sidekick: fix',
-      description: 'Systemzustand, beschädigte Caches und lokale Lockfiles automatisch reparieren',
-      category: 'Sidekick CLI',
+      description: fixDesc,
+      category: cliCategory,
       icon: <Wrench size={16} />,
       keywords: ['fix', 'repair', 'reparatur', 'lockfile', 'cache', 'bereinigen', 'clean'],
       action: () => {
@@ -90,8 +98,8 @@ export function buildSidekickCliCommands(setActivePanel: (p: LastbrowserPanelId)
     {
       id: 'sidekick-cli-doctor',
       title: '> Sidekick: doctor',
-      description: 'Systemdiagnose, Umgebungsvariablen, Python-Engine und API-Konnektivität prüfen',
-      category: 'Sidekick CLI',
+      description: doctorDesc,
+      category: cliCategory,
       icon: <Activity size={16} />,
       keywords: ['doctor', 'diagnose', 'health', 'system', 'status', 'api', 'prüfen'],
       action: () => {
@@ -533,6 +541,7 @@ export function buildSidekickCliCommands(setActivePanel: (p: LastbrowserPanelId)
 }
 
 export function CommandPalette(): JSX.Element | null {
+  const { t } = useDesktopI18n();
   const { commandPaletteOpen, setCommandPaletteOpen, setActivePanel, toggleFindOpen, setDownloadsOpen, setHistoryOpen, setPermissionsOpen } =
     usePanelStore();
   const {
@@ -794,7 +803,7 @@ export function CommandPalette(): JSX.Element | null {
       },
 
       // --- Sidekick CLI Subcommands (Paket 1.2) ---
-      ...buildSidekickCliCommands(setActivePanel),
+      ...buildSidekickCliCommands(setActivePanel, t),
 
       // --- Agentic Workflow Templates (Phase 11.2) ---
       ...WORKFLOW_TEMPLATES.map((tmpl): CommandItem => ({
@@ -1074,7 +1083,20 @@ export function CommandPalette(): JSX.Element | null {
       })),
     ];
 
-    return cmds;
+    const categoryMap: Record<string, string> = {
+      'Nova AI': t('commands.category.nova'),
+      'Tabs': t('commands.category.tabs'),
+      'Navigation': t('commands.category.navigation'),
+      'System': t('commands.category.system'),
+      'Workflows': t('commands.category.workflows'),
+      'Apps': t('commands.category.apps'),
+      'Sidekick CLI': t('commands.category.cli')
+    };
+
+    return cmds.map((cmd) => ({
+      ...cmd,
+      category: (categoryMap[cmd.category] || cmd.category) as any
+    }));
   }, [
     activeTab,
     pinnedApps,
@@ -1090,24 +1112,25 @@ export function CommandPalette(): JSX.Element | null {
     sortTabsByDomain,
     toggleFindOpen,
     toggleTabMute,
-    toggleTabPinned
+    toggleTabPinned,
+    t
   ]);
 
   // Dynamic commands: Matching open tabs
   const tabCommands = useMemo<CommandItem[]>(() => {
-    return tabs.map((t) => ({
-      id: `tab-jump-${t.id}`,
-      title: t.title || 'Neuer Tab',
-      description: t.url,
-      category: 'Offene Tabs',
+    return tabs.map((tItem) => ({
+      id: `tab-jump-${tItem.id}`,
+      title: tItem.title || 'Neuer Tab',
+      description: tItem.url,
+      category: t('commands.category.openTabs') as any,
       icon: <ExternalLink size={16} />,
-      keywords: [t.title, t.url, 'switch tab', 'tab wechseln'],
+      keywords: [tItem.title, tItem.url, 'switch tab', 'tab wechseln'],
       action: () => {
-        setActiveTabId(t.id);
+        setActiveTabId(tItem.id);
         setActivePanel('browser');
       }
     }));
-  }, [tabs, setActiveTabId, setActivePanel]);
+  }, [tabs, setActiveTabId, setActivePanel, t]);
 
   // Combined and filtered items
   const filteredItems = useMemo(() => {
@@ -1204,20 +1227,20 @@ export function CommandPalette(): JSX.Element | null {
             type="text"
             className="command-palette-input"
             value={query}
-            placeholder="Befehl eingeben oder suchen... (z. B. > Doctor, Doppelte Tabs, Tab wechseln)"
+            placeholder={t('commands.placeholder')}
             onChange={(e) => {
               setQuery(e.target.value);
               setSelectedIndex(0);
             }}
             aria-autocomplete="list"
           />
-          <span className="command-palette-shortcut-badge">ESC zum Schließen</span>
+          <span className="command-palette-shortcut-badge">{`ESC ${t('common.close')}`}</span>
         </div>
 
         <div className="command-palette-list" ref={listRef} role="listbox">
           {filteredItems.length === 0 ? (
             <div className="command-palette-empty">
-              <p>Keine passenden Befehle oder Tabs gefunden.</p>
+              <p>{t('common.noData')}</p>
             </div>
           ) : (
             filteredItems.map((item, index) => {
@@ -1253,13 +1276,13 @@ export function CommandPalette(): JSX.Element | null {
 
         <div className="command-palette-footer">
           <span className="command-palette-footer-hint">
-            <kbd>↑</kbd> <kbd>↓</kbd> Navigieren
+            <kbd>↑</kbd> <kbd>↓</kbd> {t('common.view')}
           </span>
           <span className="command-palette-footer-hint">
-            <kbd>↵</kbd> Ausführen
+            <kbd>↵</kbd> {t('common.run')}
           </span>
           <span className="command-palette-footer-hint">
-            <kbd>ESC</kbd> Abbrechen
+            <kbd>ESC</kbd> {t('common.cancel')}
           </span>
         </div>
       </div>

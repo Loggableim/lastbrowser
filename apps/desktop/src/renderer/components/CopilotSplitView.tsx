@@ -38,6 +38,7 @@ import {
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
 import { brandAssets } from '../brand.js';
+import { useDesktopI18n } from '../i18n.js';
 
 export interface AvailableModelItem {
   id: string;
@@ -234,6 +235,7 @@ export function CopilotSplitView({
   activeSessionId = null,
   onSelectSession
 }: CopilotSplitViewProps): React.JSX.Element | null {
+  const { t } = useDesktopI18n();
   const [inputText, setInputText] = useState('');
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [workflowsMenuOpen, setWorkflowsMenuOpen] = useState(false);
@@ -709,11 +711,11 @@ export function CopilotSplitView({
             <button
               type="button"
               className="copilot-action-btn copilot-new-chat-btn"
-              title="Neuen Chat starten (+)"
+              title={t('sidebar.drawer.newChat')}
               onClick={onNewChat}
             >
               <Plus size={13} />
-              <span>Neu</span>
+              <span>{t('common.add')}</span>
             </button>
           )}
 
@@ -743,10 +745,10 @@ export function CopilotSplitView({
                         setHistoryMenuOpen(false);
                         onNewChat?.();
                       }}
-                      title="Neuen Chat starten"
+                      title={t('sidebar.drawer.newChat')}
                     >
                       <Plus size={11} />
-                      <span>Neu</span>
+                      <span>{t('common.add')}</span>
                     </button>
                   </div>
 
@@ -754,7 +756,7 @@ export function CopilotSplitView({
                     <Search size={11} />
                     <input
                       type="text"
-                      placeholder="Chats durchsuchen..."
+                      placeholder={t('chat.filterPlaceholder')}
                       value={historySearch}
                       onChange={(e) => setHistorySearch(e.target.value)}
                       className="history-search-input"
@@ -770,7 +772,7 @@ export function CopilotSplitView({
                   <div className="history-items-list">
                     {filteredSessions.length === 0 ? (
                       <div className="history-empty-search">
-                        <span>Keine Chats gefunden</span>
+                        <span>{t('chat.noSessions')}</span>
                       </div>
                     ) : (
                       filteredSessions.map((s) => {
@@ -808,7 +810,7 @@ export function CopilotSplitView({
             <button
               type="button"
               className="copilot-action-btn"
-              title="Minimieren"
+              title={t('common.hide')}
               onClick={onMinimize}
             >
               <Minus size={14} />
@@ -817,7 +819,7 @@ export function CopilotSplitView({
           <button
             type="button"
             className="copilot-action-btn close"
-            title="Schließen"
+            title={t('common.close')}
             onClick={onClose}
           >
             <X size={14} />
@@ -973,14 +975,14 @@ export function CopilotSplitView({
             className="copilot-input-field"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Ask about this page..."
+            placeholder={t('chat.composerPlaceholder')} /* Ask about this page... */
             disabled={busy}
           />
           {busy && onStopChat ? (
             <button
               type="button"
               className="copilot-send-btn stop"
-              title="Antwort stoppen"
+              title={t('chat.stop')}
               onClick={onStopChat}
             >
               <StopCircle size={15} />
@@ -989,10 +991,10 @@ export function CopilotSplitView({
             <button
               type="submit"
               className={`copilot-send-btn ${inputText.trim() ? 'active' : ''}`}
-              title="Senden (Enter)"
+              title={t('chat.send')}
               disabled={!inputText.trim()}
             >
-              <span>Senden</span>
+              <span>{t('chat.send')}</span>
               <Send size={13} />
             </button>
           )}

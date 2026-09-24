@@ -569,6 +569,9 @@ declare global {
         isDefaultBrowser: () => Promise<boolean>;
         setDefaultBrowser: () => Promise<boolean>;
       };
+      i18n?: {
+        setLocale: (locale: string) => Promise<boolean>;
+      };
       mcp: {
         listServers: () => Promise<Record<string, unknown>>;
         saveServers: (config: unknown) => Promise<Record<string, unknown>>;

@@ -110,4 +110,84 @@ describe('browser context menu', () => {
     linkTemplate.find((item) => item.label === 'Open link in new private tab')?.click?.({} as never, {} as never, {} as never);
     expect(openLinkInIncognitoTab).toHaveBeenCalledWith('https://example.com/login');
   });
+
+  it('renders localized context menus based on specified locale', () => {
+    // German (de)
+    const deTemplate = buildBrowserContextMenuTemplate({
+      linkURL: 'https://example.com/docs',
+      pageURL: 'https://example.com',
+      selectionText: '',
+      isEditable: false,
+      editFlags: {},
+      x: 10,
+      y: 20
+    }, {
+      canGoBack: true,
+      canGoForward: false,
+      openLinkInNewTab: vi.fn(),
+      copyText: vi.fn(),
+      locale: 'de'
+    });
+    expect(deTemplate.map((item) => item.label)).toContain('Link in neuem Tab öffnen');
+    expect(deTemplate.map((item) => item.label)).toContain('Link-Adresse kopieren');
+    expect(deTemplate.map((item) => item.label)).toContain('Zurück');
+    expect(deTemplate.map((item) => item.label)).toContain('Element untersuchen');
+
+    // Spanish (es)
+    const esTemplate = buildBrowserContextMenuTemplate({
+      linkURL: 'https://example.com/docs',
+      pageURL: 'https://example.com',
+      selectionText: '',
+      isEditable: false,
+      editFlags: {},
+      x: 10,
+      y: 20
+    }, {
+      canGoBack: true,
+      canGoForward: false,
+      openLinkInNewTab: vi.fn(),
+      copyText: vi.fn(),
+      locale: 'es'
+    });
+    expect(esTemplate.map((item) => item.label)).toContain('Abrir enlace en nueva pestaña');
+    expect(esTemplate.map((item) => item.label)).toContain('Copiar dirección del enlace');
+    expect(esTemplate.map((item) => item.label)).toContain('Atrás');
+    expect(esTemplate.map((item) => item.label)).toContain('Inspeccionar elemento');
+
+    // French (fr)
+    const frTemplate = buildBrowserContextMenuTemplate({
+      linkURL: 'https://example.com/docs',
+      pageURL: 'https://example.com',
+      selectionText: '',
+      isEditable: false,
+      editFlags: {}
+    }, {
+      canGoBack: true,
+      canGoForward: false,
+      openLinkInNewTab: vi.fn(),
+      copyText: vi.fn(),
+      locale: 'fr'
+    });
+    expect(frTemplate.map((item) => item.label)).toContain('Ouvrir le lien dans un nouvel onglet');
+    expect(frTemplate.map((item) => item.label)).toContain('Copier l’adresse du lien');
+    expect(frTemplate.map((item) => item.label)).toContain('Retour');
+
+    // Portuguese (pt-BR)
+    const ptTemplate = buildBrowserContextMenuTemplate({
+      linkURL: 'https://example.com/docs',
+      pageURL: 'https://example.com',
+      selectionText: '',
+      isEditable: false,
+      editFlags: {}
+    }, {
+      canGoBack: true,
+      canGoForward: false,
+      openLinkInNewTab: vi.fn(),
+      copyText: vi.fn(),
+      locale: 'pt-BR'
+    });
+    expect(ptTemplate.map((item) => item.label)).toContain('Abrir link em nova aba');
+    expect(ptTemplate.map((item) => item.label)).toContain('Copiar endereço do link');
+    expect(ptTemplate.map((item) => item.label)).toContain('Voltar');
+  });
 });

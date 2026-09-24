@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     isDefaultBrowser: () => ipcRenderer.invoke('lastbrowser:system:isDefaultBrowser'),
     setDefaultBrowser: () => ipcRenderer.invoke('lastbrowser:system:setDefaultBrowser')
   },
+  i18n: {
+    setLocale: (locale: string) => ipcRenderer.invoke('lastbrowser:i18n:setLocale', locale)
+  },
   browser: {
     onOpenTab: (callback: (url: string) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url);

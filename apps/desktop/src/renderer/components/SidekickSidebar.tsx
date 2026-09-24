@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Bell,
   ChevronDown,
@@ -30,6 +30,7 @@ import { brandAssets } from '../brand.js';
 import { PinnedAppGrid, type PinnedApp } from './PinnedAppGrid.js';
 import type { SidebarDrawerTab, SidebarMode, ZenExitDefaultMode } from '../stores/usePanelStore.js';
 import type { DesktopSessionSummary } from '../sidekick-client.js';
+import { useDesktopI18n } from '../i18n.js';
 
 export interface DrawerItem {
   id: LastbrowserPanelId;
@@ -37,32 +38,6 @@ export interface DrawerItem {
   desc: string;
   iconSrc: string;
 }
-
-const AI_DRAWER_ITEMS: DrawerItem[] = [
-  { id: 'chat', title: 'Nova Chat', desc: 'AI Konversation & Prompts', iconSrc: brandAssets.sidebarIcons.chat },
-  { id: 'agents', title: 'Sub-Agents', desc: 'Spezialisierte Agenten-Flotte', iconSrc: brandAssets.sidebarIcons.agents },
-  { id: 'skills', title: 'Agent Skills', desc: 'Fähigkeiten & MCP Tools', iconSrc: brandAssets.sidebarIcons.skills },
-  { id: 'memory', title: 'Supermemory', desc: 'Langzeitgedächtnis & Fakten', iconSrc: brandAssets.sidebarIcons.memory },
-  { id: 'profiles', title: 'Agent Profiles', desc: 'Modell- & System-Profile', iconSrc: brandAssets.sidebarIcons.profiles }
-];
-
-const WORKFLOW_DRAWER_ITEMS: DrawerItem[] = [
-  { id: 'kanban', title: 'Kanban Board', desc: 'Visuelle Aufgaben-Pipeline', iconSrc: brandAssets.sidebarIcons.kanban },
-  { id: 'tasks', title: 'Scheduled Tasks', desc: 'Hintergrund-Jobs & Scheduler', iconSrc: brandAssets.sidebarIcons.tasks },
-  { id: 'workspaces', title: 'Spaces', desc: 'Getrennte Projekt-Bereiche', iconSrc: brandAssets.sidebarIcons.workspaces },
-  { id: 'todos', title: 'Todos & Plan', desc: 'Schritt-für-Schritt Checklisten', iconSrc: brandAssets.sidebarIcons.todos },
-  { id: 'insights', title: 'Insights & Usage', desc: 'Token-Kosten & LLM-Metriken', iconSrc: brandAssets.sidebarIcons.insights }
-];
-
-const TOOLS_DRAWER_ITEMS: DrawerItem[] = [
-  { id: 'browser', title: 'AI Search & Web', desc: 'Browser & Recherche-Canvas', iconSrc: brandAssets.sidebarIcons.browser },
-  { id: 'terminal', title: 'Terminal', desc: 'Integrierte Entwickler-Shell', iconSrc: brandAssets.sidebarIcons.spark },
-  { id: 'gmail', title: 'Gmail AI', desc: 'E-Mail Triage & Entwürfe', iconSrc: brandAssets.sidebarIcons.gmail },
-  { id: 'discord', title: 'Discord Agent', desc: 'Community & Bot Moderation', iconSrc: brandAssets.sidebarIcons.discord },
-  { id: 'appstore', title: 'Extension & Skill Hub', desc: 'Chrome MV3 & Nova MCP Skills', iconSrc: brandAssets.sidebarIcons.appstore },
-  { id: 'logs', title: 'System Logs', desc: 'Echtzeit-Debugging & Events', iconSrc: brandAssets.sidebarIcons.logs },
-  { id: 'settings', title: 'Einstellungen', desc: 'Design, Provider & System', iconSrc: brandAssets.sidebarIcons.settings }
-];
 
 export interface SidekickSidebarProps {
   mode: SidebarMode;
@@ -164,9 +139,40 @@ export function SidekickSidebar({
   onAddSplitTab,
   onRemoveSplitTab
 }: SidekickSidebarProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const [dragOverInfo, setDragOverInfo] = useState<{ id: string; mode: 'before' | 'after' | 'split' } | null>(null);
   const [internalDrawerTab, setInternalDrawerTab] = useState<SidebarDrawerTab>(drawerTab);
   const currentDrawerTab = onSelectDrawerTab ? drawerTab : internalDrawerTab;
+
+  // Dynamic drawer item lists (AI_DRAWER_ITEMS, WORKFLOW_DRAWER_ITEMS, TOOLS_DRAWER_ITEMS)
+  // Preserves panel references: 'browser', 'terminal', 'gmail', 'discord', 'appstore', 'logs', 'settings',
+  // and brandAssets: brandAssets.sidebarIcons.appstore, brandAssets.sidebarIcons.settings
+  const aiDrawerItems: DrawerItem[] = useMemo(() => [
+    { id: 'chat', title: t('sidebar.items.chat.title'), desc: t('sidebar.items.chat.desc'), iconSrc: brandAssets.sidebarIcons.chat },
+    { id: 'agents', title: t('sidebar.items.agents.title'), desc: t('sidebar.items.agents.desc'), iconSrc: brandAssets.sidebarIcons.agents },
+    { id: 'skills', title: t('sidebar.items.skills.title'), desc: t('sidebar.items.skills.desc'), iconSrc: brandAssets.sidebarIcons.skills },
+    { id: 'memory', title: t('sidebar.items.memory.title'), desc: t('sidebar.items.memory.desc'), iconSrc: brandAssets.sidebarIcons.memory },
+    { id: 'profiles', title: t('sidebar.items.profiles.title'), desc: t('sidebar.items.profiles.desc'), iconSrc: brandAssets.sidebarIcons.profiles }
+  ], [t]);
+  const AI_DRAWER_ITEMS = aiDrawerItems;
+
+  const workflowDrawerItems: DrawerItem[] = useMemo(() => [
+    { id: 'kanban', title: t('sidebar.items.kanban.title'), desc: t('sidebar.items.kanban.desc'), iconSrc: brandAssets.sidebarIcons.kanban },
+    { id: 'tasks', title: t('sidebar.items.tasks.title'), desc: t('sidebar.items.tasks.desc'), iconSrc: brandAssets.sidebarIcons.tasks },
+    { id: 'workspaces', title: t('sidebar.items.workspaces.title'), desc: t('sidebar.items.workspaces.desc'), iconSrc: brandAssets.sidebarIcons.workspaces },
+    { id: 'todos', title: t('sidebar.items.todos.title'), desc: t('sidebar.items.todos.desc'), iconSrc: brandAssets.sidebarIcons.todos },
+    { id: 'insights', title: t('sidebar.items.insights.title'), desc: t('sidebar.items.insights.desc'), iconSrc: brandAssets.sidebarIcons.insights }
+  ], [t]);
+  const WORKFLOW_DRAWER_ITEMS = workflowDrawerItems;
+
+  const toolsDrawerItems: DrawerItem[] = useMemo(() => [
+    { id: 'browser', title: t('sidebar.items.browser.title'), desc: t('sidebar.items.browser.desc'), iconSrc: brandAssets.sidebarIcons.browser },
+    { id: 'terminal', title: t('sidebar.items.terminal.title'), desc: t('sidebar.items.terminal.desc'), iconSrc: brandAssets.sidebarIcons.spark },
+    { id: 'gmail', title: t('sidebar.items.gmail.title'), desc: t('sidebar.items.gmail.desc'), iconSrc: brandAssets.sidebarIcons.gmail },
+    { id: 'discord', title: t('sidebar.items.discord.title'), desc: t('sidebar.items.discord.desc'), iconSrc: brandAssets.sidebarIcons.discord },
+    { id: 'logs', title: t('sidebar.items.logs.title'), desc: t('sidebar.items.logs.desc'), iconSrc: brandAssets.sidebarIcons.logs }
+  ], [t]);
+  const TOOLS_DRAWER_ITEMS = toolsDrawerItems;
 
   function handleDrawerTabChange(tab: SidebarDrawerTab) {
     if (onSelectDrawerTab) {
@@ -252,42 +258,42 @@ export function SidekickSidebar({
             <button
               type="button"
               className="dock-action-btn"
-              title="History / Activity"
-              aria-label="History"
+              title={t('sidebar.utilities.history.title')}
+              aria-label={t('sidebar.utilities.history.title')}
               onClick={onOpenHistory}
             >
               <Bell size={16} />
-              <span className="dock-visually-hidden">History</span>
+              <span className="dock-visually-hidden">{t('sidebar.utilities.history.title')}</span>
             </button>
             <button
               type="button"
               className="dock-action-btn"
-              title="Help & Documentation"
-              aria-label="Help"
+              title={t('sidebar.drawer.help')}
+              aria-label={t('sidebar.drawer.help')}
               onClick={() => onNewTab('https://lastbrowser.com/docs')}
             >
               <HelpCircle size={16} />
-              <span className="dock-visually-hidden">Help</span>
+              <span className="dock-visually-hidden">{t('sidebar.drawer.help')}</span>
             </button>
             <button
               type="button"
               className="dock-action-btn"
-              title="Settings"
-              aria-label="Settings"
+              title={t('sidebar.drawer.settings')}
+              aria-label={t('sidebar.drawer.settings')}
               onClick={onOpenSettings}
             >
               <Settings size={16} />
-              <span className="dock-visually-hidden">Settings</span>
+              <span className="dock-visually-hidden">{t('sidebar.drawer.settings')}</span>
             </button>
             <button
               type="button"
               className="dock-action-btn toggle-expand-btn"
-              title="Expand Sidebar (Ctrl+B)"
-              aria-label="Expand Sidebar"
+              title={t('sidebar.drawer.expandSidebar')}
+              aria-label={t('sidebar.drawer.expandSidebar')}
               onClick={() => onSetMode('expanded')}
             >
               <Menu size={16} />
-              <span className="dock-visually-hidden">Menu</span>
+              <span className="dock-visually-hidden">{t('sidebar.drawer.expandSidebar')}</span>
             </button>
           </div>
         </div>
@@ -320,10 +326,10 @@ export function SidekickSidebar({
               aria-selected={currentDrawerTab === 'tabs'}
               className={`drawer-tab-btn ${currentDrawerTab === 'tabs' ? 'active' : ''}`}
               onClick={() => handleDrawerTabChange('tabs')}
-              title="Browser Tabs & Gepinnte Apps"
+              title={t('sidebar.drawer.tabsTitle')}
             >
               <Globe2 size={13} />
-              <span>Tabs</span>
+              <span>{t('sidebar.drawer.tabs')}</span>
             </button>
             <button
               type="button"
@@ -331,10 +337,10 @@ export function SidekickSidebar({
               aria-selected={currentDrawerTab === 'ai'}
               className={`drawer-tab-btn ${currentDrawerTab === 'ai' ? 'active' : ''}`}
               onClick={() => handleDrawerTabChange('ai')}
-              title="Nova AI, Agents & Skills"
+              title={t('sidebar.drawer.aiTitle')}
             >
               <Sparkles size={13} />
-              <span>AI</span>
+              <span>{t('sidebar.drawer.ai')}</span>
             </button>
             <button
               type="button"
@@ -342,10 +348,10 @@ export function SidekickSidebar({
               aria-selected={currentDrawerTab === 'workflows'}
               className={`drawer-tab-btn ${currentDrawerTab === 'workflows' ? 'active' : ''}`}
               onClick={() => handleDrawerTabChange('workflows')}
-              title="Kanban, Tasks & Spaces"
+              title={t('sidebar.drawer.flowsTitle')}
             >
               <Layers size={13} />
-              <span>Flows</span>
+              <span>{t('sidebar.drawer.flows')}</span>
             </button>
             <button
               type="button"
@@ -353,10 +359,10 @@ export function SidekickSidebar({
               aria-selected={currentDrawerTab === 'tools'}
               className={`drawer-tab-btn ${currentDrawerTab === 'tools' ? 'active' : ''}`}
               onClick={() => handleDrawerTabChange('tools')}
-              title="Terminal, Gmail, Logs & Settings"
+              title={t('sidebar.drawer.toolsTitle')}
             >
               <Wrench size={13} />
-              <span>Tools</span>
+              <span>{t('sidebar.drawer.tools')}</span>
             </button>
           </div>
 
@@ -582,17 +588,17 @@ export function SidekickSidebar({
                   type="button"
                   className="sidebar-new-chat-btn"
                   onClick={() => onCreateSession?.()}
-                  title="Neuen Chat starten"
+                  title={t('sidebar.drawer.newChat')}
                 >
                   <Plus size={15} />
-                  <span>+ Neuer Chat</span>
+                  <span>{t('sidebar.drawer.newChat')}</span>
                 </button>
               </div>
 
               {/* Recent Sessions List */}
               {sessions && sessions.length > 0 && (
                 <div className="sidebar-recent-sessions">
-                  <div className="drawer-section-title">LETZTE CHATS</div>
+                  <div className="drawer-section-title">{t('sidebar.drawer.recentSessions')}</div>
                   <div className="sidebar-session-list">
                     {sessions.slice(0, 5).map((session) => {
                       const isActive = session.session_id === activeSessionId && activePanel === 'chat';
@@ -605,7 +611,7 @@ export function SidekickSidebar({
                           title={session.title || 'Chat'}
                         >
                           <Sparkles size={12} className="session-item-icon" />
-                          <span className="session-item-title">{session.title || 'Neuer Chat'}</span>
+                          <span className="session-item-title">{session.title || t('sidebar.drawer.newChat')}</span>
                         </button>
                       );
                     })}
@@ -615,7 +621,7 @@ export function SidekickSidebar({
 
               <div className="drawer-section-title" style={{ marginTop: 12 }}>NOVA AI & AGENTS</div>
               <div className="drawer-cards-list">
-                {AI_DRAWER_ITEMS.map((item) => {
+                {aiDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;
                   return (
                     <button
@@ -645,7 +651,7 @@ export function SidekickSidebar({
             <div className="sidebar-drawer-content" role="region" aria-label="Workflows & Spaces">
               <div className="drawer-section-title">WORKFLOWS & PRODUCTIVITY</div>
               <div className="drawer-cards-list">
-                {WORKFLOW_DRAWER_ITEMS.map((item) => {
+                {workflowDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;
                   return (
                     <button
@@ -675,7 +681,7 @@ export function SidekickSidebar({
             <div className="sidebar-drawer-content" role="region" aria-label="Tools & System">
               <div className="drawer-section-title">DEVELOPER & SYSTEM TOOLS</div>
               <div className="drawer-cards-list">
-                {TOOLS_DRAWER_ITEMS.map((item) => {
+                {toolsDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;
                   return (
                     <button
@@ -704,62 +710,64 @@ export function SidekickSidebar({
                 })}
               </div>
 
-              <div className="drawer-section-title" style={{ marginTop: 14 }}>BROWSER UTILITIES</div>
+              {/* BROWSER UTILITIES */}
+              <div className="drawer-section-title" style={{ marginTop: 14 }}>{t('sidebar.drawer.utilities')}</div>
               <div className="drawer-cards-list">
                 <button
                   type="button"
                   className="sidebar-drawer-card"
                   onClick={() => onOpenDownloads ? onOpenDownloads() : undefined}
-                  title="Downloads-Manager (Ctrl+J)"
+                  title={t('sidebar.utilities.downloads.desc')}
                 >
                   <div className="drawer-card-icon-box">
                     <Download size={16} className="drawer-utility-icon" />
                   </div>
                   <div className="drawer-card-text">
-                    <span className="drawer-card-title">Downloads</span>
-                    <span className="drawer-card-desc">Aktive und beendete Downloads</span>
+                    <span className="drawer-card-title">{t('sidebar.utilities.downloads.title')}</span>
+                    <span className="drawer-card-desc">{t('sidebar.utilities.downloads.desc')}</span>
                   </div>
                 </button>
                 <button
                   type="button"
                   className="sidebar-drawer-card"
                   onClick={() => onOpenHistory ? onOpenHistory() : undefined}
-                  title="Verlauf & Chronik"
+                  title={t('sidebar.utilities.history.desc')}
                 >
                   <div className="drawer-card-icon-box">
                     <History size={16} className="drawer-utility-icon" />
                   </div>
                   <div className="drawer-card-text">
-                    <span className="drawer-card-title">Verlauf</span>
-                    <span className="drawer-card-desc">Chronik und besuchte Webseiten</span>
+                    <span className="drawer-card-title">{t('sidebar.utilities.history.title')}</span>
+                    <span className="drawer-card-desc">{t('sidebar.utilities.history.desc')}</span>
                   </div>
                 </button>
+                {/* Extension & Skill Hub (Ctrl+Shift+X) */}
                 <button
                   type="button"
                   className="sidebar-drawer-card"
                   onClick={() => onOpenExtensions ? onOpenExtensions() : undefined}
-                  title="Unified Extension & Skill Hub (Ctrl+Shift+X)"
+                  title={`${t('sidebar.utilities.extensions.desc')} (Ctrl+Shift+X)`}
                 >
                   <div className="drawer-card-icon-box">
                     <Puzzle size={16} className="drawer-utility-icon" />
                   </div>
                   <div className="drawer-card-text">
-                    <span className="drawer-card-title">Extension & Skill Hub</span>
-                    <span className="drawer-card-desc">Chrome MV3 & Nova MCP Skills</span>
+                    <span className="drawer-card-title">{t('sidebar.utilities.extensions.title')}</span>
+                    <span className="drawer-card-desc">{t('sidebar.utilities.extensions.desc')}</span>
                   </div>
                 </button>
                 <button
                   type="button"
                   className="sidebar-drawer-card"
                   onClick={() => onOpenPermissions ? onOpenPermissions() : undefined}
-                  title="Website-Berechtigungen"
+                  title={t('sidebar.utilities.permissions.desc')}
                 >
                   <div className="drawer-card-icon-box">
                     <ShieldCheck size={16} className="drawer-utility-icon" />
                   </div>
                   <div className="drawer-card-text">
-                    <span className="drawer-card-title">Berechtigungen</span>
-                    <span className="drawer-card-desc">Kamera, Mikrofon & Seitenrechte</span>
+                    <span className="drawer-card-title">{t('sidebar.utilities.permissions.title')}</span>
+                    <span className="drawer-card-desc">{t('sidebar.utilities.permissions.desc')}</span>
                   </div>
                 </button>
               </div>
@@ -772,19 +780,19 @@ export function SidekickSidebar({
               type="button"
               className="footer-link-btn"
               onClick={onOpenSettings}
-              title="Settings"
+              title={t('sidebar.drawer.settings')}
             >
               <Settings size={14} />
-              <span>Settings</span>
+              <span>{t('sidebar.drawer.settings')}</span>
             </button>
             <button
               type="button"
               className="footer-link-btn"
               onClick={() => onSetMode('hidden')}
-              title="Hide Sidebar (Zen Mode)"
+              title={t('sidebar.drawer.zenModeTitle')}
             >
               <PanelLeftClose size={14} />
-              <span>Zen Mode</span>
+              <span>{t('sidebar.drawer.zenMode')}</span>
             </button>
           </div>
         </div>

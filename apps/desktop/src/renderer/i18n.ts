@@ -112,6 +112,7 @@ export function DesktopI18nProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     saveDesktopLocalePreference(locale);
     document.documentElement.lang = locale;
+    void window.lastbrowser?.i18n?.setLocale?.(locale);
   }, [locale]);
 
   const value = useMemo<I18nContextValue>(() => ({

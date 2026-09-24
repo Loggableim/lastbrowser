@@ -47,6 +47,7 @@ import {
   BOT_NAME_PRESETS,
   type PersonalityProfile
 } from '../provider-presentation.js';
+import { useDesktopI18n } from '../i18n.js';
 import {
   OnboardingStatus,
   canSubmitCloudSetup,
@@ -110,6 +111,7 @@ export function FirstRunSetupPane({
   onSubmit,
   onDismiss
 }: FirstRunSetupPaneProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const providers = cloudProviderOptions(onboardingStatus);
 
   // Determine initial provider: prefer google-gemini-cli if available, else codex, else first
@@ -213,7 +215,7 @@ export function FirstRunSetupPane({
   async function startProviderLogin(): Promise<void> {
     if (!oauthProviderId) return;
     const providerLabel = activeProviderOption?.label || 'Provider';
-    setOAuthState({ status: 'starting', message: `Starte Anmeldung für ${providerLabel}...` });
+    setOAuthState({ status: 'starting', message: t('firstRun.startingLogin', { provider: providerLabel }) });
     try {
       const response = await window.lastbrowser.sidekick.startOAuth({ provider: oauthProviderId });
       if (response.error) throw new Error(response.error);
@@ -223,7 +225,7 @@ export function FirstRunSetupPane({
         setOAuthState({
           status: 'success',
           flowId,
-          message: `${providerLabel} Anmeldedaten gefunden und verbunden.`
+          message: t('firstRun.oauthSuccess', { provider: providerLabel })
         });
         await onRefreshOnboarding();
         await activateProviderAfterLogin();
@@ -241,8 +243,8 @@ export function FirstRunSetupPane({
         userCode,
         pollIntervalSeconds: Number(response.poll_interval_seconds || 3),
         message: userCode
-          ? `Öffne ${providerLabel}, gib den Bestätigungscode ein und kehre zu Lastbrowser zurück.`
-          : `Melde dich im geöffneten Connect-Fenster mit ${providerLabel} an.`
+          ? t('firstRun.oauthPromptCode', { provider: providerLabel })
+          : t('firstRun.oauthPromptWindow', { provider: providerLabel })
       });
 
       // Prefer in-app connect window over opening external system browser!
@@ -362,7 +364,7 @@ export function FirstRunSetupPane({
       }
       saveVisitedSites(window.localStorage, updated);
     }
-    setImportSuccessMsg(`Daten aus ${browser?.name || 'Browser'} erfolgreich übernommen!`);
+    setImportSuccessMsg(t('firstRun.importSuccess', { browser: browser?.name || 'Browser' }));
   };
 
   const togglePinnedApp = (appId: string) => {
@@ -427,11 +429,11 @@ export function FirstRunSetupPane({
           <button
             type="button"
             className="first-run-skip-btn"
-            aria-label="Ohne KI browsen"
-            title="Assistent überspringen — du kannst die KI jederzeit in den Einstellungen einrichten"
+            aria-label={t('firstRun.skipWithoutAi')}
+            title={t('firstRun.skipWithoutAiHint')}
             onClick={onDismiss}
           >
-            <span>Erstmal ohne KI browsen</span>
+            <span>{t('firstRun.skipWithoutAi')}</span>
             <X size={15} />
           </button>
         </header>
@@ -444,13 +446,10 @@ export function FirstRunSetupPane({
           </div>
           <div className="hero-content">
             <span className="hero-eyebrow">
-              <Sparkles size={14} /> AI-Native Browsing Experience
+              <Sparkles size={14} /> {t('firstRun.heroEyebrow')}
             </span>
-            <h1>Gestalte deinen KI-Begleiter für Lastbrowser</h1>
-            <p>
-              Lastbrowser integriert KI direkt in Tabs, Recherche und Workspaces.
-              Passe Namen und Persönlichkeit an und wähle die passende KI-Engine:
-            </p>
+            <h1>{t('firstRun.heroTitle')}</h1>
+            <p>{t('firstRun.heroSubtitle')}</p>
           </div>
         </div>
 
@@ -461,15 +460,15 @@ export function FirstRunSetupPane({
             <div className="setup-section-header">
               <span className="setup-step-number">1</span>
               <div>
-                <h2>Identität & Persönlichkeit</h2>
-                <p>Wie soll dein Assistent heißen und wie soll er sich im Browser verhalten?</p>
+                <h2>{t('firstRun.section1Title')}</h2>
+                <p>{t('firstRun.section1Desc')}</p>
               </div>
             </div>
 
             {/* Assistant Name Selection */}
             <div className="assistant-name-config">
               <label htmlFor="assistant-name-input" className="assistant-name-label">
-                Name des KI-Begleiters:
+                {t('firstRun.botNameLabel')}
               </label>
               <div className="assistant-name-input-row">
                 <input
@@ -477,7 +476,7 @@ export function FirstRunSetupPane({
                   type="text"
                   value={botName}
                   onChange={(e) => setBotName(e.target.value)}
-                  placeholder="z. B. Nova, Jarvis, Aura..."
+                  placeholder={t('firstRun.botNamePlaceholder')}
                   maxLength={32}
                   className="assistant-name-input"
                 />
@@ -555,8 +554,8 @@ export function FirstRunSetupPane({
             <div className="setup-section-header">
               <span className="setup-step-number">2</span>
               <div>
-                <h2>KI-Engine & Modell für {botName.trim() || 'deinen Begleiter'} wählen</h2>
-                <p>Wähle den Anbieter, der am besten zu deinen Gewohnheiten und Datenschutzanforderungen passt:</p>
+                <h2>{t('firstRun.section2Title', { botName: botName.trim() || 'Nova' })}</h2>
+                <p>{t('firstRun.section2Desc')}</p>
               </div>
             </div>
 
@@ -568,7 +567,7 @@ export function FirstRunSetupPane({
                 onClick={() => setActiveTab('featured')}
               >
                 <Sparkles size={15} />
-                <span>Haupt-Optionen (Empfohlen)</span>
+                <span>{t('firstRun.tabFeatured')}</span>
               </button>
               <button
                 type="button"
@@ -576,7 +575,7 @@ export function FirstRunSetupPane({
                 onClick={() => setActiveTab('custom')}
               >
                 <Key size={15} />
-                <span>Eigener API-Schlüssel (OpenRouter, DeepSeek, Claude)</span>
+                <span>{t('firstRun.tabCustomKey')}</span>
               </button>
             </div>
           </div>
@@ -640,11 +639,8 @@ export function FirstRunSetupPane({
             /* ── CUSTOM CLOUD API KEY SELECTION ── */
             <div className="custom-key-section">
               <div className="custom-key-header">
-                <h3>Cloud-Modelle mit eigenem API-Schlüssel</h3>
-                <p>
-                  Ideal für Entwickler und Power-User. Gib einfach deinen vorhandenen API-Key ein.
-                  Besonders empfohlen: <strong>OpenRouter</strong> (ein Key für hunderte Modelle) oder <strong>DeepSeek</strong> (unschlagbar günstig & klug).
-                </p>
+                <h3>{t('firstRun.customKeyHeader')}</h3>
+                <p>{t('firstRun.customKeyDesc')}</p>
               </div>
 
               <div className="provider-chips-grid">
@@ -806,7 +802,7 @@ export function FirstRunSetupPane({
 
             {/* Model picker within chosen provider */}
             <div className="model-selection-area">
-              <label className="input-label">Bevorzugtes Modell für Nova AI:</label>
+              <label className="input-label">{t('firstRun.preferredModelLabel')}</label>
               <div className="models-pills-row">
                 {models.map((m) => {
                   const note = modelNote(m.id);
@@ -832,8 +828,8 @@ export function FirstRunSetupPane({
             <div className="setup-section-header">
               <span className="setup-step-number">3</span>
               <div>
-                <h2>Daten & Lesezeichen aus Fremdbrowsern importieren</h2>
-                <p>Übertrage deine gewohnten Lesezeichen, Favoriten und Seiten direkt in Lastbrowser:</p>
+                <h2>{t('firstRun.section3Title')}</h2>
+                <p>{t('firstRun.section3Desc')}</p>
               </div>
             </div>
 
@@ -870,7 +866,7 @@ export function FirstRunSetupPane({
                     checked={importBookmarksChecked}
                     onChange={(e) => setImportBookmarksChecked(e.target.checked)}
                   />
-                  <span>Lesezeichen & Favoriten</span>
+                  <span>{t('firstRun.importBookmarks')}</span>
                 </label>
                 <label className="import-check-label">
                   <input
@@ -878,7 +874,7 @@ export function FirstRunSetupPane({
                     checked={importHistoryChecked}
                     onChange={(e) => setImportHistoryChecked(e.target.checked)}
                   />
-                  <span>Verlauf & meistbesuchte Seiten</span>
+                  <span>{t('firstRun.importHistory')}</span>
                 </label>
                 <label className="import-check-label">
                   <input
@@ -886,7 +882,7 @@ export function FirstRunSetupPane({
                     checked={importSearchChecked}
                     onChange={(e) => setImportSearchChecked(e.target.checked)}
                   />
-                  <span>Suchmaschinen & Shortcuts</span>
+                  <span>{t('firstRun.importSearch')}</span>
                 </label>
               </div>
 
@@ -902,10 +898,10 @@ export function FirstRunSetupPane({
                   type="button"
                   className="import-file-btn"
                   onClick={() => fileInputRef.current?.click()}
-                  title="HTML- oder JSON-Lesezeichendatei auswählen"
+                  title={t('firstRun.selectFile')}
                 >
                   <FileUp size={16} />
-                  <span>Lesezeichen-Datei (.html/.json) auswählen</span>
+                  <span>{t('firstRun.selectFile')}</span>
                 </button>
                 <button
                   type="button"
@@ -913,7 +909,7 @@ export function FirstRunSetupPane({
                   onClick={handleQuickImport}
                 >
                   <Download size={15} />
-                  <span>Jetzt aus {BROWSER_CHOICES.find((b) => b.id === selectedBrowser)?.name} übernehmen</span>
+                  <span>{t('firstRun.importNow', { browser: BROWSER_CHOICES.find((b) => b.id === selectedBrowser)?.name || 'Browser' })}</span>
                 </button>
               </div>
 
@@ -931,8 +927,8 @@ export function FirstRunSetupPane({
             <div className="setup-section-header">
               <span className="setup-step-number">4</span>
               <div>
-                <h2>Pinned Apps für dein Slim Dock wählen</h2>
-                <p>Wähle deine bevorzugten Web-Apps für blitzschnellen 1-Klick-Zugriff in der linken Leiste:</p>
+                <h2>{t('firstRun.section4Title')}</h2>
+                <p>{t('firstRun.section4Desc')}</p>
               </div>
             </div>
 
@@ -983,8 +979,8 @@ export function FirstRunSetupPane({
                   <Monitor size={24} className="default-browser-icon" />
                 </div>
                 <div>
-                  <strong>{isDefaultBrowser ? 'Lastbrowser ist bereits dein Standard-Browser ✓' : 'Als Standard-Webbrowser festlegen'}</strong>
-                  <p>Genieße KI-Begleitung, integrierten Adblock und blitzschnelle Tab-Synthese bei jedem Klick im System.</p>
+                  <strong>{isDefaultBrowser ? t('firstRun.defaultBrowserCardTitleActive') : t('firstRun.defaultBrowserCardTitle')}</strong>
+                  <p>{t('firstRun.defaultBrowserCardDesc')}</p>
                 </div>
               </div>
 
@@ -992,7 +988,7 @@ export function FirstRunSetupPane({
                 {isDefaultBrowser || defaultBrowserDone ? (
                   <span className="default-browser-registered-badge">
                     <CheckCircle2 size={16} />
-                    <span>Als Standard-Browser registriert</span>
+                    <span>{t('firstRun.defaultBrowserRegistered')}</span>
                   </span>
                 ) : (
                   <button
@@ -1002,7 +998,7 @@ export function FirstRunSetupPane({
                     disabled={defaultBrowserLoading}
                   >
                     {defaultBrowserLoading ? <Loader2 size={15} className="spin" /> : <Globe size={15} />}
-                    <span>Jetzt als Standard festlegen</span>
+                    <span>{t('firstRun.defaultBrowserSetBtn')}</span>
                   </button>
                 )}
               </div>
@@ -1016,7 +1012,7 @@ export function FirstRunSetupPane({
             <div className="footer-left">
               <span className={`runtime-status-indicator ${status?.sidekick === 'ready' ? 'ready' : 'starting'}`}>
                 <span className="dot" />
-                <span>Nova AI Runtime: {status?.sidekick === 'ready' ? 'Bereit' : 'Startet...'}</span>
+                <span>{status?.sidekick === 'ready' ? t('firstRun.runtimeReady') : t('firstRun.runtimeStarting')}</span>
               </span>
             </div>
 
@@ -1026,7 +1022,7 @@ export function FirstRunSetupPane({
                 className="secondary-btn"
                 onClick={onDismiss}
               >
-                Später entscheiden
+                {t('firstRun.decideLater')}
               </button>
               <button
                 type="submit"
@@ -1036,12 +1032,12 @@ export function FirstRunSetupPane({
                 {saving || !canSubmitForm ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
                 <span>
                   {saving
-                    ? 'Konfiguriere...'
+                    ? t('firstRun.configuring')
                     : canSubmitForm
-                    ? `Lastbrowser mit ${botName.trim() || 'Nova'} starten`
+                    ? t('firstRun.launchWithBot', { botName: botName.trim() || 'Nova' })
                     : oauthNeedsLogin
-                    ? 'Bitte erst oben anmelden'
-                    : 'Runtime wird vorbereitet'}
+                    ? t('firstRun.loginFirst')
+                    : t('firstRun.runtimePreparing')}
                 </span>
                 {canSubmitForm && !saving && <ArrowRight size={15} />}
               </button>

@@ -204,6 +204,7 @@ const trustedOriginsFs = { existsSync, readFileSync, writeFileSync };
 const permissions = createPermissionController(loadTrustedOrigins(trustedOriginsPath, trustedOriginsFs));
 permissions.onTrustedChange((origins) => saveTrustedOrigins(trustedOriginsPath, origins, trustedOriginsFs));
 let currentAssistantName = 'Nova';
+let currentLocale = 'en';
 const activeSessions = new Set<Session>();
 const extensionManager = new ExtensionManager(app.getPath('userData'), () => Array.from(activeSessions));
 
@@ -291,6 +292,12 @@ function registerIpc(): void {
       void shell.openExternal('ms-settings:defaultapps');
     }
     return httpOk && httpsOk;
+  });
+  ipcMain.handle('lastbrowser:i18n:setLocale', (_event, locale: unknown) => {
+    if (typeof locale === 'string' && locale.trim()) {
+      currentLocale = locale.trim();
+    }
+    return true;
   });
   ipcMain.handle('lastbrowser:browser:clearData', async (_event, options?: { cache?: boolean; cookies?: boolean; storage?: boolean }) => {
     const opts = { cache: true, cookies: true, storage: true, ...options };
@@ -849,7 +856,8 @@ app.whenReady().then(() => {
     clipboard,
     shell,
     getWindow: () => mainWindow,
-    getAssistantName: () => currentAssistantName
+    getAssistantName: () => currentAssistantName,
+    getLocale: () => currentLocale
   });
   registerBrowserShortcuts({
     app,

@@ -2760,11 +2760,6 @@ function BrowserMain({
   // has been laid out — that second mount is the one that sticks.
   const [webviewReady, setWebviewReady] = useState(false);
   const [webviewMountKey, setWebviewMountKey] = useState(0);
-  const [netflixDismissed, setNetflixDismissed] = useState(false);
-  const isNetflix = Boolean(activeTab.url && /netflix\.com/i.test(activeTab.url));
-  const isDisney = Boolean(activeTab.url && /disneyplus\.com/i.test(activeTab.url));
-  const isStreamingDrmSite = isNetflix || isDisney;
-  const streamingServiceName = isNetflix ? 'Netflix' : 'Disney+';
   const splitWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
   const allWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
 
@@ -3412,33 +3407,6 @@ function BrowserMain({
             <div className="split-dropzone-banner">
               <Columns2 size={24} />
               <span>Hier ablegen für Splitscreen-Ansicht</span>
-            </div>
-          </div>
-        )}
-        {isStreamingDrmSite && !netflixDismissed && (
-          <div className="netflix-drm-notice-banner">
-            <div className="netflix-drm-notice-content">
-              <span className="netflix-drm-icon">🎬</span>
-              <div className="netflix-drm-text">
-                <strong>{streamingServiceName} DRM-Hinweis:</strong> Streaming-Dienste erfordern für geschützte Streams Google VMP-Zertifizierung. Bei Wiedergabeproblemen oder Fehlern (z. B. NSES-UHX) kannst du den Stream mit 1 Klick in deinem Systembrowser (Chrome/Edge) fortsetzen.
-              </div>
-            </div>
-            <div className="netflix-drm-actions">
-              <button
-                type="button"
-                className="netflix-open-external-btn"
-                onClick={() => void window.lastbrowser?.shell?.openExternal?.(activeTab.url)}
-              >
-                In Systembrowser abspielen
-              </button>
-              <button
-                type="button"
-                className="netflix-dismiss-btn"
-                onClick={() => setNetflixDismissed(true)}
-                title="Hinweis schließen"
-              >
-                ✕
-              </button>
             </div>
           </div>
         )}

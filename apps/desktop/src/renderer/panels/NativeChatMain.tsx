@@ -121,12 +121,12 @@ export function NativeChatMain({
           .filter((group) => group.models.length > 0);
 
         const geminiModels = [
-          { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (Standard • Empfohlen)' },
-          { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+          { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Standard • Empfohlen)' },
           { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
           { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-          { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
-          { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
+          { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+          { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+          { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' }
         ];
 
         const accounts = useGeminiAccountStore.getState().accounts;
@@ -152,12 +152,12 @@ export function NativeChatMain({
         setModelCatalog([{
           provider: geminiGroupLabel,
           models: [
-            { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (Standard • Empfohlen)' },
-            { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+            { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Standard • Empfohlen)' },
             { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
             { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-            { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
-            { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
+            { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+            { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+            { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' }
           ]
         }]);
       }

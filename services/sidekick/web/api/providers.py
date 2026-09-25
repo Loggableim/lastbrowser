@@ -1534,6 +1534,11 @@ def set_provider_key(provider_id: str, api_key: str | None) -> dict[str, Any]:
     env_path = _get_sidekick_home() / ".env"
     try:
         _write_env_file(env_path, {env_var: api_key})
+        import os
+        if api_key:
+            os.environ[env_var] = api_key
+        else:
+            os.environ.pop(env_var, None)
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
     except Exception as exc:

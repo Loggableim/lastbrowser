@@ -15,13 +15,16 @@ import {
   Scale,
   Search,
   Send,
+  Settings,
   ShieldAlert,
   Smile,
   Sparkles,
   StopCircle,
   Table,
+  Target,
   ThumbsDown,
   ThumbsUp,
+  Users,
   X,
   Zap
 } from 'lucide-react';
@@ -29,6 +32,8 @@ import type { DesktopChatMessage } from '../bridge.js';
 import type { DesktopSessionSummary } from '../sidekick-client.js';
 import { RichTextRenderer } from '../NativeRichText.js';
 import { AiFeedbackModal } from './AiFeedbackModal.js';
+import { TeamworkProcessCard, type TeamworkMetadata } from './TeamworkProcessCard.js';
+import { SmartTrackProcessCard } from './SmartTrackProcessCard.js';
 import type { QuickActionChip } from '../quick-actions.js';
 import {
   WORKFLOW_TEMPLATES,
@@ -44,7 +49,7 @@ export interface AvailableModelItem {
   id: string;
   label: string;
   provider: string;
-  category: 'gemini' | 'claude' | 'openai' | 'local' | 'other';
+  category: 'gemini' | 'claude' | 'openai' | 'local' | 'teamwork' | 'other';
   badge: string;
   badgeClass: string;
   isDefault?: boolean;
@@ -54,23 +59,53 @@ export interface AvailableModelItem {
 }
 
 export const AVAILABLE_MODELS: AvailableModelItem[] = [
-  // Google Gemini CLI
+  // Teamwork Multi-Agent Orchestrator
   {
-    id: 'gemini-3.8-flash',
-    label: 'Gemini 3.8 Flash',
-    provider: 'Google',
-    category: 'gemini',
-    badge: 'Standard • Schnell (CLI)',
-    badgeClass: 'gemini',
-    isDefault: true
+    id: 'teamwork',
+    label: '🤝 Teamwork (Multi-Agent)',
+    provider: 'Orchestrator',
+    category: 'teamwork',
+    badge: 'Multi-Agent • Konsens & Debatte',
+    badgeClass: 'teamwork',
+    isDefault: false
   },
+  // Smart Track Single-Track Orchestrator
+  {
+    id: 'smart-track-low',
+    label: '🎯 Smart Track (Low)',
+    provider: 'Orchestrator',
+    category: 'teamwork',
+    badge: 'Max. Ersparnis • Schnelle Modelle',
+    badgeClass: 'teamwork',
+    isDefault: false
+  },
+  {
+    id: 'smart-track-medium',
+    label: '🎯 Smart Track (Medium)',
+    provider: 'Orchestrator',
+    category: 'teamwork',
+    badge: 'Ausgewogen • Optimiert für Alltag & Code',
+    badgeClass: 'teamwork',
+    isDefault: false
+  },
+  {
+    id: 'smart-track-high',
+    label: '🎯 Smart Track (High)',
+    provider: 'Orchestrator',
+    category: 'teamwork',
+    badge: 'Maximale Tiefe • Reasoning & Vorplanung',
+    badgeClass: 'teamwork',
+    isDefault: false
+  },
+  // Google Gemini CLI
   {
     id: 'gemini-2.5-flash',
     label: 'Gemini 2.5 Flash',
     provider: 'Google',
     category: 'gemini',
-    badge: 'Schnell & Effizient (CLI)',
-    badgeClass: 'gemini'
+    badge: 'Standard • Schnell (CLI)',
+    badgeClass: 'gemini',
+    isDefault: true
   },
   {
     id: 'gemini-2.5-pro',
@@ -81,19 +116,19 @@ export const AVAILABLE_MODELS: AvailableModelItem[] = [
     badgeClass: 'gemini'
   },
   {
-    id: 'gemini-3.1-pro-preview',
-    label: 'Gemini 3.1 Pro Preview',
+    id: 'gemini-2.5-flash-lite',
+    label: 'Gemini 2.5 Flash Lite',
     provider: 'Google',
     category: 'gemini',
-    badge: 'Next-Gen Reasoning (CLI)',
+    badge: 'High-Speed (CLI)',
     badgeClass: 'gemini'
   },
   {
-    id: 'gemini-3-flash-preview',
-    label: 'Gemini 3 Flash Preview',
+    id: 'gemini-2.0-flash',
+    label: 'Gemini 2.0 Flash',
     provider: 'Google',
     category: 'gemini',
-    badge: 'High-Speed Preview (CLI)',
+    badge: 'Effizient & Schnell (CLI)',
     badgeClass: 'gemini'
   },
   {
@@ -165,7 +200,23 @@ export const AVAILABLE_MODELS: AvailableModelItem[] = [
     badgeClass: 'openai'
   },
 
-  // Lokale Modelle
+  // Lokale & Cloud-Ollama Modelle
+  {
+    id: 'deepseek-v4-flash',
+    label: 'DeepSeek V4 Flash',
+    provider: 'Ollama Cloud',
+    category: 'local',
+    badge: 'Ollama Cloud • Fast Reasoning',
+    badgeClass: 'ollama'
+  },
+  {
+    id: 'qwen3:32b',
+    label: 'Qwen 3 (32B)',
+    provider: 'Ollama Cloud',
+    category: 'local',
+    badge: 'Ollama Cloud • Code & Chat',
+    badgeClass: 'ollama'
+  },
   {
     id: 'ollama-local',
     label: 'Ollama / LocalAI',
@@ -213,6 +264,7 @@ export interface CopilotSplitViewProps {
   sessions?: DesktopSessionSummary[];
   activeSessionId?: string | null;
   onSelectSession?: (sessionId: string) => void;
+  onOpenSettings?: (section?: string) => void;
 }
 
 export function CopilotSplitView({
@@ -220,7 +272,7 @@ export function CopilotSplitView({
   onClose,
   onMinimize,
   botName = 'Nova',
-  modelName = 'Gemini 3.8 Flash',
+  modelName = 'Gemini 2.5 Flash',
   messages,
   busy,
   onSendMessage,
@@ -233,7 +285,8 @@ export function CopilotSplitView({
   onNewChat,
   sessions = [],
   activeSessionId = null,
-  onSelectSession
+  onSelectSession,
+  onOpenSettings
 }: CopilotSplitViewProps): React.JSX.Element | null {
   const { t } = useDesktopI18n();
   const [inputText, setInputText] = useState('');
@@ -266,41 +319,70 @@ export function CopilotSplitView({
         })) as { groups?: Array<{ provider_id?: string; provider?: string; account?: string; models?: Array<any> }> } | null;
         if (!alive || !res || !Array.isArray(res.groups)) return;
 
-        const dynamicGeminiModels: AvailableModelItem[] = [];
+        const dynamicModels: AvailableModelItem[] = [];
 
         for (const g of res.groups) {
           const pid = (g.provider_id || g.provider || '').toLowerCase();
-          const gAccount = g.account || currentGeminiAccount?.email;
+          const gAccount = g.account || (pid.includes('gemini') || pid.includes('google') ? currentGeminiAccount?.email : undefined);
+
+          let category: 'gemini' | 'claude' | 'openai' | 'local' | 'other' = 'other';
+          let providerLabel = g.provider || pid;
+          let badgeClass = 'other';
+
           if (pid.includes('gemini') || pid.includes('google')) {
-            for (const m of g.models || []) {
-              const rawId = String(m.id || '');
-              const cleanId = rawId.startsWith('@') && rawId.includes(':') ? rawId.split(':')[1] : rawId;
-              const pct = typeof m.remaining_percent === 'number' ? m.remaining_percent : undefined;
-              const frac = typeof m.remaining_fraction === 'number' ? m.remaining_fraction : undefined;
-              const account = m.account || gAccount;
-              dynamicGeminiModels.push({
-                id: cleanId,
-                label: m.label || cleanId,
-                provider: 'Google',
-                category: 'gemini',
-                badge: pct !== undefined ? `${pct}% Kontingent verfügbar` : 'Live Quota Discovery',
-                badgeClass: 'gemini',
-                remainingPercent: pct,
-                remainingFraction: frac,
-                account,
-                isDefault: cleanId === 'gemini-3.8-flash' || cleanId === 'gemini-2.5-flash'
-              });
-            }
+            category = 'gemini';
+            providerLabel = 'Google';
+            badgeClass = 'gemini';
+          } else if (pid.includes('ollama')) {
+            category = 'local';
+            providerLabel = pid.includes('cloud') ? 'Ollama Cloud' : 'Ollama';
+            badgeClass = 'ollama';
+          } else if (pid.includes('claude') || pid.includes('anthropic')) {
+            category = 'claude';
+            providerLabel = 'Anthropic';
+            badgeClass = 'claude';
+          } else if (pid.includes('openai') || pid.includes('codex')) {
+            category = 'openai';
+            providerLabel = 'OpenAI';
+            badgeClass = 'openai';
+          } else if (pid.includes('deepseek')) {
+            category = 'other';
+            providerLabel = 'DeepSeek';
+            badgeClass = 'deepseek';
+          }
+
+          for (const m of g.models || []) {
+            const rawId = String(m.id || '');
+            const cleanId = rawId.startsWith('@') && rawId.includes(':') ? rawId.split(':')[1] : rawId;
+            const pct = typeof m.remaining_percent === 'number' ? m.remaining_percent : undefined;
+            const frac = typeof m.remaining_fraction === 'number' ? m.remaining_fraction : undefined;
+            const account = m.account || gAccount;
+            const badge = pct !== undefined
+              ? `${pct}% Kontingent verfügbar`
+              : (pid.includes('cloud') ? 'Ollama Cloud' : (category === 'gemini' ? 'Live Quota Discovery' : providerLabel));
+
+            dynamicModels.push({
+              id: cleanId,
+              label: m.label || cleanId,
+              provider: providerLabel,
+              category,
+              badge,
+              badgeClass,
+              remainingPercent: pct,
+              remainingFraction: frac,
+              account,
+              isDefault: cleanId === 'gemini-2.5-flash'
+            });
           }
         }
 
-        if (dynamicGeminiModels.length > 0) {
+        if (dynamicModels.length > 0) {
           setModelList((prev) => {
-            const nonGemini = prev.filter((m) => m.category !== 'gemini');
-            const fallbackRequired = AVAILABLE_MODELS.filter(
-              (req) => req.category === 'gemini' && !dynamicGeminiModels.some((d) => d.id === req.id)
+            const dynamicCategories = new Set(dynamicModels.map((m) => m.category));
+            const fallbacks = AVAILABLE_MODELS.filter(
+              (req) => !dynamicCategories.has(req.category) && !dynamicModels.some((d) => d.id === req.id)
             );
-            return [...dynamicGeminiModels, ...fallbackRequired, ...nonGemini];
+            return [...dynamicModels, ...fallbacks];
           });
         }
       } catch {
@@ -412,7 +494,7 @@ export function CopilotSplitView({
     const isSelected =
       activeModelItem.id === m.id ||
       modelName.toLowerCase().includes(m.id.toLowerCase()) ||
-      (m.id === 'gemini-3.8-flash' && modelName.toLowerCase().includes('gemini'));
+      (m.id === 'gemini-2.5-flash' && modelName.toLowerCase().includes('gemini'));
 
     const quotaBadge =
       m.remainingPercent !== undefined ? (
@@ -443,7 +525,34 @@ export function CopilotSplitView({
             </span>
           </div>
         </div>
-        {isSelected && <Check size={14} className="model-check-icon" />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          {(m.id === 'teamwork' || m.id.startsWith('smart-track')) && onOpenSettings && (
+            <span
+              role="button"
+              tabIndex={0}
+              title="Orchestrierungs-Einstellungen öffnen"
+              className="model-option-settings-btn"
+              style={{
+                padding: '3px 6px',
+                borderRadius: '4px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                background: 'rgba(255,255,255,0.06)'
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setModelPickerOpen(false);
+                onOpenSettings('teamwork');
+              }}
+            >
+              <Settings size={13} style={{ marginRight: '3px' }} />
+              <span style={{ fontSize: '0.72rem' }}>Setup</span>
+            </span>
+          )}
+          {isSelected && <Check size={14} className="model-check-icon" />}
+        </div>
       </button>
     );
   }
@@ -470,6 +579,17 @@ export function CopilotSplitView({
         </div>
 
         <div className="model-dropdown-list">
+          {/* 0. Multi-Agent Teamwork */}
+          {modelList.some((m) => m.category === 'teamwork') && (
+            <>
+              <div className="model-group-title">
+                <span>Multi-Agent Orchestrator</span>
+                <span className="account-tag" style={{ color: 'var(--accent, #6366f1)' }}>(Konsens & Debatte)</span>
+              </div>
+              {modelList.filter((m) => m.category === 'teamwork').map(renderModelItem)}
+            </>
+          )}
+
           {/* 1. Google Gemini CLI */}
           <div className="model-group-title">
             <span>Google Gemini CLI</span>
@@ -600,6 +720,19 @@ export function CopilotSplitView({
 
             {modelPickerOpen && renderModelDropdown('header')}
           </div>
+
+          {activeModelItem.id === 'teamwork' && onOpenSettings && (
+            <button
+              type="button"
+              className="copilot-action-btn"
+              title="Teamwork & Agenten-Einstellungen öffnen"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '3px 7px', color: 'var(--accent, #6366f1)' }}
+              onClick={() => onOpenSettings('teamwork')}
+            >
+              <Settings size={12} />
+              <span style={{ fontSize: '0.73rem' }}>Team-Setup</span>
+            </button>
+          )}
 
           {/* Workflows Button */}
           <div className="copilot-workflows-wrapper" ref={workflowDropdownRef} style={{ position: 'relative' }}>
@@ -875,6 +1008,24 @@ export function CopilotSplitView({
 
                   <div className={`copilot-bubble ${isUser ? 'user' : 'assistant'}`}>
                     <div className="copilot-bubble-body">
+                      {isAssistant && msg.teamwork && (
+                        <TeamworkProcessCard metadata={msg.teamwork as TeamworkMetadata} />
+                      )}
+                      {isAssistant && msg.smartTrack && (
+                        <SmartTrackProcessCard metadata={msg.smartTrack} />
+                      )}
+                      {isAssistant && msg.pending && activeModelItem.id === 'teamwork' && (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', padding: '4px 10px', borderRadius: '6px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent, #6366f1)', fontSize: '0.78rem', marginBottom: '0.5rem', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
+                          <Users size={13} className="spin" />
+                          <span>Teamwork aktiv: Subagenten debattieren & prüfen...</span>
+                        </div>
+                      )}
+                      {isAssistant && msg.pending && activeModelItem.id.startsWith('smart-track') && (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', padding: '4px 10px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', fontSize: '0.78rem', marginBottom: '0.5rem', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+                          <Target size={13} className="spin" />
+                          <span>Smart Track aktiv: Kuriertes Modell wird gestartet...</span>
+                        </div>
+                      )}
                       {isAssistant ? (
                         <RichTextRenderer content={msg.content || ''} text={msg.content || ''} />
                       ) : (

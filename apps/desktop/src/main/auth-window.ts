@@ -128,9 +128,39 @@ export function openAuthConnectWindow(options: AuthWindowOptions): BrowserWindow
       const currentUA = win.webContents.getUserAgent();
       win.webContents.setUserAgent(cleanOAuthUserAgent(currentUA));
     }
+    const sess = win.webContents?.session;
+    if (sess?.webRequest?.onBeforeSendHeaders) {
+      sess.webRequest.onBeforeSendHeaders({ urls: ['https://*/*', 'http://*/*'] }, (details, callback) => {
+        const requestHeaders = { ...details.requestHeaders };
+        const uaKey = Object.keys(requestHeaders).find((k) => k.toLowerCase() === 'user-agent');
+        if (uaKey) {
+          requestHeaders[uaKey] = cleanOAuthUserAgent(requestHeaders[uaKey]);
+        }
+        const secUaKey = Object.keys(requestHeaders).find((k) => k.toLowerCase() === 'sec-ch-ua');
+        if (secUaKey) {
+          requestHeaders[secUaKey] = sanitizeSecChUa(requestHeaders[secUaKey]);
+        }
+        delete requestHeaders['X-Requested-With'];
+        delete requestHeaders['x-requested-with'];
+        callback({ requestHeaders });
+      });
+    }
   } catch {
-    // webContents may be mocked or unavailable in test environments
+    // webContents or session may be mocked or unavailable in test environments
   }
+
+  win.webContents?.on?.('dom-ready', () => {
+    try {
+      void win.webContents?.executeJavaScript?.(`
+        try {
+          Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+          if (!window.chrome) { window.chrome = { runtime: {} }; }
+        } catch(e) {}
+      `);
+    } catch {
+      // ignore
+    }
+  });
 
   const handleNav = (targetUrl: string) => {
     if (isLocalhostCallback(targetUrl)) {

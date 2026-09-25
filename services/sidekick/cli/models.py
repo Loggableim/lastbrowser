@@ -135,16 +135,44 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
     # Native OpenAI Chat Completions (api.openai.com). Used by /model counts and
     # provider_model_ids fallback when /v1/models is unavailable.
     "openai": [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "o3-mini",
+        "o1",
+        "gpt-4.5-preview",
     ],
     "openai-codex": _codex_curated_models(),
     "copilot-acp": [
         "copilot-acp",
     ],
     "copilot": [
+        "claude-3.5-sonnet",
+        "gpt-4o",
     ],
     "gemini": [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
     ],
     "google-gemini-cli": [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+    ],
+    "ollama-cloud": [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+        "deepseek-v4.1-flash",
+        "gemma4",
+        "gemma4:31b",
+        "glm-5.3",
+        "glm-5.3-flash",
+        "kimi-k3",
+        "qwen3:32b",
     ],
     "zai": [
         "glm-5.2",
@@ -155,16 +183,24 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
     ],
     "xai": _xai_curated_models(),
     "nvidia": [
+        "meta/llama-3.3-70b-instruct",
+        "deepseek-ai/deepseek-r1",
     ],
     "kimi-coding": [
+        "kimi-k2.5",
+        "kimi-k2-turbo",
     ],
     "kimi-coding-cn": [
+        "kimi-k2.5",
+        "kimi-k2-turbo",
     ],
     "stepfun": [
+        "step-2-16k",
     ],
     "moonshot": [
+        "moonshot-v1-auto",
     ],
-"minimax": [
+    "minimax": [
         "MiniMax-M3",
         "MiniMax-M2.7-highspeed",
     ],
@@ -186,8 +222,11 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
         "claude-haiku-4-5-20251001",
     ],
     "deepseek": [
+        "deepseek-chat",
+        "deepseek-reasoner",
     ],
     "xiaomi": [
+        "miai-pro",
     ],
     "tencent-tokenhub": [
     ],
@@ -196,6 +235,8 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
     "gmi": [
     ],
     "opencode-zen": [
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
     ],
     "opencode-go": [
         "deepseek-v4-pro",
@@ -1420,6 +1461,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
         live = fetch_ollama_cloud_models(force_refresh=force_refresh)
         if live:
             return live
+        return list(_PROVIDER_MODELS.get("ollama-cloud", []))
     if normalized == "openai":
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if api_key:
@@ -2537,8 +2579,26 @@ def fetch_ollama_cloud_models(
     # 2. Live API probe
     if not api_key:
         api_key = os.getenv("OLLAMA_API_KEY", "")
+    if not api_key:
+        try:
+            from cli.auth import resolve_api_key_provider_credentials, get_env_value
+            api_key = get_env_value("OLLAMA_API_KEY")
+            if not api_key:
+                creds = resolve_api_key_provider_credentials("ollama-cloud")
+                api_key = str(creds.get("api_key") or "").strip()
+        except Exception:
+            pass
     if not base_url:
-        base_url = os.getenv("OLLAMA_BASE_URL", "") or "https://ollama.com/v1"
+        base_url = os.getenv("OLLAMA_BASE_URL", "")
+    if not base_url:
+        try:
+            from cli.auth import resolve_api_key_provider_credentials
+            creds = resolve_api_key_provider_credentials("ollama-cloud")
+            base_url = str(creds.get("base_url") or "").strip()
+        except Exception:
+            pass
+    if not base_url:
+        base_url = "https://ollama.com/v1"
 
     live_models: list[str] = []
     if api_key:
@@ -2583,7 +2643,7 @@ def fetch_ollama_cloud_models(
     if stale is not None:
         return stale["models"]
 
-    return []
+    return list(OLLAMA_CLOUD_CURATED_MODELS)
 
 
 def validate_requested_model(

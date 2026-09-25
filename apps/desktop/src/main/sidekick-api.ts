@@ -74,6 +74,8 @@ export type DesktopChatMessage = {
   timestamp?: string | number;
   tool_calls?: unknown[];
   pending?: boolean;
+  teamwork?: unknown;
+  smartTrack?: unknown;
 };
 
 export type ComposerDraft = {

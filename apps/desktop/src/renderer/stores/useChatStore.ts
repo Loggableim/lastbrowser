@@ -68,8 +68,8 @@ export const useChatStore = create<ChatState>((set) => ({
   composerMode: 'action',
   selectedModel:
     typeof window !== 'undefined' && window.localStorage
-      ? window.localStorage.getItem('lastbrowser.selectedModel.v1') || 'gemini-3.8-flash'
-      : 'gemini-3.8-flash',
+      ? window.localStorage.getItem('lastbrowser.selectedModel.v1') || 'gemini-2.5-flash'
+      : 'gemini-2.5-flash',
 
   setSessions: (sessions) =>
     set((state) => ({

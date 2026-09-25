@@ -899,7 +899,7 @@ def start_oauth_flow(
         "code_challenge": challenge,
         "code_challenge_method": "S256",
         "access_type": "offline",
-        "prompt": "consent",
+        "prompt": "select_account consent",
     }
     auth_url = AUTH_ENDPOINT + "?" + urllib.parse.urlencode(params) + "#sidekick"
     if callable(on_auth_url):
@@ -983,7 +983,7 @@ def _paste_mode_login(
         "code_challenge": challenge,
         "code_challenge_method": "S256",
         "access_type": "offline",
-        "prompt": "consent",
+        "prompt": "select_account consent",
     }
     auth_url = AUTH_ENDPOINT + "?" + urllib.parse.urlencode(params) + "#sidekick"
 

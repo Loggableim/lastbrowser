@@ -4710,6 +4710,26 @@ def handle_get(handler, parsed) -> bool:
     if parsed.path == "/api/providers":
         return j(handler, get_providers())
 
+    if parsed.path == "/api/teamwork/config":
+        from runtime.teamwork_orchestrator import load_teamwork_config
+        return j(handler, load_teamwork_config())
+
+    if parsed.path == "/api/teamwork/status":
+        from runtime.teamwork_orchestrator import load_teamwork_config, get_teamwork_model_pool
+        cfg = load_teamwork_config()
+        pool = get_teamwork_model_pool()
+        return j(handler, {"config": cfg, "models": pool, "models_count": len(pool)})
+
+    if parsed.path == "/api/smart-track/config":
+        from runtime.smart_track_orchestrator import load_smart_track_config
+        return j(handler, load_smart_track_config())
+
+    if parsed.path in ("/api/smart-track/status", "/api/smart-track/wall"):
+        from runtime.smart_track_orchestrator import load_smart_track_config, build_model_wall
+        cfg = load_smart_track_config()
+        wall = build_model_wall()
+        return j(handler, {"config": cfg, "wall": wall})
+
     # â”€â”€ Plugins/hooks visibility (read-only, no callback/source internals) â”€â”€
     if parsed.path == "/api/plugins":
         return _handle_plugins(handler, parsed)
@@ -7074,6 +7094,22 @@ def handle_post(handler, parsed) -> bool:
         if not result.get("ok"):
             return bad(handler, result.get("error", "Unknown error"))
         return j(handler, result)
+
+    if parsed.path == "/api/teamwork/config":
+        from runtime.teamwork_orchestrator import save_teamwork_config
+        updated = save_teamwork_config(body)
+        return j(handler, {"ok": True, "config": updated})
+
+    if parsed.path == "/api/smart-track/config":
+        from runtime.smart_track_orchestrator import save_smart_track_config
+        updated = save_smart_track_config(body)
+        return j(handler, {"ok": True, "config": updated})
+
+    if parsed.path == "/api/smart-track/scan":
+        from runtime.smart_track_orchestrator import build_model_wall, load_smart_track_config
+        wall = build_model_wall()
+        cfg = load_smart_track_config(reload=True)
+        return j(handler, {"ok": True, "wall": wall, "config": cfg})
 
     if parsed.path == "/api/reasoning":
         # CLI-parity /reasoning handler â€” writes to the same config.yaml keys
@@ -11827,10 +11863,16 @@ def _handle_chat_start(handler, body, diag=None):
             else getattr(s, "model_provider", None)
         )
         diag.stage("resolve_model_provider") if diag else None
-        model, model_provider, normalized_model = _resolve_compatible_session_model_state(
-            requested_model,
-            requested_provider,
-        )
+        req_m = str(requested_model or "").strip().lower()
+        if req_m == "teamwork" or req_m.startswith("smart-track"):
+            model = req_m
+            model_provider = "orchestrator"
+            normalized_model = True
+        else:
+            model, model_provider, normalized_model = _resolve_compatible_session_model_state(
+                requested_model,
+                requested_provider,
+            )
         provider_context = resolve_active_provider_context()
         if not model_provider and provider_context.get("provider"):
             model_provider = provider_context.get("provider")

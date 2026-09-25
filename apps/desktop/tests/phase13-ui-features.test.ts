@@ -148,17 +148,17 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
   });
 
   describe('CopilotSplitView Dynamic Model Picker & Categorized Workflows', () => {
-    it('offers Gemini 3.8 Flash as default and multiple provider models in AVAILABLE_MODELS', () => {
+    it('offers Gemini 2.5 Flash as default and multiple provider models in AVAILABLE_MODELS', () => {
       expect(AVAILABLE_MODELS.length).toBeGreaterThanOrEqual(6);
       const modelIds = AVAILABLE_MODELS.map((m) => m.id);
-      expect(modelIds).toContain('gemini-3.8-flash');
+      expect(modelIds).toContain('gemini-2.5-flash');
       expect(modelIds).toContain('gemini-2.5-pro');
       expect(modelIds).toContain('claude-sonnet-4.6');
       expect(modelIds).toContain('gpt-5.5');
       expect(modelIds).toContain('deepseek-reasoner');
       expect(modelIds).toContain('llama3.3');
 
-      const geminiModel = AVAILABLE_MODELS.find((m) => m.id === 'gemini-3.8-flash');
+      const geminiModel = AVAILABLE_MODELS.find((m) => m.id === 'gemini-2.5-flash');
       expect(geminiModel?.badge).toContain('Standard');
       expect(geminiModel?.provider).toBe('Google');
     });

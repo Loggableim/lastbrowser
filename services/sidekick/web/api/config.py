@@ -1066,12 +1066,16 @@ _PROVIDER_MODELS = {
         {"id": "gpt-5.3-codex-spark", "label": "GPT-5.3 Codex Spark"},
     ],
     "google-gemini-cli": [
-        {"id": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro Preview"},
-        {"id": "gemini-3-flash-preview", "label": "Gemini 3 Flash Preview"},
-        {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
         {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
+        {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
+        {"id": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash Lite"},
+        {"id": "gemini-2.0-flash", "label": "Gemini 2.0 Flash"},
+        {"id": "gemini-1.5-pro", "label": "Gemini 1.5 Pro"},
+        {"id": "gemini-1.5-flash", "label": "Gemini 1.5 Flash"},
     ],
     "google": [
+        {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
+        {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
         {"id": "gemini-router", "label": "Gemini Router (Free Tier)"},
     ],
     "gemini-router": [
@@ -1091,6 +1095,8 @@ _PROVIDER_MODELS = {
         {"id": "nemotron-3-nano:30b", "label": "Nemotron 3 Nano (30B)"},
     ],
     "deepseek": [
+        {"id": "deepseek-chat", "label": "DeepSeek V3 (Chat)"},
+        {"id": "deepseek-reasoner", "label": "DeepSeek R1 (Reasoner)"},
     ],
     "nous": [
         {"id": "@nous:anthropic/claude-opus-4.6",     "label": "Claude Opus 4.6 (via Nous)"},
@@ -3823,6 +3829,9 @@ def get_available_models() -> dict:
                     except Exception:
                         logger.warning("Failed to load Ollama Cloud models from sidekick_cli")
 
+                    if not raw_models:
+                        raw_models = copy.deepcopy(_PROVIDER_MODELS.get("ollama-cloud", []))
+
                     if raw_models:
                         models = _apply_provider_prefix(raw_models, pid, active_provider)
                         groups.append(
@@ -4768,6 +4777,37 @@ def save_settings(settings: dict) -> dict:
     # Handle _clear_password: explicitly disable auth
     if settings.pop("_clear_password", False):
         current["password_hash"] = None
+
+    # Handle provider and base_url updates to config.yaml (e.g. from Ollama / provider dialog)
+    target_provider = settings.pop("provider", None) or settings.pop("model_provider", None)
+    target_base_url = settings.pop("base_url", None)
+    if target_provider:
+        try:
+            cfg_path = _get_config_path()
+            cfg_data = _load_yaml_config_file(cfg_path)
+            model_section = cfg_data.setdefault("model", {})
+            if isinstance(model_section, dict):
+                model_section["provider"] = str(target_provider).strip()
+                if target_base_url is not None:
+                    model_section["base_url"] = str(target_base_url).strip()
+            _save_yaml_config_file(cfg_path, cfg_data)
+            reload_config()
+            invalidate_models_cache()
+        except Exception:
+            logger.debug("Failed to update model.provider in config.yaml", exc_info=True)
+    elif target_base_url is not None:
+        try:
+            cfg_path = _get_config_path()
+            cfg_data = _load_yaml_config_file(cfg_path)
+            model_section = cfg_data.setdefault("model", {})
+            if isinstance(model_section, dict):
+                model_section["base_url"] = str(target_base_url).strip()
+            _save_yaml_config_file(cfg_path, cfg_data)
+            reload_config()
+            invalidate_models_cache()
+        except Exception:
+            logger.debug("Failed to update model.base_url in config.yaml", exc_info=True)
+
     for k, v in settings.items():
         if k in _SETTINGS_ALLOWED_KEYS:
             if k == "theme":

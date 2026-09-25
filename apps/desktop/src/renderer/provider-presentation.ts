@@ -174,12 +174,12 @@ const MODEL_NOTES: Array<[string, ModelNote]> = [
   ['claude-sonnet-4.6', { summary: 'Best quality-per-cost for coding and long context.', tier: 'balanced' }],
   ['claude-sonnet-4-5', { summary: 'Reliable all-rounder from the previous generation.', tier: 'balanced' }],
   // Google
-  ['gemini-3.8-flash', { summary: 'Google’s next-gen flagship Flash; ultra-fast with high accuracy and deep reasoning.', tier: 'fast' }],
-  ['gemini-3.1-pro', { summary: 'Google flagship preview; 1M+ context window.', tier: 'powerful' }],
-  ['gemini-3-flash', { summary: 'Fast next-gen Gemini with high quality for chat and search.', tier: 'fast' }],
-  ['gemini-2.5-flash-lite', { summary: 'Ultra-light, fastest Gemini for rapid responses.', tier: 'fast' }],
-  ['gemini-2.5-flash', { summary: 'Flagship speed & accuracy; ideal for everyday browsing & research.', tier: 'fast' }],
+  ['gemini-2.5-flash', { summary: 'Google’s flagship Flash; ultra-fast with high accuracy, deep reasoning and 1M context.', tier: 'fast' }],
   ['gemini-2.5-pro', { summary: 'Advanced reasoning, deep comprehension and huge context.', tier: 'powerful' }],
+  ['gemini-2.5-flash-lite', { summary: 'Ultra-light, fastest Gemini for rapid responses.', tier: 'fast' }],
+  ['gemini-2.0-flash', { summary: 'Reliable, high-speed multi-modal everyday model.', tier: 'fast' }],
+  ['gemini-1.5-pro', { summary: 'Long-context reasoning model from Gemini 1.5 generation.', tier: 'powerful' }],
+  ['gemini-1.5-flash', { summary: 'Lightweight high-speed model from Gemini 1.5 generation.', tier: 'fast' }],
   // Others
   ['deepseek-reasoner', { summary: 'DeepSeek-R1 reasoning model; outstanding complex problem solving.', tier: 'powerful' }],
   ['deepseek-chat', { summary: 'DeepSeek-V3 general assistant; fast, versatile and inexpensive.', tier: 'balanced' }],

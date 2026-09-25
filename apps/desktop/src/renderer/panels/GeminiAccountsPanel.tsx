@@ -42,6 +42,15 @@ function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function openOAuthUrl(url: string): void {
+  if (!url) return;
+  if (window.lastbrowser?.auth?.openConnectWindow) {
+    void window.lastbrowser.auth.openConnectWindow(url);
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+}
+
 // ─── AccountRow ───────────────────────────────────────────────────────────────
 
 function AccountRow({
@@ -172,8 +181,10 @@ function OAuthFlowCard({
         <a
           className="gemini-oauth-uri"
           href={targetUrl}
-          target="_blank"
-          rel="noreferrer"
+          onClick={(e) => {
+            e.preventDefault();
+            openOAuthUrl(targetUrl);
+          }}
         >
           {targetUrl} <ExternalLink size={12} />
         </a>
@@ -274,8 +285,10 @@ export function GeminiAccountsPanel({ sidekickReady }: GeminiAccountsPanelProps)
         pollInterval: response.poll_interval_seconds ?? 5
       });
 
+      let opened = false;
       if (authUrl && !response.user_code) {
-        window.open(authUrl, '_blank', 'noopener,noreferrer');
+        openOAuthUrl(authUrl);
+        opened = true;
       }
 
       // Poll until done.
@@ -291,10 +304,17 @@ export function GeminiAccountsPanel({ sidekickReady }: GeminiAccountsPanelProps)
         const poll = await window.lastbrowser.sidekick.pollOAuth(response.flow_id).catch(() => null);
         const status = poll?.status;
 
+        const liveAuthUrl = (poll as { auth_url?: string })?.auth_url;
+        if (!opened && liveAuthUrl && !response.user_code) {
+          setFlow((prev) => ({ ...prev, authUrl: liveAuthUrl }));
+          openOAuthUrl(liveAuthUrl);
+          opened = true;
+        }
+
         if (status === 'success') {
           const pollEmail = (poll as { email?: string })?.email;
           const email = typeof pollEmail === 'string' ? pollEmail : (label || `google-account-${Date.now()}`);
-          addAccount({ label, email, flowId: response.flow_id, preferredModel: 'gemini-3.8-flash' });
+          addAccount({ label, email, flowId: response.flow_id, preferredModel: 'gemini-2.5-flash' });
           setFlow({ state: 'success' });
           setLabelDraft('');
           // Auto-dismiss after 2s.

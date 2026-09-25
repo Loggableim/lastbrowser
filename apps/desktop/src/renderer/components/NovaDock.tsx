@@ -151,12 +151,35 @@ export function NovaDock({
     (index: number): number => {
       if (hoveredIndex === null) return 1;
       const distance = Math.abs(index - hoveredIndex);
-      if (distance === 0) return dockSettings.magnification;
+      if (distance === 0) return Math.max(1.15, dockSettings.magnification);
       if (distance === 1) return dockSettings.neighborScale;
       if (distance === 2) return 1 + (dockSettings.neighborScale - 1) * 0.4;
-      return 1;
+      return 0.95;
     },
     [hoveredIndex, dockSettings.magnification, dockSettings.neighborScale]
+  );
+
+  // Fisheye neighbor fade opacity calculator
+  const getItemOpacity = useCallback(
+    (index: number): number => {
+      if (hoveredIndex === null) return 1;
+      const distance = Math.abs(index - hoveredIndex);
+      if (distance === 0) return 1;
+      if (distance === 1) return 0.85;
+      if (distance === 2) return 0.65;
+      return 0.45;
+    },
+    [hoveredIndex]
+  );
+
+  const getItemStyle = useCallback(
+    (index: number): React.CSSProperties => {
+      return {
+        '--item-scale': getItemScale(index),
+        '--item-opacity': getItemOpacity(index)
+      } as React.CSSProperties;
+    },
+    [getItemScale, getItemOpacity]
   );
 
   // Label reveal direction class
@@ -243,7 +266,7 @@ export function NovaDock({
         <div
           className="nova-dock-item-wrapper"
           onMouseEnter={() => setHoveredIndex(avatarIndex)}
-          style={{ '--item-scale': getItemScale(avatarIndex) } as React.CSSProperties}
+          style={getItemStyle(avatarIndex)}
         >
           <button
             type="button"
@@ -275,7 +298,7 @@ export function NovaDock({
         <div
           className="nova-dock-item-wrapper"
           onMouseEnter={() => setHoveredIndex(chatIndex)}
-          style={{ '--item-scale': getItemScale(chatIndex) } as React.CSSProperties}
+          style={getItemStyle(chatIndex)}
         >
           <button
             type="button"
@@ -293,7 +316,7 @@ export function NovaDock({
         <div
           className="nova-dock-item-wrapper"
           onMouseEnter={() => setHoveredIndex(kanbanIndex)}
-          style={{ '--item-scale': getItemScale(kanbanIndex) } as React.CSSProperties}
+          style={getItemStyle(kanbanIndex)}
         >
           <button
             type="button"
@@ -327,7 +350,7 @@ export function NovaDock({
                 key={app.id}
                 className="nova-dock-item-wrapper"
                 onMouseEnter={() => setHoveredIndex(index)}
-                style={{ '--item-scale': getItemScale(index) } as React.CSSProperties}
+                style={getItemStyle(index)}
               >
                 <button
                   type="button"
@@ -355,7 +378,7 @@ export function NovaDock({
             <div
               className="nova-dock-item-wrapper"
               onMouseEnter={() => setHoveredIndex(addAppIndex)}
-              style={{ '--item-scale': getItemScale(addAppIndex) } as React.CSSProperties}
+              style={getItemStyle(addAppIndex)}
             >
               <button
                 type="button"
@@ -382,7 +405,7 @@ export function NovaDock({
           <div
             className="nova-dock-item-wrapper"
             onMouseEnter={() => setHoveredIndex(historyIndex)}
-            style={{ '--item-scale': getItemScale(historyIndex) } as React.CSSProperties}
+            style={getItemStyle(historyIndex)}
           >
             <button
               type="button"
@@ -401,7 +424,7 @@ export function NovaDock({
           <div
             className="nova-dock-item-wrapper"
             onMouseEnter={() => setHoveredIndex(helpIndex)}
-            style={{ '--item-scale': getItemScale(helpIndex) } as React.CSSProperties}
+            style={getItemStyle(helpIndex)}
           >
             <button
               type="button"
@@ -420,7 +443,7 @@ export function NovaDock({
           <div
             className="nova-dock-item-wrapper"
             onMouseEnter={() => setHoveredIndex(settingsIndex)}
-            style={{ '--item-scale': getItemScale(settingsIndex) } as React.CSSProperties}
+            style={getItemStyle(settingsIndex)}
           >
             <button
               type="button"
@@ -439,7 +462,7 @@ export function NovaDock({
           <div
             className="nova-dock-item-wrapper"
             onMouseEnter={() => setHoveredIndex(expandIndex)}
-            style={{ '--item-scale': getItemScale(expandIndex) } as React.CSSProperties}
+            style={getItemStyle(expandIndex)}
           >
             <button
               type="button"

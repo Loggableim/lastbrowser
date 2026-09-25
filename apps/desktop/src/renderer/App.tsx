@@ -214,6 +214,7 @@ import {
 import { SidekickSidebar } from './components/SidekickSidebar.js';
 import { InPageActionBar } from './components/InPageActionBar.js';
 import { PinnedAppModal } from './components/PinnedAppModal.js';
+import { SpaceSetupModal, type SpaceSetupData } from './components/SpaceSetupModal.js';
 import { UnifiedExtensionHub } from './components/UnifiedExtensionHub.js';
 
 import { usePinnedAppStore } from './stores/usePinnedAppStore.js';
@@ -652,6 +653,26 @@ export function App(): JSX.Element {
   const [setupError, setSetupError] = useState('');
   const [setupSaving, setSetupSaving] = useState(false);
   const [zenTitlebarRevealed, setZenTitlebarRevealed] = useState(false);
+  const [zenSidebarRevealed, setZenSidebarRevealed] = useState(false);
+  const zenSidebarTimerRef = useRef<number | null>(null);
+  const [spaceSetupModalOpen, setSpaceSetupModalOpen] = useState(false);
+
+  const handleZenSidebarEnter = useCallback(() => {
+    if (zenSidebarTimerRef.current) {
+      window.clearTimeout(zenSidebarTimerRef.current);
+      zenSidebarTimerRef.current = null;
+    }
+    setZenSidebarRevealed(true);
+  }, []);
+
+  const handleZenSidebarLeave = useCallback(() => {
+    if (zenSidebarTimerRef.current) {
+      window.clearTimeout(zenSidebarTimerRef.current);
+    }
+    zenSidebarTimerRef.current = window.setTimeout(() => {
+      setZenSidebarRevealed(false);
+    }, 350);
+  }, []);
   const [sessions, setSessions] = useState<DesktopSessionSummary[]>([]);
   const [sessionSearch, setSessionSearch] = useState('');
   const [sessionError, setSessionError] = useState('');
@@ -1594,7 +1615,7 @@ export function App(): JSX.Element {
         const next = geminiStore.getNextAccount();
         if (next) {
           geminiStore.recordUsage(next.id);
-          accountModel = next.preferredModel || 'gemini-3.8-flash';
+          accountModel = next.preferredModel || 'gemini-2.5-flash';
           accountProvider = 'google-gemini-cli';
         }
       }
@@ -1795,7 +1816,7 @@ export function App(): JSX.Element {
         const currentOrNext = shouldRotate ? geminiStore.getNextAccount() : geminiStore.activeAccount();
         if (currentOrNext) {
           geminiStore.recordUsage(currentOrNext.id);
-          accountModel = effectiveSelectedModel || currentOrNext.preferredModel || 'gemini-3.8-flash';
+          accountModel = effectiveSelectedModel || currentOrNext.preferredModel || 'gemini-2.5-flash';
           accountProvider = 'google-gemini-cli';
         }
       }
@@ -2095,6 +2116,26 @@ export function App(): JSX.Element {
     }
   }
 
+  const handleCreateSpaceFromModal = useCallback(async (data: SpaceSetupData) => {
+    try {
+      await addSpaceNative(data.path, data.name);
+      if (data.pinnedApps && data.pinnedApps.length > 0) {
+        data.pinnedApps.forEach((app) => {
+          usePinnedAppStore.getState().addApp({
+            name: app.name,
+            url: app.url,
+            color: app.color || data.color
+          });
+        });
+      }
+      if (data.startUrl && data.startUrl !== 'app://browser-home') {
+        addTab(data.startUrl);
+      }
+    } catch (err) {
+      console.error('[App] Failed to create space from modal:', err);
+    }
+  }, [spaces, handleSpaceSelect, addTab]);
+
   async function renameSpaceNative(space: SpaceSummary): Promise<void> {
     const nextName = window.prompt('Rename space', spaceDisplayName(space));
     if (!nextName?.trim()) return;
@@ -2346,6 +2387,131 @@ export function App(): JSX.Element {
             )}
           </ModernTitlebar>
 
+          {sidebarMode === 'hidden' && (
+            <>
+              <div
+                className="zen-left-hover-sensor"
+                onMouseEnter={handleZenSidebarEnter}
+                aria-hidden="true"
+                title="Kante berühren, um Seitenleiste einzublenden"
+              />
+              <div
+                className={`zen-sidebar-overlay ${zenSidebarRevealed ? 'zen-revealed' : ''}`}
+                onMouseEnter={handleZenSidebarEnter}
+                onMouseLeave={handleZenSidebarLeave}
+              >
+                <SidekickSidebar
+                  mode={zenExitDefaultMode}
+                  tabs={tabs}
+                  activeTabId={activeTab.id}
+                  draggedTabId={draggedTabId}
+                  onActivateTab={(tabId) => {
+                    activeTabIdRef.current = tabId;
+                    setActiveTabId(tabId);
+                    setActivePanel('browser');
+                    setZenSidebarRevealed(false);
+                  }}
+                  onCloseTab={closeTab}
+                  onNewTab={(url, opts) => {
+                    addTab(url, opts);
+                    setZenSidebarRevealed(false);
+                  }}
+                  onPinTab={toggleTabPinned}
+                  onToggleTabMute={toggleTabMute}
+                  onDragStartTab={setDraggedTabId}
+                  onDragEndTab={() => setDraggedTabId(null)}
+                  onMoveTab={moveTab}
+                  onCycleMode={cycleSidebarMode}
+                  onSetMode={setSidebarMode}
+                  activeSpacePath={activeSpacePath}
+                  spaces={spaces}
+                  onSelectSpace={(path) => {
+                    handleSpaceSelect(path);
+                    setZenSidebarRevealed(false);
+                  }}
+                  onCreateSpace={() => {
+                    setSpaceSetupModalOpen(true);
+                    setZenSidebarRevealed(false);
+                  }}
+                  onOpenSettings={() => {
+                    setActivePanel('settings');
+                    setZenSidebarRevealed(false);
+                  }}
+                  onOpenHistory={() => {
+                    usePanelStore.getState().setHistoryOpen(true);
+                    setZenSidebarRevealed(false);
+                  }}
+                  onOpenDownloads={() => {
+                    usePanelStore.getState().setDownloadsOpen(true);
+                    setZenSidebarRevealed(false);
+                  }}
+                  onOpenExtensions={() => {
+                    usePanelStore.getState().setExtensionHubOpen(true);
+                    setZenSidebarRevealed(false);
+                  }}
+                  onOpenPermissions={() => {
+                    usePanelStore.getState().setPermissionsOpen(true);
+                    setZenSidebarRevealed(false);
+                  }}
+                  onOpenApp={(app, opts) => {
+                    setZenSidebarRevealed(false);
+                    if (app.panel) {
+                      setActivePanel(app.panel);
+                    } else if (app.url) {
+                      if (opts?.newTab) {
+                        addTab(app.url, { pinned: true });
+                      } else {
+                        const existingTabs = useTabStore.getState().tabs;
+                        const appDomain = (() => {
+                          try { return new URL(app.url).hostname.replace(/^www\./, ''); } catch { return ''; }
+                        })();
+                        const match = existingTabs.find(t => {
+                          if (!t.url) return false;
+                          try {
+                            const d = new URL(t.url).hostname.replace(/^www\./, '');
+                            return d === appDomain || d.endsWith(`.${appDomain}`);
+                          } catch { return false; }
+                        });
+                        if (match) {
+                          if (match.isDiscarded) wakeTab(match.id);
+                          setActiveTabId(match.id);
+                          setActivePanel('browser');
+                        } else {
+                          addTab(app.url, { pinned: true });
+                        }
+                      }
+                    }
+                  }}
+                  onAddPinnedApp={() => { setPinnedEditApp(null); setPinnedModalOpen(true); }}
+                  onEditPinnedApp={(app) => { setPinnedEditApp(app); setPinnedModalOpen(true); }}
+                  activeTabUrl={activeTab?.url}
+                  openTabUrls={tabs.map(t => t.url ?? '').filter(Boolean)}
+                  botName={setupState.botName || 'Nova'}
+                  onWakeTab={wakeTab}
+                  activePanel={activePanel}
+                  onSelectPanel={(panel) => {
+                    setActivePanel(panel);
+                    setZenSidebarRevealed(false);
+                  }}
+                  drawerTab={sidebarDrawerTab}
+                  onSelectDrawerTab={setSidebarDrawerTab}
+                  zenExitDefaultMode={zenExitDefaultMode}
+                  sessions={sessions}
+                  activeSessionId={activeSessionId}
+                  onSelectSession={(sessionId) => {
+                    setActiveSessionId(sessionId);
+                    setActivePanel('chat');
+                    setZenSidebarRevealed(false);
+                  }}
+                  onCreateSession={() => void createNativeSession()}
+                  splitTabIds={splitTabIds}
+                  onAddSplitTab={addSplitTab}
+                  onRemoveSplitTab={removeSplitTab}
+                />
+              </div>
+            </>
+          )}
+
           <div className={`browser-zen-workspace mode-${sidebarMode} dock-pos-${dockSettings.position}`}>
             <SidekickSidebar
               mode={sidebarMode}
@@ -2369,7 +2535,7 @@ export function App(): JSX.Element {
               activeSpacePath={activeSpacePath}
               spaces={spaces}
               onSelectSpace={handleSpaceSelect}
-              onCreateSpace={() => setActivePanel('workspaces')}
+              onCreateSpace={() => setSpaceSetupModalOpen(true)}
               onOpenSettings={() => setActivePanel('settings')}
               onOpenHistory={() => usePanelStore.getState().setHistoryOpen(true)}
               onOpenDownloads={() => usePanelStore.getState().setDownloadsOpen(true)}
@@ -2512,7 +2678,7 @@ export function App(): JSX.Element {
                   onClose={() => setCopilotOpen(false)}
                   onMinimize={() => setCopilotOpen(false)}
                   botName={setupState.botName || 'Nova'}
-                  modelName={setupState.model || 'Gemini 3.8 Flash'}
+                  modelName={setupState.model || 'Gemini 2.5 Flash'}
                   messages={chatMessages}
                   busy={sidekickBusy}
                   onSendMessage={(msg) => void startNativeChat(msg)}
@@ -2539,6 +2705,10 @@ export function App(): JSX.Element {
                         window.localStorage.setItem('lastbrowser.selectedModel.v1', modelId);
                       }
                     } catch {}
+                  }}
+                  onOpenSettings={(sec) => {
+                    setActiveContextItem(sec || 'teamwork');
+                    setActivePanel('settings');
                   }}
                 />
               )}
@@ -2811,6 +2981,12 @@ export function App(): JSX.Element {
           onClose={() => { setPinnedModalOpen(false); setPinnedEditApp(null); }}
           editApp={pinnedEditApp}
           activeTab={activeTab ? { title: activeTab.title, url: activeTab.url, favicon: activeTab.favicon } : null}
+        />
+        <SpaceSetupModal
+          isOpen={spaceSetupModalOpen}
+          onClose={() => setSpaceSetupModalOpen(false)}
+          onCreateSpace={handleCreateSpaceFromModal}
+          existingSpaceNames={spaces.map(spaceDisplayName)}
         />
         <CommandPalette />
     </div>

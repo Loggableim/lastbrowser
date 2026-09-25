@@ -75,7 +75,7 @@ describe('Phase 13 In-App UI Polish: Top-64 Pinned Apps & Universal Model Picker
       const modelIds = AVAILABLE_MODELS.map((m) => m.id);
 
       // Google Gemini CLI models
-      expect(modelIds).toContain('gemini-3.8-flash');
+      expect(modelIds).toContain('gemini-2.5-flash');
       expect(modelIds).toContain('gemini-1.5-pro');
       expect(modelIds).toContain('gemini-1.5-flash');
 
@@ -92,7 +92,7 @@ describe('Phase 13 In-App UI Polish: Top-64 Pinned Apps & Universal Model Picker
 
       // Verify default model
       const defaultModel = AVAILABLE_MODELS.find((m) => m.isDefault);
-      expect(defaultModel?.id).toBe('gemini-3.8-flash');
+      expect(defaultModel?.id).toBe('gemini-2.5-flash');
       expect(defaultModel?.provider).toBe('Google');
     });
 
@@ -131,8 +131,8 @@ describe('Phase 13 In-App UI Polish: Top-64 Pinned Apps & Universal Model Picker
       store.setSelectedModel('gpt-4o');
       expect(useChatStore.getState().selectedModel).toBe('gpt-4o');
 
-      store.setSelectedModel('gemini-3.8-flash');
-      expect(useChatStore.getState().selectedModel).toBe('gemini-3.8-flash');
+      store.setSelectedModel('gemini-2.5-flash');
+      expect(useChatStore.getState().selectedModel).toBe('gemini-2.5-flash');
     });
   });
 

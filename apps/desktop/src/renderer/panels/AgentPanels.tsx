@@ -639,7 +639,7 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
                 </div>
                 <div className="profile-spec-item">
                   <span className="spec-label">Fallback-Modell</span>
-                  <strong className="spec-value">gemini-3.8-flash</strong>
+                  <strong className="spec-value">gemini-2.5-flash</strong>
                 </div>
                 <div className="profile-spec-item full-width">
                   <span className="spec-label">Auflösung</span>

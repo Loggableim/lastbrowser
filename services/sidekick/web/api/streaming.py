@@ -2578,6 +2578,68 @@ def _run_agent_streaming(
             put('cancel', {'message': 'Cancelled before start'})
             return
 
+        # Teamwork Multi-Agent Orchestrator
+        if str(model or '').strip().lower() == 'teamwork' or str(mode or '').strip().lower() == 'teamwork':
+            try:
+                from runtime.teamwork_orchestrator import run_teamwork_turn
+                run_teamwork_turn(
+                    s,
+                    msg_text,
+                    stream_put=put,
+                    cancel_event=cancel_event,
+                )
+                s.active_stream_id = None
+                s.pending_user_message = None
+                try:
+                    s.save()
+                except Exception:
+                    pass
+                put('stream_end', {'session_id': session_id, 'stream_id': stream_id})
+                return
+            except InterruptedError:
+                put('cancel', {'message': 'Teamwork turn cancelled'})
+                return
+            except Exception as e:
+                logger.error("Teamwork turn failed: %s", e, exc_info=True)
+                put('error', {'error': str(e), 'session_id': session_id})
+                return
+
+        # Smart Track Single-Track Orchestrator
+        _model_lower = str(model or '').strip().lower()
+        if _model_lower.startswith('smart-track') or str(mode or '').strip().lower() == 'smart-track':
+            try:
+                from runtime.smart_track_orchestrator import run_smart_track_turn
+                _effort = "medium"
+                if "low" in _model_lower:
+                    _effort = "low"
+                elif "high" in _model_lower:
+                    _effort = "high"
+                elif "medium" in _model_lower:
+                    _effort = "medium"
+
+                run_smart_track_turn(
+                    s,
+                    msg_text,
+                    effort=_effort,
+                    stream_put=put,
+                    cancel_event=cancel_event,
+                )
+                s.active_stream_id = None
+                s.pending_user_message = None
+                try:
+                    s.save()
+                except Exception:
+                    pass
+                put('stream_end', {'session_id': session_id, 'stream_id': stream_id})
+                return
+            except InterruptedError:
+                put('cancel', {'message': 'Smart Track turn cancelled'})
+                return
+            except Exception as e:
+                logger.error("Smart Track turn failed: %s", e, exc_info=True)
+                put('error', {'error': str(e), 'session_id': session_id})
+                return
+
         # Resolve profile home for this agent run — use the session's own profile
         # (stamped at new_session() time from the client's S.activeProfile) so that
         # two concurrent tabs on different profiles don't clobber each other via the

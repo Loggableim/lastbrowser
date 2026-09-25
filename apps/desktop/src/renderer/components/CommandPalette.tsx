@@ -692,13 +692,13 @@ export function CommandPalette(): JSX.Element | null {
       },
       {
         id: 'sidekick-gemini-cli-flash-38',
-        title: 'Modell: Gemini 3.8 Flash (Google CLI / Antigravity - Standard)',
-        description: 'Neuestes Standardmodell von Google mit extrem hoher Geschwindigkeit & 1M Kontext',
+        title: 'Modell: Gemini 2.5 Flash (Google CLI / Antigravity - Standard)',
+        description: 'Standardmodell von Google mit hoher Geschwindigkeit & 1M Kontext',
         category: 'Nova AI',
         icon: <Zap size={16} />,
-        keywords: ['gemini', '3.8', 'flash', 'google', 'cli', 'antigravity', 'gravity', 'modell', 'default', 'standard'],
+        keywords: ['gemini', '2.5', 'flash', 'google', 'cli', 'antigravity', 'gravity', 'modell', 'default', 'standard'],
         action: () => {
-          void window.lastbrowser?.sidekick?.setDefaultModel({ model: 'gemini-3.8-flash' });
+          void window.lastbrowser?.sidekick?.setDefaultModel({ model: 'gemini-2.5-flash' });
         }
       },
       {

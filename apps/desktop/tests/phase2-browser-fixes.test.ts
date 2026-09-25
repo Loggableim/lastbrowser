@@ -32,7 +32,7 @@ describe('Phase 2 Browser Fixes: Sidebar, Spaces, Multiscreen & Summarize Bar', 
     it('passes onSelectSpace and onCreateSpace from App.tsx to SidekickSidebar', () => {
       const appSource = readRendererFile('App.tsx');
       expect(appSource).toMatch(/onSelectSpace=\{.*(handleSpaceSelect|setActiveSpacePath).*\}/);
-      expect(appSource).toContain('onCreateSpace={() => setActivePanel(\'workspaces\')}');
+      expect(appSource).toMatch(/onCreateSpace=\{.*(setSpaceSetupModalOpen|setActivePanel).*?\}/);
     });
 
     it('computes isolated space partitions correctly', () => {

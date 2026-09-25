@@ -34,6 +34,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { GeminiAccountsPanel } from './GeminiAccountsPanel.js';
+import { TeamworkSettingsPanel } from './TeamworkSettingsPanel.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { cloudProviderOptions, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
 import { providerPresentation } from '../provider-presentation.js';
@@ -117,7 +118,7 @@ export function normalizeAppstoreRecord(app: AnyRecord): AnyRecord {
   };
 }
 
-export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'google-accounts' | 'extensions' | 'plugins' | 'system';
+export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'teamwork' | 'google-accounts' | 'extensions' | 'plugins' | 'system';
 
 export type SettingsSectionMeta = {
   title: string;
@@ -167,6 +168,11 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
     title: 'Providers',
     description: 'Provider defaults and model routing settings.',
     icon: <Brain size={16} />
+  },
+  teamwork: {
+    title: 'KI-Orchestrierung',
+    description: 'Multi-Agent Teamwork, Smart Track (Single Track) & kuratierte Modellwand.',
+    icon: <Users size={16} />
   },
   'google-accounts': {
     title: 'Google Accounts',
@@ -1876,13 +1882,69 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     settings.skin, settings.theme, settings.font_size, settings.message_layout, settings.syntax_theme, settings.accent_color
   ]);
 
-  function updateDraftField(key: string, value: unknown): void {
-    setDraft((current) => ({ ...current, [key]: value }));
-    setDirty(true);
+  const autoSaveTimerRef = useRef<number | null>(null);
+
+  const persistSettings = useCallback(async (updatedDraft: AnyRecord) => {
+    if (!ready) return;
+    try {
+      const payload = cleanSettingsPayload({
+        ...settings,
+        ...updatedDraft
+      });
+      payload.bot_name = settingsText(payload.bot_name, 'Nova').trim() || 'Nova';
+      payload.language = settingsText(payload.language, 'en');
+      payload.theme = settingsText(payload.theme, 'dark');
+      payload.skin = settingsText(payload.skin, 'default');
+      payload.accent_color = settingsText(payload.accent_color, '');
+      payload.font_size = settingsText(payload.font_size, 'default');
+      payload.default_zoom = Number(payload.default_zoom) || 100;
+      payload.message_layout = settingsText(payload.message_layout, 'bubbles');
+      payload.syntax_theme = settingsText(payload.syntax_theme, '');
+      payload.sound_enabled = settingsBoolean(payload.sound_enabled, true);
+      payload.notifications_enabled = settingsBoolean(payload.notifications_enabled, true);
+      payload.show_token_usage = settingsBoolean(payload.show_token_usage, false);
+      payload.show_tps = settingsBoolean(payload.show_tps, false);
+      payload.simplified_tool_calling = settingsBoolean(payload.simplified_tool_calling, true);
+      payload.show_thinking = settingsBoolean(payload.show_thinking, false);
+      payload.show_cli_sessions = settingsBoolean(payload.show_cli_sessions, false);
+      payload.sync_to_insights = settingsBoolean(payload.sync_to_insights, false);
+      payload.check_for_updates = settingsBoolean(payload.check_for_updates, true);
+
+      // Instant local storage fast-path for appearance
+      try {
+        if (payload.theme) window.localStorage.setItem('lastbrowser.theme', String(payload.theme));
+        if (payload.skin) window.localStorage.setItem('lastbrowser.skin', String(payload.skin));
+        if (payload.font_size) window.localStorage.setItem('lastbrowser.font_size', String(payload.font_size));
+        if (payload.message_layout) window.localStorage.setItem('lastbrowser.message_layout', String(payload.message_layout));
+      } catch {}
+
+      if (window.lastbrowser?.sidekick?.saveSettings) {
+        await window.lastbrowser.sidekick.saveSettings({ settings: payload });
+      }
+      window.dispatchEvent(new CustomEvent('lastbrowser:settings-changed', { detail: payload }));
+      setDirty(false);
+    } catch (err) {
+      console.error('[SystemPanels] Auto-save error:', err);
+    }
+  }, [settings, ready]);
+
+  function updateDraftField(key: string, value: unknown, autoPersist = true): void {
+    setDraft((current) => {
+      const next = { ...current, [key]: value };
+      if (autoPersist) {
+        if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = window.setTimeout(() => {
+          void persistSettings(next);
+        }, 150);
+      } else {
+        setDirty(true);
+      }
+      return next;
+    });
   }
 
-  function updateDraftToggle(key: string, value: boolean): void {
-    updateDraftField(key, value);
+  function updateDraftToggle(key: string, value: boolean, autoPersist = true): void {
+    updateDraftField(key, value, autoPersist);
   }
 
   function restoreDraft(): void {
@@ -3116,9 +3178,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 type="button"
                                 className="secondary-action compact"
                                 onClick={() => {
+                                  const defaultUrl = option.id === 'ollama-cloud' ? 'https://ollama.com' : 'http://localhost:11434';
                                   setOllamaModalProviderId(option.id);
                                   setOllamaModalLabel(option.label || option.id);
-                                  setOllamaUrl(settingsText(settings.base_url, option.id === 'ollama' ? 'http://localhost:11434' : ''));
+                                  setOllamaUrl(settingsText(settings.base_url, defaultUrl));
                                   setOllamaKey(settingsText(settings.api_key, ''));
                                   setOllamaTestResult('');
                                 }}
@@ -3154,15 +3217,15 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                         type="url"
                         value={ollamaUrl}
                         onChange={(e) => setOllamaUrl(e.target.value)}
-                        placeholder="http://localhost:11434"
+                        placeholder={ollamaModalProviderId === 'ollama-cloud' ? 'https://ollama.com' : 'http://localhost:11434'}
                         style={{ width: '100%', marginBottom: 8 }}
                       />
-                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>API Key (optional)</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>API Key {ollamaModalProviderId === 'ollama-cloud' ? '(required)' : '(optional)'}</label>
                       <input
                         type="password"
                         value={ollamaKey}
                         onChange={(e) => setOllamaKey(e.target.value)}
-                        placeholder="Leave empty for local Ollama"
+                        placeholder={ollamaModalProviderId === 'ollama-cloud' ? 'Enter Ollama Cloud API Key' : 'Leave empty for local Ollama'}
                         style={{ width: '100%', marginBottom: 12 }}
                       />
                       {ollamaTestResult && (
@@ -3177,9 +3240,22 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           onClick={async () => {
                             setOllamaTestResult('Testing…');
                             try {
-                              const res = await fetch(`${ollamaUrl.replace(/\/$/, '')}/api/tags`, { signal: AbortSignal.timeout(5000) });
-                              if (res.ok) setOllamaTestResult('✓ Connected — Ollama is reachable');
-                              else setOllamaTestResult(`✗ HTTP ${res.status}`);
+                              const isCloud = ollamaModalProviderId === 'ollama-cloud';
+                              const baseUrl = ollamaUrl.trim().replace(/\/$/, '');
+                              const testUrl = isCloud ? `${baseUrl}/v1/models` : `${baseUrl}/api/tags`;
+                              const headers: Record<string, string> = {};
+                              if (ollamaKey.trim()) {
+                                headers['Authorization'] = `Bearer ${ollamaKey.trim()}`;
+                              }
+                              const res = await fetch(testUrl, {
+                                headers,
+                                signal: AbortSignal.timeout(6000)
+                              });
+                              if (res.ok) {
+                                setOllamaTestResult(`✓ Connected — ${isCloud ? 'Ollama Cloud' : 'Ollama'} reachable`);
+                              } else {
+                                setOllamaTestResult(`✗ HTTP ${res.status}: ${res.statusText || 'Error'}`);
+                              }
                             } catch (err) {
                               setOllamaTestResult(`✗ ${err instanceof Error ? err.message : String(err)}`);
                             }
@@ -3197,17 +3273,26 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           onClick={async () => {
                             setSaving(true);
                             try {
+                              if (ollamaKey.trim()) {
+                                await window.lastbrowser.sidekick.requestWebui({
+                                  method: 'POST',
+                                  path: '/api/providers',
+                                  body: {
+                                    provider: ollamaModalProviderId,
+                                    api_key: ollamaKey.trim()
+                                  }
+                                });
+                              }
                               await window.lastbrowser.sidekick.saveSettings({
                                 settings: {
                                   ...cleanSettingsPayload(settings),
                                   provider: ollamaModalProviderId,
-                                  base_url: ollamaUrl.trim(),
-                                  ...(ollamaKey.trim() ? { api_key: ollamaKey.trim() } : {})
+                                  base_url: ollamaUrl.trim()
                                 }
                               });
                               await settingsState.refresh();
                               await modelsState.refresh();
-                              showToast(`Ollama provider set. URL: ${ollamaUrl.trim()}`);
+                              showToast(`${ollamaModalLabel} configured. URL: ${ollamaUrl.trim()}`);
                               setOllamaModalProviderId(null);
                             } catch (error) {
                               showToast(`Could not configure Ollama: ${error instanceof Error ? error.message : String(error)}`);
@@ -3269,6 +3354,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   <GeminiAccountsPanel sidekickReady={ready} />
                 </SettingsCard>
               </>
+            )}
+
+            {section === 'teamwork' && (
+              <TeamworkSettingsPanel />
             )}
 
             {section === 'google-accounts' && (

@@ -106,11 +106,14 @@ import {
   type BrowserProfile
 } from './profiles.js';
 import {
+  computeSpacePartition,
   loadProfileTabs,
   loadSessionSnapshot,
+  loadSpaceTabs,
   removeProfileTabs,
   saveProfileTabs,
-  saveSessionSnapshot
+  saveSessionSnapshot,
+  saveSpaceTabs
 } from './tab-sessions.js';
 import {
   loadVisitedSites,
@@ -240,11 +243,7 @@ type KanbanTaskSummary = NonNullable<KanbanColumnSummary['tasks']>[number];
 type DesktopSettingsRecord = Record<string, unknown>;
 const desktopSettingsStorageKey = 'lastbrowser.desktopSettings.v1';
 
-export function computeSpacePartition(profileId: string, spacePath?: string | null, incognito?: boolean): string {
-  if (incognito) return 'in-memory-incognito';
-  const safeSpace = (spacePath || 'home').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
-  return `persist:space_${safeSpace}_${profileId}`;
-}
+export { computeSpacePartition } from './tab-sessions.js';
 
 function isRecord(value: unknown): value is DesktopSettingsRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -666,7 +665,19 @@ export function App(): JSX.Element {
   const [composerText, setComposerText] = useState('');
   const [composerMode, setComposerMode] = useState<ComposerMode>('action');
   const [spaces, setSpaces] = useState<SpaceSummary[]>([]);
-  const [activeSpacePath, setActiveSpacePath] = useState('');
+  const [activeSpacePath, setActiveSpacePath] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem('lastbrowser.activeSpacePath.v1') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('lastbrowser.activeSpacePath.v1', activeSpacePath);
+    } catch {}
+  }, [activeSpacePath]);
   const [spacesError, setSpacesError] = useState('');
   const [workspacePath, setWorkspacePath] = useState('.');
   const [workspaceEntries, setWorkspaceEntries] = useState<WorkspaceTreeEntry[]>([]);
@@ -692,11 +703,12 @@ export function App(): JSX.Element {
   const activeProfile = useMemo(() => profileById(profiles, activeProfileId), [profiles, activeProfileId]);
   const activePartition = useMemo(() => computeSpacePartition(activeProfile.id, activeSpacePath), [activeProfile.id, activeSpacePath]);
 
-  // Keep the active profile's tab session and auto-recovery snapshot up to date.
+  // Keep the active profile's tab session, active space tabs, and auto-recovery snapshot up to date.
   useEffect(() => {
     saveProfileTabs(activeProfileId, { tabs, activeTabId }, window.localStorage);
+    saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage);
     saveSessionSnapshot(activeProfileId, { tabs, activeTabId }, window.localStorage);
-  }, [activeProfileId, tabs, activeTabId]);
+  }, [activeProfileId, activeSpacePath, tabs, activeTabId]);
 
   const activeBookmarkable = isBookmarkableUrl(activeTab.url);
   const activeBookmarked = useMemo(() => isBookmarked(bookmarks, activeTab.url), [activeTab.url, bookmarks]);
@@ -1188,7 +1200,8 @@ export function App(): JSX.Element {
       setSpaces(nextSpaces);
       setSpacesError('');
       setActiveSpacePath((current) => {
-        if (current && nextSpaces.some((space) => space.path === current)) return current;
+        if (current && (nextSpaces.some((space) => space.path === current) || current === 'home')) return current;
+        if (!current && nextSpaces.length === 0) return '';
         return result.last || nextSpaces[0]?.path || '';
       });
     } catch (error) {
@@ -1333,9 +1346,10 @@ export function App(): JSX.Element {
 
   function switchProfile(profileId: string): void {
     if (profileId === activeProfileId) return;
-    // Persist the outgoing profile's tabs before swapping.
+    // Persist the outgoing profile's space and global tabs before swapping.
+    saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage);
     saveProfileTabs(activeProfileId, { tabs, activeTabId }, window.localStorage);
-    const stored = loadProfileTabs(profileId, window.localStorage);
+    const stored = loadSpaceTabs(profileId, activeSpacePath, window.localStorage);
     const nextTabs = stored.tabs.length ? stored.tabs : [createInitialTab(browserStartUrl)];
     const nextActiveId = stored.activeTabId && nextTabs.some((tab) => tab.id === stored.activeTabId)
       ? stored.activeTabId
@@ -1346,6 +1360,42 @@ export function App(): JSX.Element {
     setActiveProfileId(profileId);
     saveActiveProfileId(window.localStorage, profileId);
   }
+
+  const handleSpaceSelect = useCallback((newSpacePath: string) => {
+    if (newSpacePath === activeSpacePath) return;
+
+    // 1. Persist outgoing space tabs
+    saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage);
+
+    // 2. Mute background audio in existing webviews before leaving space
+    try {
+      document.querySelectorAll('webview').forEach((el) => {
+        try {
+          (el as Electron.WebviewTag).setAudioMuted(true);
+        } catch {}
+      });
+    } catch {}
+
+    // 3. Clear split tabs so previous space's split tab IDs do not leak
+    clearSplitTabs();
+
+    // 4. Load target space tabs
+    const stored = loadSpaceTabs(activeProfileId, newSpacePath, window.localStorage);
+    const nextTabs = stored.tabs.length > 0
+      ? stored.tabs
+      : [createInitialTab(browserStartUrl)];
+    const nextActiveId = stored.activeTabId && nextTabs.some((t) => t.id === stored.activeTabId)
+      ? stored.activeTabId
+      : nextTabs[0].id;
+
+    // 5. Update state
+    setTabs(nextTabs);
+    activeTabIdRef.current = nextActiveId;
+    setActiveTabId(nextActiveId);
+    setActiveSpacePath(newSpacePath);
+    setBrowserMode(isAiBrowserHomeUrl(nextTabs.find((t) => t.id === nextActiveId)?.url || '') ? 'home' : 'web');
+    setBrowserLoadError('');
+  }, [activeProfileId, activeSpacePath, tabs, activeTabId, setTabs, setActiveTabId, clearSplitTabs, setBrowserMode, setBrowserLoadError]);
 
   function createProfileEntry(name: string): void {
     setProfiles((current) => {
@@ -2038,8 +2088,8 @@ export function App(): JSX.Element {
       const result = await window.lastbrowser.sidekick.addSpace({ path, name, create: true });
       const nextSpaces = Array.isArray(result.workspaces) ? result.workspaces : spaces;
       setSpaces(nextSpaces);
-      setActiveSpacePath(path);
       setSpacesError('');
+      handleSpaceSelect(path);
     } catch (error) {
       setSpacesError(error instanceof Error ? error.message : String(error));
     }
@@ -2063,7 +2113,7 @@ export function App(): JSX.Element {
       const result = await window.lastbrowser.sidekick.removeSpace({ path: space.path });
       const nextSpaces = Array.isArray(result.workspaces) ? result.workspaces : spaces.filter((item) => item.path !== space.path);
       setSpaces(nextSpaces);
-      if (activeSpacePath === space.path) setActiveSpacePath(nextSpaces[0]?.path || '');
+      if (activeSpacePath === space.path) handleSpaceSelect(nextSpaces[0]?.path || '');
       setSpacesError('');
     } catch (error) {
       setSpacesError(error instanceof Error ? error.message : String(error));
@@ -2318,7 +2368,7 @@ export function App(): JSX.Element {
               onSetMode={setSidebarMode}
               activeSpacePath={activeSpacePath}
               spaces={spaces}
-              onSelectSpace={(spacePath) => setActiveSpacePath(spacePath)}
+              onSelectSpace={handleSpaceSelect}
               onCreateSpace={() => setActivePanel('workspaces')}
               onOpenSettings={() => setActivePanel('settings')}
               onOpenHistory={() => usePanelStore.getState().setHistoryOpen(true)}
@@ -2442,7 +2492,7 @@ export function App(): JSX.Element {
                   hasActiveDownloads={hasActiveDownloads}
                   onRemoveSpace={(space) => void removeSpaceNative(space)}
                   onRenameSpace={(space) => void renameSpaceNative(space)}
-                  onSelectSpace={setActiveSpacePath}
+                  onSelectSpace={handleSpaceSelect}
                   onSendChat={(message) => void startNativeChat(message)}
                   onStopChat={() => void stopNativeChat()}
                   onClearBrowserError={() => setBrowserLoadError('')}
@@ -2559,7 +2609,7 @@ export function App(): JSX.Element {
                 error={spacesError}
                 spaces={spaces}
                 onOpenSpaces={() => setActivePanel('workspaces')}
-                onSelect={(path) => setActiveSpacePath(path)}
+                onSelect={handleSpaceSelect}
               />
               <ProfileSwitcher
                 profiles={profiles}
@@ -2691,7 +2741,7 @@ export function App(): JSX.Element {
               hasActiveDownloads={hasActiveDownloads}
               onRemoveSpace={(space) => void removeSpaceNative(space)}
               onRenameSpace={(space) => void renameSpaceNative(space)}
-              onSelectSpace={setActiveSpacePath}
+              onSelectSpace={handleSpaceSelect}
               onSendChat={(message) => void startNativeChat(message)}
               onStopChat={() => void stopNativeChat()}
               onClearBrowserError={() => setBrowserLoadError('')}
@@ -2897,6 +2947,8 @@ function BrowserMain({
     minWidth: 0,
     minHeight: 0
   } as React.CSSProperties;
+
+  const safeSpace = (activeSpacePath || 'home').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
 
 
 
@@ -3635,6 +3687,11 @@ function BrowserMain({
               visits={visitedSites}
               onNavigate={onNavigate}
               botName={botName}
+              spaces={spaces}
+              activeSpacePath={activeSpacePath}
+              activeProfileId={activeProfile.id}
+              onSelectSpace={onSelectSpace}
+              onAddSpace={onAddSpace}
               onAskAi={(prompt) => {
                 usePanelStore.getState().setCopilotOpen(true);
                 void onSendChat(prompt);
@@ -3744,7 +3801,7 @@ function BrowserMain({
                         </div>
                       </div>
                       <webview
-                        key={`${activeProfile.id}:${tab.id}:${webviewMountKey}`}
+                        key={`${activeProfile.id}:${safeSpace}:${tab.id}:${webviewMountKey}`}
                         ref={(el) => {
                           if (el) {
                             splitWebviewRefs.current[tab.id] = el;
@@ -3821,7 +3878,7 @@ function BrowserMain({
               >
                 {webviewReady && (
                   <webview
-                    key={`${activeProfile.id}:${tab.id}:${webviewMountKey}`}
+                    key={`${activeProfile.id}:${safeSpace}:${tab.id}:${webviewMountKey}`}
                     ref={(el) => {
                       if (el) {
                         allWebviewRefs.current[tab.id] = el;

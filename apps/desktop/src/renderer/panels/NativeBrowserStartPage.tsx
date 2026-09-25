@@ -10,12 +10,19 @@ import {
   Clock,
   Command,
   Wand2,
-  Bot
+  Bot,
+  Layers,
+  Plus,
+  Check,
+  X,
+  ShieldCheck
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import type { BrowserBookmark } from '../bookmarks.js';
 import type { BrowserVisit } from '../history.js';
 import { normalizeNavigationInput } from '../tabs.js';
+import { spaceDisplayName, type SpaceSummary } from '../shell-state.js';
+import { getSpaceTabCount } from '../tab-sessions.js';
 
 export interface SpeedDialItem {
   id: string;
@@ -92,23 +99,65 @@ export const DASHBOARD_QUICK_ACTIONS: DashboardQuickAction[] = [
   { id: 'palette', label: 'Befehlspalette', prompt: 'palette', icon: '⌘K', type: 'action' }
 ];
 
-export function NativeBrowserStartPage({
-  bookmarks,
-  visits,
-  onNavigate,
-  onAskAi,
-  onOpenCommandPalette,
-  botName = 'Nova'
-}: {
+export interface NativeBrowserStartPageProps {
   bookmarks: BrowserBookmark[];
   visits: BrowserVisit[];
   onNavigate: (url: string) => void;
   onAskAi?: (prompt: string) => void;
   onOpenCommandPalette?: () => void;
   botName?: string;
-}): JSX.Element {
+  spaces?: SpaceSummary[];
+  activeSpacePath?: string;
+  activeProfileId?: string;
+  onSelectSpace?: (spacePath: string) => void;
+  onAddSpace?: (path: string, name: string) => void;
+}
+
+export function NativeBrowserStartPage({
+  bookmarks,
+  visits,
+  onNavigate,
+  onAskAi,
+  onOpenCommandPalette,
+  botName = 'Nova',
+  spaces = [],
+  activeSpacePath = '',
+  activeProfileId = 'default',
+  onSelectSpace,
+  onAddSpace
+}: NativeBrowserStartPageProps): JSX.Element {
   const [query, setQuery] = useState('');
   const [currentTime, setCurrentTime] = useState(() => new Date());
+  const [isCreatingSpace, setIsCreatingSpace] = useState(false);
+  const [newSpaceName, setNewSpaceName] = useState('');
+
+  const displayedSpaces = useMemo(() => {
+    if (spaces && spaces.length > 0) {
+      return spaces;
+    }
+    return [{ path: '', name: 'Standard Space', emoji: '🏠' }];
+  }, [spaces]);
+
+  const isSpaceActive = (space: SpaceSummary) => {
+    if (space.path === activeSpacePath) return true;
+    if (!activeSpacePath && (space.path === '' || space.path === 'home')) return true;
+    return false;
+  };
+
+  const handleCreateSpaceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newSpaceName.trim();
+    if (!trimmed) return;
+    const slug = trimmed.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-');
+    const path = `workspaces/${slug}`;
+    if (onAddSpace) {
+      onAddSpace(path, trimmed);
+    } else if (onSelectSpace) {
+      onSelectSpace(path);
+    }
+    setNewSpaceName('');
+    setIsCreatingSpace(false);
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -242,6 +291,167 @@ export function NativeBrowserStartPage({
           </button>
         ))}
       </div>
+
+      {/* ── Space-Hub / Workspaces Overview ──────────────────────────────── */}
+      <section className="startpage-spaces-section" data-testid="browser-start-spaces-hub">
+        <div className="startpage-section-head">
+          <div className="startpage-section-title-wrap">
+            <div className="startpage-section-icon-badge">
+              <Layers size={16} />
+            </div>
+            <div>
+              <span className="eyebrow">Isolierte Arbeitsbereiche</span>
+              <h2 className="startpage-section-title">Spaces & Sessions</h2>
+            </div>
+          </div>
+          <div className="startpage-section-actions">
+            <span className="startpage-spaces-isolation-hint" title="Jeder Space speichert separate Cookies, Logins und Tabs">
+              <ShieldCheck size={13} />
+              <span>Getrennte Logins pro Space</span>
+            </span>
+            <button
+              type="button"
+              className="startpage-add-space-btn"
+              onClick={() => setIsCreatingSpace(true)}
+              title="Neuen Space mit eigener Session erstellen"
+            >
+              <Plus size={14} />
+              <span>Neuer Space</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="startpage-spaces-grid">
+          {displayedSpaces.map((space) => {
+            const isActive = isSpaceActive(space);
+            const name = spaceDisplayName(space);
+            const tabCount = getSpaceTabCount(activeProfileId || 'default', space.path);
+            const avatarChar = space.emoji || (space.path === '' ? '🏠' : name.charAt(0).toUpperCase());
+
+            return (
+              <div
+                key={space.path || '__home__'}
+                className={`startpage-space-card ${isActive ? 'is-active' : ''}`}
+                onClick={() => onSelectSpace?.(space.path)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectSpace?.(space.path);
+                  }
+                }}
+                title={`Zu Space "${name}" wechseln (Eigene Session & Logins)`}
+              >
+                <div className="startpage-space-card-top">
+                  <div className="startpage-space-avatar">
+                    {avatarChar}
+                  </div>
+                  {isActive ? (
+                    <span className="startpage-space-badge active">
+                      <Check size={11} />
+                      <span>Aktiv</span>
+                    </span>
+                  ) : (
+                    <span className="startpage-space-badge inactive">
+                      <span>Wechseln</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="startpage-space-card-body">
+                  <h3 className="startpage-space-name">{name}</h3>
+                  <div className="startpage-space-meta">
+                    <span className="startpage-space-tabs-count">
+                      {tabCount === 0 ? 'Keine Tabs' : tabCount === 1 ? '1 Tab' : `${tabCount} Tabs`}
+                    </span>
+                    <span className="startpage-space-dot">•</span>
+                    <span className="startpage-space-session-tag">Eigene Session</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* "+ Neuer Space" Card */}
+          <button
+            type="button"
+            className="startpage-space-card startpage-space-add-card"
+            onClick={() => setIsCreatingSpace(true)}
+            title="Neuen Space mit eigener Session erstellen"
+          >
+            <div className="startpage-add-icon-box">
+              <Plus size={20} />
+            </div>
+            <div className="startpage-add-card-text">
+              <span className="startpage-add-title">Neuer Space</span>
+              <span className="startpage-add-sub">Isolierter Login-Bereich</span>
+            </div>
+          </button>
+        </div>
+
+        {/* Modal / Dialog for New Space */}
+        {isCreatingSpace && (
+          <div className="startpage-modal-overlay" onClick={() => setIsCreatingSpace(false)}>
+            <div className="startpage-modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="startpage-modal-header">
+                <div className="startpage-modal-title-wrap">
+                  <div className="startpage-section-icon-badge">
+                    <Layers size={16} />
+                  </div>
+                  <div>
+                    <h3>Neuen Space erstellen</h3>
+                    <p className="startpage-modal-sub">
+                      Erstelle einen neuen isolierten Arbeitsbereich mit eigenen Logins, Cookies und Tabs.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="startpage-modal-close"
+                  onClick={() => setIsCreatingSpace(false)}
+                  title="Schließen"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateSpaceSubmit} className="startpage-modal-form">
+                <div className="startpage-form-field">
+                  <label htmlFor="startpage-space-name-input">Name des Space</label>
+                  <input
+                    id="startpage-space-name-input"
+                    type="text"
+                    autoFocus
+                    placeholder="z. B. Arbeit, Privat, Finanzen, Recherche..."
+                    value={newSpaceName}
+                    onChange={(e) => setNewSpaceName(e.target.value)}
+                    className="startpage-text-input"
+                  />
+                </div>
+
+                <div className="startpage-modal-actions">
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={() => setIsCreatingSpace(false)}
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="submit"
+                    className="primary-action"
+                    disabled={!newSpaceName.trim()}
+                  >
+                    <Plus size={14} />
+                    <span>Space erstellen</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Speed Dial Quick Launch Section */}
       <section className="speed-dial-section">

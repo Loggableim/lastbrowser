@@ -22,6 +22,17 @@ export function emptyTabState(): ProfileTabState {
   return { tabs: [], activeTabId: null };
 }
 
+export function computeSpaceSessionKey(profileId: string, spacePath?: string | null): string {
+  const safeSpace = (spacePath || 'home').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+  return `${profileId}::${safeSpace}`;
+}
+
+export function computeSpacePartition(profileId: string, spacePath?: string | null, incognito?: boolean): string {
+  if (incognito) return 'in-memory-incognito';
+  const safeSpace = (spacePath || 'home').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+  return `persist:space_${safeSpace}_${profileId}`;
+}
+
 export function loadProfileTabs(
   profileId: string,
   storage: ReadStorage = window.localStorage
@@ -29,6 +40,24 @@ export function loadProfileTabs(
   const all = readAll(storage);
   const entry = all[profileId];
   if (!entry) return emptyTabState();
+  return normalizeTabState(entry);
+}
+
+export function loadSpaceTabs(
+  profileId: string,
+  spacePath?: string | null,
+  storage: ReadStorage = window.localStorage
+): ProfileTabState {
+  const key = computeSpaceSessionKey(profileId, spacePath);
+  const all = readAll(storage);
+  const entry = all[key];
+  if (!entry) {
+    if (!spacePath || spacePath === 'home') {
+      const legacyEntry = all[profileId];
+      if (legacyEntry) return normalizeTabState(legacyEntry);
+    }
+    return emptyTabState();
+  }
   return normalizeTabState(entry);
 }
 
@@ -46,6 +75,33 @@ export function saveProfileTabs(
       : (persistableTabs[0]?.id ?? null)
   };
   storage.setItem(tabSessionsStorageKey, JSON.stringify(all));
+}
+
+export function saveSpaceTabs(
+  profileId: string,
+  spacePath: string | null | undefined,
+  state: ProfileTabState,
+  storage: WriteStorage = window.localStorage
+): void {
+  const key = computeSpaceSessionKey(profileId, spacePath);
+  const all = readAll(storage as unknown as ReadStorage);
+  const persistableTabs = state.tabs.filter((tab) => !tab.incognito);
+  all[key] = {
+    tabs: persistableTabs.map((tab) => ({ ...tab })),
+    activeTabId: persistableTabs.some((t) => t.id === state.activeTabId)
+      ? state.activeTabId
+      : (persistableTabs[0]?.id ?? null)
+  };
+  storage.setItem(tabSessionsStorageKey, JSON.stringify(all));
+}
+
+export function getSpaceTabCount(
+  profileId: string,
+  spacePath: string | null | undefined,
+  storage: ReadStorage = window.localStorage
+): number {
+  const state = loadSpaceTabs(profileId, spacePath, storage);
+  return state.tabs.length;
 }
 
 export function removeProfileTabs(

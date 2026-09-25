@@ -182,4 +182,28 @@ describe('Appearance Relaunch & Design-System Engine', () => {
       expect(root.style.getPropertyValue('--user-accent-primary')).toBe('');
     });
   });
+
+  describe('6. BrowserMain desktopSettings Contract & Zoom Resilience', () => {
+    it('declares desktopSettings in BrowserMain parameters and prop types', () => {
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+      const browserMainIndex = appTsx.indexOf('function BrowserMain(');
+      expect(browserMainIndex).toBeGreaterThan(0);
+      const browserMainSignature = appTsx.slice(browserMainIndex, appTsx.indexOf('): JSX.Element {', browserMainIndex));
+      expect(browserMainSignature).toContain('desktopSettings = null');
+      expect(browserMainSignature).toContain('desktopSettings?: DesktopSettingsRecord | null;');
+    });
+
+    it('passes desktopSettings to all BrowserMain call sites in App.tsx', () => {
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+      const browserMainCalls = appTsx.match(/<BrowserMain[\s\S]*?\/>/g) || [];
+      expect(browserMainCalls.length).toBeGreaterThanOrEqual(2);
+      for (const call of browserMainCalls) {
+        expect(call).toContain('desktopSettings={desktopSettings}');
+      }
+    });
+  });
 });

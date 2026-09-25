@@ -616,7 +616,7 @@ export function App(): JSX.Element {
               const existingTabs = useTabStore.getState().tabs;
               const appHost = (() => { try { return new URL(app.url).hostname.replace(/^www\\./, ''); } catch { return ''; } })();
               const match = existingTabs.find(t => { if (!t.url) return false; try { const h = new URL(t.url).hostname.replace(/^www\\./, ''); return h === appHost || h.endsWith(`.${appHost}`); } catch { return false; } });
-              if (match) { if (match.discarded) wakeTab(match.id); setActiveTabId(match.id); setActivePanel('browser'); }
+              if (match) { if (match.isDiscarded) wakeTab(match.id); setActiveTabId(match.id); setActivePanel('browser'); }
               else { addTab(app.url); }
             }
           }
@@ -2502,6 +2502,7 @@ export function App(): JSX.Element {
                   onReopenClosedTab={reopenClosedTab}
                   searchEngineId={searchEngineId}
                   onSearchEngineChange={setSearchEngineId}
+                  desktopSettings={desktopSettings}
                 />
               </div>
 
@@ -2751,6 +2752,7 @@ export function App(): JSX.Element {
               onReopenClosedTab={reopenClosedTab}
               searchEngineId={searchEngineId}
               onSearchEngineChange={setSearchEngineId}
+              desktopSettings={desktopSettings}
             />
             <WorkspacePanel
               activeSessionId={activeSessionId}
@@ -2877,7 +2879,8 @@ function BrowserMain({
   onAddSplitTab,
   onRemoveSplitTab,
   onSetSplitLayout,
-  botName = 'Nova'
+  botName = 'Nova',
+  desktopSettings = null
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -2940,6 +2943,7 @@ function BrowserMain({
   onRemoveSplitTab?: (tabId: string) => void;
   onSetSplitLayout?: (layout: 'columns' | 'rows' | 'grid') => void;
   botName?: string;
+  desktopSettings?: DesktopSettingsRecord | null;
 }): JSX.Element {
   const browserWebviewStyle = {
     width: '100%',
@@ -3081,7 +3085,8 @@ function BrowserMain({
   const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
   const [zoomFactor, setZoomFactor] = useState<number>(() => {
     try {
-      return getEffectiveZoomForUrl(activeTab?.url || '', Number(desktopSettings?.default_zoom) || 100);
+      const defaultZoom = Number(desktopSettings?.default_zoom ?? loadDesktopSettingsFromStorage()?.default_zoom) || 100;
+      return getEffectiveZoomForUrl(activeTab?.url || '', defaultZoom);
     } catch {
       return 1;
     }
@@ -3138,7 +3143,8 @@ function BrowserMain({
 
   // Synchronize domain-specific or default appearance zoom on navigation / tab switch
   useEffect(() => {
-    const effective = getEffectiveZoomForUrl(activeTab.url, Number(desktopSettings?.default_zoom) || 100);
+    const defaultZoom = Number(desktopSettings?.default_zoom ?? loadDesktopSettingsFromStorage()?.default_zoom) || 100;
+    const effective = getEffectiveZoomForUrl(activeTab.url, defaultZoom);
     setZoomFactor(effective);
     const view = webviewRef.current;
     if (view && typeof view.setZoomFactor === 'function') {

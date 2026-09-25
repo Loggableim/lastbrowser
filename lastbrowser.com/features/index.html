@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Features &amp; Browser-Vergleich – Lastbrowser</title>
+<meta name="description" content="Alle Features von Lastbrowser im Detail: Nova AI, 100% isolierte Spaces, Unified Extension &amp; MCP Hub, Widevine DRM, ConPTY Terminal und der direkte Vergleich mit Chrome, Edge, Brave &amp; Arc.">
+<meta property="og:title" content="Features &amp; Browser-Vergleich – Lastbrowser">
+<meta property="og:description" content="Entdecken Sie die 5 Kernsäulen von Lastbrowser und den direkten Vergleich mit Chrome, Edge, Brave und Arc.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/features/">
+<meta property="og:image" content="https://lastbrowser.com/assets/sidekick/sidekick-mascot-512.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/features/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/features/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/features/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/features/">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --nearBlack:#070A12; --midnight:#07111F; --surface:#101827; --panel:#0E1628; --stroke:#2A3550;
+  --text:#F7FAFF; --muted:#AAB4C6; --electricBlue:#2563FF; --cyan:#00E5FF; --magenta:#FF2D8F;
+  --purple:#8A3FFC; --yellow:#FFC800; --green:#7CFF6B;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:radial-gradient(circle at 18% 0%,rgba(37,99,255,.2),transparent 30%),
+             radial-gradient(circle at 85% 10%,rgba(255,45,143,.14),transparent 28%),
+             radial-gradient(circle at 50% 60%,rgba(0,229,255,.06),transparent 40%),
+             linear-gradient(180deg,#060913 0%,#070B14 50%,#05070D 100%);
+  color:var(--text);font-family:Inter,"Segoe UI",system-ui,-apple-system,sans-serif;
+  line-height:1.6;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+}
+body:before{
+  content:"";position:fixed;inset:0;pointer-events:none;opacity:.65;
+  background-image:radial-gradient(circle,rgba(0,229,255,.035) 1px,transparent 1px);
+  background-size:24px 24px;z-index:0;
+}
+.container{width:min(1160px,calc(100% - 40px));margin:0 auto;position:relative;z-index:2}
+a{color:var(--cyan);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4{font-family:Outfit,Inter,sans-serif;font-weight:700}
+
+/* Nav */
+nav{position:sticky;top:0;z-index:30;backdrop-filter:blur(20px);background:rgba(7,10,18,.82);border-bottom:1px solid rgba(42,53,80,.68)}
+nav .inner{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0}
+.logo{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+.logo img{width:42px;height:42px;border-radius:11px;border:1px solid rgba(42,53,80,.9);box-shadow:0 0 16px rgba(37,99,255,.25)}
+.logo strong{display:block;font-size:18px;letter-spacing:-.02em}
+.logo span{display:block;color:var(--cyan);font-size:12px;margin-top:2px;font-weight:600}
+.links{display:flex;gap:20px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.links a{color:var(--muted);font-size:14px;font-weight:600;transition:.2s color}
+.links a:hover,.links a.active{color:var(--text);text-decoration:none}
+.links a.active{color:var(--cyan)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:12px 22px;border-radius:14px;text-decoration:none;font-weight:700;font-size:15px;border:1px solid transparent;transition:all .2s ease;cursor:pointer}
+.btn:hover{transform:translateY(-2px);text-decoration:none}
+.btn-primary{color:#fff;background:linear-gradient(135deg,var(--electricBlue),var(--purple));box-shadow:0 12px 28px rgba(37,99,255,.3)}
+.btn-primary:hover{box-shadow:0 16px 36px rgba(37,99,255,.45)}
+.btn-ghost{background:rgba(16,24,39,.85);border-color:var(--stroke);color:var(--text)}
+.btn-ghost:hover{border-color:var(--cyan);color:var(--cyan)}
+.btn-sm{padding:8px 16px;font-size:13px;border-radius:10px}
+
+/* Hero */
+.hero{padding:60px 0 40px;text-align:center}
+.pill-badge{display:inline-flex;gap:8px;align-items:center;margin-bottom:20px;padding:8px 16px;border-radius:999px;border:1px solid rgba(0,229,255,.35);background:rgba(0,229,255,.08);color:var(--cyan);font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:800}
+.hero h1{margin:0 auto 16px;max-width:920px;font-size:clamp(36px,5.5vw,62px);line-height:1.1;letter-spacing:-.04em}
+.grad{background:linear-gradient(90deg,var(--cyan),var(--electricBlue),var(--magenta));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p.lead{margin:0 auto 28px;max-width:720px;color:var(--muted);font-size:clamp(16px,1.8vw,19px);line-height:1.7}
+
+/* Pillars */
+.pillar-section{padding:40px 0 60px}
+.pillar-block{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;margin-bottom:70px;background:linear-gradient(180deg,rgba(16,24,39,.9),rgba(11,18,32,.9));border:1px solid rgba(42,53,80,.68);border-radius:24px;padding:36px;position:relative;overflow:hidden}
+.pillar-block.reverse{grid-template-columns:1fr 1fr}
+.pillar-badge{display:inline-block;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
+.pillar-block h3{font-size:clamp(22px,3vw,30px);letter-spacing:-.02em;margin-bottom:14px}
+.pillar-block p{color:var(--muted);font-size:15px;line-height:1.7;margin-bottom:18px}
+.pillar-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.pillar-tag{background:rgba(7,10,18,.8);border:1px solid rgba(42,53,80,.7);padding:6px 12px;border-radius:8px;font-size:12px;color:var(--text);font-weight:600}
+.pillar-img-wrap{border-radius:16px;overflow:hidden;border:1px solid rgba(42,53,80,.8);box-shadow:0 16px 40px rgba(0,0,0,.5);background:#070a12}
+.pillar-img-wrap img{width:100%;height:auto;display:block;transition:transform .3s ease}
+.pillar-img-wrap img:hover{transform:scale(1.02)}
+
+/* Comparison Matrix */
+.matrix-section{padding:50px 0 80px}
+.matrix-header{text-align:center;max-width:760px;margin:0 auto 40px}
+.matrix-header h2{font-size:clamp(28px,4vw,44px);letter-spacing:-.03em;margin-bottom:12px}
+.matrix-header p{color:var(--muted);font-size:16px}
+.table-wrap{overflow-x:auto;border-radius:20px;border:1px solid rgba(42,53,80,.7);background:rgba(11,18,32,.95);box-shadow:0 18px 45px rgba(0,0,0,.4)}
+table.compare-table{width:100%;border-collapse:collapse;text-align:left;font-size:14px}
+table.compare-table th,table.compare-table td{padding:16px 20px;border-bottom:1px solid rgba(42,53,80,.6)}
+table.compare-table th{background:rgba(16,24,39,.95);font-family:Outfit,Inter,sans-serif;font-weight:700;color:var(--text);font-size:15px}
+table.compare-table th.highlight,table.compare-table td.highlight{background:rgba(37,99,255,.12);border-left:1px solid rgba(0,229,255,.3);border-right:1px solid rgba(0,229,255,.3)}
+table.compare-table th.highlight{color:var(--cyan);font-weight:800;font-size:16px}
+.yes{color:var(--green);font-weight:bold}
+.no{color:var(--muted);opacity:.6}
+.part{color:var(--yellow);font-weight:600}
+
+/* CTA */
+.cta-banner{padding:70px 0;text-align:center;background:radial-gradient(circle at 50% 50%,rgba(37,99,255,.15),transparent 65%)}
+.cta-banner h2{font-size:clamp(30px,4.5vw,46px);letter-spacing:-.03em;margin-bottom:14px}
+.cta-banner p{color:var(--muted);font-size:16px;max-width:600px;margin:0 auto 24px}
+
+/* Footer */
+footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--muted);font-size:14px}
+.footer-row{display:flex;justify-content:space-between;gap:20px;align-items:center;flex-wrap:wrap}
+.footer-links{display:flex;gap:22px;flex-wrap:wrap}
+.footer-links a{color:var(--muted)}
+.footer-links a:hover{color:var(--text)}
+
+@media(max-width:920px){
+  .pillar-block{grid-template-columns:1fr;gap:24px}
+  .pillar-block.reverse{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser">
+      <div><strong>Lastbrowser</strong><span>v0.1.32 Beta · AI-Native</span></div>
+    </a>
+    <div class="links">
+      <a href="/">Home</a>
+      <a href="/features/" class="active">Features &amp; Vergleich</a>
+      <a href="/download/">Download</a>
+      <a href="/changelog/">Changelog</a>
+      <a href="/support/">Support &amp; FAQ</a>
+      <a href="/privacy/">Datenschutz</a>
+      <a href="/en/features/">English (EN)</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container">
+    <div class="pill-badge">✦ Tiefe Einblicke in die Architektur · v0.1.32 Public Beta</div>
+    <h1>Entwickelt für <span class="grad">Fokus, Freiheit &amp; Datenkontrolle</span>.</h1>
+    <p class="lead">Entdecken Sie die fünf architektonischen Säulen von Lastbrowser und erfahren Sie, wie er sich fundamental von Standard-Browsern unterscheidet.</p>
+  </div>
+</header>
+
+<main class="container pillar-section">
+
+  <!-- Pillar 1: Nova AI & BYOK -->
+  <article class="pillar-block">
+    <div>
+      <span class="pillar-badge" style="background:rgba(138,63,252,.18);color:var(--purple);border:1px solid rgba(138,63,252,.3)">Säule 1 · Intelligenz</span>
+      <h3>Nova AI &amp; BYOK-Freiheit (Bring Your Own Key)</h3>
+      <p>
+        Kein 20-Euro-Abo pro Monat. Lastbrowser bindet direkt Ihre vorhandenen Anmeldedaten ein. Nutzen Sie die kostenlose <strong>Google Gemini CLI</strong> mit automatischem <strong>Multi-Account Round-Robin</strong>: Bei Quota-Limits (HTTP 429) schaltet der Browser unterbrechungsfrei auf das nächste Konto um.
+      </p>
+      <p>
+        Alternativ hinterlegen Sie eigene API-Keys für Claude 3.5 Sonnet, OpenAI GPT-4o / o3-mini oder verbinden lokale Offline-Modelle via <strong>Ollama</strong>. Name und Mentalität (Pragmatisch, Forschend, Technisch, Visionär) lassen sich frei konfigurieren.
+      </p>
+      <div class="pillar-tags">
+        <div class="pillar-tag">Gemini Multi-Account Quota</div>
+        <div class="pillar-tag">Claude 3.5 Sonnet</div>
+        <div class="pillar-tag">OpenAI o3-mini</div>
+        <div class="pillar-tag">Ollama Offline</div>
+      </div>
+    </div>
+    <div class="pillar-img-wrap">
+      <img src="/assets/screenshots/store-screen-2-copilot-splitview.png" alt="Nova AI Split-View">
+    </div>
+  </article>
+
+  <!-- Pillar 2: Spaces Isolation -->
+  <article class="pillar-block reverse">
+    <div class="pillar-img-wrap">
+      <img src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Isolierte Spaces in Zen-Sidebar">
+    </div>
+    <div>
+      <span class="pillar-badge" style="background:rgba(37,99,255,.18);color:var(--cyan);border:1px solid rgba(0,229,255,.3)">Säule 2 · Multitasking</span>
+      <h3>Isolierte Spaces mit 100% Session-Partitionierung</h3>
+      <p>
+        Vergessen Sie unübersichtliche Profil-Fenster oder Session-Leaks. In Lastbrowser besitzt jeder Space einen eigenständigen Partitions-Schlüssel (<code>persist:profile:space</code>).
+      </p>
+      <p>
+        Das bedeutet: In Space „Arbeit“ sind Sie mit dem Firmen-Google-Konto angemeldet, in Space „Privat“ mit Ihrem privaten Konto und in Space „Recherche“ völlig neutral. Kein Session-Spillover, sauberes Tab-Management und ein integrierter Space-Hub auf der Startseite mit Live-Tab-Zähler.
+      </p>
+      <div class="pillar-tags">
+        <div class="pillar-tag">Echte Cookie-Isolation</div>
+        <div class="pillar-tag">Multi-Session Partitioning</div>
+        <div class="pillar-tag">Space-Hub Startseite</div>
+      </div>
+    </div>
+  </article>
+
+  <!-- Pillar 3: Unified Extension & MCP Hub -->
+  <article class="pillar-block">
+    <div>
+      <span class="pillar-badge" style="background:rgba(124,255,107,.18);color:var(--green);border:1px solid rgba(124,255,107,.3)">Säule 3 · Erweiterbarkeit</span>
+      <h3>Unified Extension &amp; Skill Hub (Chrome MV3 + MCP)</h3>
+      <p>
+        Zwei Ökosysteme vereint unter einem Dach (<code>Ctrl+Shift+X</code>): <strong>Chrome MV3 WebExtensions</strong> wie uBlock Origin Lite, Dark Reader oder Bitwarden installieren Sie mit 1 Klick oder via Store-URL.
+      </p>
+      <p>
+        Gleichzeitig unterstützt Lastbrowser das neue <strong>Model Context Protocol (MCP)</strong>: Binden Sie externe Werkzeuge und Datenserver über standardisierte stdio/sse-Schnittstellen an – kompatibel mit dem Claude-Desktop-Ökosystem und ergänzt durch 48 kuratierte Agentic-Skills.
+      </p>
+      <div class="pillar-tags">
+        <div class="pillar-tag">Chrome MV3 Extensions</div>
+        <div class="pillar-tag">Model Context Protocol (MCP)</div>
+        <div class="pillar-tag">48 Agentic Workflows</div>
+      </div>
+    </div>
+    <div class="pillar-img-wrap">
+      <img src="/assets/screenshots/store-screen-5-webextensions.png" alt="Unified Extension & MCP Hub">
+    </div>
+  </article>
+
+  <!-- Pillar 4: Widevine DRM Streaming -->
+  <article class="pillar-block reverse">
+    <div class="pillar-img-wrap">
+      <img src="/assets/screenshots/store-screen-3-tab-intelligence.png" alt="Castlabs Widevine DRM Streaming">
+    </div>
+    <div>
+      <span class="pillar-badge" style="background:rgba(255,45,143,.18);color:var(--magenta);border:1px solid rgba(255,45,143,.3)">Säule 4 · Entertainment</span>
+      <h3>Castlabs Widevine DRM für Netflix, Disney+ &amp; Co.</h3>
+      <p>
+        Lastbrowser setzt auf die offizielle <strong>Castlabs Electron-Runtime</strong> mit hardwarebeschleunigtem Widevine CDM und Video Multi-Part Protection (VMP) Signierung.
+      </p>
+      <p>
+        Geschützte Medieninhalte von Netflix, Disney+, Spotify und Amazon Prime laufen nahtlos in gestochen scharfer Auflösung. Nutzen Sie den synchronen <strong>Split-View</strong>, um auf der linken Seite ein Video oder Webinar laufen zu lassen, während Nova AI rechts Notizen und Transkripte anfertigt.
+      </p>
+      <div class="pillar-tags">
+        <div class="pillar-tag">Widevine L3 Hardware-CDM</div>
+        <div class="pillar-tag">VMP Code-Signing</div>
+        <div class="pillar-tag">Synchroner Split-View</div>
+      </div>
+    </div>
+  </article>
+
+  <!-- Pillar 5: ConPTY Terminal & Local-First -->
+  <article class="pillar-block">
+    <div>
+      <span class="pillar-badge" style="background:rgba(255,200,0,.18);color:var(--yellow);border:1px solid rgba(255,200,0,.3)">Säule 5 · Entwickler &amp; Privatsphäre</span>
+      <h3>Echtes ConPTY Terminal &amp; 100% Local-First Engine</h3>
+      <p>
+        Entwickler müssen den Browser nicht mehr verlassen: Die integrierte Windows <strong>ConPTY PowerShell</strong> öffnet sich per Shortcut (<code>Ctrl+\`</code>) direkt in der Seitenleiste – inklusive ANSI-Farben, Prozesskontrolle und interaktiver TUI.
+      </p>
+      <p>
+        100% Local-First: Verlauf, SQLite-Datenbanken, Cookies und Keys verbleiben auf Ihrem PC unter <code>%APPDATA%\Lastbrowser</code>. Keine ungefragte Telemetrie, keine Cloud-Zwänge.
+      </p>
+      <div class="pillar-tags">
+        <div class="pillar-tag">Native ConPTY PowerShell</div>
+        <div class="pillar-tag">1-Klick Doctor Self-Repair</div>
+        <div class="pillar-tag">Zero Cloud Tracking</div>
+      </div>
+    </div>
+    <div class="pillar-img-wrap">
+      <img src="/assets/screenshots/store-screen-4-conpty-terminal.png" alt="ConPTY PowerShell Terminal">
+    </div>
+  </article>
+
+  <!-- Comparison Matrix -->
+  <section class="matrix-section">
+    <div class="matrix-header">
+      <h2>Der direkte <span class="grad">Browser-Vergleich</span></h2>
+      <p>Warum Lastbrowser das Beste aus Produktivität, KI-Integration und Privatsphäre vereint.</p>
+    </div>
+
+    <div class="table-wrap">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Funktion / Merkmal</th>
+            <th class="highlight">Lastbrowser</th>
+            <th>Google Chrome</th>
+            <th>Microsoft Edge</th>
+            <th>Brave</th>
+            <th>Arc</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Integrierter KI-Copilot mit BYOK</strong></td>
+            <td class="highlight"><span class="yes">✓ Eigene Keys / Gemini CLI</span></td>
+            <td><span class="no">✗ Feste Cloud-KI</span></td>
+            <td><span class="no">✗ Fester MS Copilot</span></td>
+            <td><span class="part">~ Leo (eingeschränkt)</span></td>
+            <td><span class="no">✗ Feste Arc Max Cloud</span></td>
+          </tr>
+          <tr>
+            <td><strong>100% isolierte Spaces &amp; Sessions</strong></td>
+            <td class="highlight"><span class="yes">✓ Volle Partitions-Trennung</span></td>
+            <td><span class="no">✗ Nur Fenster-Profile</span></td>
+            <td><span class="no">✗ Nur Fenster-Profile</span></td>
+            <td><span class="no">✗ Nein</span></td>
+            <td><span class="part">~ Profile mit Leaks</span></td>
+          </tr>
+          <tr>
+            <td><strong>Model Context Protocol (MCP) Hub</strong></td>
+            <td class="highlight"><span class="yes">✓ Standardisiert (stdio/sse)</span></td>
+            <td><span class="no">✗ Nicht unterstützt</span></td>
+            <td><span class="no">✗ Nicht unterstützt</span></td>
+            <td><span class="no">✗ Nicht unterstützt</span></td>
+            <td><span class="no">✗ Nicht unterstützt</span></td>
+          </tr>
+          <tr>
+            <td><strong>Echtes ConPTY Terminal in Sidebar</strong></td>
+            <td class="highlight"><span class="yes">✓ Volle PowerShell &amp; TUI</span></td>
+            <td><span class="no">✗ Nur Web-DevTools</span></td>
+            <td><span class="no">✗ Nur Web-DevTools</span></td>
+            <td><span class="no">✗ Nein</span></td>
+            <td><span class="no">✗ Nein</span></td>
+          </tr>
+          <tr>
+            <td><strong>Widevine DRM (Netflix, Disney+, Spotify)</strong></td>
+            <td class="highlight"><span class="yes">✓ Castlabs VMP signiert</span></td>
+            <td><span class="yes">✓ Unterstützt</span></td>
+            <td><span class="yes">✓ Unterstützt</span></td>
+            <td><span class="yes">✓ Unterstützt</span></td>
+            <td><span class="yes">✓ Unterstützt</span></td>
+          </tr>
+          <tr>
+            <td><strong>Chrome MV3 WebExtensions</strong></td>
+            <td class="highlight"><span class="yes">✓ 1-Klick &amp; Store-URLs</span></td>
+            <td><span class="yes">✓ Unterstützt</span></td>
+            <td><span class="yes">✓ Unterstützt</span></td>
+            <td><span class="yes">✓ Unterstützt</span></td>
+            <td><span class="yes">✓ Unterstützt</span></td>
+          </tr>
+          <tr>
+            <td><strong>100% Local-First (Zero Cloud Tracking)</strong></td>
+            <td class="highlight"><span class="yes">✓ Daten in %APPDATA%</span></td>
+            <td><span class="no">✗ Google Telemetrie</span></td>
+            <td><span class="no">✗ MS Telemetrie</span></td>
+            <td><span class="part">~ Eigene Rewards/Krypto</span></td>
+            <td><span class="no">✗ Account-Pflicht</span></td>
+          </tr>
+          <tr>
+            <td><strong>Monatliche Kosten / Abo</strong></td>
+            <td class="highlight"><span class="yes">0 € (Free non-commercial)</span></td>
+            <td>0 €</td>
+            <td>0 €</td>
+            <td>0 €</td>
+            <td>0 €</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- CTA Banner -->
+  <section class="cta-banner">
+    <h2>Erleben Sie den Unterschied selbst</h2>
+    <p>Laden Sie die öffentliche Beta (v0.1.32) herunter und starten Sie direkt durch.</p>
+    <a class="btn btn-primary" href="/download/">
+      <span>Jetzt kostenlos herunterladen</span>
+    </a>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container footer-row">
+    <div>© 2026 Lastbrowser Project · Local-First AI Web Browser</div>
+    <div class="footer-links">
+      <a href="/download/">Download</a>
+      <a href="/changelog/">Changelog</a>
+      <a href="/support/">Support &amp; FAQ</a>
+      <a href="/privacy/">Datenschutzerklärung</a>
+      <a href="/en/features/">English Version</a>
+      <a href="https://github.com/Loggableim/lastbrowser" target="_blank" rel="noopener">GitHub</a>
+      <a href="mailto:support@lastbrowser.com">support@lastbrowser.com</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

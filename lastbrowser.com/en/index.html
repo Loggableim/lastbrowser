@@ -72,30 +72,23 @@ nav .inner{display:flex;align-items:center;justify-content:space-between;gap:18p
 .cta-group{display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:18px}
 .sub-cta-note{color:var(--muted);font-size:13px}
 
-/* Shell Preview Mockup */
-.preview-wrap{margin:48px auto 0;max-width:1080px;border-radius:20px;padding:6px;background:linear-gradient(135deg,rgba(0,229,255,.4),rgba(37,99,255,.2),rgba(255,45,143,.3));box-shadow:0 24px 60px rgba(0,0,0,.65)}
-.preview-window{background:var(--surface);border-radius:16px;overflow:hidden;border:1px solid rgba(42,53,80,.8)}
+/* Interactive Screenshot Showcase */
+.showcase-container{margin:40px auto 0;max-width:1100px}
+.showcase-nav{display:flex;justify-content:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.sc-btn{padding:10px 18px;border-radius:12px;background:rgba(16,24,39,.8);border:1px solid rgba(42,53,80,.8);color:var(--muted);font-weight:700;font-size:13px;cursor:pointer;transition:all .2s ease;display:inline-flex;align-items:center;gap:8px}
+.sc-btn:hover{color:var(--text);border-color:rgba(0,229,255,.4);transform:translateY(-1px)}
+.sc-btn.active{background:linear-gradient(135deg,rgba(37,99,255,.25),rgba(0,229,255,.15));border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 16px rgba(0,229,255,.2)}
+.showcase-window{border-radius:20px;background:linear-gradient(180deg,rgba(16,24,39,.98),rgba(7,10,18,.98));border:1px solid rgba(42,53,80,.85);overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.7)}
 .window-titlebar{height:42px;background:rgba(7,10,18,.95);display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid rgba(42,53,80,.6)}
 .window-dots{display:flex;gap:8px}
 .window-dots span{width:11px;height:11px;border-radius:50%;display:inline-block}
 .dot-red{background:#ff5f56} .dot-yellow{background:#ffbd2e} .dot-green{background:#27c93f}
-.omnibox-mock{flex:1;max-width:540px;margin:0 16px;background:rgba(16,24,39,.9);border:1px solid rgba(42,53,80,.7);border-radius:8px;padding:5px 14px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.omnibox-mock{flex:1;max-width:560px;margin:0 16px;background:rgba(16,24,39,.9);border:1px solid rgba(42,53,80,.7);border-radius:8px;padding:5px 14px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
 .omnibox-shield{color:var(--green);font-weight:600;font-size:11px}
-.preview-body{display:grid;grid-template-columns:220px 1fr 300px;min-height:440px;background:#090d16}
-.preview-sidebar{background:var(--panel);border-right:1px solid rgba(42,53,80,.7);padding:14px}
-.preview-sidebar .sb-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
-.preview-pinned{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:16px}
-.pinned-icon{width:36px;height:36px;background:rgba(16,24,39,.8);border:1px solid rgba(42,53,80,.7);border-radius:8px;display:grid;place-items:center;font-size:14px}
-.preview-tabs{display:flex;flex-direction:column;gap:5px}
-.preview-tab{padding:8px 10px;border-radius:8px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;background:rgba(16,24,39,.4)}
-.preview-tab.active{background:rgba(37,99,255,.18);border:1px solid rgba(0,229,255,.3);color:var(--text);font-weight:600}
-.preview-webcontent{padding:24px;display:flex;flex-direction:column;gap:14px}
-.web-card{background:rgba(16,24,39,.7);border:1px solid rgba(42,53,80,.5);border-radius:12px;padding:18px}
-.web-highlight{background:rgba(0,229,255,.12);border:1px solid var(--cyan);border-radius:6px;padding:6px 10px;color:var(--cyan);font-weight:600;font-size:13px;display:inline-block}
-.preview-copilot{background:rgba(11,18,32,.95);border-left:1px solid rgba(42,53,80,.7);padding:16px;display:flex;flex-direction:column;gap:12px}
-.copilot-header{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:var(--cyan)}
-.copilot-msg{background:rgba(16,24,39,.8);border:1px solid rgba(42,53,80,.6);border-radius:10px;padding:12px;font-size:12px;line-height:1.6}
-.badge-cite{display:inline-block;padding:2px 6px;border-radius:4px;background:rgba(0,229,255,.15);border:1px solid rgba(0,229,255,.3);color:var(--cyan);font-weight:700;font-size:10px;margin-right:4px}
+.showcase-view{position:relative;background:#05070d;display:flex;justify-content:center;align-items:center;min-height:360px}
+.showcase-view img{width:100%;height:auto;display:block;opacity:1;transition:opacity .25s ease-in-out}
+.showcase-view img.fade-out{opacity:0}
+.showcase-footer{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:rgba(11,18,32,.95);border-top:1px solid rgba(42,53,80,.7);flex-wrap:wrap;gap:12px}
 
 /* Features Grid */
 .features-section{padding:90px 0 60px}
@@ -157,13 +150,14 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
       <div><strong>Lastbrowser</strong><span>v0.1.32 Beta · AI-Native</span></div>
     </a>
     <div class="links">
-      <a href="#features">Features</a>
-      <a href="#models">AI Models</a>
-      <a href="#specs">Specifications</a>
+      <a href="/en/" class="active">Home</a>
+      <a href="/en/features/">Features &amp; Comparison</a>
+      <a href="/en/download/">Download</a>
+      <a href="/en/changelog/">Changelog</a>
       <a href="/en/support/">Support &amp; FAQ</a>
-      <a href="/en/privacy/">Privacy Policy</a>
+      <a href="/en/privacy/">Privacy</a>
       <a href="/">Deutsch (DE)</a>
-      <a class="btn btn-primary btn-sm" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.32/Lastbrowser-0.1.32-x64-setup.exe">Download Beta (.exe)</a>
+      <a class="btn btn-primary btn-sm" href="/en/download/">Download Beta (.exe)</a>
     </div>
   </div>
 </nav>
@@ -175,69 +169,45 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
     <p class="lead">Lastbrowser unifies an ultra-fast, resource-efficient Chromium browser with Nova AI, 100% session-isolated Spaces, and Widevine DRM streaming right in the shell. Available now as a direct public beta—zero cloud lock-in, total data sovereignty.</p>
     
     <div class="cta-group">
-      <a class="btn btn-primary" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.32/Lastbrowser-0.1.32-x64-setup.exe">
+      <a class="btn btn-primary" href="/en/download/">
         <span>Download Windows Installer (Beta .exe)</span>
       </a>
-      <a class="btn btn-ghost" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.32/Lastbrowser-0.1.32-x64-portable.exe">
-        <span>Portable Version (.exe)</span>
+      <a class="btn btn-ghost" href="/en/features/">
+        <span>Explore Features &amp; Comparison</span>
       </a>
       <a class="btn btn-ghost" href="https://github.com/Loggableim/lastbrowser" target="_blank" rel="noopener">GitHub Repo</a>
     </div>
     <div class="sub-cta-note">Direct Beta Download for Windows 10 &amp; 11 · EV Code-Signed (Dominik Rainer) · Microsoft Store edition coming upon certification</div>
 
-    <!-- UI Mockup Preview -->
-    <div class="preview-wrap">
-      <div class="preview-window">
+    <!-- Interactive Screenshot Showcase -->
+    <div class="showcase-container">
+      <div class="showcase-nav">
+        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-zen-sidebar.png" data-title="Collapsible Zen Sidebar &amp; Spaces" data-desc="Complete session isolation per Space (Work, Personal, Research) with vertical tabs and 48px slim dock.">🧭 Zen Sidebar &amp; Spaces</button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-2-copilot-splitview.png" data-title="Nova AI Copilot &amp; Split-View" data-desc="70% Web left, 30% Nova AI right. Grounding anchors, cross-referencing, and total model freedom (Gemini CLI, Claude, OpenAI, Ollama).">🤖 Nova AI Split-View</button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-4-conpty-terminal.png" data-title="Native ConPTY PowerShell Terminal" data-desc="Full Windows PowerShell terminal right inside the sidebar (Ctrl+`). Includes 1-click system diagnostics via doctor.">💻 ConPTY Dev-Terminal</button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-5-webextensions.png" data-title="Unified Extension &amp; MCP Skill Hub" data-desc="Chrome MV3 WebExtensions and Model Context Protocol (MCP) servers for external agent tools united under Ctrl+Shift+X.">🧩 Extension &amp; MCP Hub</button>
+      </div>
+
+      <div class="showcase-window">
         <div class="window-titlebar">
           <div class="window-dots">
             <span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span>
           </div>
           <div class="omnibox-mock">
-            <span>https://lastbrowser.com/en/docs/ai-workspaces</span>
-            <span class="omnibox-shield">🛡️ 3,420 Ads blocked · 1.2 GB RAM saved</span>
+            <span id="scOmnibox">https://lastbrowser.com/en/features/spaces</span>
+            <span class="omnibox-shield">🛡️ 3,420 Ads blocked · Widevine VMP Verified</span>
           </div>
-          <div style="font-size:12px;color:var(--muted)">Nova AI: Online</div>
+          <div style="font-size:12px;color:var(--cyan);font-weight:600">v0.1.32 Beta</div>
         </div>
-        <div class="preview-body">
-          <aside class="preview-sidebar">
-            <div class="sb-label">Pinned Apps (Top 64)</div>
-            <div class="preview-pinned">
-              <div class="pinned-icon" title="WhatsApp">💬</div>
-              <div class="pinned-icon" title="Discord">🎮</div>
-              <div class="pinned-icon" title="Figma">🎨</div>
-              <div class="pinned-icon" title="GitHub">🐙</div>
-              <div class="pinned-icon" title="Notion">📝</div>
-              <div class="pinned-icon" title="Linear">⚡</div>
-              <div class="pinned-icon" title="Spotify">🎵</div>
-              <div class="pinned-icon" title="More">+</div>
-            </div>
-            <div class="sb-label">Active Tabs</div>
-            <div class="preview-tabs">
-              <div class="preview-tab active">🌐 Lastbrowser Docs</div>
-              <div class="preview-tab">📄 GitHub Repository</div>
-              <div class="preview-tab">📊 Benchmark Report</div>
-              <div class="preview-tab">+ New Tab (Ctrl+T)</div>
-            </div>
-          </aside>
-          <main class="preview-webcontent">
-            <div class="web-card">
-              <span class="web-highlight">🎯 Grounding Anchor: In-Page Illumination</span>
-              <h3 style="margin:12px 0 8px">Deep Tab Intelligence &amp; Synthesis</h3>
-              <p style="color:var(--muted);font-size:13px;line-height:1.6">Lastbrowser analyzes active web content across multiple open tabs and enables cross-referencing directly in the right-hand Nova panel.</p>
-            </div>
-          </main>
-          <aside class="preview-copilot">
-            <div class="copilot-header">
-              <span>🤖 Nova AI Split-View</span>
-              <span style="font-size:11px;color:var(--yellow)">Gemini 3.8 Flash</span>
-            </div>
-            <div class="copilot-msg">
-              <span class="badge-cite">[Tab 1]</span> <strong>Summary:</strong> The Local-First architecture stores all databases and sessions in <code>%APPDATA%\Lastbrowser</code>.
-            </div>
-            <div class="copilot-msg" style="border-color:rgba(0,229,255,.4)">
-              <strong>Prompt:</strong> @tabs Compare pricing of all opened products in a table.
-            </div>
-          </aside>
+        <div class="showcase-view">
+          <img id="scImage" src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Lastbrowser Showcase">
+        </div>
+        <div class="showcase-footer">
+          <div>
+            <strong id="scTitle" style="font-size:16px;color:var(--text)">Collapsible Zen Sidebar &amp; Spaces</strong>
+            <p id="scDesc" style="color:var(--muted);font-size:13px;margin-top:4px">Complete session isolation per Space (Work, Personal, Research) with vertical tabs and 48px slim dock.</p>
+          </div>
+          <a class="btn btn-ghost btn-sm" href="/en/features/">Explore in Feature Deep-Dives →</a>
         </div>
       </div>
     </div>
@@ -368,13 +338,13 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
 <section class="cta-banner">
   <div class="container">
     <h2>Ready for the <span class="grad">Next-Generation Browser</span>?</h2>
-    <p>Download the public beta and experience unified web workflows with native AI assistance, isolated spaces, and DRM media streaming.</p>
+    <p>Download the official Windows Beta (v0.1.32) and take control with native AI assistance, isolated spaces, and hardware DRM media streaming.</p>
     <div class="cta-group">
-      <a class="btn btn-primary" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.32/Lastbrowser-0.1.32-x64-setup.exe">
-        <span>Download Lastbrowser v0.1.32 Setup (.exe)</span>
+      <a class="btn btn-primary" href="/en/download/">
+        <span>Go to Download Hub (.exe &amp; Portable)</span>
       </a>
-      <a class="btn btn-ghost" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.32/Lastbrowser-0.1.32-x64-portable.exe">
-        <span>Portable Version (.exe)</span>
+      <a class="btn btn-ghost" href="/en/features/">
+        <span>View Browser Comparison Matrix</span>
       </a>
     </div>
   </div>
@@ -384,14 +354,57 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
   <div class="container footer-row">
     <div>© 2026 Lastbrowser Project · Local-First AI Web Browser</div>
     <div class="footer-links">
+      <a href="/en/features/">Features &amp; Comparison</a>
+      <a href="/en/download/">Download</a>
+      <a href="/en/changelog/">Changelog</a>
       <a href="/en/support/">Support &amp; FAQ</a>
       <a href="/en/privacy/">Privacy Policy</a>
       <a href="/">German Version</a>
-      <a href="https://github.com/Loggableim/lastbrowser" target="_blank" rel="noopener">GitHub Repository</a>
+      <a href="https://github.com/Loggableim/lastbrowser" target="_blank" rel="noopener">GitHub</a>
       <a href="mailto:support@lastbrowser.com">support@lastbrowser.com</a>
     </div>
   </div>
 </footer>
+
+<script>
+  (function() {
+    const buttons = document.querySelectorAll('.sc-btn');
+    const img = document.getElementById('scImage');
+    const title = document.getElementById('scTitle');
+    const desc = document.getElementById('scDesc');
+    const omnibox = document.getElementById('scOmnibox');
+
+    const omniboxMap = {
+      'store-screen-1-zen-sidebar.png': 'https://lastbrowser.com/en/features/spaces',
+      'store-screen-2-copilot-splitview.png': 'https://lastbrowser.com/en/features/nova-ai',
+      'store-screen-4-conpty-terminal.png': 'https://lastbrowser.com/en/features/terminal',
+      'store-screen-5-webextensions.png': 'https://lastbrowser.com/en/features/extensions-mcp'
+    };
+
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        buttons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const newSrc = btn.getAttribute('data-img');
+        const newTitle = btn.getAttribute('data-title');
+        const newDesc = btn.getAttribute('data-desc');
+
+        img.classList.add('fade-out');
+        setTimeout(() => {
+          img.src = newSrc;
+          title.textContent = newTitle;
+          desc.textContent = newDesc;
+          const key = newSrc.split('/').pop();
+          if (omniboxMap[key]) {
+            omnibox.textContent = omniboxMap[key];
+          }
+          img.classList.remove('fade-out');
+        }, 120);
+      });
+    });
+  })();
+</script>
 
 </body>
 </html>

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Download Lastbrowser – Official Windows Release (v0.1.32 Beta)</title>
+<meta name="description" content="Download Lastbrowser for Windows 10 &amp; 11. Version 0.1.32 Beta: NSIS Setup Installer and Portable edition. EV Code-Signed, 100% Local-First.">
+<meta property="og:title" content="Download Lastbrowser – Official Windows Download (v0.1.32)">
+<meta property="og:description" content="Fast, private Chromium browser with Nova AI, isolated Spaces, and Castlabs Widevine DRM. Download directly for Windows.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/en/download/">
+<meta property="og:image" content="https://lastbrowser.com/assets/sidekick/sidekick-mascot-512.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/en/download/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/download/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/download/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/download/">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --nearBlack:#070A12; --midnight:#07111F; --surface:#101827; --panel:#0E1628; --stroke:#2A3550;
+  --text:#F7FAFF; --muted:#AAB4C6; --electricBlue:#2563FF; --cyan:#00E5FF; --magenta:#FF2D8F;
+  --purple:#8A3FFC; --yellow:#FFC800; --green:#7CFF6B;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:radial-gradient(circle at 18% 0%,rgba(37,99,255,.2),transparent 30%),
+             radial-gradient(circle at 85% 10%,rgba(255,45,143,.14),transparent 28%),
+             radial-gradient(circle at 50% 60%,rgba(0,229,255,.06),transparent 40%),
+             linear-gradient(180deg,#060913 0%,#070B14 50%,#05070D 100%);
+  color:var(--text);font-family:Inter,"Segoe UI",system-ui,-apple-system,sans-serif;
+  line-height:1.6;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+}
+body:before{
+  content:"";position:fixed;inset:0;pointer-events:none;opacity:.65;
+  background-image:radial-gradient(circle,rgba(0,229,255,.035) 1px,transparent 1px);
+  background-size:24px 24px;z-index:0;
+}
+.container{width:min(1160px,calc(100% - 40px));margin:0 auto;position:relative;z-index:2}
+a{color:var(--cyan);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4{font-family:Outfit,Inter,sans-serif;font-weight:700}
+
+/* Nav */
+nav{position:sticky;top:0;z-index:30;backdrop-filter:blur(20px);background:rgba(7,10,18,.82);border-bottom:1px solid rgba(42,53,80,.68)}
+nav .inner{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0}
+.logo{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+.logo img{width:42px;height:42px;border-radius:11px;border:1px solid rgba(42,53,80,.9);box-shadow:0 0 16px rgba(37,99,255,.25)}
+.logo strong{display:block;font-size:18px;letter-spacing:-.02em}
+.logo span{display:block;color:var(--cyan);font-size:12px;margin-top:2px;font-weight:600}
+.links{display:flex;gap:20px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.links a{color:var(--muted);font-size:14px;font-weight:600;transition:.2s color}
+.links a:hover,.links a.active{color:var(--text);text-decoration:none}
+.links a.active{color:var(--cyan)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:12px 22px;border-radius:14px;text-decoration:none;font-weight:700;font-size:15px;border:1px solid transparent;transition:all .2s ease;cursor:pointer}
+.btn:hover{transform:translateY(-2px);text-decoration:none}
+.btn-primary{color:#fff;background:linear-gradient(135deg,var(--electricBlue),var(--purple));box-shadow:0 12px 28px rgba(37,99,255,.3)}
+.btn-primary:hover{box-shadow:0 16px 36px rgba(37,99,255,.45)}
+.btn-ghost{background:rgba(16,24,39,.85);border-color:var(--stroke);color:var(--text)}
+.btn-ghost:hover{border-color:var(--cyan);color:var(--cyan)}
+.btn-sm{padding:8px 16px;font-size:13px;border-radius:10px}
+
+/* Hero */
+.hero{padding:60px 0 40px;text-align:center}
+.pill-badge{display:inline-flex;gap:8px;align-items:center;margin-bottom:20px;padding:8px 16px;border-radius:999px;border:1px solid rgba(0,229,255,.35);background:rgba(0,229,255,.08);color:var(--cyan);font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:800}
+.hero h1{margin:0 auto 16px;max-width:880px;font-size:clamp(36px,5.5vw,62px);line-height:1.1;letter-spacing:-.04em}
+.grad{background:linear-gradient(90deg,var(--cyan),var(--electricBlue),var(--magenta));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p.lead{margin:0 auto 28px;max-width:680px;color:var(--muted);font-size:clamp(16px,1.8vw,19px);line-height:1.7}
+
+/* Download Grid */
+.download-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px;margin:30px 0 50px}
+.dl-card{background:linear-gradient(180deg,rgba(16,24,39,.95),rgba(11,18,32,.9));border:1px solid rgba(42,53,80,.68);border-radius:24px;padding:32px;display:flex;flex-direction:column;position:relative;overflow:hidden;transition:border-color .25s,transform .2s}
+.dl-card.highlight{border-color:rgba(0,229,255,.5);box-shadow:0 16px 40px rgba(0,229,255,.12)}
+.dl-badge{display:inline-block;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px;align-self:flex-start}
+.dl-badge.blue{background:rgba(37,99,255,.18);color:var(--cyan);border:1px solid rgba(0,229,255,.3)}
+.dl-badge.purple{background:rgba(138,63,252,.18);color:var(--purple);border:1px solid rgba(138,63,252,.3)}
+.dl-card h2{font-size:24px;margin-bottom:8px}
+.dl-card .meta{color:var(--muted);font-size:13px;margin-bottom:20px}
+.dl-features{list-style:none;margin:0 0 28px;display:flex;flex-direction:column;gap:10px}
+.dl-features li{font-size:14px;color:var(--text);display:flex;align-items:center;gap:10px}
+.dl-features li span{color:var(--green);font-weight:bold}
+.dl-actions{margin-top:auto;display:flex;flex-direction:column;gap:12px}
+
+/* Hash Box */
+.hash-box{background:rgba(7,10,18,.8);border:1px solid rgba(42,53,80,.6);border-radius:10px;padding:10px 14px;font-size:12px;display:flex;flex-direction:column;gap:4px}
+.hash-label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.hash-val{font-family:Consolas,monospace;color:var(--cyan);word-break:break-all;font-size:11px}
+
+/* Trust Banner */
+.trust-banner{background:linear-gradient(135deg,rgba(16,24,39,.95),rgba(14,22,40,.9));border:1px solid rgba(42,53,80,.7);border-radius:20px;padding:28px;margin-bottom:50px;display:grid;grid-template-columns:80px 1fr;gap:24px;align-items:center}
+.trust-icon{width:70px;height:70px;border-radius:18px;background:rgba(0,229,255,.1);border:1px solid rgba(0,229,255,.3);display:grid;place-items:center;font-size:32px}
+.trust-text h3{font-size:19px;margin-bottom:6px;color:var(--text)}
+.trust-text p{font-size:14px;color:var(--muted);line-height:1.65}
+
+/* Steps Section */
+.steps-section{padding:30px 0 50px}
+.steps-section h2{font-size:clamp(26px,3.5vw,38px);text-align:center;margin-bottom:36px}
+.steps-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+.step-card{background:rgba(16,24,39,.75);border:1px solid rgba(42,53,80,.6);border-radius:18px;padding:24px;position:relative}
+.step-num{width:36px;height:36px;border-radius:10px;background:rgba(37,99,255,.2);border:1px solid var(--electricBlue);color:var(--cyan);display:grid;place-items:center;font-weight:900;font-size:16px;margin-bottom:14px}
+.step-card h4{font-size:17px;margin-bottom:8px}
+.step-card p{font-size:13px;color:var(--muted);line-height:1.6}
+
+/* Specs */
+.specs-box{background:rgba(16,24,39,.65);border:1px solid rgba(42,53,80,.5);border-radius:18px;padding:26px;margin-bottom:60px}
+.specs-box h3{font-size:18px;margin-bottom:16px}
+.specs-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.specs-item h5{color:var(--cyan);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.specs-item p{color:var(--text);font-size:14px;font-weight:600}
+
+/* Footer */
+footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--muted);font-size:14px}
+.footer-row{display:flex;justify-content:space-between;gap:20px;align-items:center;flex-wrap:wrap}
+.footer-links{display:flex;gap:22px;flex-wrap:wrap}
+.footer-links a{color:var(--muted)}
+.footer-links a:hover{color:var(--text)}
+
+@media(max-width:768px){
+  .trust-banner{grid-template-columns:1fr;text-align:center}
+  .trust-icon{margin:0 auto}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container inner">
+    <a href="/en/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser">
+      <div><strong>Lastbrowser</strong><span>v0.1.32 Beta · AI-Native</span></div>
+    </a>
+    <div class="links">
+      <a href="/en/">Home</a>
+      <a href="/en/features/">Features &amp; Comparison</a>
+      <a href="/en/download/" class="active">Download</a>
+      <a href="/en/changelog/">Changelog</a>
+      <a href="/en/support/">Support &amp; FAQ</a>
+      <a href="/en/privacy/">Privacy</a>
+      <a href="/download/">Deutsch (DE)</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container">
+    <div class="pill-badge">✦ Official Windows Release · Version 0.1.32 Beta · EV Code-Signed</div>
+    <h1>Download <span class="grad">Lastbrowser</span>.</h1>
+    <p class="lead">The AI-native Chromium browser for Windows 10 &amp; 11 with Nova AI, 100% per-space session isolation, and Castlabs Widevine DRM. Choose your preferred package.</p>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- Download Cards -->
+  <div class="download-grid">
+    
+    <!-- Setup Card -->
+    <div class="dl-card highlight">
+      <span class="dl-badge blue">Recommended for Most Users</span>
+      <h2>Windows Installer (Setup)</h2>
+      <div class="meta">Version 0.1.32 · x64 · 192.6 MB · Windows 10/11</div>
+      <ul class="dl-features">
+        <li><span>✓</span> Full installation with Desktop &amp; Start Menu shortcuts</li>
+        <li><span>✓</span> Seamless background auto-updates (electron-updater)</li>
+        <li><span>✓</span> Can be registered as default Windows browser (HTTP/HTTPS)</li>
+        <li><span>✓</span> Fully Authenticode &amp; EV signed (Dominik Rainer)</li>
+      </ul>
+      <div class="dl-actions">
+        <a class="btn btn-primary" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.32/Lastbrowser-0.1.32-x64-setup.exe">
+          <span>Download Installer (.exe)</span>
+        </a>
+        <div class="hash-box">
+          <span class="hash-label">SHA-256 Checksum (Setup.exe):</span>
+          <span class="hash-val">BBD68764AE9C7CE7B78B5748BAA15294369384EBBB524FA486B5D16B2C967CBA</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Portable Card -->
+    <div class="dl-card">
+      <span class="dl-badge purple">Standalone · Zero Installation</span>
+      <h2>Portable Edition</h2>
+      <div class="meta">Version 0.1.32 · x64 · 192.2 MB · Windows 10/11</div>
+      <ul class="dl-features">
+        <li><span>✓</span> Run directly without admin privileges or installation</li>
+        <li><span>✓</span> Perfect for USB thumb drives, enterprise PCs, or quick testing</li>
+        <li><span>✓</span> Leaves zero footprint in the Windows Registry</li>
+        <li><span>✓</span> Full feature parity (Nova AI, Spaces &amp; Widevine DRM)</li>
+      </ul>
+      <div class="dl-actions">
+        <a class="btn btn-ghost" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.32/Lastbrowser-0.1.32-x64-portable.exe">
+          <span>Download Portable Edition (.exe)</span>
+        </a>
+        <div class="hash-box">
+          <span class="hash-label">SHA-256 Checksum (Portable.exe):</span>
+          <span class="hash-val">DC2EBF0138EAD02B7D758FC0D8970DA8B140593D7178177179A7EE2B28DE91FB</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Trust & SmartScreen -->
+  <div class="trust-banner">
+    <div class="trust-icon">🛡️</div>
+    <div class="trust-text">
+      <h3>Cryptographically Signed (Extended Validation)</h3>
+      <p>
+        All Lastbrowser binaries are digitally signed and timestamped using an official <strong>Extended Validation (EV) Code Signing Certificate</strong> issued to <em>Dominik Rainer</em> (Certum CA).
+        <br>
+        <strong>Note on Windows SmartScreen:</strong> For brand new software releases, Windows Defender SmartScreen gradually builds up reputation metrics. If you see the blue <em>“Windows protected your PC”</em> dialog, simply click <strong>“More info”</strong> followed by <strong>“Run anyway”</strong>. The download is 100% clean and free from any malware.
+      </p>
+    </div>
+  </div>
+
+  <!-- 3 Steps -->
+  <section class="steps-section">
+    <h2>Up and running in 3 simple steps</h2>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h4>Download &amp; Launch</h4>
+        <p>Download the installer or portable executable and launch Lastbrowser with a double click.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h4>Configure Your AI</h4>
+        <p>In the welcome setup, choose your assistant's name (Nova, Jarvis, etc.) and personality mentality (Pragmatic, Inquisitive, Technical, or Visionary).</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <h4>Multitask with Spaces</h4>
+        <p>Organize separate Spaces for Work, Personal, and Research. All logins and cookies remain strictly isolated.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Specs -->
+  <div class="specs-box">
+    <h3>System Requirements &amp; Architecture</h3>
+    <div class="specs-list">
+      <div class="specs-item">
+        <h5>Operating System</h5>
+        <p>Windows 10 (Build 17763+) or Windows 11 (64-bit)</p>
+      </div>
+      <div class="specs-item">
+        <h5>System Memory</h5>
+        <p>4 GB RAM minimum (8 GB recommended for multi-agent workflows)</p>
+      </div>
+      <div class="specs-item">
+        <h5>Storage Footprint</h5>
+        <p>approx. 600 MB free disk space (includes embedded Python AI runtime)</p>
+      </div>
+      <div class="specs-item">
+        <h5>Chromium Engine</h5>
+        <p>Chromium 138 (Castlabs Electron 37 + VMP Widevine)</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div class="container footer-row">
+    <div>© 2026 Lastbrowser Project · Local-First AI Web Browser</div>
+    <div class="footer-links">
+      <a href="/en/features/">Features &amp; Comparison</a>
+      <a href="/en/changelog/">Changelog</a>
+      <a href="/en/support/">Support &amp; FAQ</a>
+      <a href="/en/privacy/">Privacy Policy</a>
+      <a href="/download/">German Version</a>
+      <a href="https://github.com/Loggableim/lastbrowser" target="_blank" rel="noopener">GitHub</a>
+      <a href="mailto:support@lastbrowser.com">support@lastbrowser.com</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

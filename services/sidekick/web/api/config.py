@@ -4558,9 +4558,13 @@ _SETTINGS_DEFAULTS = {
     "show_cli_sessions": False,  # merge CLI sessions from state.db into the sidebar
     "sync_to_insights": False,  # mirror WebUI token usage to state.db for /insights
     "check_for_updates": True,  # check if webui/agent repos are behind upstream
-    "theme": "dark",  # light | dark | system
-    "skin": "default",  # accent color skin: default | ares | mono | slate | poseidon | sisyphus | charizard
-    "font_size": "default",  # x-small | small | default | large | x-large | xx-large
+    "theme": "dark",  # light | dark | system | oled
+    "skin": "default",  # accent color skin: default | ares | mono | slate | poseidon | sisyphus | charizard | sienna | matrix | custom
+    "accent_color": "",  # custom hex color for 'custom' skin (e.g. #00d26a)
+    "font_size": "default",  # small | default | large | xlarge
+    "default_zoom": 100,  # default webview zoom percentage (80 - 150)
+    "message_layout": "bubbles",  # bubbles | compact | expanded
+    "syntax_theme": "",  # code block theme: '' | tomorrow-night | one-dark | github-light
     "session_jump_buttons": False,  # show Start/End transcript jump pills
     "session_endless_scroll": False,  # auto-load older transcript pages while scrolling upward
     "language": "en",  # UI locale code; must match a key in static/i18n.js LOCALES
@@ -4582,7 +4586,7 @@ _SETTINGS_DEFAULTS = {
     "show_openrouter_paid": False,  # show paid OpenRouter models in picker (default: free only)
 }
 _SETTINGS_LEGACY_DROP_KEYS = {"assistant_language", "bubble_layout", "default_model"}
-_SETTINGS_THEME_VALUES = {"light", "dark", "system"}
+_SETTINGS_THEME_VALUES = {"light", "dark", "system", "oled"}
 _SETTINGS_SKIN_VALUES = {
     "default",
     "ares",
@@ -4591,6 +4595,9 @@ _SETTINGS_SKIN_VALUES = {
     "poseidon",
     "sisyphus",
     "charizard",
+    "sienna",
+    "matrix",
+    "custom",
 }
 _SETTINGS_LEGACY_THEME_MAP = {
     # Legacy full themes now map onto the closest supported theme + accent skin pair.
@@ -4598,7 +4605,6 @@ _SETTINGS_LEGACY_THEME_MAP = {
     "solarized": ("dark", "poseidon"),
     "monokai": ("dark", "sisyphus"),
     "nord": ("dark", "slate"),
-    "oled": ("dark", "default"),
 }
 
 
@@ -4717,10 +4723,12 @@ _SETTINGS_ALLOWED_KEYS = set(_SETTINGS_DEFAULTS.keys()) - {
 _SETTINGS_ENUM_VALUES = {
     "send_key": {"enter", "ctrl+enter"},
     "sidebar_density": {"compact", "detailed"},
-    "font_size": {"x-small", "small", "default", "large", "x-large", "xx-large"},
+    "font_size": {"x-small", "small", "default", "large", "x-large", "xx-large", "xlarge"},
     "auto_title_refresh_every": {"0", "5", "10", "20"},
     "busy_input_mode": {"queue", "interrupt", "steer"},
     "composer_mode": {"action", "plan"},
+    "message_layout": {"bubbles", "compact", "expanded"},
+    "syntax_theme": {"", "tomorrow-night", "one-dark", "github-light"},
 }
 _SETTINGS_BOOL_KEYS = {
     "onboarding_completed",
@@ -4740,6 +4748,7 @@ _SETTINGS_BOOL_KEYS = {
 }
 # Language codes are validated as short alphanumeric BCP-47-like tags (e.g. 'en', 'zh', 'fr')
 _SETTINGS_LANG_RE = __import__("re").compile(r"^[a-zA-Z]{2,10}(-[a-zA-Z0-9]{2,8})?$")
+_SETTINGS_HEX_COLOR_RE = __import__("re").compile(r"^#[0-9a-fA-F]{3,8}$")
 
 
 def save_settings(settings: dict) -> dict:
@@ -4770,6 +4779,20 @@ def save_settings(settings: dict) -> dict:
                 if isinstance(v, str) and v.strip():
                     pending_skin = v
                     skin_was_explicit = True
+                continue
+            if k == "accent_color":
+                if isinstance(v, str):
+                    val = v.strip()
+                    if not val or _SETTINGS_HEX_COLOR_RE.match(val):
+                        current["accent_color"] = val.lower()
+                continue
+            if k == "default_zoom":
+                try:
+                    num = int(v)
+                    if 50 <= num <= 300:
+                        current["default_zoom"] = num
+                except (ValueError, TypeError):
+                    pass
                 continue
             # Validate enum-constrained keys
             if k in _SETTINGS_ENUM_VALUES and v not in _SETTINGS_ENUM_VALUES[k]:

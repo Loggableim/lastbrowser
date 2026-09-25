@@ -113,6 +113,64 @@ html.theme-light .browser-start-card {
   color: var(--lb-text);
 }
 
+/* ==========================================================================
+   OLED Pure Black Theme (Pitch Black #000000 with Slate Card Accents)
+   ========================================================================== */
+html.theme-oled {
+  color-scheme: dark;
+  --lb-bg: #000000;
+  --lb-bg-alt: #040608;
+  --lb-surface: #0a0d13;
+  --lb-surface-strong: #0f131a;
+  --lb-surface-panel: #07090e;
+  --lb-border: rgba(255, 255, 255, .12);
+  --lb-text: #ffffff;
+  --lb-muted: rgba(255, 255, 255, .64);
+  background: #000000;
+  color: #ffffff;
+}
+
+html.theme-oled .app-shell {
+  background: #000000;
+}
+
+html.theme-oled .browser-titlebar,
+html.theme-oled .browser-chrome {
+  background: #040507;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html.theme-oled .shell-rail {
+  background: #040507;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html.theme-oled .context-sidebar,
+html.theme-oled .workspace-panel {
+  background: #06080c;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html.theme-oled .browser-start-page,
+html.theme-oled .browser-main.browser-page-main {
+  background: #000000;
+}
+
+html.theme-oled .native-work-card,
+html.theme-oled .settings-card,
+html.theme-oled .browser-action-strip,
+html.theme-oled .integration-list,
+html.theme-oled .native-rest-editor,
+html.theme-oled .workspace-preview,
+html.theme-oled .workspace-entry,
+html.theme-oled .browser-start-hero,
+html.theme-oled .browser-start-search,
+html.theme-oled .browser-start-card {
+  background: #090c12;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
 .app-shell {
   display: grid;
   grid-template-rows: 34px auto minmax(0, 1fr);
@@ -16124,33 +16182,121 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
    ========================================================================== */
 
 /* Skins */
-[data-skin="ares"] { --accent-primary: #ff4444; --accent-glow: rgba(255, 68, 68, 0.4); }
-[data-skin="poseidon"] { --accent-primary: #0ea5e9; --accent-glow: rgba(14, 165, 233, 0.4); }
-[data-skin="sisyphus"] { --accent-primary: #a78bfa; --accent-glow: rgba(167, 139, 250, 0.4); }
-[data-skin="charizard"] { --accent-primary: #f97316; --accent-glow: rgba(249, 115, 22, 0.4); }
-[data-skin="matrix"] { --accent-primary: #00ff41; --accent-glow: rgba(0, 255, 65, 0.4); }
-[data-skin="slate"] { --accent-primary: #64748b; --accent-glow: rgba(100, 116, 139, 0.4); }
-[data-skin="mono"] { --accent-primary: #cccccc; --accent-glow: rgba(204, 204, 204, 0.3); }
-[data-skin="sienna"] { --accent-primary: #d97757; --accent-glow: rgba(217, 119, 87, 0.4); }
+[data-skin="default"] { --accent-primary: #ffd700; --accent-glow: rgba(255, 215, 0, 0.4); --accent-hover: #ffea70; --accent-text: #000000; }
+[data-skin="ares"] { --accent-primary: #ff4444; --accent-glow: rgba(255, 68, 68, 0.4); --accent-hover: #ff6666; --accent-text: #ffffff; }
+[data-skin="poseidon"] { --accent-primary: #0ea5e9; --accent-glow: rgba(14, 165, 233, 0.4); --accent-hover: #38bdf8; --accent-text: #ffffff; }
+[data-skin="sisyphus"] { --accent-primary: #a78bfa; --accent-glow: rgba(167, 139, 250, 0.4); --accent-hover: #c4b5fd; --accent-text: #ffffff; }
+[data-skin="charizard"] { --accent-primary: #f97316; --accent-glow: rgba(249, 115, 22, 0.4); --accent-hover: #fb923c; --accent-text: #ffffff; }
+[data-skin="matrix"] { --accent-primary: #00ff41; --accent-glow: rgba(0, 255, 65, 0.4); --accent-hover: #33ff66; --accent-text: #000000; }
+[data-skin="slate"] { --accent-primary: #64748b; --accent-glow: rgba(100, 116, 139, 0.4); --accent-hover: #94a3b8; --accent-text: #ffffff; }
+[data-skin="mono"] { --accent-primary: #cccccc; --accent-glow: rgba(204, 204, 204, 0.3); --accent-hover: #e0e0e0; --accent-text: #000000; }
+[data-skin="sienna"] { --accent-primary: #d97757; --accent-glow: rgba(217, 119, 87, 0.4); --accent-hover: #e58d70; --accent-text: #ffffff; }
+[data-skin="custom"] {
+  --accent-primary: var(--user-accent-primary, #0ea5e9);
+  --accent-glow: var(--user-accent-glow, rgba(14, 165, 233, 0.4));
+  --accent-hover: var(--user-accent-hover, #38bdf8);
+  --accent-text: var(--user-accent-text, #ffffff);
+}
 
-/* Font Scaling */
-[data-font-size="small"] { --base-font-size: 13px; --chat-font-size: 13px; --app-font-scale: 0.92; }
-[data-font-size="default"] { --base-font-size: 14px; --chat-font-size: 14px; --app-font-scale: 1; }
-[data-font-size="large"] { --base-font-size: 16px; --chat-font-size: 16px; --app-font-scale: 1.12; }
+/* 4-Step Font Scaling & UI Proportional Sizing */
+[data-font-size="small"] { --base-font-size: 12px; --chat-font-size: 13px; --app-font-scale: 0.88; }
+[data-font-size="default"] { --base-font-size: 14px; --chat-font-size: 14px; --app-font-scale: 1.00; }
+[data-font-size="large"] { --base-font-size: 16px; --chat-font-size: 16px; --app-font-scale: 1.15; }
+[data-font-size="xlarge"],
+[data-font-size="x-large"],
+[data-font-size="xx-large"] { --base-font-size: 18px; --chat-font-size: 18px; --app-font-scale: 1.30; }
 
 body {
   font-size: var(--base-font-size, 14px);
 }
 
-/* Message Layout */
-[data-message-layout="compact"] .chat-turn-item { padding: 6px 10px; margin-bottom: 4px; }
-[data-message-layout="compact"] .chat-turn-bubble,
-[data-message-layout="compact"] .copilot-bubble { border-radius: 6px; padding: 8px 12px; }
-[data-message-layout="expanded"] .chat-turn-item { padding: 16px 24px; max-width: 100%; }
-[data-message-layout="expanded"] .chat-turn-bubble,
-[data-message-layout="expanded"] .copilot-bubble { border-radius: 14px; padding: 16px 22px; width: 100%; }
+/* Cascade --app-font-scale systematically across desktop chrome */
+.app-shell,
+.browser-titlebar,
+.shell-rail,
+.context-sidebar,
+.workspace-panel,
+.browser-action-strip,
+.native-work-card,
+.settings-card,
+.chat-transcript,
+.copilot-split-view,
+.sidekick-sidebar-container,
+.vtab-item,
+.nova-dock {
+  font-size: calc(14px * var(--app-font-scale, 1));
+}
+
+.chat-message,
+.copilot-bubble,
+.chat-turn-item {
+  font-size: var(--chat-font-size, 14px);
+}
+
+/* Message Layout Styles */
+/* 1. Bubbles (Modern Speech Cards) */
+[data-message-layout="bubbles"] .chat-turn-item {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
 [data-message-layout="bubbles"] .chat-turn-bubble,
-[data-message-layout="bubbles"] .copilot-bubble { border-radius: 12px; padding: 12px 16px; }
+[data-message-layout="bubbles"] .copilot-bubble {
+  border-radius: 12px;
+  padding: 12px 16px;
+  background: var(--lb-surface-strong, rgba(15, 23, 42, 0.85));
+  border: 1px solid var(--lb-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+[data-message-layout="bubbles"] .copilot-bubble.user {
+  background: rgba(14, 165, 233, 0.14);
+  border-color: rgba(14, 165, 233, 0.28);
+}
+
+/* 2. Compact Stream (Flat Slack / Terminal / IRC style) */
+[data-message-layout="compact"] .chat-turn-item,
+[data-message-layout="compact"] .chat-message {
+  padding: 4px 8px;
+  margin-bottom: 2px;
+  border-radius: 4px;
+}
+[data-message-layout="compact"] .chat-turn-item:hover,
+[data-message-layout="compact"] .chat-message:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+[data-message-layout="compact"] .chat-turn-bubble,
+[data-message-layout="compact"] .copilot-bubble {
+  border-radius: 4px;
+  padding: 4px 8px;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+[data-message-layout="compact"] .copilot-bubble.user {
+  border-left: 3px solid var(--accent-primary) !important;
+  border-radius: 0 4px 4px 0;
+  padding-left: 8px;
+}
+[data-message-layout="compact"] .copilot-bubble-body,
+[data-message-layout="compact"] .message-body {
+  line-height: 1.45;
+}
+
+/* 3. Expanded Canvas (Spacious Document Flow) */
+[data-message-layout="expanded"] .chat-turn-item,
+[data-message-layout="expanded"] .chat-message {
+  padding: 18px 24px;
+  max-width: 100%;
+  margin-bottom: 12px;
+}
+[data-message-layout="expanded"] .chat-turn-bubble,
+[data-message-layout="expanded"] .copilot-bubble {
+  border-radius: 16px;
+  padding: 18px 24px;
+  width: 100%;
+  line-height: 1.68;
+  background: var(--lb-surface-strong, rgba(15, 23, 42, 0.9));
+  border: 1px solid var(--lb-border, rgba(255, 255, 255, 0.1));
+}
 
 /* ==========================================================================
    Phase 3: Accessibility (A11y)
@@ -16349,3 +16495,60 @@ body, p, span, div, button, input {
 
 
 
+
+/* === Settings Inline Modal === */
+.settings-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.settings-modal-box {
+  background: var(--bg-elevated, #1e1e2e);
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.1));
+  border-radius: 12px;
+  padding: 20px 24px;
+  min-width: 360px;
+  max-width: 480px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  color: var(--text-primary, #e2e2f0);
+}
+
+.settings-modal-box input {
+  background: var(--bg-input, rgba(255,255,255,0.06));
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.12));
+  border-radius: 6px;
+  color: var(--text-primary, #e2e2f0);
+  padding: 6px 10px;
+  font-size: 13px;
+  display: block;
+  box-sizing: border-box;
+}
+
+.settings-modal-box input:focus {
+  outline: none;
+  border-color: var(--accent-primary, #7c5df9);
+}
+
+.primary-action.compact {
+  background: var(--accent-primary, #7c5df9);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.primary-action.compact:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

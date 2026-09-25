@@ -38,6 +38,7 @@ import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { cloudProviderOptions, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
 import { providerPresentation } from '../provider-presentation.js';
 import { searchEngines } from '../tabs.js';
+import { computeAccentTokens } from '../App.js';
 import { type ExtensionRecord, type ExtensionPreset } from '../bridge.js';
 import {
   usePanelStore,
@@ -289,9 +290,10 @@ export function settingsCsv(value: unknown): string {
   return settingsText(value);
 }
 
-export function normalizeAppearanceTheme(value: string): 'light' | 'dark' | 'system' {
+export function normalizeAppearanceTheme(value: string): 'light' | 'dark' | 'system' | 'oled' {
   const normalized = value.trim().toLowerCase();
-  return normalized === 'light' || normalized === 'system' ? normalized : 'dark';
+  if (normalized === 'light' || normalized === 'system' || normalized === 'oled') return normalized;
+  return 'dark';
 }
 
 export function normalizeAppearanceSkin(value: string): string {
@@ -323,7 +325,8 @@ export function applyDesktopAppearancePreview(
   skinValue: string,
   fontSizeValue: string = 'default',
   messageLayoutValue: string = 'bubbles',
-  syntaxThemeValue: string = ''
+  syntaxThemeValue: string = '',
+  accentColorValue: string = ''
 ): void {
   if (typeof document === 'undefined') return;
   const theme = normalizeAppearanceTheme(themeValue);
@@ -334,6 +337,7 @@ export function applyDesktopAppearancePreview(
   const fontSize = String(fontSizeValue || 'default').trim().toLowerCase() || 'default';
   const messageLayout = String(messageLayoutValue || 'bubbles').trim().toLowerCase() || 'bubbles';
   const syntaxTheme = String(syntaxThemeValue || '').trim();
+  const accentColor = String(accentColorValue || '').trim().toLowerCase();
 
   const root = document.documentElement;
   root.dataset.theme = resolvedTheme;
@@ -342,10 +346,35 @@ export function applyDesktopAppearancePreview(
   root.dataset.fontSize = fontSize;
   root.dataset.messageLayout = messageLayout;
   root.dataset.syntaxTheme = syntaxTheme;
+
   root.classList.toggle('theme-light', resolvedTheme === 'light');
-  root.classList.toggle('theme-dark', resolvedTheme !== 'light');
+  root.classList.toggle('theme-dark', resolvedTheme === 'dark');
+  root.classList.toggle('theme-oled', resolvedTheme === 'oled');
   root.classList.toggle('theme-system', theme === 'system');
-  root.style.colorScheme = resolvedTheme;
+  root.style.colorScheme = resolvedTheme === 'light' ? 'light' : 'dark';
+
+  if ((skin === 'custom' || accentColor) && accentColor.startsWith('#')) {
+    const tokens = computeAccentTokens(accentColor);
+    if (tokens) {
+      root.style.setProperty('--user-accent-primary', tokens.primary);
+      root.style.setProperty('--user-accent-glow', tokens.glow);
+      root.style.setProperty('--user-accent-hover', tokens.hover);
+      root.style.setProperty('--user-accent-text', tokens.text);
+      root.style.setProperty('--accent-primary', tokens.primary);
+      root.style.setProperty('--accent-glow', tokens.glow);
+      root.style.setProperty('--accent-hover', tokens.hover);
+      root.style.setProperty('--accent-rgb', tokens.rgbStr);
+    }
+  } else {
+    root.style.removeProperty('--user-accent-primary');
+    root.style.removeProperty('--user-accent-glow');
+    root.style.removeProperty('--user-accent-hover');
+    root.style.removeProperty('--user-accent-text');
+    root.style.removeProperty('--accent-primary');
+    root.style.removeProperty('--accent-glow');
+    root.style.removeProperty('--accent-hover');
+    root.style.removeProperty('--accent-rgb');
+  }
 }
 
 export function NativeInsightsMain({
@@ -1743,6 +1772,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const [passwordDraft, setPasswordDraft] = useState('');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [ollamaModalProviderId, setOllamaModalProviderId] = useState<string | null>(null);
+  const [ollamaModalLabel, setOllamaModalLabel] = useState('');
+  const [ollamaUrl, setOllamaUrl] = useState('');
+  const [ollamaKey, setOllamaKey] = useState('');
+  const [ollamaTestResult, setOllamaTestResult] = useState('');
+
 
   const [zenExitMode, setZenExitModeState] = useState<ZenExitDefaultMode>(() => {
     try {
@@ -1830,9 +1865,16 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   useEffect(() => {
     applyDesktopAppearancePreview(
       settingsText(draft.theme ?? settings.theme, 'dark'),
-      settingsText(draft.skin ?? settings.skin, 'default')
+      settingsText(draft.skin ?? settings.skin, 'default'),
+      settingsText(draft.font_size ?? settings.font_size, 'default'),
+      settingsText(draft.message_layout ?? settings.message_layout, 'bubbles'),
+      settingsText(draft.syntax_theme ?? settings.syntax_theme, ''),
+      settingsText(draft.accent_color ?? settings.accent_color, '')
     );
-  }, [draft.skin, draft.theme, settings.skin, settings.theme]);
+  }, [
+    draft.skin, draft.theme, draft.font_size, draft.message_layout, draft.syntax_theme, draft.accent_color,
+    settings.skin, settings.theme, settings.font_size, settings.message_layout, settings.syntax_theme, settings.accent_color
+  ]);
 
   function updateDraftField(key: string, value: unknown): void {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -1864,7 +1906,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       payload.language = settingsText(payload.language, 'en');
       payload.theme = settingsText(payload.theme, 'dark');
       payload.skin = settingsText(payload.skin, 'default');
+      payload.accent_color = settingsText(payload.accent_color, '');
       payload.font_size = settingsText(payload.font_size, 'default');
+      payload.default_zoom = Number(payload.default_zoom) || 100;
+      payload.message_layout = settingsText(payload.message_layout, 'bubbles');
+      payload.syntax_theme = settingsText(payload.syntax_theme, '');
       payload.send_key = settingsText(payload.send_key, 'enter');
       payload.busy_input_mode = ['queue', 'interrupt', 'steer'].includes(settingsText(payload.busy_input_mode)) ? payload.busy_input_mode : 'queue';
       payload.sidebar_density = settingsText(payload.sidebar_density, 'compact') === 'detailed' ? 'detailed' : 'compact';
@@ -2544,31 +2590,58 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   </div>
                 </SettingsCard>
 
-                <SettingsCard title="Theme" description="Pick the visual theme and skin family.">
+                <SettingsCard title="Basis-Theme" description="Wähle das grundlegende Farbschema für Browser und Oberfläche.">
                   <div className="settings-theme-grid">
-                    <button type="button" className={settingsText(draft.theme ?? settings.theme, 'dark') === 'dark' ? 'settings-theme-btn active' : 'settings-theme-btn'} onClick={() => updateDraftField('theme', 'dark')}>
+                    <button
+                      type="button"
+                      className={settingsText(draft.theme ?? settings.theme, 'dark') === 'dark' ? 'settings-theme-btn active' : 'settings-theme-btn'}
+                      onClick={() => updateDraftField('theme', 'dark')}
+                    >
                       <span className="settings-theme-preview settings-theme-preview-dark" />
                       <strong>Dark</strong>
+                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Navy / Slate</span>
                     </button>
-                    <button type="button" className={settingsText(draft.theme ?? settings.theme, 'dark') === 'light' ? 'settings-theme-btn active' : 'settings-theme-btn'} onClick={() => updateDraftField('theme', 'light')}>
+                    <button
+                      type="button"
+                      className={settingsText(draft.theme ?? settings.theme, 'dark') === 'light' ? 'settings-theme-btn active' : 'settings-theme-btn'}
+                      onClick={() => updateDraftField('theme', 'light')}
+                    >
                       <span className="settings-theme-preview settings-theme-preview-light" />
                       <strong>Light</strong>
+                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Klar & Hell</span>
                     </button>
-                    <button type="button" className={settingsText(draft.theme ?? settings.theme, 'dark') === 'system' ? 'settings-theme-btn active' : 'settings-theme-btn'} onClick={() => updateDraftField('theme', 'system')}>
+                    <button
+                      type="button"
+                      className={settingsText(draft.theme ?? settings.theme, 'dark') === 'oled' ? 'settings-theme-btn active' : 'settings-theme-btn'}
+                      onClick={() => updateDraftField('theme', 'oled')}
+                    >
+                      <span className="settings-theme-preview" style={{ background: '#000000', border: '1px solid rgba(255,255,255,0.3)' }} />
+                      <strong>OLED</strong>
+                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Pitch Black #000</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={settingsText(draft.theme ?? settings.theme, 'dark') === 'system' ? 'settings-theme-btn active' : 'settings-theme-btn'}
+                      onClick={() => updateDraftField('theme', 'system')}
+                    >
                       <span className="settings-theme-preview settings-theme-preview-system" />
                       <strong>System</strong>
+                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Auto (OS)</span>
                     </button>
                   </div>
                 </SettingsCard>
 
-                <SettingsCard title="Skins and type" description="Accent skin and readable font scaling.">
+                <SettingsCard title="Akzentfarbe & Skins" description="Wähle eine kuratierte Farbpalette oder bestimme eine freie Akzentfarbe.">
                   <div className="settings-skin-grid">
                     {SETTINGS_SKINS.map((skin) => (
                       <button
                         key={skin.key}
                         type="button"
                         className={settingsText(draft.skin ?? settings.skin, 'default').toLowerCase() === skin.key ? 'settings-skin-btn active' : 'settings-skin-btn'}
-                        onClick={() => updateDraftField('skin', skin.key)}
+                        onClick={() => {
+                          updateDraftField('skin', skin.key);
+                          updateDraftField('accent_color', '');
+                        }}
                       >
                         <div className="settings-skin-dots">
                           {skin.colors.map((color) => <span key={color} style={{ background: color }} />)}
@@ -2577,39 +2650,167 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       </button>
                     ))}
                   </div>
-                  <div className="settings-size-grid">
-                    {[
-                      ['small', 'Small'],
-                      ['default', 'Default'],
-                      ['large', 'Large']
-                    ].map(([value, label]) => (
+
+                  <div className="settings-custom-color-card" style={{ marginTop: 14, padding: '12px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--lb-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <input
+                        type="color"
+                        value={settingsText(draft.accent_color ?? settings.accent_color, '#0ea5e9') || '#0ea5e9'}
+                        onChange={(e) => {
+                          updateDraftField('skin', 'custom');
+                          updateDraftField('accent_color', e.target.value);
+                        }}
+                        style={{ width: 34, height: 34, padding: 0, border: 'none', borderRadius: '50%', cursor: 'pointer', background: 'transparent' }}
+                        title="Eigene Akzentfarbe wählen"
+                      />
+                      <div>
+                        <strong style={{ display: 'block', fontSize: 13 }}>Benutzerdefinierte Akzentfarbe</strong>
+                        <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Dynamische Berechnung von Glow-, Hover- und Kontrastwerten</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="text"
+                        value={settingsText(draft.accent_color ?? settings.accent_color, '')}
+                        onChange={(e) => {
+                          const val = e.target.value.trim();
+                          updateDraftField('skin', 'custom');
+                          updateDraftField('accent_color', val);
+                        }}
+                        placeholder="#0ea5e9"
+                        maxLength={7}
+                        style={{ width: 85, padding: '5px 8px', fontSize: 12, fontFamily: 'monospace', borderRadius: 6, border: '1px solid var(--lb-border)', background: 'var(--lb-bg-alt)', color: 'var(--lb-text)' }}
+                      />
                       <button
-                        key={value}
                         type="button"
-                        className={settingsText(draft.font_size ?? settings.font_size, 'default') === value ? 'settings-size-btn active' : 'settings-size-btn'}
-                        onClick={() => updateDraftField('font_size', value)}
+                        className={settingsText(draft.skin ?? settings.skin, 'default') === 'custom' ? 'secondary-action compact active' : 'secondary-action compact'}
+                        onClick={() => {
+                          updateDraftField('skin', 'custom');
+                          if (!draft.accent_color && !settings.accent_color) {
+                            updateDraftField('accent_color', '#0ea5e9');
+                          }
+                        }}
                       >
-                        <span>Aa</span>
-                        <strong>{label}</strong>
+                        Aktivieren
                       </button>
-                    ))}
+                    </div>
                   </div>
-                  <SettingsField label="Message layout" description="Visual style and arrangement of messages in AI chat sessions.">
-                    <select value={settingsText(draft.message_layout ?? settings.message_layout, 'bubbles')} onChange={(event) => updateDraftField('message_layout', event.target.value)}>
-                      <option value="bubbles">Chat Bubbles (Modern)</option>
-                      <option value="compact">Compact Flow</option>
-                      <option value="expanded">Expanded Canvas</option>
-                    </select>
-                  </SettingsField>
-                  <SettingsField label="Syntax theme" description="Code block theme for transcript and previews.">
+                </SettingsCard>
+
+                <SettingsCard title="Typografie & Seitenzoom" description="UI-Schriftgröße der Oberfläche und Standard-Zoom für Webseiten-Inhalte.">
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 8, color: 'var(--lb-text)' }}>
+                      UI-Schriftgröße (Oberfläche & Chat)
+                    </label>
+                    <div className="settings-size-grid">
+                      {[
+                        ['small', 'Klein (88%)'],
+                        ['default', 'Standard (100%)'],
+                        ['large', 'Groß (115%)'],
+                        ['xlarge', 'Sehr groß (130%)']
+                      ].map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          className={settingsText(draft.font_size ?? settings.font_size, 'default') === value ? 'settings-size-btn active' : 'settings-size-btn'}
+                          onClick={() => updateDraftField('font_size', value)}
+                        >
+                          <span style={{ fontSize: value === 'small' ? 12 : value === 'default' ? 14 : value === 'large' ? 16 : 18 }}>Aa</span>
+                          <strong>{label}</strong>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '12px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--lb-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div>
+                        <strong style={{ display: 'block', fontSize: 13 }}>Standard-Seitenzoom</strong>
+                        <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Basis-Zoom für neue Webseiten (gespeicherte Domain-Zooms bleiben erhalten)</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 600, fontSize: 13, minWidth: 44, textAlign: 'right' }}>
+                          {Number(draft.default_zoom ?? settings.default_zoom) || 100}%
+                        </span>
+                        <button
+                          type="button"
+                          className="secondary-action compact"
+                          style={{ padding: '3px 8px', fontSize: 11 }}
+                          onClick={() => updateDraftField('default_zoom', 100)}
+                          title="Auf 100% zurücksetzen"
+                        >
+                          100%
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min={80}
+                      max={150}
+                      step={5}
+                      value={Number(draft.default_zoom ?? settings.default_zoom) || 100}
+                      onChange={(e) => updateDraftField('default_zoom', Number(e.target.value))}
+                      style={{ width: '100%', cursor: 'pointer', accentColor: 'var(--accent-primary)' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--lb-muted)', marginTop: 4 }}>
+                      <span>80%</span>
+                      <span>100% (Standard)</span>
+                      <span>125%</span>
+                      <span>150%</span>
+                    </div>
+                  </div>
+                </SettingsCard>
+
+                <SettingsCard title="Nachrichten-Layout (Copilot & Chat)" description="Visuelle Darstellungsform für KI-Antworten und Dialoge.">
+                  <div className="settings-layout-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
+                    {[
+                      { key: 'bubbles', title: 'Sprechblasen', desc: 'Klassische Chat-Karten mit abgerundeten Ecken und Avataren', icon: '💬' },
+                      { key: 'compact', title: 'Kompakter Stream', desc: 'Flacher, dichter Textfluss im Terminal-/Slack-Stil', icon: '📄' },
+                      { key: 'expanded', title: 'Dokumenten-Canvas', desc: 'Großzügiges Lese-Layout über die volle Breite', icon: '📖' }
+                    ].map((item) => {
+                      const isActive = settingsText(draft.message_layout ?? settings.message_layout, 'bubbles') === item.key;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          className={isActive ? 'settings-theme-btn active' : 'settings-theme-btn'}
+                          onClick={() => updateDraftField('message_layout', item.key)}
+                          style={{ padding: '12px 10px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 4 }}
+                        >
+                          <span style={{ fontSize: 18 }}>{item.icon}</span>
+                          <strong style={{ fontSize: 13 }}>{item.title}</strong>
+                          <span style={{ fontSize: 11, color: 'var(--lb-muted)', lineHeight: 1.3 }}>{item.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <SettingsField label="Syntax-Highlighting Theme" description="Codeblock-Farbschema für Transkripte und Vorschauen.">
                     <select value={settingsText(draft.syntax_theme ?? settings.syntax_theme, '')} onChange={(event) => updateDraftField('syntax_theme', event.target.value)}>
-                      <option value="">Default</option>
+                      <option value="">Standard (Theme-spezifisch)</option>
                       <option value="tomorrow-night">Tomorrow Night</option>
                       <option value="one-dark">One Dark</option>
                       <option value="github-light">GitHub Light</option>
                     </select>
                   </SettingsField>
                 </SettingsCard>
+
+                {dirty && (
+                  <div className="settings-floating-action-bar" style={{ position: 'sticky', bottom: 12, zIndex: 10, padding: '10px 16px', borderRadius: 10, background: 'var(--lb-surface-strong)', border: '1px solid var(--accent-primary)', boxShadow: '0 8px 24px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="status-dot" style={{ background: 'var(--accent-primary)' }} />
+                      <span style={{ fontSize: 12, fontWeight: 500 }}>Live-Vorschau aktiv (Änderungen ungespeichert)</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button type="button" className="secondary-action compact" onClick={() => void restoreDraft()} disabled={!ready || !dirty}>
+                        Zurücksetzen
+                      </button>
+                      <button type="button" className="primary-action compact" onClick={() => void save()} disabled={!ready || saving || !dirty} style={{ background: 'var(--accent-primary)', color: 'var(--accent-text, #ffffff)' }}>
+                        {saving ? 'Speichert...' : 'Einstellungen speichern'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <SettingsCard title="Session view" description="Defaults that affect the left sidebar and transcript layout.">
                   <div className="settings-field-grid">
@@ -2720,7 +2921,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 <SettingsCard title="Defaults" description="Language and chat behavior.">
                   <div className="settings-field-grid">
                     <SettingsField label="Language" description="User-facing UI language.">
-                      <select value={settingsText(draft.language ?? settings.language, 'en')} onChange={(event) => updateDraftField('language', event.target.value)}>
+                      <select
+                        value={settingsText(draft.language ?? settings.language, 'en')}
+                        onChange={(event) => {
+                          updateDraftField('language', event.target.value);
+                          // Sofortiger Sprachswitch ohne Save
+                          void window.lastbrowser?.i18n?.setLocale?.(event.target.value).catch(() => {});
+                        }}
+                      >
                         {SETTINGS_LANGUAGES.map((language) => (
                           <option key={language.value} value={language.value}>{language.label}</option>
                         ))}
@@ -2808,8 +3016,67 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     />
                   </div>
                 </SettingsCard>
+                {/* === Accessibility Card === */}
+                <SettingsCard title="Barrierefreiheit" description="Hilfsmittel für barrierefreies Arbeiten: Hoher Kontrast, Dyslexie-Schrift, UI-Zoom und Fokus-Ringe.">
+                  <div className="settings-field-grid">
+                    <SettingsToggle
+                      label="Hoher Kontrast"
+                      description="Maximiert Lesbarkeit mit weißem Text auf schwarzem Hintergrund (WCAG ≥ 7:1)."
+                      checked={usePanelStore.getState().a11yHighContrast}
+                      onChange={(val) => { usePanelStore.getState().setA11yHighContrast(val); }}
+                    />
+                    <SettingsToggle
+                      label="Dyslexie-Schrift"
+                      description="Wechselt zur lesefreundlichen OpenDyslexic-Schriftart."
+                      checked={usePanelStore.getState().a11yDyslexicFont}
+                      onChange={(val) => { usePanelStore.getState().setA11yDyslexicFont(val); }}
+                    />
+                    <SettingsField label="Mindestschriftgröße" description="Verhindert, dass Text unter die gewählte Größe fällt.">
+                      <select
+                        value={String(usePanelStore.getState().a11yMinFontSize)}
+                        onChange={(e) => { usePanelStore.getState().setA11yMinFontSize(Number(e.target.value)); }}
+                      >
+                        <option value="0">Aus (Standard)</option>
+                        <option value="14">14px</option>
+                        <option value="16">16px</option>
+                        <option value="18">18px</option>
+                        <option value="20">20px</option>
+                      </select>
+                    </SettingsField>
+                    <SettingsField
+                      label={`UI-Zoom: ${usePanelStore.getState().a11yUiZoom}%`}
+                      description="Skaliert die gesamte Oberfläche. Standard: 100 %."
+                    >
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          type="range"
+                          min={80}
+                          max={150}
+                          step={5}
+                          value={usePanelStore.getState().a11yUiZoom}
+                          onChange={(e) => { usePanelStore.getState().setA11yUiZoom(Number(e.target.value)); }}
+                          style={{ flex: 1 }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => { usePanelStore.getState().setA11yUiZoom(100); }}
+                          style={{ fontSize: 11, padding: '2px 8px' }}
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </SettingsField>
+                    <SettingsToggle
+                      label="Fokus-Ringe"
+                      description="Zeigt deutliche gelbe Fokus-Ringe für Tastatur-Navigation (WCAG AA)."
+                      checked={usePanelStore.getState().a11yFocusRings}
+                      onChange={(val) => { usePanelStore.getState().setA11yFocusRings(val); }}
+                    />
+                  </div>
+                </SettingsCard>
               </>
             )}
+
 
             {section === 'providers' && (
               <>
@@ -2844,7 +3111,23 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 <span>Connect</span>
                               </button>
                             )}
-                            {!isActive && (
+                            {!isActive && (['ollama', 'ollama-cloud'].includes(option.id) ? (
+                              <button
+                                type="button"
+                                className="secondary-action compact"
+                                onClick={() => {
+                                  setOllamaModalProviderId(option.id);
+                                  setOllamaModalLabel(option.label || option.id);
+                                  setOllamaUrl(settingsText(settings.base_url, option.id === 'ollama' ? 'http://localhost:11434' : ''));
+                                  setOllamaKey(settingsText(settings.api_key, ''));
+                                  setOllamaTestResult('');
+                                }}
+                                disabled={!ready || saving}
+                              >
+                                <Settings size={14} />
+                                <span>Configure</span>
+                              </button>
+                            ) : (
                               <button
                                 type="button"
                                 className="secondary-action compact"
@@ -2853,7 +3136,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                               >
                                 <span>Use</span>
                               </button>
-                            )}
+                            ))}
                           </div>
                         );
                       })}
@@ -2861,7 +3144,87 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   )}
                 </SettingsCard>
 
+                {/* Ollama Config Modal */}
+                {ollamaModalProviderId && (
+                  <div className="settings-modal-overlay" onClick={() => setOllamaModalProviderId(null)}>
+                    <div className="settings-modal-box" onClick={(e) => e.stopPropagation()}>
+                      <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>Configure {ollamaModalLabel}</h3>
+                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Base URL</label>
+                      <input
+                        type="url"
+                        value={ollamaUrl}
+                        onChange={(e) => setOllamaUrl(e.target.value)}
+                        placeholder="http://localhost:11434"
+                        style={{ width: '100%', marginBottom: 8 }}
+                      />
+                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>API Key (optional)</label>
+                      <input
+                        type="password"
+                        value={ollamaKey}
+                        onChange={(e) => setOllamaKey(e.target.value)}
+                        placeholder="Leave empty for local Ollama"
+                        style={{ width: '100%', marginBottom: 12 }}
+                      />
+                      {ollamaTestResult && (
+                        <div style={{ fontSize: 12, marginBottom: 8, color: ollamaTestResult.startsWith('✓') ? 'var(--accent-primary)' : '#ff6b6b' }}>
+                          {ollamaTestResult}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          className="secondary-action compact"
+                          onClick={async () => {
+                            setOllamaTestResult('Testing…');
+                            try {
+                              const res = await fetch(`${ollamaUrl.replace(/\/$/, '')}/api/tags`, { signal: AbortSignal.timeout(5000) });
+                              if (res.ok) setOllamaTestResult('✓ Connected — Ollama is reachable');
+                              else setOllamaTestResult(`✗ HTTP ${res.status}`);
+                            } catch (err) {
+                              setOllamaTestResult(`✗ ${err instanceof Error ? err.message : String(err)}`);
+                            }
+                          }}
+                        >
+                          Test Connection
+                        </button>
+                        <button type="button" className="secondary-action compact" onClick={() => setOllamaModalProviderId(null)}>
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="primary-action compact"
+                          disabled={!ollamaUrl.trim() || saving}
+                          onClick={async () => {
+                            setSaving(true);
+                            try {
+                              await window.lastbrowser.sidekick.saveSettings({
+                                settings: {
+                                  ...cleanSettingsPayload(settings),
+                                  provider: ollamaModalProviderId,
+                                  base_url: ollamaUrl.trim(),
+                                  ...(ollamaKey.trim() ? { api_key: ollamaKey.trim() } : {})
+                                }
+                              });
+                              await settingsState.refresh();
+                              await modelsState.refresh();
+                              showToast(`Ollama provider set. URL: ${ollamaUrl.trim()}`);
+                              setOllamaModalProviderId(null);
+                            } catch (error) {
+                              showToast(`Could not configure Ollama: ${error instanceof Error ? error.message : String(error)}`);
+                            } finally {
+                              setSaving(false);
+                            }
+                          }}
+                        >
+                          Save & Activate
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <SettingsCard title="Model catalog" description="Live `/api/models` payload mirrored from the backend.">
+
                   {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label="Loading models…" />}
                   {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
                   {!modelsState.loading && !modelsState.error && (
@@ -2917,13 +3280,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
               </SettingsCard>
             )}
 
-            {section === 'extensions' && (
-              <ExtensionsSettingsSection />
-            )}
-
-            {section === 'plugins' && (
+            {(section === 'extensions' || section === 'plugins') && (
               <>
-                <SettingsCard title="Connected apps" description="Installed app integrations and their current visibility.">
+                <ExtensionsSettingsSection />
+                <SettingsCard title="Connected apps & Plugins" description="Installed app integrations and plugin inventory.">
                   <div className="settings-field-grid">
                     <SettingsToggle
                       label="Gmail visible in sidebar"
@@ -2942,12 +3302,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     </SettingsField>
                   </div>
                 </SettingsCard>
-
                 <SettingsCard title="Installed plugin inventory" description="What the backend currently exposes.">
                   {renderPluginsList()}
                 </SettingsCard>
               </>
             )}
+
 
             {section === 'system' && (
               <>

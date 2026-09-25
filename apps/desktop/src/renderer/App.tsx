@@ -279,17 +279,99 @@ function saveDesktopSettingsToStorage(settings: DesktopSettingsRecord | null): v
   }
 }
 
-function normalizeAppearanceTheme(value: string): 'light' | 'dark' | 'system' {
-  const normalized = value.trim().toLowerCase();
-  return normalized === 'light' || normalized === 'system' ? normalized : 'dark';
+export function getDomainFromUrl(rawUrl: string): string {
+  try {
+    if (!rawUrl || rawUrl.startsWith('app://') || rawUrl.startsWith('lastbrowser://') || rawUrl.startsWith('about:')) {
+      return '';
+    }
+    const parsed = new URL(rawUrl);
+    return parsed.hostname.toLowerCase();
+  } catch {
+    return '';
+  }
 }
 
-function normalizeAppearanceSkin(value: string): string {
+export const DOMAIN_ZOOM_STORAGE_KEY = 'lastbrowser.domainZoomMap.v1';
+
+export function loadDomainZoomMap(): Record<string, number> {
+  try {
+    const raw = window.localStorage.getItem(DOMAIN_ZOOM_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveDomainZoom(domain: string, factor: number): void {
+  if (!domain) return;
+  try {
+    const map = loadDomainZoomMap();
+    map[domain] = factor;
+    window.localStorage.setItem(DOMAIN_ZOOM_STORAGE_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+export function getEffectiveZoomForUrl(url: string, defaultZoomPercent: number = 100): number {
+  const domain = getDomainFromUrl(url);
+  if (domain) {
+    const map = loadDomainZoomMap();
+    if (typeof map[domain] === 'number' && Number.isFinite(map[domain]) && map[domain] > 0) {
+      return map[domain];
+    }
+  }
+  const base = (typeof defaultZoomPercent === 'number' && defaultZoomPercent > 0 ? defaultZoomPercent : 100) / 100;
+  return base;
+}
+
+export function normalizeAppearanceTheme(value: string): 'light' | 'dark' | 'system' | 'oled' {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'light' || normalized === 'system' || normalized === 'oled') return normalized;
+  return 'dark';
+}
+
+export function normalizeAppearanceSkin(value: string): string {
   const normalized = value.trim().toLowerCase();
   return normalized || 'default';
 }
 
-function applyDesktopAppearance(settings: DesktopSettingsRecord | null): void {
+export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const clean = hex.replace(/^#/, '');
+  if (clean.length === 3) {
+    const r = parseInt(clean[0] + clean[0], 16);
+    const g = parseInt(clean[1] + clean[1], 16);
+    const b = parseInt(clean[2] + clean[2], 16);
+    return isNaN(r) || isNaN(g) || isNaN(b) ? null : { r, g, b };
+  }
+  if (clean.length === 6 || clean.length === 8) {
+    const r = parseInt(clean.substring(0, 2), 16);
+    const g = parseInt(clean.substring(2, 4), 16);
+    const b = parseInt(clean.substring(4, 6), 16);
+    return isNaN(r) || isNaN(g) || isNaN(b) ? null : { r, g, b };
+  }
+  return null;
+}
+
+export function computeAccentTokens(hexColor: string) {
+  const rgb = hexToRgb(hexColor);
+  if (!rgb) return null;
+  const { r, g, b } = rgb;
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const contrastText = luminance > 0.55 ? '#000000' : '#ffffff';
+  const glow = `rgba(${r}, ${g}, ${b}, 0.45)`;
+  const hoverR = Math.min(255, Math.round(r + (255 - r) * 0.18));
+  const hoverG = Math.min(255, Math.round(g + (255 - g) * 0.18));
+  const hoverB = Math.min(255, Math.round(b + (255 - b) * 0.18));
+  const hover = `#${hoverR.toString(16).padStart(2, '0')}${hoverG.toString(16).padStart(2, '0')}${hoverB.toString(16).padStart(2, '0')}`;
+  return {
+    primary: hexColor,
+    glow,
+    hover,
+    text: contrastText,
+    rgbStr: `${r}, ${g}, ${b}`
+  };
+}
+
+export function applyDesktopAppearance(settings: DesktopSettingsRecord | null): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
   const theme = normalizeAppearanceTheme(String(settings?.theme || 'dark'));
@@ -297,6 +379,7 @@ function applyDesktopAppearance(settings: DesktopSettingsRecord | null): void {
     ? (window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
     : theme;
   const skin = normalizeAppearanceSkin(String(settings?.skin || 'default'));
+  const accentColor = String(settings?.accent_color || '').trim().toLowerCase();
   const fontSize = String(settings?.font_size || 'default').trim().toLowerCase() || 'default';
   const messageLayout = String(settings?.message_layout || 'bubbles').trim().toLowerCase() || 'bubbles';
   const syntaxTheme = String(settings?.syntax_theme || '').trim();
@@ -307,10 +390,35 @@ function applyDesktopAppearance(settings: DesktopSettingsRecord | null): void {
   root.dataset.fontSize = fontSize;
   root.dataset.messageLayout = messageLayout;
   root.dataset.syntaxTheme = syntaxTheme;
+
   root.classList.toggle('theme-light', resolvedTheme === 'light');
-  root.classList.toggle('theme-dark', resolvedTheme !== 'light');
+  root.classList.toggle('theme-dark', resolvedTheme === 'dark');
+  root.classList.toggle('theme-oled', resolvedTheme === 'oled');
   root.classList.toggle('theme-system', theme === 'system');
-  root.style.colorScheme = resolvedTheme;
+  root.style.colorScheme = resolvedTheme === 'light' ? 'light' : 'dark';
+
+  if ((skin === 'custom' || accentColor) && accentColor.startsWith('#')) {
+    const tokens = computeAccentTokens(accentColor);
+    if (tokens) {
+      root.style.setProperty('--user-accent-primary', tokens.primary);
+      root.style.setProperty('--user-accent-glow', tokens.glow);
+      root.style.setProperty('--user-accent-hover', tokens.hover);
+      root.style.setProperty('--user-accent-text', tokens.text);
+      root.style.setProperty('--accent-primary', tokens.primary);
+      root.style.setProperty('--accent-glow', tokens.glow);
+      root.style.setProperty('--accent-hover', tokens.hover);
+      root.style.setProperty('--accent-rgb', tokens.rgbStr);
+    }
+  } else {
+    root.style.removeProperty('--user-accent-primary');
+    root.style.removeProperty('--user-accent-glow');
+    root.style.removeProperty('--user-accent-hover');
+    root.style.removeProperty('--user-accent-text');
+    root.style.removeProperty('--accent-primary');
+    root.style.removeProperty('--accent-glow');
+    root.style.removeProperty('--accent-hover');
+    root.style.removeProperty('--accent-rgb');
+  }
 }
 
 type TodoItem = {
@@ -2921,8 +3029,7 @@ function BrowserMain({
   const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
   const [zoomFactor, setZoomFactor] = useState<number>(() => {
     try {
-      const stored = Number(window.localStorage.getItem('lastbrowser.zoomFactor'));
-      return Number.isFinite(stored) && stored > 0 ? stored : 1;
+      return getEffectiveZoomForUrl(activeTab?.url || '', Number(desktopSettings?.default_zoom) || 100);
     } catch {
       return 1;
     }
@@ -2931,6 +3038,10 @@ function BrowserMain({
   const applyZoom = useCallback((next: number) => {
     const clamped = Math.min(3, Math.max(0.5, next));
     setZoomFactor(clamped);
+    const domain = getDomainFromUrl(activeTab.url);
+    if (domain) {
+      saveDomainZoom(domain, clamped);
+    }
     try {
       window.localStorage.setItem('lastbrowser.zoomFactor', String(clamped));
     } catch {
@@ -2944,7 +3055,7 @@ function BrowserMain({
         // Guest not ready yet; the effect below re-applies on dom-ready.
       }
     }
-  }, []);
+  }, [activeTab.url]);
 
   const stepZoom = useCallback((direction: 1 | -1) => {
     setZoomFactor((current) => {
@@ -2952,6 +3063,10 @@ function BrowserMain({
       const from = index >= 0 ? index : ZOOM_STEPS.length - 1;
       const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, from + direction))];
       const clamped = Math.min(3, Math.max(0.5, next));
+      const domain = getDomainFromUrl(activeTab.url);
+      if (domain) {
+        saveDomainZoom(domain, clamped);
+      }
       try {
         window.localStorage.setItem('lastbrowser.zoomFactor', String(clamped));
       } catch {
@@ -2967,7 +3082,19 @@ function BrowserMain({
       }
       return clamped;
     });
-  }, []);
+  }, [activeTab.url]);
+
+  // Synchronize domain-specific or default appearance zoom on navigation / tab switch
+  useEffect(() => {
+    const effective = getEffectiveZoomForUrl(activeTab.url, Number(desktopSettings?.default_zoom) || 100);
+    setZoomFactor(effective);
+    const view = webviewRef.current;
+    if (view && typeof view.setZoomFactor === 'function') {
+      try {
+        view.setZoomFactor(effective);
+      } catch {}
+    }
+  }, [activeTab.id, activeTab.url, desktopSettings?.default_zoom]);
 
   // Re-apply the stored zoom whenever the guest is (re)created.
   useEffect(() => {

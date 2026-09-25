@@ -74,9 +74,14 @@ describe('Phase 2 Browser Fixes: Sidebar, Spaces, Multiscreen & Summarize Bar', 
   });
 
   describe('3. Multiscreen Tab-Switching Lock', () => {
-    it('ensures split screen is active only when activeTab is in splitTabIds', () => {
+    it('ensures split screen and normal viewport are toggled by CSS display, not conditional unmounting', () => {
       const appSource = readRendererFile('App.tsx');
-      expect(appSource).toContain('webviewReady && splitTabIds && splitTabIds.length > 1 && splitTabIds.includes(activeTab.id)');
+      // Both branches are always in the DOM; visibility is controlled via display:none.
+      // This prevents WebView remounting when switching between split and non-split tabs.
+      expect(appSource).toContain("splitTabIds.includes(activeTab.id) ? 'flex' : 'none'");
+      expect(appSource).toContain("splitTabIds.includes(activeTab.id)) ? 'none' : 'block'");
+      // Split container is still conditional on having ≥2 tabs in split
+      expect(appSource).toContain('splitTabIds && splitTabIds.length > 1');
     });
   });
 

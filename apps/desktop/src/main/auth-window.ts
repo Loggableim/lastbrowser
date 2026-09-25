@@ -30,8 +30,9 @@ export function isStreamingLoginUrl(url: string): boolean {
   try {
     const { hostname, pathname } = new URL(url);
     const h = hostname.toLowerCase();
-    // Disney+ / BAM identity provider
+    // Disney+ / BAM identity provider and login bridge
     if (h === 'sso.id.bamgrid.com' || h.endsWith('.bamgrid.com')) return true;
+    if (h === 'login.disney.com' || h.endsWith('.disney.com') && /\/(login|bridge|identity|sso)/i.test(pathname)) return true;
     if ((h === 'www.disneyplus.com' || h === 'disneyplus.com') &&
         /^\/(login|de\/login|en-gb\/login|signup|identity)/i.test(pathname)) return true;
     // Amazon Prime Video signin

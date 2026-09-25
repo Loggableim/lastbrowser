@@ -3531,8 +3531,22 @@ function BrowserMain({
             </div>
           </div>
         )}
-        {webviewReady && splitTabIds && splitTabIds.length > 1 && splitTabIds.includes(activeTab.id) ? (
-          <>
+        {/* ── Split-view container ─────────────────────────────────────────
+            Always rendered so WebViews are never unmounted when the user
+            switches to a non-split tab (unmounting causes a blank screen
+            because Electron re-creates the renderer process).
+            Hidden via display:none when the active tab is not in the split. */}
+        {webviewReady && splitTabIds && splitTabIds.length > 1 && (
+          <div
+            style={{
+              display: splitTabIds.includes(activeTab.id) ? 'flex' : 'none',
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              zIndex: splitTabIds.includes(activeTab.id) ? 1 : -1
+            }}
+          >
             {resizingDividerIndex !== null && (
               <div
                 className="split-resize-overlay"
@@ -3639,75 +3653,90 @@ function BrowserMain({
                 );
               })}
             </div>
-          </>
-        ) : (
-          <div className="browser-tabs-viewport" style={{ position: 'relative', width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
-            {(tabs && tabs.length > 0 ? tabs : [activeTab]).map((tab) => {
-              const isCurrent = tab.id === activeTab.id;
-              if (tab.isDiscarded && !isCurrent) return null;
-              if (isAiBrowserHomeUrl(tab.url) && !isCurrent) return null;
-              return (
-                <div
-                  key={tab.id}
-                  className={`browser-tab-pane ${isCurrent ? 'active-tab-pane' : 'inactive-tab-pane'}`}
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    width: '100%',
-                    height: '100%',
-                    minWidth: 0,
-                    minHeight: 0,
-                    visibility: isCurrent ? 'visible' : 'hidden',
-                    pointerEvents: isCurrent ? 'auto' : 'none',
-                    zIndex: isCurrent ? 1 : 0
-                  }}
-                >
-                  {webviewReady && (
-                    <webview
-                      key={`${activeProfile.id}:${tab.id}:${webviewMountKey}`}
-                      ref={(el) => {
-                        if (el) {
-                          allWebviewRefs.current[tab.id] = el;
-                          if (tab.id === activeTab.id) {
-                            webviewRef.current = el;
-                          }
-                        } else {
-                          delete allWebviewRefs.current[tab.id];
-                        }
-                      }}
-                      src={tab.url}
-                      className="browser-view"
-                      style={browserWebviewStyle}
-                      partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito)}
-                      allowpopups="true"
-                      plugins="true"
-                      webpreferences="contextIsolation=yes, plugins=yes"
-                      onDidStartLoading={() => {
-                        if (tab.id === activeTab.id) onClearBrowserError();
-                      }}
-                      onDomReady={(event) => {
-                        void hideWebviewScrollbars(event.currentTarget);
-                      }}
-                      onDidFailLoad={(event) => {
-                        if (!event.isMainFrame || event.errorCode === -3) return;
+          </div>
+        )}
+        {/* ── Normal single-tab viewport ────────────────────────────────────
+            Always rendered. Hidden when the active tab is part of a split
+            (the split container above takes over).  Keeps all WebViews alive
+            in the DOM so switching back from split never causes a blank tab. */}
+        <div
+          className="browser-tabs-viewport"
+          style={{
+            display: (splitTabIds && splitTabIds.length > 1 && splitTabIds.includes(activeTab.id)) ? 'none' : 'block',
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            minWidth: 0,
+            minHeight: 0,
+            overflow: 'hidden'
+          }}
+        >
+          {(tabs && tabs.length > 0 ? tabs : [activeTab]).map((tab) => {
+            const isCurrent = tab.id === activeTab.id;
+            if (tab.isDiscarded && !isCurrent) return null;
+            if (isAiBrowserHomeUrl(tab.url) && !isCurrent) return null;
+            return (
+              <div
+                key={tab.id}
+                className={`browser-tab-pane ${isCurrent ? 'active-tab-pane' : 'inactive-tab-pane'}`}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  minWidth: 0,
+                  minHeight: 0,
+                  visibility: isCurrent ? 'visible' : 'hidden',
+                  pointerEvents: isCurrent ? 'auto' : 'none',
+                  zIndex: isCurrent ? 1 : 0
+                }}
+              >
+                {webviewReady && (
+                  <webview
+                    key={`${activeProfile.id}:${tab.id}:${webviewMountKey}`}
+                    ref={(el) => {
+                      if (el) {
+                        allWebviewRefs.current[tab.id] = el;
                         if (tab.id === activeTab.id) {
-                          if (event.errorCode < -100) {
-                            onSetBrowserError(`Connection failed (${event.errorDescription}). Returning to start page.`);
-                            setTimeout(() => {
-                              onNavigate(browserStartUrl);
-                            }, 1500);
-                          } else {
-                            onSetBrowserError(`${event.errorCode}: ${event.errorDescription}`);
-                          }
+                          webviewRef.current = el;
                         }
-                      }}
-                    />
-                  )}
+                      } else {
+                        delete allWebviewRefs.current[tab.id];
+                      }
+                    }}
+                    src={tab.url}
+                    className="browser-view"
+                    style={browserWebviewStyle}
+                    partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito)}
+                    allowpopups="true"
+                    plugins="true"
+                    webpreferences="contextIsolation=yes, plugins=yes"
+                    onDidStartLoading={() => {
+                      if (tab.id === activeTab.id) onClearBrowserError();
+                    }}
+                    onDomReady={(event) => {
+                      void hideWebviewScrollbars(event.currentTarget);
+                    }}
+                    onDidFailLoad={(event) => {
+                      if (!event.isMainFrame || event.errorCode === -3) return;
+                      if (tab.id === activeTab.id) {
+                        if (event.errorCode < -100) {
+                          onSetBrowserError(`Connection failed (${event.errorDescription}). Returning to start page.`);
+                          setTimeout(() => {
+                            onNavigate(browserStartUrl);
+                          }, 1500);
+                        } else {
+                          onSetBrowserError(`${event.errorCode}: ${event.errorDescription}`);
+                        }
+                      }
+                    }}
+                  />
+                )}
                 </div>
               );
             })}
-          </div>
-        )}
+            </div>
       </div>
     </section>
     </PanelErrorBoundary>

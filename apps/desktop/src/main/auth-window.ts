@@ -15,6 +15,42 @@ export function isOAuthUrl(url: string): boolean {
 }
 
 /**
+ * Detect whether a URL belongs to a streaming service login / identity flow
+ * that sends X-Frame-Options or CSP frame-ancestors headers which prevent
+ * the Electron webview from rendering the login page.
+ *
+ * Domains covered:
+ *  - Disney+ BAM SSO:  sso.id.bamgrid.com, disneyplus.com (login paths)
+ *  - Amazon Prime:     www.amazon.com (signin), api.amazon.com
+ *  - HBO/Max:          auth.max.com, id.hbo.com
+ *  - Paramount+:       login.paramountplus.com
+ *  - Apple TV+:        idmsa.apple.com, appleid.apple.com
+ */
+export function isStreamingLoginUrl(url: string): boolean {
+  try {
+    const { hostname, pathname } = new URL(url);
+    const h = hostname.toLowerCase();
+    // Disney+ / BAM identity provider
+    if (h === 'sso.id.bamgrid.com' || h.endsWith('.bamgrid.com')) return true;
+    if ((h === 'www.disneyplus.com' || h === 'disneyplus.com') &&
+        /^\/(login|de\/login|en-gb\/login|signup|identity)/i.test(pathname)) return true;
+    // Amazon Prime Video signin
+    if ((h === 'www.amazon.com' || h === 'www.amazon.de' || h.endsWith('.amazon.com')) &&
+        /\/(ap\/signin|gp\/sign-in|auth)/i.test(pathname)) return true;
+    // HBO / Max
+    if (h === 'auth.max.com' || h === 'id.hbo.com' || h.endsWith('.hbo.com')) return true;
+    // Paramount+
+    if (h === 'login.paramountplus.com' || h.endsWith('.paramountplus.com')) return true;
+    // Apple TV+
+    if (h === 'idmsa.apple.com' || h === 'appleid.apple.com') return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+
+/**
  * Detect whether a redirect or navigation target is the local Sidekick callback server.
  */
 export function isLocalhostCallback(url: string): boolean {

@@ -162,7 +162,7 @@ import { createAppTray, setupMinimizeToTray, type TrayController } from './tray.
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
 import { registerBrowserShortcuts } from './shortcuts.js';
-import { openAuthConnectWindow, cleanOAuthUserAgent, sanitizeSecChUa } from './auth-window.js';
+import { openAuthConnectWindow, cleanOAuthUserAgent, sanitizeSecChUa, isStreamingLoginUrl } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
 
 process.on('uncaughtException', (err, origin) => {
@@ -910,6 +910,32 @@ function attachSessionHandlers(targetSession: Session): void {
       }
     }
     callback({ requestHeaders });
+  });
+
+  // Strip X-Frame-Options and CSP frame-ancestors from streaming service login pages.
+  // Disney+ (sso.id.bamgrid.com), Amazon, HBO/Max and others send these headers to
+  // prevent embedding — but Electron interprets them the same way a browser does and
+  // refuses to load the page inside the webview, resulting in a blank login screen.
+  // We remove those headers only for known streaming identity provider origins so
+  // normal same-origin protections remain in place for all other sites.
+  targetSession.webRequest.onHeadersReceived((details, callback) => {
+    if (!isStreamingLoginUrl(details.url)) {
+      callback({});
+      return;
+    }
+    const responseHeaders = { ...details.responseHeaders };
+    for (const key of Object.keys(responseHeaders)) {
+      const lower = key.toLowerCase();
+      if (lower === 'x-frame-options') {
+        delete responseHeaders[key];
+      } else if (lower === 'content-security-policy' || lower === 'content-security-policy-report-only') {
+        // Remove only the frame-ancestors directive; keep everything else intact.
+        responseHeaders[key] = responseHeaders[key].map((v: string) =>
+          v.replace(/frame-ancestors[^;]*(;|$)/gi, '').trim()
+        );
+      }
+    }
+    callback({ responseHeaders });
   });
 
   void adblock.attach(targetSession);

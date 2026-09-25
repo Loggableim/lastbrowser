@@ -340,7 +340,7 @@ Nova AI & Unified Extension & Skill Hub (v0.1.31)
 favor of the Unified Extension & Skill Hub.
 ```
 
-### 8.3 Aktualisierte Kurzangaben (v0.1.31)
+### 8.3 Aktualisierte Kurzangaben (v0.1.32)
 
 | Feld | Sprache | Text | Zeichen |
 | :--- | :--- | :--- | :--- |
@@ -350,5 +350,5 @@ favor of the Unified Extension & Skill Hub.
 | **Short Description** | en-US | `Fast, private Chromium browser with Nova AI, 48 workflows & MCP skill hub.` | 74/100 |
 
 Die bisherigen Werte aus 2.1/3.1 (`AI-Native Web Browser` / „Nova KI-Copilot“-Formulierungen)
-bleiben als Fallback gültig; für die v0.1.31-Einreichung sind die obigen Varianten
+bleiben als Fallback gültig; für die v0.1.32-Einreichung sind die obigen Varianten
 empfohlen, da sie das Re-Branding und die Hub-Architektur widerspiegeln.

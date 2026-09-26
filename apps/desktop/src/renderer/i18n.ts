@@ -11,6 +11,20 @@ import { desktopEsOverrides } from './i18n/locales/es.js';
 import { desktopFrOverrides } from './i18n/locales/fr.js';
 import { desktopItOverrides } from './i18n/locales/it.js';
 import { desktopPtBrOverrides } from './i18n/locales/pt-BR.js';
+import { desktopRuOverrides } from './i18n/locales/ru.js';
+import { desktopSystemPanelCoreOverrides } from './i18n/system-panels-extra.js';
+import { systemPanelsRomanTranslations } from './i18n/system-panels-roman.js';
+import { settingsAppearanceTranslations } from './i18n/settings-appearance-translations.js';
+import { settingsProviderTranslations } from './i18n/settings-provider-translations.js';
+import { settingsOtherPanelsTranslations } from './i18n/settings-other-panels-translations.js';
+import { geminiSubscriptionTranslations } from './i18n/gemini-subscription-translations.js';
+
+const systemPanelOverrides = {
+  de: systemPanelsRomanTranslations.de,
+  es: systemPanelsRomanTranslations.es,
+  fr: systemPanelsRomanTranslations.fr,
+  it: systemPanelsRomanTranslations.it
+} as const;
 
 export const desktopLocaleStorageKey = 'lastbrowser.locale';
 export { desktopLocaleIds, desktopLocaleNames, desktopTranslationKeys } from './i18n/keys.js';
@@ -29,12 +43,24 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 const defaultEnglishCatalog = buildDefaultEnglishCatalog();
 
 export const desktopLocaleCatalogs: Record<DesktopLocaleId, Readonly<DesktopCatalog>> = {
-  en: mergeCatalog(defaultEnglishCatalog, desktopEnOverrides),
-  de: mergeCatalog(defaultEnglishCatalog, desktopDeOverrides),
-  it: mergeCatalog(defaultEnglishCatalog, desktopItOverrides),
-  es: mergeCatalog(defaultEnglishCatalog, desktopEsOverrides),
-  fr: mergeCatalog(defaultEnglishCatalog, desktopFrOverrides),
-  'pt-BR': mergeCatalog(defaultEnglishCatalog, desktopPtBrOverrides)
+  en: mergeCatalog(defaultEnglishCatalog, { ...desktopEnOverrides, ...desktopSystemPanelCoreOverrides.en, ...settingsAppearanceTranslations.en, ...settingsProviderTranslations.en, ...settingsOtherPanelsTranslations.en, ...geminiSubscriptionTranslations.en }),
+  de: mergeCatalog(defaultEnglishCatalog, { ...desktopDeOverrides, ...desktopSystemPanelCoreOverrides.de, ...systemPanelOverrides.de, ...settingsAppearanceTranslations.de, ...settingsProviderTranslations.de, ...settingsOtherPanelsTranslations.de, ...geminiSubscriptionTranslations.de }),
+  it: mergeCatalog(defaultEnglishCatalog, { ...desktopItOverrides, ...desktopSystemPanelCoreOverrides.it, ...systemPanelOverrides.it, ...settingsAppearanceTranslations.it, ...settingsProviderTranslations.it, ...settingsOtherPanelsTranslations.it, ...geminiSubscriptionTranslations.it }),
+  es: mergeCatalog(defaultEnglishCatalog, { ...desktopEsOverrides, ...desktopSystemPanelCoreOverrides.es, ...systemPanelOverrides.es, ...settingsAppearanceTranslations.es, ...settingsProviderTranslations.es, ...settingsOtherPanelsTranslations.es, ...geminiSubscriptionTranslations.es }),
+  fr: mergeCatalog(defaultEnglishCatalog, { ...desktopFrOverrides, ...desktopSystemPanelCoreOverrides.fr, ...systemPanelOverrides.fr, ...settingsAppearanceTranslations.fr, ...settingsProviderTranslations.fr, ...settingsOtherPanelsTranslations.fr, ...geminiSubscriptionTranslations.fr }),
+  'pt-BR': mergeCatalog(defaultEnglishCatalog, { ...desktopPtBrOverrides, ...desktopSystemPanelCoreOverrides['pt-BR'], ...settingsAppearanceTranslations['pt-BR'], ...settingsProviderTranslations['pt-BR'], ...settingsOtherPanelsTranslations['pt-BR'], ...geminiSubscriptionTranslations['pt-BR'] }),
+  ru: mergeCatalog(defaultEnglishCatalog, { ...desktopRuOverrides, ...desktopSystemPanelCoreOverrides.ru, ...settingsAppearanceTranslations.ru, ...settingsProviderTranslations.ru, ...settingsOtherPanelsTranslations.ru, ...geminiSubscriptionTranslations.ru })
+};
+
+/** Raw locale resources, exported so coverage tests can detect keys hidden by English fallback. */
+export const desktopLocaleOverrides: Record<DesktopLocaleId, Readonly<DesktopCatalog>> = {
+  en: { ...desktopEnOverrides, ...desktopSystemPanelCoreOverrides.en, ...settingsAppearanceTranslations.en, ...settingsProviderTranslations.en, ...settingsOtherPanelsTranslations.en, ...geminiSubscriptionTranslations.en },
+  de: { ...desktopDeOverrides, ...desktopSystemPanelCoreOverrides.de, ...systemPanelOverrides.de, ...settingsAppearanceTranslations.de, ...settingsProviderTranslations.de, ...settingsOtherPanelsTranslations.de, ...geminiSubscriptionTranslations.de },
+  it: { ...desktopItOverrides, ...desktopSystemPanelCoreOverrides.it, ...systemPanelOverrides.it, ...settingsAppearanceTranslations.it, ...settingsProviderTranslations.it, ...settingsOtherPanelsTranslations.it, ...geminiSubscriptionTranslations.it },
+  es: { ...desktopEsOverrides, ...desktopSystemPanelCoreOverrides.es, ...systemPanelOverrides.es, ...settingsAppearanceTranslations.es, ...settingsProviderTranslations.es, ...settingsOtherPanelsTranslations.es, ...geminiSubscriptionTranslations.es },
+  fr: { ...desktopFrOverrides, ...desktopSystemPanelCoreOverrides.fr, ...systemPanelOverrides.fr, ...settingsAppearanceTranslations.fr, ...settingsProviderTranslations.fr, ...settingsOtherPanelsTranslations.fr, ...geminiSubscriptionTranslations.fr },
+  'pt-BR': { ...desktopPtBrOverrides, ...desktopSystemPanelCoreOverrides['pt-BR'], ...settingsAppearanceTranslations['pt-BR'], ...settingsProviderTranslations['pt-BR'], ...settingsOtherPanelsTranslations['pt-BR'], ...geminiSubscriptionTranslations['pt-BR'] },
+  ru: { ...desktopRuOverrides, ...desktopSystemPanelCoreOverrides.ru, ...settingsAppearanceTranslations.ru, ...settingsProviderTranslations.ru, ...settingsOtherPanelsTranslations.ru, ...geminiSubscriptionTranslations.ru }
 };
 
 export function normalizeDesktopLocale(value: unknown): DesktopLocaleId | null {
@@ -45,6 +71,7 @@ export function normalizeDesktopLocale(value: unknown): DesktopLocaleId | null {
   const lower = normalized.toLowerCase();
 
   if (lower === 'pt' || lower === 'pt-br' || lower === 'ptbr') return 'pt-BR';
+  if (lower === 'russian' || lower === 'русский' || lower.startsWith('ru-') || lower === 'ru') return 'ru';
   if (lower.startsWith('de')) return 'de';
   if (lower.startsWith('it')) return 'it';
   if (lower.startsWith('es')) return 'es';
@@ -150,7 +177,7 @@ function mergeCatalog(base: Readonly<Record<DesktopTranslationKey, string>>, ove
 
 function buildDefaultEnglishCatalog(): Readonly<Record<DesktopTranslationKey, string>> {
   const catalog = Object.fromEntries(desktopTranslationKeys.map((key) => [key, humanizeKey(key)])) as Record<DesktopTranslationKey, string>;
-  return mergeCatalog(catalog, desktopEnOverrides) as Readonly<Record<DesktopTranslationKey, string>>;
+  return mergeCatalog(catalog, { ...desktopEnOverrides, ...desktopSystemPanelCoreOverrides.en }) as Readonly<Record<DesktopTranslationKey, string>>;
 }
 
 function humanizeKey(key: string): string {

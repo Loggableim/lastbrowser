@@ -881,39 +881,18 @@ def _fetch_account_usage_with_profile_context(provider: str) -> Any:
 
 def _provider_account_usage_status(provider: str, display_name: str) -> dict[str, Any]:
     if provider == "google-gemini-cli":
-        creds = None
-        try:
-            from runtime.google_oauth import get_valid_access_token, load_credentials
-            from runtime.google_code_assist import retrieve_user_quota
-            creds = load_credentials()
-            if not creds:
-                raise RuntimeError("not connected")
-            token = get_valid_access_token()
-            buckets = retrieve_user_quota(token, project_id=creds.project_id or creds.managed_project_id)
-            if not buckets:
-                raise RuntimeError("quota_empty")
-            windows = [{"label": b.model_id or "Gemini", "remaining_percent": max(0, min(100, b.remaining_fraction * 100)), "reset_at": b.reset_time_iso or None} for b in buckets]
-            return {"ok": True, "provider": provider, "display_name": display_name, "supported": True,
-                    "status": "available", "label": "Gemini Code Assist quota", "quota": None,
-                    "account_limits": {"plan": "Google Gemini / Code Assist", "windows": windows,
-                                       "details": [f"Account: {creds.email}" if creds.email else "Google account"]},
-                    "message": "Google Gemini quota loaded."}
-        except Exception as exc:
-            code = getattr(exc, "code", "")
-            message = "Google-Kontingent derzeit nicht abrufbar. Bitte später erneut prüfen."
-            reason = "quota_unavailable"
-            if "SUBSCRIPTION_REQUIRED" in str(exc):
-                reason = "subscription_required"
-                message = "Google lehnt die Quota-Abfrage ab: Für dieses Konto wird keine gültige Code-Assist-Lizenz erkannt (HTTP 403). Die Google-Anmeldung allein bestätigt keinen Kontingentzugriff."
-            elif code == "code_assist_http_403":
-                reason = "access_denied"
-                message = "Google verweigert den Kontingentzugriff (HTTP 403). Konto- und Projektberechtigungen prüfen."
-            elif code in {"google_oauth_not_logged_in", "google_oauth_invalid_grant"} or not creds:
-                reason = "authentication_required"
-                message = "Bitte das Google-Konto erneut über die WebUI verbinden."
-            return {"ok": False, "provider": provider, "display_name": display_name, "supported": True,
-                    "status": "unavailable", "quota": None, "account_limits": None,
-                    "error_code": reason, "message": message}
+        from cli.auth import GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE
+        return {
+            "ok": False,
+            "provider": provider,
+            "display_name": display_name,
+            "supported": False,
+            "status": "unsupported",
+            "quota": None,
+            "account_limits": None,
+            "error_code": "provider_unavailable",
+            "message": GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE,
+        }
     snapshot = _fetch_account_usage_with_profile_context(provider)
     account_limits = _serialize_account_usage_snapshot(snapshot)
     if account_limits and account_limits.get("available"):
@@ -1217,6 +1196,31 @@ def _provider_is_oauth(provider_id: str) -> bool:
     return provider_id in _OAUTH_PROVIDERS
 
 
+def _anthropic_claude_code_linked() -> bool:
+    """Return whether Claude Code credentials were explicitly linked.
+
+    Anthropic supports both API-key auth and a local Claude Code credential
+    link. Keep these states separate: ``has_key`` describes API-key setup,
+    while this marker reports the independent OAuth-style link.
+    """
+    try:
+        auth_path = _get_sidekick_home() / "auth.json"
+        if not auth_path.is_file():
+            return False
+        payload = json.loads(auth_path.read_text(encoding="utf-8"))
+        pool = payload.get("credential_pool") if isinstance(payload, dict) else None
+        entries = pool.get("anthropic") if isinstance(pool, dict) else None
+        return any(
+            isinstance(entry, dict)
+            and entry.get("auth_type") == "oauth"
+            and entry.get("source") == "claude_code_linked"
+            for entry in (entries if isinstance(entries, list) else [])
+        )
+    except Exception:
+        logger.debug("Could not read Anthropic Claude Code link status", exc_info=True)
+        return False
+
+
 # SECTION: Public API
 
 
@@ -1230,6 +1234,7 @@ def get_providers() -> dict[str, Any]:
     - ``configurable``: whether the key can be set from the WebUI
     - ``key_source``: where the key was found (``env_file``, ``env_var``,
       ``config_yaml``, ``oauth``, ``none``)
+    - ``oauth_connected``: whether a separate OAuth-style account link is active
     - ``models``: list of known model IDs for this provider
     """
     providers = []
@@ -1256,6 +1261,9 @@ def get_providers() -> dict[str, Any]:
         auth_error = None
         oauth_email = ""
         auth_state = "not_connected"
+        oauth_connected = False
+        provider_available = True
+        legacy_credentials_present = False
         if is_oauth:
             key_source = "oauth"
             # Check if actually authenticated via sidekick_cli.
@@ -1268,15 +1276,27 @@ def get_providers() -> dict[str, Any]:
                     from runtime.google_oauth import load_credentials
                     creds = load_credentials()
                     status = None
-                    has_key = bool(creds and creds.access_token)
-                    oauth_email = str(getattr(creds, "email", "") or "")
-                    if has_key and creds.access_token_expired() and not creds.refresh_token:
-                        auth_error = "Google token expired; sign in again."
-                        auth_state = "expired"
-                    elif has_key:
-                        auth_state = "connected"
-                    else:
-                        auth_error = "Google Gemini is not connected."
+                    try:
+                        from runtime.credential_pool import read_credential_pool
+                        pooled_credentials = read_credential_pool("google-gemini-cli")
+                    except Exception:
+                        pooled_credentials = []
+                    legacy_credentials_present = bool(
+                        creds and creds.access_token
+                    ) or any(
+                        isinstance(entry, dict) and bool(entry.get("access_token"))
+                        for entry in pooled_credentials
+                    )
+                    # A stored token is only legacy metadata: consumer Gemini
+                    # CLI/Code Assist inference is disabled. Never present it
+                    # as a connected, usable provider or surface the account
+                    # email as if requests could be routed through it.
+                    from cli.auth import GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE
+                    has_key = False
+                    oauth_email = ""
+                    provider_available = False
+                    auth_state = "unavailable"
+                    auth_error = GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE
                 else:
                     from cli.auth import get_auth_status as _gas
                     status = _gas(pid)
@@ -1325,6 +1345,9 @@ def get_providers() -> dict[str, Any]:
                         key_source = "config_yaml"
             else:
                 key_source = "config_yaml"
+
+        if pid == "anthropic":
+            oauth_connected = _anthropic_claude_code_linked()
         elif pid not in _PROVIDER_ENV_VAR:
             # Fallback: provider is not a known API-key provider and not in
             # the hardcoded _OAUTH_PROVIDERS set.  It may be a custom or
@@ -1353,6 +1376,7 @@ def get_providers() -> dict[str, Any]:
 
         models = list(_PROVIDER_MODELS.get(pid, []))
         models_total = len(models)
+        models_configured = False
         # OpenAI Codex account catalogs drift independently from WebUI releases.
         # The model picker already prefers sidekick_cli + Codex local cache for
         # this provider (the agent's `provider_model_ids("openai-codex")` filters
@@ -1416,6 +1440,7 @@ def get_providers() -> dict[str, Any]:
         if isinstance(providers_cfg, dict):
             provider_cfg = providers_cfg.get(pid, {})
             if isinstance(provider_cfg, dict) and "models" in provider_cfg:
+                models_configured = True
                 cfg_models = provider_cfg["models"]
                 if isinstance(cfg_models, dict):
                     models = models + [{"id": k, "label": k} for k in cfg_models.keys()]
@@ -1429,6 +1454,13 @@ def get_providers() -> dict[str, Any]:
                 if pid != "nous":
                     models_total = len(models)
 
+        if pid == "google-gemini-cli":
+            # Stale credentials and saved model lists must not make this
+            # disabled subscription provider look selectable in Settings.
+            models = []
+            models_total = 0
+            models_configured = False
+
         providers.append({
             "id": pid,
             "display_name": display_name,
@@ -1439,7 +1471,11 @@ def get_providers() -> dict[str, Any]:
             "auth_error": auth_error,
             "oauth_email": oauth_email,
             "auth_state": auth_state,
+            "oauth_connected": oauth_connected,
+            "provider_available": provider_available,
+            "legacy_credentials_present": legacy_credentials_present,
             "models": models,
+            "models_configured": models_configured,
             # models_total reflects the complete catalog size (e.g. 396 for
             # an enterprise Nous Portal account), even when "models" is
             # trimmed to a featured subset for UI scannability. The frontend
@@ -1597,6 +1633,56 @@ def set_provider_key(provider_id: str, api_key: str | None) -> dict[str, Any]:
         "display_name": _PROVIDER_DISPLAY.get(provider_id, provider_id),
         "action": "updated" if api_key else "removed",
     }
+
+
+def normalize_provider_model_allowlist(provider_id: str, models: Any) -> list[str]:
+    """Validate a user-selected model allowlist for a provider.
+
+    OpenRouter catalog entries use provider/model IDs. Keep the accepted
+    alphabet deliberately narrow so arbitrary config content cannot be
+    injected through the settings endpoint.
+    """
+    if str(provider_id or "").strip().lower() != "openrouter":
+        raise ValueError("Model selection is currently supported for OpenRouter only.")
+    if not isinstance(models, list) or len(models) > 500:
+        raise ValueError("models must be a list of at most 500 model IDs.")
+    import re
+
+    accepted: list[str] = []
+    seen: set[str] = set()
+    for raw in models:
+        if not isinstance(raw, str):
+            raise ValueError("Each model ID must be a string.")
+        model_id = raw.strip()
+        if not model_id or len(model_id) > 256 or not re.fullmatch(r"[A-Za-z0-9_.:/+@-]+", model_id):
+            raise ValueError("A model ID contains unsupported characters.")
+        if model_id not in seen:
+            accepted.append(model_id)
+            seen.add(model_id)
+    return accepted
+
+
+def set_provider_models(provider_id: str, models: Any) -> dict[str, Any]:
+    """Persist an explicit provider model allowlist in config.yaml."""
+    normalized = normalize_provider_model_allowlist(provider_id, models)
+    import web.api.config as config_module
+
+    config_path = config_module._get_config_path()
+    with config_module._cfg_lock:
+        cfg = config_module._load_yaml_config_file(config_path)
+        providers_cfg = cfg.get("providers")
+        if not isinstance(providers_cfg, dict):
+            providers_cfg = {}
+        provider_cfg = providers_cfg.get("openrouter")
+        if not isinstance(provider_cfg, dict):
+            provider_cfg = {}
+        provider_cfg["models"] = normalized
+        providers_cfg["openrouter"] = provider_cfg
+        cfg["providers"] = providers_cfg
+        config_module._save_yaml_config_file(config_path, cfg)
+    config_module.reload_config()
+    config_module.invalidate_models_cache()
+    return {"ok": True, "provider": "openrouter", "models": normalized}
 
 
 def remove_provider_key(provider_id: str) -> dict[str, Any]:

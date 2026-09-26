@@ -74,23 +74,63 @@ export function createWindowControlHandlers(getWindow: () => WindowControlTarget
   };
 }
 
-export function registerWindowControlIpc(ipcMain: IpcHandleApi, getWindow: () => WindowControlTarget | null): void {
+export function registerWindowControlIpc(
+  ipcMain: IpcHandleApi,
+  getWindow: () => WindowControlTarget | null,
+  resolveFromEventSender?: (sender: unknown) => WindowControlTarget | null
+): void {
   const handlers = createWindowControlHandlers(getWindow);
-  ipcMain.handle('lastbrowser:window:minimize', () => handlers.minimize());
-  ipcMain.handle('lastbrowser:window:toggleMaximize', () => handlers.toggleMaximize());
-  ipcMain.handle('lastbrowser:window:close', () => handlers.close());
-  ipcMain.handle('lastbrowser:window:isMaximized', () => handlers.isMaximized());
-  ipcMain.handle('lastbrowser:window:unmaximize', () => handlers.unmaximize());
-  ipcMain.handle('lastbrowser:window:setPosition', (_event: unknown, coords: unknown) => {
+  ipcMain.handle('lastbrowser:window:minimize', (event) => {
+    const target = resolveFromEventSender?.(event.sender) ?? getWindow();
+    target?.minimize();
+  });
+  ipcMain.handle('lastbrowser:window:toggleMaximize', (event) => {
+    const target = resolveFromEventSender?.(event.sender) ?? getWindow();
+    if (!target) return false;
+    if (target.isMaximized()) {
+      target.unmaximize();
+      return false;
+    }
+    target.maximize();
+    return true;
+  });
+  ipcMain.handle('lastbrowser:window:close', (event) => {
+    const target = resolveFromEventSender?.(event.sender) ?? getWindow();
+    target?.close();
+  });
+  ipcMain.handle('lastbrowser:window:isMaximized', (event) => {
+    const target = resolveFromEventSender?.(event.sender) ?? getWindow();
+    return target?.isMaximized() ?? false;
+  });
+  ipcMain.handle('lastbrowser:window:unmaximize', (event) => {
+    const target = resolveFromEventSender?.(event.sender) ?? getWindow();
+    target?.unmaximize();
+  });
+  ipcMain.handle('lastbrowser:window:setPosition', (event, coords) => {
+    const target = resolveFromEventSender?.(event.sender) ?? getWindow();
     const { x, y } = (coords || {}) as { x?: number; y?: number };
     if (typeof x === 'number' && typeof y === 'number') {
-      handlers.setPosition(Math.round(x), Math.round(y));
+      target?.setPosition?.(Math.round(x), Math.round(y));
     }
   });
-  ipcMain.handle('lastbrowser:window:getBounds', () => handlers.getBounds());
-  ipcMain.handle('lastbrowser:window:isFullScreen', () => handlers.isFullScreen());
-  ipcMain.handle('lastbrowser:window:setFullScreen', (_event: unknown, flag: unknown) => {
-    handlers.setFullScreen(Boolean(flag));
+  ipcMain.handle('lastbrowser:window:getBounds', (event) => {
+    const target = resolveFromEventSender?.(event.sender) ?? getWindow();
+    return target?.getBounds?.() ?? { x: 0, y: 0, width: 1440, height: 920 };
   });
-  ipcMain.handle('lastbrowser:window:toggleFullScreen', () => handlers.toggleFullScreen());
+  ipcMain.handle('lastbrowser:window:isFullScreen', (event) => {
+    const target = resolveFromEventSender?.(event.sender) ?? getWindow();
+    return target?.isFullScreen?.() ?? false;
+  });
+  ipcMain.handle('lastbrowser:window:setFullScreen', (event, flag) => {
+    const target = resolveFromEventSender?.(event.sender) ?? getWindow();
+    target?.setFullScreen?.(Boolean(flag));
+  });
+  ipcMain.handle('lastbrowser:window:toggleFullScreen', (event) => {
+    const target = resolveFromEventSender?.(event.sender) ?? getWindow();
+    if (!target) return false;
+    const next = !(target.isFullScreen?.() ?? false);
+    target.setFullScreen?.(next);
+    return next;
+  });
 }
+

@@ -654,7 +654,14 @@ describe('sidekick api client', () => {
       message: 'Hallo Sidekick',
       mode: 'plan',
       model: 'gpt-5.5',
-      workspace: 'C:/work'
+      modelProvider: 'google-gemini-cli',
+      providerAccountEmail: 'DOMINIKRNR@GMAIL.COM',
+      workspace: 'C:/work',
+      groundingContext: {
+        url: 'https://example.test/path',
+        title: 'Example',
+        snippet: 'visible excerpt',
+      }
     }, fetchImpl);
     await getChatStreamStatus('http://127.0.0.1:8787', 'stream-1', fetchImpl);
     await cancelChatStream('http://127.0.0.1:8787', 'stream-1', fetchImpl);
@@ -666,7 +673,14 @@ describe('sidekick api client', () => {
       message: 'Hallo Sidekick',
       mode: 'plan',
       model: 'gpt-5.5',
-      workspace: 'C:/work'
+      model_provider: 'google-gemini-cli',
+      provider_account_email: 'dominikrnr@gmail.com',
+      workspace: 'C:/work',
+      grounding_context: {
+        url: 'https://example.test/path',
+        title: 'Example',
+        snippet: 'visible excerpt',
+      }
     });
     expect(calls[1].url).toBe('http://127.0.0.1:8787/api/chat/stream/status?stream_id=stream-1');
     expect(calls[2].url).toBe('http://127.0.0.1:8787/api/chat/cancel?stream_id=stream-1');

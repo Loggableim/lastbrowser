@@ -64,6 +64,30 @@ describe('Phase 9: Modern UI Redesign (Sidekick + Zen Browser Synthese)', () => 
     expect(source).toContain('toggleCopilot');
   });
 
+  it('exposes the existing profile switcher in the modern browser titlebar when supplied', () => {
+    const header = readRendererFile('components/HeaderComponents.tsx');
+
+    expect(header).toContain('profiles?: BrowserProfile[]');
+    expect(header).toContain('activeProfileId?: string');
+    expect(header).toContain('<ProfileSwitcher');
+    expect(header).toContain('onSelect={onSelectProfile}');
+    expect(header).toContain('onCreate={onCreateProfile}');
+    expect(header).toContain('onRename={onRenameProfile}');
+    expect(header).toContain('onDelete={onDeleteProfile}');
+  });
+
+  it('uses live adblock status in the titlebar and opens the real shield controls', () => {
+    const app = readRendererFile('App.tsx');
+    const header = readRendererFile('components/HeaderComponents.tsx');
+    const shield = readRendererFile('components/AdblockShield.tsx');
+
+    expect(app).toContain('blockedAdsCount={blockedAdsCount}');
+    expect(app).not.toContain('blockedAdsCount={3420}');
+    expect(header).toContain('<AdblockShield open={shieldPopoverOpen}');
+    expect(shield).toContain("window.lastbrowser.adblock?.status()");
+    expect(shield).toContain('window.lastbrowser.adblock.setEnabled');
+  });
+
   it('has comprehensive CSS definitions for the unified titlebar, 3 sidebar modes, and 70/30 split view', () => {
     const css = readRendererFile('styles.css');
 
@@ -116,6 +140,82 @@ describe('Phase 9: Modern UI Redesign (Sidekick + Zen Browser Synthese)', () => 
     expect(sidebarSource).toContain('expanded-workspace-pill');
     expect(sidebarSource).toContain('expanded-tabs-section');
     expect(sidebarSource).toContain('vertical-tab-list');
+  });
+
+  it('shows a floating animated label when a shell-rail item is hovered in collapsed mode', () => {
+    const rail = readRendererFile('components/ShellRail.tsx');
+    const css = readRendererFile('styles.css');
+
+    expect(rail).toContain('createPortal');
+    expect(rail).toContain('showHoverLabel(event, panel.label)');
+    expect(rail).toContain('className="rail-floating-hover-label"');
+    expect(css).toContain('.rail-floating-hover-label');
+    expect(css).toContain('@keyframes rail-label-float-in');
+    expect(css).toContain('prefers-reduced-motion: reduce');
+  });
+
+  it('keeps the minimized Nova Dock fisheye and title wave visible outside the narrow sidebar', () => {
+    const dock = readRendererFile('components/NovaDock.tsx');
+    const css = readRendererFile('styles.css');
+
+    expect(dock).toContain("closest<HTMLElement>('.nova-dock-item-wrapper')");
+    expect(dock).toContain("querySelectorAll<HTMLElement>('.nova-dock-item-wrapper')");
+    expect(dock).toContain("'--label-opacity': opacity");
+    expect(dock).toContain('transform: `scale(${scale})`');
+    expect(dock).toContain('const getLabelStyle = useCallback');
+    expect(dock).toContain("'--label-scale': scale");
+    expect(css).toContain('.sidekick-sidebar.slim .sidekick-dock-inner');
+    expect(css).toContain('.sidekick-sidebar.slim .nova-dock');
+    expect(css).toMatch(/\.sidekick-sidebar\.slim\s*\{[^}]*overflow:\s*visible/s);
+    expect(css).toContain('opacity: var(--label-opacity, 0)');
+    expect(css).toContain('transition: opacity 0.18s cubic-bezier');
+    const labelStyles = css.match(/\.nova-dock-label-pill\s*\{([^}]+)\}/s)?.[1] || '';
+    expect(labelStyles).not.toContain('visibility: hidden;');
+  });
+
+  it('does not show a fabricated task count in the navigation rail', () => {
+    const rail = readRendererFile('components/ShellRail.tsx');
+    expect(rail).not.toContain("panel.id === 'tasks' && <em>9+</em>");
+  });
+
+  it('reveals the Zen sidebar and titlebar on edge hover, then hides them after pointer leave', () => {
+    const app = readRendererFile('App.tsx');
+    const header = readRendererFile('components/HeaderComponents.tsx');
+    const css = readRendererFile('styles.css');
+
+    expect(app).toContain('className="zen-left-hover-sensor"');
+    expect(app).toContain('onMouseEnter={handleZenSidebarEnter}');
+    expect(app).toContain('onMouseLeave={handleZenSidebarLeave}');
+    expect(app).toContain('setZenSidebarRevealed(false)');
+    expect(header).toContain('className="zen-top-hover-sensor"');
+    expect(header).toContain('onMouseEnter={handleMouseEnter}');
+    expect(css).toContain('.zen-sidebar-overlay.zen-revealed');
+    expect(css).toContain('pointer-events: auto');
+    expect(css).toContain('.modern-titlebar.zen-autohide.zen-revealed');
+  });
+
+  it('keeps the Zen sidebar frei schwebend (floating overlay) without docking or collapsing canvas', () => {
+    const app = readRendererFile('App.tsx');
+    const sidebar = readRendererFile('components/SidekickSidebar.tsx');
+    const dock = readRendererFile('components/NovaDock.tsx');
+    const css = readRendererFile('styles.css');
+
+    expect(app).toContain('isFloatingOverlay={true}');
+    expect(app).toContain('zenFloatingMode');
+    expect(app).toContain('onRevealZen={handleZenSidebarEnter}');
+    expect(sidebar).toContain('onRevealZen?: () => void');
+    expect(sidebar).toContain('isFloatingOverlay');
+    expect(sidebar).toContain('sidebar-dock-pin-btn');
+    expect(dock).toContain('forcedPosition?: NovaDockPosition');
+    expect(css).toContain('.zen-sidebar-overlay .sidekick-sidebar .sidebar-dock-pin-btn');
+    expect(css).toContain('.zen-sidebar-overlay .sidekick-sidebar.expanded');
+  });
+
+  it('shows recent chat activity from actual messages rather than a fixed placeholder', () => {
+    const contextSidebar = readRendererFile('components/ContextSidebar.tsx');
+    expect(contextSidebar).toContain('const recentMessages = messages.slice(-3)');
+    expect(contextSidebar).toContain('{recentMessages.map((message)');
+    expect(contextSidebar).toContain('{message.content}');
   });
 
   it('implements CopilotSplitView with formatting, code copy, and page-aware chat input', () => {

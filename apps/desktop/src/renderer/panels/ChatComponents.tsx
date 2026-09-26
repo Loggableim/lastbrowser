@@ -35,6 +35,8 @@ import { describeChatContent } from '../chat-display.js';
 import { RichTextRenderer } from '../NativeRichText.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import type { DesktopChatMessage, DesktopSessionDetail, ChatRunState } from '../shell-state.js';
+import { shouldShowNativeTurnUsage, type NativeChatTurnUsage } from '../chat-usage.js';
+import { useDesktopI18n } from '../i18n.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -52,6 +54,11 @@ export type ChatTranscriptProps = {
   pendingUserMessage: string;
   ready: boolean;
   showDeveloperTools: boolean;
+  showTokenUsage: boolean;
+  showTps: boolean;
+  showThinking: boolean;
+  simplifiedToolCalling: boolean;
+  latestTurnUsage: NativeChatTurnUsage | null;
   onCreateSession: () => void;
   serviceStatus: ServiceStatus | null;
 };
@@ -65,9 +72,16 @@ export function ChatTranscript({
   pendingUserMessage,
   ready,
   showDeveloperTools,
+  showTokenUsage,
+  showTps,
+  showThinking,
+  simplifiedToolCalling,
+  latestTurnUsage,
   onCreateSession,
   serviceStatus
 }: ChatTranscriptProps): React.JSX.Element {
+  const { locale, t } = useDesktopI18n();
+  const numberFormat = new Intl.NumberFormat(locale);
   if (loading) {
     return (
       <div className="chat-transcript chat-state">
@@ -94,7 +108,17 @@ export function ChatTranscript({
   return (
     <div className="chat-transcript">
       {error && <div className="chat-error">{error}</div>}
-      {messages.map((message, index) => (
+      {messages.map((message, index) => {
+        const isLastAssistant = message.role === 'assistant' && !messages.slice(index + 1).some((item) => item.role === 'assistant');
+        const messageUsage = isLastAssistant ? latestTurnUsage : null;
+        const inputTokens = messageUsage?.inputTokens;
+        const outputTokens = messageUsage?.outputTokens;
+        const tokensPerSecond = messageUsage?.tokensPerSecond ?? message._turnTps;
+        const toolCalls = normalizeToolCalls(message.tool_calls);
+        const reasoning = typeof message.reasoning === 'string' ? message.reasoning.trim() : '';
+        const hasActivity = toolCalls.length > 0 || (showThinking && reasoning.length > 0);
+
+        return (
         <article key={`${message.role || 'message'}-${index}`} className={`chat-message ${message.role || 'assistant'} ${message.pending ? 'pending' : ''}`}>
           <div className="message-avatar">
             {message.role === 'user' ? <UserCircle size={17} /> : <img src={brandAssets.sidekickAvatar} alt="" />}
@@ -105,9 +129,41 @@ export function ChatTranscript({
               {message.pending && <Loader2 size={13} className="spin" />}
             </div>
             <ChatMessageBody content={String(message.content || '')} />
+            {showThinking && reasoning && !simplifiedToolCalling && (
+              <details className="chat-reasoning-details">
+                <summary>{t('chat.reasoning')}</summary>
+                <div className="chat-reasoning-content"><ChatMessageBody content={reasoning} /></div>
+              </details>
+            )}
+            {hasActivity && (
+              simplifiedToolCalling ? (
+                <details className="chat-activity-details">
+                  <summary>{t('settings.panels.notifications.compactActivity')} · {toolCalls.length}</summary>
+                  {showThinking && reasoning && (
+                    <div className="chat-reasoning-content"><strong>{t('chat.reasoning')}</strong><ChatMessageBody content={reasoning} /></div>
+                  )}
+                  {toolCalls.map((call, callIndex) => <ToolCallDetails key={call.id || `${call.name}-${callIndex}`} call={call} detailed={false} />)}
+                </details>
+              ) : (
+                <section className="chat-tool-call-list">
+                  {toolCalls.map((call, callIndex) => <ToolCallDetails key={call.id || `${call.name}-${callIndex}`} call={call} detailed />)}
+                </section>
+              )
+            )}
+            {shouldShowNativeTurnUsage({ isLatestAssistant: isLastAssistant, showTokenUsage, showTps, usage: messageUsage, persistedTps: message._turnTps }) && (
+              <div className="chat-turn-usage" aria-label={t('chat.turnUsage')}>
+                {showTokenUsage && inputTokens !== undefined && outputTokens !== undefined && (
+                  <span>{t('chat.inputTokens', { count: numberFormat.format(inputTokens) })} · {t('chat.outputTokens', { count: numberFormat.format(outputTokens) })}</span>
+                )}
+                {showTps && typeof tokensPerSecond === 'number' && (
+                  <span>{t('chat.tokensPerSecond', { count: numberFormat.format(tokensPerSecond) })}</span>
+                )}
+              </div>
+            )}
           </div>
         </article>
-      ))}
+        );
+      })}
       {pendingUserMessage && (
         <article className="chat-message user pending">
           <div className="message-avatar"><UserCircle size={17} /></div>
@@ -142,6 +198,35 @@ export function ChatTranscript({
         </section>
       )}
     </div>
+  );
+}
+
+type ToolCallView = { id?: string; name: string; arguments?: string };
+
+function normalizeToolCalls(value: unknown): ToolCallView[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+    const record = entry as Record<string, unknown>;
+    const fn = record.function && typeof record.function === 'object' ? record.function as Record<string, unknown> : {};
+    const name = String(fn.name || record.name || '').trim();
+    if (!name) return [];
+    const rawArgs = fn.arguments ?? record.arguments;
+    let args = '';
+    if (typeof rawArgs === 'string') args = rawArgs;
+    else if (rawArgs && typeof rawArgs === 'object') {
+      try { args = JSON.stringify(rawArgs, null, 2); } catch { args = ''; }
+    }
+    return [{ id: String(record.id || ''), name, arguments: args }];
+  });
+}
+
+function ToolCallDetails({ call, detailed }: { call: ToolCallView; detailed: boolean }): React.JSX.Element {
+  return (
+    <details className={detailed ? 'chat-tool-call-details expanded' : 'chat-tool-call-details'}>
+      <summary>{call.name}</summary>
+      {call.arguments && <pre>{call.arguments}</pre>}
+    </details>
   );
 }
 

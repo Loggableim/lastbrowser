@@ -225,4 +225,30 @@ describe('usePinnedAppStore – pinTabAsApp', () => {
     const added = store.getState().apps.find(a => a.domain === 'example-site-test-abc.com');
     expect(added?.name).toBe('Dashboard');
   });
+
+  it('keeps Space-scoped apps out of other Spaces and reorders only visible slots', async () => {
+    const { getPinnedAppsForSpace } = await import('../src/renderer/stores/usePinnedAppStore.js');
+    const scopedA = store.getState().addApp({ name: 'A', url: 'https://space-a.example', color: '#fff', bg: '', spacePath: 'spaces/a' });
+    const scopedB = store.getState().addApp({ name: 'B', url: 'https://space-b.example', color: '#fff', bg: '', spacePath: 'spaces/b' });
+    const scopedC = store.getState().addApp({ name: 'C', url: 'https://space-c.example', color: '#fff', bg: '', spacePath: 'spaces/a' });
+
+    expect(getPinnedAppsForSpace(store.getState().apps, 'spaces/a').map((app) => app.id)).toContain(scopedA.id);
+    expect(getPinnedAppsForSpace(store.getState().apps, 'spaces/a').map((app) => app.id)).toContain(scopedC.id);
+    expect(getPinnedAppsForSpace(store.getState().apps, 'spaces/a').map((app) => app.id)).not.toContain(scopedB.id);
+
+    const beforeBPosition = store.getState().apps.findIndex((app) => app.id === scopedB.id);
+    const aApps = getPinnedAppsForSpace(store.getState().apps, 'spaces/a');
+    store.getState().reorderApps(aApps.findIndex((app) => app.id === scopedC.id), aApps.findIndex((app) => app.id === scopedA.id), 'spaces/a');
+    expect(store.getState().apps.findIndex((app) => app.id === scopedB.id)).toBe(beforeBPosition);
+    expect(getPinnedAppsForSpace(store.getState().apps, 'spaces/a').findIndex((app) => app.id === scopedC.id))
+      .toBeLessThan(getPinnedAppsForSpace(store.getState().apps, 'spaces/a').findIndex((app) => app.id === scopedA.id));
+  });
+
+  it('pins a tab to the requested Space while reusing globally visible apps', () => {
+    const result = store.getState().pinTabAsApp({ url: 'https://space-only.example/path', title: 'Space Tool' }, 'spaces/research');
+    expect(result.spacePath).toBe('spaces/research');
+    const again = store.getState().pinTabAsApp({ url: 'https://space-only.example/other', title: 'Space Tool 2' }, 'spaces/research');
+    expect(again.id).toBe(result.id);
+    expect(store.getState().apps.filter((app) => app.domain === 'space-only.example')).toHaveLength(1);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createWindowControlHandlers } from '../src/main/window-controls.js';
+import { createWindowControlHandlers, registerWindowControlIpc } from '../src/main/window-controls.js';
 
 describe('window controls', () => {
   it('minimizes the current main window', () => {
@@ -121,5 +121,80 @@ describe('window controls', () => {
     const toggleHandlers = createWindowControlHandlers(() => toggleWin);
     expect(toggleHandlers.toggleFullScreen()).toBe(true);
     expect(toggleWin.setFullScreen).toHaveBeenCalledWith(true);
+  });
+});
+
+describe('registerWindowControlIpc per-window routing', () => {
+  type CapturedHandler = (...args: any[]) => unknown;
+  function captureIpcMain() {
+    const handlers = new Map<string, CapturedHandler>();
+    const ipcMain = {
+      handle(channel: string, listener: CapturedHandler) {
+        handlers.set(channel, listener);
+      }
+    };
+    return { ipcMain, handlers };
+  }
+  function makeWindow() {
+    return {
+      minimize: vi.fn(),
+      isMaximized: vi.fn().mockReturnValue(false),
+      maximize: vi.fn(),
+      unmaximize: vi.fn(),
+      close: vi.fn()
+    };
+  }
+
+  it('routes close to the window resolved from event.sender, not the fallback', () => {
+    const { ipcMain, handlers } = captureIpcMain();
+    const fallback = makeWindow();
+    const detached = makeWindow();
+    registerWindowControlIpc(ipcMain as any, () => fallback as any, (sender) =>
+      sender === 'detached-sender' ? (detached as any) : null
+    );
+
+    handlers.get('lastbrowser:window:close')!({ sender: 'detached-sender' });
+
+    expect(detached.close).toHaveBeenCalledTimes(1);
+    expect(fallback.close).not.toHaveBeenCalled();
+  });
+
+  it('falls back to getWindow() when the sender resolver returns null', () => {
+    const { ipcMain, handlers } = captureIpcMain();
+    const fallback = makeWindow();
+    registerWindowControlIpc(ipcMain as any, () => fallback as any, () => null);
+
+    handlers.get('lastbrowser:window:close')!({ sender: {} });
+
+    expect(fallback.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes minimize and toggleMaximize per sender window', () => {
+    const { ipcMain, handlers } = captureIpcMain();
+    const fallback = makeWindow();
+    const detached = makeWindow();
+    registerWindowControlIpc(ipcMain as any, () => fallback as any, (sender) =>
+      sender === 'detached-sender' ? (detached as any) : null
+    );
+
+    handlers.get('lastbrowser:window:minimize')!({ sender: 'detached-sender' });
+    expect(detached.minimize).toHaveBeenCalledTimes(1);
+    expect(fallback.minimize).not.toHaveBeenCalled();
+
+    detached.isMaximized = vi.fn().mockReturnValue(true);
+    const result = handlers.get('lastbrowser:window:toggleMaximize')!({ sender: 'detached-sender' });
+    expect(result).toBe(false);
+    expect(detached.unmaximize).toHaveBeenCalledTimes(1);
+    expect(fallback.maximize).not.toHaveBeenCalled();
+  });
+
+  it('keeps legacy behavior when no sender resolver is provided', () => {
+    const { ipcMain, handlers } = captureIpcMain();
+    const fallback = makeWindow();
+    registerWindowControlIpc(ipcMain as any, () => fallback as any);
+
+    handlers.get('lastbrowser:window:close')!({ sender: {} });
+
+    expect(fallback.close).toHaveBeenCalledTimes(1);
   });
 });

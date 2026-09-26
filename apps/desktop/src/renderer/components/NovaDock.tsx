@@ -12,6 +12,7 @@ import { brandAssets } from '../brand.js';
 import type { LastbrowserPanelId } from '../shell-state.js';
 import {
   type NovaDockSettings,
+  type NovaDockPosition,
   usePanelStore
 } from '../stores/usePanelStore.js';
 import {
@@ -35,6 +36,8 @@ export interface NovaDockProps {
   onOpenSettings: () => void;
   onNewTab: (url?: string) => void;
   onExpandSidebar: () => void;
+  forcedPosition?: NovaDockPosition;
+  spacePath?: string;
 }
 
 export function NovaDock({
@@ -49,13 +52,15 @@ export function NovaDock({
   onOpenHistory,
   onOpenSettings,
   onNewTab,
-  onExpandSidebar
+  onExpandSidebar,
+  forcedPosition,
+  spacePath = ''
 }: NovaDockProps): React.JSX.Element {
   const { t } = useDesktopI18n();
   const dockSettings = usePanelStore((s) => s.dockSettings);
   const setDockSettings = usePanelStore((s) => s.setDockSettings);
   const pinnedStore = usePinnedAppStore();
-  const apps = pinnedStore.apps;
+  const apps = pinnedStore.apps.filter((app) => !app.spacePath || app.spacePath === spacePath);
 
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isRevealed, setIsRevealed] = useState<boolean>(true);
@@ -66,10 +71,11 @@ export function NovaDock({
   const dragStartOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dockRef = useRef<HTMLDivElement | null>(null);
 
+  const effectivePosition = forcedPosition ?? dockSettings.position;
   const effectiveOrientation =
-    dockSettings.position === 'floating'
+    effectivePosition === 'floating'
       ? dockSettings.orientation
-      : dockSettings.position === 'top' || dockSettings.position === 'bottom'
+      : effectivePosition === 'top' || effectivePosition === 'bottom'
         ? 'horizontal'
         : 'vertical';
 
@@ -108,7 +114,7 @@ export function NovaDock({
   // Drag handlers for floating mode
   const handleDragMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      if (dockSettings.position !== 'floating' || !dockRef.current) return;
+      if (effectivePosition !== 'floating' || !dockRef.current) return;
       e.preventDefault();
       setIsDragging(true);
       const rect = dockRef.current.getBoundingClientRect();
@@ -117,7 +123,7 @@ export function NovaDock({
         y: e.clientY - rect.top
       };
     },
-    [dockSettings.position]
+    [effectivePosition]
   );
 
   useEffect(() => {
@@ -172,11 +178,40 @@ export function NovaDock({
     [hoveredIndex]
   );
 
+  // Fisheye title wave calculator: neighbor titles smoothly fade and scale down
+  const getLabelOpacity = useCallback(
+    (index: number): number => {
+      if (hoveredIndex === null) return 0;
+      const distance = Math.abs(index - hoveredIndex);
+      if (distance === 0) return 1;
+      if (distance === 1) return 0.65;
+      if (distance === 2) return 0.25;
+      return 0;
+    },
+    [hoveredIndex]
+  );
+
+  const getLabelScale = useCallback(
+    (index: number): number => {
+      if (hoveredIndex === null) return 0.8;
+      const distance = Math.abs(index - hoveredIndex);
+      if (distance === 0) return 1;
+      if (distance === 1) return 0.88;
+      if (distance === 2) return 0.75;
+      return 0.65;
+    },
+    [hoveredIndex]
+  );
+
   const getItemStyle = useCallback(
     (index: number): React.CSSProperties => {
+      const scale = getItemScale(index);
+      const opacity = getItemOpacity(index);
       return {
-        '--item-scale': getItemScale(index),
-        '--item-opacity': getItemOpacity(index)
+        '--item-scale': scale,
+        '--item-opacity': opacity,
+        transform: `scale(${scale})`,
+        opacity
       } as React.CSSProperties;
     },
     [getItemScale, getItemOpacity]
@@ -184,7 +219,7 @@ export function NovaDock({
 
   // Label reveal direction class
   const labelPlacementClass = useMemo(() => {
-    switch (dockSettings.position) {
+    switch (effectivePosition) {
       case 'bottom':
         return 'label-pos-top';
       case 'top':
@@ -198,7 +233,34 @@ export function NovaDock({
       default:
         return 'label-pos-right';
     }
-  }, [dockSettings.position, isHorizontal]);
+  }, [effectivePosition, isHorizontal]);
+
+  const getLabelStyle = useCallback((index: number): React.CSSProperties => {
+    const opacity = getLabelOpacity(index);
+    const scale = getLabelScale(index);
+    const offset = (1 - scale) * 10;
+    let transform: string;
+    switch (labelPlacementClass) {
+      case 'label-pos-left':
+        transform = `translateY(-50%) translateX(${offset}px) scale(${scale})`;
+        break;
+      case 'label-pos-top':
+        transform = `translateX(-50%) translateY(${offset}px) scale(${scale})`;
+        break;
+      case 'label-pos-bottom':
+        transform = `translateX(-50%) translateY(${-offset}px) scale(${scale})`;
+        break;
+      default:
+        transform = `translateY(-50%) translateX(${-offset}px) scale(${scale})`;
+        break;
+    }
+    return {
+      '--label-opacity': opacity,
+      '--label-scale': scale,
+      opacity,
+      transform
+    } as React.CSSProperties;
+  }, [getLabelOpacity, getLabelScale, labelPlacementClass]);
 
   // Build unified item list for continuous fisheye indexing
   let currentIndex = 0;
@@ -216,7 +278,7 @@ export function NovaDock({
 
   // Floating coordinates style
   const floatingStyle: React.CSSProperties =
-    dockSettings.position === 'floating'
+    effectivePosition === 'floating'
       ? {
           position: 'fixed',
           left: `${dockSettings.floatingPos.x}px`,
@@ -232,9 +294,9 @@ export function NovaDock({
   return (
     <>
       {/* Auto-Hide Hover Trigger Zone at the screen edge */}
-      {dockSettings.autoHide && (
+      {dockSettings.autoHide && effectivePosition !== 'floating' && (
         <div
-          className={`nova-dock-trigger-zone trigger-${dockSettings.position} ${isRevealed ? 'is-open' : 'is-peeking'}`}
+          className={`nova-dock-trigger-zone trigger-${effectivePosition} ${isRevealed ? 'is-open' : 'is-peeking'}`}
           onMouseEnter={handleMouseEnter}
           aria-hidden="true"
         >
@@ -245,14 +307,23 @@ export function NovaDock({
       {/* Main Nova Dock Container */}
       <nav
         ref={dockRef}
-        className={`nova-dock pos-${dockSettings.position} ${isHorizontal ? 'is-horizontal' : 'is-vertical'} anim-${dockSettings.animation} ${isRevealed ? 'is-revealed' : 'is-hidden'} ${isDragging ? 'is-dragging' : ''}`}
+        className={`nova-dock pos-${effectivePosition} ${isHorizontal ? 'is-horizontal' : 'is-vertical'} anim-${dockSettings.animation} ${isRevealed ? 'is-revealed' : 'is-hidden'} ${isDragging ? 'is-dragging' : ''}`}
         style={{ ...floatingStyle, ...animDurationStyle }}
         aria-label="Nova Dock"
         onMouseEnter={handleMouseEnter}
+        onMouseMove={(event) => {
+          // Track the physical pointer continuously; React mouse-enter can be
+          // skipped while Chromium retargets through an overlapping label.
+          const item = (event.target as HTMLElement).closest<HTMLElement>('.nova-dock-item-wrapper');
+          if (!item) return;
+          const wrappers = Array.from(dockRef.current?.querySelectorAll<HTMLElement>('.nova-dock-item-wrapper') ?? []);
+          const index = wrappers.indexOf(item);
+          if (index >= 0) setHoveredIndex(index);
+        }}
         onMouseLeave={handleMouseLeave}
       >
         {/* Drag handle for floating mode */}
-        {dockSettings.position === 'floating' && (
+        {effectivePosition === 'floating' && (
           <div
             className="nova-dock-drag-handle"
             onMouseDown={handleDragMouseDown}
@@ -286,7 +357,7 @@ export function NovaDock({
             </div>
             <span className="dock-online-dot" />
           </button>
-          <div className={`nova-dock-label-pill ${labelPlacementClass}`}>
+          <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(avatarIndex)}>
             <span className="label-text">{botName} AI</span>
             <span className="label-badge">Assistant</span>
           </div>
@@ -308,7 +379,7 @@ export function NovaDock({
           >
             <img src={brandAssets.sidebarIcons.chat} alt="Chat" className="dock-mini-icon" />
           </button>
-          <div className={`nova-dock-label-pill ${labelPlacementClass}`}>
+          <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(chatIndex)}>
             <span className="label-text">{t('sidebar.items.chat.title')}</span>
           </div>
         </div>
@@ -326,7 +397,7 @@ export function NovaDock({
           >
             <img src={brandAssets.sidebarIcons.kanban} alt="Kanban" className="dock-mini-icon" />
           </button>
-          <div className={`nova-dock-label-pill ${labelPlacementClass}`}>
+          <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(kanbanIndex)}>
             <span className="label-text">{t('sidebar.items.kanban.title')}</span>
           </div>
         </div>
@@ -365,7 +436,7 @@ export function NovaDock({
                   </div>
                   {isRunning && <span className="pinned-running-dot" />}
                 </button>
-                <div className={`nova-dock-label-pill ${labelPlacementClass}`}>
+                <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(pinnedIndexes[index])}>
                   <span className="label-text">{app.name}</span>
                   {isRunning && <span className="label-status">Aktiv</span>}
                 </div>
@@ -390,7 +461,7 @@ export function NovaDock({
                   <Plus size={14} />
                 </div>
               </button>
-              <div className={`nova-dock-label-pill ${labelPlacementClass}`}>
+              <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(addAppIndex ?? 0)}>
                 <span className="label-text">App anheften</span>
               </div>
             </div>
@@ -415,7 +486,7 @@ export function NovaDock({
             >
               <Bell size={16} />
             </button>
-            <div className={`nova-dock-label-pill ${labelPlacementClass}`}>
+            <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(historyIndex)}>
               <span className="label-text">{t('sidebar.utilities.history.title')}</span>
             </div>
           </div>
@@ -434,7 +505,7 @@ export function NovaDock({
             >
               <HelpCircle size={16} />
             </button>
-            <div className={`nova-dock-label-pill ${labelPlacementClass}`}>
+            <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(helpIndex)}>
               <span className="label-text">{t('sidebar.drawer.help')}</span>
             </div>
           </div>
@@ -453,7 +524,7 @@ export function NovaDock({
             >
               <Settings size={16} />
             </button>
-            <div className={`nova-dock-label-pill ${labelPlacementClass}`}>
+            <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(settingsIndex)}>
               <span className="label-text">{t('sidebar.drawer.settings')}</span>
             </div>
           </div>
@@ -472,7 +543,7 @@ export function NovaDock({
             >
               <Menu size={16} />
             </button>
-            <div className={`nova-dock-label-pill ${labelPlacementClass}`}>
+            <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(expandIndex)}>
               <span className="label-text">{t('sidebar.drawer.expandSidebar')}</span>
             </div>
           </div>

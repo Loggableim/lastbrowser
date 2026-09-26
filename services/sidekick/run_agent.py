@@ -1108,6 +1108,7 @@ class AIAgent:
         iteration_budget: "IterationBudget" = None,
         fallback_model: Dict[str, Any] = None,
         credential_pool=None,
+        google_account_email: str = "",
         checkpoints_enabled: bool = False,
         checkpoint_max_snapshots: int = 20,
         checkpoint_max_total_size_mb: int = 500,
@@ -1716,6 +1717,8 @@ class AIAgent:
                             "configuration."
                         )
             
+            if self.provider == "google-gemini-cli" and google_account_email:
+                client_kwargs["account_email"] = str(google_account_email).strip()
             self._client_kwargs = client_kwargs  # stored for rebuilding after interrupt
 
             # Enable fine-grained tool streaming for Claude on OpenRouter.
@@ -3710,6 +3713,41 @@ class AIAgent:
             return False
 
         return not self._has_natural_response_ending(visible_text)
+
+    def _is_thinking_budget_exhausted(
+        self,
+        assistant_message,
+        *,
+        has_tool_calls: bool = False,
+    ) -> bool:
+        """Detect a length response that spent its output budget on reasoning.
+
+        Some OpenAI-compatible reasoning providers (including Ollama Cloud
+        models) return reasoning in structured fields instead of inline
+        ``<think>`` tags. Treating those responses as ordinary truncation made
+        the agent ask for several continuations that could not recover visible
+        text, then finish with an empty answer. Keep the early exit limited to
+        responses with actual reasoning and no visible answer.
+        """
+        if has_tool_calls or assistant_message is None:
+            return False
+
+        content = getattr(assistant_message, "content", None)
+        visible_content = self._strip_think_blocks(content or "").strip() if isinstance(content, str) else ""
+        if visible_content:
+            return False
+
+        if isinstance(content, str) and re.search(
+            r'<(?:think|thinking|reasoning|REASONING_SCRATCHPAD)[^>]*>',
+            content,
+            re.IGNORECASE,
+        ):
+            return True
+
+        return any(
+            getattr(assistant_message, field, None)
+            for field in ("reasoning", "reasoning_content", "reasoning_details")
+        )
 
     def _looks_like_codex_intermediate_ack(
         self,
@@ -6379,6 +6417,12 @@ class AIAgent:
         # copy locks the contract so future transport/keepalive work can't reintroduce
         # the same class of bug.
         client_kwargs = dict(client_kwargs)
+        if self.provider in {"google-gemini-cli", "gemini-cli", "gemini-oauth"} or str(
+            client_kwargs.get("base_url", "")
+        ).strip().lower().startswith("cloudcode-pa://"):
+            from cli.auth import _google_gemini_cli_unavailable
+
+            raise _google_gemini_cli_unavailable()
         _validate_proxy_env_urls()
         _validate_base_url(client_kwargs.get("base_url"))
         if self.provider == "copilot-acp" or str(client_kwargs.get("base_url", "")).startswith("acp://copilot"):
@@ -6387,22 +6431,6 @@ class AIAgent:
             client = CopilotACPClient(**client_kwargs)
             logger.info(
                 "Copilot ACP client created (%s, shared=%s) %s",
-                reason,
-                shared,
-                self._client_log_context(),
-            )
-            return client
-        if self.provider == "google-gemini-cli" or str(client_kwargs.get("base_url", "")).startswith("cloudcode-pa://"):
-            from runtime.gemini_cloudcode_adapter import GeminiCloudCodeClient
-
-            # Strip OpenAI-specific kwargs the Gemini client doesn't accept
-            safe_kwargs = {
-                k: v for k, v in client_kwargs.items()
-                if k in {"api_key", "base_url", "default_headers", "project_id", "timeout"}
-            }
-            client = GeminiCloudCodeClient(**safe_kwargs)
-            logger.info(
-                "Gemini Cloud Code Assist client created (%s, shared=%s) %s",
                 reason,
                 shared,
                 self._client_log_context(),
@@ -12654,20 +12682,9 @@ class AIAgent:
                         # string for unrelated reasons — treat those as normal
                         # truncations that deserve continuation retries, not as
                         # thinking-budget exhaustion.
-                        _has_think_tags = bool(
-                            _trunc_content and re.search(
-                                r'<(?:think|thinking|reasoning|REASONING_SCRATCHPAD)[^>]*>',
-                                _trunc_content,
-                                re.IGNORECASE,
-                            )
-                        )
-                        _thinking_exhausted = (
-                            not _trunc_has_tool_calls
-                            and _has_think_tags
-                            and (
-                                (_trunc_content is not None and not self._has_content_after_think_block(_trunc_content))
-                                or _trunc_content is None
-                            )
+                        _thinking_exhausted = self._is_thinking_budget_exhausted(
+                            _trunc_msg,
+                            has_tool_calls=_trunc_has_tool_calls,
                         )
 
                         if _thinking_exhausted:

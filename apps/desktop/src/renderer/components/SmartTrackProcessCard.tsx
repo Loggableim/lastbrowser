@@ -139,9 +139,9 @@ export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ me
               fontSize: '0.68rem',
               fontWeight: 500,
             }}
-            title="Gegenüber parallelem Multi-Agent-Teamwork"
+            title="Smart Track verarbeitet die Anfrage entlang einer einzelnen Modellspur."
           >
-            ~80% Token-Ersparnis
+            Einzelspur
           </span>
 
           {expanded ? <ChevronUp size={14} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />}

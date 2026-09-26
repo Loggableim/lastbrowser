@@ -7,7 +7,7 @@
  *  - Docking to 3 zones: Below tabs, in top bar (left/right), or next to Sidekick
  *  - Minimizable to floating pill badge with active download count
  */
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   CheckCircle2,
   Download,
@@ -26,6 +26,7 @@ import {
   X,
   XCircle
 } from 'lucide-react';
+import { canApplyDownloadSnapshot } from './download-snapshot.js';
 
 export type DownloadEntry = {
   id: string;
@@ -45,6 +46,19 @@ export type DownloadsDockMode =
   | 'dock-topbar-left'
   | 'dock-topbar-right'
   | 'dock-sidekick';
+
+const DOWNLOAD_DOCK_MODES: DownloadsDockMode[] = [
+  'dropdown', 'floating', 'dock-tabs', 'dock-topbar-left', 'dock-topbar-right', 'dock-sidekick'
+];
+
+export function resolveDownloadsDockMode(value: string | null): DownloadsDockMode {
+  return DOWNLOAD_DOCK_MODES.includes(value as DownloadsDockMode) ? value as DownloadsDockMode : 'dropdown';
+}
+
+/** A closed downloads surface always reopens expanded. */
+export function resolveDownloadsMinimizedState(open: boolean, minimized: boolean): boolean {
+  return open && minimized;
+}
 
 function formatBytes(bytes: number): string {
   if (!bytes || bytes < 0) return '0 B';
@@ -116,7 +130,7 @@ export function DownloadsPanel({
   const [entries, setEntries] = useState<DownloadEntry[]>([]);
   const [dockMode, setDockMode] = useState<DownloadsDockMode>(() => {
     try {
-      return (window.localStorage.getItem('lastbrowser.downloads.mode.v1') as DownloadsDockMode) || 'dropdown';
+      return resolveDownloadsDockMode(window.localStorage.getItem('lastbrowser.downloads.mode.v1'));
     } catch {
       return 'dropdown';
     }
@@ -135,23 +149,35 @@ export function DownloadsPanel({
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      const list = await window.lastbrowser.downloads.list();
-      setEntries(Array.isArray(list) ? (list as DownloadEntry[]) : []);
-    } catch {
-      // The bridge may not be ready yet; the push channel will catch up.
-    }
-  }, []);
+  // Ignore an initial IPC snapshot if a newer push update arrived while the
+  // request was in flight. Otherwise a slow list response can roll the panel
+  // back to an older download state after onChanged already rendered progress.
+  const downloadRevisionRef = useRef(0);
+
+  useEffect(() => {
+    setMinimized((current) => resolveDownloadsMinimizedState(open, current));
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    void refresh();
     const unsubscribe = window.lastbrowser.downloads.onChanged((next) => {
+      downloadRevisionRef.current += 1;
       setEntries(Array.isArray(next) ? (next as DownloadEntry[]) : []);
     });
-    return () => unsubscribe();
-  }, [open, refresh]);
+    const requestedRevision = downloadRevisionRef.current;
+    let mounted = true;
+    void window.lastbrowser.downloads.list().then((list) => {
+      if (mounted && canApplyDownloadSnapshot(requestedRevision, downloadRevisionRef.current)) {
+        setEntries(Array.isArray(list) ? (list as DownloadEntry[]) : []);
+      }
+    }).catch(() => {
+      // The bridge may not be ready yet; the push channel will catch up.
+    });
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [open]);
 
   const handleSetDockMode = (mode: DownloadsDockMode) => {
     setDockMode(mode);
@@ -208,7 +234,7 @@ export function DownloadsPanel({
   const completed = entries.filter((entry) => entry.state === 'completed').length;
 
   // Render Minimized Pill
-  if (minimized) {
+  if (resolveDownloadsMinimizedState(open, minimized)) {
     return (
       <div
         ref={panelRef}
@@ -230,6 +256,7 @@ export function DownloadsPanel({
             onClose();
           }}
           title="Schließen"
+          aria-label="Downloads schließen"
         >
           <X size={12} />
         </button>
@@ -370,11 +397,12 @@ export function DownloadsPanel({
             </>
           )}
 
-          {dockMode === 'floating' && (
+          {dockMode !== 'dropdown' && (
             <button
               type="button"
               className="downloads-tool-btn"
               title="Minimieren"
+              aria-label="Downloads minimieren"
               onClick={() => setMinimized(true)}
             >
               <Minus size={13} />

@@ -142,6 +142,7 @@ export function renderAppIcon(app: PinnedApp): React.JSX.Element {
 export interface PinnedAppGridProps {
   layout: 'dock' | 'grid';
   apps?: PinnedApp[];
+  spacePath?: string;
   activeTabUrl?: string;
   openTabUrls?: string[];
   onOpenApp: (app: PinnedApp, options?: { newTab?: boolean }) => void;
@@ -152,6 +153,7 @@ export interface PinnedAppGridProps {
 export function PinnedAppGrid({
   layout,
   apps: propsApps,
+  spacePath,
   activeTabUrl,
   openTabUrls = [],
   onOpenApp,
@@ -159,7 +161,9 @@ export function PinnedAppGrid({
   onEditApp
 }: PinnedAppGridProps): React.JSX.Element {
   const store = usePinnedAppStore();
-  const apps = propsApps || store.apps;
+  const apps = propsApps || (spacePath
+    ? store.apps.filter((app) => !app.spacePath || app.spacePath === spacePath)
+    : store.apps);
 
   const [contextMenu, setContextMenu] = useState<{
     app: PinnedApp;
@@ -197,7 +201,7 @@ export function PinnedAppGrid({
     if (idx === -1) return;
     const targetIdx = direction === 'prev' ? idx - 1 : idx + 1;
     if (targetIdx >= 0 && targetIdx < apps.length) {
-      store.reorderApps(idx, targetIdx);
+      store.reorderApps(idx, targetIdx, spacePath);
     }
     setContextMenu(null);
   };
@@ -218,7 +222,7 @@ export function PinnedAppGrid({
     const fromIdx = apps.findIndex((a) => a.id === draggedAppId);
     const toIdx = apps.findIndex((a) => a.id === targetId);
     if (fromIdx !== -1 && toIdx !== -1) {
-      store.reorderApps(fromIdx, toIdx);
+      store.reorderApps(fromIdx, toIdx, spacePath);
     }
     setDraggedAppId(null);
   };

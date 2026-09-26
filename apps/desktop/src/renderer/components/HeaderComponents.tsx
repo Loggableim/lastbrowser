@@ -11,6 +11,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import { AdblockShield } from './AdblockShield.js';
 import {
   Bug,
   CheckCircle2,
@@ -773,6 +774,13 @@ export type ModernTitlebarProps = {
   onToggleDownloads: () => void;
   hasActiveDownloads?: boolean;
   onToggleExtensions?: () => void;
+  /** Optional browser-profile controls; omitted in contexts without profile management. */
+  profiles?: BrowserProfile[];
+  activeProfileId?: string;
+  onSelectProfile?: (profileId: string) => void;
+  onCreateProfile?: (name: string) => void;
+  onRenameProfile?: (profileId: string, name: string) => void;
+  onDeleteProfile?: (profileId: string) => void;
   copilotOpen: boolean;
   onToggleCopilot: () => void;
   onOpenGithub?: () => void;
@@ -799,12 +807,18 @@ export function ModernTitlebar({
   children,
   topbarActionStrip,
   onTriggerSummarize,
-  blockedAdsCount = 3420,
+  blockedAdsCount = 0,
   onToggleShieldPopover,
   onToggleFind,
   onToggleDownloads,
   hasActiveDownloads,
   onToggleExtensions,
+  profiles,
+  activeProfileId,
+  onSelectProfile,
+  onCreateProfile,
+  onRenameProfile,
+  onDeleteProfile,
   copilotOpen,
   onToggleCopilot,
   onOpenGithub,
@@ -819,6 +833,7 @@ export function ModernTitlebar({
   const { isMaximized, handleDoubleClick, handleMouseDown } = useWindowDrag();
   const isZen = zenMode ?? sidebarMode === 'hidden';
   const [internalZenHover, setInternalZenHover] = useState(false);
+  const [shieldPopoverOpen, setShieldPopoverOpen] = useState(false);
   const hoverLeaveTimerRef = useRef<number | null>(null);
 
   const isRevealed = Boolean(zenRevealed || internalZenHover);
@@ -842,7 +857,7 @@ export function ModernTitlebar({
     }, 350);
   };
 
-  const adRamSavedGb = Math.max(1.2, (blockedAdsCount * 0.35) / 1000).toFixed(1);
+  const adRamSavedGb = ((blockedAdsCount * 0.35) / 1000).toFixed(1);
   const totalRamSavedLabel =
     savedMemoryMb > 0
       ? `${adRamSavedGb} GB + ${savedMemoryMb} MB tab sleep`
@@ -942,22 +957,42 @@ export function ModernTitlebar({
           </div>
         )}
 
-        <button
-          type="button"
-          className="adblock-stats-pill"
-          onClick={onToggleShieldPopover}
-          title={`${blockedAdsCount.toLocaleString()} Werbeanzeigen und Tracker blockiert · Geschätzte ${totalRamSavedLabel} RAM gespart. Klicken für Einstellungen.`}
-          aria-label="Adblock and Privacy Shield Statistics"
-        >
-          <ShieldCheck size={13} className="stats-shield-icon" />
-          <span className="stats-text">
-            <strong>{blockedAdsCount.toLocaleString()}</strong> Ads blocked · <strong>{totalRamSavedLabel}</strong> RAM saved
-          </span>
-        </button>
+        <div className="adblock-stats-group">
+          <button
+            type="button"
+            className="adblock-stats-pill"
+            onClick={() => {
+              setShieldPopoverOpen((open) => !open);
+              onToggleShieldPopover?.();
+            }}
+            title={`${blockedAdsCount.toLocaleString()} Werbeanzeigen und Tracker blockiert · Geschätzte ${totalRamSavedLabel} RAM gespart. Klicken für Einstellungen.`}
+            aria-label="Adblock and Privacy Shield Statistics"
+            aria-expanded={shieldPopoverOpen}
+          >
+            <ShieldCheck size={13} className="stats-shield-icon" />
+            <span className="stats-text">
+              <strong>{blockedAdsCount.toLocaleString()}</strong> Ads blocked · <strong>{totalRamSavedLabel}</strong> RAM saved
+            </span>
+          </button>
+          <AdblockShield open={shieldPopoverOpen} onOpenChange={setShieldPopoverOpen} hideButton />
+        </div>
       </div>
 
       {/* Right controls: In-page find, Downloads, GitHub, Copilot toggle, WindowControls */}
       <div className="modern-titlebar-right">
+        {profiles && activeProfileId && onSelectProfile && onCreateProfile && onRenameProfile && onDeleteProfile && (
+          <div className="modern-titlebar-profile-switcher">
+            <ProfileSwitcher
+              profiles={profiles}
+              activeProfileId={activeProfileId}
+              onSelect={onSelectProfile}
+              onCreate={onCreateProfile}
+              onRename={onRenameProfile}
+              onDelete={onDeleteProfile}
+            />
+          </div>
+        )}
+
         <button
           type="button"
           className="titlebar-tool-btn find-btn"

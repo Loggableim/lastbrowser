@@ -116,7 +116,7 @@ def test_presence_operational_projection_marks_unverified_lease_degraded():
     assert payload["lease_liveness"] == "lease_unverified"
 
 
-def test_presence_card_warns_for_legacy_unverified_lease_liveness():
+def test_presence_card_warns_for_legacy_unverified_lease_liveness(tmp_path):
     """The UI must fail closed for both lease liveness spellings."""
     ui_js = Path("web/static/ui.js").read_text(encoding="utf-8")
     start = ui_js.index("const _NOVA_CARD_SPACE_RE=")
@@ -132,7 +132,9 @@ context._renderNovaPresenceCard({state:'available',managed_spaces:[{space:'aquar
 if(!elements.novaPresenceSupervision.textContent.includes('Lease aktiv, Hostprozess nicht verifiziert')) throw new Error(elements.novaPresenceSupervision.textContent);
 if(!elements.novaPresencePolicy.textContent.includes('Lease aktiv, Hostprozess nicht verifiziert')) throw new Error(elements.novaPresencePolicy.textContent);
 """.replace('__CODE__',json.dumps(code))
-    result=subprocess.run(['node','-e',program],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=15)
+    script_path = tmp_path / "presence-check.cjs"
+    script_path.write_text(program, encoding="utf-8")
+    result=subprocess.run(['node',str(script_path)],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=15)
     assert result.returncode==0, result.stderr or result.stdout
 
 

@@ -5,7 +5,10 @@ import {
   isLocalhostCallback,
   isOAuthUrl,
   isStreamingLoginUrl,
-  openAuthConnectWindow
+  openAuthConnectWindow,
+  getKnownWindowsBrowserPaths,
+  openInExternalSystemBrowser,
+  openExternalUrl
 } from '../src/main/auth-window.js';
 
 describe('auth-window logic', () => {
@@ -92,4 +95,51 @@ describe('auth-window logic', () => {
     expect(win).toBe(mockWindow);
   });
 
+  it('lists common candidate paths for Windows browsers', () => {
+    const paths = getKnownWindowsBrowserPaths();
+    expect(Array.isArray(paths)).toBe(true);
+    expect(paths.length).toBeGreaterThan(0);
+    expect(paths.some((p) => p.includes('msedge.exe'))).toBe(true);
+  });
+
+  it('delegates to native browser executable when found on Windows', () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+    const mockExists = vi.fn((path: string) => path.includes('msedge.exe'));
+    const mockUnref = vi.fn();
+    const mockSpawn = vi.fn().mockReturnValue({ unref: mockUnref });
+
+    const launched = openInExternalSystemBrowser(
+      'https://accounts.google.com/o/oauth2/v2/auth',
+      mockExists,
+      mockSpawn as never
+    );
+
+    expect(launched).toBe(true);
+    expect(mockSpawn).toHaveBeenCalledWith(
+      expect.stringContaining('msedge.exe'),
+      ['https://accounts.google.com/o/oauth2/v2/auth'],
+      expect.objectContaining({ detached: true })
+    );
+    expect(mockUnref).toHaveBeenCalled();
+
+    Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+  });
+
+  it('validates external URLs and reports OS launch failures', async () => {
+    const shellOpenExternal = vi.fn().mockResolvedValue(undefined);
+    await expect(openExternalUrl('javascript:alert(1)', { shellOpenExternal }))
+      .resolves.toBe(false);
+    await expect(openExternalUrl('not a url', { shellOpenExternal }))
+      .resolves.toBe(false);
+    await expect(openExternalUrl('https://accounts.google.com/o/oauth2/auth', {
+      platform: 'win32',
+      existsFn: () => false,
+      shellOpenExternal: vi.fn().mockRejectedValue(new Error('no browser'))
+    })).resolves.toBe(false);
+    await expect(openExternalUrl('https://example.com', { shellOpenExternal }))
+      .resolves.toBe(true);
+    expect(shellOpenExternal).toHaveBeenCalledWith('https://example.com/');
+  });
 });

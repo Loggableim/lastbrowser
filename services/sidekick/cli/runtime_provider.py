@@ -949,6 +949,14 @@ def resolve_runtime_provider(
     """
     requested_provider = resolve_requested_provider(requested)
 
+    if requested_provider in {"google-gemini-cli", "gemini-cli", "gemini-oauth"}:
+        raise auth_mod._google_gemini_cli_unavailable()
+    if any(
+        str(url or "").strip().lower().startswith("cloudcode-pa://")
+        for url in (explicit_base_url, _get_model_config().get("base_url"))
+    ):
+        raise auth_mod._google_gemini_cli_unavailable()
+
     # Azure Anthropic short-circuit: when explicitly targeting an Azure endpoint
     # with provider="anthropic", bypass _resolve_named_custom_runtime (which would
     # return provider="custom" with chat_completions api_mode and no valid key).

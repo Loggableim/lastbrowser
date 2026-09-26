@@ -146,6 +146,16 @@ Funktionen, die Lastbrowser zum produktivsten und ergonomischsten Browser auf Wi
 ### 7.2 Semantischer Bookmark Knowledge Graph
 * **Keine toten Ordner mehr:** Lesezeichen werden automatisch semantisch indiziert und als interaktiver Wissensgraph visualisiert. Nova findet Lesezeichen nicht nur über den exakten Titel, sondern über thematische Zusammenhänge.
 
+### 7.3 Optionaler Katteb-Content-Skill im Copilot
+* **Ziel:** Katteb als spezialisiertes Content-Werkzeug verfügbar machen, ohne den normalen Copilot- oder Modellfluss zu dominieren.
+* **Manuelle Aktivierung:** Ein kleiner Tools-/Skills-Auswahlschalter im Copilot-Composer bietet den optionalen Skill **„Katteb Content“** an. Der Skill wird nur für die Anfrage verwendet, für die der Nutzer ihn auswählt.
+* **Keine Seitenaktionen:** Keine automatische Aktivierung anhand der geöffneten Seite, kein Seiten-Kontextmenü und keine eigenständige Katteb-Oberfläche. Inhalte werden vom Nutzer im Copilot-Auftrag angegeben.
+* **Funktionen:** Artikelgenerierung, SEO-Analyse, Humanizer-Erkennung und -Rewrite sowie Faktencheck. Der Skill ordnet die Anfrage einer dieser gezielten Aktionen zu; nicht unterstützte oder nicht verfügbare API-Funktionen werden als solche ausgewiesen.
+* **Kosten und Laufzeit:** Vor kostenpflichtigen Aufrufen die erwarteten Credits anzeigen. Artikel und SEO laufen als Hintergrundjobs mit sichtbarem Status; Humanizer und Faktencheck liefern synchrone Ergebnisse. Für die Artikelerstellung beginnt die Wortzahl-Auswahl beim bestätigten Mindestwert von **2.000 Wörtern**.
+* **Ergebnisdarstellung:** Ergebnisse erscheinen im Copilot-Chat. Artikel können dort angesehen und kopiert werden; SEO-Ergebnisse werden strukturiert angezeigt; Rewrite zeigt Original und Vorschlag zum Vergleich; Faktenchecks enthalten Urteil und Quellen.
+* **Verbindung & Datenschutz:** API-Schlüssel unter **Einstellungen → Integrationen** lokal hinterlegen, Guthaben prüfen und Verbindung trennen. Schlüssel und Katteb-Anfragen werden durch das Sidekick-Backend verwaltet; der Schlüssel wird nicht an Renderer oder Webseiten weitergegeben. Ohne eingerichteten Zugang bleibt die Skill-Auswahl optional und fordert erst bei Verwendung zur Verbindung auf.
+* **Umsetzungsgrenze:** Katteb ist eine spezialisierte API-Integration und kein allgemeines Chatmodell im Modellwähler. Backend-Aktionen müssen auf die vorgesehenen Katteb-Endpunkte begrenzt sein.
+
 ---
 
 ## 8. Umsetzungs-Reihenfolge & Roadmap-Phasen
@@ -159,3 +169,4 @@ Funktionen, die Lastbrowser zum produktivsten und ergonomischsten Browser auf Wi
 | **Phase 19** | **Voice & Vision Intelligence** | Gemini Live Audio Streaming & Visual Screenshot Snipping Tool | ⚪ Ausstehend |
 | **Phase 20** | **Local Sovereignty & Containers** | Multi-Account Containers, Ghost Sessions & Ollama Hub | ⚪ Ausstehend |
 | **Phase 21** | **Developer Tools & Knowledge Graph** | In-Page API Explorer & Semantischer Bookmark-Graph | ⚪ Ausstehend |
+| **Phase 22** | **Optionaler Katteb-Content-Skill** | Manuelle Skill-Auswahl im Copilot, lokale Integrationseinstellungen, sichere Backend-Aktionen für Artikel, SEO, Humanizer und Faktencheck | ⚪ Ausstehend |

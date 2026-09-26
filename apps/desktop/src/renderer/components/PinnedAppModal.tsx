@@ -27,6 +27,7 @@ export interface PinnedAppModalProps {
   onClose: () => void;
   editApp?: PinnedApp | null;
   activeTab?: { title: string; url: string; favicon?: string } | null;
+  defaultSpacePath?: string;
 }
 
 const COLOR_PALETTE = [
@@ -46,7 +47,8 @@ export function PinnedAppModal({
   isOpen,
   onClose,
   editApp,
-  activeTab
+  activeTab,
+  defaultSpacePath = ''
 }: PinnedAppModalProps): React.JSX.Element | null {
   const { addApp, updateApp, removeApp, pinTabAsApp, apps } = usePinnedAppStore();
 
@@ -130,7 +132,8 @@ export function PinnedAppModal({
         color: selectedColor.color,
         bg: selectedColor.bg,
         domain: extractAppDomain(url),
-        faviconUrl: url ? getFaviconUrl(url) : undefined
+        faviconUrl: url ? getFaviconUrl(url) : undefined,
+        spacePath: defaultSpacePath || undefined
       });
     }
     onClose();
@@ -152,14 +155,15 @@ export function PinnedAppModal({
         letter: preset.letter,
         iconName: preset.iconName,
         domain: preset.domain,
-        faviconUrl: preset.faviconUrl || (preset.url ? getFaviconUrl(preset.url) : undefined)
+        faviconUrl: preset.faviconUrl || (preset.url ? getFaviconUrl(preset.url) : undefined),
+        spacePath: defaultSpacePath || undefined
       });
     }
   };
 
   const handlePinCurrentTab = () => {
     if (!activeTab || !activeTab.url) return;
-    pinTabAsApp(activeTab);
+    pinTabAsApp(activeTab, defaultSpacePath || undefined);
     setActiveTabPinned(true);
     setTimeout(() => {
       onClose();

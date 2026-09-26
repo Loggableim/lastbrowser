@@ -40,10 +40,15 @@ contextBridge.exposeInMainWorld('lastbrowser', {
       return () => ipcRenderer.removeListener('lastbrowser:browser:shortcut', listener);
     },
     clearData: (options?: { cache?: boolean; cookies?: boolean; storage?: boolean }) =>
-      ipcRenderer.invoke('lastbrowser:browser:clearData', options)
+      ipcRenderer.invoke('lastbrowser:browser:clearData', options),
+    clearDeletedProfileData: (request: { profileId: string; spacePaths: string[] }) =>
+      ipcRenderer.invoke('lastbrowser:browser:clearDeletedProfileData', request)
   },
   sidekick: {
     onboardingStatus: () => ipcRenderer.invoke('lastbrowser:sidekick:onboardingStatus'),
+    detectExistingInstall: () => ipcRenderer.invoke('lastbrowser:sidekick:detectExistingInstall'),
+    migrateStandalone: (request: { source_home: string; items: { spaces: boolean; supermemory: boolean; profiles: boolean } }) =>
+      ipcRenderer.invoke('lastbrowser:sidekick:migrateStandalone', request),
     applyCloudSetup: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:applyCloudSetup', request),
     setDefaultModel: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:setDefaultModel', request),
     getFallbackModel: () => ipcRenderer.invoke('lastbrowser:sidekick:getFallbackModel'),
@@ -291,13 +296,13 @@ contextBridge.exposeInMainWorld('lastbrowser', {
       ipcRenderer.on('lastbrowser:window:fullScreenChanged', listener);
       return () => ipcRenderer.removeListener('lastbrowser:window:fullScreenChanged', listener);
     },
-    detachTab: (payload: { tab: unknown; screenX: number; screenY: number; spacePath?: string }) =>
+    detachTab: (payload: { tab: unknown; guestWebContentsId: number; screenX: number; screenY: number; spacePath?: string }) =>
       ipcRenderer.invoke('lastbrowser:window:detachTab', payload),
     getStartupState: () => ipcRenderer.invoke('lastbrowser:window:getStartupState') as Promise<{
       isDetachedWindow: boolean;
       transfer: { transferId: string; tab: unknown; spacePath?: string } | null;
     }>,
-    ackDetachedTab: (transferId: string, tabId: string) => ipcRenderer.invoke('lastbrowser:window:ackDetachedTab', transferId, tabId) as Promise<boolean>,
+    ackDetachedTab: (transferId: string, tabId: string, guestWebContentsId: number) => ipcRenderer.invoke('lastbrowser:window:ackDetachedTab', transferId, tabId, guestWebContentsId) as Promise<boolean>,
     getDisplays: () => ipcRenderer.invoke('lastbrowser:window:getDisplays'),
     onInitDetachedTab: (callback: (payload: { tab: unknown; spacePath?: string }) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: { tab: unknown; spacePath?: string }) => callback(data);

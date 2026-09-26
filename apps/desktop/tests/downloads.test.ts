@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createDownloadTracker } from '../src/main/downloads.js';
+import path from 'node:path';
+import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { broadcastDownloadSnapshot, createDownloadTracker } from '../src/main/downloads.js';
+import { resolveDownloadsDockMode, resolveDownloadsMinimizedState } from '../src/renderer/NativeDownloads.js';
+import { canApplyDownloadSnapshot } from '../src/renderer/download-snapshot.js';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -18,6 +23,7 @@ function fakeItem(overrides: Partial<{
     received: overrides.received ?? 0,
     total: overrides.total ?? 1000,
     savePath: overrides.savePath ?? 'C:/Users/test/Downloads/report.pdf',
+    assignedSavePath: '',
     paused: overrides.paused ?? false
   };
   return {
@@ -26,8 +32,9 @@ function fakeItem(overrides: Partial<{
     getURL: () => state.url,
     getReceivedBytes: () => state.received,
     getTotalBytes: () => state.total,
-    getSavePath: () => state.savePath,
+    getSavePath: () => state.assignedSavePath || state.savePath,
     isPaused: () => state.paused,
+    setSavePath: (path: string) => { state.assignedSavePath = path; },
     on(event: string, listener: Listener) {
       listeners.set(event, [...(listeners.get(event) ?? []), listener]);
     },
@@ -50,6 +57,58 @@ function fakeSession() {
 }
 
 describe('download tracker', () => {
+  it('keeps the downloads surface mounted at app-shell scope for every active panel', () => {
+    const appSource = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
+    const panelMount = appSource.indexOf('<DownloadsPanel open={downloadsOpen}');
+    const browserMainDeclaration = appSource.indexOf('function BrowserMain(');
+    const appComponentStart = appSource.indexOf('export function App(): JSX.Element {');
+    const appScope = appSource.slice(appComponentStart, browserMainDeclaration);
+
+    expect(panelMount).toBeGreaterThan(-1);
+    expect(panelMount).toBeLessThan(browserMainDeclaration);
+    expect(appSource.match(/<DownloadsPanel open=\{downloadsOpen\}/g)).toHaveLength(1);
+    expect(appScope).toMatch(/downloadsOpen,\s*setDownloadsOpen,/);
+  });
+
+  it('does not let an older list response overwrite a newer pushed snapshot', () => {
+    const requestRevision = 4;
+
+    expect(canApplyDownloadSnapshot(requestRevision, 4)).toBe(true);
+    // An onChanged event increments the revision while list() is in flight.
+    expect(canApplyDownloadSnapshot(requestRevision, 5)).toBe(false);
+  });
+
+  it('broadcasts download changes to every live window and skips destroyed windows', () => {
+    const mainSend = vi.fn();
+    const detachedSend = vi.fn();
+    const destroyedSend = vi.fn();
+    const entries = [{ id: 'dl-1', filename: 'a.txt', url: 'https://example.com/a.txt', received: 1, total: 2, state: 'progressing' as const, savePath: '', startedAt: 1 }];
+
+    broadcastDownloadSnapshot([
+      { isDestroyed: () => false, webContents: { send: mainSend } },
+      { isDestroyed: () => false, webContents: { send: detachedSend } },
+      { isDestroyed: () => true, webContents: { send: destroyedSend } }
+    ], entries);
+
+    expect(mainSend).toHaveBeenCalledWith('lastbrowser:downloads:changed', entries);
+    expect(detachedSend).toHaveBeenCalledWith('lastbrowser:downloads:changed', entries);
+    expect(destroyedSend).not.toHaveBeenCalled();
+  });
+
+  it('restores only supported dock positions and falls back for stale preferences', () => {
+    expect(resolveDownloadsDockMode('dock-tabs')).toBe('dock-tabs');
+    expect(resolveDownloadsDockMode('dock-topbar-left')).toBe('dock-topbar-left');
+    expect(resolveDownloadsDockMode('dock-sidekick')).toBe('dock-sidekick');
+    expect(resolveDownloadsDockMode('legacy-position')).toBe('dropdown');
+    expect(resolveDownloadsDockMode(null)).toBe('dropdown');
+  });
+
+  it('reopens a closed minimized downloads panel in its expanded state', () => {
+    expect(resolveDownloadsMinimizedState(false, true)).toBe(false);
+    expect(resolveDownloadsMinimizedState(true, false)).toBe(false);
+    expect(resolveDownloadsMinimizedState(true, true)).toBe(true);
+  });
+
   it('records a download when it starts', () => {
     const tracker = createDownloadTracker();
     const session = fakeSession();
@@ -61,6 +120,40 @@ describe('download tracker', () => {
     expect(list[0].filename).toBe('report.pdf');
     expect(list[0].state).toBe('progressing');
     expect(list[0].total).toBe(1000);
+  });
+
+  it('assigns a default Downloads path before tracking the item', () => {
+    const tracker = createDownloadTracker();
+    const session = fakeSession();
+    const downloadsDirectory = path.join(tmpdir(), `lastbrowser-download-test-${process.pid}-${Math.random()}`);
+    tracker.attach(session, downloadsDirectory);
+    const item = fakeItem({ filename: 'report.pdf', savePath: '' });
+
+    session.start(item);
+
+    expect(item.state.assignedSavePath).toBe(path.join(downloadsDirectory, 'report.pdf'));
+    expect(tracker.list()[0].savePath).toBe(item.state.assignedSavePath);
+    expect(tracker.list()[0].state).toBe('progressing');
+
+    item.state.received = 1000;
+    item.fire('done', {}, 'completed');
+    expect(tracker.list()[0].state).toBe('completed');
+    expect(tracker.list()[0].savePath).toBe(item.state.assignedSavePath);
+  });
+
+  it('sanitizes suggested names and chooses a free name for concurrent/existing downloads', () => {
+    const tracker = createDownloadTracker();
+    const session = fakeSession();
+    const downloadsDirectory = path.join(tmpdir(), `lastbrowser-download-test-${process.pid}-${Math.random()}`);
+    tracker.attach(session, downloadsDirectory);
+    const first = fakeItem({ filename: '..\\report?.pdf', savePath: '' });
+    const second = fakeItem({ filename: '..\\report?.pdf', savePath: '' });
+
+    session.start(first);
+    session.start(second);
+
+    expect(first.state.assignedSavePath).toBe(path.join(downloadsDirectory, 'report_.pdf'));
+    expect(second.state.assignedSavePath).toBe(path.join(downloadsDirectory, 'report_ (1).pdf'));
   });
 
   it('updates progress from the updated event', () => {

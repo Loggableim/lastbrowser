@@ -229,9 +229,19 @@ declare global {
         onDeepResearch: (callback: (payload: { selectionText?: string; pageUrl?: string }) => void) => () => void;
         onShortcut: (callback: (event: { action: string; payload?: { index?: number } }) => void) => () => void;
         clearData?: (options?: { cache?: boolean; cookies?: boolean; storage?: boolean }) => Promise<{ ok: boolean }>;
+        clearDeletedProfileData?: (request: { profileId: string; spacePaths: string[] }) => Promise<{ ok: boolean; cleared: number; error?: string }>;
       };
       sidekick: {
         onboardingStatus: () => Promise<Record<string, unknown>>;
+        detectExistingInstall: () => Promise<{
+          found: boolean;
+          homeDir?: string;
+          components: { spaces: boolean; supermemory: boolean; profiles: boolean; config: boolean };
+        }>;
+        migrateStandalone: (request: {
+          source_home: string;
+          items: { spaces: boolean; supermemory: boolean; profiles: boolean };
+        }) => Promise<{ copied: string[]; skipped: string[]; errors: string[] }>;
         applyCloudSetup: (request: { provider: string; model: string; apiKey?: string; baseUrl?: string; confirmOverwrite?: boolean }) => Promise<Record<string, unknown>>;
         setDefaultModel: (request: { model: string }) => Promise<Record<string, unknown>>;
         completeCloudSetup: () => Promise<Record<string, unknown>>;
@@ -269,6 +279,7 @@ declare global {
           workspace?: string;
           model?: string;
           modelProvider?: string | null;
+          providerAccountEmail?: string | null;
           profile?: string;
         }) => Promise<{ session?: DesktopSessionSummary & Record<string, unknown> }>;
         getSession: (request: string | { sessionId: string; messages?: boolean; msgLimit?: number }) => Promise<{ session?: DesktopSessionDetail }>;
@@ -287,6 +298,7 @@ declare global {
           mode?: 'action' | 'plan';
           chatMode?: string;
           sandboxDisabled?: boolean;
+          groundingContext?: { url?: string; title?: string; snippet?: string } | null;
         }) => Promise<{ sessionId: string; streamId: string }>;
         getStreamStatus: (streamId: string) => Promise<Record<string, unknown>>;
         cancelStream: (streamId: string) => Promise<Record<string, unknown>>;
@@ -550,9 +562,9 @@ declare global {
         toggleFullScreen?: () => Promise<boolean>;
         onMaximizeChange?: (callback: (maximized: boolean) => void) => () => void;
         onFullScreenChange?: (callback: (fullscreen: boolean) => void) => () => void;
-        detachTab?: (payload: { tab: unknown; screenX: number; screenY: number; spacePath?: string }) => Promise<{ success: boolean; windowId?: number; error?: string }>;
+        detachTab?: (payload: { tab: unknown; guestWebContentsId: number; screenX: number; screenY: number; spacePath?: string }) => Promise<{ success: boolean; windowId?: number; error?: string }>;
         getStartupState?: () => Promise<{ isDetachedWindow: boolean; transfer: { transferId: string; tab: unknown; spacePath?: string } | null }>;
-        ackDetachedTab?: (transferId: string, tabId: string) => Promise<boolean>;
+        ackDetachedTab?: (transferId: string, tabId: string, guestWebContentsId: number) => Promise<boolean>;
         getDisplays?: () => Promise<Array<{ id: number; bounds: { x: number; y: number; width: number; height: number }; workArea: { x: number; y: number; width: number; height: number }; scaleFactor: number }>>;
         onInitDetachedTab?: (callback: (payload: { tab: unknown; spacePath?: string }) => void) => () => void;
       };

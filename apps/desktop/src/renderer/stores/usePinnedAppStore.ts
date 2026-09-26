@@ -12,6 +12,12 @@ export interface PinnedApp {
   iconName?: string;
   faviconUrl?: string;
   domain?: string;
+  /** When set, this app is shown only in its owning Space. */
+  spacePath?: string;
+}
+
+export function getPinnedAppsForSpace(apps: PinnedApp[], spacePath: string): PinnedApp[] {
+  return apps.filter((app) => !app.spacePath || app.spacePath === spacePath);
 }
 
 export const PRESET_PINNED_APPS: PinnedApp[] = [
@@ -251,8 +257,8 @@ export interface PinnedAppState {
   addApp: (app: Omit<PinnedApp, 'id'> & { id?: string }) => PinnedApp;
   updateApp: (id: string, updates: Partial<PinnedApp>) => void;
   removeApp: (id: string) => void;
-  reorderApps: (fromIndex: number, toIndex: number) => void;
-  pinTabAsApp: (tab: { title: string; url: string; favicon?: string }) => PinnedApp;
+  reorderApps: (fromIndex: number, toIndex: number, spacePath?: string) => void;
+  pinTabAsApp: (tab: { title: string; url: string; favicon?: string }, spacePath?: string) => PinnedApp;
   resetToDefaults: () => void;
   findMatchingApp: (url: string) => PinnedApp | undefined;
   isAppRunning: (app: PinnedApp, openUrls: string[]) => boolean;
@@ -282,7 +288,8 @@ export const usePinnedAppStore = create<PinnedAppState>((set, get) => ({
       letter: appData.letter || (appData.name ? appData.name.charAt(0).toUpperCase() : undefined),
       iconName: appData.iconName || 'generic',
       faviconUrl: appData.faviconUrl || (appData.url ? getFaviconUrl(appData.url) : undefined),
-      domain
+      domain,
+      spacePath: appData.spacePath
     };
 
     const updated = [...get().apps, newApp];
@@ -316,20 +323,40 @@ export const usePinnedAppStore = create<PinnedAppState>((set, get) => ({
     });
   },
 
-  reorderApps: (fromIndex, toIndex) => {
+  reorderApps: (fromIndex, toIndex, spacePath) => {
     const current = [...get().apps];
-    if (fromIndex < 0 || fromIndex >= current.length || toIndex < 0 || toIndex >= current.length) {
+    const scoped = spacePath === undefined ? current : getPinnedAppsForSpace(current, spacePath);
+    if (fromIndex < 0 || fromIndex >= scoped.length || toIndex < 0 || toIndex >= scoped.length) {
       return;
     }
-    const [moved] = current.splice(fromIndex, 1);
-    current.splice(toIndex, 0, moved);
-    savePinnedAppsToStorage(current);
-    set({ apps: current });
+    const [moved] = scoped.splice(fromIndex, 1);
+    scoped.splice(toIndex, 0, moved);
+    if (spacePath === undefined) {
+      savePinnedAppsToStorage(scoped);
+      set({ apps: scoped });
+      return;
+    }
+    // Reorder only the visible app slots so other Spaces' apps keep their
+    // positions and never leak into the active Space's ordering operation.
+    let scopedIndex = 0;
+    const updated = current.map((app) => {
+      if (app.spacePath && app.spacePath !== spacePath) return app;
+      return scoped[scopedIndex++];
+    });
+    savePinnedAppsToStorage(updated);
+    set({ apps: updated });
   },
 
-  pinTabAsApp: (tab) => {
+  pinTabAsApp: (tab, spacePath) => {
     const domain = extractAppDomain(tab.url);
-    const existing = get().findMatchingApp(tab.url);
+    const existing = get().apps.find((app) => {
+      if (app.spacePath && app.spacePath !== spacePath) return false;
+      const cleanUrl = tab.url.toLowerCase();
+      const appDomain = (app.domain || extractAppDomain(app.url)).toLowerCase();
+      const urlDomain = domain.toLowerCase();
+      return Boolean((app.url && cleanUrl.startsWith(app.url.toLowerCase())) ||
+        (appDomain && urlDomain && (urlDomain === appDomain || urlDomain.endsWith(`.${appDomain}`))));
+    });
     if (existing) {
       return existing;
     }
@@ -342,7 +369,8 @@ export const usePinnedAppStore = create<PinnedAppState>((set, get) => ({
       bg: 'rgba(56, 189, 248, 0.15)',
       domain,
       faviconUrl: tab.favicon || getFaviconUrl(tab.url),
-      letter: title.charAt(0).toUpperCase()
+      letter: title.charAt(0).toUpperCase(),
+      spacePath
     });
   },
 

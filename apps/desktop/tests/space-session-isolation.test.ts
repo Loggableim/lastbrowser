@@ -37,9 +37,16 @@ describe('Space Session & Partition Isolation', () => {
     });
 
     it('normalizes space slugs with special characters, slashes, and uppercase', () => {
-      expect(computeSpaceSessionKey('default', 'workspaces/work')).toBe('default::workspaces_work');
-      expect(computeSpaceSessionKey('user1', 'My Space! #1')).toBe('user1::my_space___1');
+      expect(computeSpaceSessionKey('default', 'workspaces/work')).toBe('default::workspaces_work~776f726b7370616365732f776f726b');
+      expect(computeSpaceSessionKey('user1', 'My Space! #1')).toBe('user1::my_space___1~6d7920737061636521202331');
       expect(computeSpaceSessionKey('work', 'RECHERCHE')).toBe('work::recherche');
+    });
+
+    it('keeps lossy legacy slugs distinct without changing existing safe keys', () => {
+      const paths = ['work/a', 'work_a'];
+      expect(computeSpaceSessionKey('profile', 'work/a', paths)).not.toBe(computeSpaceSessionKey('profile', 'work_a', paths));
+      expect(computeSpaceSessionKey('profile', 'Work')).toBe('profile::work');
+      expect(computeSpaceSessionKey('profile', 'work/a', ['work/a'])).toBe('profile::work_a');
     });
   });
 
@@ -54,8 +61,8 @@ describe('Space Session & Partition Isolation', () => {
       const partSpaceB = computeSpacePartition('default', 'workspaces/personal');
       const partHome = computeSpacePartition('default', '');
 
-      expect(partSpaceA).toBe('persist:space_workspaces_work_default');
-      expect(partSpaceB).toBe('persist:space_workspaces_personal_default');
+      expect(partSpaceA).toBe('persist:space_workspaces_work~776f726b7370616365732f776f726b_default');
+      expect(partSpaceB).toBe('persist:space_workspaces_personal~776f726b7370616365732f706572736f6e616c_default');
       expect(partHome).toBe('persist:space_home_default');
 
       // Crucial: No two spaces can ever share the same session partition
@@ -70,6 +77,14 @@ describe('Space Session & Partition Isolation', () => {
       expect(partProfile1).toBe('persist:space_work_profile-1');
       expect(partProfile2).toBe('persist:space_work_profile-2');
       expect(partProfile1).not.toBe(partProfile2);
+    });
+
+    it('separates paths that previously collided and preserves legacy-safe partitions', () => {
+      const paths = ['work/a', 'work_a'];
+      expect(computeSpacePartition('profile', 'work/a', false, paths)).not.toBe(computeSpacePartition('profile', 'work_a', false, paths));
+      expect(computeSpacePartition('profile', 'work_a')).toBe('persist:space_work_a_profile');
+      expect(computeSpacePartition('profile', 'work/a', false, ['work/a'])).toBe('persist:space_work_a_profile');
+      expect(computeSpacePartition('profile', 'home')).toBe('persist:space_home_profile');
     });
   });
 
@@ -115,6 +130,16 @@ describe('Space Session & Partition Isolation', () => {
       saveSpaceTabs('default', 'workspaces/work', { tabs: [tabsSpaceA[0]], activeTabId: 'tab-a1' }, storage);
       expect(loadSpaceTabs('default', 'workspaces/work', storage).tabs).toHaveLength(1);
       expect(loadSpaceTabs('default', 'workspaces/personal', storage).tabs).toHaveLength(1);
+    });
+
+    it('does not mix saved tabs for paths that normalize to the same legacy slug', () => {
+      const storage = memoryStorage();
+      const paths = ['work/a', 'work_a'];
+      saveSpaceTabs('profile', 'work/a', { tabs: [tab('slash')], activeTabId: 'slash' }, storage, paths);
+      saveSpaceTabs('profile', 'work_a', { tabs: [tab('underscore')], activeTabId: 'underscore' }, storage, paths);
+
+      expect(loadSpaceTabs('profile', 'work/a', storage, paths).tabs.map((item) => item.id)).toEqual(['slash']);
+      expect(loadSpaceTabs('profile', 'work_a', storage, paths).tabs.map((item) => item.id)).toEqual(['underscore']);
     });
 
     it('falls back to legacy profile entry when spacePath is empty or home', () => {

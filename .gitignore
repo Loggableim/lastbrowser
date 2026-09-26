@@ -36,3 +36,7 @@ installer/build/
 installer/dist/
 smoke-output/
 .agents/
+# Local tooling / installer leftovers — never commit these.
+$payload/
+.playwright-cli/
+.permission-adblock-live-audit.mjs

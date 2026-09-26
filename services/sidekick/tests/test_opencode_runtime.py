@@ -15,7 +15,10 @@ def test_opencode_go_keeps_deepseek_model_ids():
     assert normalize_opencode_model_id("opencode-go", "opencode-go/deepseek-v4-flash") == "deepseek-v4-flash"
     assert normalize_opencode_model_id("opencode-go", "deepseek/deepseek-v4-flash") == "deepseek-v4-flash"
     assert opencode_model_api_mode("opencode-go", "deepseek-v4-flash") == "chat_completions"
-    assert opencode_provider_for_model("opencode-zen", "deepseek-v4-flash") == "opencode-go"
+    # This model is listed by both current OpenCode catalogs, so a caller's
+    # provider selection disambiguates which endpoint should receive it.
+    assert opencode_provider_for_model("opencode-zen", "deepseek-v4-flash") == "opencode-zen"
+    assert opencode_provider_for_model("opencode-go", "deepseek-v4-flash") == "opencode-go"
 
 
 def test_opencode_go_aux_default_has_large_context_for_compression():
@@ -23,7 +26,7 @@ def test_opencode_go_aux_default_has_large_context_for_compression():
     assert opencode_model_api_mode("opencode-go", "glm-5.1") == "chat_completions"
 
 
-def test_runtime_provider_routes_deepseek_flash_to_opencode_go(monkeypatch):
+def test_runtime_provider_preserves_provider_for_shared_deepseek_flash(monkeypatch):
     monkeypatch.setattr(runtime_provider, "resolve_provider", lambda *args, **kwargs: "opencode-zen")
     monkeypatch.setattr(
         runtime_provider,
@@ -50,9 +53,9 @@ def test_runtime_provider_routes_deepseek_flash_to_opencode_go(monkeypatch):
         target_model="deepseek-v4-flash",
     )
 
-    assert runtime["provider"] == "opencode-go"
+    assert runtime["provider"] == "opencode-zen"
     assert runtime["api_mode"] == "chat_completions"
-    assert runtime["base_url"] == "https://opencode.ai/zen/go/v1"
+    assert runtime["base_url"] == "https://opencode.ai/zen/v1"
 
 
 def test_cron_scheduler_uses_modern_runtime_provider_import():

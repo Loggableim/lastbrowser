@@ -24,9 +24,9 @@ export function isBookmarkableUrl(url: string): boolean {
 }
 
 export function loadBookmarks(storage: Pick<Storage, 'getItem'> = window.localStorage): BrowserBookmark[] {
-  const raw = storage.getItem(bookmarksStorageKey);
-  if (!raw) return [];
   try {
+    const raw = storage.getItem(bookmarksStorageKey);
+    if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed
@@ -38,7 +38,11 @@ export function loadBookmarks(storage: Pick<Storage, 'getItem'> = window.localSt
 }
 
 export function saveBookmarks(storage: BookmarkStorage = window.localStorage, bookmarks: BrowserBookmark[]): void {
-  storage.setItem(bookmarksStorageKey, JSON.stringify(bookmarks));
+  try {
+    storage.setItem(bookmarksStorageKey, JSON.stringify(bookmarks));
+  } catch {
+    // Bookmark persistence must not crash the browser when storage is unavailable.
+  }
 }
 
 export function bookmarkFromTab(tab: BrowserTab): BrowserBookmark {
@@ -101,8 +105,10 @@ function readableBookmarkTitle(title: string, url: string): string {
 function normalizeBookmarkUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    parsed.hash = '';
-    return parsed.toString().replace(/\/$/, '');
+    // Keep fragments and non-root trailing slashes: both can identify a
+    // distinct destination (for example a section anchor or directory URL).
+    // URL already canonicalizes the host and the root URL consistently.
+    return parsed.toString();
   } catch {
     return url.trim().replace(/\/$/, '');
   }

@@ -2299,6 +2299,33 @@ def _attempt_credential_self_heal(
         return None
 
 
+def _requested_orchestration_mode(model: object, mode: object) -> str | None:
+    """Identify an orchestration request without intercepting normal providers."""
+    model_id = str(model or "").strip().lower()
+    mode_id = str(mode or "").strip().lower()
+    if model_id == "teamwork" or mode_id == "teamwork":
+        return "teamwork"
+    if model_id.startswith("smart-track") or mode_id == "smart-track":
+        return "smart-track"
+    return None
+
+
+def _orchestration_is_enabled(orchestration: str) -> bool:
+    """Read the persisted enabled preference; config failures deny the route."""
+    try:
+        if orchestration == "teamwork":
+            from runtime.teamwork_orchestrator import load_teamwork_config
+
+            return load_teamwork_config().get("enabled") is True
+        if orchestration == "smart-track":
+            from runtime.smart_track_orchestrator import load_smart_track_config
+
+            return load_smart_track_config().get("enabled") is True
+    except Exception:
+        logger.exception("Failed to load %s orchestration config; denying request", orchestration)
+    return False
+
+
 def _run_agent_streaming(
     session_id,
     msg_text,
@@ -2309,9 +2336,11 @@ def _run_agent_streaming(
     *,
     ephemeral=False,
     model_provider=None,
+    google_account_email="",
     goal_related=False,
     mode="",
     sandbox_disabled=False,
+    grounding_context="",
 ):
     """Run agent in background thread, writing SSE events to STREAMS[stream_id].
 
@@ -2578,13 +2607,31 @@ def _run_agent_streaming(
             put('cancel', {'message': 'Cancelled before start'})
             return
 
+        # Teamwork / Smart Track requests are rejected before any model work
+        # when the user's persisted preference disables that orchestration.
+        orchestration = _requested_orchestration_mode(model, mode)
+        if orchestration and not _orchestration_is_enabled(orchestration):
+            label = "Teamwork" if orchestration == "teamwork" else "Smart Track"
+            s.active_stream_id = None
+            s.pending_user_message = None
+            try:
+                s.save()
+            except Exception:
+                logger.debug("Failed to persist disabled orchestration state for %s", session_id, exc_info=True)
+            put('error', {
+                'error': f"{label} ist in den Einstellungen deaktiviert. Aktiviere es, um diese Anfragemethode zu verwenden.",
+                'session_id': session_id,
+            })
+            return
+
         # Teamwork Multi-Agent Orchestrator
-        if str(model or '').strip().lower() == 'teamwork' or str(mode or '').strip().lower() == 'teamwork':
+        if orchestration == 'teamwork':
             try:
                 from runtime.teamwork_orchestrator import run_teamwork_turn
                 run_teamwork_turn(
                     s,
                     msg_text,
+                    grounding_context=grounding_context,
                     stream_put=put,
                     cancel_event=cancel_event,
                 )
@@ -2606,7 +2653,7 @@ def _run_agent_streaming(
 
         # Smart Track Single-Track Orchestrator
         _model_lower = str(model or '').strip().lower()
-        if _model_lower.startswith('smart-track') or str(mode or '').strip().lower() == 'smart-track':
+        if orchestration == 'smart-track':
             try:
                 from runtime.smart_track_orchestrator import run_smart_track_turn
                 _effort = "medium"
@@ -3303,6 +3350,7 @@ def _run_agent_streaming(
                 provider=resolved_provider,
                 base_url=resolved_base_url,
                 api_key=resolved_api_key,
+                google_account_email=(google_account_email if resolved_provider == "google-gemini-cli" else ""),
                 # Identify browser-originated sessions as WebUI so Nova
                 # does not inject CLI-specific terminal/output guidance.
                 platform='webui',
@@ -3367,6 +3415,7 @@ def _run_agent_streaming(
                     _hashlib.sha256((resolved_api_key or '').encode()).hexdigest()[:16],
                     resolved_base_url or '',
                     resolved_provider or '',
+                    str(google_account_email or '').strip().casefold(),
                     _max_iterations_cfg or '',
                     _max_tokens_cfg or '',
                     _fallback_resolved or {},

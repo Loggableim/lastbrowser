@@ -57,6 +57,11 @@ import {
   X
 } from 'lucide-react';
 import { hideWebviewScrollbars } from './browser-view.js';
+import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
+import { playChatCompletionSound } from './notification-sound.js';
+import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
+import { describeOrchestrationProgress } from './orchestration-progress.js';
+import { parseNaturalLanguageBrowserCommand } from './browser-agent-tools.js';
 import {
   bookmarkFromTab,
   isBookmarkableUrl,
@@ -118,6 +123,7 @@ import {
   saveSpaceSnapGroup,
   type PersistedSnapGroup
 } from './tab-sessions.js';
+import { loadDetachedWindowSession, saveDetachedWindowSession } from './detached-window-session.js';
 import {
   loadVisitedSites,
   recordVisit,
@@ -129,6 +135,7 @@ import {
 import {
   SidekickActionId,
   buildSidekickPrompt,
+  collectTeamworkGroundingContext,
   collectBrowserContext,
   lastAssistantText,
   resolveConfiguredModel,
@@ -215,6 +222,7 @@ import {
   useWindowDrag
 } from './components/HeaderComponents.js';
 import { SidekickSidebar } from './components/SidekickSidebar.js';
+import { NovaDock } from './components/NovaDock.js';
 import { InPageActionBar } from './components/InPageActionBar.js';
 import { PinnedAppModal } from './components/PinnedAppModal.js';
 import { SpaceSetupModal, type SpaceSetupData } from './components/SpaceSetupModal.js';
@@ -227,11 +235,9 @@ import { CopilotSplitView } from './components/CopilotSplitView.js';
 import { WorkspacePanel } from './panels/WorkspacePanel.js';
 import { ShellRail } from './components/ShellRail.js';
 import { ContextSidebar, panelContextItems, type SidekickMessage } from './components/ContextSidebar.js';
-import { AdblockShield } from './components/AdblockShield.js';
 import { AddressBar } from './components/AddressBar.js';
 import { useTabStore, type SplitLayoutMode } from './stores/useTabStore.js';
 import { usePanelStore } from './stores/usePanelStore.js';
-import { useGeminiAccountStore } from './stores/useGeminiAccountStore.js';
 import { useChatStore } from './stores/useChatStore.js';
 import { loadSpaceModel, removeSpaceModel, saveSpaceModel } from './space-models.js';
 import { CommandPalette } from './components/CommandPalette.js';
@@ -240,6 +246,7 @@ import { detectPageCategory, getQuickActionChips, executeQuickAction, type Quick
 import { SnapGhostOverlay } from './components/SnapGhostOverlay.js';
 import { SnapBarFlyout } from './components/SnapBarFlyout.js';
 import { MultiviewGridContainer } from './components/MultiviewGridContainer.js';
+import { buildSnapGroupAfterDrop } from './snap-drop.js';
 import {
   SNAP_LAYOUT_DEFINITIONS,
   type SnapLayoutType,
@@ -290,9 +297,9 @@ function persistableSnapGroup(
   };
 }
 
-function loadPersistedSnapGroup(profileId: string, spacePath: string, tabs: BrowserTab[]): PersistedSnapGroup | null {
+function loadPersistedSnapGroup(profileId: string, spacePath: string, tabs: BrowserTab[], knownSpacePaths?: string[]): PersistedSnapGroup | null {
   const available = tabs.filter((tab) => !tab.incognito).map((tab) => tab.id);
-  const group = loadSpaceSnapGroup(profileId, spacePath, available, window.localStorage);
+  const group = loadSpaceSnapGroup(profileId, spacePath, available, window.localStorage, knownSpacePaths);
   return group && group.tabIds.length > 1 ? group : null;
 }
 
@@ -303,7 +310,8 @@ function savePersistedSnapGroup(
   layout: SplitLayoutMode,
   tabIds: string[],
   slotIndexes: number[],
-  ratios: SnapLayoutRatios
+  ratios: SnapLayoutRatios,
+  knownSpacePaths?: string[]
 ): void {
   const available = tabs.filter((tab) => !tab.incognito).map((tab) => tab.id);
   saveSpaceSnapGroup(
@@ -311,7 +319,8 @@ function savePersistedSnapGroup(
     spacePath,
     persistableSnapGroup(layout, tabIds, slotIndexes, tabs, ratios),
     available,
-    window.localStorage
+    window.localStorage,
+    knownSpacePaths
   );
 }
 
@@ -392,9 +401,9 @@ export function getEffectiveZoomForUrl(url: string, defaultZoomPercent: number =
   return base;
 }
 
-export function normalizeAppearanceTheme(value: string): 'light' | 'dark' | 'system' | 'oled' {
+export function normalizeAppearanceTheme(value: string): 'light' | 'dark' | 'system' | 'oled' | 'vision-impaired' {
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'light' || normalized === 'system' || normalized === 'oled') return normalized;
+  if (normalized === 'light' || normalized === 'system' || normalized === 'oled' || normalized === 'vision-impaired') return normalized;
   return 'dark';
 }
 
@@ -405,6 +414,7 @@ export function normalizeAppearanceSkin(value: string): string {
 
 export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const clean = hex.replace(/^#/, '');
+  if (!/^(?:[\da-f]{3}|[\da-f]{6}(?:[\da-f]{2})?)$/i.test(clean)) return null;
   if (clean.length === 3) {
     const r = parseInt(clean[0] + clean[0], 16);
     const g = parseInt(clean[1] + clean[1], 16);
@@ -477,6 +487,15 @@ export function applyDesktopAppearance(settings: DesktopSettingsRecord | null): 
       root.style.setProperty('--accent-glow', tokens.glow);
       root.style.setProperty('--accent-hover', tokens.hover);
       root.style.setProperty('--accent-rgb', tokens.rgbStr);
+    } else {
+      root.style.removeProperty('--user-accent-primary');
+      root.style.removeProperty('--user-accent-glow');
+      root.style.removeProperty('--user-accent-hover');
+      root.style.removeProperty('--user-accent-text');
+      root.style.removeProperty('--accent-primary');
+      root.style.removeProperty('--accent-glow');
+      root.style.removeProperty('--accent-hover');
+      root.style.removeProperty('--accent-rgb');
     }
   } else {
     root.style.removeProperty('--user-accent-primary');
@@ -488,6 +507,17 @@ export function applyDesktopAppearance(settings: DesktopSettingsRecord | null): 
     root.style.removeProperty('--accent-hover');
     root.style.removeProperty('--accent-rgb');
   }
+}
+
+export function watchSystemThemeChanges(settings: DesktopSettingsRecord | null): () => void {
+  if (normalizeAppearanceTheme(String(settings?.theme || 'dark')) !== 'system'
+    || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return () => undefined;
+  }
+  const preference = window.matchMedia('(prefers-color-scheme: light)');
+  const update = () => applyDesktopAppearance(settings);
+  preference.addEventListener?.('change', update);
+  return () => preference.removeEventListener?.('change', update);
 }
 
 type TodoItem = {
@@ -612,6 +642,8 @@ export function App(): JSX.Element {
     setLeftSidebarCollapsed,
     sidebarMode,
     setSidebarMode,
+    downloadsOpen,
+    setDownloadsOpen,
     cycleSidebarMode,
     copilotOpen,
     setCopilotOpen,
@@ -664,7 +696,14 @@ export function App(): JSX.Element {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b') {
         event.preventDefault();
-        cycleSidebarMode();
+        if (usePanelStore.getState().sidebarMode === 'hidden') {
+          setZenSidebarRevealed((prev) => !prev);
+        } else {
+          cycleSidebarMode();
+        }
+      }
+      if (event.key === 'Escape' && usePanelStore.getState().sidebarMode === 'hidden') {
+        setZenSidebarRevealed(false);
       }
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') {
         event.preventDefault();
@@ -724,9 +763,17 @@ export function App(): JSX.Element {
   const [setupError, setSetupError] = useState('');
   const [setupSaving, setSetupSaving] = useState(false);
   const [zenTitlebarRevealed, setZenTitlebarRevealed] = useState(false);
+  const [blockedAdsCount, setBlockedAdsCount] = useState(0);
   const [zenSidebarRevealed, setZenSidebarRevealed] = useState(false);
   const zenSidebarTimerRef = useRef<number | null>(null);
+  const [zenFloatingMode, setZenFloatingMode] = useState<SidebarMode>('expanded');
   const [spaceSetupModalOpen, setSpaceSetupModalOpen] = useState(false);
+  // Audio keepalive across spaces (goal.md Paket 3): pinned tabs that are
+  // playing audio keep a hidden webview mounted when their space is left, so
+  // music (e.g. YouTube Music) continues seamlessly while the user works in
+  // another space. Entries are removed when the user returns to the space
+  // (the main layer remounts the tab) or when the space is deleted.
+  const [audioKeepalive, setAudioKeepalive] = useState<Array<{ tab: BrowserTab; spacePath: string; profileId: string }>>([]);
 
   const handleZenSidebarEnter = useCallback(() => {
     if (zenSidebarTimerRef.current) {
@@ -751,6 +798,7 @@ export function App(): JSX.Element {
   const [activeSession, setActiveSession] = useState<DesktopSessionDetail | null>(null);
   const [activeSessionLoading, setActiveSessionLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<DesktopChatMessage[]>([]);
+  const [lastChatTurnUsage, setLastChatTurnUsage] = useState<{ sessionId: string; usage: NativeChatTurnUsage } | null>(null);
   const [chatError, setChatError] = useState('');
   const [chatRunState, setChatRunState] = useState<ChatRunState>('idle');
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
@@ -764,7 +812,29 @@ export function App(): JSX.Element {
       return '';
     }
   });
+  const knownSpacePaths = useMemo(
+    () => [...new Set([activeSpacePath, ...spaces.map((space) => space.path)].filter(Boolean))],
+    [activeSpacePath, spaces]
+  );
   const [isDetachedWindow, setIsDetachedWindow] = useState(false);
+  useEffect(() => {
+    if (isDetachedWindow || !window.lastbrowser?.adblock) return;
+    let disposed = false;
+    const refreshBlockedCount = async () => {
+      try {
+        const status = await window.lastbrowser.adblock?.status();
+        if (!disposed && status) setBlockedAdsCount(status.blockedCount);
+      } catch {
+        if (!disposed) setBlockedAdsCount(0);
+      }
+    };
+    void refreshBlockedCount();
+    const timer = window.setInterval(() => void refreshBlockedCount(), 3000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [isDetachedWindow]);
   const [windowStartupReady, setWindowStartupReady] = useState(false);
   const [pendingDetachedTransfer, setPendingDetachedTransfer] = useState<{ transferId: string; tabId: string } | null>(null);
   const windowStartupInitializedRef = useRef(false);
@@ -800,7 +870,6 @@ export function App(): JSX.Element {
   ]);
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) || tabs[0], [activeTabId, tabs]);
   const activeProfile = useMemo(() => profileById(profiles, activeProfileId), [profiles, activeProfileId]);
-  const activePartition = useMemo(() => computeSpacePartition(activeProfile.id, activeSpacePath), [activeProfile.id, activeSpacePath]);
   const handleSetSnapRatio = useCallback((axis: 'x' | 'y', index: number, ratio: number) => {
     setSnapRatios((current) => {
       const next = { x: [...current.x], y: [...current.y] };
@@ -817,9 +886,26 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (isDetachedWindow || !windowStartupReady) return;
     saveProfileTabs(activeProfileId, { tabs, activeTabId }, window.localStorage);
-    saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage);
-    savePersistedSnapGroup(activeProfileId, activeSpacePath, tabs, splitLayout, splitTabIds, splitSlotIndexes, snapRatios);
+    saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage, knownSpacePaths);
+    savePersistedSnapGroup(activeProfileId, activeSpacePath, tabs, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, knownSpacePaths);
     saveSessionSnapshot(activeProfileId, { tabs, activeTabId }, window.localStorage);
+  }, [activeProfileId, activeSpacePath, tabs, activeTabId, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, isDetachedWindow, windowStartupReady, knownSpacePaths]);
+
+  // Detached BrowserWindows have their own sessionStorage, so their tab state
+  // survives reloads without ever reading or overwriting the source window's
+  // shared profile/Space tab records.
+  useEffect(() => {
+    if (!isDetachedWindow || !windowStartupReady) return;
+    saveDetachedWindowSession(window.sessionStorage, {
+      profileId: activeProfileId,
+      spacePath: activeSpacePath,
+      tabs,
+      activeTabId,
+      splitLayout,
+      splitTabIds,
+      splitSlotIndexes,
+      snapRatios
+    });
   }, [activeProfileId, activeSpacePath, tabs, activeTabId, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, isDetachedWindow, windowStartupReady]);
 
   const activeBookmarkable = isBookmarkableUrl(activeTab.url);
@@ -886,6 +972,8 @@ export function App(): JSX.Element {
   useEffect(() => {
     applyDesktopAppearance(desktopSettings);
   }, [desktopSettings]);
+
+  useEffect(() => watchSystemThemeChanges(desktopSettings), [desktopSettings]);
 
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
@@ -1460,16 +1548,19 @@ export function App(): JSX.Element {
     if (profileId === activeProfileId) return;
     // Persist the outgoing profile's space and global tabs before swapping.
     if (!isDetachedWindow) {
-      saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage);
-      savePersistedSnapGroup(activeProfileId, activeSpacePath, tabs, splitLayout, splitTabIds, splitSlotIndexes, snapRatios);
+      saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage, knownSpacePaths);
+      savePersistedSnapGroup(activeProfileId, activeSpacePath, tabs, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, knownSpacePaths);
       saveProfileTabs(activeProfileId, { tabs, activeTabId }, window.localStorage);
     }
-    const stored = loadSpaceTabs(profileId, activeSpacePath, window.localStorage);
+    // Audio keepalive entries belong to the outgoing profile's sessions; a
+    // different profile must not inherit (or keep hearing) them.
+    setAudioKeepalive((current) => current.filter((entry) => entry.profileId === profileId));
+    const stored = loadSpaceTabs(profileId, activeSpacePath, window.localStorage, knownSpacePaths);
     const nextTabs = stored.tabs.length ? stored.tabs : [createInitialTab(browserStartUrl)];
     const nextActiveId = stored.activeTabId && nextTabs.some((tab) => tab.id === stored.activeTabId)
       ? stored.activeTabId
       : nextTabs[0].id;
-    const nextSnapGroup = loadPersistedSnapGroup(profileId, activeSpacePath, nextTabs);
+    const nextSnapGroup = loadPersistedSnapGroup(profileId, activeSpacePath, nextTabs, knownSpacePaths);
     setTabs(nextTabs);
     activeTabIdRef.current = nextActiveId;
     setActiveTabId(nextActiveId);
@@ -1490,31 +1581,62 @@ export function App(): JSX.Element {
 
     // 1. Persist outgoing space tabs
     if (!isDetachedWindow) {
-      saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage);
-      savePersistedSnapGroup(activeProfileId, activeSpacePath, tabs, splitLayout, splitTabIds, splitSlotIndexes, snapRatios);
+      saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage, knownSpacePaths);
+      savePersistedSnapGroup(activeProfileId, activeSpacePath, tabs, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, knownSpacePaths);
     }
 
-    // 2. Mute background audio in existing webviews before leaving space
+    // 2. Mute background audio in existing webviews before leaving space.
+    //    Pinned tabs that are playing audio (e.g. YouTube Music) are exempt so
+    //    music keeps playing across space switches (goal.md Paket 3).
+    //    The webviews live in the BrowserMain layer; reach them through the DOM
+    //    and match each element to its tab via the data-tab-id attribute.
+    //    Keepalive webviews (audio-keepalive layer) carry no data-tab-id, so
+    //    they are never muted by a later space switch either.
     try {
-      document.querySelectorAll('webview').forEach((el) => {
+      const exemptTabIds = new Set(
+        tabs.filter((tab) => tab.pinned && tab.isPlayingAudio).map((tab) => tab.id)
+      );
+      document.querySelectorAll<HTMLElement>('webview[data-tab-id]').forEach((el) => {
+        const tabId = el.getAttribute('data-tab-id') || '';
+        if (exemptTabIds.has(tabId)) return;
         try {
           (el as Electron.WebviewTag).setAudioMuted(true);
         } catch {}
       });
     } catch {}
 
+    // 2b. Audio keepalive: pinned tabs that are playing audio get a hidden
+    //     webview in the keepalive layer so they survive the tab-list swap
+    //     below and keep playing. Entries for the TARGET space are dropped —
+    //     the main layer remounts those tabs, and a second webview for the
+    //     same tab would double the audio.
+    if (!isDetachedWindow) {
+      const keepaliveCandidates = tabs
+        .filter((tab) => tab.pinned && tab.isPlayingAudio)
+        .map((tab) => ({ tab, spacePath: activeSpacePath, profileId: activeProfileId }));
+      setAudioKeepalive((current) => {
+        const merged = current.filter((entry) => entry.spacePath !== newSpacePath);
+        const existingIds = new Set(merged.map((entry) => entry.tab.id));
+        for (const candidate of keepaliveCandidates) {
+          if (!existingIds.has(candidate.tab.id)) merged.push(candidate);
+        }
+        return merged;
+      });
+    }
+
     // 3. Clear split tabs so previous space's split tab IDs do not leak
     clearSplitTabs();
 
     // 4. Load target space tabs
-    const stored = loadSpaceTabs(activeProfileId, newSpacePath, window.localStorage);
+    const nextKnownSpacePaths = [...new Set([...knownSpacePaths, newSpacePath])];
+    const stored = loadSpaceTabs(activeProfileId, newSpacePath, window.localStorage, nextKnownSpacePaths);
     const nextTabs = stored.tabs.length > 0
       ? stored.tabs
       : [createInitialTab(browserStartUrl)];
     const nextActiveId = stored.activeTabId && nextTabs.some((t) => t.id === stored.activeTabId)
       ? stored.activeTabId
       : nextTabs[0].id;
-    const nextSnapGroup = loadPersistedSnapGroup(activeProfileId, newSpacePath, nextTabs);
+    const nextSnapGroup = loadPersistedSnapGroup(activeProfileId, newSpacePath, nextTabs, nextKnownSpacePaths);
 
     // 5. Update state
     setTabs(nextTabs);
@@ -1531,13 +1653,18 @@ export function App(): JSX.Element {
     if (spaceModel) useChatStore.getState().setSelectedModel(spaceModel);
     setBrowserMode(isAiBrowserHomeUrl(nextTabs.find((t) => t.id === nextActiveId)?.url || '') ? 'home' : 'web');
     setBrowserLoadError('');
-  }, [activeProfileId, activeSpacePath, tabs, activeTabId, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, isDetachedWindow, setTabs, setActiveTabId, clearSplitTabs, setSnapGroup, setSplitLayout, setBrowserMode, setBrowserLoadError]);
+  }, [activeProfileId, activeSpacePath, tabs, activeTabId, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, isDetachedWindow, setTabs, setActiveTabId, clearSplitTabs, setSnapGroup, setSplitLayout, setBrowserMode, setBrowserLoadError, knownSpacePaths]);
 
-  const handleDetachTab = useCallback(async (tabToDetach: BrowserTab, screenX?: number, screenY?: number) => {
+  const handleDetachTab = useCallback(async (tabToDetach: BrowserTab, screenX?: number, screenY?: number, guestWebContentsId?: number) => {
     if (window.lastbrowser?.window?.detachTab) {
+      if (!Number.isInteger(guestWebContentsId) || guestWebContentsId! <= 0) {
+        console.error('[Lastbrowser] Could not detach tab: source webview is not ready.');
+        return;
+      }
       try {
         const result = await window.lastbrowser.window.detachTab({
           tab: tabToDetach,
+          guestWebContentsId: guestWebContentsId!,
           screenX: screenX ?? (window.screenX + 100),
           screenY: screenY ?? (window.screenY + 100),
           spacePath: activeSpacePath
@@ -1568,12 +1695,46 @@ export function App(): JSX.Element {
           const incoming = transfer.tab as BrowserTab;
           setTabs([incoming]);
           setActiveTabId(incoming.id);
+          setSplitLayout('single');
           clearSplitTabs();
           setSnapRatios(getDefaultSnapLayoutRatios('dual-50-50'));
           if (transfer.spacePath) setActiveSpacePath(transfer.spacePath);
           setPendingDetachedTransfer({ transferId: transfer.transferId, tabId: incoming.id });
+        } else if (startup?.isDetachedWindow) {
+          const detachedSession = loadDetachedWindowSession(window.sessionStorage);
+          if (detachedSession) {
+            setActiveProfileId(detachedSession.profileId);
+            setActiveSpacePath(detachedSession.spacePath);
+            setTabs(detachedSession.tabs);
+            setActiveTabId(detachedSession.activeTabId);
+            setSplitLayout(detachedSession.splitLayout);
+            if (detachedSession.splitTabIds.length && detachedSession.splitLayout in SNAP_LAYOUT_DEFINITIONS) {
+              setSnapGroup(
+                detachedSession.splitLayout as SnapLayoutType,
+                detachedSession.splitTabIds,
+                detachedSession.splitSlotIndexes
+              );
+            } else if (detachedSession.splitTabIds.length) {
+              useTabStore.setState({
+                splitTabIds: detachedSession.splitTabIds,
+                splitSlotIndexes: detachedSession.splitSlotIndexes
+              });
+            } else {
+              clearSplitTabs();
+            }
+            setSnapRatios(detachedSession.snapRatios);
+          } else {
+            // Do not initialize a detached window from the source window's
+            // shared profile tabs when its private recovery record is absent.
+            const freshTab = createInitialTab(browserStartUrl);
+            setTabs([freshTab]);
+            setActiveTabId(freshTab.id);
+            setSplitLayout('single');
+            clearSplitTabs();
+            setSnapRatios(getDefaultSnapLayoutRatios('dual-50-50'));
+          }
         } else {
-          const stored = loadSpaceTabs(activeProfileId, activeSpacePath, window.localStorage);
+          const stored = loadSpaceTabs(activeProfileId, activeSpacePath, window.localStorage, knownSpacePaths);
           const restoredTabs = stored.tabs.length ? stored.tabs : tabs;
           if (stored.tabs.length) {
             const restoredActiveId = stored.activeTabId && restoredTabs.some((tab) => tab.id === stored.activeTabId)
@@ -1582,7 +1743,7 @@ export function App(): JSX.Element {
             setTabs(restoredTabs);
             setActiveTabId(restoredActiveId);
           }
-          const snapGroup = loadPersistedSnapGroup(activeProfileId, activeSpacePath, restoredTabs);
+          const snapGroup = loadPersistedSnapGroup(activeProfileId, activeSpacePath, restoredTabs, knownSpacePaths);
           if (snapGroup) {
             setSnapGroup(snapGroup.layout, snapGroup.tabIds, snapGroup.slotIndexes);
             setSnapRatios(snapGroup.ratios ?? getDefaultSnapLayoutRatios(snapGroup.layout));
@@ -1605,15 +1766,15 @@ export function App(): JSX.Element {
     };
     void initializeWindow();
     return () => { cancelled = true; };
-  }, [activeProfileId, activeSpacePath, tabs, setTabs, setActiveTabId, setActiveSpacePath, setSnapGroup, clearSplitTabs]);
+  }, [activeProfileId, activeSpacePath, tabs, setTabs, setActiveTabId, setActiveSpacePath, setSnapGroup, clearSplitTabs, knownSpacePaths]);
 
-  const handleTransferredWebviewReady = useCallback((tabId: string) => {
+  const handleTransferredWebviewReady = useCallback((tabId: string, guestWebContentsId: number) => {
     const transfer = pendingDetachedTransfer;
     if (!transfer || transfer.tabId !== tabId || acknowledgingTransferRef.current === transfer.transferId) return;
     acknowledgingTransferRef.current = transfer.transferId;
     // A mounted <webview> is not ready until Electron reports dom-ready. Only
     // then can the source safely release the original tab.
-    void window.lastbrowser?.window?.ackDetachedTab?.(transfer.transferId, tabId).then((acknowledged) => {
+    void window.lastbrowser?.window?.ackDetachedTab?.(transfer.transferId, tabId, guestWebContentsId).then((acknowledged) => {
       if (!acknowledged) {
         acknowledgingTransferRef.current = null;
         console.error('[Lastbrowser] Main process rejected the completed tab transfer.');
@@ -1643,15 +1804,25 @@ export function App(): JSX.Element {
   }
 
   function deleteProfileEntry(profileId: string): void {
+    // Switching away from the active profile persists its last session, so do
+    // that first. The profile data is removed afterward to avoid recreating it.
+    if (profileId === activeProfileId) switchProfile('default');
     setProfiles((current) => {
       const next = removeProfile(current, profileId);
       saveProfiles(window.localStorage, next);
       return next;
     });
     removeProfileTabs(profileId, window.localStorage);
-    if (profileId === activeProfileId) {
-      switchProfile('default');
-    }
+    // Let React detach the deleted profile's webviews before clearing their
+    // persistent Electron sessions. Only this profile's known Space partitions
+    // are sent to the main process, which independently validates the profile.
+    window.requestAnimationFrame(() => {
+      void window.lastbrowser?.browser?.clearDeletedProfileData?.({ profileId, spacePaths: knownSpacePaths })
+        .then((result) => {
+          if (!result?.ok) console.error('[Lastbrowser] Could not clear deleted profile browser data:', result?.error || 'Unknown error');
+        })
+        .catch((error) => console.error('[Lastbrowser] Could not clear deleted profile browser data:', error));
+    });
   }
 
   function closeTab(tabId: string): void {
@@ -1816,21 +1987,7 @@ export function App(): JSX.Element {
     }
 
     try {
-      const geminiStore = useGeminiAccountStore.getState();
-      let accountModel: string | undefined;
-      let accountProvider: string | undefined;
-      if (geminiStore.roundRobinEnabled && geminiStore.accounts.length > 0) {
-        const next = geminiStore.getNextAccount();
-        if (next) {
-          geminiStore.recordUsage(next.id);
-          accountModel = next.preferredModel || 'gemini-2.5-flash';
-          accountProvider = 'google-gemini-cli';
-        }
-      }
-
       const sessionOpts: Record<string, unknown> = activeSpacePath ? { workspace: activeSpacePath } : {};
-      if (accountModel) sessionOpts.model = accountModel;
-      if (accountProvider) sessionOpts.modelProvider = accountProvider;
 
       const result = await window.lastbrowser.sidekick.createSession(sessionOpts);
       const session = result.session;
@@ -1924,13 +2081,25 @@ export function App(): JSX.Element {
     const deadline = Date.now() + 120000;
     let sawStreamEnd = false;
     let streamFailed = false;
+    const notifyCompletion = createOnceChatCompletionNotifier(
+      desktopSettings?.sound_enabled === true,
+      desktopSettings?.notifications_enabled === true,
+      () => playChatCompletionSound(true),
+      () => { void window.lastbrowser.sidekick.notifyChatCompleted(true).catch(() => false); }
+    );
 
     const unsubscribe = window.lastbrowser.sidekick.onChatStreamEvent((payload) => {
       const event = payload as { streamId?: string; event?: string; data?: unknown } | null;
       if (!event || event.streamId !== streamId) return;
       if (event.event === 'stream_end') {
-        void window.lastbrowser.sidekick.notifyChatCompleted(desktopSettings?.notifications_enabled === true).catch(() => false);
+        notifyCompletion();
         sawStreamEnd = true;
+        return;
+      }
+      if (event.event === 'done') {
+        const payload = isRecord(event.data) ? event.data : {};
+        const usage = normalizeNativeChatTurnUsage(payload.usage);
+        if (usage) setLastChatTurnUsage({ sessionId, usage });
         return;
       }
       if (event.event === 'cancel') {
@@ -1939,6 +2108,17 @@ export function App(): JSX.Element {
       }
       if (event.event === 'error') {
         streamFailed = true;
+        return;
+      }
+      const orchestrationProgress = describeOrchestrationProgress(event.event, event.data);
+      if (orchestrationProgress) {
+        const updatePending = (items: DesktopChatMessage[]) => items.map((item) => (
+          item.role === 'assistant' && item.pending
+            ? { ...item, content: orchestrationProgress.message }
+            : item
+        ));
+        setChatMessages(updatePending);
+        setMessages(updatePending);
         return;
       }
       // Any content-bearing event means the turn is progressing; refresh the
@@ -1962,7 +2142,10 @@ export function App(): JSX.Element {
         if (Date.now() % 6000 < 700) {
           const streamStatus = await window.lastbrowser.sidekick.getStreamStatus(streamId).catch(() => null);
           const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
-          if (!streamStatus?.active && !latest?.active_stream_id && !latest?.pending_user_message) return;
+          if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
+            notifyCompletion();
+            return;
+          }
         }
       }
       if (sawStreamEnd) return;
@@ -1976,8 +2159,10 @@ export function App(): JSX.Element {
       await delay(1200);
       const streamStatus = await window.lastbrowser.sidekick.getStreamStatus(streamId).catch(() => null);
       const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
-      const streamActive = streamStatus?.active === true;
-      if (!streamActive && !latest?.active_stream_id && !latest?.pending_user_message) return;
+      if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
+        notifyCompletion();
+        return;
+      }
     }
     throw new Error('Sidekick is still working. Try again in a moment.');
   }
@@ -2003,6 +2188,7 @@ export function App(): JSX.Element {
     }
 
     const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
+    setLastChatTurnUsage(null);
     setChatMessages((current) => [
       ...current,
       visibleUserMessage,
@@ -2017,20 +2203,24 @@ export function App(): JSX.Element {
     setChatRunState('starting');
     setChatError('');
     try {
-      const geminiStore = useGeminiAccountStore.getState();
       const storedModel = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('lastbrowser.selectedModel.v1') : null;
       const effectiveSelectedModel = loadSpaceModel(activeSpacePath, window.localStorage) || setupState.model || storedModel || undefined;
-      const isGeminiRequested = !effectiveSelectedModel || effectiveSelectedModel.toLowerCase().includes('gemini');
-
-      let accountModel: string | undefined;
-      let accountProvider: string | undefined;
-      if (isGeminiRequested && geminiStore.roundRobinEnabled && geminiStore.accounts.length > 0) {
-        const shouldRotate = !geminiStore.rotatePerSession || !activeSessionId;
-        const currentOrNext = shouldRotate ? geminiStore.getNextAccount() : geminiStore.activeAccount();
-        if (currentOrNext) {
-          geminiStore.recordUsage(currentOrNext.id);
-          accountModel = effectiveSelectedModel || currentOrNext.preferredModel || 'gemini-2.5-flash';
-          accountProvider = 'google-gemini-cli';
+      const configuredChatModel = effectiveSelectedModel
+        || (await resolveConfiguredModel((request) => window.lastbrowser.sidekick.requestWebui(request)))
+        || undefined;
+      let teamworkGroundingContext;
+      if (configuredChatModel === 'teamwork') {
+        try {
+          const teamworkConfig = await window.lastbrowser.sidekick.requestWebui({
+            method: 'GET',
+            path: '/api/teamwork/config',
+          });
+          if (teamworkConfig && typeof teamworkConfig === 'object' && (teamworkConfig as any).shared_grounding === true) {
+            teamworkGroundingContext = await collectTeamworkGroundingContext(webviewRef.current, activeTab);
+          }
+        } catch {
+          // The chat still works when settings are unavailable; do not send
+          // browser context unless the user-visible setting was confirmed on.
         }
       }
 
@@ -2041,11 +2231,15 @@ export function App(): JSX.Element {
         // wizard may have been skipped), and sending nothing made the backend
         // pick a stale catalog entry — observed as
         // "Ring-2.6-1T is no longer available as a free model".
-        model: accountModel || effectiveSelectedModel || (await resolveConfiguredModel((request) => window.lastbrowser.sidekick.requestWebui(request))) || undefined,
-        modelProvider: accountProvider,
+        model: configuredChatModel,
+        groundingContext: teamworkGroundingContext,
         workspace: activeSpacePath,
         mode: composerMode
       });
+      // When a fresh conversation is created implicitly by startChat, the
+      // selected account could not be bound before the backend returned its
+      // session ID. Bind it now so follow-up messages stay on this account in
+      // per-session round-robin mode.
       setActiveSessionId(response.sessionId);
       setActiveStreamId(response.streamId);
       setComposerText('');
@@ -2334,25 +2528,33 @@ export function App(): JSX.Element {
   const handleCreateSpaceFromModal = useCallback(async (data: SpaceSetupData) => {
     try {
       const created = await addSpaceNative(data.path, data.name);
-      if (!created) return;
+      if (!created) return false;
       if (data.model) {
         saveSpaceModel(data.path, data.model, window.localStorage);
         useChatStore.getState().setSelectedModel(data.model);
       }
       if (data.pinnedApps && data.pinnedApps.length > 0) {
         data.pinnedApps.forEach((app) => {
+          const existingVisibleApp = usePinnedAppStore.getState().apps.some((existing) =>
+            existing.url === app.url && (!existing.spacePath || existing.spacePath === data.path)
+          );
+          if (existingVisibleApp) return;
           usePinnedAppStore.getState().addApp({
             name: app.name,
             url: app.url,
-            color: app.color || data.color
+            color: app.color || data.color,
+            spacePath: data.path
           });
         });
       }
       if (data.startUrl && data.startUrl !== 'app://browser-home') {
         addTab(data.startUrl);
       }
+      return true;
     } catch (err) {
       console.error('[App] Failed to create space from modal:', err);
+      setSpacesError(err instanceof Error ? err.message : String(err));
+      return false;
     }
   }, [spaces, handleSpaceSelect, addTab]);
 
@@ -2373,6 +2575,9 @@ export function App(): JSX.Element {
     try {
       const result = await window.lastbrowser.sidekick.removeSpace({ path: space.path });
       removeSpaceModel(space.path, window.localStorage);
+      // Audio keepalive entries of a deleted space must not keep orphan
+      // webviews (and their audio) alive (goal.md Paket 3).
+      setAudioKeepalive((current) => current.filter((entry) => entry.spacePath !== space.path));
       const nextSpaces = Array.isArray(result.workspaces) ? result.workspaces : spaces.filter((item) => item.path !== space.path);
       setSpaces(nextSpaces);
       if (activeSpacePath === space.path) handleSpaceSelect(nextSpaces[0]?.path || '');
@@ -2526,7 +2731,7 @@ export function App(): JSX.Element {
             zenMode={sidebarMode === 'hidden'}
             zenRevealed={zenTitlebarRevealed}
             onZenRevealChange={setZenTitlebarRevealed}
-            blockedAdsCount={3420}
+            blockedAdsCount={blockedAdsCount}
             savedMemoryMb={savedMemoryMb}
             onToggleShieldPopover={() => {}}
             onToggleFind={() => usePanelStore.getState().setFindOpen(!usePanelStore.getState().findOpen)}
@@ -2542,6 +2747,12 @@ export function App(): JSX.Element {
             onExecuteQuickAction={handleExecuteQuickAction}
             onTriggerSummarize={() => void runSidekickAction('summarize-page')}
             botName={setupState.botName || 'Nova'}
+            profiles={profiles}
+            activeProfileId={activeProfileId}
+            onSelectProfile={switchProfile}
+            onCreateProfile={createProfileEntry}
+            onRenameProfile={renameProfileEntry}
+            onDeleteProfile={deleteProfileEntry}
             topbarActionStrip={
               activePanel === 'browser' ? (
                 <InPageActionBar
@@ -2613,6 +2824,8 @@ export function App(): JSX.Element {
               <div
                 className="zen-left-hover-sensor"
                 onMouseEnter={handleZenSidebarEnter}
+                onMouseLeave={handleZenSidebarLeave}
+                onClick={handleZenSidebarEnter}
                 aria-hidden="true"
                 title="Kante berühren, um Seitenleiste einzublenden"
               />
@@ -2622,7 +2835,10 @@ export function App(): JSX.Element {
                 onMouseLeave={handleZenSidebarLeave}
               >
                 <SidekickSidebar
-                  mode={zenExitDefaultMode}
+                  mode={zenFloatingMode}
+                  isFloatingOverlay={true}
+                  onCloseOverlay={() => setZenSidebarRevealed(false)}
+                  onDock={() => setSidebarMode(zenExitDefaultMode)}
                   tabs={tabs}
                   activeTabId={activeTab.id}
                   draggedTabId={draggedTabId}
@@ -2642,8 +2858,16 @@ export function App(): JSX.Element {
                   onDragStartTab={setDraggedTabId}
                   onDragEndTab={() => setDraggedTabId(null)}
                   onMoveTab={moveTab}
-                  onCycleMode={cycleSidebarMode}
-                  onSetMode={setSidebarMode}
+                  onCycleMode={() => {
+                    setZenFloatingMode((prev) => (prev === 'expanded' ? 'slim' : 'expanded'));
+                  }}
+                  onSetMode={(m) => {
+                    if (m === 'hidden') {
+                      setZenSidebarRevealed(false);
+                    } else {
+                      setZenFloatingMode(m);
+                    }
+                  }}
                   activeSpacePath={activeSpacePath}
                   spaces={spaces}
                   onSelectSpace={(path) => {
@@ -2736,6 +2960,7 @@ export function App(): JSX.Element {
           <div className={`browser-zen-workspace mode-${sidebarMode} dock-pos-${dockSettings.position}`}>
             <SidekickSidebar
               mode={sidebarMode}
+              onRevealZen={handleZenSidebarEnter}
               tabs={tabs}
               activeTabId={activeTab.id}
               draggedTabId={draggedTabId}
@@ -2907,7 +3132,8 @@ export function App(): JSX.Element {
                   onClose={() => setCopilotOpen(false)}
                   onMinimize={() => setCopilotOpen(false)}
                   botName={setupState.botName || 'Nova'}
-                  modelName={setupState.model || 'Gemini 2.5 Flash'}
+                  modelName={setupState.model || 'Gemini CLI'}
+                  modelProvider={onboardingStatus?.system?.current_provider || setupState.provider}
                   messages={chatMessages}
                   busy={sidekickBusy}
                   onSendMessage={(msg) => void startNativeChat(msg)}
@@ -2943,6 +3169,54 @@ export function App(): JSX.Element {
               )}
             </div>
           </div>
+
+          {/* Shell-level Nova Dock: renders OUTSIDE the sidebar <aside> whenever
+              the dock position is not 'left', so right/top/bottom/floating are
+              never clipped by the sidebar's overflow constraints (goal.md Paket 5). */}
+          {dockSettings.position !== 'left' && sidebarMode === 'slim' && (
+            <NovaDock
+              botName={setupState.botName || 'Nova'}
+              activePanel={activePanel}
+              activeTabUrl={activeTab?.url}
+              openTabUrls={tabs.map(t => t.url ?? '').filter(Boolean)}
+              onSelectPanel={(panel) => setActivePanel(panel)}
+              onOpenApp={(app, opts) => {
+                if (app.panel) {
+                  setActivePanel(app.panel);
+                } else if (app.url) {
+                  if (opts?.newTab) {
+                    addTab(app.url, { pinned: true });
+                  } else {
+                    const existingTabs = useTabStore.getState().tabs;
+                    const appDomain = (() => {
+                      try { return new URL(app.url).hostname.replace(/^www\./, ''); } catch { return ''; }
+                    })();
+                    const match = existingTabs.find(t => {
+                      if (!t.url) return false;
+                      try {
+                        const d = new URL(t.url).hostname.replace(/^www\./, '');
+                        return d === appDomain || d.endsWith(`.${appDomain}`);
+                      } catch { return false; }
+                    });
+                    if (match) {
+                      if (match.isDiscarded) wakeTab(match.id);
+                      setActiveTabId(match.id);
+                      setActivePanel('browser');
+                    } else {
+                      addTab(app.url, { pinned: true });
+                    }
+                  }
+                }
+              }}
+              onAddPinnedApp={() => { setPinnedEditApp(null); setPinnedModalOpen(true); }}
+              onEditPinnedApp={(app) => { setPinnedEditApp(app); setPinnedModalOpen(true); }}
+              onOpenHistory={() => usePanelStore.getState().setHistoryOpen(true)}
+              onOpenSettings={() => setActivePanel('settings')}
+              onNewTab={(url) => addTab(url)}
+              onExpandSidebar={() => setSidebarMode('expanded')}
+              spacePath={activeSpacePath}
+            />
+          )}
         </>
       ) : (
         <>
@@ -3226,6 +3500,7 @@ export function App(): JSX.Element {
           onClose={() => { setPinnedModalOpen(false); setPinnedEditApp(null); }}
           editApp={pinnedEditApp}
           activeTab={activeTab ? { title: activeTab.title, url: activeTab.url, favicon: activeTab.favicon } : null}
+          defaultSpacePath={activeSpacePath}
         />
         <SpaceSetupModal
           isOpen={spaceSetupModalOpen}
@@ -3233,7 +3508,45 @@ export function App(): JSX.Element {
           onCreateSpace={handleCreateSpaceFromModal}
           existingSpaceNames={spaces.map(spaceDisplayName)}
         />
+        <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />
         <CommandPalette />
+
+        {/* Audio keepalive layer (goal.md Paket 3): hidden webviews for pinned
+            tabs that were playing audio when their space was left. The 1px
+            container stays inside the viewport so Chromium does not
+            occlusion-suspend the guest; backgroundThrottling=no keeps media
+            active. These webviews intentionally carry NO data-tab-id so the
+            space-switch mute logic never touches them. */}
+        {audioKeepalive.length > 0 && (
+          <div
+            className="audio-keepalive-layer"
+            aria-hidden="true"
+            style={{
+              position: 'fixed',
+              right: 0,
+              bottom: 0,
+              width: 1,
+              height: 1,
+              opacity: 0,
+              pointerEvents: 'none',
+              zIndex: 0,
+              overflow: 'hidden'
+            }}
+          >
+            {audioKeepalive.map((entry) => (
+              <webview
+                key={`keepalive:${entry.tab.id}`}
+                src={entry.tab.url}
+                className="browser-view"
+                style={{ width: 1, height: 1 }}
+                partition={computeSpacePartition(entry.profileId, entry.spacePath, entry.tab.incognito, knownSpacePaths)}
+                allowpopups="true"
+                plugins="true"
+                webpreferences="contextIsolation=yes, plugins=yes, backgroundThrottling=no"
+              />
+            ))}
+          </div>
+        )}
     </div>
     </DesktopI18nProvider>
   );
@@ -3317,7 +3630,7 @@ function BrowserMain({
   activeTab: BrowserTab;
   activeProfile: BrowserProfile;
   webviewStartupReady?: boolean;
-  onTransferredWebviewReady?: (tabId: string) => void;
+  onTransferredWebviewReady?: (tabId: string, guestWebContentsId: number) => void;
   pendingTransferredTabId?: string | null;
   onboardingStatus: OnboardingStatus | null;
   onReopenSetup: () => void;
@@ -3377,7 +3690,7 @@ function BrowserMain({
   onAddSplitTab?: (tabId: string) => void;
   onRemoveSplitTab?: (tabId: string) => void;
   onSetSnapGroup?: (layout: SnapLayoutType, tabIds: string[], slotIndexes?: number[]) => void;
-  onDetachTab?: (tab: BrowserTab, screenX?: number, screenY?: number) => void;
+  onDetachTab?: (tab: BrowserTab, screenX?: number, screenY?: number, guestWebContentsId?: number) => void;
   onSetSplitLayout?: (layout: SplitLayoutMode) => void;
   botName?: string;
   desktopSettings?: DesktopSettingsRecord | null;
@@ -3389,7 +3702,8 @@ function BrowserMain({
     minHeight: 0
   } as React.CSSProperties;
 
-  const safeSpace = (activeSpacePath || 'home').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+  const knownSpacePaths = spaces.map((space) => space.path);
+  const safeSpace = computeSpacePartition(activeProfile.id, activeSpacePath, false, knownSpacePaths).replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
 
 
 
@@ -3410,45 +3724,14 @@ function BrowserMain({
   const splitGroupActive = splitTabIds.length > 1 && splitTabIds.includes(activeTab.id);
   function commitSnapDrop(layout: SnapLayoutType, slotIndex: number, draggedId = draggedTabId): void {
     if (!draggedId || !onSetSnapGroup) return;
-    const capacity = SNAP_LAYOUT_DEFINITIONS[layout].slots.length;
-    if (slotIndex < 0 || slotIndex >= capacity || !tabs?.some((tab) => tab.id === draggedId)) return;
-
-    const hasGroupContext = splitTabIds.includes(activeTab.id) || splitTabIds.includes(draggedId);
-    let ids = hasGroupContext
-      ? splitTabIds.filter((id) => tabs.some((tab) => tab.id === id)).slice(0, capacity)
-      : [];
-    let slots = ids.map((id) => splitSlotIndexes[splitTabIds.indexOf(id)] ?? splitTabIds.indexOf(id));
-    if (!ids.length) {
-      const partner = activeTab.id !== draggedId ? activeTab.id : tabs.find((tab) => tab.id !== draggedId)?.id;
-      if (partner) {
-        ids = [partner];
-        const firstFree = Array.from({ length: capacity }, (_, index) => index).find((index) => index !== slotIndex) ?? 0;
-        slots = [firstFree];
-      }
-    }
-
-    const currentDraggedIndex = ids.indexOf(draggedId);
-    const targetOccupant = slots.indexOf(slotIndex);
-    if (currentDraggedIndex >= 0) {
-      if (targetOccupant >= 0 && targetOccupant !== currentDraggedIndex) {
-        slots[targetOccupant] = slots[currentDraggedIndex];
-      }
-      slots[currentDraggedIndex] = slotIndex;
-    } else {
-      if (targetOccupant >= 0) {
-        ids.splice(targetOccupant, 1);
-        slots.splice(targetOccupant, 1);
-      }
-      if (ids.length >= capacity) {
-        ids.pop();
-        slots.pop();
-      }
-      ids.push(draggedId);
-      slots.push(slotIndex);
-    }
-    const paired = ids.map((id, index) => ({ id, slot: slots[index] ?? index }))
-      .sort((a, b) => a.slot - b.slot);
-    onSetSnapGroup(layout, paired.map(({ id }) => id), paired.map(({ slot }) => slot));
+    if (!tabs?.some((tab) => tab.id === draggedId)) return;
+    const group = buildSnapGroupAfterDrop(layout, slotIndex, draggedId, {
+      tabIds: splitTabIds,
+      slotIndexes: splitSlotIndexes,
+      activeTabId: activeTab.id,
+      availableTabIds: tabs.map((tab) => tab.id)
+    });
+    onSetSnapGroup(layout, group.tabIds, group.slotIndexes);
     setSnapDropTarget(null);
     setSnapFlyoutVisible(false);
   }
@@ -3459,7 +3742,8 @@ function BrowserMain({
     const rect = browserFrameRef.current.getBoundingClientRect();
     const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(rect.width, 1)));
     const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / Math.max(rect.height, 1)));
-    if (y < 0.16) {
+    // Windows 11 style: flyout triggers only at top-center; corners trigger quad-grid snapping
+    if (y < 0.16 && x >= 0.25 && x <= 0.75) {
       setSnapFlyoutVisible(true);
       setSnapDropTarget(null);
       return;
@@ -3504,7 +3788,7 @@ function BrowserMain({
         // its navigation, even while the first document is still loading.
         const guestId = webview.getWebContentsId();
         if (!cancelled && Number.isInteger(guestId) && guestId > 0) {
-          onTransferredWebviewReady(tabId);
+          onTransferredWebviewReady(tabId, guestId);
         }
       } catch {
         // The guest is not attached yet. Retry after it finishes mounting.
@@ -3994,6 +4278,31 @@ function BrowserMain({
     };
   }, [webviewMountKey, webviewReady]);
 
+  function renderBrowserStartPage(tabId?: string): React.ReactNode {
+    const activatePane = () => {
+      if (tabId && tabId !== activeTab.id) onActivateTab?.(tabId);
+    };
+    return (
+      <NativeBrowserStartPage
+        bookmarks={bookmarks}
+        visits={visitedSites}
+        onNavigate={(url) => { activatePane(); onNavigate(url); }}
+        botName={botName}
+        spaces={spaces}
+        activeSpacePath={activeSpacePath}
+        activeProfileId={activeProfile.id}
+        onSelectSpace={(path) => { activatePane(); onSelectSpace(path); }}
+        onAddSpace={(path, name) => { activatePane(); onAddSpace(path, name); }}
+        onAskAi={(prompt) => {
+          activatePane();
+          usePanelStore.getState().setCopilotOpen(true);
+          void onSendChat(prompt);
+        }}
+        onOpenCommandPalette={() => { activatePane(); usePanelStore.getState().setCommandPaletteOpen(true); }}
+      />
+    );
+  }
+
   if (activePanel === 'chat') {
     return (
       <PanelErrorBoundary panel={activePanel} key={activePanel}>
@@ -4010,6 +4319,11 @@ function BrowserMain({
           sessionLoading={sessionLoading}
           setupModel={setupModel}
           activeSpacePath={activeSpacePath}
+          showTokenUsage={desktopSettings?.show_token_usage === true}
+          showTps={desktopSettings?.show_tps === true}
+          showThinking={desktopSettings?.show_thinking === true}
+          simplifiedToolCalling={desktopSettings?.simplified_tool_calling !== false}
+          latestTurnUsage={lastChatTurnUsage?.sessionId === activeSessionId ? lastChatTurnUsage.usage : null}
           onComposerMode={onComposerMode}
           onComposerText={onComposerText}
           onCreateSession={onCreateSession}
@@ -4078,7 +4392,7 @@ function BrowserMain({
       case 'terminal':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeChatMain activeSession={activeSession} activeSessionId={activeSessionId} busy={busy} chatError={chatError} messages={chatMessages} runState={chatRunState} composerMode={composerMode} composerText={composerText} serviceStatus={serviceStatus} sessionLoading={sessionLoading} setupModel={setupModel} activeSpacePath={activeSpacePath} onComposerMode={onComposerMode} onComposerText={onComposerText} onCreateSession={onCreateSession} onSend={onSendChat} onStop={onStopChat} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeChatMain activeSession={activeSession} activeSessionId={activeSessionId} busy={busy} chatError={chatError} messages={chatMessages} runState={chatRunState} composerMode={composerMode} composerText={composerText} serviceStatus={serviceStatus} sessionLoading={sessionLoading} setupModel={setupModel} activeSpacePath={activeSpacePath} showTokenUsage={desktopSettings?.show_token_usage === true} showTps={desktopSettings?.show_tps === true} showThinking={desktopSettings?.show_thinking === true} simplifiedToolCalling={desktopSettings?.simplified_tool_calling !== false} latestTurnUsage={lastChatTurnUsage?.sessionId === activeSessionId ? lastChatTurnUsage.usage : null} onComposerMode={onComposerMode} onComposerText={onComposerText} onCreateSession={onCreateSession} onSend={onSendChat} onStop={onStopChat} /></PanelErrorBoundary>;
     }
   }
 
@@ -4129,7 +4443,6 @@ function BrowserMain({
         </div>
       )}
       <PermissionsPanel open={permissionsOpen} onClose={() => setPermissionsOpen(false)} />
-      <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />
       <HistoryPanel
         open={historyOpen}
         visits={visitedSites}
@@ -4198,24 +4511,9 @@ function BrowserMain({
           <div className="browser-mode-overlay" style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'var(--bg-main, #12141a)' }}>
             <NativeAiBrowserMain serviceStatus={serviceStatus} onNavigate={onNavigate} />
           </div>
-        ) : (browserMode === 'home' || isAiBrowserHomeUrl(activeTab.url)) ? (
+        ) : !splitGroupActive && (browserMode === 'home' || isAiBrowserHomeUrl(activeTab.url)) ? (
           <div className="browser-mode-overlay" style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'var(--bg-main, #12141a)', overflowY: 'auto' }}>
-            <NativeBrowserStartPage
-              bookmarks={bookmarks}
-              visits={visitedSites}
-              onNavigate={onNavigate}
-              botName={botName}
-              spaces={spaces}
-              activeSpacePath={activeSpacePath}
-              activeProfileId={activeProfile.id}
-              onSelectSpace={onSelectSpace}
-              onAddSpace={onAddSpace}
-              onAskAi={(prompt) => {
-                usePanelStore.getState().setCopilotOpen(true);
-                void onSendChat(prompt);
-              }}
-              onOpenCommandPalette={() => usePanelStore.getState().setCommandPaletteOpen(true)}
-            />
+            {renderBrowserStartPage()}
           </div>
         ) : null}
         {draggedTabId && (
@@ -4258,7 +4556,7 @@ function BrowserMain({
             onSetRatio={onSetSnapRatio}
             onActivateTab={onActivateTab}
             onRemoveSplitTab={onRemoveSplitTab}
-            onDetachTab={onDetachTab}
+            onDetachTab={(tab, screenX, screenY) => onDetachTab?.(tab, screenX, screenY, allWebviewRefs.current[tab.id]?.getWebContentsId())}
             onMaximizeTab={(tabId) => {
               onActivateTab?.(tabId);
               splitTabIds.filter((id) => id !== tabId).forEach((id) => onRemoveSplitTab?.(id));
@@ -4291,7 +4589,8 @@ function BrowserMain({
             const slot = slotIndex >= 0 ? SNAP_LAYOUT_DEFINITIONS[normalizedSnapLayout].slots[slotIndex] : null;
             const paneBounds = slot ? getSnapSlotBounds(normalizedSnapLayout, slotIndex, snapRatios) : null;
             if (tab.isDiscarded && !isCurrent) return null;
-            if (isAiBrowserHomeUrl(tab.url) && !isCurrent) return null;
+            const isHomeTab = isAiBrowserHomeUrl(tab.url);
+            if (isHomeTab && !isCurrent && !isInActiveSplit) return null;
             return (
               <div
                 key={tab.id}
@@ -4309,7 +4608,11 @@ function BrowserMain({
                   zIndex: isInActiveSplit ? 2 : isCurrent ? 1 : 0
                 }}
               >
-                {webviewReady && webviewStartupReady && (
+                {isHomeTab && isInActiveSplit ? (
+                  <div className="snap-start-page-pane" style={{ position: 'absolute', inset: '28px 0 0', overflow: 'hidden' }}>
+                    {renderBrowserStartPage(tab.id)}
+                  </div>
+                ) : webviewReady && webviewStartupReady && (
                   <webview
                     key={`${activeProfile.id}:${safeSpace}:${tab.id}:${webviewMountKey}`}
                     ref={(el) => {
@@ -4323,9 +4626,10 @@ function BrowserMain({
                       }
                     }}
                     src={tab.url}
+                    data-tab-id={tab.id}
                     className="browser-view"
                     style={isInActiveSplit ? { ...browserWebviewStyle, position: 'absolute', top: 28, height: 'calc(100% - 28px)' } : browserWebviewStyle}
-                    partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito)}
+                    partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito, knownSpacePaths)}
                     allowpopups="true"
                     plugins="true"
                     webpreferences="contextIsolation=yes, plugins=yes"

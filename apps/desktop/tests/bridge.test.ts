@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSidekickPrompt, clampContextText } from '../src/renderer/bridge.js';
+import { buildSidekickPrompt, clampContextText, createTeamworkGroundingContext } from '../src/renderer/bridge.js';
 
 const context = {
   url: 'https://example.com/article',
@@ -9,6 +9,23 @@ const context = {
 };
 
 describe('sidekick bridge prompts', () => {
+  it('builds bounded Teamwork context with query strings and fragments removed', () => {
+    expect(createTeamworkGroundingContext(
+      'https://user:password@example.test/article?session=private#section',
+      'Page title',
+      'visible excerpt',
+    )).toEqual({
+      url: 'https://example.test/article',
+      title: 'Page title',
+      snippet: 'visible excerpt',
+    });
+    expect(createTeamworkGroundingContext('file:///private/document.html', 'x'.repeat(500), 'y'.repeat(5000))).toMatchObject({
+      url: '',
+      title: `${'x'.repeat(240)}…`,
+      snippet: `${'y'.repeat(1800)}…`,
+    });
+  });
+
   it('builds a page-summary prompt from active tab context', () => {
     const result = buildSidekickPrompt('summarize-page', context);
 

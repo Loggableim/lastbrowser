@@ -189,5 +189,23 @@ describe('browser context menu', () => {
     expect(ptTemplate.map((item) => item.label)).toContain('Abrir link em nova aba');
     expect(ptTemplate.map((item) => item.label)).toContain('Copiar endereço do link');
     expect(ptTemplate.map((item) => item.label)).toContain('Voltar');
+
+    // Russian (including regional BCP-47 locale tags)
+    const ruTemplate = buildBrowserContextMenuTemplate({
+      linkURL: 'https://example.com/docs',
+      pageURL: 'https://example.com',
+      selectionText: '',
+      isEditable: false,
+      editFlags: {}
+    }, {
+      canGoBack: true,
+      canGoForward: false,
+      openLinkInNewTab: vi.fn(),
+      copyText: vi.fn(),
+      locale: 'ru-RU'
+    });
+    expect(ruTemplate.map((item) => item.label)).toContain('Открыть ссылку в новой вкладке');
+    expect(ruTemplate.map((item) => item.label)).toContain('Копировать адрес ссылки');
+    expect(ruTemplate.map((item) => item.label)).toContain('Назад');
   });
 });

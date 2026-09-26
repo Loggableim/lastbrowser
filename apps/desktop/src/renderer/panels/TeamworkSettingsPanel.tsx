@@ -140,6 +140,7 @@ export function TeamworkSettingsPanel(): JSX.Element {
       } else {
         setInitialConfig(config);
       }
+      window.dispatchEvent(new Event('lastbrowser:orchestration-config-updated'));
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2800);
     } catch (err) {
@@ -431,7 +432,7 @@ export function TeamworkSettingsPanel(): JSX.Element {
 
           <SettingsToggle
             label="Shared Browser Grounding"
-            description="Liest den aktiven Browser-Tab (Titel, URL, DOM-Auszug) vor dem Start der Debatte einmalig ein, sodass alle Modelle mit denselben Fakten arbeiten."
+            description="Nur bei Teamwork-Anfragen: Sendet Tab-Titel, URL ohne Query/Fragment und höchstens 1.800 Zeichen markierten oder sichtbaren Text an die konfigurierten Modelle. Kein vollständiger Seiteninhalt."
             checked={config.shared_grounding}
             onChange={(checked) => setConfig((prev) => ({ ...prev, shared_grounding: checked }))}
           />
@@ -557,18 +558,17 @@ export function TeamworkSettingsPanel(): JSX.Element {
       {/* Connected Model Pool Overview */}
       <SettingsCard
         title="Erkannter Modell-Pool"
-        description="Alle aktuell erkannten und einsatzbereiten Modelle, die dem Orchestrator für Debatten zur Verfügung stehen."
+        description="Modelle aus den verbundenen Provider-Katalogen. Die Erkennung bestätigt weder aktuelle Erreichbarkeit noch verfügbares Kontingent."
         action={
-          <span className="native-rest-pill ready">
-            <span className="status-dot ready" />
-            {models.length} {models.length === 1 ? 'Modell einsatzbereit' : 'Modelle einsatzbereit'}
+          <span className="native-rest-pill">
+            {models.length} {models.length === 1 ? 'Modell erkannt' : 'Modelle erkannt'}
           </span>
         }
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.25rem' }}>
           {models.length === 0 ? (
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-              Keine externen Modelle verbunden. Es wird auf die integrierten Standardmodelle zurückgegriffen.
+              Keine Modelle in den verbundenen Provider-Katalogen erkannt. Teamwork kann ohne ein verfügbares Modell nicht ausgeführt werden.
             </p>
           ) : (
             models.map((m) => {

@@ -4,12 +4,56 @@ import {
   cloudProviderOptions,
   defaultSetupState,
   firstRunStatus,
+  isGeminiCliProvider,
   isFirstRunRequired,
   modelsForProvider,
-  normalizeSetupState
+  openProviderOAuthUrl,
+  normalizeSetupState,
+  reconcileGeminiCliModelSelection
 } from '../src/renderer/setup-state.js';
 
 describe('cloud first-run setup state', () => {
+  it('identifies Gemini CLI by provider ID, not by model family', () => {
+    expect(isGeminiCliProvider('google-gemini-cli')).toBe(true);
+    expect(isGeminiCliProvider('Gemini-OAuth')).toBe(true);
+    expect(isGeminiCliProvider('openrouter')).toBe(false);
+    expect(isGeminiCliProvider('')).toBe(false);
+  });
+
+  it('reconciles retired Gemini CLI selections against the current live catalog only', () => {
+    const liveIds = ['gemini-3-flash-preview', 'gemini-3.1-pro-preview'];
+
+    expect(reconcileGeminiCliModelSelection('google-gemini-cli', 'gemini-2.5-flash', liveIds))
+      .toBe('gemini-3-flash-preview');
+    expect(reconcileGeminiCliModelSelection('google-gemini-cli', 'gemini-3.1-pro-preview', liveIds))
+      .toBe('gemini-3.1-pro-preview');
+    expect(reconcileGeminiCliModelSelection('openrouter', 'gemini-2.5-flash', liveIds))
+      .toBeUndefined();
+  });
+
+  it('does not open legacy Gemini CLI authorization URLs', async () => {
+    const openExternal = vi.fn(async () => true);
+    const openConnectWindow = vi.fn(async () => undefined);
+    const opened = await openProviderOAuthUrl('google-gemini-cli', 'https://accounts.google.com/oauth', {
+      openExternal,
+      openConnectWindow
+    });
+
+    expect(opened).toBe(false);
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(openConnectWindow).not.toHaveBeenCalled();
+  });
+
+  it('does not fall back to an embedded window when Google system-browser access is unavailable', async () => {
+    const openConnectWindow = vi.fn(async () => undefined);
+    const opened = await openProviderOAuthUrl('google-gemini-cli', 'https://accounts.google.com/oauth', {
+      openConnectWindow
+    });
+
+    expect(opened).toBe(false);
+    expect(openConnectWindow).not.toHaveBeenCalled();
+  });
+
   it('requires setup until local cloud setup state and backend readiness agree', () => {
     const readyStatus = { system: { chat_ready: true } };
 
@@ -51,26 +95,30 @@ describe('cloud first-run setup state', () => {
     expect(options.find((option) => option.id === 'ollama')?.keyOptional).toBe(true);
   });
 
-  it('carries the OAuth connect info through for CLI providers', () => {
+  it('carries the OAuth connect info through for supported CLI providers', () => {
     const options = cloudProviderOptions({
       setup: {
         providers: [
-          { id: 'anthropic', label: 'Anthropic', oauth_provider: 'anthropic', oauth_label: 'Claude Code OAuth' },
-          { id: 'google-gemini-cli', label: 'Gemini CLI', oauth_provider: 'google-gemini-cli', oauth_label: 'Google-Konto / Gemini CLI', key_optional: true }
+          { id: 'anthropic', label: 'Anthropic', oauth_provider: 'anthropic', oauth_label: 'Claude Code OAuth' }
         ]
       }
     });
 
-    const gemini = options.find((option) => option.id === 'google-gemini-cli');
-    expect(gemini?.oauthProvider).toBe('google-gemini-cli');
-    expect(gemini?.oauthLabel).toBe('Google-Konto / Gemini CLI');
     expect(options.find((option) => option.id === 'anthropic')?.oauthProvider).toBe('anthropic');
+  });
+
+  it('filters unsupported personal Gemini subscription connectors from provider selection', () => {
+    const options = cloudProviderOptions({ setup: { providers: [
+      { id: 'google-gemini-cli', label: 'Gemini CLI', oauth_provider: 'google-gemini-cli' },
+      { id: 'gemini-cli-acp', label: 'Gemini CLI (official ACP)', models: [{ id: 'gemini-cli' }] }
+    ] } });
+    expect(options.map((option) => option.id)).not.toContain('google-gemini-cli');
+    expect(options.map((option) => option.id)).not.toContain('gemini-cli-acp');
   });
 
   it('shows cloud provider fallbacks before the onboarding API responds', () => {
     expect(cloudProviderOptions(null).map((option) => option.id)).toEqual([
       'openai-codex',
-      'google-gemini-cli',
       'ollama',
       'ollama-cloud',
       'openrouter',
@@ -102,8 +150,9 @@ describe('cloud first-run setup state', () => {
       label: 'GPT-5.5'
     });
     expect(modelsForProvider(null, 'openai-codex').map((model) => model.id)).toContain('gpt-5.3-codex');
-    expect(modelsForProvider(null, 'google-gemini-cli')[0]?.id).toBe('gemini-2.5-flash');
-    expect(modelsForProvider(null, 'google-gemini-cli').map((m) => m.id)).toContain('gemini-2.5-pro');
+    expect(modelsForProvider(null, 'google-gemini-cli')).toEqual([]);
+    expect(modelsForProvider(null, 'gemini-cli-acp')).toEqual([]);
+    expect(modelsForProvider(null, 'gemini')).toEqual([]);
     expect(modelsForProvider(null, 'ollama')[0]?.id).toBe('llama3.3');
     expect(modelsForProvider(null, 'openai')[0]?.id).toBe('gpt-5.5');
     expect(modelsForProvider(null, 'openrouter')[0]?.id).toBe('anthropic/claude-sonnet-4.6');
@@ -117,6 +166,21 @@ describe('cloud first-run setup state', () => {
         ]
       }
     }, 'openai-codex')).toEqual([{ id: 'gpt-live', label: 'GPT Live' }]);
+  });
+
+  it('uses only live backend Gemini CLI models and never resurrects stale IDs', () => {
+    expect(modelsForProvider({ setup: { providers: [{
+      id: 'google-gemini-cli',
+      models: [{ id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }]
+    }] } }, 'google-gemini-cli')).toEqual([
+      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
+    ]);
+  });
+
+  it('offers OpenRouter as a key-required provider', () => {
+    const openrouter = cloudProviderOptions(null).find((option) => option.id === 'openrouter');
+    expect(openrouter?.keyOptional).toBe(false);
+    expect(modelsForProvider(null, 'openrouter').length).toBeGreaterThan(0);
   });
 
   it('derives first-run warmup states from service and onboarding readiness', () => {
@@ -175,9 +239,7 @@ describe('cloud first-run setup state', () => {
 
   it('highlights the top-3 LLMs with detailed benefits and recommended badges (Paket 2.1)', async () => {
     const { PROVIDER_RECOMMENDATIONS } = await import('../src/renderer/provider-presentation.js');
-    expect(PROVIDER_RECOMMENDATIONS['google-gemini-cli']).toBeDefined();
-    expect(PROVIDER_RECOMMENDATIONS['google-gemini-cli'].badgeType).toBe('recommended');
-    expect(PROVIDER_RECOMMENDATIONS['google-gemini-cli'].benefits.some((b) => b.includes('Multi-Account'))).toBe(true);
+    expect(PROVIDER_RECOMMENDATIONS['google-gemini-cli']).toBeUndefined();
 
     expect(PROVIDER_RECOMMENDATIONS['openai-codex']).toBeDefined();
     expect(PROVIDER_RECOMMENDATIONS['openai-codex'].badgeType).toBe('popular');
@@ -196,6 +258,27 @@ describe('cloud first-run setup state', () => {
     expect(ids).toContain('edge');
     expect(ids).toContain('firefox');
     expect(ids).toContain('brave');
+  }, 15000);
+
+  it('renders the first-run provider picker without a temporal-dead-zone error', async () => {
+    const React = await import('react');
+    const { renderToString } = await import('react-dom/server');
+    const { DesktopI18nProvider } = await import('../src/renderer/i18n.js');
+    const { FirstRunSetupPane } = await import('../src/renderer/components/FirstRunSetupPane.js');
+    const html = renderToString(React.createElement(
+      DesktopI18nProvider,
+      null,
+      React.createElement(FirstRunSetupPane, {
+        status: null,
+        onboardingStatus: { setup: { providers: [{ id: 'openrouter', label: 'OpenRouter' }] } },
+        setupLoading: false,
+        error: '',
+        saving: false,
+        onRefreshOnboarding: async () => {},
+        onSubmit: async () => {},
+        onDismiss: () => {}
+      })
+    ));
+    expect(html).toContain('OpenRouter');
   });
 });
-

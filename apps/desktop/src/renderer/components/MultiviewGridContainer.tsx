@@ -1,7 +1,32 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { ExternalLink, Maximize2, X } from 'lucide-react';
 import type { BrowserTab } from '../tabs.js';
-import { SNAP_LAYOUT_DEFINITIONS, getSnapSlotBounds, type SnapLayoutRatios, type SnapLayoutType } from '../types/snap-layouts.js';
+import { useTabStore } from '../stores/useTabStore.js';
+import { prepareSnapTabDrag, SNAP_LAYOUT_DEFINITIONS, getSnapSlotBounds, type SnapLayoutRatios, type SnapLayoutType } from '../types/snap-layouts.js';
+
+export interface ScreenBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** True when a native drag ended outside the current app window. */
+export function isPointOutsideWindow(x: number, y: number, bounds: ScreenBounds): boolean {
+  return x < bounds.left || y < bounds.top || x >= bounds.left + bounds.width || y >= bounds.top + bounds.height;
+}
+
+export function detachPaneIfDraggedOutside(
+  tab: BrowserTab,
+  x: number,
+  y: number,
+  bounds: ScreenBounds,
+  onDetach: (tab: BrowserTab, screenX: number, screenY: number) => void
+): boolean {
+  if (!isPointOutsideWindow(x, y, bounds)) return false;
+  onDetach(tab, x, y);
+  return true;
+}
 
 export interface MultiviewGridContainerProps {
   layout: SnapLayoutType;
@@ -87,7 +112,25 @@ export function MultiviewGridContainer({
           >
             {tab ? (
               <div className="multiview-pane-header">
-                <span className="multiview-pane-title" title={tab.title}>{tab.title || tab.url}</span>
+                <span
+                  className="multiview-pane-title"
+                  title={`${tab.title || tab.url} · Ziehen zum Verschieben oder aus dem Fenster lösen`}
+                  draggable
+                  onDragStart={(event) => {
+                    prepareSnapTabDrag(event.dataTransfer, tab.id);
+                    useTabStore.getState().setDraggedTabId(tab.id);
+                  }}
+                  onDragEnd={(event) => {
+                    const bounds = {
+                      left: window.screenX,
+                      top: window.screenY,
+                      width: window.outerWidth,
+                      height: window.outerHeight
+                    };
+                    if (onDetachTab) detachPaneIfDraggedOutside(tab, event.screenX, event.screenY, bounds, onDetachTab);
+                    useTabStore.getState().setDraggedTabId(null);
+                  }}
+                >{tab.title || tab.url}</span>
                 <div className="multiview-pane-controls" onClick={(event) => event.stopPropagation()}>
                   {onDetachTab && <button type="button" className="multiview-pane-btn" title="In eigenem Fenster öffnen" onClick={(event) => onDetachTab(tab, event.screenX, event.screenY)}><ExternalLink size={12} /></button>}
                   {onMaximizeTab && <button type="button" className="multiview-pane-btn" title="Diesen Tab maximieren" onClick={() => onMaximizeTab(tab.id)}><Maximize2 size={12} /></button>}

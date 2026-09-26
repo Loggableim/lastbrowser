@@ -21,6 +21,7 @@ function memoryStorage(initial: Record<string, string> = {}) {
   return {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => { store.set(key, value); },
+    removeItem: (key: string) => { store.delete(key); },
     dump: () => Object.fromEntries(store)
   };
 }
@@ -110,6 +111,37 @@ describe('per-profile tab persistence', () => {
 
     expect(loadProfileTabs('work', storage)).toEqual(emptyTabState());
     expect(loadProfileTabs('default', storage).tabs).toHaveLength(1);
+  });
+
+  it('removes all legacy and per-Space sessions, snap groups and recovery snapshot owned by a deleted profile', () => {
+    const storage = memoryStorage({
+      [tabSessionsStorageKey]: JSON.stringify({
+        work: { tabs: [tab('legacy')], activeTabId: 'legacy' },
+        'work::home': { tabs: [tab('home')], activeTabId: 'home' },
+        'work::space-project': { tabs: [tab('project')], activeTabId: 'project' },
+        'workshop::home': { tabs: [tab('other')], activeTabId: 'other' },
+        'default::home': { tabs: [tab('default')], activeTabId: 'default' }
+      }),
+      [snapGroupsStorageKey]: JSON.stringify({
+        'work::home': { layout: 'dual-50-50', tabIds: ['a', 'b'], slotIndexes: [0, 1] },
+        'work::space-project': { layout: 'dual-50-50', tabIds: ['c', 'd'], slotIndexes: [0, 1] },
+        'workshop::home': { layout: 'dual-50-50', tabIds: ['e', 'f'], slotIndexes: [0, 1] }
+      }),
+      [sessionSnapshotStorageKey]: JSON.stringify({
+        timestamp: 1, profileId: 'work', state: { tabs: [tab('recover')], activeTabId: 'recover' }
+      })
+    });
+
+    removeProfileTabs('work', storage);
+
+    expect(JSON.parse(storage.dump()[tabSessionsStorageKey])).toEqual({
+      'workshop::home': { tabs: [tab('other')], activeTabId: 'other' },
+      'default::home': { tabs: [tab('default')], activeTabId: 'default' }
+    });
+    expect(JSON.parse(storage.dump()[snapGroupsStorageKey])).toHaveProperty('workshop::home');
+    expect(JSON.parse(storage.dump()[snapGroupsStorageKey])).not.toHaveProperty('work::home');
+    expect(JSON.parse(storage.dump()[snapGroupsStorageKey])).not.toHaveProperty('work::space-project');
+    expect(storage.dump()).not.toHaveProperty(sessionSnapshotStorageKey);
   });
 
   it('is a no-op when removing an unknown profile', () => {

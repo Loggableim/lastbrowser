@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Target,
   RefreshCw,
@@ -50,11 +50,13 @@ interface SmartTrackConfig {
 
 export const SmartTrackSettingsTab: React.FC = () => {
   const [config, setConfig] = useState<SmartTrackConfig | null>(null);
+  const savedConfigRef = useRef<SmartTrackConfig | null>(null);
   const [wall, setWall] = useState<SmartTrackWall | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStatus();
@@ -65,11 +67,16 @@ export const SmartTrackSettingsTab: React.FC = () => {
       setLoading(true);
       const data = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/smart-track/status' });
       if (data && typeof data === 'object') {
-        setConfig((data as any).config);
+        const loadedConfig = (data as any).config as SmartTrackConfig | undefined;
+        if (loadedConfig && typeof loadedConfig.enabled === 'boolean') {
+          savedConfigRef.current = loadedConfig;
+          setConfig(loadedConfig);
+        }
         setWall((data as any).wall);
       }
     } catch (e) {
       console.error('Failed to load Smart Track status:', e);
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -81,30 +88,50 @@ export const SmartTrackSettingsTab: React.FC = () => {
       const data = await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/smart-track/scan' });
       if (data && typeof data === 'object') {
         setWall((data as any).wall);
-        setConfig((data as any).config);
+        const scannedConfig = (data as any).config as SmartTrackConfig | undefined;
+        if (scannedConfig && typeof scannedConfig.enabled === 'boolean') {
+          savedConfigRef.current = scannedConfig;
+          setConfig(scannedConfig);
+        }
+        setError(null);
         triggerSuccess();
       }
     } catch (e) {
       console.error('Failed to trigger scan:', e);
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setScanning(false);
     }
   };
 
   const handleSave = async (updated: Partial<SmartTrackConfig>) => {
-    if (!config) return;
-    const newConfig = { ...config, ...updated };
+    if (!config || saving) return;
+    const current = savedConfigRef.current || config;
+    const newConfig: SmartTrackConfig = {
+      ...current,
+      ...updated,
+      overrides: { ...current.overrides, ...(updated.overrides || {}) },
+    };
     setConfig(newConfig);
     try {
       setSaving(true);
-      await window.lastbrowser.sidekick.requestWebui({
+      setError(null);
+      const response = await window.lastbrowser.sidekick.requestWebui({
         method: 'POST',
         path: '/api/smart-track/config',
         body: newConfig,
       });
+      const saved = response && typeof response === 'object' && (response as any).config
+        ? (response as any).config as SmartTrackConfig
+        : newConfig;
+      savedConfigRef.current = saved;
+      setConfig(saved);
+      window.dispatchEvent(new Event('lastbrowser:orchestration-config-updated'));
       triggerSuccess();
     } catch (e) {
       console.error('Failed to save smart track config:', e);
+      setConfig(savedConfigRef.current || config);
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -220,6 +247,7 @@ export const SmartTrackSettingsTab: React.FC = () => {
           <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Manuelle Zuweisung:</label>
           <select
             value={currentOverride}
+            disabled={saving || !config}
             onChange={(e) => {
               const updatedOverrides = {
                 ...config?.overrides,
@@ -271,15 +299,14 @@ export const SmartTrackSettingsTab: React.FC = () => {
             <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Smart Track (Single Track Orchestrator)</h3>
           </div>
           <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-            Sparsames Intent-Routing: Schickt pro Anfrage nur eine kuratierte Modellspur los. Spart bis zu 90 % der
-            Tokens gegenüber Multi-Agent-Teamwork. Der interne Agent kuratiert die Modellwand automatisch.
+            Sparsames Intent-Routing: Schickt pro Anfrage eine kuratierte Modellspur los, statt mehrere Entwürfe parallel zu erzeugen.
           </p>
         </div>
 
         <button
           type="button"
           onClick={handleScan}
-          disabled={scanning}
+          disabled={scanning || saving}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -291,8 +318,8 @@ export const SmartTrackSettingsTab: React.FC = () => {
             border: 'none',
             fontSize: '0.82rem',
             fontWeight: 500,
-            cursor: scanning ? 'not-allowed' : 'pointer',
-            opacity: scanning ? 0.7 : 1,
+            cursor: scanning || saving ? 'not-allowed' : 'pointer',
+            opacity: scanning || saving ? 0.7 : 1,
           }}
         >
           <RefreshCw size={14} className={scanning ? 'spin-animation' : ''} />
@@ -317,6 +344,44 @@ export const SmartTrackSettingsTab: React.FC = () => {
           <Check size={14} /> Einstellungen erfolgreich gespeichert.
         </div>
       )}
+
+      {error && (
+        <div role="alert" style={{ padding: '0.55rem 0.8rem', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontSize: '0.8rem' }}>
+          {error}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', padding: '0.85rem 1rem', border: '1px solid var(--border-color, rgba(255,255,255,0.1))', borderRadius: '8px' }}>
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', fontSize: '0.82rem' }}>
+          <span>
+            <strong style={{ display: 'block' }}>Smart Track aktivieren</strong>
+            <span style={{ color: 'var(--text-secondary)' }}>Steuert, ob Smart Track in der Copilot-Modellauswahl angeboten wird.</span>
+          </span>
+          <input
+            type="checkbox"
+            aria-label="Smart Track aktivieren"
+            checked={config?.enabled ?? true}
+            disabled={saving || !config}
+            onChange={(e) => void handleSave({ enabled: e.target.checked })}
+          />
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', fontSize: '0.82rem' }}>
+          <span>
+            <strong style={{ display: 'block' }}>Auto-Scan-Einstellung</strong>
+            <span style={{ color: 'var(--text-secondary)' }}>Gespeicherte Vorgabe für automatische Modell-Scans.</span>
+          </span>
+          <input
+            type="checkbox"
+            aria-label="Smart Track Auto-Scan"
+            checked={config?.auto_scan ?? true}
+            disabled={saving || !config}
+            onChange={(e) => void handleSave({ auto_scan: e.target.checked })}
+          />
+        </label>
+        <small style={{ color: 'var(--text-secondary)' }}>
+          Bei aktiviertem Auto-Scan wird die Modellwand beim Start und nach Änderungen an Provider-Schlüsseln oder Modellfreigaben in den Provider-Einstellungen im Hintergrund aktualisiert. „Modellwand neu scannen“ aktualisiert sie jederzeit manuell.
+        </small>
+      </div>
 
       {/* 3-Tier Model Wall */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
@@ -385,7 +450,8 @@ export const SmartTrackSettingsTab: React.FC = () => {
           <input
             type="checkbox"
             checked={config?.preplan_on_high ?? true}
-            onChange={(e) => handleSave({ preplan_on_high: e.target.checked })}
+            disabled={saving || !config}
+            onChange={(e) => void handleSave({ preplan_on_high: e.target.checked })}
             style={{ width: '16px', height: '16px', cursor: 'pointer' }}
           />
         </label>

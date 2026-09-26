@@ -8,9 +8,18 @@ export type AdblockStatus = {
   lastError: string | null;
 };
 
-export function AdblockShield(): React.JSX.Element | null {
+export function AdblockShield({ open: controlledOpen, onOpenChange, hideButton = false }: {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideButton?: boolean;
+} = {}): React.JSX.Element | null {
   const [status, setStatus] = useState<AdblockStatus | null>(null);
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -31,6 +40,7 @@ export function AdblockShield(): React.JSX.Element | null {
   useEffect(() => {
     if (!open) return;
     const handleClickOutside = (e: MouseEvent) => {
+      if (e.target instanceof Element && e.target.closest('.adblock-stats-pill')) return;
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
@@ -53,7 +63,7 @@ export function AdblockShield(): React.JSX.Element | null {
 
   return (
     <div className="adblock-shield-wrap" ref={popoverRef}>
-      <button
+      {!hideButton && <button
         type="button"
         className={`adblock-shield-btn ${status.enabled ? 'shield-on' : 'shield-off'}`}
         title={`Adblock: ${status.enabled ? 'Active' : 'Disabled'} (${status.blockedCount} blocked)`}
@@ -64,7 +74,7 @@ export function AdblockShield(): React.JSX.Element | null {
         {status.enabled && status.blockedCount > 0 && (
           <span className="adblock-badge">{status.blockedCount > 99 ? '99+' : status.blockedCount}</span>
         )}
-      </button>
+      </button>}
 
       {open && (
         <div className="adblock-popover" role="dialog" aria-label="Adblock details">

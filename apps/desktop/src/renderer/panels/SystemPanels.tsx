@@ -1,4 +1,5 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import '../appearance.css';
 import {
   AlertTriangle,
   Brain,
@@ -38,9 +39,13 @@ import { TeamworkSettingsPanel } from './TeamworkSettingsPanel.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { cloudProviderOptions, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
 import { providerPresentation } from '../provider-presentation.js';
+import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
+import { providerVerification } from '../provider-verification.js';
 import { searchEngines } from '../tabs.js';
 import { computeAccentTokens } from '../App.js';
 import { type ExtensionRecord, type ExtensionPreset } from '../bridge.js';
+import { useDesktopI18n } from '../i18n.js';
+import type { DesktopTranslationKey } from '../i18n/keys.js';
 import {
   usePanelStore,
   type ZenExitDefaultMode,
@@ -95,6 +100,20 @@ export function stringArray(value: unknown): string[] {
   return value.map((entry) => text(entry).trim()).filter(Boolean);
 }
 
+type OpenRouterModelOption = { id: string; label: string };
+
+function normalizeOpenRouterModels(value: unknown): OpenRouterModelOption[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) return [];
+    const id = text(entry.id || entry.model).trim();
+    if (!id || seen.has(id)) return [];
+    seen.add(id);
+    return [{ id, label: text(entry.label || entry.name || id).trim() || id }];
+  });
+}
+
 export function normalizeAppstoreRecord(app: AnyRecord): AnyRecord {
   const installed = isRecord(app.status) ? app.status : {};
   return {
@@ -120,7 +139,7 @@ export function normalizeAppstoreRecord(app: AnyRecord): AnyRecord {
 
 export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'teamwork' | 'google-accounts' | 'extensions' | 'plugins' | 'system';
 
-export type SettingsSectionMeta = {
+export type SettingsSectionMeta ={
   title: string;
   description: string;
   icon: React.ReactNode;
@@ -145,10 +164,11 @@ export const SETTINGS_LANGUAGES = [
   { value: 'it', label: 'Italiano' },
   { value: 'es', label: 'Español' },
   { value: 'fr', label: 'Français' },
-  { value: 'pt-BR', label: 'Português (Brasil)' }
+  { value: 'pt-BR', label: 'Português (Brasil)' },
+  { value: 'ru', label: 'Русский' }
 ] as const;
 
-export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> = {
+export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> ={
   conversation: {
     title: 'Conversation',
     description: 'Default model, send key and assistant identity.',
@@ -175,8 +195,8 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
     icon: <Users size={16} />
   },
   'google-accounts': {
-    title: 'Google Accounts',
-    description: 'Multi-account Google CLI / Antigravity OAuth & Round-Robin.',
+    title: 'Gemini subscription information',
+    description: 'Current Gemini CLI subscription availability and official migration information.',
     icon: <Users size={16} />
   },
   extensions: {
@@ -194,6 +214,18 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
     description: 'Access control, auth, update checks and diagnostics.',
     icon: <Shield size={16} />
   }
+};
+
+const SETTINGS_SECTION_COPY: Record<SettingsSectionId, { title: DesktopTranslationKey; description: DesktopTranslationKey }> ={
+  conversation: { title: 'settings.sections.conversation', description: 'settings.sectionDescriptions.conversation' },
+  appearance: { title: 'settings.sections.appearance', description: 'settings.sectionDescriptions.appearance' },
+  preferences: { title: 'settings.sections.preferences', description: 'settings.sectionDescriptions.preferences' },
+  providers: { title: 'settings.sections.providers', description: 'settings.sectionDescriptions.providers' },
+  teamwork: { title: 'settings.sections.teamwork', description: 'settings.sectionDescriptions.teamwork' },
+  'google-accounts': { title: 'settings.sections.googleAccounts', description: 'settings.sectionDescriptions.googleAccounts' },
+  extensions: { title: 'settings.sections.extensions', description: 'settings.sectionDescriptions.extensions' },
+  plugins: { title: 'settings.sections.plugins', description: 'settings.sectionDescriptions.plugins' },
+  system: { title: 'settings.sections.system', description: 'settings.sectionDescriptions.system' }
 };
 
 function MessageSquareIcon({ size }: { size: number }): JSX.Element {
@@ -296,9 +328,9 @@ export function settingsCsv(value: unknown): string {
   return settingsText(value);
 }
 
-export function normalizeAppearanceTheme(value: string): 'light' | 'dark' | 'system' | 'oled' {
+export function normalizeAppearanceTheme(value: string): 'light' | 'dark' | 'system' | 'oled' | 'vision-impaired' {
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'light' || normalized === 'system' || normalized === 'oled') return normalized;
+  if (normalized === 'light' || normalized === 'system' || normalized === 'oled' || normalized === 'vision-impaired') return normalized;
   return 'dark';
 }
 
@@ -315,7 +347,7 @@ export function parseSettingsCsv(value: string): string[] {
 }
 
 export function cleanSettingsPayload(payload: AnyRecord): AnyRecord {
-  const next = { ...payload };
+  const next ={ ...payload };
   delete next.auth_enabled;
   delete next.logged_in;
   delete next.auth_just_enabled;
@@ -332,7 +364,8 @@ export function applyDesktopAppearancePreview(
   fontSizeValue: string = 'default',
   messageLayoutValue: string = 'bubbles',
   syntaxThemeValue: string = '',
-  accentColorValue: string = ''
+  accentColorValue: string = '',
+  defaultZoomValue: number = 100
 ): void {
   if (typeof document === 'undefined') return;
   const theme = normalizeAppearanceTheme(themeValue);
@@ -356,8 +389,14 @@ export function applyDesktopAppearancePreview(
   root.classList.toggle('theme-light', resolvedTheme === 'light');
   root.classList.toggle('theme-dark', resolvedTheme === 'dark');
   root.classList.toggle('theme-oled', resolvedTheme === 'oled');
+  root.classList.toggle('theme-vision-impaired', resolvedTheme === 'vision-impaired');
   root.classList.toggle('theme-system', theme === 'system');
   root.style.colorScheme = resolvedTheme === 'light' ? 'light' : 'dark';
+
+  // UI page zoom scales the whole browser chrome proportionally (80%–150%).
+  // Webview content zoom stays governed by the separate zoomFactor logic in App.tsx.
+  const zoomPercent = Math.min(150, Math.max(80, Math.round(Number(defaultZoomValue) || 100)));
+  root.style.zoom = String(zoomPercent / 100);
 
   if ((skin === 'custom' || accentColor) && accentColor.startsWith('#')) {
     const tokens = computeAccentTokens(accentColor);
@@ -370,6 +409,15 @@ export function applyDesktopAppearancePreview(
       root.style.setProperty('--accent-glow', tokens.glow);
       root.style.setProperty('--accent-hover', tokens.hover);
       root.style.setProperty('--accent-rgb', tokens.rgbStr);
+    } else {
+      root.style.removeProperty('--user-accent-primary');
+      root.style.removeProperty('--user-accent-glow');
+      root.style.removeProperty('--user-accent-hover');
+      root.style.removeProperty('--user-accent-text');
+      root.style.removeProperty('--accent-primary');
+      root.style.removeProperty('--accent-glow');
+      root.style.removeProperty('--accent-hover');
+      root.style.removeProperty('--accent-rgb');
     }
   } else {
     root.style.removeProperty('--user-accent-primary');
@@ -411,16 +459,16 @@ export function NativeInsightsMain({
   const hourRows = arrayFrom(insightData, ['hours', 'by_hour', 'hourly', 'activity_by_hour']);
   const systemHealth = isRecord(insightData.system) ? insightData.system : isRecord(insightData.health) ? insightData.health : null;
   const overviewCards = [
-    { label: 'Sessions', value: formatCompactNumber(insightData.total_sessions || insightData.sessions) },
-    { label: 'Messages', value: formatCompactNumber(insightData.total_messages || insightData.messages) },
-    { label: 'Tokens', value: formatCompactNumber(insightData.total_tokens || insightData.tokens) },
-    { label: 'Cost', value: formatMoney(insightData.total_cost || insightData.cost) }
+    { label: 'Sessions', value: formatCompactNumber(insightData.total_sessions || insightData.sessions)},
+    { label: 'Messages', value: formatCompactNumber(insightData.total_messages || insightData.messages)},
+    { label: 'Tokens', value: formatCompactNumber(insightData.total_tokens || insightData.tokens)},
+    { label: 'Cost', value: formatMoney(insightData.total_cost || insightData.cost)}
   ];
   const tokenBreakdown = [
-    { label: 'Input', value: formatCompactNumber(insightData.total_input_tokens || insightData.input_tokens) },
-    { label: 'Output', value: formatCompactNumber(insightData.total_output_tokens || insightData.output_tokens) },
-    { label: 'Average / session', value: formatCompactNumber(insightData.average_tokens_per_session || insightData.avg_tokens_per_session) },
-    { label: 'Weekly total', value: formatCompactNumber(insightData.weekly_tokens || insightData.period_tokens) }
+    { label: 'Input', value: formatCompactNumber(insightData.total_input_tokens || insightData.input_tokens)},
+    { label: 'Output', value: formatCompactNumber(insightData.total_output_tokens || insightData.output_tokens)},
+    { label: 'Average / session', value: formatCompactNumber(insightData.average_tokens_per_session || insightData.avg_tokens_per_session)},
+    { label: 'Weekly total', value: formatCompactNumber(insightData.weekly_tokens || insightData.period_tokens)}
   ];
 
   useEffect(() => {
@@ -512,8 +560,8 @@ export function NativeInsightsMain({
                       <article key={idOf(row) || `${index}`} className="insights-bar-row">
                         <span className="insights-bar-label">{text(row.date || row.day || row.label || `Day ${index + 1}`)}</span>
                         <div className="insights-bar-track">
-                          <div className="insights-bar-fill insights-bar-output" style={{ width: percentValue(output, total) }} />
-                          <div className="insights-bar-fill insights-bar-input" style={{ width: percentValue(input, total) }} />
+                          <div className="insights-bar-fill insights-bar-output" style={{ width: percentValue(output, total)}} />
+                          <div className="insights-bar-fill insights-bar-input" style={{ width: percentValue(input, total)}} />
                         </div>
                         <span className="insights-bar-value">{formatCompactNumber(total)}</span>
                       </article>
@@ -564,7 +612,7 @@ export function NativeInsightsMain({
                   <article key={idOf(row) || `${index}`} className="insights-bar-row">
                     <span className="insights-bar-label">{text(row.hour ?? row.time ?? row.label ?? index).padStart(2, '0')}</span>
                     <div className="insights-bar-track">
-                      <div className="insights-bar-fill insights-bar-input" style={{ width: percentValue(row.sessions || row.count || row.total || 0, hourRows.reduce((max, item) => Math.max(max, toNumber(item.sessions || item.count || item.total || 0)), 0)) }} />
+                      <div className="insights-bar-fill insights-bar-input" style={{ width: percentValue(row.sessions || row.count || row.total || 0, hourRows.reduce((max, item) => Math.max(max, toNumber(item.sessions || item.count || item.total || 0)), 0))}} />
                     </div>
                     <span className="insights-bar-value">{formatCompactNumber(row.sessions || row.count || row.total || 0)}</span>
                   </article>
@@ -704,10 +752,10 @@ export function NativeAppstoreMain({
     || null
   ), [apps, filteredApps, selectedAppId]);
   const appstoreOverview = [
-    { label: 'Catalog', value: formatCompactNumber(apps.length) },
-    { label: 'Installed', value: formatCompactNumber(installedApps.length) },
-    { label: 'Updates', value: formatCompactNumber(updateCount) },
-    { label: 'Sidebar apps', value: formatCompactNumber(sidebarAppApps.length) }
+    { label: 'Catalog', value: formatCompactNumber(apps.length)},
+    { label: 'Installed', value: formatCompactNumber(installedApps.length)},
+    { label: 'Updates', value: formatCompactNumber(updateCount)},
+    { label: 'Sidebar apps', value: formatCompactNumber(sidebarAppApps.length)}
   ];
 
   useEffect(() => {
@@ -725,14 +773,14 @@ export function NativeAppstoreMain({
   }
 
   async function install(app: AnyRecord): Promise<void> {
-    await window.lastbrowser.sidekick.installAppstoreApp({ appId: idOf(app) });
+    await window.lastbrowser.sidekick.installAppstoreApp({ appId: idOf(app)});
     const sidebarPanel = sidebarAppPanelForApp(app);
     if (sidebarPanel) onInstalledSidebarApp(sidebarPanel);
     await refreshAll();
   }
 
   async function uninstall(app: AnyRecord): Promise<void> {
-    await window.lastbrowser.sidekick.uninstallAppstoreApp({ appId: idOf(app) });
+    await window.lastbrowser.sidekick.uninstallAppstoreApp({ appId: idOf(app)});
     const sidebarPanel = sidebarAppPanelForApp(app);
     if (sidebarPanel) onUninstalledSidebarApp(sidebarPanel);
     await refreshAll();
@@ -948,9 +996,9 @@ export function NativeAppstoreMain({
                 <header><strong>SDK / Updates</strong></header>
                 <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
                   {[
-                    { label: 'SDK entries', value: formatCompactNumber(arrayFrom(sdk.data, ['items', 'entries', 'tools']).length || Object.keys(sdk.data || {}).length) },
-                    { label: 'Installed apps', value: formatCompactNumber(installedApps.length) },
-                    { label: 'Updates available', value: formatCompactNumber(updateCount) }
+                    { label: 'SDK entries', value: formatCompactNumber(arrayFrom(sdk.data, ['items', 'entries', 'tools']).length || Object.keys(sdk.data || {}).length)},
+                    { label: 'Installed apps', value: formatCompactNumber(installedApps.length)},
+                    { label: 'Updates available', value: formatCompactNumber(updateCount)}
                   ].map((card) => (
                     <article key={card.label} className="metric-card">
                       <span>{card.label}</span>
@@ -1035,7 +1083,7 @@ export function NativeAppstoreMain({
                     {appstoreSettingType(value) === 'checkbox' ? (
                       <input type="checkbox" checked={Boolean(value)} onChange={(event) => setSettingsDraft((current) => ({ ...current, [key]: event.target.checked }))} />
                     ) : appstoreSettingType(value) === 'number' ? (
-                      <input type="number" value={String(value)} onChange={(event) => setSettingsDraft((current) => ({ ...current, [key]: event.target.value === '' ? 0 : Number(event.target.value) }))} />
+                      <input type="number" value={String(value)} onChange={(event) => setSettingsDraft((current) => ({ ...current, [key]: event.target.value === '' ? 0 : Number(event.target.value)}))} />
                     ) : (
                       <input type="text" value={String(value)} onChange={(event) => setSettingsDraft((current) => ({ ...current, [key]: event.target.value }))} />
                     )}
@@ -1765,6 +1813,7 @@ export function ExtensionsSettingsSection(): JSX.Element {
 }
 
 export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void }): JSX.Element {
+  const { t, locale, setLocale } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
   const modelsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' }), [ready], ready);
@@ -1783,6 +1832,16 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const [ollamaUrl, setOllamaUrl] = useState('');
   const [ollamaKey, setOllamaKey] = useState('');
   const [ollamaTestResult, setOllamaTestResult] = useState('');
+  const [openRouterModalOpen, setOpenRouterModalOpen] = useState(false);
+  const [openRouterKey, setOpenRouterKey] = useState('');
+  const [openRouterHasSavedKey, setOpenRouterHasSavedKey] = useState(false);
+  const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModelOption[]>([]);
+  const [openRouterSelectedModels, setOpenRouterSelectedModels] = useState<string[]>([]);
+  const [openRouterHasSavedSelection, setOpenRouterHasSavedSelection] = useState(false);
+  const [openRouterDefaultModel, setOpenRouterDefaultModel] = useState('');
+  const [openRouterLoading, setOpenRouterLoading] = useState(false);
+  const [openRouterSaving, setOpenRouterSaving] = useState(false);
+  const [openRouterError, setOpenRouterError] = useState('');
 
 
   const [zenExitMode, setZenExitModeState] = useState<ZenExitDefaultMode>(() => {
@@ -1804,6 +1863,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const themeAccent = usePanelStore((s) => s.themeAccent);
   const glassLevel = usePanelStore((s) => s.glassLevel);
   const uiDensity = usePanelStore((s) => s.uiDensity);
+  const a11yHighContrast = usePanelStore((s) => s.a11yHighContrast);
+  const a11yDyslexicFont = usePanelStore((s) => s.a11yDyslexicFont);
+  const a11yMinFontSize = usePanelStore((s) => s.a11yMinFontSize);
+  const a11yUiZoom = usePanelStore((s) => s.a11yUiZoom);
+  const a11yFocusRings = usePanelStore((s) => s.a11yFocusRings);
   const dockSettings = usePanelStore((s) => s.dockSettings);
   const setDockSettings = usePanelStore((s) => s.setDockSettings);
   const applyDockPreset = usePanelStore((s) => s.applyDockPreset);
@@ -1822,13 +1886,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const handleSetDefaultBrowser = async () => {
     try {
       await window.lastbrowser?.system?.setDefaultBrowser?.();
-      showToast('Windows Standard-Apps Einstellungen geöffnet');
+      showToast(t('settings.panels.preferences.defaultBrowserOpened'));
       setTimeout(async () => {
         const isDef = await window.lastbrowser?.system?.isDefaultBrowser?.();
         if (typeof isDef === 'boolean') setDefaultBrowserStatus(isDef);
       }, 1500);
     } catch {
-      showToast('Konnte Standard-Browser nicht setzen');
+      showToast(t('settings.panels.preferences.defaultBrowserError'));
     }
   };
 
@@ -1875,11 +1939,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       settingsText(draft.font_size ?? settings.font_size, 'default'),
       settingsText(draft.message_layout ?? settings.message_layout, 'bubbles'),
       settingsText(draft.syntax_theme ?? settings.syntax_theme, ''),
-      settingsText(draft.accent_color ?? settings.accent_color, '')
+      settingsText(draft.accent_color ?? settings.accent_color, ''),
+      Number(draft.default_zoom ?? settings.default_zoom) || 100
     );
   }, [
-    draft.skin, draft.theme, draft.font_size, draft.message_layout, draft.syntax_theme, draft.accent_color,
-    settings.skin, settings.theme, settings.font_size, settings.message_layout, settings.syntax_theme, settings.accent_color
+    draft.skin, draft.theme, draft.font_size, draft.message_layout, draft.syntax_theme, draft.accent_color, draft.default_zoom,
+    settings.skin, settings.theme, settings.font_size, settings.message_layout, settings.syntax_theme, settings.accent_color, settings.default_zoom
   ]);
 
   const autoSaveTimerRef = useRef<number | null>(null);
@@ -1930,7 +1995,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   function updateDraftField(key: string, value: unknown, autoPersist = true): void {
     setDraft((current) => {
-      const next = { ...current, [key]: value };
+      const next ={ ...current, [key]: value };
       if (autoPersist) {
         if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = window.setTimeout(() => {
@@ -2079,6 +2144,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   }
 
   async function startProviderConnect(option: ProviderOption): Promise<void> {
+    if (['google-gemini-cli', 'gemini-cli-acp'].includes(option.id)) {
+      showToast('Gemini CLI subscription access for consumer accounts changed on June 18, 2026. See the Gemini subscription information panel.');
+      return;
+    }
     if (!option.oauthProvider) return;
     try {
       const response = await window.lastbrowser.sidekick.startOAuth({ provider: option.oauthProvider });
@@ -2094,6 +2163,128 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       showToast(`Sign in with ${option.label} in the opened browser tab.`);
     } catch (error) {
       showToast(`Connect failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function loadOpenRouterModelCatalog(
+    keyToSave = openRouterKey,
+    existingKeyAvailable = openRouterHasSavedKey,
+    savedSelection?: { ids: string[]; configured: boolean; defaultModel: string }
+  ): Promise<void> {
+    setOpenRouterLoading(true);
+    setOpenRouterError('');
+    try {
+      const nextKey = keyToSave.trim();
+      if (nextKey) {
+        await window.lastbrowser.sidekick.requestWebui({
+          method: 'POST',
+          path: '/api/providers',
+          body: { provider: 'openrouter', api_key: nextKey }
+        });
+        setOpenRouterKey('');
+        setOpenRouterHasSavedKey(true);
+      } else if (!existingKeyAvailable) {
+        throw new Error(t('settings.panels.providers.openrouterKeyRequired'));
+      }
+
+      const response = await window.lastbrowser.sidekick.requestWebui({
+        method: 'GET',
+        path: '/api/models/live?provider=openrouter'
+      });
+      const models = normalizeOpenRouterModels(response.models);
+      if (!models.length) {
+        setOpenRouterModels([]);
+        throw new Error(t('settings.panels.providers.openrouterNoModels'));
+      }
+      setOpenRouterModels(models);
+      const priorSelection = savedSelection?.ids ?? openRouterSelectedModels;
+      const hasSelection = savedSelection?.configured ?? openRouterHasSavedSelection;
+      const nextSelection = priorSelection.length || hasSelection
+        ? priorSelection
+        : models.map((model) => model.id);
+      const preferredDefault = savedSelection?.defaultModel || openRouterDefaultModel;
+      const availableDefault = nextSelection.find((id) => models.some((model) => model.id === id)) || '';
+      setOpenRouterSelectedModels(nextSelection);
+      setOpenRouterDefaultModel(
+        preferredDefault && nextSelection.includes(preferredDefault) && models.some((model) => model.id === preferredDefault)
+          ? preferredDefault
+          : availableDefault || nextSelection[0] || ''
+      );
+    } catch (error) {
+      setOpenRouterError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOpenRouterLoading(false);
+    }
+  }
+
+  async function openOpenRouterSettings(): Promise<void> {
+    setOpenRouterKey('');
+    setOpenRouterModels([]);
+    setOpenRouterSelectedModels([]);
+    setOpenRouterHasSavedSelection(false);
+    setOpenRouterError('');
+    setOpenRouterDefaultModel(settingsText(modelsState.data?.default_model || settings.default_model, ''));
+    setOpenRouterModalOpen(true);
+    try {
+      const response = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers' });
+      const entries = Array.isArray(response.providers) ? response.providers.filter(isRecord) : [];
+      const provider = entries.find((entry) => settingsText(entry.id).toLowerCase() === 'openrouter');
+      const configuredModels = normalizeOpenRouterModels(provider?.models).map((model) => model.id);
+      const hasConfiguredSelection = Boolean(provider?.models_configured) || configuredModels.length > 0;
+      const hasKey = Boolean(provider?.has_key);
+      const currentDefaultModel = settingsText(modelsState.data?.default_model || settings.default_model, '');
+      setOpenRouterHasSavedKey(hasKey);
+      setOpenRouterHasSavedSelection(hasConfiguredSelection);
+      setOpenRouterSelectedModels(configuredModels);
+      if (hasKey) {
+        await loadOpenRouterModelCatalog('', true, {
+          ids: configuredModels,
+          configured: hasConfiguredSelection,
+          defaultModel: currentDefaultModel
+        });
+      }
+    } catch (error) {
+      setOpenRouterError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function saveOpenRouterSettings(): Promise<void> {
+    if (openRouterSaving) return;
+    const selectedModels = [...new Set(openRouterSelectedModels)];
+    if (!selectedModels.length) {
+      setOpenRouterError(t('settings.panels.providers.openrouterSelectAtLeastOne'));
+      return;
+    }
+    if (!openRouterHasSavedKey && !openRouterKey.trim()) {
+      setOpenRouterError(t('settings.panels.providers.openrouterKeyRequired'));
+      return;
+    }
+    setOpenRouterSaving(true);
+    setOpenRouterError('');
+    try {
+      const selectedDefault = selectedModels.includes(openRouterDefaultModel)
+        ? openRouterDefaultModel
+        : selectedModels[0];
+      const body: Record<string, unknown> = { provider: 'openrouter', models: selectedModels };
+      if (openRouterKey.trim()) body.api_key = openRouterKey.trim();
+      await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/providers', body });
+      await window.lastbrowser.sidekick.saveSettings({
+        settings: {
+          ...cleanSettingsPayload(settings),
+          provider: 'openrouter',
+          base_url: 'https://openrouter.ai/api/v1',
+          default_model: selectedDefault
+        }
+      });
+      await window.lastbrowser.sidekick.setDefaultModel({ model: selectedDefault });
+      await settingsState.refresh();
+      await modelsState.refresh();
+      setOpenRouterModalOpen(false);
+      showToast(t('settings.panels.providers.connectionSuccess'));
+    } catch (error) {
+      setOpenRouterError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOpenRouterSaving(false);
     }
   }
 
@@ -2157,14 +2348,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   function renderPluginsList(): JSX.Element {
     if (pluginsState.loading) {
-      return <EmptyState icon={<Loader2 size={16} className="spin" />} label="Loading plugins…" />;
+      return <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.plugins.loading')} />;
     }
     if (pluginsState.error) {
       return <div className="workspace-error">{pluginsState.error}</div>;
     }
     const plugins = pluginList;
     if (!plugins.length) {
-      return <EmptyState icon={<Package size={16} />} label="No plugins are visible yet." />;
+      return <EmptyState icon={<Package size={16} />} label={t('settings.panels.plugins.empty')} />;
     }
     return (
       <div className="compact-list settings-plugin-list">
@@ -2194,9 +2385,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     <section className="browser-main native-rest-main settings-main">
       <NativeHeader
         icon={<Settings size={21} />}
-        title="Settings"
-        kicker="System"
-        detail="Conversation, appearance, preferences, providers, plugins and system settings."
+        title={t('settings.title')}
+        kicker={t('settings.system')}
+        detail={t('settings.detail')}
         loading={settingsState.loading}
         ready={ready}
         onRefresh={settingsState.refresh}
@@ -2209,8 +2400,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             <button key={key} type="button" className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}>
               <span className="settings-section-button-icon">{meta.icon}</span>
               <span className="settings-section-button-text">
-                <strong>{meta.title}</strong>
-                <small>{meta.description}</small>
+                <strong>{t(SETTINGS_SECTION_COPY[key].title)}</strong>
+                <small>{t(SETTINGS_SECTION_COPY[key].description)}</small>
               </span>
             </button>
           ))}
@@ -2219,21 +2410,21 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         <main className="native-work-card settings-editor settings-panel-scroll">
           <header className="settings-editor-head">
             <div>
-              <strong>{SETTINGS_SECTIONS[section].title}</strong>
-              <span>{SETTINGS_SECTIONS[section].description}</span>
+              <strong>{t(SETTINGS_SECTION_COPY[section].title)}</strong>
+              <span>{t(SETTINGS_SECTION_COPY[section].description)}</span>
             </div>
             <div className="settings-editor-actions">
               <span className={`native-rest-pill ${dirty ? '' : 'ready'}`}>
                 <span className={`status-dot ${dirty ? '' : 'ready'}`} />
-                {dirty ? 'Unsaved' : 'Saved'}
+                {dirty ? t('settings.status.unsaved') : t('settings.status.saved')}
               </span>
               <button type="button" className="secondary-action compact" onClick={() => void restoreDraft()} disabled={!ready || !dirty}>
                 <RefreshCw size={15} />
-                <span>Reset</span>
+                <span>{t('settings.reset')}</span>
               </button>
               <button type="button" className="secondary-action compact" onClick={() => void save()} disabled={!ready || saving || !dirty}>
                 {saving ? <Loader2 size={15} className="spin" /> : <Save size={15} />}
-                <span>Save</span>
+                <span>{t('settings.save')}</span>
               </button>
             </div>
           </header>
@@ -2242,56 +2433,56 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             {section === 'conversation' && (
               <>
                 <SettingsCard
-                  title="Conversation defaults"
-                  description="Model routing and composer behavior for new conversations."
-                  action={<span className="settings-badge">Provider: {activeProvider || '—'}</span>}
+                  title={t('settings.panels.conversation.defaults')}
+                  description={t('settings.panels.conversation.routingDescription')}
+                  action={<span className="settings-badge">{t('settings.panels.conversation.providerBadge', { provider: activeProvider || '—' })}</span>}
                 >
                   <div className="settings-field-grid">
-                    <SettingsField label="Default model" description="Used for new conversations. Existing conversations keep their model.">
+                    <SettingsField label={t('settings.panels.conversation.defaultModel')} description={t('settings.panels.conversation.defaultModelDescription')}>
                       {renderModelOptions()}
                     </SettingsField>
-                    <SettingsField label="Send key" description="Choose how Enter behaves in the composer.">
+                    <SettingsField label={t('settings.panels.conversation.sendKey')} description={t('settings.panels.conversation.sendKeyDescription')}>
                       <select value={settingsText(draft.send_key ?? settings.send_key, 'enter')} onChange={(event) => updateDraftField('send_key', event.target.value)}>
-                        <option value="enter">Enter (Shift+Enter for newline)</option>
-                        <option value="ctrl+enter">Ctrl+Enter (Enter for newline)</option>
+                        <option value="enter">{t('settings.panels.conversation.enterNewline')}</option>
+                        <option value="ctrl+enter">{t('settings.panels.conversation.ctrlEnterNewline')}</option>
                       </select>
                     </SettingsField>
-                    <SettingsField label="Chat mode" description="Default mode used when opening a new chat.">
+                    <SettingsField label={t('settings.panels.conversation.chatMode')} description={t('settings.panels.conversation.chatModeDescription')}>
                       <select value={settingsText(draft.chat_mode ?? settings.chat_mode, 'chat')} onChange={(event) => updateDraftField('chat_mode', event.target.value)}>
-                        <option value="chat">Chat</option>
-                        <option value="plan">Plan</option>
-                        <option value="action">Action</option>
+                        <option value="chat">{t('settings.panels.conversation.chat')}</option>
+                        <option value="plan">{t('settings.panels.conversation.plan')}</option>
+                        <option value="action">{t('settings.panels.conversation.action')}</option>
                       </select>
                     </SettingsField>
-                    <SettingsField label="Composer mode" description="Default action on the composer toolbar.">
+                    <SettingsField label={t('settings.panels.conversation.composerMode')} description={t('settings.panels.conversation.composerModeDescription')}>
                       <select value={settingsText(draft.composer_mode ?? settings.composer_mode, 'action')} onChange={(event) => updateDraftField('composer_mode', event.target.value)}>
-                        <option value="action">Action</option>
-                        <option value="plan">Plan</option>
-                        <option value="chat">Chat</option>
+                        <option value="action">{t('settings.panels.conversation.action')}</option>
+                        <option value="plan">{t('settings.panels.conversation.plan')}</option>
+                        <option value="chat">{t('settings.panels.conversation.chat')}</option>
                       </select>
                     </SettingsField>
-                    <SettingsField label="Profile" description="Profile used for new sessions.">
-                      <input value={settingsText(draft.profile ?? settings.profile, '')} onChange={(event) => updateDraftField('profile', event.target.value)} placeholder="default" />
+                    <SettingsField label={t('settings.panels.conversation.profile')} description={t('settings.panels.conversation.profileDescription')}>
+                      <input value={settingsText(draft.profile ?? settings.profile, '')} onChange={(event) => updateDraftField('profile', event.target.value)} placeholder={t('settings.panels.conversation.defaultPlaceholder')} />
                     </SettingsField>
-                    <SettingsField label="Assistant name" description="Display name across the UI.">
+                    <SettingsField label={t('settings.panels.conversation.assistantName')} description={t('settings.panels.conversation.assistantNameDescription')}>
                       <input value={settingsText(draft.bot_name ?? settings.bot_name, 'Nova')} onChange={(event) => updateDraftField('bot_name', event.target.value)} placeholder="Nova" />
                     </SettingsField>
                   </div>
                 </SettingsCard>
 
                 <SettingsCard
-                  title="Fallback model"
-                  description="Used automatically when the primary model hits a rate limit or quota. Without one, a rate-limited turn just fails."
-                  action={fallbackModel ? <span className="settings-badge">active</span> : <span className="settings-badge">none</span>}
+                  title={t('settings.panels.conversation.fallbackModel')}
+                  description={t('settings.panels.conversation.fallbackDescription')}
+                  action={fallbackModel ? <span className="settings-badge">{t('settings.panels.conversation.active')}</span> : <span className="settings-badge">{t('settings.panels.conversation.none')}</span>}
                 >
                   <div className="settings-field-grid">
-                    <SettingsField label="Fallback model" description="Leave on “None” to disable the fallback.">
+                    <SettingsField label={t('settings.panels.conversation.fallbackModel')} description={t('settings.panels.conversation.fallbackDisableDescription')}>
                       <select
                         value={fallbackModel}
                         onChange={(event) => void saveFallbackModel(event.target.value)}
                         disabled={!ready || saving}
                       >
-                        <option value="">None</option>
+                        <option value="">{t('settings.panels.conversation.none')}</option>
                         {modelGroups.map((group) => {
                           const providerLabel = settingsText(group.provider || group.provider_id || 'Provider');
                           const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
@@ -2307,23 +2498,20 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       </select>
                     </SettingsField>
                   </div>
-                  <p className="settings-hint">
-                    A good fallback is a model on a different provider — e.g. an OpenRouter model when your
-                    Google quota is exhausted.
-                  </p>
+                  <p className="settings-hint">{t('settings.panels.conversation.fallbackHint')}</p>
                 </SettingsCard>
               </>
             )}
 
             {section === 'appearance' && (
               <>
-                <SettingsCard title="Modern Zen & Sidekick Layout (Variante B)" description="Konfiguration für die modulare Multi-Tier Seitenleiste und die In-Page Nova Action Bar.">
+                <SettingsCard title={t('settings.panels.appearance.cardModern')} description={t('settings.panels.appearance.zenDescription')}>
                   <div className="settings-modern-layout-config">
                     {/* Zen Exit Default Mode */}
                     <div className="settings-field-row">
                       <div className="settings-field-info">
-                        <strong>Zen-Modus Aufwach-Standard (Ctrl+B)</strong>
-                        <small>Bestimmt, ob beim Verlassen des Zen-Modus das kompakte Dock oder die volle Seitenleiste geöffnet wird.</small>
+                        <strong>{t('settings.panels.appearance.zenTitle')}</strong>
+                        <small>{t('settings.panels.appearance.zenDescription')}</small>
                       </div>
                       <div className="settings-segmented-group">
                         <button
@@ -2334,7 +2522,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                             usePanelStore.getState().setZenExitDefaultMode('slim');
                           }}
                         >
-                          Kompaktes Dock (48px)
+                          {t('settings.panels.appearance.compactDock')}
                         </button>
                         <button
                           type="button"
@@ -2344,7 +2532,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                             usePanelStore.getState().setZenExitDefaultMode('expanded');
                           }}
                         >
-                          Volle Leiste (240px)
+                          {t('settings.panels.appearance.fullSidebar')} (240px)
                         </button>
                       </div>
                     </div>
@@ -2352,17 +2540,17 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     {/* Action Bar Docking Preference */}
                     <div className="settings-field-row">
                       <div className="settings-field-info">
-                        <strong>In-Page AI Action Bar Andockung</strong>
-                        <small>Standard-Position der schwebenden Nova-Menüleiste im Browserfenster.</small>
+                        <strong>{t('settings.panels.appearance.actionBarTitle')}</strong>
+                        <small>{t('settings.panels.appearance.actionBarDescription')}</small>
                       </div>
                       <div className="settings-dock-buttons-row">
                         {[
-                          { id: 'topbar', label: 'Topleiste (Icon + Ausklapper)' },
-                          { id: 'sidebar', label: 'Seitenmenü' },
-                          { id: 'bottom', label: 'Unten Mitte' },
-                          { id: 'top-left', label: 'Oben Links' },
-                          { id: 'top-right', label: 'Oben Rechts' },
-                          { id: 'free', label: 'Frei schwebend' }
+                          { id: 'topbar', label: t('settings.panels.appearance.actionTopbar') },
+                          { id: 'sidebar', label: t('settings.panels.appearance.actionSidebar') },
+                          { id: 'bottom', label: t('settings.panels.appearance.actionBottom') },
+                          { id: 'top-left', label: t('settings.panels.appearance.actionTopLeft') },
+                          { id: 'top-right', label: t('settings.panels.appearance.actionTopRight') },
+                          { id: 'free', label: t('settings.panels.appearance.actionFloating') }
                         ].map((d) => (
                           <button
                             key={d.id}
@@ -2383,22 +2571,22 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 </SettingsCard>
 
                 <SettingsCard
-                  title="Nova Dock (Interaktive Leiste & Fisheye-Effekt)"
-                  description="Wähle die Position des Docks (Unten, Oben, Links, Rechts oder frei Schwebend), passe die macOS-ähnliche Fisheye-Wellenvergrößerung und das automatische Ausblenden an."
+                  title={t('settings.panels.appearance.dockTitle')}
+                  description={t('settings.panels.appearance.dockDescription')}
                 >
                   <div className="settings-modern-layout-config">
                     {/* 1-Klick-Presets */}
                     <div className="settings-field-row">
                       <div className="settings-field-info">
-                        <strong>1-Klick-Presets</strong>
-                        <small>Wähle eine vorkonfigurierte Nova-Dock-Einstellung für schnellen Start.</small>
+                        <strong>{t('settings.panels.appearance.presets')}</strong>
+                        <small>{t('settings.panels.appearance.presetsDescription')}</small>
                       </div>
                       <div className="settings-dock-buttons-row" style={{ flexWrap: 'wrap' }}>
                         {[
-                          { id: 'bottom-dock', label: '🌟 Nova Dock Unten' },
-                          { id: 'classic-left', label: '📐 Klassisch Links' },
-                          { id: 'floating-widget', label: '🎈 Schwebendes Widget' },
-                          { id: 'minimalist-autohide', label: '⚡ Minimalist (Auto-Hide)' }
+                          { id: 'bottom-dock', label: `🌟 ${t('settings.panels.appearance.presetNovaBottom')}` },
+                          { id: 'classic-left', label: `📐 ${t('settings.panels.appearance.presetClassicLeft')}` },
+                          { id: 'floating-widget', label: `🎈 ${t('settings.panels.appearance.presetFloating')}` },
+                          { id: 'minimalist-autohide', label: `⚡ ${t('settings.panels.appearance.presetMinimal')}` }
                         ].map((p) => (
                           <button
                             key={p.id}
@@ -2415,16 +2603,16 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     {/* Dock Position */}
                     <div className="settings-field-row">
                       <div className="settings-field-info">
-                        <strong>Dock-Position</strong>
-                        <small>Position der eingeklappten Nova-Leiste im Browserfenster.</small>
+                        <strong>{t('settings.panels.appearance.dockPosition')}</strong>
+                        <small>{t('settings.panels.appearance.dockPositionDescription')}</small>
                       </div>
                       <div className="settings-segmented-group">
                         {[
-                          { id: 'left', label: 'Links' },
-                          { id: 'right', label: 'Rechts' },
-                          { id: 'bottom', label: 'Unten' },
-                          { id: 'top', label: 'Oben' },
-                          { id: 'floating', label: 'Schwebend' }
+                          { id: 'left', label: t('settings.panels.appearance.left')},
+                          { id: 'right', label: t('settings.panels.appearance.right')},
+                          { id: 'bottom', label: t('settings.panels.appearance.bottom')},
+                          { id: 'top', label: t('settings.panels.appearance.top')},
+                          { id: 'floating', label: t('settings.panels.appearance.floating')}
                         ].map((pos) => (
                           <button
                             key={pos.id}
@@ -2442,8 +2630,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     {dockSettings.position === 'floating' && (
                       <div className="settings-field-row">
                         <div className="settings-field-info">
-                          <strong>Schwebend: Ausrichtung & Position</strong>
-                          <small>Horizontale oder vertikale Ausrichtung des freischwebenden Docks.</small>
+                          <strong>{t('settings.panels.appearance.floatingPosition')}</strong>
+                          <small>{t('settings.panels.appearance.floatingPositionDescription')}</small>
                         </div>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                           <div className="settings-segmented-group">
@@ -2452,24 +2640,24 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                               className={dockSettings.orientation === 'horizontal' ? 'settings-seg-btn active' : 'settings-seg-btn'}
                               onClick={() => setDockSettings({ orientation: 'horizontal' })}
                             >
-                              Horizontal
+                              {t('settings.panels.appearance.horizontal')}
                             </button>
                             <button
                               type="button"
                               className={dockSettings.orientation === 'vertical' ? 'settings-seg-btn active' : 'settings-seg-btn'}
                               onClick={() => setDockSettings({ orientation: 'vertical' })}
                             >
-                              Vertikal
+                              {t('settings.panels.appearance.vertical')}
                             </button>
                           </div>
                           <button
                             type="button"
                             className="secondary-action compact"
                             onClick={resetFloatingDockPos}
-                            title="Setzt die Schwebeposition zurück"
+                            title={t('settings.panels.appearance.resetFloatingPosition')}
                           >
                             <RotateCcw size={13} />
-                            <span>Position zurücksetzen</span>
+                            <span>{t('settings.panels.appearance.resetFloatingPosition')}</span>
                           </button>
                         </div>
                       </div>
@@ -2478,8 +2666,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     {/* Auto-Hide Toggle */}
                     <div className="settings-field-row">
                       <div className="settings-field-info">
-                        <strong>Automatisches Ausblenden (Auto-Hide)</strong>
-                        <small>Das Dock verbirgt sich automatisch und erscheint bei Mouseover am Bildschirmrand.</small>
+                        <strong>{t('settings.panels.appearance.autoHide')}</strong>
+                        <small>{t('settings.panels.appearance.autoHideDescription')}</small>
                       </div>
                       <div className="settings-segmented-group">
                         <button
@@ -2487,7 +2675,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           className={dockSettings.autoHide ? 'settings-seg-btn active' : 'settings-seg-btn'}
                           onClick={() => setDockSettings({ autoHide: true })}
                         >
-                          Aktiviert
+                          {t('settings.panels.appearance.enabled')}
                         </button>
                         <button
                           type="button"
@@ -2502,15 +2690,15 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     {/* Reveal Animation Style & Duration */}
                     <div className="settings-field-row">
                       <div className="settings-field-info">
-                        <strong>Einblend-Animation & Dauer</strong>
-                        <small>Animationsstil und Geschwindigkeit beim Einblenden ({dockSettings.animationDuration}ms).</small>
+                        <strong>{t('settings.panels.appearance.animation')}</strong>
+                        <small>{t('settings.panels.appearance.animationDescription', { duration: dockSettings.animationDuration })}</small>
                       </div>
                       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                         <div className="settings-segmented-group">
                           {[
-                            { id: 'slide', label: 'Slide-in' },
-                            { id: 'fade', label: 'Fade' },
-                            { id: 'instant', label: 'Sofort' }
+                            { id: 'slide', label: t('settings.panels.appearance.animationSlide')},
+                            { id: 'fade', label: t('settings.panels.appearance.animationFade')},
+                            { id: 'instant', label: t('settings.panels.appearance.animationInstant')}
                           ].map((anim) => (
                             <button
                               key={anim.id}
@@ -2528,7 +2716,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           max="600"
                           step="50"
                           value={dockSettings.animationDuration}
-                          onChange={(e) => setDockSettings({ animationDuration: Number(e.target.value) })}
+                          onChange={(e) => setDockSettings({ animationDuration: Number(e.target.value)})}
                           style={{ width: '110px' }}
                         />
                         <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{dockSettings.animationDuration} ms</span>
@@ -2539,30 +2727,30 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     <div className="settings-field-row">
                       <div className="settings-field-info">
                         <strong>Fisheye-Vergrößerung (Fokus: {dockSettings.magnification}x, Nachbarn: {dockSettings.neighborScale}x)</strong>
-                        <small>Stärke der Icon-Vergrößerung bei Mouseover (macOS Fisheye Wave).</small>
+                        <small>{t('settings.panels.appearance.fisheyeDescription')}</small>
                       </div>
                       <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Fokus-Icon</label>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('settings.panels.appearance.focusIcon')}</label>
                           <input
                             type="range"
                             min="1.0"
                             max="2.0"
                             step="0.05"
                             value={dockSettings.magnification}
-                            onChange={(e) => setDockSettings({ magnification: Number(e.target.value) })}
+                            onChange={(e) => setDockSettings({ magnification: Number(e.target.value)})}
                             style={{ width: '100px' }}
                           />
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Nachbar-Icons</label>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('settings.panels.appearance.neighborIcons')}</label>
                           <input
                             type="range"
                             min="1.0"
                             max="1.5"
                             step="0.05"
                             value={dockSettings.neighborScale}
-                            onChange={(e) => setDockSettings({ neighborScale: Number(e.target.value) })}
+                            onChange={(e) => setDockSettings({ neighborScale: Number(e.target.value)})}
                             style={{ width: '100px' }}
                           />
                         </div>
@@ -2571,21 +2759,21 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   </div>
                 </SettingsCard>
 
-                <SettingsCard title="Akzentfarben & Glassmorphism (Phase 13.8)" description="Wähle dein bevorzugtes Farbschema, den Unschärfe-Grad der Oberflächen und die visuelle Dichte.">
+                <SettingsCard title={t('settings.panels.appearance.accentGlassTitle')} description={t('settings.panels.appearance.accentGlassDescription')}>
                   <div className="settings-modern-appearance-grid">
                     {/* Theme Accents */}
                     <div className="settings-field-row">
                       <div className="settings-field-info">
-                        <strong>Farben-Akzent (Neon / Minimal)</strong>
-                        <small>Steuert Primär-Highlights, Icons, Status-Glow und Cursor.</small>
+                        <strong>{t('settings.panels.appearance.accentTitle')}</strong>
+                        <small>{t('settings.panels.appearance.accentDescription')}</small>
                       </div>
                       <div className="settings-accent-palette">
                         {[
-                          { id: 'neon-cyan', name: 'Neon Cyan', color: '#00d9ff' },
-                          { id: 'electric-violet', name: 'Electric Violet', color: '#a855f7' },
-                          { id: 'emerald-flow', name: 'Emerald Flow', color: '#10b981' },
-                          { id: 'solar-amber', name: 'Solar Amber', color: '#f59e0b' },
-                          { id: 'monochrome-slate', name: 'Monochrome Slate', color: '#94a3b8' }
+                          { id: 'neon-cyan', name: t('settings.panels.appearance.accentNeon'), color: '#00d9ff' },
+                          { id: 'electric-violet', name: t('settings.panels.appearance.accentViolet'), color: '#a855f7' },
+                          { id: 'emerald-flow', name: t('settings.panels.appearance.accentEmerald'), color: '#10b981' },
+                          { id: 'solar-amber', name: t('settings.panels.appearance.accentAmber'), color: '#f59e0b' },
+                          { id: 'monochrome-slate', name: t('settings.panels.appearance.accentSlate'), color: '#94a3b8' }
                         ].map((acc) => (
                           <button
                             key={acc.id}
@@ -2604,15 +2792,15 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     {/* Glassmorphism Levels */}
                     <div className="settings-field-row">
                       <div className="settings-field-info">
-                        <strong>Glassmorphism & Frosted Blur</strong>
-                        <small>Transparenz- und Blur-Effekte der Titelleiste, Seitenleiste und Drawer.</small>
+                        <strong>{t('settings.panels.appearance.glassTitle')}</strong>
+                        <small>{t('settings.panels.appearance.glassDescription')}</small>
                       </div>
                       <div className="settings-segmented-group">
                         {[
-                          { id: 'solid', label: 'Solid (Opak)' },
-                          { id: 'subtle', label: 'Subtil (8px)' },
-                          { id: 'modern', label: 'Modern (16px)' },
-                          { id: 'deep', label: 'Deep Glass (24px)' }
+                          { id: 'solid', label: t('settings.panels.appearance.glassSolid') },
+                          { id: 'subtle', label: t('settings.panels.appearance.glassSubtle') },
+                          { id: 'modern', label: t('settings.panels.appearance.glassModern') },
+                          { id: 'deep', label: t('settings.panels.appearance.glassDeep') }
                         ].map((gl) => (
                           <button
                             key={gl.id}
@@ -2629,14 +2817,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     {/* UI Density */}
                     <div className="settings-field-row">
                       <div className="settings-field-info">
-                        <strong>UI Dichte (Kompaktheit)</strong>
-                        <small>Höhe der Navigation, Abstände in der Tab-Leiste und Icon-Raster.</small>
+                        <strong>{t('settings.panels.appearance.densityTitle')}</strong>
+                        <small>{t('settings.panels.appearance.densityDescription')}</small>
                       </div>
                       <div className="settings-segmented-group">
                         {[
-                          { id: 'compact', label: 'Kompakt' },
-                          { id: 'standard', label: 'Standard' },
-                          { id: 'comfortable', label: 'Großzügig' }
+                          { id: 'compact', label: t('settings.panels.appearance.densityCompact') },
+                          { id: 'standard', label: t('settings.panels.appearance.densityStandard') },
+                          { id: 'comfortable', label: t('settings.panels.appearance.densityComfortable') }
                         ].map((den) => (
                           <button
                             key={den.id}
@@ -2652,7 +2840,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   </div>
                 </SettingsCard>
 
-                <SettingsCard title="Basis-Theme" description="Wähle das grundlegende Farbschema für Browser und Oberfläche.">
+                <SettingsCard title={t('settings.panels.appearance.themeTitle')} description={t('settings.panels.appearance.themeDescription')}>
                   <div className="settings-theme-grid">
                     <button
                       type="button"
@@ -2660,8 +2848,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       onClick={() => updateDraftField('theme', 'dark')}
                     >
                       <span className="settings-theme-preview settings-theme-preview-dark" />
-                      <strong>Dark</strong>
-                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Navy / Slate</span>
+                      <strong>{t('settings.panels.appearance.themeDark')}</strong>
+                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>{t('settings.panels.appearance.themeDarkSubtitle')}</span>
                     </button>
                     <button
                       type="button"
@@ -2669,8 +2857,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       onClick={() => updateDraftField('theme', 'light')}
                     >
                       <span className="settings-theme-preview settings-theme-preview-light" />
-                      <strong>Light</strong>
-                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Klar & Hell</span>
+                      <strong>{t('settings.panels.appearance.themeLight')}</strong>
+                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>{t('settings.panels.appearance.themeLightSubtitle')}</span>
                     </button>
                     <button
                       type="button"
@@ -2678,8 +2866,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       onClick={() => updateDraftField('theme', 'oled')}
                     >
                       <span className="settings-theme-preview" style={{ background: '#000000', border: '1px solid rgba(255,255,255,0.3)' }} />
-                      <strong>OLED</strong>
-                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Pitch Black #000</span>
+                      <strong>{t('settings.panels.appearance.themeOled')}</strong>
+                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>{t('settings.panels.appearance.themeOledSubtitle')}</span>
                     </button>
                     <button
                       type="button"
@@ -2687,13 +2875,25 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       onClick={() => updateDraftField('theme', 'system')}
                     >
                       <span className="settings-theme-preview settings-theme-preview-system" />
-                      <strong>System</strong>
-                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Auto (OS)</span>
+                      <strong>{t('settings.panels.appearance.themeSystem')}</strong>
+                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>{t('settings.panels.appearance.themeSystemSubtitle')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={settingsText(draft.theme ?? settings.theme, 'dark') === 'vision-impaired' ? 'settings-theme-btn active' : 'settings-theme-btn'}
+                      onClick={() => updateDraftField('theme', 'vision-impaired')}
+                    >
+                      <span
+                        className="settings-theme-preview"
+                        style={{ background: 'linear-gradient(135deg, #000000 55%, #FFD700 55%, #FFD700 70%, #00FFFF 70%)', border: '2px solid #FFFFFF' }}
+                      />
+                      <strong>{t('settings.panels.appearance.themeVisionImpaired')}</strong>
+                      <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>{t('settings.panels.appearance.themeVisionImpairedSubtitle')}</span>
                     </button>
                   </div>
                 </SettingsCard>
 
-                <SettingsCard title="Akzentfarbe & Skins" description="Wähle eine kuratierte Farbpalette oder bestimme eine freie Akzentfarbe.">
+                <SettingsCard title={t('settings.panels.appearance.skinsTitle')} description={t('settings.panels.appearance.skinsDescription')}>
                   <div className="settings-skin-grid">
                     {SETTINGS_SKINS.map((skin) => (
                       <button
@@ -2723,11 +2923,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           updateDraftField('accent_color', e.target.value);
                         }}
                         style={{ width: 34, height: 34, padding: 0, border: 'none', borderRadius: '50%', cursor: 'pointer', background: 'transparent' }}
-                        title="Eigene Akzentfarbe wählen"
+                        title={t('settings.panels.appearance.customAccent')}
                       />
                       <div>
-                        <strong style={{ display: 'block', fontSize: 13 }}>Benutzerdefinierte Akzentfarbe</strong>
-                        <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Dynamische Berechnung von Glow-, Hover- und Kontrastwerten</span>
+                        <strong style={{ display: 'block', fontSize: 13 }}>{t('settings.panels.appearance.customAccent')}</strong>
+                        <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>{t('settings.panels.appearance.customAccentDescription')}</span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2753,23 +2953,23 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           }
                         }}
                       >
-                        Aktivieren
+                        {t('settings.panels.appearance.activate')}
                       </button>
                     </div>
                   </div>
                 </SettingsCard>
 
-                <SettingsCard title="Typografie & Seitenzoom" description="UI-Schriftgröße der Oberfläche und Standard-Zoom für Webseiten-Inhalte.">
+                <SettingsCard title={t('settings.panels.appearance.typographyTitle')} description={t('settings.panels.appearance.typographyDescription')}>
                   <div style={{ marginBottom: 16 }}>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 8, color: 'var(--lb-text)' }}>
-                      UI-Schriftgröße (Oberfläche & Chat)
+                      {t('settings.panels.appearance.fontSize')}
                     </label>
                     <div className="settings-size-grid">
                       {[
-                        ['small', 'Klein (88%)'],
-                        ['default', 'Standard (100%)'],
-                        ['large', 'Groß (115%)'],
-                        ['xlarge', 'Sehr groß (130%)']
+                        ['small', t('settings.panels.appearance.fontSmall')],
+                        ['default', t('settings.panels.appearance.fontDefault')],
+                        ['large', t('settings.panels.appearance.fontLarge')],
+                        ['xlarge', t('settings.panels.appearance.fontXLarge')]
                       ].map(([value, label]) => (
                         <button
                           key={value}
@@ -2787,8 +2987,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   <div style={{ padding: '12px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--lb-border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                       <div>
-                        <strong style={{ display: 'block', fontSize: 13 }}>Standard-Seitenzoom</strong>
-                        <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>Basis-Zoom für neue Webseiten (gespeicherte Domain-Zooms bleiben erhalten)</span>
+                        <strong style={{ display: 'block', fontSize: 13 }}>{t('settings.panels.appearance.defaultZoom')}</strong>
+                        <span style={{ fontSize: 11, color: 'var(--lb-muted)' }}>{t('settings.panels.appearance.defaultZoomDescription')}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontWeight: 600, fontSize: 13, minWidth: 44, textAlign: 'right' }}>
@@ -2799,7 +2999,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           className="secondary-action compact"
                           style={{ padding: '3px 8px', fontSize: 11 }}
                           onClick={() => updateDraftField('default_zoom', 100)}
-                          title="Auf 100% zurücksetzen"
+                          title={t('settings.panels.appearance.resetZoom')}
                         >
                           100%
                         </button>
@@ -2816,19 +3016,19 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     />
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--lb-muted)', marginTop: 4 }}>
                       <span>80%</span>
-                      <span>100% (Standard)</span>
+                      <span>{t('settings.panels.appearance.zoomDefault')}</span>
                       <span>125%</span>
                       <span>150%</span>
                     </div>
                   </div>
                 </SettingsCard>
 
-                <SettingsCard title="Nachrichten-Layout (Copilot & Chat)" description="Visuelle Darstellungsform für KI-Antworten und Dialoge.">
+                <SettingsCard title={t('settings.panels.appearance.messageLayoutTitle')} description={t('settings.panels.appearance.messageLayoutDescription')}>
                   <div className="settings-layout-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
                     {[
-                      { key: 'bubbles', title: 'Sprechblasen', desc: 'Klassische Chat-Karten mit abgerundeten Ecken und Avataren', icon: '💬' },
-                      { key: 'compact', title: 'Kompakter Stream', desc: 'Flacher, dichter Textfluss im Terminal-/Slack-Stil', icon: '📄' },
-                      { key: 'expanded', title: 'Dokumenten-Canvas', desc: 'Großzügiges Lese-Layout über die volle Breite', icon: '📖' }
+                      { key: 'bubbles', title: t('settings.panels.appearance.bubbles'), desc: t('settings.panels.appearance.bubblesDescription'), icon: '💬' },
+                      { key: 'compact', title: t('settings.panels.appearance.compactStream'), desc: t('settings.panels.appearance.compactStreamDescription'), icon: '📄' },
+                      { key: 'expanded', title: t('settings.panels.appearance.documentCanvas'), desc: t('settings.panels.appearance.documentCanvasDescription'), icon: '📖' }
                     ].map((item) => {
                       const isActive = settingsText(draft.message_layout ?? settings.message_layout, 'bubbles') === item.key;
                       return (
@@ -2847,12 +3047,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     })}
                   </div>
 
-                  <SettingsField label="Syntax-Highlighting Theme" description="Codeblock-Farbschema für Transkripte und Vorschauen.">
+                  <SettingsField label={t('settings.panels.appearance.syntaxTheme')} description={t('settings.panels.appearance.syntaxThemeDescription')}>
                     <select value={settingsText(draft.syntax_theme ?? settings.syntax_theme, '')} onChange={(event) => updateDraftField('syntax_theme', event.target.value)}>
-                      <option value="">Standard (Theme-spezifisch)</option>
-                      <option value="tomorrow-night">Tomorrow Night</option>
-                      <option value="one-dark">One Dark</option>
-                      <option value="github-light">GitHub Light</option>
+                      <option value="">{t('settings.panels.appearance.themeDefault')}</option>
+                      <option value="tomorrow-night">{t('settings.panels.appearance.tomorrowNight')}</option>
+                      <option value="one-dark">{t('settings.panels.appearance.oneDark')}</option>
+                      <option value="github-light">{t('settings.panels.appearance.githubLight')}</option>
                     </select>
                   </SettingsField>
                 </SettingsCard>
@@ -2861,36 +3061,36 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   <div className="settings-floating-action-bar" style={{ position: 'sticky', bottom: 12, zIndex: 10, padding: '10px 16px', borderRadius: 10, background: 'var(--lb-surface-strong)', border: '1px solid var(--accent-primary)', boxShadow: '0 8px 24px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span className="status-dot" style={{ background: 'var(--accent-primary)' }} />
-                      <span style={{ fontSize: 12, fontWeight: 500 }}>Live-Vorschau aktiv (Änderungen ungespeichert)</span>
+                      <span style={{ fontSize: 12, fontWeight: 500 }}>{t('settings.panels.appearance.livePreview')}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <button type="button" className="secondary-action compact" onClick={() => void restoreDraft()} disabled={!ready || !dirty}>
-                        Zurücksetzen
+                        {t('settings.panels.appearance.resetDraft')}
                       </button>
                       <button type="button" className="primary-action compact" onClick={() => void save()} disabled={!ready || saving || !dirty} style={{ background: 'var(--accent-primary)', color: 'var(--accent-text, #ffffff)' }}>
-                        {saving ? 'Speichert...' : 'Einstellungen speichern'}
+                        {saving ? t('settings.panels.appearance.saving') : t('settings.panels.appearance.saveSettings')}
                       </button>
                     </div>
                   </div>
                 )}
 
-                <SettingsCard title="Session view" description="Defaults that affect the left sidebar and transcript layout.">
+                <SettingsCard title={t('settings.panels.appearance.sessionView')} description={t('settings.panels.appearance.sessionViewDescription')}>
                   <div className="settings-field-grid">
                     <SettingsToggle
-                      label="Keep file tree open"
-                      description="Show the workspace file tree by default in chat."
+                      label={t('settings.panels.appearance.keepFileTree')}
+                      description={t('settings.panels.appearance.keepFileTreeDescription')}
                       checked={settingsBoolean(draft.workspace_panel_open ?? settings.workspace_panel_open, true)}
                       onChange={(value) => updateDraftToggle('workspace_panel_open', value)}
                     />
                     <SettingsToggle
-                      label="Show session jump buttons"
-                      description="Display floating start/end buttons in long sessions."
+                      label={t('settings.panels.appearance.sessionJump')}
+                      description={t('settings.panels.appearance.sessionJumpDescription')}
                       checked={settingsBoolean(draft.session_jump_buttons ?? settings.session_jump_buttons, false)}
                       onChange={(value) => updateDraftToggle('session_jump_buttons', value)}
                     />
                     <SettingsToggle
-                      label="Infinite scroll history"
-                      description="Load older messages automatically when scrolling upward."
+                      label={t('settings.panels.appearance.infiniteScroll')}
+                      description={t('settings.panels.appearance.infiniteScrollDescription')}
                       checked={settingsBoolean(draft.session_endless_scroll ?? settings.session_endless_scroll, false)}
                       onChange={(value) => updateDraftToggle('session_endless_scroll', value)}
                     />
@@ -2902,11 +3102,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             {section === 'preferences' && (
               <>
                 <SettingsCard
-                  title="Search engine"
-                  description="Used when you type a search term into the address bar instead of a URL."
+                  title={t('settings.panels.preferences.searchEngine')}
+                  description={t('settings.panels.preferences.searchEngineDescription')}
                 >
                   <div className="settings-field-grid">
-                    <SettingsField label="Engine" description="Applies to new searches immediately.">
+                    <SettingsField label={t('settings.panels.preferences.engine')} description={t('settings.panels.preferences.engineDescription')}>
                       <select
                         value={searchEngineId}
                         onChange={(event) => onSearchEngineChange(event.target.value)}
@@ -2920,18 +3120,18 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 </SettingsCard>
 
                 <SettingsCard
-                  title="Default browser"
-                  description="Use Lastbrowser as your default application for opening web links and HTML documents."
+                  title={t('settings.panels.preferences.defaultBrowser')}
+                  description={t('settings.panels.preferences.defaultBrowserDescription')}
                 >
                   <div className="settings-field-grid">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '16px' }}>
                       <div>
                         <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>
                           {defaultBrowserStatus === true
-                            ? '✓ Lastbrowser ist aktuell als Standard-Browser eingerichtet.'
+                            ? t('settings.panels.preferences.defaultBrowserConfigured')
                             : defaultBrowserStatus === false
-                            ? 'Lastbrowser ist noch nicht als Standard-Browser eingerichtet.'
-                            : 'Status wird überprüft...'}
+                            ? t('settings.panels.preferences.defaultBrowserNotConfigured')
+                            : t('settings.panels.preferences.defaultBrowserChecking')}
                         </p>
                       </div>
                       <button
@@ -2941,54 +3141,54 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
                       >
                         <ExternalLink size={14} />
-                        {defaultBrowserStatus === true ? 'Windows-Einstellungen öffnen' : 'Als Standard festlegen'}
+                        {defaultBrowserStatus === true ? t('settings.panels.preferences.openWindowsSettings') : t('settings.panels.preferences.makeDefaultBrowser')}
                       </button>
                     </div>
                   </div>
                 </SettingsCard>
 
                 <SettingsCard
-                  title="Browsing data & cache"
-                  description="Clear temporary HTTP cache, cookies, and local web storage across all browser sessions."
+                  title={t('settings.panels.preferences.dataCacheTitle')}
+                  description={t('settings.panels.preferences.dataCacheDescription')}
                 >
                   <div className="settings-field-grid">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '16px' }}>
                       <div>
                         <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>
-                          Löscht Netzwerk-Cache und Cookies zur Einhaltung der Privatsphäre (Policy 10.2).
+                          {t('settings.panels.preferences.dataCachePolicy')}
                         </p>
                       </div>
                       <button
                         type="button"
                         className="button button-secondary"
                         onClick={async () => {
-                          if (window.confirm('Möchtest du Cache und Cookies wirklich bereinigen?')) {
+                          if (window.confirm(t('settings.panels.preferences.clearConfirm'))) {
                             try {
                               await window.lastbrowser?.browser?.clearData?.({ cache: true, cookies: true, storage: true });
-                              showToast('Cache und Browserdaten erfolgreich gelöscht');
+                              showToast(t('settings.panels.preferences.clearSuccess'));
                             } catch {
-                              showToast('Fehler beim Bereinigen der Browserdaten');
+                              showToast(t('settings.panels.preferences.clearError'));
                             }
                           }
                         }}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
                       >
                         <Trash2 size={14} />
-                        Daten jetzt bereinigen
+                        {t('settings.panels.preferences.clearNow')}
                       </button>
                     </div>
                   </div>
                 </SettingsCard>
 
-                <SettingsCard title="Defaults" description="Language and chat behavior.">
+                <SettingsCard title={t('settings.panels.preferences.defaults')} description={t('settings.panels.preferences.defaultsDescription')}>
                   <div className="settings-field-grid">
-                    <SettingsField label="Language" description="User-facing UI language.">
+                    <SettingsField label={t('settings.panels.preferences.language')} description={t('settings.panels.preferences.languageDescription')}>
                       <select
                         value={settingsText(draft.language ?? settings.language, 'en')}
                         onChange={(event) => {
                           updateDraftField('language', event.target.value);
-                          // Sofortiger Sprachswitch ohne Save
-                          void window.lastbrowser?.i18n?.setLocale?.(event.target.value).catch(() => {});
+                          // Update the React catalog immediately; its provider persists and syncs the locale to main.
+                          setLocale(event.target.value);
                         }}
                       >
                         {SETTINGS_LANGUAGES.map((language) => (
@@ -2996,109 +3196,109 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                         ))}
                       </select>
                     </SettingsField>
-                    <SettingsField label="Sidebar density" description="How much metadata the sidebar shows.">
+                    <SettingsField label={t('settings.panels.preferences.sidebarDensity')} description={t('settings.panels.preferences.sidebarDensityDescription')}>
                       <select value={settingsText(draft.sidebar_density ?? settings.sidebar_density, 'compact') === 'detailed' ? 'detailed' : 'compact'} onChange={(event) => updateDraftField('sidebar_density', event.target.value)}>
-                        <option value="compact">Compact</option>
-                        <option value="detailed">Detailed</option>
+                        <option value="compact">{t('settings.panels.preferences.compact')}</option>
+                        <option value="detailed">{t('settings.panels.preferences.detailed')}</option>
                       </select>
                     </SettingsField>
-                    <SettingsField label="Busy input mode" description="What happens when you send a message mid-run.">
+                    <SettingsField label={t('settings.panels.preferences.busyInput')} description={t('settings.panels.preferences.busyInputDescription')}>
                       <select value={settingsText(draft.busy_input_mode ?? settings.busy_input_mode, 'queue')} onChange={(event) => updateDraftField('busy_input_mode', event.target.value)}>
-                        <option value="queue">Queue follow-up</option>
-                        <option value="interrupt">Interrupt current turn</option>
-                        <option value="steer">Steer mid-turn</option>
+                        <option value="queue">{t('settings.panels.preferences.queue')}</option>
+                        <option value="interrupt">{t('settings.panels.preferences.interrupt')}</option>
+                        <option value="steer">{t('settings.panels.preferences.steer')}</option>
                       </select>
                     </SettingsField>
-                    <SettingsField label="Adaptive title refresh" description="How often the session title should be regenerated.">
+                    <SettingsField label={t('settings.panels.preferences.adaptiveTitle')} description={t('settings.panels.preferences.adaptiveTitleDescription')}>
                       <select value={settingsText(draft.auto_title_refresh_every ?? settings.auto_title_refresh_every, '0')} onChange={(event) => updateDraftField('auto_title_refresh_every', event.target.value)}>
-                        <option value="0">Off</option>
-                        <option value="5">Every 5 exchanges</option>
-                        <option value="10">Every 10 exchanges</option>
-                        <option value="20">Every 20 exchanges</option>
+                        <option value="0">{t('settings.panels.preferences.off')}</option>
+                        <option value="5">{t('settings.panels.preferences.every5')}</option>
+                        <option value="10">{t('settings.panels.preferences.every10')}</option>
+                        <option value="20">{t('settings.panels.preferences.every20')}</option>
                       </select>
                     </SettingsField>
                   </div>
                 </SettingsCard>
 
-                <SettingsCard title="Notifications and activity" description="Background visibility and response signaling.">
+                <SettingsCard title={t('settings.panels.notifications.title')} description={t('settings.panels.notifications.description')}>
                   <div className="settings-field-grid">
                     <SettingsToggle
-                      label="Notification sound"
-                      description="Play a sound when a response completes."
+                      label={t('settings.panels.notifications.sound')}
+                      description={t('settings.panels.notifications.soundDescription')}
                       checked={settingsBoolean(draft.sound_enabled ?? settings.sound_enabled, true)}
                       onChange={(value) => updateDraftToggle('sound_enabled', value)}
                     />
                     <SettingsToggle
-                      label="Browser notifications"
-                      description="Show desktop notifications while the tab is in the background."
+                      label={t('settings.panels.notifications.browser')}
+                      description={t('settings.panels.notifications.browserDescription')}
                       checked={settingsBoolean(draft.notifications_enabled ?? settings.notifications_enabled, true)}
                       onChange={(value) => updateDraftToggle('notifications_enabled', value)}
                     />
                     <SettingsToggle
-                      label="Show token usage"
-                      description="Display token counts under assistant replies."
+                      label={t('settings.panels.notifications.tokenUsage')}
+                      description={t('settings.panels.notifications.tokenUsageDescription')}
                       checked={settingsBoolean(draft.show_token_usage ?? settings.show_token_usage, false)}
                       onChange={(value) => updateDraftToggle('show_token_usage', value)}
                     />
                     <SettingsToggle
-                      label="Show token speed (TPS)"
-                      description="Display streaming tokens per second."
+                      label={t('settings.panels.notifications.tokenSpeed')}
+                      description={t('settings.panels.notifications.tokenSpeedDescription')}
                       checked={settingsBoolean(draft.show_tps ?? settings.show_tps, false)}
                       onChange={(value) => updateDraftToggle('show_tps', value)}
                     />
                     <SettingsToggle
-                      label="Compact tool activity"
-                      description="Group thinking and tool calls into one collapsed activity section."
+                      label={t('settings.panels.notifications.compactActivity')}
+                      description={t('settings.panels.notifications.compactActivityDescription')}
                       checked={settingsBoolean(draft.simplified_tool_calling ?? settings.simplified_tool_calling, true)}
                       onChange={(value) => updateDraftToggle('simplified_tool_calling', value)}
                     />
                     <SettingsToggle
-                      label="Show reasoning"
-                      description="Display the assistant's reasoning summaries when available."
+                      label={t('settings.panels.notifications.reasoning')}
+                      description={t('settings.panels.notifications.reasoningDescription')}
                       checked={settingsBoolean(draft.show_thinking ?? settings.show_thinking, false)}
                       onChange={(value) => updateDraftToggle('show_thinking', value)}
                     />
                     <SettingsToggle
-                      label="Show non-WebUI sessions"
-                      description="Surface CLI, Telegram, Discord and Slack sessions in the list."
+                      label={t('settings.panels.notifications.otherSessions')}
+                      description={t('settings.panels.notifications.otherSessionsDescription')}
                       checked={settingsBoolean(draft.show_cli_sessions ?? settings.show_cli_sessions, false)}
                       onChange={(value) => updateDraftToggle('show_cli_sessions', value)}
                     />
                     <SettingsToggle
-                      label="Sync usage to insights"
-                      description="Mirror browser session usage into the insights store."
+                      label={t('settings.panels.notifications.syncUsage')}
+                      description={t('settings.panels.notifications.syncUsageDescription')}
                       checked={settingsBoolean(draft.sync_to_insights ?? settings.sync_to_insights, false)}
                       onChange={(value) => updateDraftToggle('sync_to_insights', value)}
                     />
                     <SettingsToggle
-                      label="Check for updates"
-                      description="Show update banners and keep the local release feed current."
+                      label={t('settings.panels.notifications.updates')}
+                      description={t('settings.panels.notifications.updatesDescription')}
                       checked={settingsBoolean(draft.check_for_updates ?? settings.check_for_updates, true)}
                       onChange={(value) => updateDraftToggle('check_for_updates', value)}
                     />
                   </div>
                 </SettingsCard>
                 {/* === Accessibility Card === */}
-                <SettingsCard title="Barrierefreiheit" description="Hilfsmittel für barrierefreies Arbeiten: Hoher Kontrast, Dyslexie-Schrift, UI-Zoom und Fokus-Ringe.">
+                <SettingsCard title={t('settings.panels.appearance.accessibility')} description={t('settings.panels.appearance.accessibilityDescription')}>
                   <div className="settings-field-grid">
                     <SettingsToggle
-                      label="Hoher Kontrast"
-                      description="Maximiert Lesbarkeit mit weißem Text auf schwarzem Hintergrund (WCAG ≥ 7:1)."
-                      checked={usePanelStore.getState().a11yHighContrast}
+                      label={t('settings.panels.appearance.highContrast')}
+                      description={t('settings.panels.appearance.highContrastDescription')}
+                      checked={a11yHighContrast}
                       onChange={(val) => { usePanelStore.getState().setA11yHighContrast(val); }}
                     />
                     <SettingsToggle
-                      label="Dyslexie-Schrift"
-                      description="Wechselt zur lesefreundlichen OpenDyslexic-Schriftart."
-                      checked={usePanelStore.getState().a11yDyslexicFont}
+                      label={t('settings.panels.appearance.dyslexicFont')}
+                      description={t('settings.panels.appearance.dyslexicFontDescription')}
+                      checked={a11yDyslexicFont}
                       onChange={(val) => { usePanelStore.getState().setA11yDyslexicFont(val); }}
                     />
-                    <SettingsField label="Mindestschriftgröße" description="Verhindert, dass Text unter die gewählte Größe fällt.">
+                    <SettingsField label={t('settings.panels.appearance.minimumFontSize')} description={t('settings.panels.appearance.minimumFontSizeDescription')}>
                       <select
-                        value={String(usePanelStore.getState().a11yMinFontSize)}
+                        value={String(a11yMinFontSize)}
                         onChange={(e) => { usePanelStore.getState().setA11yMinFontSize(Number(e.target.value)); }}
                       >
-                        <option value="0">Aus (Standard)</option>
+                        <option value="0">{t('settings.panels.appearance.offDefault')}</option>
                         <option value="14">14px</option>
                         <option value="16">16px</option>
                         <option value="18">18px</option>
@@ -3106,8 +3306,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       </select>
                     </SettingsField>
                     <SettingsField
-                      label={`UI-Zoom: ${usePanelStore.getState().a11yUiZoom}%`}
-                      description="Skaliert die gesamte Oberfläche. Standard: 100 %."
+                      label={`${t('settings.panels.appearance.uiZoom')}: ${a11yUiZoom}%`}
+                      description={t('settings.panels.appearance.uiZoomDescription')}
                     >
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <input
@@ -3115,7 +3315,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           min={80}
                           max={150}
                           step={5}
-                          value={usePanelStore.getState().a11yUiZoom}
+                          value={a11yUiZoom}
                           onChange={(e) => { usePanelStore.getState().setA11yUiZoom(Number(e.target.value)); }}
                           style={{ flex: 1 }}
                         />
@@ -3124,14 +3324,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           onClick={() => { usePanelStore.getState().setA11yUiZoom(100); }}
                           style={{ fontSize: 11, padding: '2px 8px' }}
                         >
-                          Reset
+                          {t('settings.reset')}
                         </button>
                       </div>
                     </SettingsField>
                     <SettingsToggle
-                      label="Fokus-Ringe"
-                      description="Zeigt deutliche gelbe Fokus-Ringe für Tastatur-Navigation (WCAG AA)."
-                      checked={usePanelStore.getState().a11yFocusRings}
+                      label={t('settings.panels.appearance.focusRings')}
+                      description={t('settings.panels.appearance.focusRingsDescription')}
+                      checked={a11yFocusRings}
                       onChange={(val) => { usePanelStore.getState().setA11yFocusRings(val); }}
                     />
                   </div>
@@ -3143,25 +3343,32 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             {section === 'providers' && (
               <>
                 <SettingsCard
-                  title="Connected providers"
-                  description="Which providers Sidekick can use, and how to sign in."
-                  action={<span className="settings-badge">{activeProvider || 'No active provider'}</span>}
+                  title={t('settings.panels.providers.title')}
+                  description={t('settings.panels.providers.description')}
+                  action={<span className="settings-badge">{activeProvider || t('settings.panels.providers.noneActive')}</span>}
                 >
-                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label="Loading providers…" />}
+                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loading')} />}
                   {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
                   {!modelsState.loading && !modelsState.error && (
                     <div className="provider-status-list">
                       {providerOptions.map((option) => {
                         const meta = providerPresentation(option.id);
+                        const verification = providerVerification(option.id);
                         const isActive = option.id === activeProvider;
                         return (
                           <div key={option.id} className={`provider-status-row ${isActive ? 'active' : ''}`}>
                             <span className="provider-mark" style={{ background: meta.color }}>{meta.mark}</span>
                             <span className="provider-copy">
                               <strong>{option.label}</strong>
-                              <small>{meta.description}</small>
+                              <small>{localizedProviderDescription(option.id, locale)}</small>
+                              <small className={`provider-verification-note ${verification.verified ? 'verified' : 'untested'}`}>
+                                {t(verification.statusKey)}
+                              </small>
+                              {verification.evidenceKey && (
+                                <small className="provider-verification-evidence">{t(verification.evidenceKey)}</small>
+                              )}
                             </span>
-                            {isActive && <span className="provider-badge">active</span>}
+                            {isActive && <span className="provider-badge">{t('settings.panels.providers.active')}</span>}
                             {option.oauthProvider && (
                               <button
                                 type="button"
@@ -3170,36 +3377,50 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 disabled={!ready}
                               >
                                 <LogIn size={14} />
-                                <span>Connect</span>
+                                <span>{t('settings.panels.providers.connect')}</span>
                               </button>
                             )}
-                            {!isActive && (['ollama', 'ollama-cloud'].includes(option.id) ? (
+                            {option.id === 'openrouter' ? (
+                              <button
+                                type="button"
+                                className="secondary-action compact"
+                                onClick={() => void openOpenRouterSettings()}
+                                disabled={!ready || saving}
+                              >
+                                <Settings size={14} />
+                                <span>{t('settings.panels.providers.configure')}</span>
+                              </button>
+                            ) : ['ollama', 'ollama-cloud'].includes(option.id) ? (
                               <button
                                 type="button"
                                 className="secondary-action compact"
                                 onClick={() => {
-                                  const defaultUrl = option.id === 'ollama-cloud' ? 'https://ollama.com' : 'http://localhost:11434';
+                                  const defaultUrl = option.id === 'ollama-cloud' ? 'https://ollama.com/v1' : 'http://localhost:11434';
+                                  const providerConfig = isRecord(settings.providers) && isRecord(settings.providers[option.id])
+                                    ? settings.providers[option.id]
+                                    : {};
+                                  const currentProviderSettings = activeProvider === option.id ? settings : providerConfig;
                                   setOllamaModalProviderId(option.id);
                                   setOllamaModalLabel(option.label || option.id);
-                                  setOllamaUrl(settingsText(settings.base_url, defaultUrl));
-                                  setOllamaKey(settingsText(settings.api_key, ''));
+                                  setOllamaUrl(settingsText(currentProviderSettings.base_url, defaultUrl));
+                                  setOllamaKey('');
                                   setOllamaTestResult('');
                                 }}
                                 disabled={!ready || saving}
                               >
                                 <Settings size={14} />
-                                <span>Configure</span>
+                                <span>{t('settings.panels.providers.configure')}</span>
                               </button>
-                            ) : (
+                            ) : !isActive && (
                               <button
                                 type="button"
                                 className="secondary-action compact"
                                 onClick={() => void switchProvider(option.id)}
                                 disabled={!ready || saving}
                               >
-                                <span>Use</span>
+                                <span>{t('settings.panels.providers.use')}</span>
                               </button>
-                            ))}
+                            )}
                           </div>
                         );
                       })}
@@ -3207,29 +3428,131 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   )}
                 </SettingsCard>
 
+                {openRouterModalOpen && (
+                  <div className="settings-modal-overlay" onClick={() => setOpenRouterModalOpen(false)}>
+                    <div className="settings-modal-box" onClick={(event) => event.stopPropagation()}>
+                      <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>OpenRouter {t('settings.panels.providers.configure')}</h3>
+                      <p className="settings-hint" style={{ margin: '0 0 12px' }}>
+                        {t('settings.panels.providers.openrouterKeyHint')}
+                      </p>
+                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.apiKey')}</label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={openRouterKey}
+                        onChange={(event) => setOpenRouterKey(event.target.value)}
+                        placeholder={openRouterHasSavedKey
+                          ? t('settings.panels.providers.openrouterKeyPlaceholder')
+                          : t('settings.panels.providers.cloudKeyPlaceholder')}
+                        style={{ width: '100%', marginBottom: 10 }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                        <strong style={{ fontSize: 12 }}>{t('settings.panels.providers.openrouterChooseModels')}</strong>
+                        <button
+                          type="button"
+                          className="secondary-action compact"
+                          onClick={() => void loadOpenRouterModelCatalog()}
+                          disabled={openRouterLoading || openRouterSaving || (!openRouterHasSavedKey && !openRouterKey.trim())}
+                        >
+                          {openRouterLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}
+                          <span>{t(openRouterHasSavedKey
+                            ? 'settings.panels.providers.openrouterRefreshModels'
+                            : 'settings.panels.providers.openrouterLoadModels')}</span>
+                        </button>
+                      </div>
+                      {openRouterLoading && <EmptyState icon={<Loader2 size={15} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
+                      {!openRouterLoading && !openRouterError && openRouterModels.length === 0 && (
+                        <p className="settings-hint">{openRouterHasSavedKey || openRouterKey.trim()
+                          ? t('settings.panels.providers.openrouterNoModels')
+                          : t('settings.panels.providers.openrouterKeyRequired')}</p>
+                      )}
+                      {openRouterModels.length > 0 && (
+                        <>
+                          <div style={{ maxHeight: 230, overflowY: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '6px 10px', marginBottom: 12 }}>
+                            {[
+                              ...openRouterModels,
+                              ...openRouterSelectedModels
+                                .filter((id) => !openRouterModels.some((model) => model.id === id))
+                                .map((id) => ({ id, label: `${id} (${t('settings.panels.providers.openrouterUnavailable')})` }))
+                            ].map((model) => {
+                              const checked = openRouterSelectedModels.includes(model.id);
+                              return (
+                                <label key={model.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: 12, cursor: 'pointer' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(event) => {
+                                      const next = event.target.checked
+                                        ? [...openRouterSelectedModels, model.id]
+                                        : openRouterSelectedModels.filter((id) => id !== model.id);
+                                      setOpenRouterSelectedModels(next);
+                                      if (!next.includes(openRouterDefaultModel)) {
+                                        setOpenRouterDefaultModel(next[0] || '');
+                                      }
+                                    }}
+                                  />
+                                  <span>{model.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 5 }}>
+                            {t('settings.panels.providers.default')}
+                          </label>
+                          <select
+                            value={openRouterDefaultModel}
+                            onChange={(event) => setOpenRouterDefaultModel(event.target.value)}
+                            disabled={!openRouterSelectedModels.length}
+                            style={{ width: '100%', marginBottom: 12 }}
+                          >
+                            {openRouterModels
+                              .filter((model) => openRouterSelectedModels.includes(model.id))
+                              .map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+                          </select>
+                        </>
+                      )}
+                      {openRouterError && <div className="workspace-error" role="alert" style={{ marginBottom: 10 }}>{openRouterError}</div>}
+                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <button type="button" className="secondary-action compact" onClick={() => setOpenRouterModalOpen(false)}>
+                          {t('settings.panels.providers.cancel')}
+                        </button>
+                        <button
+                          type="button"
+                          className="primary-action compact"
+                          disabled={openRouterSaving || openRouterLoading || openRouterModels.length === 0}
+                          onClick={() => void saveOpenRouterSettings()}
+                        >
+                          {openRouterSaving ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
+                          <span>{t('settings.panels.providers.saveActivate')}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Ollama Config Modal */}
                 {ollamaModalProviderId && (
                   <div className="settings-modal-overlay" onClick={() => setOllamaModalProviderId(null)}>
                     <div className="settings-modal-box" onClick={(e) => e.stopPropagation()}>
-                      <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>Configure {ollamaModalLabel}</h3>
-                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Base URL</label>
+                      <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>{t('settings.panels.providers.configure')} {ollamaModalLabel}</h3>
+                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.baseUrl')}</label>
                       <input
                         type="url"
                         value={ollamaUrl}
                         onChange={(e) => setOllamaUrl(e.target.value)}
-                        placeholder={ollamaModalProviderId === 'ollama-cloud' ? 'https://ollama.com' : 'http://localhost:11434'}
+                        placeholder={ollamaModalProviderId === 'ollama-cloud' ? 'https://ollama.com/v1' : 'http://localhost:11434'}
                         style={{ width: '100%', marginBottom: 8 }}
                       />
-                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>API Key {ollamaModalProviderId === 'ollama-cloud' ? '(required)' : '(optional)'}</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.apiKey')} {ollamaModalProviderId === 'ollama-cloud' ? t('settings.panels.providers.apiKeyRequired') : t('settings.panels.providers.apiKeyOptional')}</label>
                       <input
                         type="password"
                         value={ollamaKey}
                         onChange={(e) => setOllamaKey(e.target.value)}
-                        placeholder={ollamaModalProviderId === 'ollama-cloud' ? 'Enter Ollama Cloud API Key' : 'Leave empty for local Ollama'}
+                        placeholder={ollamaModalProviderId === 'ollama-cloud' ? t('settings.panels.providers.cloudKeyPlaceholder') : t('settings.panels.providers.localKeyPlaceholder')}
                         style={{ width: '100%', marginBottom: 12 }}
                       />
                       {ollamaTestResult && (
-                        <div style={{ fontSize: 12, marginBottom: 8, color: ollamaTestResult.startsWith('✓') ? 'var(--accent-primary)' : '#ff6b6b' }}>
+                      <div style={{ fontSize: 12, marginBottom: 8, color: ollamaTestResult.startsWith('✓') ? 'var(--accent-primary)' : '#ff6b6b' }}>
                           {ollamaTestResult}
                         </div>
                       )}
@@ -3238,12 +3561,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           type="button"
                           className="secondary-action compact"
                           onClick={async () => {
-                            setOllamaTestResult('Testing…');
+                            setOllamaTestResult(t('settings.panels.providers.testing'));
                             try {
                               const isCloud = ollamaModalProviderId === 'ollama-cloud';
                               const baseUrl = ollamaUrl.trim().replace(/\/$/, '');
-                              const testUrl = isCloud ? `${baseUrl}/v1/models` : `${baseUrl}/api/tags`;
-                              const headers: Record<string, string> = {};
+                              const testUrl = isCloud
+                                ? `${baseUrl.replace(/\/v1$/i, '')}/v1/models`
+                                : `${baseUrl}/api/tags`;
+                              const headers: Record<string, string> ={};
                               if (ollamaKey.trim()) {
                                 headers['Authorization'] = `Bearer ${ollamaKey.trim()}`;
                               }
@@ -3252,19 +3577,19 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 signal: AbortSignal.timeout(6000)
                               });
                               if (res.ok) {
-                                setOllamaTestResult(`✓ Connected — ${isCloud ? 'Ollama Cloud' : 'Ollama'} reachable`);
+                                setOllamaTestResult(`✓ ${t('settings.panels.providers.connectionSuccess')} — ${isCloud ? 'Ollama Cloud' : 'Ollama'}`);
                               } else {
-                                setOllamaTestResult(`✗ HTTP ${res.status}: ${res.statusText || 'Error'}`);
+                                setOllamaTestResult(`✗ ${t('settings.panels.providers.connectionError')} (HTTP ${res.status}: ${res.statusText || t('common.error')})`);
                               }
                             } catch (err) {
-                              setOllamaTestResult(`✗ ${err instanceof Error ? err.message : String(err)}`);
+                              setOllamaTestResult(`✗ ${t('settings.panels.providers.connectionError')}: ${err instanceof Error ? err.message : String(err)}`);
                             }
                           }}
                         >
-                          Test Connection
+                          {t('settings.panels.providers.testConnection')}
                         </button>
                         <button type="button" className="secondary-action compact" onClick={() => setOllamaModalProviderId(null)}>
-                          Cancel
+                          {t('common.cancel')}
                         </button>
                         <button
                           type="button"
@@ -3301,55 +3626,55 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                             }
                           }}
                         >
-                          Save & Activate
+                          {t('settings.panels.providers.saveActivate')}
                         </button>
                       </div>
                     </div>
                   </div>
                 )}
 
-                <SettingsCard title="Model catalog" description="Live `/api/models` payload mirrored from the backend.">
+                <SettingsCard title={t('settings.panels.providers.modelCatalog')} description={t('settings.panels.providers.modelCatalogDescription')}>
 
-                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label="Loading models…" />}
+                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
                   {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
                   {!modelsState.loading && !modelsState.error && (
                     <div className="settings-model-summary">
-                      <span className="settings-badge">Default: {settingsText(modelsState.data?.default_model, '—')}</span>
-                      <span className="settings-badge">Active provider: {activeProvider || '—'}</span>
-                      <span className="settings-badge">Groups: {modelGroups.length}</span>
+                      <span className="settings-badge">{t('settings.panels.providers.default')}: {settingsText(modelsState.data?.default_model, '—')}</span>
+                      <span className="settings-badge">{t('settings.panels.providers.activeProvider')}: {activeProvider || '—'}</span>
+                      <span className="settings-badge">{t('settings.panels.providers.groups')}: {modelGroups.length}</span>
                     </div>
                   )}
                 </SettingsCard>
 
-                <SettingsCard title="Advanced provider routing" description="Raw identifiers — only change these if you know the backend expects them.">
+                <SettingsCard title={t('settings.panels.providers.advancedRouting')} description={t('settings.panels.providers.advancedRoutingDescription')}>
                   <div className="settings-field-grid">
-                    <SettingsField label="Provider" description="Top-level provider identifier.">
+                    <SettingsField label={t('settings.panels.providers.provider')} description={t('settings.panels.providers.providerDescription')}>
                       <input value={settingsText(draft.provider ?? settings.provider, '')} onChange={(event) => updateDraftField('provider', event.target.value)} placeholder="openai-codex" />
                     </SettingsField>
-                    <SettingsField label="Model provider" description="Provider family used for model resolution.">
+                    <SettingsField label={t('settings.panels.providers.modelProvider')} description={t('settings.panels.providers.modelProviderDescription')}>
                       <input value={settingsText(draft.model_provider ?? settings.model_provider, '')} onChange={(event) => updateDraftField('model_provider', event.target.value)} placeholder="openai-codex" />
                     </SettingsField>
-                    <SettingsField label="Gateway" description="Optional gateway / proxy identifier.">
+                    <SettingsField label={t('settings.panels.providers.gateway')} description={t('settings.panels.providers.gatewayDescription')}>
                       <input value={settingsText(draft.gateway ?? settings.gateway, '')} onChange={(event) => updateDraftField('gateway', event.target.value)} placeholder="default" />
                     </SettingsField>
-                    <SettingsField label="OpenAI Codex" description="Enable Codex-specific provider handling.">
+                    <SettingsField label={t('settings.panels.providers.openaiCodex')} description={t('settings.panels.providers.openaiCodexDescription')}>
                       <select value={settingsBoolean(draft.openai_codex_enabled ?? settings.openai_codex_enabled, false) ? 'true' : 'false'} onChange={(event) => updateDraftField('openai_codex_enabled', event.target.value === 'true')}>
-                        <option value="false">Disabled</option>
-                        <option value="true">Enabled</option>
+                        <option value="false">{t('settings.panels.providers.disabled')}</option>
+                        <option value="true">{t('settings.panels.providers.enabled')}</option>
                       </select>
                     </SettingsField>
-                    <SettingsField label="API redaction" description="Hide sensitive data in API responses.">
+                    <SettingsField label={t('settings.panels.providers.apiRedaction')} description={t('settings.panels.providers.apiRedactionDescription')}>
                       <select value={settingsBoolean(draft.api_redact_enabled ?? settings.api_redact_enabled, true) ? 'true' : 'false'} onChange={(event) => updateDraftField('api_redact_enabled', event.target.value === 'true')}>
-                        <option value="true">Enabled</option>
-                        <option value="false">Disabled</option>
+                        <option value="true">{t('settings.panels.providers.enabled')}</option>
+                        <option value="false">{t('settings.panels.providers.disabled')}</option>
                       </select>
                     </SettingsField>
                   </div>
                 </SettingsCard>
 
                 <SettingsCard
-                  title="Google Accounts & Round-Robin"
-                  description="Multi-account OAuth connections for Google Gemini CLI / Antigravity with balanced token usage."
+                  title={t('settings.panels.providers.googleAccounts')}
+                  description={t('settings.panels.providers.googleAccountsDescription')}
                 >
                   <GeminiAccountsPanel sidekickReady={ready} />
                 </SettingsCard>
@@ -3362,8 +3687,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
             {section === 'google-accounts' && (
               <SettingsCard
-                title="Google Accounts & Round-Robin"
-                description="Connect multiple Google accounts to balance Gemini API / CLI token usage across accounts with round-robin rotation."
+                title={t('settings.panels.providers.googleAccounts')}
+                description={t('settings.panels.providers.googleAccountsRoundRobinDescription')}
               >
                 <GeminiAccountsPanel sidekickReady={ready} />
               </SettingsCard>
@@ -3372,26 +3697,26 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             {(section === 'extensions' || section === 'plugins') && (
               <>
                 <ExtensionsSettingsSection />
-                <SettingsCard title="Connected apps & Plugins" description="Installed app integrations and plugin inventory.">
+                <SettingsCard title={t('settings.panels.plugins.connectedApps')} description={t('settings.panels.plugins.connectedAppsDescription')}>
                   <div className="settings-field-grid">
                     <SettingsToggle
-                      label="Gmail visible in sidebar"
-                      description="Shown only when installed from the appstore."
+                      label={t('settings.panels.plugins.gmailVisible')}
+                      description={t('settings.panels.plugins.appstoreOnly')}
                       checked={settingsBoolean(draft.gmail ?? settings.gmail, false)}
                       onChange={(value) => updateDraftToggle('gmail', value)}
                     />
                     <SettingsToggle
-                      label="Discord visible in sidebar"
-                      description="Shown only when installed from the appstore."
+                      label={t('settings.panels.plugins.discordVisible')}
+                      description={t('settings.panels.plugins.appstoreOnly')}
                       checked={settingsBoolean(draft.discord ?? settings.discord, false)}
                       onChange={(value) => updateDraftToggle('discord', value)}
                     />
-                    <SettingsField label="Enabled plugins" description="Comma-separated plugin keys.">
-                      <input value={settingsCsv(draft.enabled_plugins ?? settings.enabled_plugins)} onChange={(event) => updateDraftField('enabled_plugins', event.target.value)} placeholder="gmail,discord" />
+                    <SettingsField label={t('settings.panels.plugins.enabledPlugins')} description={t('settings.panels.plugins.enabledPluginsDescription')}>
+                      <input value={settingsCsv(draft.enabled_plugins ?? settings.enabled_plugins)} onChange={(event) => updateDraftField('enabled_plugins', event.target.value)} placeholder={t('settings.panels.plugins.keysPlaceholder')} />
                     </SettingsField>
                   </div>
                 </SettingsCard>
-                <SettingsCard title="Installed plugin inventory" description="What the backend currently exposes.">
+                <SettingsCard title={t('settings.panels.plugins.installedInventory')} description={t('settings.panels.plugins.inventoryDescription')}>
                   {renderPluginsList()}
                 </SettingsCard>
               </>
@@ -3403,8 +3728,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 <DoctorDashboard onReopenSetup={onReopenSetup} />
 
                 <SettingsCard
-                  title="Setup assistant"
-                  description="Reopen the first-run wizard to change providers, sign in again, or review the model options."
+                  title={t('settings.panels.system.setupAssistant')}
+                  description={t('settings.panels.system.setupAssistantDescription')}
                 >
                   <div className="settings-system-actions">
                     <button
@@ -3413,18 +3738,15 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       onClick={onReopenSetup}
                     >
                       <Sparkles size={15} />
-                      <span>Open setup assistant</span>
+                      <span>{t('settings.panels.system.openSetupAssistant')}</span>
                     </button>
                   </div>
-                  <p className="settings-hint">
-                    The assistant walks through provider sign-in and model choice. It does not change
-                    anything until you confirm.
-                  </p>
+                  <p className="settings-hint">{t('settings.panels.system.setupHint')}</p>
                 </SettingsCard>
 
                 <SettingsCard
-                  title="Access and updates"
-                  description="Authentication, password control and package updates."
+                  title={t('settings.panels.system.accessUpdates')}
+                  description={t('settings.panels.system.accessUpdatesDescription')}
                   action={
                     <div className="settings-system-badges">
                       <span className="settings-badge">WebUI: {webuiVersion}</span>
@@ -3433,7 +3755,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   }
                 >
                   <div className="settings-field-grid">
-                    <SettingsField label="Access password" description="Leave blank to keep the current password.">
+                    <SettingsField label={t('settings.panels.system.accessPassword')} description={t('settings.panels.system.passwordKeepDescription')}>
                       <input
                         type="password"
                         value={passwordDraft}
@@ -3442,21 +3764,21 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           setPasswordDraft(event.target.value);
                           setDirty(true);
                         }}
-                        placeholder={passwordEnvLocked ? 'Locked by env var' : 'Enter new password…'}
+                        placeholder={passwordEnvLocked ? t('settings.panels.system.lockedByEnvironment') : t('settings.panels.system.enterNewPassword')}
                       />
                     </SettingsField>
-                    <SettingsField label="Workspace root" description="Default workspace path for this install.">
+                    <SettingsField label={t('settings.panels.system.workspaceRoot')} description={t('settings.panels.system.workspaceRootDescription')}>
                       <input value={settingsText(draft.workspace_root ?? settings.workspace_root, '')} onChange={(event) => updateDraftField('workspace_root', event.target.value)} placeholder={settingsText(serviceStatus?.runtimeDir, '')} />
                     </SettingsField>
                     <SettingsToggle
-                      label="Debug mode"
-                      description="Enable verbose diagnostics in the desktop shell."
+                      label={t('settings.panels.system.debugMode')}
+                      description={t('settings.panels.system.debugModeDescription')}
                       checked={settingsBoolean(draft.debug ?? settings.debug, false)}
                       onChange={(value) => updateDraftToggle('debug', value)}
                     />
                     <SettingsToggle
-                      label="Auth enabled"
-                      description={authEnabled ? 'Authentication is currently active.' : 'Authentication is currently disabled.'}
+                      label={t('settings.panels.system.authEnabled')}
+                      description={authEnabled ? t('settings.panels.system.authActive') : t('settings.panels.system.authDisabled')}
                       checked={authEnabled}
                       onChange={() => void 0}
                       disabled
@@ -3464,41 +3786,41 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   </div>
                   {passwordEnvLocked && (
                     <div className="settings-env-lock">
-                      The HERMES_WEBUI_PASSWORD environment variable is set and overrides this password field.
+                    {t('settings.panels.system.environmentPasswordNotice')}
                     </div>
                   )}
                   <div className="settings-system-actions">
                     <button type="button" className="secondary-action compact" onClick={() => void checkUpdates()} disabled={!ready || updatesState.loading}>
                       {updatesState.loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
-                      <span>Check updates</span>
+                      <span>{t('settings.panels.system.checkUpdates')}</span>
                     </button>
                     <button type="button" className="secondary-action compact" onClick={() => void signOut()} disabled={!ready || !loggedIn}>
                       <Shield size={15} />
-                      <span>Sign out</span>
+                      <span>{t('settings.panels.system.signOut')}</span>
                     </button>
                     <button type="button" className="secondary-action compact" onClick={() => void disableAuth()} disabled={!ready || !authEnabled || passwordEnvLocked}>
                       <Trash2 size={15} />
-                      <span>Disable auth</span>
+                      <span>{t('settings.panels.system.disableAuth')}</span>
                     </button>
                   </div>
                   <div className="settings-system-status">
-                    <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>Update state: {updateState}</span>
-                    {updateCurrentVersion && <span className="settings-badge">Current: {updateCurrentVersion}</span>}
-                    {updateAvailableVersion && <span className="settings-badge">Available: {updateAvailableVersion}</span>}
+                    <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>{t('settings.panels.system.updateState', { state: updateState })}</span>
+                    {updateCurrentVersion && <span className="settings-badge">{t('settings.panels.system.currentVersion', { version: updateCurrentVersion })}</span>}
+                    {updateAvailableVersion && <span className="settings-badge">{t('settings.panels.system.availableVersion', { version: updateAvailableVersion })}</span>}
                     {updateMessage && <span className="settings-badge">{updateMessage}</span>}
                   </div>
                 </SettingsCard>
 
                 <SettingsCard
-                  title="Sidekick runtime"
-                  description="Sidekick ships with Lastbrowser but updates independently — no Lastbrowser release needed."
+                  title={t('settings.panels.system.sidekickRuntime')}
+                  description={t('settings.panels.system.sidekickRuntimeDescription')}
                 >
                   <div className="settings-system-status">
                     <span className="settings-badge">
-                      Version: {sidekickUpdateVersion || 'unknown'}
+                      {t('settings.panels.system.version', { version: sidekickUpdateVersion || 'unknown' })}
                     </span>
                     <span className="settings-badge">
-                      Source: {sidekickUpdateSource === 'runtime' ? 'updated copy' : 'bundled'}
+                      {t('settings.panels.system.source', { source: sidekickUpdateSource === 'runtime' ? t('settings.panels.system.updatedCopy') : t('settings.panels.system.bundled') })}
                     </span>
                     {sidekickUpdateStatus !== 'idle' && (
                       <span className={`settings-badge ${sidekickUpdateStatus === 'error' ? 'warning' : ''}`}>
@@ -3515,7 +3837,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       disabled={sidekickUpdateBusy}
                     >
                       {sidekickUpdateBusy ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
-                      <span>Check Sidekick</span>
+                      <span>{t('settings.panels.system.checkSidekick')}</span>
                     </button>
                     <button
                       type="button"
@@ -3524,12 +3846,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       disabled={sidekickUpdateBusy || !sidekickUpdateAvailable}
                     >
                       <Download size={15} />
-                      <span>Update Sidekick</span>
+                      <span>{t('settings.panels.system.updateSidekick')}</span>
                     </button>
                   </div>
                 </SettingsCard>
 
-                <SettingsCard title="Developer API tools" description="Useful while bridging remaining WebUI endpoints.">
+                <SettingsCard title={t('settings.panels.system.developerApiTools')} description={t('settings.panels.system.developerApiToolsDescription')}>
                   <AdvancedWebUiTools panel="settings" serviceStatus={serviceStatus} compact />
                 </SettingsCard>
               </>

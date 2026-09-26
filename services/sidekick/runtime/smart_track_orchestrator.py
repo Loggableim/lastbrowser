@@ -33,6 +33,14 @@ DEFAULT_SMART_TRACK_CONFIG: Dict[str, Any] = {
 
 _CONFIG_LOCK = threading.RLock()
 _CACHED_CONFIG: Optional[Dict[str, Any]] = None
+_SCAN_LOCK = threading.Lock()
+_SCAN_THREAD: Optional[threading.Thread] = None
+_SCAN_STATE: Dict[str, Any] = {"status": "idle", "last_error": None}
+
+
+def _set_model_wall_scan_state(status: str, error: Optional[str] = None) -> None:
+    with _SCAN_LOCK:
+        _SCAN_STATE.update(status=status, last_error=error)
 
 
 def get_smart_track_config_path() -> Path:
@@ -149,7 +157,7 @@ def classify_smart_model(model_id: str, provider: str = "") -> Tuple[str, List[s
         tags.append("web")
     if any(k in mid for k in ("pro", "r1", "o1", "o3", "sonnet", "opus", "qwq")):
         tags.append("reasoning")
-    if any(k in mid for k in ("flash-lite", "lite", "nano", "mini", "haiku", "3b", "7b", "8b")):
+    if any(k in mid for k in ("flash-lite", "lite", "nano", "mini", "haiku")) or re.search(r"(?:^|[:_\-])(?:3|4|7|8)b(?:$|[:_\-])", mid):
         tags.append("fast")
 
     # Tier assignment
@@ -165,7 +173,7 @@ def classify_smart_model(model_id: str, provider: str = "") -> Tuple[str, List[s
         return "high", tags
 
     # Low / Eco Tier
-    if any(k in mid for k in ("lite", "nano", "mini", "3b", "7b", "8b", "haiku")):
+    if any(k in mid for k in ("lite", "nano", "mini", "haiku")) or re.search(r"(?:^|[:_\-])(?:3|4|7|8)b(?:$|[:_\-])", mid):
         return "low", tags
 
     # Medium Tier
@@ -191,7 +199,10 @@ def build_model_wall() -> Dict[str, Any]:
             raw_id = str(m.get("id") or "").strip()
             if not raw_id:
                 continue
-            clean_id = raw_id.split(":", 1)[1] if ":" in raw_id and not raw_id.startswith("ollama:") else raw_id
+            # Only @provider:model is a provider-qualified picker ID. A bare
+            # colon is part of many real model IDs (for example qwen3:4b,
+            # deepseek-r1:70b, or OpenRouter :free variants) and must survive.
+            clean_id = raw_id.split(":", 1)[1] if raw_id.startswith("@") and ":" in raw_id else raw_id
             if clean_id.lower() in ("teamwork", "smart-track", "smart-track-low", "smart-track-medium", "smart-track-high") or clean_id in seen:
                 continue
             seen.add(clean_id)
@@ -238,6 +249,52 @@ def build_model_wall() -> Dict[str, Any]:
         }
 
     return model_wall
+
+
+def schedule_model_wall_scan(*, force: bool = False) -> bool:
+    """Refresh the Model Wall off-thread; return whether a scan was queued.
+
+    Automatic startup/credential scans obey ``auto_scan``. Explicit callers may
+    pass ``force=True`` (the manual scan endpoint) and always trigger discovery.
+    Discovery only enumerates provider models; it never issues generations.
+    """
+    global _SCAN_THREAD
+    if not force and not load_smart_track_config(reload=True).get("auto_scan", True):
+        return False
+    with _SCAN_LOCK:
+        if _SCAN_THREAD is not None and _SCAN_THREAD.is_alive():
+            return False
+        _SCAN_STATE.update(status="scanning", last_error=None)
+
+        def scan() -> None:
+            global _SCAN_THREAD
+            try:
+                build_model_wall()
+                _set_model_wall_scan_state("complete")
+            except Exception as exc:
+                logger.warning("Smart Track automatic model scan failed: %s", exc)
+                _set_model_wall_scan_state("failed", str(exc))
+            finally:
+                with _SCAN_LOCK:
+                    _SCAN_THREAD = None
+
+        _SCAN_THREAD = threading.Thread(target=scan, name="smart-track-model-scan", daemon=True)
+        _SCAN_THREAD.start()
+        return True
+
+
+def get_model_wall_scan_state() -> Dict[str, Any]:
+    with _SCAN_LOCK:
+        return dict(_SCAN_STATE)
+
+
+def _provider_for_wall_model(wall: Dict[str, Any], model_id: str, fallback: str = "") -> str:
+    """Return the provider owning a selected model-wall ID."""
+    for tier in wall.values():
+        for model in tier.get("models", []):
+            if model.get("id") == model_id:
+                return str(model.get("provider") or fallback)
+    return fallback
 
 
 def resolve_smart_track_model(
@@ -365,6 +422,7 @@ def run_smart_track_turn(
             wall = build_model_wall()
             preplan_model = wall.get("low", {}).get("default") or wall.get("medium", {}).get("default") or routed["model"]
             preplan_resp = call_llm(
+                provider=_provider_for_wall_model(wall, preplan_model, routed["provider"]),
                 model=preplan_model,
                 messages=[
                     {"role": "system", "content": preplan_sys},
@@ -423,6 +481,7 @@ def run_smart_track_turn(
         wall = build_model_wall()
         fb_model = wall.get("medium", {}).get("default") or routed["model"]
         fb_resp = call_llm(
+            provider=_provider_for_wall_model(wall, fb_model, routed["provider"]),
             model=fb_model,
             messages=main_messages,
             timeout=60.0,
@@ -431,6 +490,7 @@ def run_smart_track_turn(
         if not final_answer:
             final_answer = str(fb_resp.choices[0].message.content or "").strip()
         routed["model"] = fb_model
+        routed["provider"] = _provider_for_wall_model(wall, fb_model, routed["provider"])
         routed["name"] = f"{fb_model} (Fallback)"
 
     main_ms = int((time.time() - main_t0) * 1000)

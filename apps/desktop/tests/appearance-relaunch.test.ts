@@ -14,6 +14,8 @@ const localStorageMock = {
 const _classes = new Set<string>();
 const _styles: Record<string, string> = {};
 const _datasets: Record<string, string> = {};
+let systemThemeIsLight = false;
+const systemThemeListeners = new Set<() => void>();
 
 const documentMock = {
   documentElement: {
@@ -33,6 +35,7 @@ const documentMock = {
     },
     style: {
       colorScheme: 'dark',
+      zoom: '1',
       setProperty: (prop: string, val: string) => { _styles[prop] = val; },
       getPropertyValue: (prop: string) => _styles[prop] || '',
       removeProperty: (prop: string) => { delete _styles[prop]; }
@@ -43,7 +46,11 @@ const documentMock = {
 (globalThis as unknown as { localStorage: typeof localStorageMock }).localStorage = localStorageMock;
 (globalThis as unknown as { window: unknown }).window = {
   localStorage: localStorageMock,
-  matchMedia: () => ({ matches: false })
+  matchMedia: () => ({
+    get matches() { return systemThemeIsLight; },
+    addEventListener: (_event: string, listener: () => void) => systemThemeListeners.add(listener),
+    removeEventListener: (_event: string, listener: () => void) => systemThemeListeners.delete(listener)
+  })
 };
 (globalThis as unknown as { document: typeof documentMock }).document = documentMock;
 
@@ -55,8 +62,10 @@ import {
   getDomainFromUrl,
   getEffectiveZoomForUrl,
   saveDomainZoom,
-  applyDesktopAppearance
+  applyDesktopAppearance,
+  watchSystemThemeChanges
 } from '../src/renderer/App.js';
+import { applyDesktopAppearancePreview } from '../src/renderer/panels/SystemPanels.js';
 
 describe('Appearance Relaunch & Design-System Engine', () => {
   beforeEach(() => {
@@ -64,6 +73,8 @@ describe('Appearance Relaunch & Design-System Engine', () => {
     _classes.clear();
     Object.keys(_styles).forEach((k) => delete _styles[k]);
     Object.keys(_datasets).forEach((k) => delete _datasets[k]);
+    systemThemeIsLight = false;
+    systemThemeListeners.clear();
   });
 
   describe('1. Theme Normalization & OLED Support', () => {
@@ -75,6 +86,28 @@ describe('Appearance Relaunch & Design-System Engine', () => {
       expect(normalizeAppearanceTheme('OLED')).toBe('oled');
       expect(normalizeAppearanceTheme('unknown-theme')).toBe('dark');
       expect(normalizeAppearanceTheme('')).toBe('dark');
+    });
+
+    it('normalizes the vision-impaired high-contrast theme', () => {
+      expect(normalizeAppearanceTheme('vision-impaired')).toBe('vision-impaired');
+      expect(normalizeAppearanceTheme('Vision-Impaired')).toBe('vision-impaired');
+      expect(normalizeAppearanceTheme('vision impaired')).not.toBe('vision-impaired');
+    });
+
+    it('updates the resolved appearance when the OS color preference changes in System mode', () => {
+      const settings = { theme: 'system' };
+      applyDesktopAppearance(settings);
+      expect(_datasets.theme).toBe('dark');
+
+      const stopWatching = watchSystemThemeChanges(settings);
+      expect(systemThemeListeners.size).toBe(1);
+      systemThemeIsLight = true;
+      systemThemeListeners.forEach((listener) => listener());
+      expect(_datasets.theme).toBe('light');
+      expect(_classes.has('theme-light')).toBe(true);
+
+      stopWatching();
+      expect(systemThemeListeners.size).toBe(0);
     });
   });
 
@@ -95,6 +128,8 @@ describe('Appearance Relaunch & Design-System Engine', () => {
       expect(hexToRgb('#000')).toEqual({ r: 0, g: 0, b: 0 });
       expect(hexToRgb('#0ea5e9')).toEqual({ r: 14, g: 165, b: 233 });
       expect(hexToRgb('invalid')).toBeNull();
+      expect(hexToRgb('#1g3456')).toBeNull();
+      expect(hexToRgb('#12.456')).toBeNull();
     });
 
     it('computes glow, hover, and contrasting text color dynamically', () => {
@@ -181,6 +216,48 @@ describe('Appearance Relaunch & Design-System Engine', () => {
       expect(root.classList.contains('theme-oled')).toBe(false);
       expect(root.style.getPropertyValue('--user-accent-primary')).toBe('');
     });
+
+    it('clears a previously applied accent when the draft color becomes invalid', () => {
+      applyDesktopAppearance({ theme: 'dark', skin: 'custom', accent_color: '#00d26a' });
+      expect(documentMock.documentElement.style.getPropertyValue('--accent-primary')).toBe('#00d26a');
+
+      applyDesktopAppearance({ theme: 'dark', skin: 'custom', accent_color: '#0g526a' });
+      expect(documentMock.documentElement.style.getPropertyValue('--accent-primary')).toBe('');
+      expect(documentMock.documentElement.style.getPropertyValue('--user-accent-glow')).toBe('');
+    });
+
+    it('clears invalid custom accents from the live settings preview', () => {
+      applyDesktopAppearancePreview('dark', 'custom', 'default', 'bubbles', '', '#00d26a');
+      expect(documentMock.documentElement.style.getPropertyValue('--accent-primary')).toBe('#00d26a');
+
+      applyDesktopAppearancePreview('dark', 'custom', 'default', 'bubbles', '', '#0g526a');
+      expect(documentMock.documentElement.style.getPropertyValue('--accent-primary')).toBe('');
+    });
+
+    it('toggles the theme-vision-impaired root class', () => {
+      applyDesktopAppearancePreview('vision-impaired', 'default', 'default', 'bubbles', '', '');
+      const root = documentMock.documentElement;
+      expect(root.classList.contains('theme-vision-impaired')).toBe(true);
+      expect(root.classList.contains('theme-dark')).toBe(false);
+
+      applyDesktopAppearancePreview('dark', 'default', 'default', 'bubbles', '', '');
+      expect(root.classList.contains('theme-vision-impaired')).toBe(false);
+      expect(root.classList.contains('theme-dark')).toBe(true);
+    });
+
+    it('applies the UI page zoom to the browser chrome root', () => {
+      applyDesktopAppearancePreview('dark', 'default', 'default', 'bubbles', '', '', 125);
+      expect(documentMock.documentElement.style.zoom).toBe('1.25');
+
+      applyDesktopAppearancePreview('dark', 'default', 'default', 'bubbles', '', '', 80);
+      expect(documentMock.documentElement.style.zoom).toBe('0.8');
+
+      applyDesktopAppearancePreview('dark', 'default', 'default', 'bubbles', '', '', 200);
+      expect(documentMock.documentElement.style.zoom).toBe('1.5');
+
+      applyDesktopAppearancePreview('dark', 'default', 'default', 'bubbles', '', '', NaN);
+      expect(documentMock.documentElement.style.zoom).toBe('1');
+    });
   });
 
   describe('6. BrowserMain desktopSettings Contract & Zoom Resilience', () => {
@@ -216,6 +293,75 @@ describe('Appearance Relaunch & Design-System Engine', () => {
       expect(css).toContain('backdrop-filter: blur(var(--glass-blur, 16px))');
       expect(css).toContain('height: var(--titlebar-height, 42px)');
       expect(css).toContain('width: var(--dock-width, 48px)');
+    });
+
+    it('applies each selected syntax theme to both transcript and Copilot code blocks', () => {
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const css = fs.readFileSync(path.resolve(__dirname, '../src/renderer/appearance.css'), 'utf8');
+
+      for (const theme of ['tomorrow-night', 'one-dark', 'github-light']) {
+        expect(css).toContain(`html[data-syntax-theme="${theme}"] .rich-code-block`);
+        expect(css).toContain(`html[data-syntax-theme="${theme}"] .copilot-code-block`);
+        expect(css).toContain(`html[data-syntax-theme="${theme}"] .rich-code-block pre`);
+        expect(css).toContain(`html[data-syntax-theme="${theme}"] .copilot-code-content`);
+      }
+      expect(css).toContain('color: #24292f');
+      expect(css).toContain('background: #f6f8fa');
+    });
+
+    it('applies the accent palette to the Default skin while leaving named skins in control', () => {
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const css = fs.readFileSync(path.resolve(__dirname, '../src/renderer/appearance.css'), 'utf8');
+      for (const accent of ['neon-cyan', 'electric-violet', 'emerald-flow', 'solar-amber', 'monochrome-slate']) {
+        expect(css).toContain(`html[data-skin="default"][data-theme-accent="${accent}"]`);
+      }
+      expect(css).toContain('--accent-primary: #00d9ff');
+      expect(css).not.toContain('html[data-skin="ares"][data-theme-accent=');
+    });
+
+    it('wires font size and every message layout to the native Sidekick transcript markup', () => {
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const css = fs.readFileSync(path.resolve(__dirname, '../src/renderer/appearance.css'), 'utf8');
+      const baseCss = fs.readFileSync(path.resolve(__dirname, '../src/renderer/styles.css'), 'utf8');
+
+      expect(css).toContain('html[data-font-size] .chat-message .message-body p');
+      expect(css).toContain('font-size: var(--chat-font-size, 14px)');
+      expect(baseCss).toContain('[data-message-layout="compact"] .chat-message');
+      expect(baseCss).toContain('[data-message-layout="expanded"] .chat-message');
+      expect(css).toContain('html[data-message-layout="bubbles"] .chat-message');
+      expect(css).toContain('html[data-message-layout="bubbles"] .chat-message .message-body');
+      expect(css).toContain('html[data-message-layout="expanded"] .chat-message .message-body');
+    });
+
+    it('keeps native settings controls readable on the light theme', () => {
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const css = fs.readFileSync(path.resolve(__dirname, '../src/renderer/styles.css'), 'utf8');
+
+      expect(css).toContain('html.theme-light .settings-section-button-text strong');
+      expect(css).toContain('html.theme-light .settings-section-button-text small');
+      expect(css).toContain('html.theme-light .settings-card-header strong');
+      expect(css).toContain('html.theme-light .settings-editor-head strong');
+      expect(css).toContain('html.theme-light .settings-editor .secondary-action');
+      expect(css).toContain('html.theme-light .settings-editor .secondary-action:disabled');
+      expect(css).toContain('html.theme-light .provider-status-row.active .provider-copy strong');
+      expect(css).toContain('html.theme-light .provider-status-row .provider-badge');
+      expect(css).toContain('html.theme-light .downloads-panel');
+      expect(css).toContain('html.theme-light .downloads-panel > header strong');
+      expect(css).toContain('html.theme-light .downloads-empty');
+      expect(css).toContain('html.theme-light .settings-theme-btn.active strong');
+      expect(css).toContain('html.theme-light .settings-skin-btn:not(.active) strong');
+      expect(css).toContain('html.theme-light .settings-custom-color-card strong');
+      expect(css).toContain('html.theme-light .settings-field input');
+      expect(css).toContain('html.theme-light .provider-copy .provider-verification-note.untested');
+      expect(css).toContain('html.theme-light .provider-copy .provider-verification-note.verified');
+      expect(css).toContain('color: #854d0e;');
+      expect(css).toContain('color: #166534;');
+      expect(css).toContain('color: #075985;');
+      expect(css).toContain('color: var(--lb-muted);');
     });
   });
 });

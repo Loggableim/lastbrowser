@@ -142,8 +142,8 @@ def classify_model_tier(model_id: str, provider: str = "") -> str:
     if any(k in mid for k in ("pro", "deepseek-r1", "-r1", "o1", "o3", "claude-3-7", "claude-3-5-sonnet", ":70b", "-70b", "qwq")):
         return "quality"
     # Fast / Cost-optimized models
-    fast_tokens = ("lite", "nano", "mini", "3b", "7b", "8b", "haiku")
-    if any(k in mid for k in fast_tokens):
+    fast_tokens = ("lite", "nano", "mini", "haiku")
+    if any(k in mid for k in fast_tokens) or re.search(r"(?:^|[:_\-])(?:3|4|7|8)b(?:$|[:_\-])", mid):
         return "fast"
     # Balanced
     return "balanced"
@@ -163,7 +163,10 @@ def get_teamwork_model_pool() -> List[Dict[str, Any]]:
             raw_id = str(m.get("id") or "").strip()
             if not raw_id:
                 continue
-            clean_id = raw_id.split(":", 1)[1] if ":" in raw_id and not raw_id.startswith("ollama:") else raw_id
+            # Only @provider:model is a provider-qualified picker ID. A bare
+            # colon is part of many real model IDs (for example qwen3:4b,
+            # deepseek-r1:70b, or OpenRouter :free variants) and must survive.
+            clean_id = raw_id.split(":", 1)[1] if raw_id.startswith("@") and ":" in raw_id else raw_id
             if clean_id.lower() == "teamwork" or clean_id in seen_ids:
                 continue
             seen_ids.add(clean_id)
@@ -296,11 +299,15 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
         # Pick highest reasoning model available
         critic_cand = next((m["id"] for m in quality_models), None) or next((m["id"] for m in balanced_models), None) or (pool[0]["id"] if pool else "")
         critic_model = critic_cand
+    critic_entry = next((m for m in pool if m["id"] == critic_model), None)
+    critic_provider = critic_entry["provider"] if critic_entry else None
 
     manual_synth = roles_cfg.get("synthesizer")
     synth_model = manual_synth if manual_synth and manual_synth != "auto" else None
     if not synth_model:
         synth_model = critic_model
+    synth_entry = next((m for m in pool if m["id"] == synth_model), None)
+    synth_provider = synth_entry["provider"] if synth_entry else None
 
     # Assign diverse perspectives to each worker
     perspective_templates = [
@@ -327,7 +334,9 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
         "planner": planner,
         "workers": workers_with_perspectives,
         "critic": critic_model,
+        "critic_provider": critic_provider,
         "synthesizer": synth_model,
+        "synthesizer_provider": synth_provider,
         "pool": pool,
     }
 
@@ -436,7 +445,7 @@ def run_teamwork_turn(
         "message": "Erfasse Kontext und Browser-Zustand...",
     })
 
-    grounding_text = grounding_context.strip()
+    grounding_text = grounding_context.strip() if cfg.get("shared_grounding", True) else ""
     if not grounding_text and cfg.get("shared_grounding", True):
         # Extract active tab context if attached to session
         tab_title = getattr(session, "active_tab_title", None)
@@ -454,7 +463,9 @@ def run_teamwork_turn(
     plan = resolve_team_plan(prompt, cfg)
     workers = plan["workers"]
     critic_model = plan["critic"]
+    critic_provider = plan.get("critic_provider")
     synth_model = plan["synthesizer"]
+    synth_provider = plan.get("synthesizer_provider")
     pool = plan["pool"]
     if not workers or not critic_model or not synth_model:
         raise RuntimeError("Teamwork hat keine aktuell verfügbaren Modelle. Verbinde zuerst mindestens einen Modellanbieter.")
@@ -574,6 +585,7 @@ def run_teamwork_turn(
     critic_review = ""
     try:
         critic_resp = call_llm(
+            provider=critic_provider,
             model=critic_model,
             messages=[{"role": "user", "content": critic_prompt}],
             timeout=50.0,
@@ -624,6 +636,7 @@ def run_teamwork_turn(
     synth_t0 = time.time()
     try:
         synth_resp = call_llm(
+            provider=synth_provider,
             model=synth_model,
             messages=[{"role": "user", "content": synthesis_prompt}],
             timeout=65.0,

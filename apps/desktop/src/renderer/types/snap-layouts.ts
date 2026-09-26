@@ -62,7 +62,8 @@ export function getDefaultSnapLayoutRatios(layout: SnapLayoutType): SnapLayoutRa
   if (layout === 'dual-75-25') return { x: [75], y: [] };
   if (layout === 'dual-25-75') return { x: [25], y: [] };
   if (layout === 'trio-columns') return { x: [33.33, 66.67], y: [] };
-  if (layout === 'trio-stacked-right' || layout === 'trio-stacked-left' || layout === 'trio-main-right') return { x: [50], y: [50] };
+  if (layout === 'trio-stacked-right' || layout === 'trio-stacked-left') return { x: [50], y: [50] };
+  if (layout === 'trio-main-right') return { x: [33.33], y: [50] };
   if (layout === 'quad-grid') return { x: [50], y: [50] };
   return { x: [50], y: [] };
 }
@@ -106,12 +107,50 @@ export function getSnapSlotBounds(layout: SnapLayoutType, slotIndex: number, rat
 export function getSnapTargetForPointer(x: number, y: number): GhostTarget {
   let layout: SnapLayoutType = 'dual-50-50';
   let slotIndex = x < 0.5 ? 0 : 1;
-  if (y < 0.32 && x < 0.3) { layout = 'quad-grid'; slotIndex = 0; }
-  else if (y < 0.32 && x > 0.7) { layout = 'quad-grid'; slotIndex = 1; }
-  else if (y > 0.68 && x < 0.3) { layout = 'quad-grid'; slotIndex = 2; }
-  else if (y > 0.68 && x > 0.7) { layout = 'quad-grid'; slotIndex = 3; }
-  else if (x < 0.22) { layout = 'dual-25-75'; slotIndex = 0; }
-  else if (x > 0.78) { layout = 'dual-75-25'; slotIndex = 1; }
+
+  // 1. Four corner zones -> Quad grid quadrants (Windows 11 style)
+  if (y < 0.25 && x < 0.25) {
+    layout = 'quad-grid';
+    slotIndex = 0;
+  } else if (y < 0.25 && x > 0.75) {
+    layout = 'quad-grid';
+    slotIndex = 1;
+  } else if (y > 0.75 && x < 0.25) {
+    layout = 'quad-grid';
+    slotIndex = 2;
+  } else if (y > 0.75 && x > 0.75) {
+    layout = 'quad-grid';
+    slotIndex = 3;
+  }
+  // 2. Left side edge zones -> Dynamic 1/4, 1/3, 2/3, 1/2
+  else if (x < 0.10) {
+    layout = 'dual-25-75';
+    slotIndex = 0; // 1/4 Left (25%)
+  } else if (x < 0.22) {
+    layout = 'dual-33-66';
+    slotIndex = 0; // 1/3 Left (33.3%)
+  } else if (x < 0.35) {
+    layout = 'dual-66-33';
+    slotIndex = 0; // 2/3 Left (66.7%)
+  } else if (x < 0.50) {
+    layout = 'dual-50-50';
+    slotIndex = 0; // 1/2 Left (50%)
+  }
+  // 3. Right side edge zones -> Dynamic 1/2, 2/3, 1/3, 1/4
+  else if (x < 0.65) {
+    layout = 'dual-50-50';
+    slotIndex = 1; // 1/2 Right (50%)
+  } else if (x < 0.78) {
+    layout = 'dual-33-66';
+    slotIndex = 1; // 2/3 Right (66.7%)
+  } else if (x < 0.90) {
+    layout = 'dual-66-33';
+    slotIndex = 1; // 1/3 Right (33.3%)
+  } else {
+    layout = 'dual-75-25';
+    slotIndex = 1; // 1/4 Right (25%)
+  }
+
   const definition = SNAP_LAYOUT_DEFINITIONS[layout];
   const slot = definition.slots[slotIndex];
   return { layout, slotIndex, label: `${definition.label} · ${slot.name}`, bounds: slot.bounds };
@@ -194,11 +233,11 @@ export const SNAP_LAYOUT_DEFINITIONS: Record<SnapLayoutType, SnapLayoutDefinitio
   'trio-main-right': {
     type: 'trio-main-right',
     label: 'Trio Hauptbereich rechts',
-    description: 'Zwei übereinander links, Hauptseite rechts',
+    description: 'Zwei schmale Bereiche links, breiter Hauptbereich rechts',
     slots: [
-      { slotId: 'top-left', name: 'Oben Links (25%)', bounds: { top: 0, left: 0, width: 50, height: 50 } },
-      { slotId: 'bottom-left', name: 'Unten Links (25%)', bounds: { top: 50, left: 0, width: 50, height: 50 } },
-      { slotId: 'right-main', name: 'Hauptseite (50%)', bounds: { top: 0, left: 50, width: 50, height: 100 } }
+      { slotId: 'top-left', name: 'Oben Links (17%)', bounds: { top: 0, left: 0, width: 33.33, height: 50 } },
+      { slotId: 'bottom-left', name: 'Unten Links (17%)', bounds: { top: 50, left: 0, width: 33.33, height: 50 } },
+      { slotId: 'right-main', name: 'Hauptseite (67%)', bounds: { top: 0, left: 33.33, width: 66.67, height: 100 } }
     ]
   },
   'trio-columns': {

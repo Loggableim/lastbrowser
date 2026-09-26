@@ -28,7 +28,7 @@ export interface SpaceSetupData {
 export interface SpaceSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateSpace: (data: SpaceSetupData) => void;
+  onCreateSpace: (data: SpaceSetupData) => Promise<boolean>;
   existingSpaceNames?: string[];
 }
 
@@ -140,11 +140,38 @@ export function isDuplicateSpaceName(name: string, existingNames: string[]): boo
   return Boolean(normalizedName) && existingNames.some((existing) => existing.trim().toLowerCase() === normalizedName);
 }
 
+export function normalizePinnedApp(name: string, url: string): { name: string; url: string } | null {
+  const trimmedName = name.trim();
+  const trimmedUrl = url.trim();
+  if (!trimmedName || !trimmedUrl) return null;
+  try {
+    const parsed = new URL(trimmedUrl);
+    if (!['https:', 'http:'].includes(parsed.protocol)) return null;
+    return { name: trimmedName, url: parsed.toString() };
+  } catch {
+    return null;
+  }
+}
+
 export function resolvePresetModel(defaultModel: string, currentModel: string, availableModelIds: string[]): string {
   const isAvailable = (modelId: string) => BUILT_IN_MODEL_IDS.has(modelId) || availableModelIds.includes(modelId);
   if (isAvailable(defaultModel)) return defaultModel;
   if (isAvailable(currentModel)) return currentModel;
   return 'smart-track';
+}
+
+export async function submitSpaceSetup(
+  data: SpaceSetupData,
+  onCreateSpace: (data: SpaceSetupData) => Promise<boolean>,
+  onClose: () => void
+): Promise<Error | null> {
+  try {
+    if (!await onCreateSpace(data)) return new Error('Der Space konnte nicht erstellt werden. Bitte prüfe den Speicherort und versuche es erneut.');
+    onClose();
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
 }
 
 export function SpaceSetupModal({
@@ -163,6 +190,10 @@ export function SpaceSetupModal({
   const [selectedApps, setSelectedApps] = useState<{ name: string; url: string; color: string }[]>(
     PRESETS[0].pinnedApps
   );
+  const [customAppName, setCustomAppName] = useState('');
+  const [customAppUrl, setCustomAppUrl] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createError, setCreateError] = useState('');
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; provider_label?: string; provider?: string }>>([]);
 
   useEffect(() => {
@@ -202,6 +233,14 @@ export function SpaceSetupModal({
     }
   };
 
+  const addCustomApp = () => {
+    const app = normalizePinnedApp(customAppName, customAppUrl);
+    if (!app || selectedApps.some((existing) => existing.url === app.url)) return;
+    setSelectedApps((current) => [...current, { ...app, color }]);
+    setCustomAppName('');
+    setCustomAppUrl('');
+  };
+
   const slug = useMemo(() => {
     return name
       .toLowerCase()
@@ -218,24 +257,27 @@ export function SpaceSetupModal({
   const duplicateName = isDuplicateSpaceName(name, existingSpaceNames);
   const isNameValid = name.trim().length > 0 && !duplicateName;
 
-  const handleFinish = () => {
-    if (!isNameValid) return;
-    onCreateSpace({
+  const handleFinish = async () => {
+    if (!isNameValid || isSubmitting) return;
+    setIsSubmitting(true);
+    setCreateError('');
+    const error = await submitSpaceSetup({
       path: resolvedPath,
       name: name.trim(),
       color,
       model,
       pinnedApps: selectedApps,
       startUrl: startUrl.trim() || 'app://browser-home'
-    });
-    onClose();
+    }, onCreateSpace, onClose);
+    if (error) setCreateError(error.message);
+    setIsSubmitting(false);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="space-setup-modal-backdrop" onClick={onClose}>
-      <div className="space-setup-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+    <div className="space-setup-modal-backdrop" onClick={() => { if (!isSubmitting) onClose(); }}>
+      <div className="space-setup-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-busy={isSubmitting}>
         {/* Header */}
         <div className="space-setup-modal-header">
           <div className="space-setup-header-title">
@@ -247,7 +289,7 @@ export function SpaceSetupModal({
               <p>Strukturierter Arbeitsbereich mit eigenem Profil, KI-Modell & Apps</p>
             </div>
           </div>
-          <button type="button" className="space-setup-close-btn" onClick={onClose} aria-label="Schließen">
+          <button type="button" className="space-setup-close-btn" onClick={onClose} aria-label="Schließen" disabled={isSubmitting}>
             <X size={16} />
           </button>
         </div>
@@ -421,6 +463,19 @@ export function SpaceSetupModal({
                 )}
               </div>
 
+              <div className="space-setup-form-row" style={{ marginTop: 12 }}>
+                <div className="space-field-group" style={{ flex: 1 }}>
+                  <label className="space-setup-label" htmlFor="space-custom-app-name">Eigene App anheften</label>
+                  <input id="space-custom-app-name" className="space-setup-input" value={customAppName} onChange={(event) => setCustomAppName(event.target.value)} placeholder="Name" />
+                </div>
+                <div className="space-field-group" style={{ flex: 2 }}>
+                  <label className="space-setup-label" htmlFor="space-custom-app-url">Webadresse</label>
+                  <input id="space-custom-app-url" className="space-setup-input" value={customAppUrl} onChange={(event) => setCustomAppUrl(event.target.value)} placeholder="https://…" />
+                </div>
+                <button type="button" className="space-btn secondary" disabled={!normalizePinnedApp(customAppName, customAppUrl) || selectedApps.some((app) => app.url === normalizePinnedApp(customAppName, customAppUrl)?.url)} onClick={addCustomApp}>App hinzufügen</button>
+              </div>
+              {selectedApps.length > 0 && <div className="space-hint" aria-live="polite">Angeheftet: {selectedApps.map((app) => app.name).join(', ')}</div>}
+
               <div className="space-field-group" style={{ marginTop: 18 }}>
                 <label className="space-setup-label">Start-Webseite beim Öffnen</label>
                 <input
@@ -437,17 +492,19 @@ export function SpaceSetupModal({
 
         {/* Footer Navigation */}
         <div className="space-setup-modal-footer">
+          {createError && <p className="space-hint" role="alert" style={{ color: '#f87171', flexBasis: '100%' }}>{createError}</p>}
           {step > 1 ? (
             <button
               type="button"
               className="space-btn secondary"
+              disabled={isSubmitting}
               onClick={() => setStep((step - 1) as 1 | 2 | 3)}
             >
               <ArrowLeft size={14} />
               <span>Zurück</span>
             </button>
           ) : (
-            <button type="button" className="space-btn secondary" onClick={onClose}>
+            <button type="button" className="space-btn secondary" onClick={onClose} disabled={isSubmitting}>
               Abbrechen
             </button>
           )}
@@ -456,7 +513,7 @@ export function SpaceSetupModal({
             <button
               type="button"
               className="space-btn primary"
-              disabled={!isNameValid}
+              disabled={!isNameValid || isSubmitting}
               onClick={() => setStep((step + 1) as 1 | 2 | 3)}
               style={{ background: color, color: '#000000' }}
             >
@@ -467,12 +524,12 @@ export function SpaceSetupModal({
             <button
               type="button"
               className="space-btn primary finish"
-              disabled={!isNameValid}
-              onClick={handleFinish}
+              disabled={!isNameValid || isSubmitting}
+              onClick={() => void handleFinish()}
               style={{ background: color, color: '#000000' }}
             >
               <Check size={15} />
-              <span>Space erstellen & öffnen</span>
+              <span>{isSubmitting ? 'Space wird erstellt …' : 'Space erstellen & öffnen'}</span>
             </button>
           )}
         </div>

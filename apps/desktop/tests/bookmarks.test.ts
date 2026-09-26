@@ -51,6 +51,24 @@ describe('browser bookmarks', () => {
     expect(removeBookmark(updated, 'https://example.com')).toEqual([]);
   });
 
+  it('keeps fragment targets and directory URLs as distinct bookmarks', () => {
+    const first: BrowserBookmark = {
+      id: 'section-one', title: 'Section one', url: 'https://example.com/guide#one', createdAt: 1
+    };
+    const second: BrowserBookmark = {
+      id: 'section-two', title: 'Section two', url: 'https://example.com/guide#two', createdAt: 2
+    };
+    const directory: BrowserBookmark = {
+      id: 'directory', title: 'Directory', url: 'https://example.com/guide/', createdAt: 3
+    };
+
+    const bookmarks = upsertBookmark(upsertBookmark([first], second), directory);
+
+    expect(bookmarks).toEqual([first, second, directory]);
+    expect(isBookmarked(bookmarks, 'https://example.com/guide#one')).toBe(true);
+    expect(removeBookmark(bookmarks, 'https://example.com/guide#two')).toEqual([first, directory]);
+  });
+
   it('creates readable bookmarks from browser tabs and persists them', () => {
     const storage = memoryStorage();
     const bookmark = bookmarkFromTab({ id: 'tab-1', title: 'Example Domain', url: 'https://example.com' });
@@ -62,5 +80,16 @@ describe('browser bookmarks', () => {
     expect(loadBookmarks(storage)).toHaveLength(1);
     expect(isBookmarkableUrl('lastbrowser://ai-browser')).toBe(false);
     expect(isBookmarkableUrl('https://example.com')).toBe(true);
+  });
+
+  it('keeps the browser usable when bookmark storage is blocked or full', () => {
+    const blockedStorage = {
+      getItem: () => { throw new Error('storage blocked'); },
+      setItem: () => { throw new Error('storage full'); }
+    };
+    const bookmark = bookmarkFromTab({ id: 'tab-1', title: 'Example', url: 'https://example.com' });
+
+    expect(loadBookmarks(blockedStorage)).toEqual([]);
+    expect(() => saveBookmarks(blockedStorage, [bookmark])).not.toThrow();
   });
 });

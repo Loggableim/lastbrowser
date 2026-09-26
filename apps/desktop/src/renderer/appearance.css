@@ -1,0 +1,110 @@
+/* Syntax theme preferences are applied to both rich chat transcripts and Copilot code blocks. */
+/* The accent palette applies to the Default skin; named skins retain their own palette. */
+html[data-skin="default"][data-theme-accent="neon-cyan"] {
+  --accent-primary: #00d9ff;
+  --accent-glow: rgba(0, 217, 255, 0.4);
+}
+
+html[data-skin="default"][data-theme-accent="electric-violet"] {
+  --accent-primary: #a855f7;
+  --accent-glow: rgba(168, 85, 247, 0.4);
+}
+
+html[data-skin="default"][data-theme-accent="emerald-flow"] {
+  --accent-primary: #10b981;
+  --accent-glow: rgba(16, 185, 129, 0.4);
+}
+
+html[data-skin="default"][data-theme-accent="solar-amber"] {
+  --accent-primary: #f59e0b;
+  --accent-glow: rgba(245, 158, 11, 0.4);
+}
+
+html[data-skin="default"][data-theme-accent="monochrome-slate"] {
+  --accent-primary: #94a3b8;
+  --accent-glow: rgba(148, 163, 184, 0.4);
+}
+
+html[data-syntax-theme="tomorrow-night"] .rich-code-block,
+html[data-syntax-theme="tomorrow-night"] .copilot-code-block {
+  background: #1d1f21;
+  border-color: #373b41;
+}
+
+html[data-syntax-theme="tomorrow-night"] .rich-code-block pre,
+html[data-syntax-theme="tomorrow-night"] .copilot-code-content {
+  background: #1d1f21;
+  color: #c5c8c6;
+}
+
+html[data-syntax-theme="tomorrow-night"] .rich-code-block code,
+html[data-syntax-theme="tomorrow-night"] .copilot-code-content code {
+  color: #c5c8c6;
+}
+
+html[data-syntax-theme="one-dark"] .rich-code-block,
+html[data-syntax-theme="one-dark"] .copilot-code-block {
+  background: #282c34;
+  border-color: #3e4451;
+}
+
+html[data-syntax-theme="one-dark"] .rich-code-block pre,
+html[data-syntax-theme="one-dark"] .copilot-code-content {
+  background: #282c34;
+  color: #abb2bf;
+}
+
+html[data-syntax-theme="one-dark"] .rich-code-block code,
+html[data-syntax-theme="one-dark"] .copilot-code-content code {
+  color: #abb2bf;
+}
+
+html[data-syntax-theme="github-light"] .rich-code-block,
+html[data-syntax-theme="github-light"] .copilot-code-block {
+  background: #f6f8fa;
+  border-color: #d0d7de;
+}
+
+html[data-syntax-theme="github-light"] .rich-code-block pre,
+html[data-syntax-theme="github-light"] .copilot-code-content {
+  background: #f6f8fa;
+  color: #24292f;
+}
+
+html[data-syntax-theme="github-light"] .rich-code-block code,
+html[data-syntax-theme="github-light"] .copilot-code-content code {
+  color: #24292f;
+}
+
+/* Native Sidekick transcript markup uses .chat-message/.message-body. Keep its
+   appearance controls wired alongside the Copilot split view classes. */
+html[data-font-size] .chat-message .message-body p {
+  font-size: var(--chat-font-size, 14px);
+}
+
+html[data-message-layout="bubbles"] .chat-message {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
+html[data-message-layout="bubbles"] .chat-message .message-body {
+  border-radius: 12px;
+  padding: 12px 16px;
+  background: var(--lb-surface-strong, rgba(15, 23, 42, 0.85));
+  border: 1px solid var(--lb-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+html[data-message-layout="bubbles"] .chat-message.user .message-body {
+  background: rgba(14, 165, 233, 0.14);
+  border-color: rgba(14, 165, 233, 0.28);
+}
+
+html[data-message-layout="expanded"] .chat-message .message-body {
+  border-radius: 16px;
+  padding: 18px 24px;
+  width: 100%;
+  line-height: 1.68;
+  background: var(--lb-surface-strong, rgba(15, 23, 42, 0.9));
+  border: 1px solid var(--lb-border, rgba(255, 255, 255, 0.1));
+}

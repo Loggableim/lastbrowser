@@ -16,6 +16,24 @@ export type ProfileTabState = {
 export const tabSessionsStorageKey = 'lastbrowser.tabSessions.v1';
 export const snapGroupsStorageKey = 'lastbrowser.snapGroups.v1';
 
+/** Preserve the historic partition slug when it is already unambiguous, but
+ * append a stable path encoding whenever normalization would be lossy. */
+function spaceSlug(spacePath?: string | null, knownSpacePaths?: string[]): string {
+  const normalized = (spacePath || 'home').toLowerCase();
+  const slug = normalized.replace(/[^a-z0-9_-]/g, '_');
+  if (normalized === 'home') return slug;
+  let collidingPaths: string[] = [];
+  if (knownSpacePaths) {
+    collidingPaths = [...new Set(knownSpacePaths.map((path) => path.toLowerCase()))]
+      .filter((path) => path.replace(/[^a-z0-9_-]/g, '_') === slug)
+      .sort();
+    if (collidingPaths.length <= 1 || collidingPaths[0] === normalized) return slug;
+  }
+  if (/^[a-z0-9_-]+$/.test(normalized) && collidingPaths.length <= 1) return slug;
+  const encoded = Array.from(new TextEncoder().encode(normalized), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${slug}~${encoded}`;
+}
+
 /** Serializable occupied panes for one profile/Space. Array positions pair. */
 export type PersistedSnapGroup = {
   layout: SnapLayoutType;
@@ -26,31 +44,30 @@ export type PersistedSnapGroup = {
 
 type ReadStorage = Pick<Storage, 'getItem'>;
 type WriteStorage = Pick<Storage, 'setItem'>;
-type ReadWriteStorage = Pick<Storage, 'getItem' | 'setItem'>;
+type ReadWriteStorage = Pick<Storage, 'getItem' | 'setItem'> & Partial<Pick<Storage, 'removeItem'>>;
 
 export function emptyTabState(): ProfileTabState {
   return { tabs: [], activeTabId: null };
 }
 
-export function computeSpaceSessionKey(profileId: string, spacePath?: string | null): string {
-  const safeSpace = (spacePath || 'home').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
-  return `${profileId}::${safeSpace}`;
+export function computeSpaceSessionKey(profileId: string, spacePath?: string | null, knownSpacePaths?: string[]): string {
+  return `${profileId}::${spaceSlug(spacePath, knownSpacePaths)}`;
 }
 
-export function computeSpacePartition(profileId: string, spacePath?: string | null, incognito?: boolean): string {
+export function computeSpacePartition(profileId: string, spacePath?: string | null, incognito?: boolean, knownSpacePaths?: string[]): string {
   if (incognito) return 'in-memory-incognito';
-  const safeSpace = (spacePath || 'home').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
-  return `persist:space_${safeSpace}_${profileId}`;
+  return `persist:space_${spaceSlug(spacePath, knownSpacePaths)}_${profileId}`;
 }
 
 export function loadSpaceSnapGroup(
   profileId: string,
   spacePath: string | null | undefined,
   availableTabIds: string[],
-  storage: ReadStorage = window.localStorage
+  storage: ReadStorage = window.localStorage,
+  knownSpacePaths?: string[]
 ): PersistedSnapGroup | null {
   const all = readSnapGroups(storage);
-  const entry = all[computeSpaceSessionKey(profileId, spacePath)];
+  const entry = all[computeSpaceSessionKey(profileId, spacePath, knownSpacePaths)];
   return normalizeSnapGroup(entry, availableTabIds);
 }
 
@@ -59,10 +76,11 @@ export function saveSpaceSnapGroup(
   spacePath: string | null | undefined,
   group: PersistedSnapGroup | null,
   availableTabIds: string[],
-  storage: ReadWriteStorage = window.localStorage
+  storage: ReadWriteStorage = window.localStorage,
+  knownSpacePaths?: string[]
 ): void {
   const all = readSnapGroups(storage);
-  const key = computeSpaceSessionKey(profileId, spacePath);
+  const key = computeSpaceSessionKey(profileId, spacePath, knownSpacePaths);
   const normalized = normalizeSnapGroup(group, availableTabIds);
   if (normalized) all[key] = normalized;
   else delete all[key];
@@ -141,9 +159,10 @@ export function loadProfileTabs(
 export function loadSpaceTabs(
   profileId: string,
   spacePath?: string | null,
-  storage: ReadStorage = window.localStorage
+  storage: ReadStorage = window.localStorage,
+  knownSpacePaths?: string[]
 ): ProfileTabState {
-  const key = computeSpaceSessionKey(profileId, spacePath);
+  const key = computeSpaceSessionKey(profileId, spacePath, knownSpacePaths);
   const all = readAll(storage);
   const entry = all[key];
   if (!entry) {
@@ -176,9 +195,10 @@ export function saveSpaceTabs(
   profileId: string,
   spacePath: string | null | undefined,
   state: ProfileTabState,
-  storage: WriteStorage = window.localStorage
+  storage: WriteStorage = window.localStorage,
+  knownSpacePaths?: string[]
 ): void {
-  const key = computeSpaceSessionKey(profileId, spacePath);
+  const key = computeSpaceSessionKey(profileId, spacePath, knownSpacePaths);
   const all = readAll(storage as unknown as ReadStorage);
   const persistableTabs = state.tabs.filter((tab) => !tab.incognito);
   all[key] = {
@@ -193,9 +213,10 @@ export function saveSpaceTabs(
 export function getSpaceTabCount(
   profileId: string,
   spacePath: string | null | undefined,
-  storage: ReadStorage = window.localStorage
+  storage: ReadStorage = window.localStorage,
+  knownSpacePaths?: string[]
 ): number {
-  const state = loadSpaceTabs(profileId, spacePath, storage);
+  const state = loadSpaceTabs(profileId, spacePath, storage, knownSpacePaths);
   return state.tabs.length;
 }
 
@@ -204,9 +225,38 @@ export function removeProfileTabs(
   storage: ReadWriteStorage = window.localStorage
 ): void {
   const all = readAll(storage);
-  if (!(profileId in all)) return;
-  delete all[profileId];
-  storage.setItem(tabSessionsStorageKey, JSON.stringify(all));
+  const profilePrefix = `${profileId}::`;
+  let changed = false;
+  for (const key of Object.keys(all)) {
+    // Remove both legacy profile-wide sessions and current per-Space sessions.
+    if (key === profileId || key.startsWith(profilePrefix)) {
+      delete all[key];
+      changed = true;
+    }
+  }
+  if (changed) storage.setItem(tabSessionsStorageKey, JSON.stringify(all));
+
+  // Snap groups use the same `${profileId}::${space}` key format.
+  const snapGroups = readSnapGroups(storage);
+  let snapGroupsChanged = false;
+  for (const key of Object.keys(snapGroups)) {
+    if (key === profileId || key.startsWith(profilePrefix)) {
+      delete snapGroups[key];
+      snapGroupsChanged = true;
+    }
+  }
+  if (snapGroupsChanged) storage.setItem(snapGroupsStorageKey, JSON.stringify(snapGroups));
+
+  // The crash recovery snapshot is global but owned by a single profile.
+  const rawSnapshot = storage.getItem(sessionSnapshotStorageKey);
+  if (rawSnapshot) {
+    try {
+      const snapshot = JSON.parse(rawSnapshot) as Partial<SessionSnapshot>;
+      if (snapshot.profileId === profileId) storage.removeItem?.(sessionSnapshotStorageKey);
+    } catch {
+      // Ignore malformed recovery data; it is not safe to infer its owner.
+    }
+  }
 }
 
 export const sessionSnapshotStorageKey = 'lastbrowser.sessionSnapshot.v1';

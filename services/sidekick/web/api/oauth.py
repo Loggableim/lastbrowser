@@ -39,7 +39,7 @@ CODEX_REDIRECT_URI = f"{CODEX_ISSUER}/deviceauth/callback"
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 CODEX_FLOW_MAX_WAIT_SECONDS = 15 * 60
 
-_ALLOWED_ONBOARDING_OAUTH_PROVIDERS = {"openai-codex", "anthropic", "claude", "claude-code", "google-gemini-cli"}
+_ALLOWED_ONBOARDING_OAUTH_PROVIDERS = {"openai-codex", "anthropic", "claude", "claude-code"}
 _ANTHROPIC_PROVIDER_ALIASES = {"anthropic", "claude", "claude-code"}
 _REJECTED_ONBOARDING_OAUTH_PROVIDERS = {
     "nous",
@@ -61,6 +61,28 @@ _ANTHROPIC_ENV_KEYS = ("ANTHROPIC_TOKEN", "ANTHROPIC_API_KEY")
 GOOGLE_FLOW_MAX_WAIT_SECONDS = 15 * 60
 
 
+def _safe_google_oauth_error(exc: Exception, code: str) -> str:
+    """Map OAuth failures to useful, secret-free sign-in guidance."""
+    normalized_code = str(code or "").strip().lower()
+    detail = str(exc or "").lower()
+    if normalized_code == "google_oauth_client_id_missing":
+        return "Gemini CLI OAuth is not configured in this installation."
+    if "disallowed_useragent" in detail or "browser or this app may not be secure" in detail:
+        return (
+            "Google rejected this OAuth client as an untrusted app. Opening the "
+            "sign-in page in a system browser cannot fix a client-policy rejection."
+        )
+    if normalized_code in {"google_oauth_cancelled", "google_oauth_no_code"}:
+        return "Google sign-in was cancelled or did not complete."
+    if normalized_code == "google_oauth_invalid_grant":
+        return "Google rejected the authorization code. Restart sign-in and try again."
+    if normalized_code.startswith("google_oauth_token_"):
+        return "Google could not exchange the authorization code. Check the OAuth client configuration and try again."
+    if normalized_code == "google_oauth_incomplete_token_response":
+        return "Google did not return the required Gemini CLI credentials."
+    return "Google sign-in failed. Check the Google OAuth flow and try again."
+
+
 def _spawn_google_oauth_worker(flow_id: str, sidekick_home: Path) -> None:
     def worker() -> None:
         try:
@@ -77,16 +99,11 @@ def _spawn_google_oauth_worker(flow_id: str, sidekick_home: Path) -> None:
                                          callback_wait_seconds=GOOGLE_FLOW_MAX_WAIT_SECONDS,
                                          on_auth_url=publish_auth_url,
                                          cancel_event=_OAUTH_FLOWS.get(flow_id, {}).get("cancel_event"))
-            # Keep the runtime file authoritative; seed the pool with a
-            # metadata-only entry so the Providers card can report readiness.
-            from runtime.credential_pool import read_credential_pool, write_credential_pool
-            entries = read_credential_pool("google-gemini-cli")
-            if not any(str(e.get("email") or "") == creds.email for e in entries):
-                entries.append({"id": uuid.uuid4().hex, "label": creds.email or "Google account",
-                                "auth_type": "oauth", "source": "google_pkce",
-                                "access_token": creds.access_token, "refresh_token": creds.refresh_token,
-                                "expires_at_ms": creds.expires_ms, "extra": {"email": creds.email}})
-                write_credential_pool("google-gemini-cli", entries)
+            # start_oauth_flow persists this identity into the account pool;
+            # retain an explicit call here for compatibility with mocked login
+            # workers and ensure metadata reflects the completed flow.
+            from runtime.google_oauth import save_account_credentials_to_pool
+            save_account_credentials_to_pool(creds)
             with _OAUTH_FLOWS_LOCK:
                 flow = _OAUTH_FLOWS.get(flow_id)
                 if flow:
@@ -96,7 +113,11 @@ def _spawn_google_oauth_worker(flow_id: str, sidekick_home: Path) -> None:
             with _OAUTH_FLOWS_LOCK:
                 flow = _OAUTH_FLOWS.get(flow_id)
                 if flow:
-                    flow.update({"status": "error", "error": "Google sign-in failed. Please try again.", "updated_at": time.time()})
+                    from runtime.google_oauth import GoogleOAuthError
+                    code = exc.code if isinstance(exc, GoogleOAuthError) else "google_oauth_error"
+                    reason = _safe_google_oauth_error(exc, code)
+                    flow.update({"status": "error", "error_code": code,
+                                 "error": reason, "updated_at": time.time()})
     threading.Thread(target=worker, name="sidekick-google-oauth", daemon=True).start()
 
 
@@ -396,9 +417,8 @@ def _anthropic_public_start_payload(flow_id: str, flow: dict[str, Any]) -> dict[
     }
     if flow.get("status") == "pending":
         payload["action_required"] = (
-            "Claude Code credentials were not found on this server. "
-            "Please run 'claude login' or 'claude setup-token' in a terminal "
-            "on the host, then return here — this page will detect the credentials automatically."
+            "Lastbrowser does not run a Claude OAuth browser login yet. Install Claude Code and run "
+            "'claude login' on this device, then return here. Lastbrowser will detect its local credentials."
         )
     if flow.get("expires_at"):
         payload["expires_at"] = flow["expires_at"]
@@ -594,15 +614,14 @@ def _public_status_payload(flow_id: str, flow: dict[str, Any]) -> dict[str, Any]
     if provider == "anthropic":
         return _anthropic_public_status_payload(flow_id, flow)
     if provider == "google-gemini-cli":
-        payload = {"ok": True, "provider": provider, "flow_id": flow_id,
-                   "status": flow.get("status", "error")}
-        if flow.get("auth_url") and flow.get("status") == "pending":
-            payload["auth_url"] = str(flow["auth_url"])
-        if flow.get("email") and flow.get("status") == "success":
-            payload["email"] = str(flow["email"])
-        if flow.get("status") == "error":
-            payload["error"] = "Google sign-in failed. Please try again."
-        return payload
+        return {
+            "ok": False,
+            "provider": provider,
+            "flow_id": flow_id,
+            "status": "error",
+            "error_code": "unsupported_third_party_oauth",
+            "error": "Google sign-in for consumer Gemini Code Assist accounts ended on June 18, 2026. Google directs personal subscribers to Antigravity; Lastbrowser cannot connect to Antigravity under Google's third-party access terms.",
+        }
     return _codex_public_status_payload(flow_id, flow)
 
 
@@ -752,80 +771,11 @@ def start_onboarding_oauth_flow(body: dict[str, Any] | None) -> dict[str, Any]:
         return _start_anthropic_flow(_get_active_profile_home())
 
     if provider == "google-gemini-cli":
-        sidekick_home = _get_active_profile_home()
-        with _OAUTH_FLOWS_LOCK:
-            # Expire stale flows first: a flow whose worker died (browser
-            # closed, callback never arrived) would otherwise block every new
-            # attempt for GOOGLE_FLOW_MAX_WAIT_SECONDS (15 min) with
-            # "A Google sign-in is already in progress for this profile".
-            _now = time.time()
-            for _fid, _flow in list(_OAUTH_FLOWS.items()):
-                if (
-                    _flow.get("provider") == provider
-                    and _flow.get("status") == "pending"
-                    and float(_flow.get("expires_at") or 0) <= _now
-                ):
-                    _flow["status"] = "expired"
-                    _drop_sensitive_flow_fields(_flow)
-
-            # Reuse a live flow instead of rejecting the request. The user may
-            # simply have closed the sign-in tab and clicked Connect again —
-            # returning the same flow (and its auth_url) is idempotent and
-            # avoids stranding them behind the "already in progress" error.
-            existing_id = next(
-                (
-                    fid for fid, f in _OAUTH_FLOWS.items()
-                    if f.get("provider") == provider
-                    and f.get("status") == "pending"
-                    and f.get("sidekick_home") == str(sidekick_home)
-                ),
-                None,
-            )
-            if existing_id:
-                existing = _OAUTH_FLOWS[existing_id]
-                _existing_url = existing.get("auth_url")
-                _existing_expires = existing.get("expires_at")
-            else:
-                _existing_url = None
-                _existing_expires = None
-
-        if existing_id:
-            # Give the worker a moment to publish the URL if it has not yet.
-            auth_url = _existing_url if isinstance(_existing_url, str) else ""
-            deadline = time.time() + 1.5
-            while not auth_url and time.time() < deadline:
-                with _OAUTH_FLOWS_LOCK:
-                    auth_url = _OAUTH_FLOWS.get(existing_id, {}).get("auth_url") or ""
-                if auth_url:
-                    break
-                time.sleep(0.02)
-            return {"ok": True, "provider": provider, "flow_id": existing_id,
-                    "status": "pending", "expires_at": _existing_expires,
-                    "auth_url": auth_url,
-                    "message": "A Google sign-in is already in progress; reusing it."}
-
-        with _OAUTH_FLOWS_LOCK:
-            flow_id = uuid.uuid4().hex
-            flow = {"provider": provider, "status": "pending",
-                    "expires_at": time.time() + GOOGLE_FLOW_MAX_WAIT_SECONDS,
-                    "sidekick_home": str(sidekick_home), "created_at": time.time(),
-                    "updated_at": time.time(), "cancel_event": threading.Event()}
-            _OAUTH_FLOWS[flow_id] = flow
-        _spawn_google_oauth_worker(flow_id, sidekick_home)
-        # Let the worker publish the loopback callback URL without making the
-        # request wait for Google. This is bounded and remains non-blocking.
-        auth_url = ""
-        deadline = time.time() + 1.5
-        while time.time() < deadline:
-            with _OAUTH_FLOWS_LOCK:
-                auth_url = _OAUTH_FLOWS.get(flow_id, {}).get("auth_url")
-            if auth_url:
-                break
-            time.sleep(0.02)
-        return {"ok": True, "provider": provider, "flow_id": flow_id,
-                "status": "pending", "expires_at": flow["expires_at"],
-                "auth_url": auth_url if isinstance(auth_url, str) else "",
-                "message": "Open the Google sign-in URL to continue."}
+        raise ValueError(
+            "Google sign-in for consumer Gemini Code Assist accounts ended on June 18, 2026. "
+            "Google directs personal subscribers to Antigravity; Lastbrowser cannot connect "
+            "to Antigravity under Google's third-party access terms."
+        )
 
     # Codex flow
     sidekick_home = _get_active_profile_home()
@@ -881,7 +831,7 @@ def cancel_onboarding_oauth_flow(body: dict[str, Any] | None) -> dict[str, Any]:
     if not fid:
         raise ValueError("flow_id is required")
     requested_provider = _normalize_onboarding_oauth_provider(str((body or {}).get("provider") or ""))
-    if requested_provider not in {"openai-codex", "anthropic", "google-gemini-cli"}:
+    if requested_provider not in {"openai-codex", "anthropic"}:
         requested_provider = "openai-codex"
     with _OAUTH_FLOWS_LOCK:
         flow = _OAUTH_FLOWS.get(fid)
@@ -899,13 +849,13 @@ def cancel_onboarding_oauth_flow(body: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def disconnect_google_oauth() -> dict[str, Any]:
-    """Remove Google OAuth credentials for the active profile only."""
-    from runtime.google_oauth import clear_credentials, load_credentials
-    had_credentials = load_credentials() is not None
-    clear_credentials()
-    from runtime.credential_pool import write_credential_pool
-    write_credential_pool("google-gemini-cli", [])
-    return {"ok": True, "provider": "google-gemini-cli", "disconnected": had_credentials}
+    """Legacy credentials are deliberately preserved; never mutate user login state here."""
+    return {
+        "ok": False,
+        "provider": "google-gemini-cli",
+        "disconnected": False,
+        "error_code": "unsupported_third_party_oauth",
+    }
 
 
 # Backward-compatible names from the abandoned spike. They intentionally do not

@@ -225,7 +225,7 @@ function _renderOnboardingModelField(){
 
 function _renderOnboardingProviderOAuthField(provider){
   if(!provider||!provider.oauth_provider)return '';
-  if(provider.oauth_provider==='google-gemini-cli') return `<div class="onboarding-oauth-card onboarding-oauth-pending" style="margin-top:12px"><div class="onboarding-oauth-icon">G</div><div><strong>Mit Google anmelden</strong><p style="margin-top:6px;color:var(--muted);font-size:13px">Verwendet das Gemini-CLI-Kontingent deines Google-Kontos. Tokens bleiben auf Sidekick.</p><button class="sm-btn" type="button" id="googleGeminiOAuthBtn" onclick="startGoogleGeminiOnboardingOAuth()">Google-Login starten</button><div id="googleGeminiOAuthFlow" style="margin-top:8px"></div></div></div>`;
+  if(provider.oauth_provider==='google-gemini-cli') return `<div class="onboarding-oauth-card onboarding-oauth-pending" style="margin-top:12px"><div class="onboarding-oauth-icon">G</div><div><strong>Gemini CLI Anmeldung derzeit nicht verfügbar</strong><p style="margin-top:6px;color:var(--muted);font-size:13px">Google hat die Anmeldung und Anfrageverarbeitung für private Gemini CLI Konten und Google AI Pro/Ultra am 18. Juni 2026 eingestellt. Für private Konten verweist Google auf <a href="https://antigravity.google/docs/cli" target="_blank" rel="noopener noreferrer">Antigravity CLI</a>; Lastbrowser bietet dafür derzeit keine unterstützte Anmeldung.</p></div></div>`;
   if(provider.oauth_provider!=='anthropic')return '';
   return `<div class="onboarding-oauth-card onboarding-oauth-pending" style="margin-top:12px">
     <div class="onboarding-oauth-icon">🔑</div>
@@ -236,15 +236,6 @@ function _renderOnboardingProviderOAuthField(provider){
       <div id="anthropicOAuthFlow" style="display:none;margin-top:12px"></div>
     </div>
   </div>`;
-}
-
-async function startGoogleGeminiOnboardingOAuth(){
-  const btn=$('googleGeminiOAuthBtn'), out=$('googleGeminiOAuthFlow'); if(!btn)return;
-  btn.disabled=true; btn.textContent='Anmeldung läuft …';
-  try{const s=await api('/api/oauth/google/start',{method:'POST',body:JSON.stringify({provider:'google-gemini-cli'})}); if(s.error)throw new Error(s.error);
-    if(s.auth_url) window.open(s.auth_url,'sidekick-google-oauth','width=640,height=760');
-    const poll=async()=>{const p=await api('/api/oauth/google/status?flow_id='+encodeURIComponent(s.flow_id)); if(p.status==='pending'){setTimeout(poll,2000);return;} if(p.status==='success'){out.textContent='Google verbunden';btn.textContent='Google verbunden';}else{throw new Error(p.error||'Login fehlgeschlagen');} btn.disabled=false;}; poll();
-  }catch(e){out.textContent=e.message;btn.disabled=false;btn.textContent='Google-Login starten';}
 }
 
 function _providerStatusLabel(system){
@@ -306,9 +297,9 @@ function _renderOnboardingBody(){
       const codexOauthPendingBody=currentProviderName==='openai-codex'
         ? 'This instance is configured to use <strong>openai-codex</strong>, which uses OAuth rather than an API key. Use the button below to authenticate with ChatGPT, then continue once provider status refreshes.'
         : currentProviderName==='google-gemini-cli'
-          ? 'Gemini CLI wird direkt über die WebUI mit deinem Google-Konto verbunden.'
+          ? 'Google hat die Anmeldung und Anfrageverarbeitung für private Gemini CLI Konten und Google AI Pro/Ultra am 18. Juni 2026 eingestellt. Für private Konten verweist Google auf <a href="https://antigravity.google/docs/cli" target="_blank" rel="noopener noreferrer">Antigravity CLI</a>; Lastbrowser bietet dafür derzeit keine unterstützte Anmeldung.'
         : t('onboarding_oauth_provider_not_ready_body').replace('{provider}',providerLabel);
-      if(isReady){
+      if(isReady&&currentProviderName!=='google-gemini-cli'){
         _setOnboardingNotice(t('onboarding_notice_setup_already_ready'),'success');
         body.innerHTML=`
           <div class="onboarding-oauth-card onboarding-oauth-ready">
@@ -335,7 +326,6 @@ function _renderOnboardingBody(){
               <strong>${t('onboarding_oauth_provider_not_ready_title')}</strong>
               <p>${codexOauthPendingBody}</p>
               ${currentProviderName==='openai-codex'?`<div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="sm-btn" id="codexOAuthBtn" onclick="startCodexOAuth()" type="button">${t('oauth_login_codex')}</button></div><div id="codexOAuthFlow" style="display:none;margin-top:12px"></div>`:''}
-              ${currentProviderName==='google-gemini-cli'?`<div style="margin-top:12px"><button class="sm-btn" id="googleGeminiOAuthBtn" onclick="startGoogleGeminiOnboardingOAuth()" type="button">Mit Google verbinden</button></div><div id="googleGeminiOAuthFlow" style="margin-top:12px"></div>`:''}
             </div>
           </div>
           <p class="onboarding-copy" style="margin-top:20px">${t('onboarding_oauth_switch_hint')}</p>

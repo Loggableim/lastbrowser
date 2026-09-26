@@ -148,19 +148,16 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
   });
 
   describe('CopilotSplitView Dynamic Model Picker & Categorized Workflows', () => {
-    it('offers Gemini 2.5 Flash as default and multiple provider models in AVAILABLE_MODELS', () => {
+    it('keeps retired Gemini CLI models out of the static list while retaining other providers', () => {
       expect(AVAILABLE_MODELS.length).toBeGreaterThanOrEqual(6);
       const modelIds = AVAILABLE_MODELS.map((m) => m.id);
-      expect(modelIds).toContain('gemini-2.5-flash');
-      expect(modelIds).toContain('gemini-2.5-pro');
+      expect(modelIds.some((id) => id.startsWith('gemini-'))).toBe(false);
       expect(modelIds).toContain('claude-sonnet-4.6');
       expect(modelIds).toContain('gpt-5.5');
       expect(modelIds).toContain('deepseek-reasoner');
       expect(modelIds).toContain('llama3.3');
 
-      const geminiModel = AVAILABLE_MODELS.find((m) => m.id === 'gemini-2.5-flash');
-      expect(geminiModel?.badge).toContain('Standard');
-      expect(geminiModel?.provider).toBe('Google');
+      expect(AVAILABLE_MODELS.some((m) => m.category === 'gemini')).toBe(false);
     });
 
     it('implements interactive model dropdown and workflow search & categories in CopilotSplitView.tsx', () => {
@@ -187,27 +184,32 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
     it('provides Zen exit default mode and Action Bar dock settings in SystemPanels.tsx', () => {
       const source = readRendererFile('panels/SystemPanels.tsx');
 
-      expect(source).toContain('Modern Zen & Sidekick Layout (Variante B)');
-      expect(source).toContain('Zen-Modus Aufwach-Standard (Ctrl+B)');
-      expect(source).toContain('Kompaktes Dock (48px)');
-      expect(source).toContain('Volle Leiste (240px)');
-      expect(source).toContain('In-Page AI Action Bar Andockung');
+      expect(source).toContain('settings.panels.appearance.cardModern');
+      expect(source).toContain('settings.panels.appearance.zenTitle');
+      expect(source).toContain('settings.panels.appearance.compactDock');
+      expect(source).toContain('settings.panels.appearance.fullSidebar');
+      expect(source).toContain('settings.panels.appearance.actionBarTitle');
       expect(source).toContain('settings-dock-btn');
     });
 
     it('provides Theme Accents, Glassmorphism, and UI Density settings in SystemPanels.tsx', () => {
       const source = readRendererFile('panels/SystemPanels.tsx');
 
-      expect(source).toContain('Akzentfarben & Glassmorphism (Phase 13.8)');
-      expect(source).toContain('Neon Cyan');
-      expect(source).toContain('Electric Violet');
-      expect(source).toContain('Emerald Flow');
-      expect(source).toContain('Solar Amber');
-      expect(source).toContain('Monochrome Slate');
-      expect(source).toContain('Solid (Opak)');
-      expect(source).toContain('Subtil (8px)');
-      expect(source).toContain('Modern (16px)');
-      expect(source).toContain('Deep Glass (24px)');
+      expect(source).toContain('settings.panels.appearance.accentGlassTitle');
+      expect(source).toContain('settings.panels.appearance.accentNeon');
+      expect(source).toContain('settings.panels.appearance.accentViolet');
+      expect(source).toContain('settings.panels.appearance.accentEmerald');
+      expect(source).toContain('settings.panels.appearance.accentAmber');
+      expect(source).toContain('settings.panels.appearance.accentSlate');
+      expect(source).toContain('settings.panels.appearance.glassSolid');
+      expect(source).toContain('settings.panels.appearance.glassSubtle');
+      expect(source).toContain('settings.panels.appearance.glassModern');
+      expect(source).toContain('settings.panels.appearance.glassDeep');
+      expect(source).toContain("id: 'neon-cyan'");
+      expect(source).toContain("id: 'electric-violet'");
+      expect(source).toContain("id: 'emerald-flow'");
+      expect(source).toContain("id: 'solar-amber'");
+      expect(source).toContain("id: 'monochrome-slate'");
       expect(source).toContain('settings-accent-btn');
       expect(source).toContain('setThemeAccent');
       expect(source).toContain('setGlassLevel');
@@ -232,6 +234,16 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
 
       store.setUiDensity('compact');
       expect(usePanelStore.getState().uiDensity).toBe('compact');
+    });
+
+    it('subscribes accessibility controls to live store updates', () => {
+      const source = readRendererFile('panels/SystemPanels.tsx');
+      for (const state of ['a11yHighContrast', 'a11yDyslexicFont', 'a11yMinFontSize', 'a11yUiZoom', 'a11yFocusRings']) {
+        expect(source).toContain(`const ${state} = usePanelStore((s) => s.${state});`);
+      }
+      expect(source).not.toContain('checked={usePanelStore.getState().a11y');
+      expect(source).not.toContain('value={String(usePanelStore.getState().a11y');
+      expect(source).not.toContain('value={usePanelStore.getState().a11yUiZoom}');
     });
   });
 

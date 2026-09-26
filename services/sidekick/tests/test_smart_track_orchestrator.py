@@ -3,6 +3,7 @@ import os
 import json
 import tempfile
 import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -16,6 +17,8 @@ from runtime.smart_track_orchestrator import (
     load_smart_track_config,
     save_smart_track_config,
     run_smart_track_turn,
+    schedule_model_wall_scan,
+    get_model_wall_scan_state,
 )
 
 
@@ -86,6 +89,23 @@ def test_build_model_wall():
         assert wall["high"]["default"] == "gemini-2.5-pro"
 
 
+def test_smart_track_model_wall_preserves_ollama_model_size_tags():
+    catalog = {
+        "groups": [{
+            "provider_id": "ollama",
+            "provider": "Ollama",
+            "models": [
+                {"id": "qwen3:4b", "name": "Qwen 3 4B"},
+                {"id": "deepseek-r1:70b", "name": "DeepSeek R1 70B"},
+            ],
+        }]
+    }
+    with patch("web.api.config.get_available_models", return_value=catalog):
+        wall = build_model_wall()
+    assert wall["low"]["models"][0]["id"] == "qwen3:4b"
+    assert wall["high"]["models"][0]["id"] == "deepseek-r1:70b"
+
+
 def test_empty_model_catalog_does_not_inject_gemini_fallbacks():
     with patch("web.api.config.get_available_models", return_value={"groups": []}):
         wall = build_model_wall()
@@ -106,6 +126,123 @@ def test_smart_track_config_persistence(tmp_path):
         assert updated["effort"] == "high"
         assert updated["preplan_on_high"] is False
         assert updated["overrides"]["high"] == "my-custom-model"
+
+
+def test_automatic_model_scan_respects_disabled_config(tmp_path):
+    config_file = tmp_path / "smart_track.json"
+    config_file.write_text(json.dumps({"auto_scan": False}), encoding="utf-8")
+    with patch("runtime.smart_track_orchestrator.get_smart_track_config_path", return_value=config_file), \
+         patch("runtime.smart_track_orchestrator.build_model_wall") as build:
+        assert schedule_model_wall_scan() is False
+        build.assert_not_called()
+
+
+def test_forced_model_scan_runs_even_when_automatic_scan_is_disabled(tmp_path):
+    config_file = tmp_path / "smart_track.json"
+    config_file.write_text(json.dumps({"auto_scan": False}), encoding="utf-8")
+    started = threading.Event()
+    release = threading.Event()
+
+    def scan():
+        started.set()
+        assert release.wait(2)
+        return {"low": {"models": []}}
+
+    with patch("runtime.smart_track_orchestrator.get_smart_track_config_path", return_value=config_file), \
+         patch("runtime.smart_track_orchestrator.build_model_wall", side_effect=scan):
+        assert schedule_model_wall_scan(force=True) is True
+        assert started.wait(1)
+        assert get_model_wall_scan_state()["status"] == "scanning"
+        release.set()
+        deadline = time.monotonic() + 2
+        while get_model_wall_scan_state()["status"] == "scanning" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert get_model_wall_scan_state()["status"] == "complete"
+
+
+def test_automatic_model_scan_is_background_and_records_errors():
+    started = threading.Event()
+    release = threading.Event()
+
+    def scan():
+        started.set()
+        assert release.wait(2)
+        raise RuntimeError("catalog unavailable")
+
+    with patch("runtime.smart_track_orchestrator.load_smart_track_config", return_value={"auto_scan": True}), \
+         patch("runtime.smart_track_orchestrator.build_model_wall", side_effect=scan):
+        before = time.monotonic()
+        assert schedule_model_wall_scan() is True
+        assert time.monotonic() - before < 0.5
+        assert started.wait(1)
+        release.set()
+        deadline = time.monotonic() + 2
+        while get_model_wall_scan_state()["status"] == "scanning" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert get_model_wall_scan_state() == {"status": "failed", "last_error": "catalog unavailable"}
+
+
+@pytest.mark.parametrize("path", ["/api/providers", "/api/providers/delete"])
+def test_provider_credential_routes_schedule_auto_scan(monkeypatch, path):
+    import io
+    from urllib.parse import urlparse
+    from web.api import routes
+    from runtime import smart_track_orchestrator as orchestrator
+
+    body = json.dumps({"provider": "ollama", "api_key": "local-test-key"}).encode("utf-8")
+    class Handler:
+        headers = {"Content-Length": str(len(body)), "Content-Type": "application/json", "Host": "127.0.0.1"}
+        client_address = ("127.0.0.1", 12345)
+        def __init__(self):
+            self.rfile = io.BytesIO(body)
+            self.wfile = io.BytesIO()
+            self.status_code = None
+        def send_response(self, status):
+            self.status_code = status
+        def send_header(self, name, value):
+            pass
+        def end_headers(self):
+            pass
+
+    scheduled = []
+    monkeypatch.setattr(orchestrator, "schedule_model_wall_scan", lambda: scheduled.append(True) or True)
+    monkeypatch.setattr(routes, "set_provider_key", lambda *args: {"ok": True})
+    monkeypatch.setattr(routes, "remove_provider_key", lambda *args: {"ok": True})
+    handler = Handler()
+    routes.handle_post(handler, urlparse(path))
+    assert handler.status_code == 200
+    assert scheduled == [True]
+
+
+def test_explicit_model_wall_scan_runs_when_auto_scan_disabled(monkeypatch):
+    import io
+    from urllib.parse import urlparse
+    from web.api import routes
+    from runtime import smart_track_orchestrator as orchestrator
+
+    class Handler:
+        headers = {"Content-Length": "0", "Content-Type": "application/json", "Host": "127.0.0.1"}
+        client_address = ("127.0.0.1", 12345)
+        def __init__(self):
+            self.rfile = io.BytesIO(b"")
+            self.wfile = io.BytesIO()
+            self.status_code = None
+        def send_response(self, status):
+            self.status_code = status
+        def send_header(self, name, value):
+            pass
+        def end_headers(self):
+            pass
+
+    expected_wall = {"low": {"models": []}}
+    monkeypatch.setattr(orchestrator, "build_model_wall", lambda: expected_wall)
+    monkeypatch.setattr(orchestrator, "load_smart_track_config", lambda reload=False: {"auto_scan": False})
+    handler = Handler()
+    routes.handle_post(handler, urlparse("/api/smart-track/scan"))
+    assert handler.status_code == 200
+    payload = json.loads(handler.wfile.getvalue().decode("utf-8"))
+    assert payload["ok"] is True
+    assert payload["wall"] == expected_wall
 
 
 def test_resolve_smart_track_model():
@@ -214,8 +351,15 @@ def test_run_smart_track_turn_high_preplan():
     def mock_extract(resp):
         return resp.choices[0].message.content
 
+    wall = {
+        "low": {"default": "qwen3:4b", "models": [{"id": "qwen3:4b", "name": "Qwen", "provider": "ollama"}]},
+        "medium": {"default": "gemini-flash", "models": [{"id": "gemini-flash", "name": "Gemini Flash", "provider": "google-gemini-cli"}]},
+        "high": {"default": "gemini-pro", "reasoning": "gemini-pro", "models": [{"id": "gemini-pro", "name": "Gemini Pro", "provider": "google-gemini-cli"}]},
+    }
+
     with patch("runtime.auxiliary_client.call_llm", side_effect=mock_call_llm), \
-         patch("runtime.auxiliary_client.extract_content_or_reasoning", side_effect=mock_extract):
+         patch("runtime.auxiliary_client.extract_content_or_reasoning", side_effect=mock_extract), \
+         patch("runtime.smart_track_orchestrator.build_model_wall", return_value=wall):
         result = run_smart_track_turn(
             session=session,
             prompt="Analysiere die Systemarchitektur",
@@ -226,6 +370,10 @@ def test_run_smart_track_turn_high_preplan():
 
         assert result["content"] == "Finale tiefgehende Begründung."
         assert len(calls) == 2  # Preplan + Main execution
+        assert calls[0].get("provider") == "ollama"
+        assert calls[0].get("model") == "qwen3:4b"
+        assert calls[1].get("provider") == "google-gemini-cli"
+        assert calls[1].get("model") == "gemini-pro"
 
         event_names = [e[0] for e in events]
         assert "smart_track_preplan" in event_names

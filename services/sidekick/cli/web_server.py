@@ -994,10 +994,21 @@ def _release_game_mode_resources_on_startup() -> None:
         _log.warning("Game Mode startup release failed", exc_info=True)
 
 
+def _schedule_smart_track_model_scan_on_startup() -> None:
+    """Start Smart Track discovery in a daemon thread without delaying startup."""
+    try:
+        from runtime.smart_track_orchestrator import schedule_model_wall_scan
+
+        schedule_model_wall_scan()
+    except Exception:
+        _log.warning("Smart Track startup scan could not be scheduled", exc_info=True)
+
+
 app.router.on_startup.append(_install_asyncio_disconnect_exception_filter)
 app.router.on_startup.append(_start_dashboard_cron_ticker)
 app.router.on_startup.append(_start_nova_space_supervision_ticker)
 app.router.on_startup.append(_release_game_mode_resources_on_startup)
+app.router.on_startup.append(_schedule_smart_track_model_scan_on_startup)
 
 
 # ---------------------------------------------------------------------------

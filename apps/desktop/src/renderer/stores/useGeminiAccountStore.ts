@@ -43,13 +43,13 @@ export type GeminiAccountState = {
   roundRobinEnabled: boolean;
   /** Whether to rotate on every new session (true) or every new message (false). */
   rotatePerSession: boolean;
+  /** Stable account email selected for each chat session in per-session mode. */
+  sessionAccountEmails: Record<string, string>;
 
   // ─── Actions ─────────────────────────────────────────────────────────────
 
   /** Add a completed OAuth account to the list. */
   addAccount(account: Omit<GeminiOAuthAccount, 'id' | 'addedAt' | 'totalSessionsUsed'>): void;
-  /** Replace the locally displayed account after the backend's singleton OAuth identity changes. */
-  replaceActiveAccount(account: Omit<GeminiOAuthAccount, 'id' | 'addedAt' | 'totalSessionsUsed'>): void;
 
   /** Remove an account by ID. Safely adjusts currentIndex. */
   removeAccount(id: string): void;
@@ -67,6 +67,11 @@ export type GeminiAccountState = {
    * Return the currently active account without advancing the pointer.
    */
   activeAccount(): GeminiOAuthAccount | null;
+
+  /** Bind or retrieve the account selected for a chat session. */
+  assignSessionAccount(sessionId: string, email: string): void;
+  accountForSession(sessionId: string): GeminiOAuthAccount | null;
+  selectAccountForSession(sessionId?: string): GeminiOAuthAccount | null;
 
   /** Record a session being sent through the given account. */
   recordUsage(id: string): void;
@@ -90,26 +95,30 @@ interface StoredData {
   currentIndex: number;
   roundRobinEnabled: boolean;
   rotatePerSession: boolean;
+  sessionAccountEmails: Record<string, string>;
 }
 
 function loadInitialData(): StoredData {
   try {
     if (typeof window === 'undefined' || !window.localStorage) {
-      return { accounts: [], currentIndex: 0, roundRobinEnabled: true, rotatePerSession: true };
+      return { accounts: [], currentIndex: 0, roundRobinEnabled: true, rotatePerSession: true, sessionAccountEmails: {} };
     }
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return { accounts: [], currentIndex: 0, roundRobinEnabled: true, rotatePerSession: true };
+      return { accounts: [], currentIndex: 0, roundRobinEnabled: true, rotatePerSession: true, sessionAccountEmails: {} };
     }
     const parsed = JSON.parse(raw);
     return {
       accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
       currentIndex: typeof parsed.currentIndex === 'number' ? parsed.currentIndex : 0,
       roundRobinEnabled: typeof parsed.roundRobinEnabled === 'boolean' ? parsed.roundRobinEnabled : true,
-      rotatePerSession: typeof parsed.rotatePerSession === 'boolean' ? parsed.rotatePerSession : true
+      rotatePerSession: typeof parsed.rotatePerSession === 'boolean' ? parsed.rotatePerSession : true,
+      sessionAccountEmails: parsed.sessionAccountEmails && typeof parsed.sessionAccountEmails === 'object' && !Array.isArray(parsed.sessionAccountEmails)
+        ? parsed.sessionAccountEmails
+        : {}
     };
   } catch {
-    return { accounts: [], currentIndex: 0, roundRobinEnabled: true, rotatePerSession: true };
+    return { accounts: [], currentIndex: 0, roundRobinEnabled: true, rotatePerSession: true, sessionAccountEmails: {} };
   }
 }
 
@@ -133,35 +142,20 @@ export const useGeminiAccountStore = create<GeminiAccountState>((set, get) => ({
   currentIndex: initial.currentIndex,
   roundRobinEnabled: initial.roundRobinEnabled,
   rotatePerSession: initial.rotatePerSession,
+  sessionAccountEmails: initial.sessionAccountEmails,
 
   addAccount(account) {
-    const newAccount: GeminiOAuthAccount = {
-      ...account,
-      id: crypto.randomUUID(),
-      addedAt: Date.now(),
-      totalSessionsUsed: 0
-    };
     set((state) => {
-      const next = [...state.accounts, newAccount];
-      saveToStorage({ accounts: next });
-      return { accounts: next };
-    });
-  },
-
-  replaceActiveAccount(account) {
-    const active: GeminiOAuthAccount = {
-      ...account,
-      id: crypto.randomUUID(),
-      addedAt: Date.now(),
-      totalSessionsUsed: 0
-    };
-    set((state) => {
-      // Keep prior local metadata intact, but do not claim it has a matching
-      // backend credential. The runtime only replaces its single OAuth identity.
-      const accounts = state.accounts.length
-        ? state.accounts.map((stored, index) => index === state.currentIndex ? active : stored)
-        : [active];
-      const currentIndex = Math.min(state.currentIndex, accounts.length - 1);
+      const normalizedEmail = account.email.trim().toLowerCase();
+      const existingIndex = state.accounts.findIndex((stored) => stored.email.trim().toLowerCase() === normalizedEmail);
+      const now = Date.now();
+      const updated: GeminiOAuthAccount = existingIndex >= 0
+        ? { ...state.accounts[existingIndex], ...account, email: normalizedEmail }
+        : { ...account, email: normalizedEmail, id: crypto.randomUUID(), addedAt: now, totalSessionsUsed: 0 };
+      const accounts = existingIndex >= 0
+        ? state.accounts.map((stored, index) => index === existingIndex ? updated : stored)
+        : [...state.accounts, updated];
+      const currentIndex = accounts.length ? Math.min(state.currentIndex, accounts.length - 1) : 0;
       saveToStorage({ accounts, currentIndex });
       return { accounts, currentIndex };
     });
@@ -208,6 +202,40 @@ export const useGeminiAccountStore = create<GeminiAccountState>((set, get) => ({
     const { accounts, currentIndex } = get();
     if (accounts.length === 0) return null;
     return accounts[currentIndex % accounts.length] ?? null;
+  },
+
+  assignSessionAccount(sessionId, email) {
+    if (!sessionId || !email) return;
+    set((state) => {
+      const next = { ...state.sessionAccountEmails, [sessionId]: email.trim().toLowerCase() };
+      const entries = Object.entries(next);
+      const sessionAccountEmails = entries.length > 500
+        ? Object.fromEntries(entries.slice(-500))
+        : next;
+      saveToStorage({ sessionAccountEmails });
+      return { sessionAccountEmails };
+    });
+  },
+
+  accountForSession(sessionId) {
+    const email = get().sessionAccountEmails[sessionId]?.trim().toLowerCase();
+    if (!email) return null;
+    return get().accounts.find((account) => account.email.trim().toLowerCase() === email) ?? null;
+  },
+
+  selectAccountForSession(sessionId) {
+    const state = get();
+    if (state.rotatePerSession && sessionId) {
+      const bound = state.accountForSession(sessionId);
+      if (bound) return bound;
+    }
+
+    const current = get();
+    const account = current.roundRobinEnabled ? current.getNextAccount() : current.activeAccount();
+    if (account && sessionId && current.rotatePerSession) {
+      current.assignSessionAccount(sessionId, account.email);
+    }
+    return account;
   },
 
   recordUsage(id) {

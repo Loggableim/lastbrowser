@@ -1084,6 +1084,40 @@ button:disabled {
   box-shadow: inset 0 -3px 0 #ffcf00, 0 0 18px rgba(0, 217, 255, .12);
 }
 
+/* Floating, animated names keep the compact rail discoverable without taking
+   space from the browser canvas. ShellRail renders these in a portal so the
+   rail's vertical scroll viewport cannot clip the hover card. */
+.rail-floating-hover-label {
+  position: fixed;
+  z-index: 20000;
+  transform: translateY(-50%) translateX(-7px) scale(.96);
+  transform-origin: left center;
+  max-width: 260px;
+  padding: 7px 12px;
+  border: 1px solid rgba(0, 229, 255, .38);
+  border-radius: 999px;
+  background: rgba(8, 14, 28, .94);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .48), 0 0 16px rgba(0, 217, 255, .18);
+  color: #f5fbff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: rail-label-float-in 180ms cubic-bezier(.16, 1, .3, 1) forwards;
+}
+
+@keyframes rail-label-float-in {
+  from { opacity: 0; transform: translateY(-50%) translateX(-7px) scale(.96); }
+  to { opacity: 1; transform: translateY(-50%) translateX(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-floating-hover-label { animation-duration: 1ms; }
+}
+
 .rail-bottom {
   display: grid;
   gap: 4px;
@@ -6069,6 +6103,25 @@ html.theme-light select optgroup {
   border: 1px solid rgba(168, 85, 247, 0.35);
 }
 
+.featured-card .provider-verification-note {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 207, 112, 0.3);
+  border-radius: 6px;
+  color: #ffcf70;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.featured-card .provider-verification-note.verified {
+  border-color: rgba(140, 224, 165, 0.3);
+  color: #8ce0a5;
+}
+
 .select-radio {
   width: 18px;
   height: 18px;
@@ -7049,6 +7102,20 @@ html.theme-light select optgroup {
   font-size: 11.5px;
   line-height: 1.35;
   color: var(--lb-muted);
+}
+
+.provider-copy .provider-verification-note {
+  color: #ffcf70;
+  font-weight: 650;
+}
+
+.provider-copy .provider-verification-note.verified {
+  color: #8ce0a5;
+}
+
+.provider-copy .provider-verification-evidence {
+  color: var(--lb-muted);
+  font-size: 10.5px;
 }
 
 .provider-badge {
@@ -9329,6 +9396,7 @@ html.theme-light select optgroup {
 
 /* ─── Modern Shell Layout ─────────────────────────────────────────────────── */
 .app-shell.modern-mode {
+  position: relative;
   display: flex;
   flex-direction: column;
   grid-template-rows: unset;
@@ -9392,14 +9460,16 @@ html.theme-light select optgroup {
   top: 0;
   left: 0;
   bottom: 0;
-  width: 8px;
-  z-index: 99;
+  width: 10px;
+  z-index: 110;
   background: transparent;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .zen-left-hover-sensor:hover {
   background: rgba(0, 217, 255, 0.25);
+  box-shadow: 0 0 12px rgba(0, 217, 255, 0.4);
 }
 
 .zen-sidebar-overlay {
@@ -9407,25 +9477,57 @@ html.theme-light select optgroup {
   top: 0;
   left: 0;
   bottom: 0;
-  z-index: 100;
+  z-index: 120;
   transform: translateX(-100%);
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
   box-shadow: 0 0 0 rgba(0, 0, 0, 0);
   pointer-events: none;
+  display: flex;
 }
 
 .zen-sidebar-overlay.zen-revealed {
   transform: translateX(0);
-  box-shadow: 10px 0 40px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 217, 255, 0.15);
+  box-shadow: 12px 0 44px rgba(0, 0, 0, 0.8), 0 0 24px rgba(0, 217, 255, 0.18);
   pointer-events: auto;
 }
 
 .zen-sidebar-overlay .sidekick-sidebar {
   height: 100%;
-  border-right: 1px solid rgba(0, 217, 255, 0.25);
-  background: rgba(7, 17, 31, 0.96);
+  border-right: 1px solid rgba(0, 217, 255, 0.28);
+  background: rgba(9, 14, 31, 0.96);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+  box-shadow: 6px 0 28px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.zen-sidebar-overlay .sidekick-sidebar.slim {
+  width: 48px;
+}
+
+.zen-sidebar-overlay .sidekick-sidebar.expanded {
+  width: 240px;
+}
+
+.zen-sidebar-overlay .sidekick-sidebar .sidebar-dock-pin-btn {
+  background: transparent;
+  border: none;
+  color: rgba(232, 242, 255, 0.6);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  margin-right: 2px;
+}
+
+.zen-sidebar-overlay .sidekick-sidebar .sidebar-dock-pin-btn:hover {
+  background: rgba(0, 217, 255, 0.15);
+  color: #00d9ff;
 }
 
 .app-shell.zen-mode .browser-zen-workspace {
@@ -9996,6 +10098,14 @@ html.theme-light select optgroup {
   user-select: none;
   z-index: 1000;
   box-sizing: border-box;
+  /* Anti-clipping (goal.md Paket 5): fisheye magnification scales items up to
+     2.0x — the dock and its inner wrappers must never crop the magnified icons. */
+  overflow: visible;
+}
+
+.nova-dock .nova-dock-item-wrapper,
+.nova-dock .sidekick-dock-inner {
+  overflow: visible;
 }
 
 /* Vertical Dock (left, right, or floating vertical) */
@@ -10025,9 +10135,15 @@ html.theme-light select optgroup {
 
 /* Position: Right */
 .nova-dock.pos-right {
-  height: calc(100% - 20px);
+  position: fixed;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  height: auto;
+  max-height: calc(100% - 20px);
   margin: 10px 8px 10px 0;
   border-radius: 16px;
+  z-index: 9990;
 }
 
 /* Position: Bottom (macOS style dock) */
@@ -10200,7 +10316,9 @@ html.theme-light select optgroup {
   border-radius: 9999px;
   font-size: 11px;
   font-weight: 600;
-  opacity: 0;
+  opacity: var(--label-opacity, 0);
+  transform-origin: center center;
+  will-change: opacity, transform;
   z-index: 10000;
   transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -10226,45 +10344,29 @@ html.theme-light select optgroup {
   border-radius: 4px;
 }
 
-/* Directional Label Animations */
-.nova-dock-item-wrapper:hover .nova-dock-label-pill {
-  opacity: 1;
-}
-
+/* Directional Label Animations & Fisheye Title Wave */
 .nova-dock-label-pill.label-pos-right {
   left: calc(100% + 12px);
   top: 50%;
-  transform: translateY(-50%) translateX(-8px);
-}
-.nova-dock-item-wrapper:hover .nova-dock-label-pill.label-pos-right {
-  transform: translateY(-50%) translateX(0);
+  transform: translateY(-50%) translateX(calc((1 - var(--label-scale, 1)) * -10px)) scale(var(--label-scale, 1));
 }
 
 .nova-dock-label-pill.label-pos-left {
   right: calc(100% + 12px);
   top: 50%;
-  transform: translateY(-50%) translateX(8px);
-}
-.nova-dock-item-wrapper:hover .nova-dock-label-pill.label-pos-left {
-  transform: translateY(-50%) translateX(0);
+  transform: translateY(-50%) translateX(calc((1 - var(--label-scale, 1)) * 10px)) scale(var(--label-scale, 1));
 }
 
 .nova-dock-label-pill.label-pos-top {
   bottom: calc(100% + 12px);
   left: 50%;
-  transform: translateX(-50%) translateY(8px);
-}
-.nova-dock-item-wrapper:hover .nova-dock-label-pill.label-pos-top {
-  transform: translateX(-50%) translateY(0);
+  transform: translateX(-50%) translateY(calc((1 - var(--label-scale, 1)) * 10px)) scale(var(--label-scale, 1));
 }
 
 .nova-dock-label-pill.label-pos-bottom {
   top: calc(100% + 12px);
   left: 50%;
-  transform: translateX(-50%) translateY(-8px);
-}
-.nova-dock-item-wrapper:hover .nova-dock-label-pill.label-pos-bottom {
-  transform: translateX(-50%) translateY(0);
+  transform: translateX(-50%) translateY(calc((1 - var(--label-scale, 1)) * -10px)) scale(var(--label-scale, 1));
 }
 
 /* ─── Auto-Hide Animations ──────────────────────────────────────────────── */
@@ -11850,7 +11952,29 @@ html.theme-light select optgroup {
 }
 
 .vertical-tab-item:hover .vtab-close-btn {
+  opacity: 0;
+}
+
+.vertical-tab-pin-btn {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin-left: 4px;
+  color: var(--accent-text, #000);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.vertical-tab-item:hover .vertical-tab-pin-btn {
   opacity: 1;
+}
+
+.vertical-tab-pin-btn.pinned {
+  opacity: 1;
+  color: var(--accent-primary, #0066ff);
 }
 
 .vtab-close-btn:hover {
@@ -15556,21 +15680,122 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
 [data-glass-level="solid"] {
   --glass-blur: 0px;
   --glass-bg-opacity: 0.98;
+  --glass-bg: rgba(10, 14, 22, 0.98);
+  --glass-border: rgba(255, 255, 255, 0.14);
 }
 
 [data-glass-level="subtle"] {
   --glass-blur: 8px;
   --glass-bg-opacity: 0.88;
+  --glass-bg: rgba(10, 14, 22, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.12);
 }
 
 [data-glass-level="modern"] {
   --glass-blur: 16px;
   --glass-bg-opacity: 0.72;
+  --glass-bg: rgba(10, 14, 22, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.10);
 }
 
 [data-glass-level="deep"] {
-  --glass-blur: 24px;
+  --glass-blur: 36px;
   --glass-bg-opacity: 0.52;
+  --glass-bg: rgba(10, 14, 22, 0.52);
+  --glass-border: rgba(255, 255, 255, 0.08);
+}
+
+/* ─── Vision Impaired theme: pure maximal contrast (goal.md Paket 4) ───────── */
+.theme-vision-impaired,
+.theme-vision-impaired .modern-titlebar,
+.theme-vision-impaired .sidekick-sidebar,
+.theme-vision-impaired .zen-sidebar-overlay {
+  --glass-blur: 0px;
+  --glass-bg: #000000;
+  --glass-bg-opacity: 1;
+  --glass-border: #FFFFFF;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.theme-vision-impaired {
+  background: #000000;
+  color: #FFFFFF;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+}
+
+.theme-vision-impaired body {
+  background: #000000;
+  color: #FFFFFF;
+}
+
+.theme-vision-impaired .modern-titlebar,
+.theme-vision-impaired .sidekick-sidebar,
+.theme-vision-impaired .settings-card,
+.theme-vision-impaired .system-panel,
+.theme-vision-impaired .zen-sidebar-overlay {
+  background: #000000;
+  color: #FFFFFF;
+}
+
+.theme-vision-impaired input,
+.theme-vision-impaired select,
+.theme-vision-impaired textarea,
+.theme-vision-impaired button,
+.theme-vision-impaired .settings-seg-btn,
+.theme-vision-impaired .settings-theme-btn,
+.theme-vision-impaired .settings-skin-btn,
+.theme-vision-impaired .drawer-tab-btn {
+  background: #000000;
+  color: #FFFFFF;
+  border: 2px solid #FFFFFF;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.theme-vision-impaired input:focus-visible,
+.theme-vision-impaired select:focus-visible,
+.theme-vision-impaired textarea:focus-visible,
+.theme-vision-impaired button:focus-visible {
+  outline: 3px solid #FFD700;
+  outline-offset: 2px;
+}
+
+.theme-vision-impaired a,
+.theme-vision-impaired .accent-text {
+  color: #00FFFF;
+}
+
+.theme-vision-impaired .settings-theme-btn.active,
+.theme-vision-impaired .settings-seg-btn.active,
+.theme-vision-impaired .drawer-tab-btn.active {
+  background: #FFD700;
+  color: #000000;
+  border-color: #FFD700;
+}
+
+.theme-vision-impaired input::placeholder,
+.theme-vision-impaired textarea::placeholder {
+  color: #FFFFFF;
+  opacity: 0.85;
+}
+
+.theme-vision-impaired input:disabled,
+.theme-vision-impaired button:disabled,
+.theme-vision-impaired select:disabled {
+  border-color: #767676;
+  color: #a0a0a0;
+  background: #0a0a0a;
+}
+
+.theme-vision-impaired ::-webkit-scrollbar-thumb {
+  background: #FFD700;
+  border: 1px solid #FFFFFF;
+}
+
+.theme-vision-impaired ::-webkit-scrollbar-track {
+  background: #000000;
+  border-left: 1px solid #FFFFFF;
 }
 
 [data-ui-density="compact"] {
@@ -15586,6 +15811,12 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
 [data-ui-density="comfortable"] {
   --titlebar-height: 48px;
   --dock-width: 56px;
+}
+
+.adblock-stats-group {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 /* Apply the appearance controls to visible browser chrome, not just tokens. */
@@ -15605,6 +15836,19 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
 
 .sidekick-sidebar.slim {
   width: var(--dock-width, 48px);
+  overflow: visible;
+}
+
+/* Nova Dock is a floating hover surface. The labels and fisheye magnification
+   intentionally extend beyond the narrow sidebar's 48px layout column. */
+.sidekick-sidebar.slim .sidekick-dock-inner {
+  width: 100%;
+  overflow: visible;
+}
+
+.sidekick-sidebar.slim .nova-dock {
+  position: relative;
+  overflow: visible;
 }
 
 /* Modern Titlebar Tool Banner (for non-browser panels in Zen workspace) */
@@ -16832,6 +17076,50 @@ body {
   border: 1px solid var(--lb-border, rgba(255, 255, 255, 0.1));
 }
 
+/* Horizontal-overflow guards for all 3 message layouts: code blocks,
+   grounding citations and process cards must never clip or shift layout. */
+[data-message-layout="bubbles"] .copilot-bubble-body,
+[data-message-layout="bubbles"] .message-body,
+[data-message-layout="compact"] .copilot-bubble-body,
+[data-message-layout="compact"] .message-body,
+[data-message-layout="expanded"] .copilot-bubble-body,
+[data-message-layout="expanded"] .message-body {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+[data-message-layout="bubbles"] pre,
+[data-message-layout="compact"] pre,
+[data-message-layout="expanded"] pre,
+.copilot-bubble pre,
+.chat-message pre,
+.message-body pre {
+  max-width: 100%;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+[data-message-layout="bubbles"] pre code,
+[data-message-layout="compact"] pre code,
+[data-message-layout="expanded"] pre code,
+.copilot-bubble code,
+.message-body code {
+  white-space: pre;
+  overflow-x: auto;
+  display: block;
+  max-width: 100%;
+}
+
+.grounding-citation,
+.grounding-citations,
+.teamwork-process-card,
+.smart-track-process-card {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
 /* ==========================================================================
    Phase 3: Accessibility (A11y)
    ========================================================================== */
@@ -17914,4 +18202,228 @@ body, p, span, div, button, input {
   color: #00d9ff;
   font-weight: 600;
   margin-left: 4px;
+}
+
+.chat-turn-usage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 8px;
+  color: var(--text-muted, #94a3b8);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-reasoning-details,
+.chat-activity-details,
+.chat-tool-call-details {
+  margin-top: 8px;
+  border: 1px solid var(--border-subtle, rgba(148, 163, 184, .2));
+  border-radius: 8px;
+  background: var(--surface-subtle, rgba(148, 163, 184, .05));
+  color: var(--text-secondary, #cbd5e1);
+  font-size: 12px;
+}
+
+.chat-reasoning-details > summary,
+.chat-activity-details > summary,
+.chat-tool-call-details > summary {
+  padding: 7px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chat-reasoning-content,
+.chat-tool-call-details pre {
+  margin: 0;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-subtle, rgba(148, 163, 184, .16));
+}
+
+.chat-tool-call-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.chat-tool-call-list .chat-tool-call-details { margin-top: 0; }
+.chat-tool-call-details pre { overflow: auto; white-space: pre-wrap; word-break: break-word; }
+
+/* Settings used a number of fixed white text colors from the dark design.
+   Keep these overrides after the component rules so every settings section
+   remains readable when users switch to the light theme. */
+html.theme-light .settings-section-button-text strong,
+html.theme-light .settings-editor-head strong,
+html.theme-light .settings-card-header strong,
+html.theme-light .settings-toggle-card-main span,
+html.theme-light .settings-field span,
+html.theme-light .settings-field-info strong,
+html.theme-light .settings-theme-btn,
+html.theme-light .settings-skin-btn,
+html.theme-light .settings-size-btn,
+html.theme-light .settings-dock-btn,
+html.theme-light .settings-seg-btn {
+  color: var(--lb-text);
+}
+
+html.theme-light .settings-section-button-text small,
+html.theme-light .settings-editor-head span,
+html.theme-light .settings-card-header p,
+html.theme-light .settings-toggle-card-main small,
+html.theme-light .settings-field,
+html.theme-light .settings-field small,
+html.theme-light .settings-field-info small,
+html.theme-light .settings-theme-btn > span:not(.settings-theme-preview),
+html.theme-light .settings-dock-btn:not(.active) {
+  color: var(--lb-muted);
+}
+
+html.theme-light .settings-section-button,
+html.theme-light .settings-seg-btn,
+html.theme-light .settings-theme-btn,
+html.theme-light .settings-skin-btn,
+html.theme-light .settings-size-btn,
+html.theme-light .settings-dock-btn,
+html.theme-light .settings-toggle-card {
+  border-color: var(--lb-border);
+  background: rgba(12, 22, 36, .035);
+}
+
+/* Secondary actions inherit a white-on-dark palette outside Settings. Keep
+   their labels and borders readable in every light-theme Settings section. */
+html.theme-light .settings-editor .secondary-action {
+  color: var(--lb-text);
+  border-color: var(--lb-border);
+  background: rgba(12, 22, 36, .035);
+}
+
+html.theme-light .settings-editor .secondary-action:hover:not(:disabled) {
+  color: #075985;
+  border-color: rgba(3, 105, 161, .38);
+  background: rgba(14, 165, 233, .12);
+}
+
+html.theme-light .settings-editor .secondary-action:disabled {
+  color: #64748b;
+  border-color: rgba(100, 116, 139, .28);
+  background: rgba(100, 116, 139, .08);
+  opacity: 1;
+}
+
+html.theme-light .settings-section-button.active,
+html.theme-light .settings-seg-btn.active,
+html.theme-light .settings-theme-btn.active,
+html.theme-light .settings-skin-btn.active,
+html.theme-light .settings-size-btn.active,
+html.theme-light .settings-dock-btn.active {
+  color: #075985;
+  border-color: rgba(3, 105, 161, .38);
+  background: rgba(14, 165, 233, .12);
+  box-shadow: inset 0 0 0 1px rgba(3, 105, 161, .08);
+}
+
+html.theme-light .settings-theme-btn.active strong,
+html.theme-light .settings-skin-btn.active strong,
+html.theme-light .settings-size-btn.active strong,
+html.theme-light .settings-size-btn.active span {
+  color: #075985;
+}
+
+html.theme-light .settings-theme-btn:not(.active) strong,
+html.theme-light .settings-skin-btn:not(.active) strong,
+html.theme-light .settings-size-btn:not(.active) strong,
+html.theme-light .settings-custom-color-card strong {
+  color: var(--lb-text);
+}
+
+html.theme-light .settings-field input,
+html.theme-light .settings-field select {
+  color: var(--lb-text);
+  border-color: var(--lb-border);
+  background: #fff;
+}
+
+html.theme-light .settings-custom-color-card,
+html.theme-light .settings-panel-stack [style*="rgba(255, 255, 255, 0.03)"] {
+  color: var(--lb-text);
+  border-color: var(--lb-border) !important;
+  background: rgba(12, 22, 36, .035) !important;
+}
+
+html.theme-light .provider-copy .provider-verification-note.untested,
+html.theme-light .featured-card .provider-verification-note.untested {
+  color: #854d0e;
+  border-color: rgba(133, 77, 14, .34);
+}
+
+html.theme-light .provider-copy .provider-verification-note.verified,
+html.theme-light .featured-card .provider-verification-note.verified {
+  color: #166534;
+  border-color: rgba(22, 101, 52, .32);
+}
+
+html.theme-light .provider-copy .provider-verification-evidence {
+  color: #475569;
+}
+
+html.theme-light .provider-status-row {
+  color: var(--lb-text);
+}
+
+html.theme-light .provider-status-row.active {
+  color: var(--lb-text);
+  background: rgba(14, 165, 233, .12);
+}
+
+html.theme-light .provider-status-row.active .provider-copy strong {
+  color: var(--lb-text);
+}
+
+html.theme-light .provider-status-row .provider-badge {
+  color: #075985;
+  background: rgba(14, 165, 233, .16);
+}
+
+html.theme-light .downloads-panel {
+  color: var(--lb-text);
+  border-color: var(--lb-border);
+  background: var(--lb-surface-strong);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, .24);
+}
+
+html.theme-light .downloads-panel > header {
+  color: var(--lb-muted);
+  border-bottom-color: var(--lb-border);
+}
+
+html.theme-light .downloads-panel > header strong {
+  color: var(--lb-text);
+}
+
+html.theme-light .downloads-empty,
+html.theme-light .download-copy small {
+  color: var(--lb-muted);
+}
+
+html.theme-light .downloads-drag-grip,
+html.theme-light .downloads-tool-btn,
+html.theme-light .downloads-panel > header button,
+html.theme-light .download-row > button {
+  color: #475569;
+}
+
+html.theme-light .downloads-tool-btn:hover,
+html.theme-light .downloads-panel > header button:hover,
+html.theme-light .download-row > button:hover {
+  color: #075985;
+  background: rgba(12, 22, 36, .08);
+}
+
+html.theme-light .download-row.completed .download-icon {
+  color: #15803d;
+}
+
+html.theme-light .download-row.cancelled .download-icon,
+html.theme-light .download-row.interrupted .download-icon {
+  color: #c2410c;
 }

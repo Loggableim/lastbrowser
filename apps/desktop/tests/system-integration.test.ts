@@ -152,6 +152,18 @@ describe('Clear Browsing Data (Microsoft Store Policy 10.2)', () => {
     expect(content).toContain('sess.clearCache()');
     expect(content).toContain('sess.clearStorageData(');
   });
+
+  it('exposes targeted deleted-profile cleanup through the preload and main process', () => {
+    const preload = readFileSync(path.resolve(__dirname, '../src/main/preload.ts'), 'utf8');
+    const types = readFileSync(path.resolve(__dirname, '../src/renderer/global.d.ts'), 'utf8');
+    const main = readFileSync(path.resolve(__dirname, '../src/main/main.ts'), 'utf8');
+    const app = readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+    expect(preload).toContain('clearDeletedProfileData');
+    expect(types).toContain('clearDeletedProfileData?:');
+    expect(main).toContain("ipcMain.handle('lastbrowser:browser:clearDeletedProfileData'");
+    expect(main).toContain('session.fromPartition(partition)');
+    expect(app).toContain('clearDeletedProfileData?.({ profileId, spacePaths: knownSpacePaths })');
+  });
 });
 
 describe('Split tab detach transfer handshake', () => {
@@ -179,7 +191,9 @@ describe('Split tab detach transfer handshake', () => {
     expect(app).toContain("webview.addEventListener('dom-ready', confirmAttached, { once: true })");
     expect(main).toContain('detachedWindow.destroy()');
     expect(app).toContain('webviewReady && webviewStartupReady');
-    expect(app).toContain('ackDetachedTab?.(transfer.transferId, tabId)');
+    expect(app).toContain('ackDetachedTab?.(transfer.transferId, tabId, guestWebContentsId)');
+    expect(app).toContain('guestWebContentsId: number');
+    expect(app).toContain('source webview is not ready');
     expect(app.slice(startup, startup + 5000)).toContain('startupInitialized = true');
     expect(app.slice(startup, startup + 5000)).toContain('!cancelled && startupInitialized');
     expect(app).toContain('if (windowStartupInitializedRef.current) return undefined;');

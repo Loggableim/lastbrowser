@@ -14,6 +14,8 @@ import {
   Menu,
   Moon,
   PanelLeftClose,
+  Pin,
+  PinOff,
   Plus,
   Puzzle,
   Settings,
@@ -98,6 +100,14 @@ export interface SidekickSidebarProps {
   onAddSplitTab?: (tabId: string, baseTabId?: string) => void;
   /** Callback to remove tab from splitscreen */
   onRemoveSplitTab?: (tabId: string) => void;
+  /** Callback when revealer is clicked/hovered in Zen mode to show floating sidebar */
+  onRevealZen?: () => void;
+  /** Whether this sidebar instance is rendered inside a floating overlay */
+  isFloatingOverlay?: boolean;
+  /** Callback to close the floating overlay */
+  onCloseOverlay?: () => void;
+  /** Callback to dock the sidebar and exit Zen mode */
+  onDock?: () => void;
 }
 
 export function SidekickSidebar({
@@ -142,7 +152,11 @@ export function SidekickSidebar({
   onCreateSession,
   splitTabIds = [],
   onAddSplitTab,
-  onRemoveSplitTab
+  onRemoveSplitTab,
+  onRevealZen,
+  isFloatingOverlay = false,
+  onCloseOverlay,
+  onDock
 }: SidekickSidebarProps): React.JSX.Element {
   const { t } = useDesktopI18n();
   const [dragOverInfo, setDragOverInfo] = useState<{ id: string; mode: 'before' | 'after' | 'split' } | null>(null);
@@ -206,7 +220,13 @@ export function SidekickSidebar({
       <div
         className="sidekick-sidebar-revealer"
         title={`Show Sidebar (Ctrl+B) • Opens in ${zenExitDefaultMode} mode`}
-        onClick={() => onSetMode(zenExitDefaultMode)}
+        onClick={() => {
+          if (onRevealZen) onRevealZen();
+          else onSetMode(zenExitDefaultMode);
+        }}
+        onMouseEnter={() => {
+          onRevealZen?.();
+        }}
       >
         <div className="revealer-indicator" />
       </div>
@@ -215,27 +235,36 @@ export function SidekickSidebar({
 
   const activeSpace = spaces.find((s) => s.path === activeSpacePath);
   const spaceLabel = activeSpace ? spaceDisplayName(activeSpace) : 'Workspace';
+  const effectiveDockPos = isFloatingOverlay ? 'left' : dockSettings.position;
+  // The sidebar renders the inline dock only when it actually hosts it (left
+  // position or the zen floating overlay). For right/top/bottom/floating the
+  // App shell renders NovaDock outside this <aside> (goal.md Paket 5).
+  const sidebarHostsDock = isFloatingOverlay || dockSettings.position === 'left';
 
   return (
-    <aside className={`sidekick-sidebar ${mode} dock-pos-${dockSettings.position}`}>
+    <aside className={`sidekick-sidebar ${mode} dock-pos-${effectiveDockPos} ${isFloatingOverlay ? 'zen-floating-sidebar' : ''}`}>
       {mode === 'slim' ? (
-        <div className="sidekick-dock-inner dock-top-brand dock-popart-avatar dock-quick-shortcuts dock-shortcut-btn dock-bottom-actions">
-          {/* Nova Dock provides Apple-style fisheye magnification, label reveal animations and PinnedAppGrid integration */}
-          <NovaDock
-            botName={botName}
-            activePanel={activePanel}
-            activeTabUrl={activeTabUrl}
-            openTabUrls={openTabUrls}
-            onSelectPanel={onSelectPanel}
-            onOpenApp={onOpenApp}
-            onAddPinnedApp={onAddPinnedApp}
-            onEditPinnedApp={onEditPinnedApp}
-            onOpenHistory={onOpenHistory}
-            onOpenSettings={onOpenSettings}
-            onNewTab={onNewTab}
-            onExpandSidebar={() => onSetMode('expanded')}
-          />
-        </div>
+        sidebarHostsDock ? (
+          <div className="sidekick-dock-inner dock-top-brand dock-popart-avatar dock-quick-shortcuts dock-shortcut-btn dock-bottom-actions">
+            {/* Nova Dock provides Apple-style fisheye magnification, label reveal animations and PinnedAppGrid integration */}
+            <NovaDock
+              botName={botName}
+              activePanel={activePanel}
+              activeTabUrl={activeTabUrl}
+              openTabUrls={openTabUrls}
+              onSelectPanel={onSelectPanel}
+              onOpenApp={onOpenApp}
+              onAddPinnedApp={onAddPinnedApp}
+              onEditPinnedApp={onEditPinnedApp}
+              onOpenHistory={onOpenHistory}
+              onOpenSettings={onOpenSettings}
+              onNewTab={onNewTab}
+              onExpandSidebar={() => onSetMode('expanded')}
+              forcedPosition={isFloatingOverlay ? 'left' : undefined}
+              spacePath={activeSpacePath}
+            />
+          </div>
+        ) : null
       ) : (
         <div className="sidekick-expanded-inner">
           {/* Top Workspace Picker Header */}
@@ -305,10 +334,21 @@ export function SidekickSidebar({
               </div>
             )}
 
+            {isFloatingOverlay && onDock && (
+              <button
+                type="button"
+                className="sidebar-dock-pin-btn"
+                title="Sidebar fest andocken (Zen-Modus beenden)"
+                onClick={onDock}
+              >
+                <Pin size={14} />
+              </button>
+            )}
+
             <button
               type="button"
               className="sidebar-collapse-icon-btn"
-              title="Collapse to Slim Dock (Ctrl+B)"
+              title={isFloatingOverlay ? "Collapse to Slim (Ctrl+B)" : "Collapse to Slim Dock (Ctrl+B)"}
               onClick={() => onSetMode('slim')}
             >
               <PanelLeftClose size={16} />
@@ -370,6 +410,7 @@ export function SidekickSidebar({
               <div className="expanded-pinned-raster">
                 <PinnedAppGrid
                   layout="grid"
+                  spacePath={activeSpacePath}
                   activeTabUrl={activeTabUrl}
                   openTabUrls={openTabUrls}
                   onOpenApp={onOpenApp}
@@ -490,6 +531,17 @@ export function SidekickSidebar({
                         <span className="vtab-title" title={tab.title}>
                           {tab.title}
                         </span>
+                        <button
+                          type="button"
+                          className={`vertical-tab-pin-btn ${tab.pinned ? 'pinned' : ''}`}
+                          title={tab.pinned ? 'Unpin tab' : 'Pin tab'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPinTab?.(tab.id);
+                          }}
+                        >
+                          {tab.pinned ? <PinOff size={18} /> : <Pin size={18} />}
+                        </button>
 
                         {splitTabIds.includes(tab.id) && (
                           <span className="vtab-snap-badge" title="Im aktiven Multiview-Layout">

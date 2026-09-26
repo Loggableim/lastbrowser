@@ -1065,19 +1065,8 @@ _PROVIDER_MODELS = {
         {"id": "gpt-5.4-mini", "label": "GPT-5.4 Mini"},
         {"id": "gpt-5.3-codex-spark", "label": "GPT-5.3 Codex Spark"},
     ],
-    "google-gemini-cli": [
-        {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
-        {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
-        {"id": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash Lite"},
-        {"id": "gemini-2.0-flash", "label": "Gemini 2.0 Flash"},
-        {"id": "gemini-1.5-pro", "label": "Gemini 1.5 Pro"},
-        {"id": "gemini-1.5-flash", "label": "Gemini 1.5 Flash"},
-    ],
-    "google": [
-        {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
-        {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
-        {"id": "gemini-router", "label": "Gemini Router (Free Tier)"},
-    ],
+    "google-gemini-cli": [],
+    "google": [],
     "gemini-router": [
         {"id": "gemini-router", "label": "Gemini Router (Free Tier)"},
     ],
@@ -2924,6 +2913,32 @@ def _models_from_live_provider_ids(provider_id: str, live_ids: list[str]) -> lis
     return models
 
 
+def _apply_provider_model_allowlist(raw_models: list[dict], provider_cfg: object) -> list[dict]:
+    """Apply an explicit provider model selection while preserving saved IDs.
+
+    ``None`` means no allowlist is configured, so the full live catalog stays
+    available. An explicit empty list means the user disabled every model.
+    Previously saved models remain visible even if the live catalog temporarily
+    omits them, avoiding accidental loss of a working default during outages.
+    """
+    if not isinstance(provider_cfg, dict) or "models" not in provider_cfg:
+        return raw_models
+    configured = provider_cfg.get("models")
+    if isinstance(configured, dict):
+        selected = [str(model_id).strip() for model_id in configured]
+    elif isinstance(configured, list):
+        selected = [str(model_id).strip() for model_id in configured if isinstance(model_id, str)]
+    else:
+        return raw_models
+    selected = list(dict.fromkeys(model_id for model_id in selected if model_id))
+    by_id = {
+        str(item.get("id") or "").strip(): item
+        for item in raw_models
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+    return [by_id.get(model_id, {"id": model_id, "label": model_id}) for model_id in selected]
+
+
 def _read_visible_codex_cache_model_ids() -> list[str]:
     """Return visible model slugs from Codex's local models_cache.json.
 
@@ -2963,6 +2978,77 @@ def _read_visible_codex_cache_model_ids() -> list[str]:
         if slug not in ordered:
             ordered.append(slug)
     return ordered
+
+
+def _configured_model_probe_api_key(
+    provider: str,
+    *,
+    config: dict,
+    model_config: object,
+    env_values: dict,
+    base_url: str,
+) -> str:
+    """Return a credential only from the selected provider's credential scope.
+
+    Local Ollama model discovery must not reuse ambient OpenAI/OpenRouter keys.
+    Ollama Cloud has its own key and only receives it when the configured host
+    is actually ``ollama.com`` (including its subdomains).
+    """
+    provider_id = str(provider or "").strip().lower()
+    if provider_id == "ollama":
+        providers_cfg = config.get("providers", {})
+        ollama_cfg = providers_cfg.get("ollama", {}) if isinstance(providers_cfg, dict) else {}
+        if isinstance(ollama_cfg, dict):
+            return str(ollama_cfg.get("api_key") or "").strip()
+        return ""
+    if provider_id == "ollama-cloud":
+        from shared.utils import base_url_host_matches
+
+        if not base_url_host_matches(base_url, "ollama.com"):
+            return ""
+        return str(env_values.get("OLLAMA_API_KEY") or os.getenv("OLLAMA_API_KEY") or "").strip()
+
+    configured_provider = ""
+    if isinstance(model_config, dict):
+        configured_provider = str(model_config.get("provider") or "").strip().lower()
+        model_key = str(model_config.get("api_key") or "").strip()
+        # model.api_key is scoped to the configured model/provider. Never send
+        # it to a different provider discovered from a URL or stale catalog row.
+        if model_key and (
+            configured_provider == provider_id
+            or (not configured_provider and provider_id == "custom")
+        ):
+            return model_key
+    providers_cfg = config.get("providers", {})
+    if isinstance(providers_cfg, dict):
+        provider_keys = (provider_id, "custom") if provider_id == "custom" else (provider_id,)
+        for provider_key in provider_keys:
+            provider_cfg = providers_cfg.get(provider_key, {})
+            if isinstance(provider_cfg, dict):
+                provider_key_value = str(provider_cfg.get("api_key") or "").strip()
+                if provider_key_value:
+                    return provider_key_value
+    # Model discovery may probe user-configured endpoints. Do not forward a
+    # generic ambient key (or another provider's key) to that endpoint: only
+    # use environment variables registered for this exact provider.
+    env_keys: list[str] = []
+    if provider_id == "openrouter":
+        env_keys.append("OPENROUTER_API_KEY")
+    try:
+        from cli.auth import PROVIDER_REGISTRY
+
+        provider_config = PROVIDER_REGISTRY.get(provider_id)
+        if provider_config:
+            env_keys.extend(str(key) for key in provider_config.api_key_env_vars)
+    except Exception:
+        # Catalog discovery remains usable without the CLI registry, but does
+        # not fall back to unscoped credentials when that registry is absent.
+        pass
+    for key in dict.fromkeys(env_keys):
+        value = str(env_values.get(key) or os.getenv(key) or "").strip()
+        if value:
+            return value
+    return ""
 
 
 def get_available_models() -> dict:
@@ -3256,7 +3342,8 @@ def get_available_models() -> dict:
                 pass
             try:
                 from runtime.google_oauth import load_credentials
-                if load_credentials():
+                from runtime.credential_pool import read_credential_pool
+                if load_credentials() or read_credential_pool("google-gemini-cli"):
                     detected_providers.add("google-gemini-cli")
             except Exception:
                 pass
@@ -3266,7 +3353,8 @@ def get_available_models() -> dict:
         if not _sidekick_auth_used:
             try:
                 from runtime.google_oauth import load_credentials
-                if load_credentials():
+                from runtime.credential_pool import read_credential_pool
+                if load_credentials() or read_credential_pool("google-gemini-cli"):
                     detected_providers.add("google-gemini-cli")
             except Exception:
                 pass
@@ -3452,31 +3540,13 @@ def get_available_models() -> dict:
                         pass
 
                 headers = {}
-                api_key = ""
-                if isinstance(model_cfg, dict):
-                    api_key = (model_cfg.get("api_key") or "").strip()
-                if not api_key:
-                    providers_cfg = cfg.get("providers", {})
-                    if isinstance(providers_cfg, dict):
-                        for provider_key in filter(None, [active_provider, "custom"]):
-                            provider_cfg = providers_cfg.get(provider_key, {})
-                            if isinstance(provider_cfg, dict):
-                                api_key = (provider_cfg.get("api_key") or "").strip()
-                                if api_key:
-                                    break
-                if not api_key:
-                    api_key_vars = (
-                        "SIDEKICK_API_KEY",
-                        "SIDEKICK_OPENAI_API_KEY",
-                        "OPENAI_API_KEY",
-                        "LOCAL_API_KEY",
-                        "OPENROUTER_API_KEY",
-                        "API_KEY",
-                    )
-                    for key in api_key_vars:
-                        api_key = (all_env.get(key) or os.getenv(key) or "").strip()
-                        if api_key:
-                            break
+                api_key = _configured_model_probe_api_key(
+                    provider,
+                    config=cfg,
+                    model_config=model_cfg,
+                    env_values=all_env,
+                    base_url=base_url,
+                )
                 if api_key:
                     headers["Authorization"] = f"Bearer {api_key}"
 
@@ -3660,6 +3730,13 @@ def get_available_models() -> dict:
                 _canonicalised_detected.add(_c)
             detected_providers = _canonicalised_detected
 
+        # Legacy Gemini CLI/Code Assist credentials are retained for user data
+        # compatibility, but Google no longer serves consumer subscription
+        # requests through that integration and Lastbrowser has no supported
+        # replacement path. Do not keep exposing selectable models (or probe
+        # those credentials for quota) merely because an old token remains.
+        detected_providers.discard("google-gemini-cli")
+
         # Gemini → gemini-router: Der Free Tier Router ersetzt den built-in Gemini Provider
         if "gemini" in detected_providers and "gemini-router" not in detected_providers:
             detected_providers.discard("gemini")
@@ -3810,6 +3887,14 @@ def get_available_models() -> dict:
                             if m.get("provider") == "OpenRouter"
                         ]
 
+                    _providers_config = cfg.get("providers", {})
+                    _openrouter_config = (
+                        _providers_config.get("openrouter", {})
+                        if isinstance(_providers_config, dict)
+                        else {}
+                    )
+                    raw_models = _apply_provider_model_allowlist(raw_models, _openrouter_config)
+
                     groups.append(
                         {
                             "provider": "OpenRouter",
@@ -3880,45 +3965,67 @@ def get_available_models() -> dict:
                         )
                 elif pid == "google-gemini-cli":
                     raw_models = []
-                    quota_buckets = []
                     active_email = None
+                    creds = None
                     try:
-                        from runtime.google_oauth import get_valid_access_token, load_credentials
-                        from runtime.google_code_assist import retrieve_user_quota
+                        from cli.models import provider_model_ids
+                        current_ids = provider_model_ids("google-gemini-cli")
+                        from runtime.google_oauth import load_credentials
                         creds = load_credentials()
-                        if creds:
-                            active_email = getattr(creds, "email", None)
-                            token = get_valid_access_token()
-                            proj_id = getattr(creds, "project_id", "") or getattr(creds, "managed_project_id", "")
-                            quota_buckets = retrieve_user_quota(token, project_id=proj_id)
+                        active_email = getattr(creds, "email", None) if creds else None
+                        raw_models = [{"id": mid, "label": _get_label_for_model(mid, []) or mid,
+                                       "account": active_email} for mid in current_ids]
                     except Exception as exc:
-                        logger.debug("Failed to retrieve live user quota for google-gemini-cli: %s", exc)
+                        logger.debug("Failed to retrieve live Gemini CLI model catalog: %s", exc)
+                        raw_models = []
 
-                    if quota_buckets:
-                        for b in quota_buckets:
-                            mid = getattr(b, "model_id", "") or ""
-                            if not mid:
+                    # Live quota is diagnostic metadata only: union account
+                    # model IDs and retain the best remaining quota per model.
+                    try:
+                        from runtime.credential_pool import read_credential_pool
+                        from runtime.google_oauth import get_valid_access_token, load_account_credentials
+                        from runtime.google_code_assist import retrieve_user_quota
+                        accounts = [str(entry.get("email") or "").strip()
+                                    for entry in read_credential_pool("google-gemini-cli")
+                                    if isinstance(entry, dict) and str(entry.get("email") or "").strip()]
+                        if (active_email and str(active_email).strip().casefold() not in
+                                {email.strip().casefold() for email in accounts}):
+                            accounts.append(active_email)
+                        quota_by_model = {}
+                        for account_email in accounts:
+                            account_creds = load_account_credentials(account_email)
+                            use_singleton_credentials = False
+                            # Older installations may have a valid singleton
+                            # login before credential-pool migration. Reuse it
+                            # only when its normalized email matches exactly.
+                            if (not account_creds and creds and active_email
+                                    and str(active_email).strip().casefold() == account_email.strip().casefold()):
+                                account_creds = creds
+                                use_singleton_credentials = True
+                            if not account_creds:
                                 continue
-                            rem_frac = getattr(b, "remaining_fraction", 1.0)
-                            pct = int(max(0, min(100, round(rem_frac * 100))))
-                            raw_models.append({
-                                "id": mid,
-                                "label": _get_label_for_model(mid, []) or mid,
-                                "remaining_fraction": rem_frac,
-                                "remaining_percent": pct,
-                                "reset_at": getattr(b, "reset_time_iso", "") or None,
-                                "account": active_email,
-                            })
-
-                    if not raw_models:
-                        for m in _PROVIDER_MODELS.get("google-gemini-cli", []):
-                            raw_models.append({
-                                "id": m["id"],
-                                "label": m["label"],
-                                "remaining_fraction": 1.0,
-                                "remaining_percent": 100,
-                                "account": active_email,
-                            })
+                            account_token = get_valid_access_token(
+                                account_email=None if use_singleton_credentials else account_email
+                            )
+                            project = account_creds.project_id or account_creds.managed_project_id
+                            for bucket in retrieve_user_quota(account_token, project_id=project):
+                                model_id = str(bucket.model_id or "").strip()
+                                if not model_id:
+                                    continue
+                                candidate = {"remaining_fraction": bucket.remaining_fraction,
+                                             "remaining_percent": int(max(0, min(100, round(bucket.remaining_fraction * 100)))),
+                                             "reset_at": bucket.reset_time_iso or None,
+                                             "account": account_email}
+                                if model_id not in quota_by_model or candidate["remaining_fraction"] > quota_by_model[model_id]["remaining_fraction"]:
+                                    quota_by_model[model_id] = candidate
+                        for model in raw_models:
+                            model_id = str(model["id"] or "")
+                            base_model_id = model_id.rsplit(":", 1)[-1] if model_id.startswith("@") else model_id
+                            quota = quota_by_model.get(base_model_id)
+                            if quota:
+                                model.update(quota)
+                    except Exception as exc:
+                        logger.debug("Failed to retrieve per-account Gemini quota metadata: %s", exc)
 
                     if raw_models:
                         models = _apply_provider_prefix(raw_models, pid, active_provider)

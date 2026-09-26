@@ -692,35 +692,36 @@ export function CommandPalette(): JSX.Element | null {
       },
       {
         id: 'sidekick-gemini-cli-flash-38',
-        title: 'Modell: Gemini 2.5 Flash (Google CLI / Antigravity - Standard)',
-        description: 'Standardmodell von Google mit hoher Geschwindigkeit & 1M Kontext',
+        title: 'Gemini CLI-Modellkatalog öffnen',
+        description: 'Aktuelle, für deine Google-Konten verfügbare Code-Assist-Modelle auswählen',
         category: 'Nova AI',
         icon: <Zap size={16} />,
-        keywords: ['gemini', '2.5', 'flash', 'google', 'cli', 'antigravity', 'gravity', 'modell', 'default', 'standard'],
+        keywords: ['gemini', 'google', 'cli', 'antigravity', 'gravity', 'modell', 'katalog'],
         action: () => {
-          void window.lastbrowser?.sidekick?.setDefaultModel({ model: 'gemini-2.5-flash' });
+          setActivePanel('chat');
         }
       },
       {
         id: 'sidekick-gemini-cli-flash',
-        title: 'Modell: Gemini 2.5 Flash (Google CLI / Antigravity)',
-        description: 'Schnelles KI-Modell mit Google OAuth & 1M Token Kontext',
+        title: 'Gemini CLI-Konten & Modellauswahl öffnen',
+        description: 'Live-Modellliste und Google-Konten verwalten',
         category: 'Nova AI',
         icon: <Zap size={16} />,
-        keywords: ['gemini', 'flash', 'google', 'cli', 'antigravity', 'gravity', 'modell'],
+        keywords: ['gemini', 'google', 'cli', 'antigravity', 'gravity', 'modell', 'konto'],
         action: () => {
-          void window.lastbrowser?.sidekick?.setDefaultModel({ model: 'gemini-2.5-flash' });
+          setActivePanel('settings');
+          usePanelStore.getState().setActiveContextItem('google-accounts');
         }
       },
       {
         id: 'sidekick-gemini-cli-pro',
-        title: 'Modell: Gemini 2.5 Pro (Google CLI / Antigravity)',
-        description: 'Tiefes Reasoning & komplexes Coding mit Google OAuth',
+        title: 'Gemini CLI-Modelle in der Modellauswahl',
+        description: 'Modelle werden dynamisch von Code Assist geladen',
         category: 'Nova AI',
         icon: <Bot size={16} />,
-        keywords: ['gemini', 'pro', 'google', 'cli', 'antigravity', 'gravity', 'reasoning', 'modell'],
+        keywords: ['gemini', 'google', 'cli', 'antigravity', 'gravity', 'reasoning', 'modell'],
         action: () => {
-          void window.lastbrowser?.sidekick?.setDefaultModel({ model: 'gemini-2.5-pro' });
+          setActivePanel('chat');
         }
       },
       {

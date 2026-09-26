@@ -485,6 +485,125 @@ def load_credentials() -> Optional[GoogleCredentials]:
     return creds
 
 
+def _normalized_account_email(email: str) -> str:
+    return str(email or "").strip().casefold()
+
+
+def _pool_entry_email(entry: Dict[str, Any]) -> str:
+    email = entry.get("email")
+    if not email and isinstance(entry.get("extra"), dict):
+        email = entry["extra"].get("email")
+    return _normalized_account_email(email)
+
+
+_account_round_robin_lock = threading.Lock()
+_account_round_robin_index = 0
+
+
+def select_next_account_email() -> Optional[str]:
+    """Choose the next usable Gemini CLI account in stable pool order.
+
+    Chat requests that do not explicitly select an account must still rotate
+    across the multi-account pool. Invalidated Google refresh grants are
+    excluded; quota errors are deliberately not persisted as a reason to
+    disable an account, so the next request naturally advances to another.
+    """
+    from runtime.credential_pool import read_credential_pool
+
+    candidates = []
+    seen = set()
+    for entry in read_credential_pool("google-gemini-cli"):
+        if not isinstance(entry, dict):
+            continue
+        email = _pool_entry_email(entry)
+        if (not email or email in seen or not str(entry.get("access_token") or "").strip()
+                or str(entry.get("last_error_reason") or "").casefold() == "invalid_grant"):
+            continue
+        seen.add(email)
+        candidates.append(email)
+    if not candidates:
+        return None
+
+    global _account_round_robin_index
+    with _account_round_robin_lock:
+        selected = candidates[_account_round_robin_index % len(candidates)]
+        _account_round_robin_index = (_account_round_robin_index + 1) % len(candidates)
+    return selected
+
+
+def load_account_credentials(email: str) -> Optional[GoogleCredentials]:
+    """Load one explicitly selected Google account from the provider pool.
+
+    The singleton file remains authoritative for callers that do not provide an
+    account selector. Account-aware chat requests use the pool so separate
+    logins do not overwrite each other's refresh tokens or project IDs.
+    """
+    normalized = _normalized_account_email(email)
+    if not normalized:
+        return None
+    from runtime.credential_pool import read_credential_pool
+
+    for entry in read_credential_pool("google-gemini-cli"):
+        if _pool_entry_email(entry) != normalized:
+            continue
+        if str(entry.get("last_error_reason") or "").casefold() == "invalid_grant":
+            raise GoogleOAuthError(
+                "The selected Google account needs to be reconnected.",
+                code="google_oauth_account_reconnect_required",
+            )
+        access = str(entry.get("access_token") or "").strip()
+        if not access:
+            return None
+        try:
+            expires_ms = int(entry.get("expires_at_ms") or 0)
+        except (TypeError, ValueError):
+            expires_ms = 0
+        return GoogleCredentials(
+            access_token=access,
+            refresh_token=str(entry.get("refresh_token") or "").strip(),
+            expires_ms=expires_ms,
+            email=str(entry.get("email") or "").strip(),
+            project_id=str(entry.get("project_id") or "").strip(),
+            managed_project_id=str(entry.get("managed_project_id") or "").strip(),
+        )
+    return None
+
+
+def save_account_credentials(creds: GoogleCredentials) -> None:
+    """Update only the matching Google account entry in the provider pool."""
+    normalized = _normalized_account_email(creds.email)
+    if not normalized:
+        raise GoogleOAuthError("Google account email is required for account-scoped credentials.",
+                               code="google_oauth_account_missing")
+    from runtime.credential_pool import read_credential_pool, write_credential_pool
+
+    entries = read_credential_pool("google-gemini-cli")
+    matched = False
+    for entry in entries:
+        if _pool_entry_email(entry) != normalized:
+            continue
+        entry.update({
+            "access_token": creds.access_token,
+            "refresh_token": creds.refresh_token,
+            "expires_at_ms": int(creds.expires_ms),
+            "email": creds.email,
+            "project_id": creds.project_id,
+            "managed_project_id": creds.managed_project_id,
+            "last_status": None,
+            "last_status_at": None,
+            "last_error_code": None,
+            "last_error_reason": None,
+            "last_error_message": None,
+            "last_error_reset_at": None,
+        })
+        matched = True
+        break
+    if not matched:
+        raise GoogleOAuthError("Selected Google account is no longer connected.",
+                               code="google_oauth_account_not_found")
+    write_credential_pool("google-gemini-cli", entries)
+
+
 def save_credentials(creds: GoogleCredentials) -> Path:
     """Atomically write creds to disk with 0o600 permissions."""
     path = _credentials_path()
@@ -648,13 +767,73 @@ _refresh_inflight: Dict[str, threading.Event] = {}
 _refresh_inflight_lock = threading.Lock()
 
 
-def get_valid_access_token(*, force_refresh: bool = False) -> str:
+def _get_valid_account_access_token(email: str, *, force_refresh: bool = False) -> str:
+    creds = load_account_credentials(email)
+    if creds is None:
+        raise GoogleOAuthError("The selected Google account is not connected. Reconnect it in Gemini Accounts.",
+                               code="google_oauth_account_not_found")
+    if not force_refresh and not creds.access_token_expired():
+        return creds.access_token
+    rt = creds.refresh_token
+    if not rt:
+        raise GoogleOAuthError("The selected Google account has no refresh token. Reconnect it in Gemini Accounts.",
+                               code="google_oauth_refresh_missing")
+    inflight_key = f"account:{_normalized_account_email(email)}:{rt}"
+    with _refresh_inflight_lock:
+        event = _refresh_inflight.get(inflight_key)
+        if event is None:
+            event = threading.Event()
+            _refresh_inflight[inflight_key] = event
+            owner = True
+        else:
+            owner = False
+    if not owner:
+        event.wait(timeout=LOCK_TIMEOUT_SECONDS)
+        fresh = load_account_credentials(email)
+        if fresh is not None and not fresh.access_token_expired():
+            return fresh.access_token
+    try:
+        response = refresh_access_token(rt)
+        access = str(response.get("access_token", "") or "").strip()
+        if not access:
+            raise GoogleOAuthError("Refresh response did not include an access_token.",
+                                   code="google_oauth_refresh_empty")
+        creds.access_token = access
+        creds.refresh_token = str(response.get("refresh_token", "") or "").strip() or rt
+        expires_in = int(response.get("expires_in", 0) or 0)
+        creds.expires_ms = int((time.time() + max(60, expires_in)) * 1000)
+        save_account_credentials(creds)
+        return creds.access_token
+    except GoogleOAuthError as exc:
+        # An invalid pooled account must not erase the singleton or other users.
+        if exc.code == "google_oauth_invalid_grant":
+            from runtime.credential_pool import read_credential_pool, write_credential_pool
+            entries = read_credential_pool("google-gemini-cli")
+            for entry in entries:
+                if _pool_entry_email(entry) == _normalized_account_email(email):
+                    entry["last_status"] = "exhausted"
+                    entry["last_error_code"] = 401
+                    entry["last_error_reason"] = "invalid_grant"
+                    entry["last_status_at"] = time.time()
+                    break
+            write_credential_pool("google-gemini-cli", entries)
+        raise
+    finally:
+        if owner:
+            with _refresh_inflight_lock:
+                _refresh_inflight.pop(inflight_key, None)
+            event.set()
+
+
+def get_valid_access_token(*, force_refresh: bool = False, account_email: Optional[str] = None) -> str:
     """Load creds, refreshing if near expiry, and return a valid bearer token.
 
     Dedupes concurrent refreshes by refresh_token. On ``invalid_grant``, the
     credential file is wiped and a ``google_oauth_invalid_grant`` error is raised
     (caller is expected to trigger a re-login flow).
     """
+    if account_email:
+        return _get_valid_account_access_token(account_email, force_refresh=force_refresh)
     creds = load_credentials()
     if creds is None:
         raise GoogleOAuthError(
@@ -723,8 +902,18 @@ def get_valid_access_token(*, force_refresh: bool = False) -> str:
 # Update project IDs on stored creds
 # =============================================================================
 
-def update_project_ids(project_id: str = "", managed_project_id: str = "") -> None:
+def update_project_ids(project_id: str = "", managed_project_id: str = "", *, account_email: Optional[str] = None) -> None:
     """Persist resolved/discovered project IDs back into the credential file."""
+    if account_email:
+        creds = load_account_credentials(account_email)
+        if creds is None:
+            return
+        if project_id:
+            creds.project_id = project_id
+        if managed_project_id:
+            creds.managed_project_id = managed_project_id
+        save_account_credentials(creds)
+        return
     creds = load_credentials()
     if creds is None:
         return
@@ -733,20 +922,27 @@ def update_project_ids(project_id: str = "", managed_project_id: str = "") -> No
     if managed_project_id:
         creds.managed_project_id = managed_project_id
     save_credentials(creds)
+    save_account_credentials_to_pool(creds)
 
 
 # =============================================================================
 # Callback server
 # =============================================================================
 
-class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
-    expected_state: str = ""
-    captured_code: Optional[str] = None
-    captured_error: Optional[str] = None
-    ready: Optional[threading.Event] = None
+@dataclass
+class _OAuthCallbackState:
+    expected_state: str
+    ready: threading.Event
+    code: Optional[str] = None
+    error: Optional[str] = None
 
+
+class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002, N802
-        logger.debug("OAuth callback: " + format, *args)
+        # BaseHTTPRequestHandler includes the complete request path in its
+        # default log arguments. OAuth callback URLs contain a short-lived
+        # authorization code and state, so never log those arguments.
+        logger.debug("OAuth callback request handled")
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
@@ -765,14 +961,17 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
         # retried flow) would overwrite each other and the second callback
         # would fail with "state_mismatch" even though the user signed in
         # correctly. The server carries the state for its own flow.
-        expected = getattr(self.server, "expected_state", None)
-        if expected is None:
-            expected = type(self).expected_state
+        callback_state = getattr(self.server, "oauth_callback_state", None)
+        expected = getattr(callback_state, "expected_state", "")
         if state != expected:
-            type(self).captured_error = "state_mismatch"
+            if callback_state is not None:
+                callback_state.error = "state_mismatch"
+                callback_state.ready.set()
             self._respond_html(400, _ERROR_PAGE.format(message="State mismatch — aborting for safety."))
         elif error:
-            type(self).captured_error = error
+            if callback_state is not None:
+                callback_state.error = error
+                callback_state.ready.set()
             # Simple HTML-escape of the error value
             safe_err = (
                 str(error)
@@ -782,14 +981,15 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
             )
             self._respond_html(400, _ERROR_PAGE.format(message=f"Authorization denied: {safe_err}"))
         elif code:
-            type(self).captured_code = code
+            if callback_state is not None:
+                callback_state.code = code
+                callback_state.ready.set()
             self._respond_html(200, _SUCCESS_PAGE)
         else:
-            type(self).captured_error = "no_code"
+            if callback_state is not None:
+                callback_state.error = "no_code"
+                callback_state.ready.set()
             self._respond_html(400, _ERROR_PAGE.format(message="Callback received no authorization code."))
-
-        if type(self).ready is not None:
-            type(self).ready.set()
 
     def _respond_html(self, status: int, body: str) -> None:
         payload = body.encode("utf-8")
@@ -880,15 +1080,8 @@ def start_oauth_flow(
     server, port = _bind_callback_server(DEFAULT_REDIRECT_PORT)
     redirect_uri = f"http://{REDIRECT_HOST}:{port}{CALLBACK_PATH}"
 
-    # Bind the expected state to THIS server instance. The handler class
-    # attribute is shared across flows, so a second flow would clobber the
-    # first one's state and its callback would fail with "state_mismatch".
-    server.expected_state = state
-    _OAuthCallbackHandler.expected_state = state
-    _OAuthCallbackHandler.captured_code = None
-    _OAuthCallbackHandler.captured_error = None
-    ready = threading.Event()
-    _OAuthCallbackHandler.ready = ready
+    callback_state = _OAuthCallbackState(expected_state=state, ready=threading.Event())
+    server.oauth_callback_state = callback_state
 
     params = {
         "client_id": client_id,
@@ -924,13 +1117,13 @@ def start_oauth_flow(
     code: Optional[str] = None
     try:
         deadline = time.time() + callback_wait_seconds
-        while not ready.is_set() and time.time() < deadline:
+        while not callback_state.ready.is_set() and time.time() < deadline:
             if cancel_event is not None and cancel_event.is_set():
                 raise GoogleOAuthError("Google OAuth cancelled.", code="google_oauth_cancelled")
-            ready.wait(timeout=min(1.0, max(0.05, deadline - time.time())))
-        if ready.is_set():
-            code = _OAuthCallbackHandler.captured_code
-            error = _OAuthCallbackHandler.captured_error
+            callback_state.ready.wait(timeout=min(1.0, max(0.05, deadline - time.time())))
+        if callback_state.ready.is_set():
+            code = callback_state.code
+            error = callback_state.error
             if error:
                 raise GoogleOAuthError(
                     f"Authorization failed: {error}",
@@ -956,10 +1149,17 @@ def start_oauth_flow(
             code="google_oauth_no_code",
         )
 
+    if cancel_event is not None and cancel_event.is_set():
+        raise GoogleOAuthError("Google OAuth cancelled.", code="google_oauth_cancelled")
+
     token_resp = exchange_code(
         code, verifier, redirect_uri,
         client_id=client_id, client_secret=client_secret,
     )
+    # The token request may take several seconds. A cancellation received while
+    # it is in flight must win before any credentials are persisted.
+    if cancel_event is not None and cancel_event.is_set():
+        raise GoogleOAuthError("Google OAuth cancelled.", code="google_oauth_cancelled")
     return _persist_token_response(token_resp, project_id=project_id)
 
 
@@ -1045,8 +1245,46 @@ def _persist_token_response(
         managed_project_id="",
     )
     save_credentials(creds)
+    save_account_credentials_to_pool(creds)
     logger.info("Google OAuth credentials saved to %s", _credentials_path())
     return creds
+
+
+def save_account_credentials_to_pool(creds: GoogleCredentials) -> None:
+    """Upsert OAuth tokens by normalized email without replacing other accounts."""
+    normalized = _normalized_account_email(creds.email)
+    if not normalized:
+        raise GoogleOAuthError(
+            "Google did not return an account email; credentials cannot be added to the multi-account pool.",
+            code="google_oauth_account_missing",
+        )
+    from runtime.credential_pool import read_credential_pool, write_credential_pool
+
+    entries = read_credential_pool("google-gemini-cli")
+    matching = next((entry for entry in entries if _pool_entry_email(entry) == normalized), None)
+    fields = {
+        "access_token": creds.access_token,
+        "refresh_token": creds.refresh_token,
+        "expires_at_ms": int(creds.expires_ms),
+        "email": creds.email,
+        "project_id": creds.project_id,
+        "managed_project_id": creds.managed_project_id,
+        "auth_type": "oauth",
+        "source": "google_pkce",
+        "label": creds.email,
+        "last_status": None,
+        "last_status_at": None,
+        "last_error_code": None,
+        "last_error_reason": None,
+        "last_error_message": None,
+        "last_error_reset_at": None,
+    }
+    if matching is None:
+        entries.append({"id": secrets.token_hex(8), **fields})
+    else:
+        matching.update(fields)
+        matching.pop("extra", None)
+    write_credential_pool("google-gemini-cli", entries)
 
 
 # =============================================================================

@@ -33,6 +33,7 @@ import {
   buildPromptWithTabContext
 } from '../tab-intelligence.js';
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
+import type { NativeChatTurnUsage } from '../chat-usage.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 export type ComposerMode = 'action' | 'plan';
@@ -50,6 +51,11 @@ export type NativeChatMainProps = {
   sessionLoading: boolean;
   setupModel: string;
   activeSpacePath: string;
+  showTokenUsage: boolean;
+  showTps: boolean;
+  showThinking: boolean;
+  simplifiedToolCalling: boolean;
+  latestTurnUsage: NativeChatTurnUsage | null;
   onComposerMode: (mode: ComposerMode) => void;
   onComposerText: (text: string) => void;
   onCreateSession: () => void;
@@ -70,6 +76,11 @@ export function NativeChatMain({
   sessionLoading,
   setupModel,
   activeSpacePath,
+  showTokenUsage,
+  showTps,
+  showThinking,
+  simplifiedToolCalling,
+  latestTurnUsage,
   onComposerMode,
   onComposerText,
   onCreateSession,
@@ -120,46 +131,10 @@ export function NativeChatMain({
           })
           .filter((group) => group.models.length > 0);
 
-        const geminiModels = [
-          { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Standard • Empfohlen)' },
-          { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-          { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-          { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-          { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-          { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' }
-        ];
-
-        const accounts = useGeminiAccountStore.getState().accounts;
-        const geminiGroupLabel = accounts.length > 1
-          ? `Google Gemini CLI (Antigravity) • Round-Robin (${accounts.length})`
-          : accounts.length === 1
-            ? `Google Gemini CLI (${accounts[0].label})`
-            : 'Google Gemini CLI (Antigravity)';
-
         const hasCli = rawParsed.some((g) => g.provider.toLowerCase().includes('gemini'));
-        const finalCatalog = hasCli
-          ? rawParsed
-          : [{ provider: geminiGroupLabel, models: geminiModels }, ...rawParsed];
-
-        setModelCatalog(finalCatalog);
+        setModelCatalog(rawParsed);
       } catch {
-        const accounts = useGeminiAccountStore.getState().accounts;
-        const geminiGroupLabel = accounts.length > 1
-          ? `Google Gemini CLI (Antigravity) • Round-Robin (${accounts.length})`
-          : accounts.length === 1
-            ? `Google Gemini CLI (${accounts[0].label})`
-            : 'Google Gemini CLI (Antigravity)';
-        setModelCatalog([{
-          provider: geminiGroupLabel,
-          models: [
-            { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Standard • Empfohlen)' },
-            { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-            { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-            { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-            { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-            { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' }
-          ]
-        }]);
+        setModelCatalog([]);
       }
     };
     void load();
@@ -259,6 +234,11 @@ export function NativeChatMain({
         pendingUserMessage={activeSession?.pending_user_message || ''}
         ready={ready}
         showDeveloperTools={showDeveloperTools}
+        showTokenUsage={showTokenUsage}
+        showTps={showTps}
+        showThinking={showThinking}
+        simplifiedToolCalling={simplifiedToolCalling}
+        latestTurnUsage={latestTurnUsage}
         onCreateSession={onCreateSession}
         serviceStatus={serviceStatus}
       />

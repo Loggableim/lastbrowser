@@ -689,6 +689,22 @@ class AuthError(RuntimeError):
         self.relogin_required = relogin_required
 
 
+GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE = (
+    "Gemini CLI subscription inference is unavailable in Lastbrowser. Google stopped "
+    "serving Gemini CLI requests for personal Google accounts and Google AI Pro/Ultra "
+    "on June 18, 2026, and Lastbrowser has no supported Antigravity CLI integration. "
+    "Use the official Antigravity CLI or configure the separate Gemini API provider."
+)
+
+
+def _google_gemini_cli_unavailable() -> AuthError:
+    return AuthError(
+        GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE,
+        provider="google-gemini-cli",
+        code="provider_unavailable",
+    )
+
+
 def format_auth_error(error: Exception) -> str:
     """Map auth failures to concise user-facing guidance."""
     if not isinstance(error, AuthError):
@@ -1381,6 +1397,9 @@ def resolve_provider(
         pass
     normalized = _PROVIDER_ALIASES.get(normalized, normalized)
 
+    if normalized == "google-gemini-cli":
+        raise _google_gemini_cli_unavailable()
+
     if normalized == "openrouter":
         return "openrouter"
     if normalized == "custom":
@@ -1744,66 +1763,30 @@ def resolve_gemini_oauth_runtime_credentials(
     *,
     force_refresh: bool = False,
 ) -> Dict[str, Any]:
-    """Resolve runtime OAuth creds for google-gemini-cli."""
-    try:
-        from runtime.google_oauth import (
-            GoogleOAuthError,
-            _credentials_path,
-            get_valid_access_token,
-            load_credentials,
-        )
-    except ImportError as exc:
-        raise AuthError(
-            f"agent.google_oauth is not importable: {exc}",
-            provider="google-gemini-cli",
-            code="google_oauth_module_missing",
-        ) from exc
-
-    try:
-        access_token = get_valid_access_token(force_refresh=force_refresh)
-    except GoogleOAuthError as exc:
-        raise AuthError(
-            str(exc),
-            provider="google-gemini-cli",
-            code=exc.code,
-        ) from exc
-
-    creds = load_credentials()
-    base_url = DEFAULT_GEMINI_CLOUDCODE_BASE_URL
-    return {
-        "provider": "google-gemini-cli",
-        "base_url": base_url,
-        "api_key": access_token,
-        "source": "google-oauth",
-        "expires_at_ms": (creds.expires_ms if creds else None),
-        "auth_file": str(_credentials_path()),
-        "email": (creds.email if creds else "") or "",
-        "project_id": (creds.project_id if creds else "") or "",
-    }
+    """Fail closed: Google subscription credentials are not a supported provider."""
+    raise _google_gemini_cli_unavailable()
 
 
 def get_gemini_oauth_auth_status() -> Dict[str, Any]:
-    """Return a status dict for `sidekick auth list` / `sidekick status`."""
+    """Report legacy credentials without claiming subscription access is usable."""
     try:
         from runtime.google_oauth import _credentials_path, load_credentials
     except ImportError:
-        return {"logged_in": False, "error": "agent.google_oauth unavailable"}
-    auth_path = _credentials_path()
-    creds = load_credentials()
-    if creds is None or not creds.access_token:
         return {
             "logged_in": False,
-            "auth_file": str(auth_path),
-            "error": "not logged in",
+            "provider_available": False,
+            "error_code": "provider_unavailable",
+            "error": GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE,
         }
+    auth_path = _credentials_path()
+    creds = load_credentials()
     return {
-        "logged_in": True,
+        "logged_in": False,
+        "provider_available": False,
+        "legacy_credentials_present": bool(creds and creds.access_token),
         "auth_file": str(auth_path),
-        "source": "google-oauth",
-        "api_key": creds.access_token,
-        "expires_at_ms": creds.expires_ms,
-        "email": creds.email,
-        "project_id": creds.project_id,
+        "error_code": "provider_unavailable",
+        "error": GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE,
     }
 # Spotify auth — PKCE tokens stored in ~/.sidekick/auth.json
 # =============================================================================

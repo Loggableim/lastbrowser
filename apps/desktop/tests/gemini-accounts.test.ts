@@ -101,7 +101,8 @@ describe('useGeminiAccountStore', () => {
       accounts: [],
       currentIndex: 0,
       roundRobinEnabled: true,
-      rotatePerSession: true
+      rotatePerSession: true,
+      sessionAccountEmails: {}
     });
   });
 
@@ -111,6 +112,7 @@ describe('useGeminiAccountStore', () => {
     expect(state.currentIndex).toBe(0);
     expect(state.roundRobinEnabled).toBe(true);
     expect(state.rotatePerSession).toBe(true);
+    expect(state.sessionAccountEmails).toEqual({});
   });
 
   it('adds an account with auto-generated ID, timestamp and zero usage', () => {
@@ -133,21 +135,73 @@ describe('useGeminiAccountStore', () => {
     expect(accounts[0].totalSessionsUsed).toBe(0);
   });
 
-  it('replaces metadata for the active OAuth slot while preserving other saved local metadata', () => {
+  it('keeps distinct accounts and updates an existing email instead of duplicating it', () => {
     const store = useGeminiAccountStore.getState();
     store.addAccount({ label: 'Old active', email: 'old@gmail.com', flowId: 'old-flow', preferredModel: 'gemini-2.5-flash' });
     store.addAccount({ label: 'Saved metadata', email: 'saved@gmail.com', flowId: 'saved-flow', preferredModel: 'gemini-2.5-flash' });
-    store.setActiveAccount(useGeminiAccountStore.getState().accounts[0].id);
-
-    useGeminiAccountStore.getState().replaceActiveAccount({
-      label: 'Current OAuth', email: 'current@gmail.com', flowId: 'new-flow', preferredModel: 'gemini-2.5-flash'
+    useGeminiAccountStore.getState().addAccount({
+      label: 'Updated account', email: 'OLD@gmail.com', flowId: 'new-flow', preferredModel: 'gemini-2.5-pro'
     });
 
     const accounts = useGeminiAccountStore.getState().accounts;
     expect(accounts).toHaveLength(2);
-    expect(accounts[0].email).toBe('current@gmail.com');
+    expect(accounts[0].email).toBe('old@gmail.com');
+    expect(accounts[0].label).toBe('Updated account');
+    expect(accounts[0].flowId).toBe('new-flow');
+    expect(accounts[0].preferredModel).toBe('gemini-2.5-pro');
     expect(accounts[1].email).toBe('saved@gmail.com');
     expect(useGeminiAccountStore.getState().currentIndex).toBe(0);
+  });
+
+  it('keeps one account bound to a session while other sessions rotate', () => {
+    const store = useGeminiAccountStore.getState();
+    store.addAccount({ label: 'A1', email: 'a1@gmail.com', flowId: 'f1', preferredModel: 'gemini-2.5-flash' });
+    store.addAccount({ label: 'A2', email: 'a2@gmail.com', flowId: 'f2', preferredModel: 'gemini-2.5-flash' });
+
+    const first = store.selectAccountForSession('session-1');
+    expect(first?.email).toBe('a1@gmail.com');
+    expect(store.selectAccountForSession('session-1')?.email).toBe('a1@gmail.com');
+    expect(store.selectAccountForSession('session-2')?.email).toBe('a2@gmail.com');
+    expect(useGeminiAccountStore.getState().sessionAccountEmails).toEqual({
+      'session-1': 'a1@gmail.com',
+      'session-2': 'a2@gmail.com'
+    });
+  });
+
+  it('binds the first selected account after a session is created by the initial chat request', () => {
+    const store = useGeminiAccountStore.getState();
+    store.addAccount({ label: 'A1', email: 'a1@gmail.com', flowId: 'f1', preferredModel: 'gemini-2.5-flash' });
+    store.addAccount({ label: 'A2', email: 'a2@gmail.com', flowId: 'f2', preferredModel: 'gemini-2.5-flash' });
+
+    const firstChatAccount = store.selectAccountForSession(undefined);
+    expect(firstChatAccount?.email).toBe('a1@gmail.com');
+    // startChat creates the session implicitly and returns its ID.
+    useGeminiAccountStore.getState().assignSessionAccount('new-session', firstChatAccount!.email);
+
+    expect(useGeminiAccountStore.getState().accountForSession('new-session')?.email).toBe('a1@gmail.com');
+    expect(useGeminiAccountStore.getState().selectAccountForSession('new-session')?.email).toBe('a1@gmail.com');
+    expect(useGeminiAccountStore.getState().currentIndex).toBe(1);
+  });
+
+  it('uses per-message rotation after switching from per-session mode', () => {
+    const store = useGeminiAccountStore.getState();
+    store.addAccount({ label: 'A1', email: 'a1@gmail.com', flowId: 'f1', preferredModel: 'gemini-2.5-flash' });
+    store.addAccount({ label: 'A2', email: 'a2@gmail.com', flowId: 'f2', preferredModel: 'gemini-2.5-flash' });
+    expect(store.selectAccountForSession('session-1')?.email).toBe('a1@gmail.com');
+    useGeminiAccountStore.getState().setRotatePerSession(false);
+    expect(useGeminiAccountStore.getState().selectAccountForSession('session-1')?.email).toBe('a2@gmail.com');
+    expect(useGeminiAccountStore.getState().sessionAccountEmails).toEqual({ 'session-1': 'a1@gmail.com' });
+  });
+
+  it('rotates per message when per-session rotation is disabled', () => {
+    const store = useGeminiAccountStore.getState();
+    store.addAccount({ label: 'A1', email: 'a1@gmail.com', flowId: 'f1', preferredModel: 'gemini-2.5-flash' });
+    store.addAccount({ label: 'A2', email: 'a2@gmail.com', flowId: 'f2', preferredModel: 'gemini-2.5-flash' });
+    store.setRotatePerSession(false);
+
+    expect(store.selectAccountForSession('session-1')?.email).toBe('a1@gmail.com');
+    expect(store.selectAccountForSession('session-1')?.email).toBe('a2@gmail.com');
+    expect(useGeminiAccountStore.getState().sessionAccountEmails).toEqual({});
   });
 
   it('getNextAccount returns null when no accounts are configured', () => {

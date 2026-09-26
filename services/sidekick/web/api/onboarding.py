@@ -65,6 +65,19 @@ _SUPPORTED_PROVIDER_SETUPS = {
         "oauth_provider": "anthropic",
         "oauth_label": "Claude Code OAuth",
     },
+    "openai-codex": {
+        "label": "OpenAI Codex (ChatGPT)",
+        # Codex uses the account credentials stored by the device-code OAuth
+        # flow.  It must still be written into config.yaml after login so the
+        # runtime actually selects the authenticated provider.
+        "env_var": "OPENAI_API_KEY",
+        "default_model": "gpt-5.5",
+        "requires_base_url": False,
+        "models": list(_PROVIDER_MODELS.get("openai-codex", [])),
+        "category": "easy_start",
+        "oauth_provider": "openai-codex",
+        "oauth_label": "ChatGPT account",
+    },
     "openai": {
         "label": "OpenAI",
         "env_var": "OPENAI_API_KEY",
@@ -73,17 +86,6 @@ _SUPPORTED_PROVIDER_SETUPS = {
         "requires_base_url": False,
         "models": list(_PROVIDER_MODELS.get("openai", [])),
         "category": "easy_start",
-    },
-    "google-gemini-cli": {
-        "label": "Gemini CLI",
-        "env_var": "",
-        "default_model": "gemini-3.1-pro-preview",
-        "requires_base_url": False,
-        "models": list(_PROVIDER_MODELS.get("google-gemini-cli", [])),
-        "category": "easy_start",
-        "oauth_provider": "google-gemini-cli",
-        "oauth_label": "Google-Konto / Gemini CLI",
-        "key_optional": True,
     },
     # ── Open / self-hosted ─────────────────────────────────────────────
     "ollama": {
@@ -625,16 +627,12 @@ def _provider_oauth_authenticated(provider: str, sidekick_home: "Path") -> bool:
     if not provider:
         return False
 
-    _known_oauth_providers = {"openai-codex", "copilot", "copilot-acp", "qwen-oauth", "nous", "anthropic", "google-gemini-cli"}
+    if provider == "google-gemini-cli":
+        return False
+
+    _known_oauth_providers = {"openai-codex", "copilot", "copilot-acp", "qwen-oauth", "nous", "anthropic"}
     if provider not in _known_oauth_providers:
         return False
-    if provider == "google-gemini-cli":
-        try:
-            from runtime.google_oauth import load_credentials
-            return load_credentials() is not None
-        except Exception:
-            return False
-
     try:
         import json as _j
 
@@ -1068,3 +1066,119 @@ def apply_onboarding_setup(body: dict) -> dict:
 def complete_onboarding() -> dict:
     save_settings({"onboarding_completed": True})
     return get_onboarding_status()
+
+
+# ---------------------------------------------------------------------------
+# Standalone-install migration (Lastbrowser first-run assistant)
+# ---------------------------------------------------------------------------
+
+def _validate_migration_source(source_home: str) -> Path:
+    """Resolve and validate the standalone install root. Raises ValueError."""
+    raw = str(source_home or "").strip()
+    if not raw:
+        raise ValueError("source_home is required")
+    source = Path(raw).expanduser()
+    if not source.is_absolute():
+        raise ValueError("source_home must be an absolute path")
+    resolved = source.resolve()
+    # The source must be a .sidekick home (or contain one) and must exist.
+    if resolved.name == ".sidekick":
+        home = resolved
+    elif (resolved / ".sidekick").is_dir():
+        home = resolved / ".sidekick"
+    else:
+        home = resolved
+    if not home.is_dir():
+        raise ValueError(f"source home does not exist: {raw}")
+    # Traversal guard: the resolved path must stay inside itself (no symlink tricks
+    # producing a path outside the requested root are possible after resolve(), but
+    # reject obviously suspicious inputs anyway).
+    if ".." in Path(raw).parts:
+        raise ValueError("source_home must not contain '..'")
+    return home
+
+
+def detect_standalone_install(body: dict) -> dict:
+    """Report which components exist in a standalone Sidekick install."""
+    source = _validate_migration_source(body.get("source_home") or body.get("candidate_home") or "")
+    components = {
+        "spaces": (source / "spaces").is_dir(),
+        "supermemory": (source / "supermemory.db").is_file(),
+        "profiles": (source / "profiles").is_dir(),
+        "config": (source / "config.yaml").is_file(),
+    }
+    return {
+        "found": True,
+        "home_dir": str(source),
+        "components": components,
+    }
+
+
+def _backup_existing(target: Path) -> None:
+    """Move an existing target aside with a .bak suffix (never overwrite silently)."""
+    if not target.exists():
+        return
+    backup = target.with_name(target.name + ".bak")
+    counter = 1
+    while backup.exists():
+        backup = target.with_name(f"{target.name}.bak{counter}")
+        counter += 1
+        if counter > 99:
+            raise RuntimeError(f"too many backups for {target.name}")
+    target.rename(backup)
+
+
+def migrate_standalone_install(body: dict) -> dict:
+    """Copy selected components from a standalone install into the active home."""
+    import shutil
+
+    source = _validate_migration_source(body.get("source_home") or "")
+    items = body.get("items") or {}
+    destination = _get_active_profile_home()
+    destination.mkdir(parents=True, exist_ok=True)
+
+    copied: list[str] = []
+    skipped: list[str] = []
+    errors: list[str] = []
+
+    def copy_dir(name: str) -> None:
+        src = source / name
+        dst = destination / name
+        if not src.is_dir():
+            skipped.append(name)
+            return
+        try:
+            if dst.exists():
+                _backup_existing(dst)
+            shutil.copytree(src, dst)
+            copied.append(name)
+        except Exception as exc:  # noqa: BLE001 - report per-item errors
+            errors.append(f"{name}: {exc}")
+
+    def copy_file(name: str) -> None:
+        src = source / name
+        dst = destination / name
+        if not src.is_file():
+            skipped.append(name)
+            return
+        try:
+            if dst.exists():
+                _backup_existing(dst)
+            shutil.copy2(src, dst)
+            copied.append(name)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{name}: {exc}")
+
+    if items.get("spaces"):
+        copy_dir("spaces")
+    if items.get("supermemory"):
+        copy_file("supermemory.db")
+    if items.get("profiles"):
+        copy_dir("profiles")
+
+    return {
+        "copied": copied,
+        "skipped": skipped,
+        "errors": errors,
+        "destination": str(destination),
+    }

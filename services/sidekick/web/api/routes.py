@@ -22,7 +22,7 @@ import time
 import uuid
 from pathlib import Path, PurePath, PureWindowsPath
 from contextlib import closing
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 from shared.sessions import DEFAULT_SESSION_TITLE, is_default_session_title
 from web.api._home import get_active_webui_home, get_webui_home
 from web.api.agent_sessions import (
@@ -1654,6 +1654,26 @@ def _should_attach_codex_provider_context(model: str, raw_active_provider: str, 
     return False
 
 
+def _catalog_gemini_cli_model_ids(catalog: dict) -> list[str]:
+    """Return current Gemini CLI model IDs from its exact catalog group."""
+    for group in catalog.get("groups") or []:
+        if str(group.get("provider_id") or "").strip().lower() != "google-gemini-cli":
+            continue
+        ids: list[str] = []
+        for entry in group.get("models") or []:
+            if not isinstance(entry, dict):
+                continue
+            model_id = str(entry.get("id") or "").strip()
+            if model_id.startswith("@") and ":" in model_id:
+                model_id = model_id.split(":", 1)[1]
+            if model_id.startswith("models/"):
+                model_id = model_id.removeprefix("models/")
+            if model_id and model_id not in ids:
+                ids.append(model_id)
+        return ids
+    return []
+
+
 def _resolve_compatible_session_model_state(
     model_id: str | None,
     model_provider: str | None = None,
@@ -1692,7 +1712,10 @@ def _resolve_compatible_session_model_state(
             )
             or requested_provider_normalized == raw_active_provider_fast
         ):
-            return model, requested_provider_clean, False
+            # A persisted Gemini CLI selection can outlive the model catalog.
+            # Defer this provider's fast path until current catalog validation.
+            if requested_provider_clean not in {"google-gemini-cli", "gemini-cli", "gemini-oauth"}:
+                return model, requested_provider_clean, False
     if explicit_provider_fast:
         explicit_provider_normalized = _normalize_provider_id(explicit_provider_fast)
         if (
@@ -1704,7 +1727,8 @@ def _resolve_compatible_session_model_state(
                 and explicit_provider_normalized == active_provider_fast
             )
         ):
-            return model, explicit_provider_fast, False
+            if explicit_provider_fast not in {"google-gemini-cli", "gemini-cli", "gemini-oauth"}:
+                return model, explicit_provider_fast, False
 
     catalog = get_available_models()
     default_model = str(catalog.get("default_model") or get_effective_default_model() or "").strip()
@@ -1716,6 +1740,27 @@ def _resolve_compatible_session_model_state(
     # want to detect that a session model from a known provider (e.g. openai/gpt-5.4-mini)
     # is stale relative to this unknown active provider. (#1023)
     raw_active_provider = str(catalog.get("active_provider") or "").strip().lower()
+    requested_provider_clean = _clean_session_model_provider(requested_provider)
+    gemini_cli_context = requested_provider_clean in {
+        "google-gemini-cli", "gemini-cli", "gemini-oauth",
+    } or raw_active_provider in {"google-gemini-cli", "gemini-cli", "gemini-oauth"}
+    model_candidate = model
+    if model_candidate.startswith("@") and ":" in model_candidate:
+        model_candidate = model_candidate.split(":", 1)[1]
+    if model_candidate.startswith("models/"):
+        model_candidate = model_candidate.removeprefix("models/")
+    if gemini_cli_context and model_candidate.lower().startswith("gemini-"):
+        current_gemini_ids = _catalog_gemini_cli_model_ids(catalog)
+        if current_gemini_ids:
+            current_id = next(
+                (model_id for model_id in current_gemini_ids if model_id.casefold() == model_candidate.casefold()),
+                None,
+            )
+            if current_id:
+                return current_id, requested_provider_clean or raw_active_provider, current_id != model_candidate
+            # The live Gemini CLI catalog is authoritative for this request.
+            # Repair a retired persisted selection before it reaches the adapter.
+            return current_gemini_ids[0], requested_provider_clean or raw_active_provider, True
     if not active_provider and not raw_active_provider:
         bare_model, explicit_provider = _split_provider_qualified_model(model)
         return model, explicit_provider or requested_provider, False
@@ -2315,12 +2360,14 @@ from web.api.streaming import (
     cancel_stream,
     _materialize_pending_user_turn_before_error,
 )
-from web.api.providers import get_providers, get_provider_quota, set_provider_key, remove_provider_key
+from web.api.providers import get_providers, get_provider_quota, set_provider_key, set_provider_models, normalize_provider_model_allowlist, remove_provider_key
 from web.api.onboarding import (
     apply_onboarding_setup,
     get_onboarding_status,
     complete_onboarding,
     probe_provider_endpoint,
+    detect_standalone_install,
+    migrate_standalone_install,
 )
 from web.api.oauth import (
     cancel_onboarding_oauth_flow,
@@ -6591,6 +6638,9 @@ def handle_post(handler, parsed) -> bool:
             diag.finish()
         raise
 
+    if parsed.path == "/api/models/probe":
+        return _handle_model_probe(handler, body)
+
     if parsed.path == "/api/window/control":
         return _handle_window_control(handler, body)
 
@@ -7076,14 +7126,35 @@ def handle_post(handler, parsed) -> bool:
     # â”€â”€ Providers (POST) â”€â”€
     if parsed.path == "/api/providers":
         provider_id = (body.get("provider") or "").strip().lower()
-        api_key = body.get("api_key")
         if not provider_id:
             return bad(handler, "provider is required")
-        if api_key is not None:
-            api_key = str(api_key).strip() or None
-        result = set_provider_key(provider_id, api_key)
-        if not result.get("ok"):
-            return bad(handler, result.get("error", "Unknown error"))
+        has_api_key = "api_key" in body
+        has_models = "models" in body
+        if not has_api_key and not has_models:
+            return bad(handler, "api_key or models is required")
+        # Validate the allowlist before persisting a key so a malformed model
+        # selection cannot leave a partially applied settings update.
+        if has_models:
+            try:
+                normalize_provider_model_allowlist(provider_id, body.get("models"))
+            except ValueError as exc:
+                return bad(handler, str(exc))
+        result = {"ok": True, "provider": provider_id}
+        if has_api_key:
+            api_key = str(body.get("api_key") or "").strip() or None
+            result = set_provider_key(provider_id, api_key)
+            if not result.get("ok"):
+                return bad(handler, result.get("error", "Unknown error"))
+        if has_models:
+            try:
+                result.update(set_provider_models(provider_id, body.get("models")))
+            except ValueError as exc:
+                return bad(handler, str(exc))
+            except Exception:
+                logger.exception("Failed to save model allowlist for provider %s", provider_id)
+                return bad(handler, "Failed to save provider model selection.", 500)
+        from runtime.smart_track_orchestrator import schedule_model_wall_scan
+        schedule_model_wall_scan()
         return j(handler, result)
 
     if parsed.path == "/api/providers/delete":
@@ -7093,6 +7164,8 @@ def handle_post(handler, parsed) -> bool:
         result = remove_provider_key(provider_id)
         if not result.get("ok"):
             return bad(handler, result.get("error", "Unknown error"))
+        from runtime.smart_track_orchestrator import schedule_model_wall_scan
+        schedule_model_wall_scan()
         return j(handler, result)
 
     if parsed.path == "/api/teamwork/config":
@@ -7107,6 +7180,7 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/smart-track/scan":
         from runtime.smart_track_orchestrator import build_model_wall, load_smart_track_config
+        # This is an explicit user request and must work even with auto_scan off.
         wall = build_model_wall()
         cfg = load_smart_track_config(reload=True)
         return j(handler, {"ok": True, "wall": wall, "config": cfg})
@@ -8213,6 +8287,51 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/onboarding/complete":
         return j(handler, complete_onboarding())
+
+    if parsed.path == "/api/onboarding/detect_standalone":
+        # Local-network gate like /api/onboarding/setup: the payload names
+        # filesystem paths, so keep it local-only unless auth is enabled.
+        from web.api.auth import is_auth_enabled
+        import os as _os
+        if not is_auth_enabled() and not _os.getenv("SIDEKICK_WEBUI_ONBOARDING_OPEN"):
+            import ipaddress
+            try:
+                _xff = handler.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+                _xri = handler.headers.get("X-Real-IP", "").strip()
+                _ip_str = _xff or _xri or handler.client_address[0]
+                addr = ipaddress.ip_address(_ip_str)
+                is_local = addr.is_loopback or addr.is_private
+            except ValueError:
+                is_local = False
+            if not is_local:
+                return bad(handler, "Standalone detection is only available from local networks when auth is not enabled.", 403)
+        try:
+            return j(handler, detect_standalone_install(body))
+        except ValueError as e:
+            return bad(handler, str(e))
+
+    if parsed.path == "/api/onboarding/migrate_standalone":
+        # Writes into the active profile home — same local-network gate as setup.
+        from web.api.auth import is_auth_enabled
+        import os as _os
+        if not is_auth_enabled() and not _os.getenv("SIDEKICK_WEBUI_ONBOARDING_OPEN"):
+            import ipaddress
+            try:
+                _xff = handler.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+                _xri = handler.headers.get("X-Real-IP", "").strip()
+                _ip_str = _xff or _xri or handler.client_address[0]
+                addr = ipaddress.ip_address(_ip_str)
+                is_local = addr.is_loopback or addr.is_private
+            except ValueError:
+                is_local = False
+            if not is_local:
+                return bad(handler, "Standalone migration is only available from local networks when auth is not enabled.", 403)
+        try:
+            return j(handler, migrate_standalone_install(body))
+        except ValueError as e:
+            return bad(handler, str(e))
+        except RuntimeError as e:
+            return bad(handler, str(e), 500)
 
     if parsed.path == "/api/onboarding/probe":
         # Probe a self-hosted provider endpoint (#1499).  Validates the
@@ -10416,6 +10535,50 @@ def _handle_browser_sse_stream(handler, parsed):
             pass
 
 
+def _handle_model_probe(handler, body):
+    """Probe a fixed provider catalog with a transient user-supplied key.
+
+    The key is never persisted or included in a URL/log. Only providers with a
+    known, fixed catalog endpoint are accepted to avoid SSRF.
+    """
+    provider = str(body.get("provider") or "").strip().lower()
+    api_key = str(body.get("api_key") or "").strip()
+    endpoints = {
+        "openrouter": "https://openrouter.ai/api/v1/models",
+        "openai": "https://api.openai.com/v1/models",
+        "deepseek": "https://api.deepseek.com/v1/models",
+        "anthropic": "https://api.anthropic.com/v1/models",
+    }
+    endpoint = endpoints.get(provider)
+    if not endpoint:
+        return j(handler, {"error": "Model probing is not supported for this provider", "models": []}, status=400)
+    if not api_key or len(api_key) > 4096:
+        return j(handler, {"error": "A valid API key is required", "models": []}, status=400)
+    try:
+        import urllib.request
+        headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+        if provider == "anthropic":
+            headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "Accept": "application/json"}
+        request = urllib.request.Request(endpoint, headers=headers)
+        with urllib.request.urlopen(request, timeout=12) as response:
+            payload = json.loads(response.read(4 * 1024 * 1024))
+        data = payload.get("data", []) if isinstance(payload, dict) else []
+        models = []
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    model_id = str(item.get("id") or "").strip()
+                    if model_id:
+                        models.append({"id": model_id, "label": str(item.get("name") or model_id).strip()})
+        models.sort(key=lambda item: item["id"].lower())
+        return j(handler, {"provider": provider, "models": models, "count": len(models)})
+    except Exception as exc:
+        # Avoid returning provider response bodies or request details that may
+        # contain credential-shaped data.
+        logger.info("Transient model probe failed for %s (%s)", provider, type(exc).__name__)
+        return j(handler, {"error": "Could not load models. Check the key and try again.", "models": []}, status=502)
+
+
 def _handle_live_models(handler, parsed):
     """Return the live model list for a provider.
 
@@ -11397,11 +11560,13 @@ def _start_chat_stream_for_session(
     workspace: str,
     model: str,
     model_provider=None,
+    google_account_email="",
     normalized_model: bool = False,
     diag=None,
     goal_related: bool = False,
     mode: str = "",
     sandbox_disabled: bool = False,
+    grounding_context: str = "",
 ):
     """Persist pending state, register an SSE channel, and start an agent turn."""
     attachments = attachments or []
@@ -11507,7 +11672,9 @@ def _start_chat_stream_for_session(
     thr = threading.Thread(
         target=_run_agent_streaming,
         args=(s.session_id, msg, model, workspace, stream_id, attachments),
-        kwargs={"model_provider": model_provider, "goal_related": goal_related, "mode": mode, "sandbox_disabled": sandbox_disabled},
+        kwargs={"model_provider": model_provider, "google_account_email": google_account_email,
+                "goal_related": goal_related, "mode": mode, "sandbox_disabled": sandbox_disabled,
+                "grounding_context": grounding_context},
         daemon=True,
     )
     thr.start()
@@ -11522,6 +11689,43 @@ def _start_chat_stream_for_session(
     if model_provider:
         response["effective_model_provider"] = model_provider
     return response
+
+
+def _normalize_teamwork_grounding_context(value) -> str:
+    """Bound browser grounding and strip URL credentials, query strings, and fragments."""
+    if not isinstance(value, dict):
+        return ""
+
+    def clean(field: str, limit: int) -> str:
+        raw = value.get(field)
+        if not isinstance(raw, str):
+            return ""
+        return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", raw).strip()[:limit]
+
+    url = ""
+    raw_url = clean("url", 4000)
+    try:
+        parts = urlsplit(raw_url)
+        if parts.scheme.lower() in {"http", "https"} and parts.hostname:
+            host = parts.hostname
+            if ":" in host and not host.startswith("["):
+                host = f"[{host}]"
+            if parts.port:
+                host = f"{host}:{parts.port}"
+            url = urlunsplit((parts.scheme.lower(), host, parts.path[:1500], "", ""))[:2000]
+    except (ValueError, UnicodeError):
+        url = ""
+
+    title = clean("title", 240)
+    snippet = clean("snippet", 1800)
+    lines = []
+    if url:
+        lines.append(f"URL: {url}")
+    if title:
+        lines.append(f"Titel: {title}")
+    if snippet:
+        lines.append(f"Sichtbarer Auszug: {snippet}")
+    return "\n".join(lines)
 
 
 def _game_mode_guard_payload_for_model(
@@ -11925,8 +12129,43 @@ def _handle_chat_start(handler, body, diag=None):
         )
         if game_mode_payload:
             return j(handler, game_mode_payload, status=409)
+        is_google_cli_provider = str(model_provider or "").strip().lower() in {
+            "google-gemini-cli", "gemini-cli", "gemini-oauth",
+        }
+        if is_google_cli_provider:
+            from cli.auth import GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE
+
+            return j(handler, {
+                "error": GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE,
+                "error_code": "provider_unavailable",
+                "provider": "google-gemini-cli",
+            }, status=503)
         mode = str(body.get("mode", "") or "").strip().lower()
         sandbox_disabled = body.get("sandbox_disabled", False)
+        grounding_context = ""
+        if model == "teamwork":
+            try:
+                from runtime.teamwork_orchestrator import load_teamwork_config
+
+                if load_teamwork_config().get("shared_grounding") is True:
+                    grounding_context = _normalize_teamwork_grounding_context(body.get("grounding_context"))
+            except Exception:
+                logger.warning("Could not load Teamwork grounding preference; omitting browser context", exc_info=True)
+        selected_google_account = str(body.get("provider_account_email") or "").strip().casefold()
+        if selected_google_account:
+            if "@" not in selected_google_account or any(ch.isspace() for ch in selected_google_account):
+                return bad(handler, "provider_account_email must be a valid account email")
+            if not is_google_cli_provider:
+                return bad(handler, "provider_account_email is only supported for the Gemini CLI provider")
+        elif is_google_cli_provider:
+            # Account-scoped credentials are stored in the pool. Automatically
+            # rotate chat requests when the UI has not pinned a specific account.
+            # Preserve legacy singleton behavior if no pooled account exists.
+            try:
+                from runtime.google_oauth import select_next_account_email
+                selected_google_account = select_next_account_email() or ""
+            except Exception:
+                logger.debug("Gemini account round-robin selection failed; using legacy credentials", exc_info=True)
         response = _start_chat_stream_for_session(
             s,
             msg=msg,
@@ -11934,11 +12173,13 @@ def _handle_chat_start(handler, body, diag=None):
             workspace=workspace,
             model=model,
             model_provider=model_provider,
+            google_account_email=selected_google_account,
             normalized_model=normalized_model,
             diag=diag,
             goal_related=goal_related,
             mode=mode,
             sandbox_disabled=sandbox_disabled,
+            grounding_context=grounding_context,
         )
         status = int(response.pop("_status", 200) or 200)
         diag.stage("response_write") if diag else None

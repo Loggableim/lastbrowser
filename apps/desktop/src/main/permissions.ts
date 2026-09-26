@@ -72,16 +72,26 @@ export type PermissionController = {
 export function createPermissionController(
   initialTrusted: string[] = []
 ): PermissionController {
-  const trusted = new Set(initialTrusted.filter(Boolean));
-  const listeners = new Set<(origins: string[]) => void>();
-
   const originOf = (raw: string): string => {
     try {
-      return new URL(raw).origin;
+      const parsed = new URL(raw);
+      // Site exceptions are only meaningful for ordinary web origins. In
+      // particular, file:// and custom/internal schemes must never collapse
+      // to the shared "null" origin and become a broad media exception.
+      if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || parsed.origin === 'null') {
+        return '';
+      }
+      return parsed.origin;
     } catch {
       return '';
     }
   };
+
+  // Normalize persisted values before they can participate in permission
+  // decisions. setTrustedOrigins already did this, but startup data previously
+  // bypassed that normalization and could silently fail to match real origins.
+  const trusted = new Set(initialTrusted.map(originOf).filter(Boolean));
+  const listeners = new Set<(origins: string[]) => void>();
 
   const emit = (): void => {
     const list = Array.from(trusted);

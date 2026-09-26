@@ -1,4 +1,6 @@
 import { BrowserWindow } from 'electron';
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 
 export type AuthWindowOptions = {
   url: string;
@@ -129,4 +131,87 @@ export function openAuthConnectWindow(options: AuthWindowOptions): BrowserWindow
 
   void win.loadURL(url);
   return win;
+}
+
+/**
+ * Return candidate paths to pre-installed native OS browsers on Windows
+ * (Edge, Chrome, Firefox, Brave) where Google BotGuard never flags embedded webviews.
+ */
+export function getKnownWindowsBrowserPaths(): string[] {
+  const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
+  const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+  const localAppData = process.env['LOCALAPPDATA'] || '';
+
+  return [
+    `${programFilesX86}\\Microsoft\\Edge\\Application\\msedge.exe`,
+    `${programFiles}\\Microsoft\\Edge\\Application\\msedge.exe`,
+    `${programFiles}\\Google\\Chrome\\Application\\chrome.exe`,
+    `${programFilesX86}\\Google\\Chrome\\Application\\chrome.exe`,
+    localAppData ? `${localAppData}\\Google\\Chrome\\Application\\chrome.exe` : '',
+    `${programFiles}\\Mozilla Firefox\\firefox.exe`,
+    `${programFilesX86}\\Mozilla Firefox\\firefox.exe`,
+    `${programFiles}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`
+  ].filter(Boolean);
+}
+
+/**
+ * Attempt to open a URL directly in an authentic native browser (Edge, Chrome, etc.)
+ * on Windows. Avoids loopback when Lastbrowser itself is registered as the default browser.
+ */
+export function openInExternalSystemBrowser(
+  url: string,
+  existsFn: (path: string) => boolean = existsSync,
+  spawnFn: typeof spawn = spawn
+): boolean {
+  if (process.platform !== 'win32') return false;
+  const candidates = getKnownWindowsBrowserPaths();
+  for (const browserPath of candidates) {
+    try {
+      if (existsFn(browserPath)) {
+        const child = spawnFn(browserPath, [url], { detached: true, stdio: 'ignore' });
+        child?.unref?.();
+        return true;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  return false;
+}
+
+/**
+ * Validate the target and report whether the OS accepted a request to open it.
+ * Google OAuth callers use this so a malformed or unsupported URL cannot be
+ * reported as a successful sign-in launch.
+ */
+export async function openExternalUrl(
+  url: string,
+  options: {
+    platform?: NodeJS.Platform;
+    existsFn?: (path: string) => boolean;
+    spawnFn?: typeof spawn;
+    shellOpenExternal?: (url: string) => Promise<void>;
+  } = {}
+): Promise<boolean> {
+  let target: URL;
+  try {
+    target = new URL(String(url || '').trim());
+  } catch {
+    return false;
+  }
+  if (!['http:', 'https:', 'mailto:'].includes(target.protocol)) return false;
+
+  const normalizedUrl = target.toString();
+  if (options.platform === 'win32' && isOAuthUrl(normalizedUrl)) {
+    const opened = openInExternalSystemBrowser(normalizedUrl, options.existsFn, options.spawnFn);
+    if (opened) return true;
+  }
+
+  if (!options.shellOpenExternal) return false;
+  try {
+    await options.shellOpenExternal(normalizedUrl);
+    return true;
+  } catch {
+    return false;
+  }
 }

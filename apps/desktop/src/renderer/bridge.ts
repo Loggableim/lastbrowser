@@ -37,6 +37,12 @@ export type BrowserContextPayload = {
   pageText: string;
 };
 
+export type TeamworkGroundingContext = {
+  url: string;
+  title: string;
+  snippet: string;
+};
+
 export type SidekickPromptResult =
   | { ok: true; prompt: string; title: string }
   | { ok: false; reason: string };
@@ -51,6 +57,74 @@ export function clampContextText(text: string, maxLength = 6000): string {
   const normalized = String(text || '').replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, maxLength)}…`;
+}
+
+/** Build a compact Teamwork context record without URL query/fragment data or full-page text. */
+export function createTeamworkGroundingContext(
+  url: string,
+  title: string,
+  snippet: string,
+): TeamworkGroundingContext {
+  let safeUrl = '';
+  try {
+    const parsed = new URL(String(url || ''));
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      parsed.username = '';
+      parsed.password = '';
+      parsed.search = '';
+      parsed.hash = '';
+      safeUrl = parsed.toString().slice(0, 2000);
+    }
+  } catch {
+    safeUrl = '';
+  }
+  return {
+    url: safeUrl,
+    title: clampContextText(String(title || '').replace(/[\u0000-\u001f\u007f]/g, ' '), 240),
+    snippet: clampContextText(String(snippet || '').replace(/[\u0000-\u001f\u007f]/g, ' '), 1800),
+  };
+}
+
+/** Read only the selected text or a short excerpt from visible viewport paragraphs. */
+export async function collectTeamworkGroundingContext(
+  webview: Electron.WebviewTag | null,
+  activeTab: { url: string; title: string },
+): Promise<TeamworkGroundingContext> {
+  const url = webview && typeof webview.getURL === 'function' ? webview.getURL() : activeTab.url;
+  const title = webview && typeof webview.getTitle === 'function' ? webview.getTitle() : activeTab.title;
+  if (!webview) return createTeamworkGroundingContext(url, title, '');
+
+  const visibleExcerpt = `(() => {
+    const selected = String(window.getSelection ? window.getSelection().toString() : '').trim();
+    if (selected) return selected.slice(0, 1800);
+    const viewportCenter = window.innerHeight / 2;
+    const items = Array.from(document.querySelectorAll('h1,h2,h3,p,li,blockquote'))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0
+          || rect.bottom <= 0 || rect.top >= window.innerHeight || rect.width <= 0 || rect.height <= 0) return null;
+        const text = String(element.innerText || '').replace(/\\s+/g, ' ').trim();
+        if (!text) return null;
+        return { text, distance: Math.abs((rect.top + rect.bottom) / 2 - viewportCenter) };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.distance - b.distance);
+    let excerpt = '';
+    for (const item of items) {
+      const part = item.text.slice(0, 420);
+      const next = excerpt ? excerpt + '\\n' + part : part;
+      if (next.length > 1800) {
+        excerpt = next.slice(0, 1800);
+        break;
+      }
+      excerpt = next;
+      if (excerpt.length >= 1400) break;
+    }
+    return excerpt;
+  })()`;
+  const result = await webview.executeJavaScript(visibleExcerpt, true).catch(() => '');
+  return createTeamworkGroundingContext(url, title, String(result || ''));
 }
 
 export function buildSidekickPrompt(action: SidekickActionId, context: BrowserContextPayload): SidekickPromptResult {

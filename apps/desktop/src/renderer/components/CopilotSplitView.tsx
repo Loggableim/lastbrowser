@@ -44,6 +44,7 @@ import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
 import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
+import { reconcileGeminiCliModelSelection } from '../setup-state.js';
 
 export interface AvailableModelItem {
   id: string;
@@ -97,57 +98,6 @@ export const AVAILABLE_MODELS: AvailableModelItem[] = [
     badgeClass: 'teamwork',
     isDefault: false
   },
-  // Google Gemini CLI
-  {
-    id: 'gemini-2.5-flash',
-    label: 'Gemini 2.5 Flash',
-    provider: 'Google',
-    category: 'gemini',
-    badge: 'Standard • Schnell (CLI)',
-    badgeClass: 'gemini',
-    isDefault: true
-  },
-  {
-    id: 'gemini-2.5-pro',
-    label: 'Gemini 2.5 Pro',
-    provider: 'Google',
-    category: 'gemini',
-    badge: 'Ultra Reasoning (CLI)',
-    badgeClass: 'gemini'
-  },
-  {
-    id: 'gemini-2.5-flash-lite',
-    label: 'Gemini 2.5 Flash Lite',
-    provider: 'Google',
-    category: 'gemini',
-    badge: 'High-Speed (CLI)',
-    badgeClass: 'gemini'
-  },
-  {
-    id: 'gemini-2.0-flash',
-    label: 'Gemini 2.0 Flash',
-    provider: 'Google',
-    category: 'gemini',
-    badge: 'Effizient & Schnell (CLI)',
-    badgeClass: 'gemini'
-  },
-  {
-    id: 'gemini-1.5-pro',
-    label: 'Gemini 1.5 Pro',
-    provider: 'Google',
-    category: 'gemini',
-    badge: 'Deep Reasoning (CLI)',
-    badgeClass: 'gemini'
-  },
-  {
-    id: 'gemini-1.5-flash',
-    label: 'Gemini 1.5 Flash',
-    provider: 'Google',
-    category: 'gemini',
-    badge: 'High-Speed (CLI)',
-    badgeClass: 'gemini'
-  },
-
   // Anthropic
   {
     id: 'claude-3-5-sonnet',
@@ -251,6 +201,7 @@ export interface CopilotSplitViewProps {
   onMinimize?: () => void;
   botName?: string;
   modelName?: string;
+  modelProvider?: string;
   messages: DesktopChatMessage[];
   busy: boolean;
   onSendMessage: (text: string) => void;
@@ -272,7 +223,8 @@ export function CopilotSplitView({
   onClose,
   onMinimize,
   botName = 'Nova',
-  modelName = 'Gemini 2.5 Flash',
+  modelName = 'Gemini CLI',
+  modelProvider,
   messages,
   busy,
   onSendMessage,
@@ -305,7 +257,37 @@ export function CopilotSplitView({
   const currentGeminiAccount = activeAccount();
   const { selectedModel, setSelectedModel } = useChatStore();
 
-  const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS);
+  const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS.filter((item) => item.category !== 'gemini'));
+  const [teamworkEnabled, setTeamworkEnabled] = useState(true);
+  const [smartTrackEnabled, setSmartTrackEnabled] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    const loadOrchestrationAvailability = async () => {
+      try {
+        const [teamwork, smartTrack] = await Promise.all([
+          window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/config' }),
+          window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/smart-track/config' })
+        ]);
+        if (!alive) return;
+        if (teamwork && typeof teamwork === 'object' && typeof (teamwork as any).enabled === 'boolean') {
+          setTeamworkEnabled((teamwork as any).enabled);
+        }
+        if (smartTrack && typeof smartTrack === 'object' && typeof (smartTrack as any).enabled === 'boolean') {
+          setSmartTrackEnabled((smartTrack as any).enabled);
+        }
+      } catch {
+        // Older runtimes may not expose orchestration config endpoints; keep the built-in options available.
+      }
+    };
+    const handleConfigUpdated = () => { void loadOrchestrationAvailability(); };
+    void loadOrchestrationAvailability();
+    window.addEventListener('lastbrowser:orchestration-config-updated', handleConfigUpdated);
+    return () => {
+      alive = false;
+      window.removeEventListener('lastbrowser:orchestration-config-updated', handleConfigUpdated);
+    };
+  }, []);
 
   // Phase 13.6: Dynamic live discovery via /api/models with quota status
   useEffect(() => {
@@ -318,6 +300,9 @@ export function CopilotSplitView({
           path: '/api/models'
         })) as { groups?: Array<{ provider_id?: string; provider?: string; account?: string; models?: Array<any> }> } | null;
         if (!alive || !res || !Array.isArray(res.groups)) return;
+
+        // Replace the model picker baseline with the live provider catalog;
+        // Gemini IDs are account/tier specific and must not use stale entries.
 
         const dynamicModels: AvailableModelItem[] = [];
 
@@ -371,29 +356,53 @@ export function CopilotSplitView({
               remainingPercent: pct,
               remainingFraction: frac,
               account,
-              isDefault: cleanId === 'gemini-2.5-flash'
+              isDefault: false
             });
           }
         }
 
+        const cliGroup = res.groups.find((group) =>
+          String(group.provider_id || group.provider || '').toLowerCase() === 'google-gemini-cli'
+        );
+        const cliModelIds = (cliGroup?.models || []).map((model) => {
+          const id = String(model.id || '');
+          return id.startsWith('@') && id.includes(':') ? id.split(':', 2)[1] : id.replace(/^models\//i, '');
+        }).filter(Boolean);
+        const selectedGeminiModel = selectedModel || modelName;
+        const reconciledGeminiModel = reconcileGeminiCliModelSelection(
+          modelProvider,
+          selectedGeminiModel,
+          cliModelIds,
+        );
+        if (reconciledGeminiModel && reconciledGeminiModel !== selectedGeminiModel) {
+          setSelectedModel(reconciledGeminiModel);
+          onSelectModel?.(reconciledGeminiModel);
+        }
+
         if (dynamicModels.length > 0) {
-          setModelList((prev) => {
-            const dynamicCategories = new Set(dynamicModels.map((m) => m.category));
-            const fallbacks = AVAILABLE_MODELS.filter(
-              (req) => !dynamicCategories.has(req.category) && !dynamicModels.some((d) => d.id === req.id)
-            );
-            return [...dynamicModels, ...fallbacks];
-          });
+          setModelList((prev) => [
+            ...dynamicModels,
+            ...prev.filter((item) => item.category !== 'gemini' && !dynamicModels.some((model) => model.id === item.id))
+          ]);
+        } else {
+          setModelList((prev) => prev.filter((item) => item.category !== 'gemini'));
         }
       } catch {
-        // Retain baseline AVAILABLE_MODELS on offline/network errors
+        // Do not advertise stale Gemini IDs when live Code Assist discovery fails.
+        if (alive) setModelList((prev) => prev.filter((item) => item.category !== 'gemini'));
       }
     }
     void loadLiveModels();
     return () => {
       alive = false;
     };
-  }, [currentGeminiAccount]);
+  }, [currentGeminiAccount, modelProvider]);
+
+  const visibleModelList = useMemo(() => modelList.filter((model) => {
+    if (model.id === 'teamwork') return teamworkEnabled;
+    if (model.id.startsWith('smart-track')) return smartTrackEnabled;
+    return true;
+  }), [modelList, smartTrackEnabled, teamworkEnabled]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workflowDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -404,14 +413,31 @@ export function CopilotSplitView({
   const activeModelId = selectedModel || modelName;
   const activeModelItem = useMemo(() => {
     return (
-      modelList.find(
+      visibleModelList.find(
         (m) =>
           m.id === activeModelId ||
           m.label.toLowerCase() === activeModelId.toLowerCase() ||
           activeModelId.toLowerCase().includes(m.id.toLowerCase())
-      ) || modelList[0] || AVAILABLE_MODELS[0]
+      ) || visibleModelList[0] || {
+        id: activeModelId || 'default',
+        label: activeModelId || 'Modell wird geladen',
+        provider: 'Provider',
+        category: 'other' as const,
+        badge: 'Lade aktuellen Provider-Katalog',
+        badgeClass: 'other'
+      }
     );
-  }, [activeModelId, modelList]);
+  }, [activeModelId, visibleModelList]);
+
+  useEffect(() => {
+    const orchestrationDisabled = (selectedModel === 'teamwork' && !teamworkEnabled)
+      || (selectedModel.startsWith('smart-track') && !smartTrackEnabled);
+    if (!orchestrationDisabled) return;
+    const fallback = visibleModelList.find((model) => model.category !== 'teamwork');
+    if (!fallback) return;
+    setSelectedModel(fallback.id);
+    onSelectModel?.(fallback.id);
+  }, [onSelectModel, selectedModel, setSelectedModel, smartTrackEnabled, teamworkEnabled, visibleModelList]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -491,10 +517,8 @@ export function CopilotSplitView({
   }
 
   function renderModelItem(m: AvailableModelItem) {
-    const isSelected =
-      activeModelItem.id === m.id ||
-      modelName.toLowerCase().includes(m.id.toLowerCase()) ||
-      (m.id === 'gemini-2.5-flash' && modelName.toLowerCase().includes('gemini'));
+    const isSelected = activeModelItem?.id === m.id
+      || modelName.toLowerCase().includes(m.id.toLowerCase());
 
     const quotaBadge =
       m.remainingPercent !== undefined ? (
@@ -580,13 +604,13 @@ export function CopilotSplitView({
 
         <div className="model-dropdown-list">
           {/* 0. Multi-Agent Teamwork */}
-          {modelList.some((m) => m.category === 'teamwork') && (
+          {visibleModelList.some((m) => m.category === 'teamwork') && (
             <>
               <div className="model-group-title">
                 <span>Multi-Agent Orchestrator</span>
                 <span className="account-tag" style={{ color: 'var(--accent, #6366f1)' }}>(Konsens & Debatte)</span>
               </div>
-              {modelList.filter((m) => m.category === 'teamwork').map(renderModelItem)}
+              {visibleModelList.filter((m) => m.category === 'teamwork').map(renderModelItem)}
             </>
           )}
 
@@ -597,25 +621,28 @@ export function CopilotSplitView({
               <span className="account-tag">({currentGeminiAccount.email})</span>
             )}
           </div>
-          {modelList.filter((m) => m.category === 'gemini').map(renderModelItem)}
+          {visibleModelList.filter((m) => m.category === 'gemini').map(renderModelItem)}
+          {visibleModelList.filter((m) => m.category === 'gemini').length === 0 && (
+            <div className="model-empty-state">Keine aktuellen Gemini-CLI-Modelle vom Code-Assist-Katalog erhalten.</div>
+          )}
 
           {/* 2. Anthropic */}
           <div className="model-group-title">Anthropic</div>
-          {modelList.filter((m) => m.category === 'claude').map(renderModelItem)}
+          {visibleModelList.filter((m) => m.category === 'claude').map(renderModelItem)}
 
           {/* 3. OpenAI */}
           <div className="model-group-title">OpenAI</div>
-          {modelList.filter((m) => m.category === 'openai').map(renderModelItem)}
+          {visibleModelList.filter((m) => m.category === 'openai').map(renderModelItem)}
 
           {/* 4. Lokale Modelle */}
           <div className="model-group-title">Lokale Modelle (Ollama / LocalAI)</div>
-          {modelList.filter((m) => m.category === 'local').map(renderModelItem)}
+          {visibleModelList.filter((m) => m.category === 'local').map(renderModelItem)}
 
           {/* 5. Weitere Engines */}
-          {modelList.some((m) => m.category === 'other') && (
+          {visibleModelList.some((m) => m.category === 'other') && (
             <>
               <div className="model-group-title">Weitere Engines</div>
-              {modelList.filter((m) => m.category === 'other').map(renderModelItem)}
+              {visibleModelList.filter((m) => m.category === 'other').map(renderModelItem)}
             </>
           )}
         </div>
@@ -707,7 +734,7 @@ export function CopilotSplitView({
             <button
               type="button"
               className={`copilot-header-model-btn ${modelPickerOpen ? 'active' : ''}`}
-              title={`KI-Engine: ${activeModelItem.label} • Klicken zum Wechseln`}
+      title={`KI-Engine: ${activeModelItem.label} • Klicken zum Wechseln`}
               onClick={() => setModelPickerOpen((prev) => !prev)}
               aria-label="KI-Modell auswählen"
               aria-haspopup="menu"

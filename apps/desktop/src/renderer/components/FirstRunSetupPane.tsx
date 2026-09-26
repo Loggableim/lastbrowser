@@ -3,13 +3,13 @@
  *
  * Provides a modern, immersive full-screen onboarding experience that explains
  * the available AI engines and recommends the best setup options:
- *   1. Google Gemini via CLI / Google-Konto (Recommended, free, 1M context, no API key)
+ *   1. Google Gemini API (separate API-key access)
  *   2. ChatGPT / OpenAI via Codex (Popular, connects existing subscription without API costs)
  *   3. Ollama (100% local, private, offline, no data leaves the PC)
  *   4. Cloud API Keys (OpenRouter, DeepSeek, Claude, OpenAI for power users)
  */
 
-import React, { FormEvent, useEffect, useRef, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Bookmark,
@@ -48,12 +48,16 @@ import {
   type PersonalityProfile
 } from '../provider-presentation.js';
 import { useDesktopI18n } from '../i18n.js';
+import { localizedProviderRecommendation } from '../i18n/provider-recommendations.js';
+import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
+import { providerVerification } from '../provider-verification.js';
 import {
   OnboardingStatus,
   canSubmitCloudSetup,
   cloudProviderOptions,
   firstRunStatus,
   modelsForProvider,
+  openProviderOAuthUrl,
   type ProviderOption
 } from '../setup-state.js';
 
@@ -86,6 +90,7 @@ type CodexOAuthState = {
   userCode?: string;
   pollIntervalSeconds?: number;
   message?: string;
+  actionRequired?: string;
 };
 
 export type FirstRunSetupPaneProps = {
@@ -111,17 +116,37 @@ export function FirstRunSetupPane({
   onSubmit,
   onDismiss
 }: FirstRunSetupPaneProps): React.JSX.Element {
-  const { t } = useDesktopI18n();
+  const { locale, t } = useDesktopI18n();
   const providers = cloudProviderOptions(onboardingStatus);
-
-  // Determine initial provider: prefer google-gemini-cli if available, else codex, else first
-  const defaultProviderId = providers.some((p) => p.id === 'google-gemini-cli')
-    ? 'google-gemini-cli'
-    : (providers.some((p) => p.id === 'openai-codex') ? 'openai-codex' : (providers[0]?.id || 'openrouter'));
+  const [liveProviderModels, setLiveProviderModels] = useState<Record<string, Array<{ id: string; label: string }>>>({});
+  const [modelProbeLoading, setModelProbeLoading] = useState(false);
+  const [modelProbeError, setModelProbeError] = useState('');
+  // Default to a provider whose setup flow is supported in Lastbrowser.
+  const defaultProviderId = providers.some((p) => p.id === 'openai-codex')
+    ? 'openai-codex'
+    : (providers[0]?.id || 'openrouter');
 
   const [provider, setProvider] = useState<string>(defaultProviderId);
-  const models = modelsForProvider(onboardingStatus, provider);
-  const [model, setModel] = useState(models[0]?.id || '');
+  const providerModelOptions = useMemo(() => {
+    const liveSelected = liveProviderModels[provider];
+    if (liveSelected?.length) return liveSelected;
+    if (provider === 'openrouter') return [];
+    const configured = modelsForProvider(onboardingStatus, provider);
+    const liveGroups = onboardingStatus?.models?.groups;
+    if (!Array.isArray(liveGroups)) return configured;
+    const live = liveGroups
+      .filter((group) => String(group.provider_id || group.provider || '').toLowerCase() === provider)
+      .flatMap((group) => Array.isArray(group.models) ? group.models : [])
+      .map((entry) => {
+        const model = (entry || {}) as Record<string, unknown>;
+        const id = String(model.id || model.name || '').trim();
+        return id ? { id, label: String(model.label || model.name || id).trim() } : null;
+      })
+      .filter((entry): entry is { id: string; label: string } => Boolean(entry));
+    return live.length ? live : configured;
+  }, [liveProviderModels, onboardingStatus, provider]);
+  const models = providerModelOptions;
+  const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [oauthState, setOAuthState] = useState<CodexOAuthState>(idleCodexOAuth);
 
@@ -129,9 +154,19 @@ export function FirstRunSetupPane({
   const [botName, setBotName] = useState<string>('Nova');
   const [personality, setPersonality] = useState<string>('nova');
 
-  // Setup mode tab: 'recommended' (Gemini, ChatGPT, Ollama) vs 'custom-key' (OpenRouter, DeepSeek, etc.)
+  // Setup mode tab: featured recommendations vs API-key providers.
   const [activeTab, setActiveTab] = useState<'featured' | 'custom'>('featured');
   const [baseUrl, setBaseUrl] = useState<string>('');
+
+  // Standalone Sidekick install migration (first-run assistant).
+  const [standaloneReport, setStandaloneReport] = useState<{
+    found: boolean;
+    homeDir?: string;
+    components: { spaces: boolean; supermemory: boolean; profiles: boolean; config: boolean };
+  } | null>(null);
+  const [migrateItems, setMigrateItems] = useState({ spaces: true, supermemory: true, profiles: true });
+  const [migrationState, setMigrationState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [migrationResult, setMigrationResult] = useState<{ copied: string[]; skipped: string[]; errors: string[] } | null>(null);
 
   const readiness = firstRunStatus(status, onboardingStatus);
   const canSubmit = canSubmitCloudSetup(readiness);
@@ -142,8 +177,13 @@ export function FirstRunSetupPane({
     && onboardingStatus?.system?.chat_ready === true
     && String(onboardingStatus.system.current_provider || '').toLowerCase() === oauthProviderId;
   const oauthNeedsLogin = Boolean(oauthProviderId) && oauthState.status !== 'success' && !oauthAlreadyReady;
-  const oauthLoginReady = !oauthNeedsLogin;
-  const canSubmitForm = canSubmit && oauthLoginReady;
+  // Anthropic supports both linking an existing Claude Code session and
+  // entering a regular Anthropic API key. Either credential path is valid.
+  const oauthLoginReady = !oauthNeedsLogin || (provider === 'anthropic' && Boolean(apiKey.trim()));
+  const providerModelsReady = !['google-gemini-cli', 'openai-codex'].includes(provider) || models.length > 0;
+  const keyRequired = Boolean(activeProviderOption && !activeProviderOption.oauthProvider && !activeProviderOption.keyOptional);
+  const credentialsReady = !keyRequired || Boolean(apiKey.trim());
+  const canSubmitForm = canSubmit && oauthLoginReady && providerModelsReady && credentialsReady && Boolean(model);
 
   useEffect(() => {
     if (!providers.some((item) => item.id === provider) && providers[0]) {
@@ -152,11 +192,8 @@ export function FirstRunSetupPane({
   }, [provider, providers]);
 
   useEffect(() => {
-    const nextModels = modelsForProvider(onboardingStatus, provider);
-    if (!nextModels.some((item) => item.id === model)) {
-      setModel(nextModels[0]?.id || '');
-    }
-  }, [model, onboardingStatus, provider]);
+    setModel((current) => models.some((item) => item.id === current) ? current : (models[0]?.id || ''));
+  }, [models]);
 
   useEffect(() => {
     if (!oauthProviderId && oauthState.status !== 'idle') {
@@ -164,21 +201,103 @@ export function FirstRunSetupPane({
     }
   }, [oauthProviderId, oauthState.status]);
 
+  // Detect an existing standalone Sidekick installation once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    const detect = async () => {
+      try {
+        const report = await window.lastbrowser?.sidekick?.detectExistingInstall?.();
+        if (!cancelled && report?.found) setStandaloneReport(report);
+      } catch {
+        // Detection is best-effort; the wizard works fine without migration.
+      }
+    };
+    void detect();
+    return () => { cancelled = true; };
+  }, []);
+
+  const runStandaloneMigration = useCallback(async () => {
+    if (!standaloneReport?.homeDir) return;
+    setMigrationState('running');
+    setMigrationResult(null);
+    try {
+      const result = await window.lastbrowser?.sidekick?.migrateStandalone?.({
+        source_home: standaloneReport.homeDir,
+        items: migrateItems
+      });
+      setMigrationResult(result ?? { copied: [], skipped: [], errors: ['No response from migration service.'] });
+      setMigrationState((result?.errors?.length ?? 0) > 0 ? 'error' : 'done');
+    } catch (error) {
+      setMigrationResult({ copied: [], skipped: [], errors: [error instanceof Error ? error.message : String(error)] });
+      setMigrationState('error');
+    }
+  }, [standaloneReport?.homeDir, migrateItems]);
+
+  const selectProvider = useCallback((nextProvider: string) => {
+    setProvider(nextProvider);
+    setModel('');
+    setApiKey('');
+    setOAuthState(idleCodexOAuth);
+    if (['google-gemini-cli', 'openai-codex'].includes(nextProvider)) {
+      setActiveTab('featured');
+    } else if (nextProvider === 'ollama') {
+      setActiveTab('featured');
+    } else {
+      setActiveTab('custom');
+    }
+  }, []);
+
+  const loadLiveModels = useCallback(async () => {
+    if (!['openrouter', 'anthropic', 'openai', 'deepseek', 'gemini'].includes(provider)) return;
+    if (!apiKey.trim()) return;
+    setModelProbeLoading(true);
+    setModelProbeError('');
+    try {
+      const response = await window.lastbrowser.sidekick.requestWebui({
+        method: 'POST',
+        path: '/api/models/probe',
+        body: { provider, api_key: apiKey.trim() }
+      }) as { models?: Array<Record<string, unknown>>; error?: string };
+      const models = (response?.models || []).map((item) => {
+        const id = String(item.id || item.name || '').trim();
+        return id ? { id, label: String(item.label || item.name || id) } : null;
+      }).filter((item): item is { id: string; label: string } => Boolean(item));
+      if (models.length) {
+        setLiveProviderModels((current) => ({ ...current, [provider]: models }));
+        setModel((current) => models.some((item) => item.id === current) ? current : models[0].id);
+      } else {
+        setModelProbeError(response?.error || 'Dieser Schlüssel hat keine verfügbaren Modelle zurückgegeben.');
+      }
+    } catch (error) {
+      setModelProbeError(error instanceof Error ? error.message : 'Modelle konnten nicht geladen werden.');
+    } finally {
+      setModelProbeLoading(false);
+    }
+  }, [apiKey, provider]);
+
+  useEffect(() => {
+    void loadLiveModels();
+  }, [loadLiveModels]);
+
   // OAuth polling
   useEffect(() => {
     if (!oauthProviderId || oauthState.status !== 'pending' || !oauthState.flowId) return;
     let cancelled = false;
-    const timer = window.setTimeout(async () => {
+    let timer = 0;
+    let transientFailures = 0;
+    const poll = async (): Promise<void> => {
       try {
         const response = await window.lastbrowser.sidekick.pollOAuth(oauthState.flowId || '');
         if (cancelled) return;
         const nextStatus = String(response.status || 'error') as CodexOAuthState['status'];
         if (nextStatus === 'pending') {
+          transientFailures = 0;
           setOAuthState((current) => ({
             ...current,
             status: 'pending',
             message: `Warte auf Freigabe von ${activeProviderOption?.label || 'Provider'}...`
           }));
+          timer = window.setTimeout(() => void poll(), Math.max(1200, (oauthState.pollIntervalSeconds || 3) * 1000));
           return;
         }
         if (nextStatus === 'success') {
@@ -200,11 +319,14 @@ export function FirstRunSetupPane({
         if (cancelled) return;
         setOAuthState((current) => ({
           ...current,
-          status: 'error',
-          message: pollError instanceof Error ? pollError.message : String(pollError)
+          status: 'pending',
+          message: `Verbindung kurz unterbrochen; erneuter Versuch läuft. (${pollError instanceof Error ? pollError.message : String(pollError)})`
         }));
+        transientFailures += 1;
+        timer = window.setTimeout(() => void poll(), Math.min(15000, Math.max(3000, 1000 * 2 ** Math.min(transientFailures, 4))));
       }
-    }, Math.max(1200, (oauthState.pollIntervalSeconds || 3) * 1000));
+    };
+    timer = window.setTimeout(() => void poll(), Math.max(1200, (oauthState.pollIntervalSeconds || 3) * 1000));
 
     return () => {
       cancelled = true;
@@ -214,6 +336,13 @@ export function FirstRunSetupPane({
 
   async function startProviderLogin(): Promise<void> {
     if (!oauthProviderId) return;
+    if (oauthProviderId === 'google-gemini-cli') {
+      setOAuthState({
+        status: 'error',
+        message: t('settings.panels.providers.geminiSubscriptionMigration')
+      });
+      return;
+    }
     const providerLabel = activeProviderOption?.label || 'Provider';
     setOAuthState({ status: 'starting', message: t('firstRun.startingLogin', { provider: providerLabel }) });
     try {
@@ -242,16 +371,35 @@ export function FirstRunSetupPane({
         verificationUri,
         userCode,
         pollIntervalSeconds: Number(response.poll_interval_seconds || 3),
-        message: userCode
-          ? t('firstRun.oauthPromptCode', { provider: providerLabel })
-          : t('firstRun.oauthPromptWindow', { provider: providerLabel })
+        actionRequired: typeof response.action_required === 'string' ? response.action_required : undefined,
+        message: response.action_required
+          ? String(response.action_required)
+          : userCode
+            ? t('firstRun.oauthPromptCode', { provider: providerLabel })
+            : oauthProviderId === 'google-gemini-cli'
+              ? t('firstRun.oauthPromptSystemBrowser')
+              : t('firstRun.oauthPromptWindow', { provider: providerLabel })
       });
 
-      // Prefer in-app connect window over opening external system browser!
-      if (window.lastbrowser?.auth?.openConnectWindow) {
-        void window.lastbrowser.auth.openConnectWindow(verificationUri);
-      } else {
-        window.open(verificationUri, '_blank', 'noopener,noreferrer');
+      if (oauthProviderId === 'anthropic') {
+        // This provider links credentials from the host's Claude Code CLI; it
+        // does not provide a browser OAuth URL in this flow.
+        return;
+      }
+      const opened = await openProviderOAuthUrl(oauthProviderId, verificationUri, {
+        openExternal: window.lastbrowser?.system?.openExternal,
+        openConnectWindow: window.lastbrowser?.auth?.openConnectWindow,
+        openWindow: (url) => { window.open(url, '_blank', 'noopener,noreferrer'); }
+      }).catch(() => false);
+      if (oauthProviderId === 'google-gemini-cli') {
+        // Google blocks OAuth inside embedded Electron/WebView windows.
+        // Always use the OS browser for the Gemini CLI / Code Assist flow.
+        if (!opened) {
+          setOAuthState((current) => ({
+            ...current,
+            message: t('firstRun.oauthPromptSystemBrowser')
+          }));
+        }
       }
     } catch (loginError) {
       setOAuthState({
@@ -415,7 +563,7 @@ export function FirstRunSetupPane({
   }
 
   // Identify top featured recommendation cards
-  const featuredIds = ['google-gemini-cli', 'openai-codex', 'ollama'] as const;
+  const featuredIds = ['openai-codex', 'ollama', 'openrouter'] as const;
 
   return (
     <div className="first-run-fullscreen-wrap" role="dialog" aria-modal="true" aria-label="First-run setup">
@@ -452,6 +600,65 @@ export function FirstRunSetupPane({
             <p>{t('firstRun.heroSubtitle')}</p>
           </div>
         </div>
+
+        {/* Standalone Sidekick migration card (only when an install was found) */}
+        {standaloneReport?.found && (
+          <div className="setup-section-block standalone-migration-card" data-testid="standalone-migration-card">
+            <div className="setup-section-header">
+              <span className="setup-step-number"><HardDrive size={14} /></span>
+              <div>
+                <h2>Sidekick-Installation gefunden</h2>
+                <p>
+                  Eine bestehende Sidekick-Installation wurde erkannt
+                  {standaloneReport.homeDir ? ` (${standaloneReport.homeDir})` : ''}.
+                  Wähle aus, welche Daten übernommen werden sollen.
+                </p>
+              </div>
+            </div>
+            <div className="standalone-migration-options">
+              {([
+                { key: 'spaces' as const, label: 'Spaces & Workspaces', available: standaloneReport.components.spaces },
+                { key: 'supermemory' as const, label: 'Erinnerungen (Supermemory)', available: standaloneReport.components.supermemory },
+                { key: 'profiles' as const, label: 'Profile & Konfiguration', available: standaloneReport.components.profiles }
+              ]).map((item) => (
+                <label key={item.key} className={`standalone-migration-option ${item.available ? '' : 'unavailable'}`}>
+                  <input
+                    type="checkbox"
+                    checked={migrateItems[item.key] && item.available}
+                    disabled={!item.available || migrationState === 'running' || migrationState === 'done'}
+                    onChange={(e) => setMigrateItems((prev) => ({ ...prev, [item.key]: e.target.checked }))}
+                  />
+                  <span>{item.label}</span>
+                  {!item.available && <small>nicht gefunden</small>}
+                </label>
+              ))}
+            </div>
+            <div className="standalone-migration-actions">
+              {migrationState !== 'done' && (
+                <button
+                  type="button"
+                  className="standalone-migration-import-btn"
+                  disabled={migrationState === 'running' || !Object.values(migrateItems).some(Boolean)}
+                  onClick={runStandaloneMigration}
+                >
+                  {migrationState === 'running' ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                  <span>{migrationState === 'running' ? 'Importiere…' : 'Daten übernehmen'}</span>
+                </button>
+              )}
+              {migrationState === 'done' && (
+                <span className="standalone-migration-success">
+                  <CheckCircle2 size={14} /> Übernommen: {migrationResult?.copied?.join(', ') || '—'}
+                  {migrationResult?.skipped?.length ? ` · Übersprungen: ${migrationResult.skipped.join(', ')}` : ''}
+                </span>
+              )}
+              {migrationState === 'error' && (
+                <span className="standalone-migration-error">
+                  Fehler: {migrationResult?.errors?.join('; ') || 'unbekannt'}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Form container */}
         <form className="setup-fullscreen-form" onSubmit={submit}>
@@ -585,6 +792,8 @@ export function FirstRunSetupPane({
               {featuredIds.map((featuredId) => {
                 const rec = PROVIDER_RECOMMENDATIONS[featuredId];
                 if (!rec) return null;
+                const copy = localizedProviderRecommendation(featuredId, locale);
+                const verification = providerVerification(featuredId);
                 const isSelected = provider === featuredId;
                 const opt = providers.find((p) => p.id === featuredId);
 
@@ -592,16 +801,12 @@ export function FirstRunSetupPane({
                   <div
                     key={featuredId}
                     className={`featured-card ${rec.badgeType} ${isSelected ? 'is-selected' : ''}`}
-                    onClick={() => {
-                      setProvider(featuredId);
-                      setApiKey('');
-                      setOAuthState(idleCodexOAuth);
-                    }}
+                    onClick={() => selectProvider(featuredId)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
-                        setProvider(featuredId);
+                        selectProvider(featuredId);
                       }
                     }}
                   >
@@ -610,17 +815,20 @@ export function FirstRunSetupPane({
                         {rec.badgeType === 'recommended' && <Sparkles size={12} />}
                         {rec.badgeType === 'popular' && <Bot size={12} />}
                         {rec.badgeType === 'private' && <ShieldCheck size={12} />}
-                        {rec.badge}
+                        {copy?.badge || rec.badge}
+                      </span>
+                      <span className={`provider-verification-note ${verification.verified ? 'verified' : 'untested'}`}>
+                        {t(verification.statusKey)}
                       </span>
                       <div className="select-radio">
                         <span className={`radio-dot ${isSelected ? 'active' : ''}`} />
                       </div>
                     </div>
 
-                    <h3 className="card-title">{rec.headline}</h3>
+                    <h3 className="card-title">{copy?.headline || rec.headline}</h3>
 
                     <ul className="benefits-list">
-                      {rec.benefits.map((benefit, i) => (
+                      {(copy?.benefits || rec.benefits).map((benefit, i) => (
                         <li key={i}>
                           <CheckCircle2 size={14} className="benefit-check" />
                           <span>{benefit}</span>
@@ -629,7 +837,7 @@ export function FirstRunSetupPane({
                     </ul>
 
                     <div className="card-footer-note">
-                      <strong>Fazit:</strong> {rec.bestFor}
+                      <strong>{locale === 'de' ? 'Fazit:' : locale === 'fr' ? 'En bref :' : locale === 'es' ? 'En resumen:' : locale === 'it' ? 'In sintesi:' : locale === 'pt-BR' ? 'Em resumo:' : locale === 'ru' ? 'Итог:' : 'Best for:'}</strong> {copy?.bestFor || rec.bestFor}
                     </div>
                   </div>
                 );
@@ -654,11 +862,7 @@ export function FirstRunSetupPane({
                         key={p.id}
                         type="button"
                         className={`provider-chip ${isCurrent ? 'active' : ''}`}
-                        onClick={() => {
-                          setProvider(p.id);
-                          setApiKey('');
-                          setOAuthState(idleCodexOAuth);
-                        }}
+                        onClick={() => selectProvider(p.id)}
                       >
                         <span className="chip-mark" style={{ background: meta.color }}>{meta.mark}</span>
                         <div className="chip-text">
@@ -681,7 +885,7 @@ export function FirstRunSetupPane({
                 </span>
                 <div>
                   <h4>Konfiguration: {activeProviderOption?.label || provider}</h4>
-                  <p>{providerPresentation(provider).description}</p>
+                  <p>{localizedProviderDescription(provider, locale)}</p>
                 </div>
               </div>
             </div>
@@ -703,7 +907,9 @@ export function FirstRunSetupPane({
                       <div>
                         <strong>Konto-Anmeldung erforderlich</strong>
                         <span>
-                          Klicke unten, um das Anmeldefenster direkt in Lastbrowser zu öffnen.
+                          {activeProviderOption.id === 'google-gemini-cli'
+                            ? t('firstRun.oauthPromptSystemBrowser')
+                            : 'Klicke unten, um das Anmeldefenster zu öffnen.'}
                           {activeProviderOption.id === 'google-gemini-cli' && ' Kein API-Key oder Kreditkarte nötig.'}
                         </span>
                       </div>
@@ -720,16 +926,50 @@ export function FirstRunSetupPane({
                         )}
                         <span>
                           {activeProviderOption.id === 'google-gemini-cli'
-                            ? 'In Lastbrowser mit Google anmelden'
-                            : `Mit ${activeProviderOption.label} anmelden`}
+                            ? t('firstRun.oauthOpenSystemBrowser')
+                            : activeProviderOption.id === 'anthropic'
+                              ? 'Claude Code-Konto auf diesem Gerät verbinden'
+                              : `Mit ${activeProviderOption.label} anmelden`}
                         </span>
                       </button>
+                    </div>
+                  )}
+
+                  {oauthState.status === 'pending' && oauthState.actionRequired && (
+                    <div className="oauth-message-line anthropic-action-required" role="status">
+                      <span>{oauthState.actionRequired}</span>
+                      {oauthProviderId === 'anthropic' && (
+                        <button type="button" className="import-file-btn" onClick={() => void window.lastbrowser.system.openExternal('https://docs.anthropic.com/en/docs/claude-code/overview')}>
+                          Claude Code-Installationsanleitung öffnen <ExternalLink size={14} />
+                        </button>
+                      )}
                     </div>
                   )}
 
                   {/* Device code fallback if needed */}
                   {oauthState.verificationUri && oauthState.status === 'pending' && (
                     <div className="oauth-device-details">
+                      {oauthProviderId === 'google-gemini-cli' && (
+                        <button
+                          type="button"
+                          className="import-file-btn"
+                          onClick={() => {
+                            void openProviderOAuthUrl('google-gemini-cli', oauthState.verificationUri!, {
+                              openExternal: window.lastbrowser?.system?.openExternal
+                            }).then((opened) => {
+                              if (!opened) setOAuthState((current) => ({
+                                ...current,
+                                message: t('firstRun.oauthExternalOpenFailed')
+                              }));
+                            }).catch(() => setOAuthState((current) => ({
+                              ...current,
+                              message: t('firstRun.oauthExternalOpenFailed')
+                            })));
+                          }}
+                        >
+                          {t('firstRun.oauthOpenSystemBrowser')}
+                        </button>
+                      )}
                       {oauthState.userCode && (
                         <div className="device-code-wrap">
                           <span>Bestätigungscode:</span>
@@ -747,21 +987,49 @@ export function FirstRunSetupPane({
 
                   {oauthState.message && <p className="oauth-message-line">{oauthState.message}</p>}
                 </div>
+                {provider === 'anthropic' && (
+                  <div className="api-key-panel">
+                    <label className="input-group">
+                      <span className="input-label">Anthropic API-Schlüssel (Alternative zu Claude Code)</span>
+                      <input
+                        type="password"
+                        value={apiKey}
+                        onChange={(event) => {
+                          setApiKey(event.target.value);
+                          setModelProbeError('');
+                        }}
+                        placeholder="Anthropic API-Key einfügen"
+                        className="key-input"
+                      />
+                      <div className="field-hint" style={{ marginTop: '0.5rem' }}>
+                        <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={!apiKey.trim() || modelProbeLoading}>
+                          {modelProbeLoading ? 'Modelle werden geladen…' : 'Verfügbare Modelle laden'}
+                        </button>
+                        {modelProbeError && <p role="alert">{modelProbeError}</p>}
+                      </div>
+                    </label>
+                  </div>
+                )}
               </div>
             ) : (
               /* API Key input field for cloud/local providers */
               <div className="api-key-panel">
                 <label className="input-group">
                   <span className="input-label">
-                    {activeProviderOption?.keyOptional ? 'API-Schlüssel (Optional bei lokalem Betrieb)' : 'API-Schlüssel'}
+                    {activeProviderOption?.id === 'openrouter' ? 'OpenRouter API-Schlüssel' : (activeProviderOption?.keyOptional ? 'API-Schlüssel (Optional bei lokalem Betrieb)' : 'API-Schlüssel')}
                   </span>
                   <input
                     type="password"
                     value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
+                    onChange={(e) => {
+                      setApiKey(e.target.value);
+                      setModelProbeError('');
+                    }}
                     placeholder={
                       activeProviderOption?.keyOptional
                         ? 'Leer lassen für lokalen Server (z. B. Ollama auf Port 11434)'
+                        : activeProviderOption?.id === 'openrouter'
+                          ? 'OpenRouter-Key einfügen (sk-or-...)'
                         : `API-Key für ${activeProviderOption?.label || 'Provider'} einfügen`
                     }
                     className="key-input"
@@ -775,6 +1043,14 @@ export function FirstRunSetupPane({
                     <small className="field-hint">
                       Erhältlich unter <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">openrouter.ai/keys</a>. Ein Key gewährt Zugriff auf über 200 Modelle.
                     </small>
+                  )}
+                  {['openrouter', 'anthropic', 'openai', 'deepseek'].includes(provider) && (
+                    <div className="field-hint" style={{ marginTop: '0.5rem' }}>
+                      <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={!apiKey.trim() || modelProbeLoading}>
+                        {modelProbeLoading ? 'Modelle werden geladen…' : 'Verfügbare Modelle laden'}
+                      </button>
+                      {modelProbeError && <p role="alert">{modelProbeError}</p>}
+                    </div>
                   )}
                   {activeProviderOption?.id === 'deepseek' && (
                     <small className="field-hint">
@@ -803,7 +1079,12 @@ export function FirstRunSetupPane({
             {/* Model picker within chosen provider */}
             <div className="model-selection-area">
               <label className="input-label">{t('firstRun.preferredModelLabel')}</label>
-              <div className="models-pills-row">
+              {models.length === 0 ? (
+                <div className="field-hint">
+                  <p>Für diesen Anbieter sind aktuell keine Modelle verfügbar. API-Key eingeben und Modellliste erneut laden.</p>
+                  <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()}>Modelle neu laden</button>
+                </div>
+              ) : <div className="models-pills-row">
                 {models.map((m) => {
                   const note = modelNote(m.id);
                   const isModelActive = m.id === model;
@@ -819,7 +1100,7 @@ export function FirstRunSetupPane({
                     </button>
                   );
                 })}
-              </div>
+              </div>}
             </div>
           </div>
 

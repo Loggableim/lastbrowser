@@ -43,11 +43,17 @@ export type SidekickMessageRequest = {
   message: string;
   model?: string;
   modelProvider?: string | null;
+  providerAccountEmail?: string | null;
   profile?: string;
   workspace?: string;
   mode?: 'action' | 'plan';
   chatMode?: string;
   sandboxDisabled?: boolean;
+  groundingContext?: {
+    url?: string;
+    title?: string;
+    snippet?: string;
+  } | null;
 };
 
 export type SidekickMessageResponse = {
@@ -2057,6 +2063,14 @@ async function startChat(webuiUrl: string, session: SessionShape, request: Sidek
     chat_mode: request.chatMode || 'chat',
     sandbox_disabled: request.sandboxDisabled ?? false
   };
+  if (request.providerAccountEmail?.trim()) body.provider_account_email = request.providerAccountEmail.trim().toLowerCase();
+  if (request.groundingContext && typeof request.groundingContext === 'object') {
+    body.grounding_context = {
+      url: request.groundingContext.url || '',
+      title: request.groundingContext.title || '',
+      snippet: request.groundingContext.snippet || '',
+    };
+  }
   if (resolvedModel) body.model = resolvedModel;
   return jsonRequest(webuiUrl, '/api/chat/start', {
     method: 'POST',

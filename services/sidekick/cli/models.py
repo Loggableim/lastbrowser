@@ -156,12 +156,8 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
         "gemini-2.0-flash",
     ],
     "google-gemini-cli": [
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-        "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
-        "gemini-1.5-pro",
-        "gemini-1.5-flash",
+        "gemini-3.1-pro-preview",
+        "gemini-3-flash-preview",
     ],
     "ollama-cloud": [
         "deepseek-v4-flash",
@@ -1409,6 +1405,10 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
     on the platform appear in ``/model`` without a Sidekick release.
     """
     normalized = normalize_provider(provider)
+    if normalized == "google-gemini-cli":
+        # Legacy account tokens no longer enable consumer subscription
+        # inference, so do not advertise stale Google Code Assist models.
+        return []
     if normalized == "openrouter":
         return model_ids(force_refresh=force_refresh)
     if normalized == "openai-codex":

@@ -168,6 +168,10 @@ def _format_exhausted_status(entry) -> str:
 
 def auth_add_command(args) -> None:
     provider = _normalize_provider(getattr(args, "provider", ""))
+    if provider == "google-gemini-cli":
+        from cli.auth import GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE
+
+        raise SystemExit(GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE)
     if provider not in PROVIDER_REGISTRY and provider != "openrouter" and not provider.startswith(CUSTOM_POOL_PREFIX):
         raise SystemExit(f"Unknown provider: {provider}")
 

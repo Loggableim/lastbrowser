@@ -148,6 +148,11 @@ def _post_json(
     timeout: float = _DEFAULT_REQUEST_TIMEOUT,
     user_agent_model: str = "",
 ) -> Dict[str, Any]:
+    raise CodeAssistError(
+        "Direct Google Code Assist requests are disabled in Lastbrowser. "
+        "Use a supported provider integration or the official Antigravity CLI.",
+        code="provider_unavailable",
+    )
     data = json.dumps(body).encode("utf-8")
     request = urllib.request.Request(
         url, data=data, method="POST",

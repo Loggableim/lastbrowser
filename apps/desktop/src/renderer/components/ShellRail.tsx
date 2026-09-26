@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import {
@@ -22,6 +23,13 @@ export function ShellRail({
   onPanel,
   onToggleLeft
 }: ShellRailProps): React.JSX.Element {
+  const [hoverLabel, setHoverLabel] = useState<{ text: string; left: number; top: number } | null>(null);
+  const showHoverLabel = (event: React.SyntheticEvent<HTMLElement>, text: string) => {
+    if (!leftCollapsed) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setHoverLabel({ text, left: bounds.right + 10, top: bounds.top + bounds.height / 2 });
+  };
+  const hideHoverLabel = () => setHoverLabel(null);
   const visiblePanels = lastbrowserPanels.filter(
     (panel) => panel.id !== 'settings' && isInstalledSidebarApp(panel.id, installedSidebarApps)
   );
@@ -37,30 +45,59 @@ export function ShellRail({
             key={panel.id}
             type="button"
             className={`rail-button ${activePanel === panel.id ? 'active' : ''}`}
-            title={panel.tooltip}
+            aria-label={panel.label}
+            title={leftCollapsed ? undefined : panel.tooltip}
+            onMouseEnter={(event) => showHoverLabel(event, panel.label)}
+            onMouseLeave={hideHoverLabel}
+            onFocus={(event) => showHoverLabel(event, panel.label)}
+            onBlur={hideHoverLabel}
             onClick={() => onPanel(panel.id)}
           >
             <img src={brandAssets.sidebarIcons[panel.id]} alt="" />
             <span>{panel.label}</span>
-            {panel.id === 'tasks' && <em>9+</em>}
           </button>
         ))}
       </div>
       <div className="rail-bottom">
-        <button type="button" className="rail-collapse" title="Toggle sidebar" onClick={onToggleLeft}>
+        <button
+          type="button"
+          className="rail-collapse"
+          aria-label="Sidebar ein-/ausblenden"
+          title={leftCollapsed ? undefined : 'Toggle sidebar'}
+          onMouseEnter={(event) => showHoverLabel(event, 'Sidebar ein-/ausblenden')}
+          onMouseLeave={hideHoverLabel}
+          onFocus={(event) => showHoverLabel(event, 'Sidebar ein-/ausblenden')}
+          onBlur={hideHoverLabel}
+          onClick={onToggleLeft}
+        >
           {leftCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
           <span>Sidebar ein-/ausblenden</span>
         </button>
         <button
           type="button"
           className={`rail-button ${activePanel === 'settings' ? 'active' : ''}`}
-          title={settingsPanel.tooltip}
+          aria-label={settingsPanel.label}
+          title={leftCollapsed ? undefined : settingsPanel.tooltip}
+          onMouseEnter={(event) => showHoverLabel(event, settingsPanel.label)}
+          onMouseLeave={hideHoverLabel}
+          onFocus={(event) => showHoverLabel(event, settingsPanel.label)}
+          onBlur={hideHoverLabel}
           onClick={() => onPanel('settings')}
         >
           <img src={brandAssets.sidebarIcons.settings} alt="" />
           <span>{settingsPanel.label}</span>
         </button>
       </div>
+      {leftCollapsed && hoverLabel && typeof document !== 'undefined' && createPortal(
+        <div
+          className="rail-floating-hover-label"
+          role="tooltip"
+          style={{ left: hoverLabel.left, top: hoverLabel.top }}
+        >
+          {hoverLabel.text}
+        </div>,
+        document.body
+      )}
     </nav>
   );
 }

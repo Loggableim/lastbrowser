@@ -47,12 +47,38 @@ export const defaultSetupState: SetupState = {
   model: ''
 };
 
+export function isGeminiCliProvider(provider: unknown): boolean {
+  const normalized = String(provider || '').trim().toLowerCase();
+  return normalized === 'google-gemini-cli' || normalized === 'gemini-cli' || normalized === 'gemini-oauth';
+}
+
+/** Legacy helper retained for callers migrating old persisted Gemini setup. */
+export async function openProviderOAuthUrl(
+  providerId: string,
+  url: string,
+  integrations: {
+    openExternal?: (url: string) => Promise<boolean>;
+    openConnectWindow?: (url: string) => Promise<unknown>;
+    openWindow?: (url: string) => void;
+  }
+): Promise<boolean> {
+  if (!url.trim()) return false;
+  if (isGeminiCliProvider(providerId)) {
+    return false;
+  }
+  if (integrations.openConnectWindow) {
+    await integrations.openConnectWindow(url);
+    return true;
+  }
+  integrations.openWindow?.(url);
+  return Boolean(integrations.openWindow);
+}
+
 const fallbackCloudProviders = [
   { id: 'openai-codex', label: 'OpenAI Codex (ChatGPT)', oauth_provider: 'openai-codex', oauth_label: 'ChatGPT Account' },
-  { id: 'google-gemini-cli', label: 'Google Gemini (CLI)', oauth_provider: 'google-gemini-cli', oauth_label: 'Google-Konto (Gemini CLI)', key_optional: true },
   { id: 'ollama', label: 'Ollama (Lokal)', requires_base_url: false, key_optional: true, default_base_url: 'http://127.0.0.1:11434/v1' },
   { id: 'ollama-cloud', label: 'Ollama Cloud', requires_base_url: false, key_optional: false, default_base_url: 'https://ollama.com/v1' },
-  { id: 'openrouter', label: 'OpenRouter' },
+  { id: 'openrouter', label: 'OpenRouter', key_optional: false },
   { id: 'openai', label: 'OpenAI' },
   { id: 'anthropic', label: 'Anthropic' },
   { id: 'gemini', label: 'Google Gemini' },
@@ -60,14 +86,6 @@ const fallbackCloudProviders = [
 ];
 
 const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string }>> = {
-  'google-gemini-cli': [
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Standard • Empfohlen)' },
-    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-    { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-    { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' }
-  ],
   ollama: [
     { id: 'llama3.3', label: 'Llama 3.3 (70B)' },
     { id: 'llama3.2', label: 'Llama 3.2 (3B)' },
@@ -115,14 +133,7 @@ const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string
     { id: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
     { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' }
   ],
-  gemini: [
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Standard • Empfohlen)' },
-    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-    { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-    { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' }
-  ]
+  gemini: []
 };
 
 const localProviderIds = new Set(['lmstudio', 'lm-studio', 'ollama', 'custom', 'local']);
@@ -238,6 +249,9 @@ export function cloudProviderOptions(status: OnboardingStatus | null | undefined
     : fallbackCloudProviders;
   return mergedProviders
     .filter((provider) => Boolean(String(provider.id || '').trim()))
+    // Subscription-backed Gemini CLI is not available to consumer accounts
+    // through Lastbrowser. Gemini API-key access remains a separate provider.
+    .filter((provider) => !['google-gemini-cli', 'gemini-cli-acp'].includes(String(provider.id).trim().toLowerCase()))
     .map((provider) => ({
       id: String(provider.id).trim(),
       label: String(provider.label || provider.id).trim(),
@@ -266,5 +280,22 @@ export function modelsForProvider(status: OnboardingStatus | null | undefined, p
       return id ? { id, label: String(model.label || id).trim() } : null;
     })
     .filter((item): item is { id: string; label: string } => Boolean(item));
-  return normalized.length ? normalized : (fallbackModelsByProvider[providerId] || []);
+  if (normalized.length) return normalized;
+  return fallbackModelsByProvider[providerId] || [];
+}
+
+export function reconcileGeminiCliModelSelection(
+  providerId: string | null | undefined,
+  selectedModel: string | null | undefined,
+  availableModelIds: string[]
+): string | undefined {
+  const provider = String(providerId || '').trim().toLowerCase();
+  if (!['google-gemini-cli', 'gemini-cli', 'gemini-oauth'].includes(provider)) return undefined;
+  const selected = String(selectedModel || '').trim();
+  const candidate = selected.startsWith('@') && selected.includes(':')
+    ? selected.split(':', 2)[1]
+    : selected.replace(/^models\//i, '');
+  if (!candidate.toLowerCase().startsWith('gemini-')) return undefined;
+  const current = availableModelIds.find((id) => id.toLowerCase() === candidate.toLowerCase());
+  return current || availableModelIds[0];
 }

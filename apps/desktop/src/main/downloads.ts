@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+
 /**
  * Download tracking for the browser.
  *
@@ -42,7 +45,7 @@ type SessionLike = {
 
 export type DownloadTracker = {
   /** Attach to a session (each browser profile creates its own). */
-  attach(session: SessionLike): void;
+  attach(session: SessionLike, downloadsDirectory?: string): void;
   /** Current snapshot, newest first. */
   list(): DownloadEntry[];
   /** Remove one entry from the list. */
@@ -53,10 +56,57 @@ export type DownloadTracker = {
   subscribe(listener: (entries: DownloadEntry[]) => void): () => void;
 };
 
+function sanitizeFilename(filename: string): string {
+  // Electron normally returns a filename, but a remote Content-Disposition
+  // value must never be allowed to choose a directory or an invalid path.
+  let safe = String(filename || '').split(/[\\/]/).pop() || '';
+  safe = safe.replace(/[<>:"|?*\x00-\x1f]/g, '_').replace(/[. ]+$/g, '').trim();
+  if (!safe || safe === '.' || safe === '..') safe = 'download';
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(safe)) safe = `_${safe}`;
+  return safe;
+}
+
+function reserveDownloadPath(
+  downloadsDirectory: string,
+  filename: string,
+  reservedPaths: Set<string>
+): { path: string; key: string } {
+  const safeFilename = sanitizeFilename(filename);
+  const extension = path.extname(safeFilename);
+  const stem = safeFilename.slice(0, safeFilename.length - extension.length);
+  const directory = path.resolve(downloadsDirectory);
+  for (let suffix = 0; ; suffix += 1) {
+    const candidate = path.join(directory, suffix === 0 ? safeFilename : `${stem} (${suffix})${extension}`);
+    const key = candidate.toLowerCase();
+    if (!existsSync(candidate) && !reservedPaths.has(key)) {
+      reservedPaths.add(key);
+      return { path: candidate, key };
+    }
+  }
+}
+
+type DownloadWindowLike = {
+  isDestroyed(): boolean;
+  webContents: { send(channel: string, entries: DownloadEntry[]): void };
+};
+
+/** Publish a snapshot to every live browser window, including detached tabs. */
+export function broadcastDownloadSnapshot(windows: Iterable<DownloadWindowLike>, entries: DownloadEntry[]): void {
+  for (const window of windows) {
+    try {
+      if (!window.isDestroyed()) window.webContents.send('lastbrowser:downloads:changed', entries);
+    } catch {
+      // A window closing while a download changes must not block other windows.
+    }
+  }
+}
+
 export function createDownloadTracker(): DownloadTracker {
   const entries = new Map<string, DownloadEntry>();
   const listeners = new Set<(entries: DownloadEntry[]) => void>();
   const attached = new Set<SessionLike>();
+  const reservedPaths = new Set<string>();
+  const reservationById = new Map<string, string>();
   let counter = 0;
   // Monotonic sequence for ordering: two downloads can start in the same
   // millisecond, so `startedAt` alone is not a stable sort key.
@@ -87,12 +137,27 @@ export function createDownloadTracker(): DownloadTracker {
   };
 
   return {
-    attach(session: SessionLike): void {
+    attach(session: SessionLike, downloadsDirectory?: string): void {
       if (attached.has(session)) return;
       attached.add(session);
       session.on('will-download', (_event, item) => {
         const id = `dl-${++counter}-${Date.now()}`;
         order.set(id, ++sequence);
+
+        // Without an explicit path Electron falls back to its save dialog.
+        // Lastbrowser provides its own download surface, so save into the
+        // standard Downloads folder and let that surface report the outcome.
+        if (downloadsDirectory && item.setSavePath && !item.getSavePath()) {
+          let reservation: { path: string; key: string } | undefined;
+          try {
+            reservation = reserveDownloadPath(downloadsDirectory, item.getFilename(), reservedPaths);
+            item.setSavePath(reservation.path);
+            reservationById.set(id, reservation.key);
+          } catch {
+            if (reservation) reservedPaths.delete(reservation.key);
+            // Preserve Electron's default save flow if path selection fails.
+          }
+        }
         entries.set(id, {
           id,
           filename: item.getFilename(),
@@ -125,6 +190,9 @@ export function createDownloadTracker(): DownloadTracker {
                   ? 'cancelled'
                   : 'interrupted'
           });
+          const reservation = reservationById.get(id);
+          if (reservation) reservedPaths.delete(reservation);
+          reservationById.delete(id);
         });
       });
     },

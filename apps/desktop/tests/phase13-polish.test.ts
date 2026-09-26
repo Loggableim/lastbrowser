@@ -74,10 +74,9 @@ describe('Phase 13 In-App UI Polish: Top-64 Pinned Apps & Universal Model Picker
     it('verifies AVAILABLE_MODELS contains all requested models and categories', () => {
       const modelIds = AVAILABLE_MODELS.map((m) => m.id);
 
-      // Google Gemini CLI models
-      expect(modelIds).toContain('gemini-2.5-flash');
-      expect(modelIds).toContain('gemini-1.5-pro');
-      expect(modelIds).toContain('gemini-1.5-flash');
+      // Gemini CLI models must come from the live account catalog, not this static list.
+      expect(modelIds.filter((id) => id.startsWith('gemini-'))).toEqual([]);
+      expect(AVAILABLE_MODELS.some((model) => model.category === 'gemini')).toBe(false);
 
       // Anthropic models
       expect(modelIds).toContain('claude-3-5-sonnet');
@@ -90,10 +89,9 @@ describe('Phase 13 In-App UI Polish: Top-64 Pinned Apps & Universal Model Picker
       // Local models
       expect(modelIds).toContain('ollama-local');
 
-      // Verify default model
+      // Gemini CLI has no fabricated static default.
       const defaultModel = AVAILABLE_MODELS.find((m) => m.isDefault);
-      expect(defaultModel?.id).toBe('gemini-2.5-flash');
-      expect(defaultModel?.provider).toBe('Google');
+      expect(defaultModel?.category).not.toBe('gemini');
     });
 
     it('verifies CopilotSplitView unlocks model picker in Header and shows active Gemini account', () => {

@@ -34,7 +34,7 @@ export type BrowserContextMenuActions = {
   locale?: string;
 };
 
-export type ContextMenuLocale = 'en' | 'de' | 'es' | 'fr' | 'it' | 'pt-BR';
+export type ContextMenuLocale = 'en' | 'de' | 'es' | 'fr' | 'it' | 'pt-BR' | 'ru';
 
 export interface ContextMenuLabels {
   deepResearchSelection: (assistant: string, text: string) => string;
@@ -128,6 +128,19 @@ export const contextMenuLocales: Record<ContextMenuLocale, ContextMenuLabels> = 
     forward: 'Avançar',
     reload: 'Recarregar',
     inspect: 'Inspecionar elemento'
+  },
+  ru: {
+    deepResearchSelection: (assistant, text) => `Глубокое исследование с ${assistant}: «${text}»`,
+    deepResearchLink: (assistant) => `Исследовать ссылку с помощью ${assistant}`,
+    deepResearchPage: (assistant) => `Глубокое исследование с ${assistant}`,
+    openLinkInNewTab: 'Открыть ссылку в новой вкладке',
+    openLinkInIncognitoTab: 'Открыть ссылку в новой приватной вкладке',
+    openExternal: 'Открыть ссылку в системном браузере',
+    copyLink: 'Копировать адрес ссылки',
+    back: 'Назад',
+    forward: 'Вперёд',
+    reload: 'Перезагрузить',
+    inspect: 'Исследовать элемент'
   }
 };
 
@@ -153,6 +166,7 @@ export function resolveContextMenuLabels(locale?: string): ContextMenuLabels {
   if (normalized.startsWith('fr')) return contextMenuLocales.fr;
   if (normalized.startsWith('it')) return contextMenuLocales.it;
   if (normalized === 'pt' || normalized.startsWith('pt')) return contextMenuLocales['pt-BR'];
+  if (normalized.startsWith('ru')) return contextMenuLocales.ru;
   return contextMenuLocales.en;
 }
 

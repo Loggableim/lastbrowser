@@ -19,9 +19,13 @@ describe('Snap layout targets', () => {
 
   it.each([
     [0.05, 0.5, 'dual-25-75', 0],
-    [0.95, 0.5, 'dual-75-25', 1],
+    [0.15, 0.5, 'dual-33-66', 0],
+    [0.28, 0.5, 'dual-66-33', 0],
     [0.45, 0.5, 'dual-50-50', 0],
     [0.6, 0.5, 'dual-50-50', 1],
+    [0.72, 0.5, 'dual-33-66', 1],
+    [0.85, 0.5, 'dual-66-33', 1],
+    [0.95, 0.5, 'dual-75-25', 1],
     [0.1, 0.1, 'quad-grid', 0],
     [0.9, 0.1, 'quad-grid', 1],
     [0.1, 0.9, 'quad-grid', 2],
@@ -50,5 +54,13 @@ describe('Snap layout targets', () => {
         expect(bounds.height).toBeGreaterThan(0);
       });
     }
+  });
+
+  it('keeps the main-right trio distinct from the equal-width stacked-left trio', () => {
+    const stacked = getDefaultSnapLayoutRatios('trio-stacked-left');
+    const mainRight = getDefaultSnapLayoutRatios('trio-main-right');
+    expect(getSnapSlotBounds('trio-stacked-left', 2, stacked)).toEqual({ top: 0, left: 50, width: 50, height: 100 });
+    expect(getSnapSlotBounds('trio-main-right', 2, mainRight)).toEqual({ top: 0, left: 33.33, width: 66.67, height: 100 });
+    expect(SNAP_LAYOUT_DEFINITIONS['trio-main-right'].slots[2].bounds).toEqual({ top: 0, left: 33.33, width: 66.67, height: 100 });
   });
 });

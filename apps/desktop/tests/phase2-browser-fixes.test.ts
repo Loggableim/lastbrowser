@@ -38,19 +38,19 @@ describe('Phase 2 Browser Fixes: Sidebar, Spaces, Multiscreen & Summarize Bar', 
     it('computes isolated space partitions correctly', () => {
       expect(computeSpacePartition('prof-default', 'home')).toBe('persist:space_home_prof-default');
       expect(computeSpacePartition('prof-default', 'firma')).toBe('persist:space_firma_prof-default');
-      expect(computeSpacePartition('prof-default', 'My Space 123')).toBe('persist:space_my_space_123_prof-default');
+      expect(computeSpacePartition('prof-default', 'My Space 123')).toBe('persist:space_my_space_123~6d7920737061636520313233_prof-default');
       expect(computeSpacePartition('prof-default', 'home', true)).toBe('in-memory-incognito');
       expect(computeSpacePartition('prof-2', null)).toBe('persist:space_home_prof-2');
     });
 
     it('uses computeSpacePartition on webviews in App.tsx', () => {
       const appSource = readRendererFile('App.tsx');
-      const partitionUsages = appSource.match(/computeSpacePartition\(activeProfile\.id,\s*activeSpacePath,\s*tab\.incognito\)/g);
+      const partitionUsages = appSource.match(/computeSpacePartition\(activeProfile\.id,\s*activeSpacePath,\s*tab\.incognito,\s*knownSpacePaths\)/g);
       expect(partitionUsages).not.toBeNull();
       // Every tab is rendered once in the shared viewport; split panes reuse
       // those same guests instead of mounting a second set of webviews.
       expect(partitionUsages!.length).toBe(1);
-      expect(appSource).toContain('partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito)}');
+      expect(appSource).toContain('partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito, knownSpacePaths)}');
     });
   });
 
@@ -81,7 +81,9 @@ describe('Phase 2 Browser Fixes: Sidebar, Spaces, Multiscreen & Summarize Bar', 
       expect(appSource).toContain('className="browser-tabs-viewport"');
       expect(appSource).toContain('(tabs && tabs.length > 0 ? tabs : [activeTab]).map((tab) => {');
       expect(appSource).toContain('visibility: (isCurrent || isInActiveSplit) ? \'visible\' : \'hidden\'');
-      expect(appSource).toContain('{webviewReady && webviewStartupReady && (');
+      expect(appSource).toContain('{isHomeTab && isInActiveSplit ? (');
+      expect(appSource).toContain('renderBrowserStartPage(tab.id)');
+      expect(appSource).toContain(') : webviewReady && webviewStartupReady && (');
       expect(appSource).toContain('className={`browser-tab-pane ${isCurrent ?');
     });
   });
@@ -107,8 +109,8 @@ describe('Phase 2 Browser Fixes: Sidebar, Spaces, Multiscreen & Summarize Bar', 
       const appSource = readRendererFile('App.tsx');
       const sessions = readRendererFile('tab-sessions.ts');
       expect(appSource).toContain('savePersistedSnapGroup(activeProfileId, activeSpacePath');
-      expect(appSource).toContain('loadPersistedSnapGroup(activeProfileId, newSpacePath, nextTabs)');
-      expect(appSource).toContain('loadPersistedSnapGroup(activeProfileId, activeSpacePath, restoredTabs)');
+      expect(appSource).toContain('loadPersistedSnapGroup(activeProfileId, newSpacePath, nextTabs, nextKnownSpacePaths)');
+      expect(appSource).toContain('loadPersistedSnapGroup(activeProfileId, activeSpacePath, restoredTabs, knownSpacePaths)');
       expect(sessions).toContain("export const snapGroupsStorageKey = 'lastbrowser.snapGroups.v1'");
       expect(sessions).toContain('Object.hasOwn(SNAP_LAYOUT_DEFINITIONS, layout)');
     });

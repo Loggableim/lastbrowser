@@ -5239,6 +5239,72 @@ def test_onboarding_probe_accepts_legacy_open_env_var(monkeypatch, tmp_path):
     assert seen["args"] == ("ollama", "http://example.com", "secret")
 
 
+def test_model_probe_uses_fixed_openrouter_endpoint_and_returns_models(monkeypatch):
+    import io
+    from urllib.parse import urlparse
+    from web.api import routes
+
+    seen = {}
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self, _limit):
+            return json.dumps({"data": [{"id": "acme/model-a", "name": "Model A"}]}).encode()
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["authorization"] = request.get_header("Authorization")
+        seen["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    body = json.dumps({"provider": "openrouter", "api_key": "test-only-key"})
+
+    class Handler:
+        headers = {"Content-Length": str(len(body)), "Host": "127.0.0.1"}
+        client_address = ("127.0.0.1", 12345)
+        def __init__(self):
+            self.rfile = io.BytesIO(body.encode())
+            self.wfile = io.BytesIO()
+            self.status_code = None
+        def send_response(self, status): self.status_code = status
+        def send_header(self, *_args): pass
+        def end_headers(self): pass
+
+    handler = Handler()
+    routes.handle_post(handler, urlparse("/api/models/probe"))
+    payload = json.loads(handler.wfile.getvalue())
+    assert handler.status_code == 200
+    assert payload["models"] == [{"id": "acme/model-a", "label": "Model A"}]
+    assert seen == {"url": "https://openrouter.ai/api/v1/models", "authorization": "Bearer test-only-key", "timeout": 12}
+
+
+def test_model_probe_rejects_arbitrary_provider_without_network(monkeypatch):
+    import io
+    from urllib.parse import urlparse
+    from web.api import routes
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *_a, **_k: pytest.fail("network must not be called"))
+    body = json.dumps({"provider": "custom", "api_key": "test-only-key"})
+
+    class Handler:
+        headers = {"Content-Length": str(len(body)), "Host": "127.0.0.1"}
+        client_address = ("127.0.0.1", 12345)
+        def __init__(self):
+            self.rfile = io.BytesIO(body.encode())
+            self.wfile = io.BytesIO()
+            self.status_code = None
+        def send_response(self, status): self.status_code = status
+        def send_header(self, *_args): pass
+        def end_headers(self): pass
+
+    handler = Handler()
+    routes.handle_post(handler, urlparse("/api/models/probe"))
+    assert handler.status_code == 400
+    assert b"test-only-key" not in handler.wfile.getvalue()
+
+
 def test_session_ttl_accepts_sidekick_env_var(monkeypatch, tmp_path):
     monkeypatch.setenv("SIDEKICK_WEBUI_SESSION_TTL", "600")
     from web.api import auth

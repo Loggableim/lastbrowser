@@ -34,12 +34,6 @@ const PRESENTATION: Record<string, ProviderPresentation> = {
     mark: '✳',
     color: '#d97757'
   },
-  'google-gemini-cli': {
-    description: 'Sign in with your Google account — no API key needed.',
-    category: 'connect',
-    mark: '✦',
-    color: '#4285f4'
-  },
   openai: {
     description: 'OpenAI API key for GPT models.',
     category: 'cloud',
@@ -222,20 +216,6 @@ export type ProviderRecommendation = {
 };
 
 export const PROVIDER_RECOMMENDATIONS: Record<string, ProviderRecommendation> = {
-  'google-gemini-cli': {
-    id: 'google-gemini-cli',
-    badge: 'Empfohlen • Kostenlos mit Google-Konto',
-    badgeType: 'recommended',
-    headline: 'Google Gemini (Schnell & Riesiges Kontextfenster)',
-    benefits: [
-      'Kostenlose Kontingente, Multi-Account Round-Robin & Live-Discovery',
-      'Bis zu 1 Million Tokens Kontext – erfasst ganze Websites, PDFs & lange Dokumente',
-      'Optimiert für Live-Browsing, Web-Zusammenfassungen und Recherche',
-      'Zugriff auf Gemini 3.8 Flash, Gemini 2.5 Pro & Gemini 3.1 Pro'
-    ],
-    bestFor: 'Beste Wahl für die meisten Nutzer: Sofort startklar ohne Kosten',
-    actionPrompt: 'In Lastbrowser mit Google anmelden'
-  },
   'openai-codex': {
     id: 'openai-codex',
     badge: 'Beliebt • Mit ChatGPT Plus/Team',
@@ -263,6 +243,19 @@ export const PROVIDER_RECOMMENDATIONS: Record<string, ProviderRecommendation> = 
     ],
     bestFor: 'Für maximale Privatsphäre, Offline-Arbeit und Entwickler',
     actionPrompt: 'Ollama lokal verbinden'
+  },
+  openrouter: {
+    id: 'openrouter',
+    badge: 'Viele Anbieter • Ein API-Key',
+    badgeType: 'power',
+    headline: 'OpenRouter (Modelle verschiedener Anbieter)',
+    benefits: [
+      'Ein OpenRouter-Key für zahlreiche aktuelle Modellanbieter',
+      'Live-Modellkatalog mit Verfügbarkeit und Kostenangaben',
+      'Modell beim Einrichten direkt auswählen'
+    ],
+    bestFor: 'Wenn du mehrere Anbieter über einen Zugang nutzen willst',
+    actionPrompt: 'OpenRouter-Key eingeben'
   }
 };
 

@@ -146,12 +146,65 @@ def test_teamwork_does_not_invent_models_when_provider_catalog_is_empty():
     assert plan["synthesizer"] == ""
 
 
+def test_teamwork_model_discovery_preserves_colon_tagged_model_ids():
+    catalog = {
+        "groups": [{
+            "provider_id": "ollama",
+            "provider": "Ollama",
+            "models": [
+                {"id": "qwen3:4b", "label": "Qwen 3 4B"},
+                {"id": "deepseek-r1:70b", "label": "DeepSeek R1 70B"},
+            ],
+        }]
+    }
+    with patch("web.api.config.get_available_models", return_value=catalog):
+        models = get_teamwork_model_pool()
+    assert [model["id"] for model in models] == ["qwen3:4b", "deepseek-r1:70b"]
+    assert [model["tier"] for model in models] == ["fast", "quality"]
+
+
 def test_teamwork_fails_clearly_when_no_models_are_available():
     with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[]), \
          patch("runtime.auxiliary_client.call_llm") as call_llm:
         with pytest.raises(RuntimeError, match="keine aktuell verfügbaren Modelle"):
             run_teamwork_turn(MagicMock(messages=[]), "Review this change")
         call_llm.assert_not_called()
+
+
+@pytest.mark.parametrize("shared_grounding", [True, False])
+def test_teamwork_only_uses_browser_grounding_when_setting_is_enabled(shared_grounding):
+    session = MagicMock()
+    session.messages = []
+    model = {"id": "model-a", "name": "Model A", "provider": "mock", "tier": "balanced"}
+    calls = []
+
+    def fake_call_llm(*, messages, **kwargs):
+        calls.append(messages)
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        response.choices[0].message.content = "mock answer"
+        return response
+
+    with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[model]), \
+         patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
+         patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="mock answer"):
+        run_teamwork_turn(
+            session,
+            "Answer the question",
+            grounding_context="URL: https://example.test/path\nTitel: Example\nSichtbarer Auszug: relevant snippet",
+            config={
+                "enabled": True,
+                "strategy": "balanced",
+                "auto_scale": False,
+                "max_subagents": 1,
+                "shared_grounding": shared_grounding,
+                "roles": {},
+                "hot_swap": {"enabled": True, "fallback_quorum_min": 1},
+            },
+        )
+
+    serialized_calls = "\n".join(str(messages) for messages in calls)
+    assert ("relevant snippet" in serialized_calls) is shared_grounding
 
 
 def test_run_teamwork_turn_flow():
@@ -163,7 +216,9 @@ def test_run_teamwork_turn_flow():
         events.append((ev, data))
 
     # Mock call_llm
+    llm_calls = []
     def fake_call_llm(model=None, **kwargs):
+        llm_calls.append((model, kwargs))
         resp = MagicMock()
         resp.choices = [MagicMock()]
         resp.choices[0].message.content = f"Lösungsansatz von {model}"
@@ -188,6 +243,7 @@ def test_run_teamwork_turn_flow():
         assert result["metadata"]["planner"] == "gemini-2.5-flash"
         assert len(mock_session.messages) == 1
         assert "teamwork" in mock_session.messages[0]
+        assert any(model == "deepseek-r1" and kwargs.get("provider") == "ollama" for model, kwargs in llm_calls)
 
         # Verify emitted stages
         stage_names = [data["stage"] for ev, data in events if ev == "teamwork_stage"]

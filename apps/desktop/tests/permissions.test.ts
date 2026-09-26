@@ -90,6 +90,20 @@ describe('permission controller', () => {
     expect(c.trustedOrigins()).toEqual(['https://a.com']);
   });
 
+  it('normalizes persisted origins before applying media permissions', () => {
+    const c = createPermissionController(['https://meet.example.com/path?room=1']);
+    expect(c.trustedOrigins()).toEqual(['https://meet.example.com']);
+    expect(c.decide('media', 'https://meet.example.com/call')).toBe('allow');
+  });
+
+  it('never stores file or non-web origins as media exceptions', () => {
+    const c = createPermissionController(['file:///C:/private', 'custom://trusted.example']);
+    c.trustOrigin('file:///C:/another-private-file');
+    c.trustOrigin('chrome://settings');
+    expect(c.trustedOrigins()).toEqual([]);
+    expect(c.decide('media', 'file:///C:/private')).toBe('deny');
+  });
+
   it('notifies subscribers when an origin is trusted', () => {
     const c = createPermissionController();
     const seen: string[][] = [];

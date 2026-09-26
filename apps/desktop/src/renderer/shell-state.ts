@@ -62,6 +62,9 @@ export type DesktopChatMessage = {
   content?: string;
   timestamp?: string | number;
   tool_calls?: unknown[];
+  tool_call_id?: string;
+  reasoning?: string;
+  _turnTps?: number;
   pending?: boolean;
   teamwork?: unknown;
   smartTrack?: unknown;

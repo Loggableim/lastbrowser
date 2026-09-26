@@ -153,3 +153,24 @@ def test_agent_stream_rate_limit_capture_updates_provider_response_state():
     assert state.rate_limit is not None
     assert state.rate_limit.requests_min.limit == 20
     assert state.rate_limit.requests_min.remaining == 15
+
+
+def test_ollama_cloud_length_response_with_structured_reasoning_is_not_retried_as_empty():
+    """Structured reasoning must trigger the existing useful budget warning.
+
+    Ollama Cloud reasoning models can consume the full completion budget in
+    ``reasoning_content`` while returning empty visible content. This is the
+    response shape that previously went through three futile continuations.
+    """
+    agent = AIAgent.__new__(AIAgent)
+    response = SimpleNamespace(
+        content="",
+        reasoning_content="planning tokens exhausted the response budget",
+        tool_calls=[],
+    )
+
+    assert agent._is_thinking_budget_exhausted(response) is True
+    assert agent._is_thinking_budget_exhausted(
+        SimpleNamespace(content="Here is the answer.", reasoning_content="thinking", tool_calls=[])
+    ) is False
+    assert agent._is_thinking_budget_exhausted(response, has_tool_calls=True) is False

@@ -8695,8 +8695,8 @@ function _buildProviderCard(p){
   const modelCount=Number.isFinite(p.models_total)
     ? p.models_total
     : (Array.isArray(p.models) ? p.models.length : 0);
-  const sourceLabel=isOauth && p.id==='google-gemini-cli'
-    ? (p.auth_state==='expired' ? 'Google-Anmeldung abgelaufen' : p.has_key ? 'Google OAuth verbunden' : 'Google nicht verbunden')
+  const sourceLabel=p.id==='google-gemini-cli'
+    ? 'Gemini CLI nicht verfügbar'
     : p.key_source==='oauth'
     ? _providerText('providers_status_oauth', 'OAuth')
     : p.key_source==='config_yaml'
@@ -8716,7 +8716,7 @@ function _buildProviderCard(p){
       <div class="provider-card-name">${esc(p.display_name)}</div>
       <div class="provider-card-meta">${esc(metaText)}</div>
     </div>
-    ${p.has_key?`<span class="provider-card-badge">${esc(isOauth ? sourceLabel : _providerText('providers_status_configured', 'Configured'))}</span>`:''}
+    ${p.has_key&&p.id!=='google-gemini-cli'?`<span class="provider-card-badge">${esc(isOauth ? sourceLabel : _providerText('providers_status_configured', 'Configured'))}</span>`:''}
     <svg class="provider-card-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="16" height="16"><path d="M6 9l6 6 6-6"/></svg>
   `;
   card.appendChild(header);
@@ -8724,16 +8724,25 @@ function _buildProviderCard(p){
   const body=document.createElement('div');
   body.className='provider-card-body';
 
+  if(p.id==='google-gemini-cli'){
+    const hint=document.createElement('div');
+    hint.className='provider-card-hint';
+    hint.innerHTML='Google hat die Anmeldung und Anfrageverarbeitung für private Gemini CLI Konten und Google AI Pro/Ultra am 18. Juni 2026 eingestellt. Gespeicherte OAuth-Metadaten belegen keinen aktiven Zugriff. Für private Konten verweist Google auf <a href="https://antigravity.google/docs/cli" target="_blank" rel="noopener noreferrer">Antigravity CLI</a>; Lastbrowser bietet dafür derzeit keine unterstützte Anmeldung.';
+    body.appendChild(hint);
+    const apiKeyNote=document.createElement('div');
+    apiKeyNote.className='provider-card-hint';
+    apiKeyNote.textContent='Ein Gemini API-Schlüssel ist ein separater Zugang und wird über den Gemini API-Anbieter konfiguriert; diese Gemini-CLI-Einstellung verwendet keinen API-Schlüssel.';
+    body.appendChild(apiKeyNote);
+    card.appendChild(body);
+    header.addEventListener('click',()=>card.classList.toggle('open'));
+    return card;
+  }
+
   if(isOauth){
     const hint=document.createElement('div');
     hint.className='provider-card-hint';
-    if(p.id==='google-gemini-cli'){
-      hint.textContent=p.auth_error || (p.has_key ? 'Über Google OAuth verbunden. Kein API-Schlüssel erforderlich.' : 'Nicht verbunden. Starte die Google-Anmeldung direkt hier in der WebUI.');
-    } else if(p.key_source==='config_yaml'){
+    if(p.key_source==='config_yaml'){
       hint.textContent=_providerText('providers_oauth_config_yaml_hint', 'Token configured via config.yaml. To update, edit the providers section in your config.yaml or run sidekick auth.');
-    } else if(p.id==='google-gemini-cli' && !p.has_key){
-      hint.textContent='Nicht verbunden. Starte die Google-Anmeldung direkt hier in der WebUI.';
-      hint.style.color='var(--muted)';
     } else if(p.auth_error){
       hint.textContent=p.auth_error;
       hint.style.color='var(--accent)';
@@ -8744,37 +8753,6 @@ function _buildProviderCard(p){
       hint.style.color='var(--muted)';
     }
     body.appendChild(hint);
-    if(p.id==='google-gemini-cli'){
-      const actions=document.createElement('div'); actions.className='provider-card-actions';
-      if(p.oauth_email){
-        const account=document.createElement('div'); account.className='provider-card-hint';
-        account.textContent='Google-Konto: '+p.oauth_email; body.appendChild(account);
-      }
-      const quotaHint=document.createElement('div'); quotaHint.className='provider-card-hint';
-      quotaHint.textContent='Das verfügbare Kontingent hängt von deinem Google-Konto und dessen Gemini-CLI-/Code-Assist-Zugriff ab.';
-      body.appendChild(quotaHint);
-      const btn=document.createElement('button'); btn.className='sm-btn';
-      btn.textContent=p.has_key?'Re-authenticate with Google':'Mit Google anmelden';
-      btn.addEventListener('click',()=>window.startGoogleGeminiOAuth&&window.startGoogleGeminiOAuth(btn));
-      actions.appendChild(btn); body.appendChild(actions);
-      const quotaBtn=document.createElement('button'); quotaBtn.className='sm-btn'; quotaBtn.textContent='Quota prüfen';
-      const quotaResult=document.createElement('div'); quotaResult.setAttribute('aria-live','polite');
-      body.appendChild(quotaResult);
-      quotaBtn.addEventListener('click',async()=>{
-        quotaBtn.disabled=true; quotaBtn.textContent='Quota lädt …';
-        try{
-          const q=await api('/api/provider/quota?provider=google-gemini-cli');
-          quotaResult.replaceChildren(_buildProviderQuotaCard(q));
-        }catch(e){quotaResult.textContent='Kontingent konnte nicht abgerufen werden. Bitte erneut versuchen.';}
-        finally{quotaBtn.disabled=false; quotaBtn.textContent='Quota erneut prüfen';}
-      });
-      actions.appendChild(quotaBtn);
-      if(p.has_key){
-        const disconnect=document.createElement('button'); disconnect.className='sm-btn'; disconnect.textContent='Verbindung trennen';
-        disconnect.addEventListener('click',async()=>{if(!confirm('Google-Verbindung für dieses Profil trennen?'))return; await api('/api/oauth/google/disconnect',{method:'POST'}); location.reload();});
-        actions.appendChild(disconnect);
-      }
-    }
     card.appendChild(body);
     header.addEventListener('click',()=>card.classList.toggle('open'));
     return card;
@@ -10701,27 +10679,6 @@ const _origLoadAppstorePanel = loadAppstorePanel;
 loadAppstorePanel = async function() {
   await _origLoadAppstorePanel.apply(this, arguments);
   _appstoreSyncMailButtons();
-};
-
-// Browser-driven Google Gemini OAuth. Tokens remain server-side; the UI only
-// receives a flow id and high-level status.
-window.startGoogleGeminiOAuth = async function(button){
-  if(!button) return;
-  button.disabled=true; const old=button.textContent; button.textContent='Google-Anmeldung läuft …';
-  try{
-    const start=await api('/api/oauth/google/start',{method:'POST',body:JSON.stringify({provider:'google-gemini-cli'})});
-    if(start.error) throw new Error(start.error);
-    if(start.auth_url){ window.open(start.auth_url,'sidekick-google-oauth','width=640,height=760'); }
-    const flowId=start.flow_id;
-    const poll=async()=>{
-      const s=await api('/api/oauth/google/status?flow_id='+encodeURIComponent(flowId));
-      if(s.status==='pending'){ setTimeout(poll,2000); return; }
-      button.disabled=false;
-      if(s.status==='success'){button.textContent='Google verbunden'; showToast&&showToast('Google Gemini verbunden'); await loadProvidersPanel();}
-      else {button.textContent=old; showToast&&showToast(s.error||'Google-Anmeldung fehlgeschlagen');}
-    };
-    setTimeout(poll,1000);
-  }catch(e){button.disabled=false;button.textContent=old;showToast&&showToast(e.message||'Google-Anmeldung fehlgeschlagen');}
 };
 
 

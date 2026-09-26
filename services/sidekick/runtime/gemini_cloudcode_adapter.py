@@ -592,8 +592,13 @@ class GeminiCloudCodeClient:
         base_url: Optional[str] = None,
         default_headers: Optional[Dict[str, str]] = None,
         project_id: str = "",
+        account_email: Optional[str] = None,
         **_: Any,
     ):
+        from cli.auth import _google_gemini_cli_unavailable
+
+        raise _google_gemini_cli_unavailable()
+
         # `api_key` here is a dummy — real auth is the OAuth access token
         # fetched on every call via agent.google_oauth.get_valid_access_token().
         # We accept the kwarg for openai.OpenAI interface parity.
@@ -601,6 +606,7 @@ class GeminiCloudCodeClient:
         self.base_url = base_url or MARKER_BASE_URL
         self._default_headers = dict(default_headers or {})
         self._configured_project_id = project_id
+        self.account_email = str(account_email or "").strip()
         self._project_context: Optional[ProjectContext] = None
         self._project_context_lock = False  # simple single-thread guard
         self.chat = _GeminiChatNamespace(self)
@@ -627,7 +633,8 @@ class GeminiCloudCodeClient:
             return self._project_context
 
         env_project = google_oauth.resolve_project_id_from_env()
-        creds = google_oauth.load_credentials()
+        creds = (google_oauth.load_account_credentials(self.account_email)
+                 if self.account_email else google_oauth.load_credentials())
         stored_project = creds.project_id if creds else ""
 
         # Prefer what's already baked into the creds
@@ -652,6 +659,7 @@ class GeminiCloudCodeClient:
             google_oauth.update_project_ids(
                 project_id=ctx.project_id,
                 managed_project_id=ctx.managed_project_id,
+                account_email=self.account_email or None,
             )
         self._project_context = ctx
         return ctx
@@ -672,7 +680,7 @@ class GeminiCloudCodeClient:
         timeout: Any = None,
         **_: Any,
     ) -> Any:
-        access_token = google_oauth.get_valid_access_token()
+        access_token = google_oauth.get_valid_access_token(account_email=self.account_email or None)
         ctx = self._ensure_project_context(access_token, model)
 
         thinking_config = None

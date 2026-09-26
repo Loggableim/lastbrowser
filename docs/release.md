@@ -14,11 +14,11 @@ Lastbrowser Windows releases are published through GitHub Releases from version 
    ```
 
 4. GitHub Actions runs `.github/workflows/release.yml`.
-5. The workflow runs `npm --workspace apps/desktop run package:win:publish`.
+5. The workflow builds the Windows artifacts without uploading them, signs them, then publishes the final files through `softprops/action-gh-release`.
 
 ## Auto-Update Artifacts
 
-`electron-builder` publishes these Windows release assets to GitHub Releases:
+The release workflow uploads these Windows release assets to GitHub Releases after signing:
 
 - `Lastbrowser-<version>-x64-setup.exe`
 - `Lastbrowser-<version>-x64-setup.exe.blockmap`
@@ -33,11 +33,6 @@ The installed NSIS build uses `latest.yml` to discover and download updates. The
 - The workflow needs `contents: write` permission and `GH_TOKEN` from `${{ secrets.GITHUB_TOKEN }}`.
 - The `publish` config in `apps/desktop/package.json` points to `Loggableim/lastbrowser`.
 
-## Manual Publish
+## Manual Build
 
-To publish from a trusted local machine instead of GitHub Actions:
-
-```powershell
-$env:GH_TOKEN = "<token with repo/content release permission>"
-npm run release:win
-```
+`npm run release:win` builds the Windows artifacts locally without publishing them. Use a version tag and the GitHub Actions workflow for the supported signed release path.

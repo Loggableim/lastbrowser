@@ -17,7 +17,9 @@ describe('GitHub release auto-update flow', () => {
     const pkg = readJson(desktopPackagePath);
 
     expect(pkg.dependencies['electron-updater']).toBeTruthy();
-    expect(pkg.scripts['package:win:publish']).toContain('--publish always');
+    // GitHub Actions signs the final installer files, then uploads them with
+    // action-gh-release. electron-builder must not publish unsigned artifacts.
+    expect(pkg.scripts['package:win:publish']).toContain('--publish never');
     expect(pkg.build.publish).toEqual([
       {
         provider: 'github',

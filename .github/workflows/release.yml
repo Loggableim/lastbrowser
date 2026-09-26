@@ -36,7 +36,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install installer asset dependency
-        run: python -m pip install --disable-pip-version-check Pillow
+        run: python -m pip install --disable-pip-version-check Pillow castlabs-evs
 
       - name: Install dependencies
         run: npm ci

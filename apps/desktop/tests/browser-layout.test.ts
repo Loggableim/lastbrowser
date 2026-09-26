@@ -71,7 +71,9 @@ describe('browser shell layout', () => {
 
     expect(source).toContain('className="browser-main browser-page-main"');
     expect(source).toContain('className="browser-webview-frame"');
-    expect(source).toContain('onDidStartLoading={() => onClearBrowserError()}');
+    expect(source).toContain('className="browser-tabs-viewport"');
+    expect(source).toContain('className={`browser-tab-pane ${isCurrent ?');
+    expect(source).toContain('onDidStartLoading={() => {');
     expect(source).toContain('onDidFailLoad={(event) => {');
   });
 
@@ -153,7 +155,8 @@ describe('browser shell layout', () => {
 
     expect(source).toContain('const browserWebviewStyle = {');
     expect(source).toContain("height: '100%'");
-    expect(source).toContain('style={browserWebviewStyle}');
+    expect(source).toContain('style={isInActiveSplit ? { ...browserWebviewStyle');
+    expect(source).toContain(': browserWebviewStyle}');
     expect(source).not.toContain('useBrowserViewportHeight(');
 
     const pageMain = cssBlock(css, '.browser-main.browser-page-main');

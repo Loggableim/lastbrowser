@@ -208,36 +208,6 @@ def build_model_wall() -> Dict[str, Any]:
             }
             tiers[tier].append(model_info)
 
-    # Baseline Gemini fallback if no models discovered
-    if not any(tiers.values()):
-        tiers["medium"].append({
-            "id": "gemini-2.5-flash",
-            "name": "Gemini 2.5 Flash",
-            "provider": "google-gemini-cli",
-            "provider_label": "Google Gemini",
-            "tier": "medium",
-            "tags": ["web", "fast"],
-            "context_window": 1048576,
-        })
-        tiers["low"].append({
-            "id": "gemini-2.5-flash-lite",
-            "name": "Gemini 2.5 Flash Lite",
-            "provider": "google-gemini-cli",
-            "provider_label": "Google Gemini",
-            "tier": "low",
-            "tags": ["fast"],
-            "context_window": 1048576,
-        })
-        tiers["high"].append({
-            "id": "gemini-2.5-pro",
-            "name": "Gemini 2.5 Pro",
-            "provider": "google-gemini-cli",
-            "provider_label": "Google Gemini",
-            "tier": "high",
-            "tags": ["reasoning"],
-            "context_window": 1048576,
-        })
-
     # Inter-tier fallback for empty slots
     all_models = [m for sublist in tiers.values() for m in sublist]
     for tier in ("low", "medium", "high"):
@@ -254,7 +224,7 @@ def build_model_wall() -> Dict[str, Any]:
     # Calculate default and intent specialists for each tier
     model_wall = {}
     for tier_key, model_list in tiers.items():
-        default_model = model_list[0]["id"] if model_list else "gemini-2.5-flash"
+        default_model = model_list[0]["id"] if model_list else ""
         coding_model = next((m["id"] for m in model_list if "coding" in m.get("tags", [])), default_model)
         web_model = next((m["id"] for m in model_list if "web" in m.get("tags", [])), default_model)
         reasoning_model = next((m["id"] for m in model_list if "reasoning" in m.get("tags", [])), default_model)
@@ -282,6 +252,8 @@ def resolve_smart_track_model(
         effort_norm = "medium"
 
     wall = build_model_wall()
+    if not any(tier.get("models") for tier in wall.values()):
+        raise RuntimeError("Smart Track hat keine aktuell verfügbaren Modelle. Verbinde zuerst mindestens einen Modellanbieter.")
     tier_data = wall.get(effort_norm, wall.get("medium", {}))
     models_in_tier = tier_data.get("models", [])
     intent = detect_prompt_intent(prompt)
@@ -449,7 +421,7 @@ def run_smart_track_turn(
     except Exception as e:
         logger.error("Smart track main call to %s failed: %s", routed["model"], e)
         wall = build_model_wall()
-        fb_model = wall.get("medium", {}).get("default", "gemini-2.5-flash")
+        fb_model = wall.get("medium", {}).get("default") or routed["model"]
         fb_resp = call_llm(
             model=fb_model,
             messages=main_messages,

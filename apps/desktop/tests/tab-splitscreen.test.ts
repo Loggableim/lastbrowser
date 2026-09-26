@@ -15,7 +15,9 @@ describe('Multi-Tab Splitscreen State & Mechanics', () => {
     useTabStore.setState({
       tabs: [tab1, tab2, tab3, tab4, tab5],
       activeTabId: tab1.id,
+      closedTabs: [],
       splitTabIds: [],
+      splitSlotIndexes: [],
       splitLayout: 'columns'
     });
   });
@@ -33,6 +35,7 @@ describe('Multi-Tab Splitscreen State & Mechanics', () => {
     const nextState = useTabStore.getState();
     expect(nextState.splitTabIds).toHaveLength(2);
     expect(nextState.splitTabIds).toEqual([tabs[0].id, tabs[1].id]);
+    expect(nextState.splitSlotIndexes).toEqual([0, 1]);
     expect(nextState.activeTabId).toBe(tabs[1].id);
     expect(nextState.splitLayout).toBe('columns');
   });
@@ -46,6 +49,7 @@ describe('Multi-Tab Splitscreen State & Mechanics', () => {
     addSplitTab(tabs[3].id);
     const state4 = useTabStore.getState();
     expect(state4.splitTabIds).toHaveLength(4);
+    expect(state4.splitSlotIndexes).toEqual([0, 1, 2, 3]);
     expect(state4.splitLayout).toBe('grid');
 
     // Attempting to add a 5th tab should be ignored
@@ -85,6 +89,22 @@ describe('Multi-Tab Splitscreen State & Mechanics', () => {
     expect(useTabStore.getState().splitTabIds).toEqual([tabs[0].id, tabs[2].id]);
   });
 
+  it('detaches a split tab without keeping a closed-tab duplicate', () => {
+    const { tabs, addSplitTab, detachTab } = useTabStore.getState();
+    addSplitTab(tabs[1].id);
+    addSplitTab(tabs[2].id);
+    useTabStore.setState({ activeTabId: tabs[0].id });
+
+    detachTab(tabs[1].id);
+
+    const next = useTabStore.getState();
+    expect(next.tabs.map((tab) => tab.id)).toEqual([tabs[0].id, tabs[2].id, tabs[3].id, tabs[4].id]);
+    expect(next.splitTabIds).toEqual([tabs[0].id, tabs[2].id]);
+    expect(next.splitSlotIndexes).toEqual([0, 2]);
+    expect(next.closedTabs.some((item) => item.url === tabs[1].url)).toBe(false);
+    expect(next.activeTabId).toBe(tabs[0].id);
+  });
+
   it('clearSplitTabs resets split state cleanly', () => {
     const { tabs, addSplitTab, clearSplitTabs } = useTabStore.getState();
     addSplitTab(tabs[1].id);
@@ -92,6 +112,16 @@ describe('Multi-Tab Splitscreen State & Mechanics', () => {
 
     clearSplitTabs();
     expect(useTabStore.getState().splitTabIds).toEqual([]);
+    expect(useTabStore.getState().splitSlotIndexes).toEqual([]);
+  });
+
+  it('assigns snap tabs to unique valid slots and filters duplicate tabs', () => {
+    const { tabs, setSnapGroup } = useTabStore.getState();
+    setSnapGroup('quad-grid', [tabs[0].id, tabs[1].id, tabs[1].id, tabs[2].id], [3, 1, 0, 1]);
+    const state = useTabStore.getState();
+    expect(state.splitTabIds).toEqual([tabs[0].id, tabs[1].id]);
+    expect(state.splitSlotIndexes).toEqual([3, 1]);
+    expect(state.activeTabId).toBe(tabs[0].id);
   });
 
   it('allows changing splitLayout directly', () => {

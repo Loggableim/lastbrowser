@@ -206,4 +206,16 @@ describe('Appearance Relaunch & Design-System Engine', () => {
       }
     });
   });
+
+  describe('7. Appearance controls affect browser chrome', () => {
+    it('consumes glass and density tokens in the titlebar and collapsed sidebar', () => {
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const css = fs.readFileSync(path.resolve(__dirname, '../src/renderer/styles.css'), 'utf8');
+      expect(css).toContain('background: rgba(9, 14, 31, var(--glass-bg-opacity, 0.72))');
+      expect(css).toContain('backdrop-filter: blur(var(--glass-blur, 16px))');
+      expect(css).toContain('height: var(--titlebar-height, 42px)');
+      expect(css).toContain('width: var(--dock-width, 48px)');
+    });
+  });
 });

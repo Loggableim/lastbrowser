@@ -30,7 +30,10 @@ import {
   saveProfileTabs
 } from '../tab-sessions.js';
 
+import { SNAP_LAYOUT_DEFINITIONS, type SnapLayoutType } from '../types/snap-layouts.js';
+
 export type BrowserMode = 'home' | 'search' | 'web';
+export type SplitLayoutMode = SnapLayoutType | 'columns' | 'rows' | 'grid';
 
 export interface TabState {
   tabs: BrowserTab[];
@@ -42,7 +45,8 @@ export interface TabState {
   browserMode: BrowserMode;
   browserLoadError: string;
   splitTabIds: string[];
-  splitLayout: 'columns' | 'rows' | 'grid';
+  splitSlotIndexes: number[];
+  splitLayout: SplitLayoutMode;
 
   // Setters
   setTabs(tabs: BrowserTab[] | ((prev: BrowserTab[]) => BrowserTab[])): void;
@@ -53,16 +57,18 @@ export interface TabState {
   setAddressValue(value: string | ((prev: string) => string)): void;
   setBrowserMode(mode: BrowserMode | ((prev: BrowserMode) => BrowserMode)): void;
   setBrowserLoadError(error: string | ((prev: string) => string)): void;
-  setSplitLayout(layout: 'columns' | 'rows' | 'grid'): void;
+  setSplitLayout(layout: SplitLayoutMode): void;
 
   // Splitscreen actions
   addSplitTab(tabId: string, baseTabIdOverride?: string): void;
   removeSplitTab(tabId: string): void;
   clearSplitTabs(): void;
+  setSnapGroup(layout: SnapLayoutType, tabIds: string[], slotIndexes?: number[]): void;
 
   // Compound actions
   addTab(url?: string, options?: { incognito?: boolean }): void;
   closeTab(id: string): void;
+  detachTab(id: string): void;
   reopenClosedTab(): void;
   closeDuplicateTabs(): number;
   sortTabsByDomain(): void;
@@ -115,6 +121,7 @@ export const useTabStore = create<TabState>((set, get) => {
     browserMode: isAiBrowserHomeUrl(firstTab.url) ? 'home' : 'web',
     browserLoadError: '',
     splitTabIds: [],
+    splitSlotIndexes: [],
     splitLayout: 'columns',
 
     setTabs: (tabs) =>
@@ -163,29 +170,56 @@ export const useTabStore = create<TabState>((set, get) => {
           ? baseTabIdOverride
           : (activeTabId && activeTabId !== tabId ? activeTabId : tabs.find((t) => t.id !== tabId)?.id);
         if (baseTabId) {
-          set({ splitTabIds: [baseTabId, tabId], splitLayout: 'columns', activeTabId: tabId });
+          set({ splitTabIds: [baseTabId, tabId], splitSlotIndexes: [0, 1], splitLayout: 'columns', activeTabId: tabId });
         }
         return;
       }
       if (splitTabIds.length >= 4) return;
       const nextSplit = [...splitTabIds, tabId];
       const nextLayout = nextSplit.length >= 4 ? 'grid' : get().splitLayout;
-      set({ splitTabIds: nextSplit, splitLayout: nextLayout, activeTabId: tabId });
+      set({ splitTabIds: nextSplit, splitSlotIndexes: nextSplit.map((_, index) => index), splitLayout: nextLayout, activeTabId: tabId });
     },
 
     removeSplitTab: (tabId: string) => {
-      const { splitTabIds, activeTabId, tabs } = get();
+      const { splitTabIds, splitSlotIndexes, activeTabId, tabs } = get();
+      const removedIndex = splitTabIds.indexOf(tabId);
       const nextSplit = splitTabIds.filter((id) => id !== tabId);
+      const nextSlots = splitSlotIndexes.filter((_, index) => index !== removedIndex);
       if (nextSplit.length <= 1) {
         const fallback = nextSplit[0] || (activeTabId !== tabId ? activeTabId : tabs[0]?.id || '');
-        set({ splitTabIds: [], activeTabId: fallback });
+        set({ splitTabIds: [], splitSlotIndexes: [], activeTabId: fallback });
       } else {
         const nextActive = activeTabId === tabId ? nextSplit[0] : activeTabId;
-        set({ splitTabIds: nextSplit, activeTabId: nextActive });
+        set({ splitTabIds: nextSplit, splitSlotIndexes: nextSlots, activeTabId: nextActive });
       }
     },
 
-    clearSplitTabs: () => set({ splitTabIds: [] }),
+    clearSplitTabs: () => set({ splitTabIds: [], splitSlotIndexes: [] }),
+
+    setSnapGroup: (layout: SnapLayoutType, tabIds: string[], slotIndexes?: number[]) => {
+      const { tabs, activeTabId } = get();
+      const seen = new Set<string>();
+      const usedSlots = new Set<number>();
+      const slotLimit = SNAP_LAYOUT_DEFINITIONS[layout].slots.length;
+      const valid = tabIds.map((id, index) => ({ id, slot: slotIndexes?.[index] ?? index }))
+        .filter(({ id, slot }) => {
+          if (!tabs.some((tab) => tab.id === id) || seen.has(id) || usedSlots.has(slot) || !Number.isInteger(slot) || slot < 0 || slot >= slotLimit) return false;
+          seen.add(id);
+          usedSlots.add(slot);
+          return true;
+        });
+      const validIds = valid.map(({ id }) => id);
+      if (validIds.length <= 1) {
+        set({ splitLayout: layout, splitTabIds: [], splitSlotIndexes: [], activeTabId: validIds[0] || activeTabId });
+        return;
+      }
+      set({
+        splitLayout: layout,
+        splitTabIds: validIds,
+        splitSlotIndexes: valid.map(({ slot }) => slot),
+        activeTabId: validIds.includes(activeTabId) ? activeTabId : validIds[0]
+      });
+    },
 
     addTab: (url, options) => {
       const newTab = createInitialTab(url || browserStartUrl, options);
@@ -224,6 +258,26 @@ export const useTabStore = create<TabState>((set, get) => {
         tabs: nextTabs,
         activeTabId: nextActiveTabId,
         closedTabs: nextClosed
+      });
+    },
+
+    detachTab: (id) => {
+      const before = get();
+      if (!before.tabs.some((tab) => tab.id === id)) return;
+      if (before.splitTabIds.includes(id)) get().removeSplitTab(id);
+      const { tabs, activeTabId } = get();
+      const index = tabs.findIndex((tab) => tab.id === id);
+      const remaining = tabs.filter((tab) => tab.id !== id);
+      const nextTabs = remaining.length ? remaining : [createInitialTab(browserStartUrl)];
+      const nextActiveTabId = activeTabId === id
+        ? (remaining[index] ?? remaining[index - 1] ?? remaining[0] ?? nextTabs[0]).id
+        : activeTabId;
+      const nextActiveTab = nextTabs.find((tab) => tab.id === nextActiveTabId) ?? nextTabs[0];
+      set({
+        tabs: nextTabs,
+        activeTabId: nextActiveTab.id,
+        addressValue: isAiBrowserHomeUrl(nextActiveTab.url) ? '' : nextActiveTab.url,
+        browserMode: isAiBrowserHomeUrl(nextActiveTab.url) ? 'home' : 'web'
       });
     },
 

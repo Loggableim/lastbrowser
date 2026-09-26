@@ -1,6 +1,8 @@
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { app, BrowserWindow, clipboard, ipcMain, Menu, shell, session, type Session } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, Menu, Notification, screen, shell, session, type Session } from 'electron';
+import { CHAT_COMPLETION_NOTIFICATION, shouldNotifyChatCompletion } from './chat-notifications.js';
 import { ExtensionManager } from './extensions.js';
 import { resolveCdpPort } from './cdp.js';
 import { moduleDirname } from './module-path.js';
@@ -180,6 +182,15 @@ app.on('child-process-gone', (_event, details) => {
 
 const mainDir = moduleDirname(import.meta.url);
 let mainWindow: BrowserWindow | null = null;
+const secondaryWindows = new Set<BrowserWindow>();
+type DetachedTabTransfer = {
+  transferId: string;
+  payload: { tab: any; spacePath?: string };
+  resolve: (acknowledged: boolean) => void;
+  timeout: NodeJS.Timeout;
+};
+const detachedWindowWebContents = new Set<number>();
+const detachedTabTransfers = new Map<number, DetachedTabTransfer>();
 let services: SidecarServices | null = null;
 let appTray: TrayController | null = null;
 let isQuitting = false;
@@ -292,6 +303,23 @@ function registerIpc(): void {
       void shell.openExternal('ms-settings:defaultapps');
     }
     return httpOk && httpsOk;
+  });
+  ipcMain.handle('lastbrowser:system:openExternal', (_event, url: string) => {
+    try {
+      const parsed = new URL(String(url || '').trim());
+      if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) return false;
+      void shell.openExternal(parsed.toString());
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  ipcMain.handle('lastbrowser:notifications:chatCompleted', (event, enabled: unknown) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window || !shouldNotifyChatCompletion(enabled, window.isFocused()) || !Notification.isSupported()) return false;
+    new Notification(CHAT_COMPLETION_NOTIFICATION).show();
+    return true;
   });
   ipcMain.handle('lastbrowser:i18n:setLocale', (_event, locale: unknown) => {
     if (typeof locale === 'string' && locale.trim()) {
@@ -615,6 +643,119 @@ function registerIpc(): void {
     return extractActiveWebview(maxChars);
   });
   registerWindowControlIpc(ipcMain, () => mainWindow);
+  ipcMain.handle('lastbrowser:window:getStartupState', (event) => {
+    const contentsId = event.sender.id;
+    const transfer = detachedTabTransfers.get(contentsId);
+    return {
+      isDetachedWindow: detachedWindowWebContents.has(contentsId),
+      transfer: transfer ? { transferId: transfer.transferId, ...transfer.payload } : null
+    };
+  });
+  ipcMain.handle('lastbrowser:window:ackDetachedTab', (event, transferId: string, tabId: string) => {
+    const transfer = detachedTabTransfers.get(event.sender.id);
+    if (!transfer || transfer.transferId !== transferId || transfer.payload.tab?.id !== tabId) return false;
+    clearTimeout(transfer.timeout);
+    detachedTabTransfers.delete(event.sender.id);
+    transfer.resolve(true);
+    return true;
+  });
+  ipcMain.handle('lastbrowser:window:detachTab', async (_event, payload: {
+    tab: any;
+    screenX: number;
+    screenY: number;
+    spacePath?: string;
+  }) => {
+    let newWin: BrowserWindow | null = null;
+    try {
+      if (!payload?.tab || !Number.isFinite(payload.screenX) || !Number.isFinite(payload.screenY)) {
+        return { success: false, error: 'A tab and valid screen coordinates are required.' };
+      }
+      const targetDisplay = screen.getDisplayNearestPoint({ x: payload.screenX, y: payload.screenY });
+      const workArea = targetDisplay.workArea;
+      const width = Math.min(1440, Math.max(900, Math.round(workArea.width * 0.85)));
+      const height = Math.min(920, Math.max(600, Math.round(workArea.height * 0.85)));
+      const x = Math.max(workArea.x, Math.min(workArea.x + workArea.width - width, payload.screenX - 100));
+      const y = Math.max(workArea.y, Math.min(workArea.y + workArea.height - height, payload.screenY - 30));
+
+      const detachedWindow = new BrowserWindow({
+        ...createMainWindowOptions(mainDir),
+        x,
+        y,
+        width,
+        height
+      });
+      newWin = detachedWindow;
+
+      secondaryWindows.add(detachedWindow);
+      detachedWindowWebContents.add(detachedWindow.webContents.id);
+      let resolveTransfer!: (acknowledged: boolean) => void;
+      const acknowledged = new Promise<boolean>((resolve) => { resolveTransfer = resolve; });
+      const contentsId = detachedWindow.webContents.id;
+      const transferId = randomUUID();
+      const timeout = setTimeout(() => {
+        detachedTabTransfers.delete(contentsId);
+        resolveTransfer(false);
+      }, 20_000);
+      detachedTabTransfers.set(contentsId, {
+        transferId,
+        payload: { tab: payload.tab, spacePath: payload.spacePath },
+        resolve: resolveTransfer,
+        timeout
+      });
+      detachedWindow.on('closed', () => {
+        secondaryWindows.delete(detachedWindow);
+        detachedWindowWebContents.delete(contentsId);
+        const pending = detachedTabTransfers.get(contentsId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          detachedTabTransfers.delete(contentsId);
+          pending.resolve(false);
+        }
+      });
+
+      setupMinimizeToTray(detachedWindow, () => {
+        if (isQuitting || process.platform === 'darwin') return false;
+        return true;
+      });
+
+      const rendererUrl = process.env.LASTBROWSER_RENDERER_URL;
+      await detachedWindow.loadURL(rendererUrl || appRendererUrl());
+      if (!await acknowledged) {
+        // Detached windows minimize to tray on close. A failed transfer must
+        // never leave a hidden orphan window that looks like a successful drop.
+        if (!detachedWindow.isDestroyed()) detachedWindow.destroy();
+        return { success: false, error: 'The new window did not confirm the tab transfer.' };
+      }
+      return { success: true, windowId: detachedWindow.id };
+    } catch (err) {
+      if (newWin && !newWin.isDestroyed()) {
+        const contentsId = newWin.webContents.id;
+        const pending = detachedTabTransfers.get(contentsId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          detachedTabTransfers.delete(contentsId);
+          pending.resolve(false);
+        }
+        detachedWindowWebContents.delete(contentsId);
+        newWin.destroy();
+      }
+      console.error('[lastbrowser] Failed to detach tab to window:', err);
+      return { success: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('lastbrowser:window:getDisplays', () => {
+    try {
+      return screen.getAllDisplays().map((d) => ({
+        id: d.id,
+        bounds: d.bounds,
+        workArea: d.workArea,
+        scaleFactor: d.scaleFactor
+      }));
+    } catch {
+      return [];
+    }
+  });
   registerUpdateIpc(() => mainWindow);
   ipcMain.handle('lastbrowser:adblock:status', () => adblock.getStatus());
   ipcMain.handle('lastbrowser:adblock:setEnabled', (_event, enabled: unknown) => {

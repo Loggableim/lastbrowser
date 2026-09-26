@@ -5,6 +5,26 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.34] - 2026-09-26
+
+### Fixed
+- Integrated Snap Layouts and Multiview layouts into the browser surface, with layout selection, drop previews, resizable panes, empty slots, and persistent assignments.
+- Fixed detached-window tab transfers so the destination acknowledges its attached WebView before the source removes the tab; failed destinations are destroyed instead of hidden as tray windows.
+- Kept detached windows from reloading the source profile's tabs after a transfer.
+- Routed local Ollama requests to the configured OpenAI-compatible endpoint and kept local Ollama credentials separate from Ollama Cloud credentials.
+- Persisted Space setup model choices per Space and applied them on Space changes.
+- Connected Appearance glass and density controls to visible titlebar and sidebar styles.
+- Improved Teamwork worker scaling and implemented its configured planner as a real planning pass.
+- Rejected duplicate Space names and avoided selecting unavailable preset models.
+
+### Security and behavior
+- Gemini CLI OAuth uses the system browser; embedded OAuth no longer relies on browser identity spoofing. A successful Google login was not verified in this release run.
+- Teamwork drops the ineffective autonomous-tools setting; no autonomous tool execution was added.
+
+### Verification
+- Desktop: 75 test suites, 656 tests passed; Store preflight 27/27; main and renderer build passed.
+- Backend focused Ollama and Teamwork/Smart Track tests passed. Full backend suite: 2,084 passed, 14 failed, 101 skipped; the failures include environment/order-sensitive cases and remain unresolved.
+
 ## [0.1.33] - 2026-09-25
 
 ### Highlights

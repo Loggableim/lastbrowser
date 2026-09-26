@@ -18,7 +18,10 @@ function main() {
     sourcePythonHome,
     sourceVersion: pythonVersion(join(sourcePythonHome, 'python.exe')),
     packageVersion: readPackageVersion(),
-    runtimeSchema: 1
+    // Bump when the bundled runtime dependency set changes. In particular,
+    // older prepared trees can otherwise pass the cache check without the
+    // OpenAI-compatible client needed by Ollama providers.
+    runtimeSchema: 4
   };
 
   if (
@@ -26,6 +29,7 @@ function main() {
     marker.sourcePythonHome === desired.sourcePythonHome &&
     marker.sourceVersion === desired.sourceVersion &&
     marker.packageVersion === desired.packageVersion &&
+    marker.runtimeSchema === desired.runtimeSchema &&
     existsSync(join(pythonRuntimeDir, 'python.exe'))
   ) {
     console.log(`[prepare:python] Runtime already prepared: ${pythonRuntimeDir}`);
@@ -61,7 +65,13 @@ function main() {
     'requests>=2.31',
     'httpx>=0.27',
     'pyyaml>=6.0',
+    'openai>=1.0,<3',
     resolve(repoRoot, 'services', 'sidekick')
+  ]);
+
+  run(join(pythonRuntimeDir, 'python.exe'), [
+    '-c',
+    'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import requests, yaml; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); print("[prepare:python] Core Sidekick imports verified")'
   ]);
 
   writeFileSync(markerPath, `${JSON.stringify(desired, null, 2)}\n`, 'utf8');

@@ -154,6 +154,40 @@ describe('Clear Browsing Data (Microsoft Store Policy 10.2)', () => {
   });
 });
 
+describe('Split tab detach transfer handshake', () => {
+  it('waits for the destination renderer to acknowledge before removing the source tab', () => {
+    const main = readFileSync(path.resolve(__dirname, '../src/main/main.ts'), 'utf8');
+    const app = readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+    const preload = readFileSync(path.resolve(__dirname, '../src/main/preload.ts'), 'utf8');
+
+    expect(main).toContain("ipcMain.handle('lastbrowser:window:getStartupState'");
+    expect(main).toContain("ipcMain.handle('lastbrowser:window:ackDetachedTab'");
+    expect(main).toContain('transfer.payload.tab?.id !== tabId');
+    expect(main).toContain('if (!await acknowledged)');
+    expect(preload).toContain('getStartupState:');
+    expect(preload).toContain('ackDetachedTab:');
+
+    const detach = app.indexOf('const handleDetachTab = useCallback');
+    const startup = app.indexOf('const initializeWindow = async');
+    expect(detach).toBeGreaterThan(-1);
+    expect(startup).toBeGreaterThan(-1);
+    expect(app.slice(detach, startup)).toContain('if (result?.success) useTabStore.getState().detachTab(tabToDetach.id)');
+    expect(app.slice(startup, startup + 1700)).toContain('setPendingDetachedTransfer');
+    expect(app).toContain('onDomReady={(event) => {');
+    expect(app).toContain('onTransferredWebviewReady(tab.id)');
+    expect(app).toContain('webview.getWebContentsId()');
+    expect(app).toContain("webview.addEventListener('dom-ready', confirmAttached, { once: true })");
+    expect(main).toContain('detachedWindow.destroy()');
+    expect(app).toContain('webviewReady && webviewStartupReady');
+    expect(app).toContain('ackDetachedTab?.(transfer.transferId, tabId)');
+    expect(app.slice(startup, startup + 5000)).toContain('startupInitialized = true');
+    expect(app.slice(startup, startup + 5000)).toContain('!cancelled && startupInitialized');
+    expect(app).toContain('if (windowStartupInitializedRef.current) return undefined;');
+    expect(app).toContain('windowStartupInitializedRef.current = true;');
+    expect(app).toContain('if (isDetachedWindow || !windowStartupReady) return;');
+  });
+});
+
 describe('Microsoft Store Generative AI Policy – Response Reporting & Feedback', () => {
   it('saves feedback entry with reason, snippet, timestamp and uuid', async () => {
     const { saveAiFeedback, AI_FEEDBACK_STORAGE_KEY } = await import('../src/renderer/components/AiFeedbackModal.js');

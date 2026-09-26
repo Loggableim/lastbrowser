@@ -15588,6 +15588,25 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
   --dock-width: 56px;
 }
 
+/* Apply the appearance controls to visible browser chrome, not just tokens. */
+.modern-titlebar {
+  height: var(--titlebar-height, 42px);
+  min-height: var(--titlebar-height, 42px);
+  background: rgba(9, 14, 31, var(--glass-bg-opacity, 0.72));
+  backdrop-filter: blur(var(--glass-blur, 16px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px));
+}
+
+.sidekick-sidebar {
+  background: rgba(9, 14, 31, var(--glass-bg-opacity, 0.72));
+  backdrop-filter: blur(var(--glass-blur, 16px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 16px));
+}
+
+.sidekick-sidebar.slim {
+  width: var(--dock-width, 48px);
+}
+
 /* Modern Titlebar Tool Banner (for non-browser panels in Zen workspace) */
 .modern-titlebar-tool-banner {
   display: flex;
@@ -17516,3 +17535,383 @@ body, p, span, div, button, input {
   cursor: not-allowed;
 }
 
+/* ─── Windows 11 Snap Layouts Flyout & Ghost ─────────────────────────────────── */
+.snap-bar-flyout {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-10px);
+  background: rgba(13, 20, 38, 0.88);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(0, 217, 255, 0.35);
+  border-radius: 12px;
+  padding: 12px 16px;
+  z-index: 9999;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 24px rgba(0, 217, 255, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.snap-bar-flyout.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+.snap-bar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.snap-bar-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #00d9ff;
+  letter-spacing: 0.3px;
+  text-shadow: 0 0 8px rgba(0, 217, 255, 0.4);
+}
+
+.snap-bar-hint {
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.6);
+}
+
+.snap-bar-cards {
+  display: flex;
+  gap: 10px;
+}
+
+.snap-bar-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.snap-card-preview {
+  position: relative;
+  width: 64px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.snap-card-slot {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.snap-card-slot:hover,
+.snap-card-slot.hovered {
+  background: rgba(0, 217, 255, 0.45);
+  border-color: #00d9ff;
+  box-shadow: inset 0 0 8px rgba(0, 217, 255, 0.5);
+}
+
+.snap-card-label {
+  font-size: 10px;
+  color: rgba(226, 232, 240, 0.6);
+  font-weight: 500;
+}
+
+/* ─── Fluid Acrylic Snap Ghost Overlay ────────────────────────────────────────── */
+.snap-ghost-overlay {
+  transition: top 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+              left 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+              width 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+              height 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.snap-ghost-inner {
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 217, 255, 0.12);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border: 2px solid rgba(0, 217, 255, 0.8);
+  border-radius: 10px;
+  box-shadow: 0 0 24px rgba(0, 217, 255, 0.3), inset 0 0 16px rgba(0, 217, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: snap-ghost-pulse 1.8s infinite ease-in-out;
+}
+
+@keyframes snap-ghost-pulse {
+  0%, 100% { border-color: rgba(0, 217, 255, 0.8); box-shadow: 0 0 24px rgba(0, 217, 255, 0.3); }
+  50% { border-color: rgba(0, 217, 255, 1); box-shadow: 0 0 36px rgba(0, 217, 255, 0.5); }
+}
+
+.snap-ghost-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(9, 14, 31, 0.85);
+  border: 1px solid rgba(0, 217, 255, 0.5);
+  border-radius: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.snap-ghost-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00d9ff;
+  box-shadow: 0 0 8px #00d9ff;
+}
+
+.snap-ghost-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+/* ─── Multiview Grid Container & Panes ────────────────────────────────────────── */
+.multiview-grid-container {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  background: transparent;
+}
+
+.multiview-pane-chrome {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  pointer-events: none;
+  border: 1px solid rgba(0, 217, 255, 0.38);
+  border-radius: 6px;
+}
+
+.multiview-pane-chrome.active-pane {
+  border-color: rgba(0, 217, 255, 0.8);
+  box-shadow: inset 0 0 12px rgba(0, 217, 255, 0.12);
+}
+
+.multiview-pane-chrome.empty {
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+  background: rgba(7, 13, 26, 0.22);
+  pointer-events: auto;
+}
+
+.multiview-pane-chrome .multiview-pane-header {
+  pointer-events: auto;
+}
+
+.multiview-empty-label {
+  color: rgba(226, 232, 240, 0.55);
+  border: 1px dashed rgba(226, 232, 240, 0.25);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.multiview-divider-vertical {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 25;
+  pointer-events: auto;
+}
+
+.snap-drag-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: transparent;
+}
+
+.snap-drop-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 10px 16px;
+  color: #e2e8f0;
+  border-radius: 10px;
+  background: rgba(9, 14, 31, 0.88);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.multiview-pane {
+  background: #090e1f;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.multiview-pane.active-pane {
+  border-color: rgba(0, 217, 255, 0.65);
+  box-shadow: 0 0 14px rgba(0, 217, 255, 0.22);
+}
+
+.multiview-pane-header {
+  height: 28px;
+  min-height: 28px;
+  background: rgba(9, 14, 31, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  user-select: none;
+}
+
+.multiview-pane-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  font-size: 11px;
+  color: rgba(232, 242, 255, 0.7);
+}
+
+.multiview-pane-favicon {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.multiview-pane-favicon-fallback {
+  color: rgba(0, 217, 255, 0.7);
+  flex-shrink: 0;
+}
+
+.multiview-pane-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.multiview-pane-controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.multiview-pane-btn {
+  background: transparent;
+  border: none;
+  color: rgba(232, 242, 255, 0.5);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.multiview-pane-btn:hover {
+  color: #00d9ff;
+  background: rgba(0, 217, 255, 0.12);
+}
+
+.multiview-pane-btn.close-pane:hover {
+  color: #ff4d6d;
+  background: rgba(255, 77, 109, 0.15);
+}
+
+.multiview-divider-vertical {
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.multiview-divider-vertical:hover,
+.multiview-divider-vertical.is-dragging {
+  background: rgba(0, 217, 255, 0.2);
+}
+
+.multiview-divider-grip {
+  width: 2px;
+  height: 36px;
+  background: rgba(0, 217, 255, 0.4);
+  border-radius: 2px;
+  transition: background 0.15s ease, height 0.15s ease;
+}
+
+.multiview-divider-vertical:hover .multiview-divider-grip,
+.multiview-divider-vertical.is-dragging .multiview-divider-grip {
+  background: #00d9ff;
+  height: 52px;
+  box-shadow: 0 0 8px #00d9ff;
+}
+
+.multiview-divider-horizontal {
+  position: absolute;
+  height: 8px;
+  z-index: 25;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.multiview-divider-horizontal:hover,
+.multiview-divider-horizontal.is-dragging {
+  background: rgba(0, 217, 255, 0.2);
+}
+
+.multiview-divider-horizontal .multiview-divider-grip {
+  width: 36px;
+  height: 2px;
+}
+
+.multiview-divider-horizontal:hover .multiview-divider-grip,
+.multiview-divider-horizontal.is-dragging .multiview-divider-grip {
+  width: 52px;
+  height: 2px;
+  background: #00d9ff;
+  box-shadow: 0 0 8px #00d9ff;
+}
+
+/* ─── Tab Item Snap Indicator in Sidebar ─────────────────────────────────────── */
+.vtab-item.is-in-snap-group {
+  border-left: 2px solid #00d9ff !important;
+  background: rgba(0, 217, 255, 0.05);
+}
+
+.vtab-snap-badge {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(0, 217, 255, 0.15);
+  color: #00d9ff;
+  font-weight: 600;
+  margin-left: 4px;
+}

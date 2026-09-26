@@ -48,6 +48,8 @@ export type GeminiAccountState = {
 
   /** Add a completed OAuth account to the list. */
   addAccount(account: Omit<GeminiOAuthAccount, 'id' | 'addedAt' | 'totalSessionsUsed'>): void;
+  /** Replace the locally displayed account after the backend's singleton OAuth identity changes. */
+  replaceActiveAccount(account: Omit<GeminiOAuthAccount, 'id' | 'addedAt' | 'totalSessionsUsed'>): void;
 
   /** Remove an account by ID. Safely adjusts currentIndex. */
   removeAccount(id: string): void;
@@ -143,6 +145,25 @@ export const useGeminiAccountStore = create<GeminiAccountState>((set, get) => ({
       const next = [...state.accounts, newAccount];
       saveToStorage({ accounts: next });
       return { accounts: next };
+    });
+  },
+
+  replaceActiveAccount(account) {
+    const active: GeminiOAuthAccount = {
+      ...account,
+      id: crypto.randomUUID(),
+      addedAt: Date.now(),
+      totalSessionsUsed: 0
+    };
+    set((state) => {
+      // Keep prior local metadata intact, but do not claim it has a matching
+      // backend credential. The runtime only replaces its single OAuth identity.
+      const accounts = state.accounts.length
+        ? state.accounts.map((stored, index) => index === state.currentIndex ? active : stored)
+        : [active];
+      const currentIndex = Math.min(state.currentIndex, accounts.length - 1);
+      saveToStorage({ accounts, currentIndex });
+      return { accounts, currentIndex };
     });
   },
 

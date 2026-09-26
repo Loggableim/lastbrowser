@@ -63,40 +63,26 @@ export function isLocalhostCallback(url: string): boolean {
   }
 }
 
-/**
- * Remove Electron and app-specific tokens from the User-Agent string.
- * Google OAuth blocks embedded Chromium webviews that include "Electron" with a
- * 403 disallowed_useragent error. Stripping the token lets Google accept the connection.
- */
+// Retained for the existing main-process session policy. The generic auth window
+// deliberately does not call these helpers; Google OAuth uses the system browser.
 export function cleanOAuthUserAgent(rawUserAgent: string): string {
   if (!rawUserAgent) return '';
-  return rawUserAgent
-    .replace(/Electron\/[^\s]+/gi, '')
-    .replace(/Lastbrowser\/[^\s]+/gi, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
+  return rawUserAgent.replace(/Electron\/[^\s]+/gi, '').replace(/Lastbrowser\/[^\s]+/gi, '').replace(/\s{2,}/g, ' ').trim();
 }
 
-/**
- * Sanitize Sec-CH-UA client hints headers by removing Electron tokens and ensuring standard browser brands.
- */
 export function sanitizeSecChUa(headerValue: string): string {
   if (!headerValue) return headerValue;
-  const parts = headerValue.split(',').map((p) => p.trim());
-  const filtered = parts.filter((part) => !/electron|lastbrowser/i.test(part));
-  const hasChromium = filtered.some((p) => /"Chromium"/i.test(p));
-  const hasChrome = filtered.some((p) => /"Google Chrome"/i.test(p));
-  if (hasChromium && !hasChrome) {
-    const match = /"Chromium";v="([^"]+)"/i.exec(headerValue);
-    const ver = match ? match[1] : '134';
-    filtered.push(`"Google Chrome";v="${ver}"`);
+  const filtered = headerValue.split(',').map((part) => part.trim()).filter((part) => !/electron|lastbrowser/i.test(part));
+  if (filtered.some((part) => /"Chromium"/i.test(part)) && !filtered.some((part) => /"Google Chrome"/i.test(part))) {
+    const version = /"Chromium";v="([^\"]+)"/i.exec(headerValue)?.[1] ?? '134';
+    filtered.push(`"Google Chrome";v="${version}"`);
   }
   return filtered.join(', ');
 }
 
 /**
- * Open a dedicated Lastbrowser Connect window for OAuth flows (Google Gemini,
- * ChatGPT, GitHub, etc.) instead of kicking the user out to their default OS browser.
+ * Open a dedicated, sandboxed Lastbrowser Connect window for generic website sign-ins.
+ * Gemini CLI OAuth is started from its account panel in the OS browser.
  */
 export function openAuthConnectWindow(options: AuthWindowOptions): BrowserWindow {
   const {
@@ -120,45 +106,6 @@ export function openAuthConnectWindow(options: AuthWindowOptions): BrowserWindow
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true
-    }
-  });
-
-  try {
-    if (win.webContents?.getUserAgent) {
-      const currentUA = win.webContents.getUserAgent();
-      win.webContents.setUserAgent(cleanOAuthUserAgent(currentUA));
-    }
-    const sess = win.webContents?.session;
-    if (sess?.webRequest?.onBeforeSendHeaders) {
-      sess.webRequest.onBeforeSendHeaders({ urls: ['https://*/*', 'http://*/*'] }, (details, callback) => {
-        const requestHeaders = { ...details.requestHeaders };
-        const uaKey = Object.keys(requestHeaders).find((k) => k.toLowerCase() === 'user-agent');
-        if (uaKey) {
-          requestHeaders[uaKey] = cleanOAuthUserAgent(requestHeaders[uaKey]);
-        }
-        const secUaKey = Object.keys(requestHeaders).find((k) => k.toLowerCase() === 'sec-ch-ua');
-        if (secUaKey) {
-          requestHeaders[secUaKey] = sanitizeSecChUa(requestHeaders[secUaKey]);
-        }
-        delete requestHeaders['X-Requested-With'];
-        delete requestHeaders['x-requested-with'];
-        callback({ requestHeaders });
-      });
-    }
-  } catch {
-    // webContents or session may be mocked or unavailable in test environments
-  }
-
-  win.webContents?.on?.('dom-ready', () => {
-    try {
-      void win.webContents?.executeJavaScript?.(`
-        try {
-          Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-          if (!window.chrome) { window.chrome = { runtime: {} }; }
-        } catch(e) {}
-      `);
-    } catch {
-      // ignore
     }
   });
 

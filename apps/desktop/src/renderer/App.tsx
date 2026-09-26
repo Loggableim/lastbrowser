@@ -113,7 +113,10 @@ import {
   removeProfileTabs,
   saveProfileTabs,
   saveSessionSnapshot,
-  saveSpaceTabs
+  saveSpaceTabs,
+  loadSpaceSnapGroup,
+  saveSpaceSnapGroup,
+  type PersistedSnapGroup
 } from './tab-sessions.js';
 import {
   loadVisitedSites,
@@ -226,13 +229,26 @@ import { ShellRail } from './components/ShellRail.js';
 import { ContextSidebar, panelContextItems, type SidekickMessage } from './components/ContextSidebar.js';
 import { AdblockShield } from './components/AdblockShield.js';
 import { AddressBar } from './components/AddressBar.js';
-import { useTabStore } from './stores/useTabStore.js';
+import { useTabStore, type SplitLayoutMode } from './stores/useTabStore.js';
 import { usePanelStore } from './stores/usePanelStore.js';
 import { useGeminiAccountStore } from './stores/useGeminiAccountStore.js';
+import { useChatStore } from './stores/useChatStore.js';
+import { loadSpaceModel, removeSpaceModel, saveSpaceModel } from './space-models.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { LiveAutomationBanner } from './components/LiveAutomationBanner.js';
 import { detectPageCategory, getQuickActionChips, executeQuickAction, type QuickActionChip } from './quick-actions.js';
-import { parseNaturalLanguageBrowserCommand, executeBrowserAction } from './browser-agent-tools.js';
+import { SnapGhostOverlay } from './components/SnapGhostOverlay.js';
+import { SnapBarFlyout } from './components/SnapBarFlyout.js';
+import { MultiviewGridContainer } from './components/MultiviewGridContainer.js';
+import {
+  SNAP_LAYOUT_DEFINITIONS,
+  type SnapLayoutType,
+  type GhostTarget,
+  getSnapTargetForPointer,
+  getDefaultSnapLayoutRatios,
+  getSnapSlotBounds,
+  type SnapLayoutRatios
+} from './types/snap-layouts.js';
 import './styles.css';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
@@ -245,6 +261,59 @@ type DesktopSettingsRecord = Record<string, unknown>;
 const desktopSettingsStorageKey = 'lastbrowser.desktopSettings.v1';
 
 export { computeSpacePartition } from './tab-sessions.js';
+
+function persistableSnapGroup(
+  layout: SplitLayoutMode,
+  tabIds: string[],
+  slotIndexes: number[],
+  tabs: BrowserTab[],
+  ratios: SnapLayoutRatios
+): PersistedSnapGroup | null {
+  if (!Object.hasOwn(SNAP_LAYOUT_DEFINITIONS, layout) || layout === 'single') return null;
+  const available = new Set(tabs.filter((tab) => !tab.incognito).map((tab) => tab.id));
+  const seenTabs = new Set<string>();
+  const seenSlots = new Set<number>();
+  const pairs = tabIds.map((id, index) => ({ id, slot: slotIndexes[index] ?? index }))
+    .filter(({ id, slot }) => {
+      if (!available.has(id) || seenTabs.has(id) || !Number.isInteger(slot) || slot < 0
+        || slot >= SNAP_LAYOUT_DEFINITIONS[layout as SnapLayoutType].slots.length || seenSlots.has(slot)) return false;
+      seenTabs.add(id);
+      seenSlots.add(slot);
+      return true;
+    });
+  if (pairs.length < 2) return null;
+  return {
+    layout: layout as SnapLayoutType,
+    tabIds: pairs.map(({ id }) => id),
+    slotIndexes: pairs.map(({ slot }) => slot),
+    ratios
+  };
+}
+
+function loadPersistedSnapGroup(profileId: string, spacePath: string, tabs: BrowserTab[]): PersistedSnapGroup | null {
+  const available = tabs.filter((tab) => !tab.incognito).map((tab) => tab.id);
+  const group = loadSpaceSnapGroup(profileId, spacePath, available, window.localStorage);
+  return group && group.tabIds.length > 1 ? group : null;
+}
+
+function savePersistedSnapGroup(
+  profileId: string,
+  spacePath: string,
+  tabs: BrowserTab[],
+  layout: SplitLayoutMode,
+  tabIds: string[],
+  slotIndexes: number[],
+  ratios: SnapLayoutRatios
+): void {
+  const available = tabs.filter((tab) => !tab.incognito).map((tab) => tab.id);
+  saveSpaceSnapGroup(
+    profileId,
+    spacePath,
+    persistableSnapGroup(layout, tabIds, slotIndexes, tabs, ratios),
+    available,
+    window.localStorage
+  );
+}
 
 function isRecord(value: unknown): value is DesktopSettingsRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -527,11 +596,13 @@ export function App(): JSX.Element {
     browserLoadError,
     setBrowserLoadError,
     splitTabIds,
+    splitSlotIndexes,
     splitLayout,
     setSplitLayout,
     addSplitTab,
     removeSplitTab,
-    clearSplitTabs
+    clearSplitTabs,
+    setSnapGroup
   } = useTabStore();
 
   const {
@@ -693,12 +764,19 @@ export function App(): JSX.Element {
       return '';
     }
   });
+  const [isDetachedWindow, setIsDetachedWindow] = useState(false);
+  const [windowStartupReady, setWindowStartupReady] = useState(false);
+  const [pendingDetachedTransfer, setPendingDetachedTransfer] = useState<{ transferId: string; tabId: string } | null>(null);
+  const windowStartupInitializedRef = useRef(false);
+  const acknowledgingTransferRef = useRef<string | null>(null);
+  const [snapRatios, setSnapRatios] = useState<SnapLayoutRatios>(() => getDefaultSnapLayoutRatios('dual-50-50'));
 
   useEffect(() => {
+    if (isDetachedWindow || !windowStartupReady) return;
     try {
       window.localStorage.setItem('lastbrowser.activeSpacePath.v1', activeSpacePath);
     } catch {}
-  }, [activeSpacePath]);
+  }, [activeSpacePath, isDetachedWindow, windowStartupReady]);
   const [spacesError, setSpacesError] = useState('');
   const [workspacePath, setWorkspacePath] = useState('.');
   const [workspaceEntries, setWorkspaceEntries] = useState<WorkspaceTreeEntry[]>([]);
@@ -723,13 +801,26 @@ export function App(): JSX.Element {
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) || tabs[0], [activeTabId, tabs]);
   const activeProfile = useMemo(() => profileById(profiles, activeProfileId), [profiles, activeProfileId]);
   const activePartition = useMemo(() => computeSpacePartition(activeProfile.id, activeSpacePath), [activeProfile.id, activeSpacePath]);
+  const handleSetSnapRatio = useCallback((axis: 'x' | 'y', index: number, ratio: number) => {
+    setSnapRatios((current) => {
+      const next = { x: [...current.x], y: [...current.y] };
+      next[axis][index] = ratio;
+      return next;
+    });
+  }, []);
+  const handleSetSnapGroup = useCallback((layout: SnapLayoutType, tabIds: string[], slotIndexes?: number[]) => {
+    if (layout !== splitLayout) setSnapRatios(getDefaultSnapLayoutRatios(layout));
+    setSnapGroup(layout, tabIds, slotIndexes);
+  }, [setSnapGroup, splitLayout]);
 
   // Keep the active profile's tab session, active space tabs, and auto-recovery snapshot up to date.
   useEffect(() => {
+    if (isDetachedWindow || !windowStartupReady) return;
     saveProfileTabs(activeProfileId, { tabs, activeTabId }, window.localStorage);
     saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage);
+    savePersistedSnapGroup(activeProfileId, activeSpacePath, tabs, splitLayout, splitTabIds, splitSlotIndexes, snapRatios);
     saveSessionSnapshot(activeProfileId, { tabs, activeTabId }, window.localStorage);
-  }, [activeProfileId, activeSpacePath, tabs, activeTabId]);
+  }, [activeProfileId, activeSpacePath, tabs, activeTabId, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, isDetachedWindow, windowStartupReady]);
 
   const activeBookmarkable = isBookmarkableUrl(activeTab.url);
   const activeBookmarked = useMemo(() => isBookmarked(bookmarks, activeTab.url), [activeTab.url, bookmarks]);
@@ -1368,25 +1459,40 @@ export function App(): JSX.Element {
   function switchProfile(profileId: string): void {
     if (profileId === activeProfileId) return;
     // Persist the outgoing profile's space and global tabs before swapping.
-    saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage);
-    saveProfileTabs(activeProfileId, { tabs, activeTabId }, window.localStorage);
+    if (!isDetachedWindow) {
+      saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage);
+      savePersistedSnapGroup(activeProfileId, activeSpacePath, tabs, splitLayout, splitTabIds, splitSlotIndexes, snapRatios);
+      saveProfileTabs(activeProfileId, { tabs, activeTabId }, window.localStorage);
+    }
     const stored = loadSpaceTabs(profileId, activeSpacePath, window.localStorage);
     const nextTabs = stored.tabs.length ? stored.tabs : [createInitialTab(browserStartUrl)];
     const nextActiveId = stored.activeTabId && nextTabs.some((tab) => tab.id === stored.activeTabId)
       ? stored.activeTabId
       : nextTabs[0].id;
+    const nextSnapGroup = loadPersistedSnapGroup(profileId, activeSpacePath, nextTabs);
     setTabs(nextTabs);
     activeTabIdRef.current = nextActiveId;
     setActiveTabId(nextActiveId);
+    if (nextSnapGroup) {
+      setSnapGroup(nextSnapGroup.layout, nextSnapGroup.tabIds, nextSnapGroup.slotIndexes);
+      setSnapRatios(nextSnapGroup.ratios ?? getDefaultSnapLayoutRatios(nextSnapGroup.layout));
+    } else {
+      clearSplitTabs();
+      setSplitLayout('columns');
+      setSnapRatios(getDefaultSnapLayoutRatios('dual-50-50'));
+    }
     setActiveProfileId(profileId);
-    saveActiveProfileId(window.localStorage, profileId);
+    if (!isDetachedWindow) saveActiveProfileId(window.localStorage, profileId);
   }
 
   const handleSpaceSelect = useCallback((newSpacePath: string) => {
     if (newSpacePath === activeSpacePath) return;
 
     // 1. Persist outgoing space tabs
-    saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage);
+    if (!isDetachedWindow) {
+      saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage);
+      savePersistedSnapGroup(activeProfileId, activeSpacePath, tabs, splitLayout, splitTabIds, splitSlotIndexes, snapRatios);
+    }
 
     // 2. Mute background audio in existing webviews before leaving space
     try {
@@ -1408,15 +1514,117 @@ export function App(): JSX.Element {
     const nextActiveId = stored.activeTabId && nextTabs.some((t) => t.id === stored.activeTabId)
       ? stored.activeTabId
       : nextTabs[0].id;
+    const nextSnapGroup = loadPersistedSnapGroup(activeProfileId, newSpacePath, nextTabs);
 
     // 5. Update state
     setTabs(nextTabs);
     activeTabIdRef.current = nextActiveId;
     setActiveTabId(nextActiveId);
+    if (nextSnapGroup) {
+      setSnapGroup(nextSnapGroup.layout, nextSnapGroup.tabIds, nextSnapGroup.slotIndexes);
+      setSnapRatios(nextSnapGroup.ratios ?? getDefaultSnapLayoutRatios(nextSnapGroup.layout));
+    } else {
+      setSnapRatios(getDefaultSnapLayoutRatios('dual-50-50'));
+    }
     setActiveSpacePath(newSpacePath);
+    const spaceModel = loadSpaceModel(newSpacePath, window.localStorage);
+    if (spaceModel) useChatStore.getState().setSelectedModel(spaceModel);
     setBrowserMode(isAiBrowserHomeUrl(nextTabs.find((t) => t.id === nextActiveId)?.url || '') ? 'home' : 'web');
     setBrowserLoadError('');
-  }, [activeProfileId, activeSpacePath, tabs, activeTabId, setTabs, setActiveTabId, clearSplitTabs, setBrowserMode, setBrowserLoadError]);
+  }, [activeProfileId, activeSpacePath, tabs, activeTabId, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, isDetachedWindow, setTabs, setActiveTabId, clearSplitTabs, setSnapGroup, setSplitLayout, setBrowserMode, setBrowserLoadError]);
+
+  const handleDetachTab = useCallback(async (tabToDetach: BrowserTab, screenX?: number, screenY?: number) => {
+    if (window.lastbrowser?.window?.detachTab) {
+      try {
+        const result = await window.lastbrowser.window.detachTab({
+          tab: tabToDetach,
+          screenX: screenX ?? (window.screenX + 100),
+          screenY: screenY ?? (window.screenY + 100),
+          spacePath: activeSpacePath
+        });
+        if (result?.success) useTabStore.getState().detachTab(tabToDetach.id);
+        else console.error('[Lastbrowser] Tab transfer was not acknowledged:', result?.error || 'unknown error');
+      } catch (error) {
+        console.error('[Lastbrowser] Could not detach tab:', error);
+      }
+    }
+  }, [activeSpacePath]);
+
+  useEffect(() => {
+    // This effect also observes tabs and activeSpacePath so it can initialize
+    // from the correct persisted session. After it has completed, those state
+    // updates must not make a detached window restore the source window's
+    // shared profile tabs after its transfer has been acknowledged.
+    if (windowStartupInitializedRef.current) return undefined;
+    let cancelled = false;
+    const initializeWindow = async () => {
+      let startupInitialized = false;
+      try {
+        const startup = await window.lastbrowser?.window?.getStartupState?.();
+        if (cancelled) return;
+        setIsDetachedWindow(Boolean(startup?.isDetachedWindow));
+        const transfer = startup?.transfer;
+        if (transfer?.tab && transfer.transferId) {
+          const incoming = transfer.tab as BrowserTab;
+          setTabs([incoming]);
+          setActiveTabId(incoming.id);
+          clearSplitTabs();
+          setSnapRatios(getDefaultSnapLayoutRatios('dual-50-50'));
+          if (transfer.spacePath) setActiveSpacePath(transfer.spacePath);
+          setPendingDetachedTransfer({ transferId: transfer.transferId, tabId: incoming.id });
+        } else {
+          const stored = loadSpaceTabs(activeProfileId, activeSpacePath, window.localStorage);
+          const restoredTabs = stored.tabs.length ? stored.tabs : tabs;
+          if (stored.tabs.length) {
+            const restoredActiveId = stored.activeTabId && restoredTabs.some((tab) => tab.id === stored.activeTabId)
+              ? stored.activeTabId
+              : restoredTabs[0].id;
+            setTabs(restoredTabs);
+            setActiveTabId(restoredActiveId);
+          }
+          const snapGroup = loadPersistedSnapGroup(activeProfileId, activeSpacePath, restoredTabs);
+          if (snapGroup) {
+            setSnapGroup(snapGroup.layout, snapGroup.tabIds, snapGroup.slotIndexes);
+            setSnapRatios(snapGroup.ratios ?? getDefaultSnapLayoutRatios(snapGroup.layout));
+          } else {
+            clearSplitTabs();
+            setSnapRatios(getDefaultSnapLayoutRatios('dual-50-50'));
+          }
+        }
+        startupInitialized = true;
+      } catch (error) {
+        console.error('[Lastbrowser] Window startup/transfer failed:', error);
+      } finally {
+        // Fail closed: a partially initialized window must not persist its
+        // placeholder tabs over the source window's shared profile storage.
+        if (!cancelled && startupInitialized) {
+          windowStartupInitializedRef.current = true;
+          setWindowStartupReady(true);
+        }
+      }
+    };
+    void initializeWindow();
+    return () => { cancelled = true; };
+  }, [activeProfileId, activeSpacePath, tabs, setTabs, setActiveTabId, setActiveSpacePath, setSnapGroup, clearSplitTabs]);
+
+  const handleTransferredWebviewReady = useCallback((tabId: string) => {
+    const transfer = pendingDetachedTransfer;
+    if (!transfer || transfer.tabId !== tabId || acknowledgingTransferRef.current === transfer.transferId) return;
+    acknowledgingTransferRef.current = transfer.transferId;
+    // A mounted <webview> is not ready until Electron reports dom-ready. Only
+    // then can the source safely release the original tab.
+    void window.lastbrowser?.window?.ackDetachedTab?.(transfer.transferId, tabId).then((acknowledged) => {
+      if (!acknowledged) {
+        acknowledgingTransferRef.current = null;
+        console.error('[Lastbrowser] Main process rejected the completed tab transfer.');
+        return;
+      }
+      setPendingDetachedTransfer((current) => current?.transferId === transfer.transferId ? null : current);
+    }).catch((error) => {
+      acknowledgingTransferRef.current = null;
+      console.error('[Lastbrowser] Could not acknowledge the completed tab transfer:', error);
+    });
+  }, [pendingDetachedTransfer]);
 
   function createProfileEntry(name: string): void {
     setProfiles((current) => {
@@ -1720,7 +1928,12 @@ export function App(): JSX.Element {
     const unsubscribe = window.lastbrowser.sidekick.onChatStreamEvent((payload) => {
       const event = payload as { streamId?: string; event?: string; data?: unknown } | null;
       if (!event || event.streamId !== streamId) return;
-      if (event.event === 'stream_end' || event.event === 'cancel') {
+      if (event.event === 'stream_end') {
+        void window.lastbrowser.sidekick.notifyChatCompleted(desktopSettings?.notifications_enabled === true).catch(() => false);
+        sawStreamEnd = true;
+        return;
+      }
+      if (event.event === 'cancel') {
         sawStreamEnd = true;
         return;
       }
@@ -1806,7 +2019,7 @@ export function App(): JSX.Element {
     try {
       const geminiStore = useGeminiAccountStore.getState();
       const storedModel = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('lastbrowser.selectedModel.v1') : null;
-      const effectiveSelectedModel = setupState.model || storedModel || undefined;
+      const effectiveSelectedModel = loadSpaceModel(activeSpacePath, window.localStorage) || setupState.model || storedModel || undefined;
       const isGeminiRequested = !effectiveSelectedModel || effectiveSelectedModel.toLowerCase().includes('gemini');
 
       let accountModel: string | undefined;
@@ -2104,21 +2317,28 @@ export function App(): JSX.Element {
     }
   }
 
-  async function addSpaceNative(path: string, name: string): Promise<void> {
+  async function addSpaceNative(path: string, name: string): Promise<boolean> {
     try {
       const result = await window.lastbrowser.sidekick.addSpace({ path, name, create: true });
       const nextSpaces = Array.isArray(result.workspaces) ? result.workspaces : spaces;
       setSpaces(nextSpaces);
       setSpacesError('');
       handleSpaceSelect(path);
+      return true;
     } catch (error) {
       setSpacesError(error instanceof Error ? error.message : String(error));
+      return false;
     }
   }
 
   const handleCreateSpaceFromModal = useCallback(async (data: SpaceSetupData) => {
     try {
-      await addSpaceNative(data.path, data.name);
+      const created = await addSpaceNative(data.path, data.name);
+      if (!created) return;
+      if (data.model) {
+        saveSpaceModel(data.path, data.model, window.localStorage);
+        useChatStore.getState().setSelectedModel(data.model);
+      }
       if (data.pinnedApps && data.pinnedApps.length > 0) {
         data.pinnedApps.forEach((app) => {
           usePinnedAppStore.getState().addApp({
@@ -2152,6 +2372,7 @@ export function App(): JSX.Element {
     if (!window.confirm(`Remove "${spaceDisplayName(space)}" from spaces?`)) return;
     try {
       const result = await window.lastbrowser.sidekick.removeSpace({ path: space.path });
+      removeSpaceModel(space.path, window.localStorage);
       const nextSpaces = Array.isArray(result.workspaces) ? result.workspaces : spaces.filter((item) => item.path !== space.path);
       setSpaces(nextSpaces);
       if (activeSpacePath === space.path) handleSpaceSelect(nextSpaces[0]?.path || '');
@@ -2603,10 +2824,18 @@ export function App(): JSX.Element {
                   activeSessionId={activeSessionId}
                   activeTab={activeTab}
                   activeProfile={activeProfile}
+                  webviewStartupReady={windowStartupReady}
+                  onTransferredWebviewReady={handleTransferredWebviewReady}
+                  pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
                   onboardingStatus={onboardingStatus}
                   tabs={tabs}
                   splitTabIds={splitTabIds}
+                  splitSlotIndexes={splitSlotIndexes}
                   splitLayout={splitLayout}
+                  snapRatios={snapRatios}
+                  onSetSnapRatio={handleSetSnapRatio}
+                  onSetSnapGroup={handleSetSnapGroup}
+                  onDetachTab={handleDetachTab}
                   draggedTabId={draggedTabId}
                   onActivateTab={(tabId) => {
                     activeTabIdRef.current = tabId;
@@ -2867,7 +3096,23 @@ export function App(): JSX.Element {
               activeSessionId={activeSessionId}
               activeTab={activeTab}
               activeProfile={activeProfile}
+              webviewStartupReady={windowStartupReady}
+              onTransferredWebviewReady={handleTransferredWebviewReady}
+              pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
               onboardingStatus={onboardingStatus}
+              tabs={tabs}
+              splitTabIds={splitTabIds}
+              splitSlotIndexes={splitSlotIndexes}
+              splitLayout={splitLayout}
+              snapRatios={snapRatios}
+              onSetSnapRatio={handleSetSnapRatio}
+              onSetSnapGroup={handleSetSnapGroup}
+              onDetachTab={handleDetachTab}
+              draggedTabId={draggedTabId}
+              onActivateTab={setActiveTabId}
+              onAddSplitTab={addSplitTab}
+              onRemoveSplitTab={removeSplitTab}
+              onSetSplitLayout={setSplitLayout}
               onReopenSetup={() => {
                 setSetupDismissed(false);
                 try {
@@ -3000,6 +3245,9 @@ function BrowserMain({
   activeSessionId,
   activeTab,
   activeProfile,
+  webviewStartupReady = true,
+  onTransferredWebviewReady = () => undefined,
+  pendingTransferredTabId = null,
   onboardingStatus,
   onReopenSetup,
   busy,
@@ -3049,11 +3297,16 @@ function BrowserMain({
   onSearchEngineChange,
   tabs,
   splitTabIds = [],
+  splitSlotIndexes = [],
   splitLayout = 'columns',
+  snapRatios,
+  onSetSnapRatio,
   draggedTabId,
   onActivateTab,
   onAddSplitTab,
   onRemoveSplitTab,
+  onSetSnapGroup,
+  onDetachTab,
   onSetSplitLayout,
   botName = 'Nova',
   desktopSettings = null
@@ -3063,6 +3316,9 @@ function BrowserMain({
   activeSessionId: string | null;
   activeTab: BrowserTab;
   activeProfile: BrowserProfile;
+  webviewStartupReady?: boolean;
+  onTransferredWebviewReady?: (tabId: string) => void;
+  pendingTransferredTabId?: string | null;
   onboardingStatus: OnboardingStatus | null;
   onReopenSetup: () => void;
   busy: boolean;
@@ -3112,12 +3368,17 @@ function BrowserMain({
   onSearchEngineChange: (id: string) => void;
   tabs?: BrowserTab[];
   splitTabIds?: string[];
-  splitLayout?: 'columns' | 'rows' | 'grid';
+  splitSlotIndexes?: number[];
+  splitLayout?: SplitLayoutMode;
+  snapRatios: SnapLayoutRatios;
+  onSetSnapRatio: (axis: 'x' | 'y', index: number, ratio: number) => void;
   draggedTabId?: string | null;
   onActivateTab?: (tabId: string) => void;
   onAddSplitTab?: (tabId: string) => void;
   onRemoveSplitTab?: (tabId: string) => void;
-  onSetSplitLayout?: (layout: 'columns' | 'rows' | 'grid') => void;
+  onSetSnapGroup?: (layout: SnapLayoutType, tabIds: string[], slotIndexes?: number[]) => void;
+  onDetachTab?: (tab: BrowserTab, screenX?: number, screenY?: number) => void;
+  onSetSplitLayout?: (layout: SplitLayoutMode) => void;
   botName?: string;
   desktopSettings?: DesktopSettingsRecord | null;
 }): JSX.Element {
@@ -3140,96 +3401,128 @@ function BrowserMain({
   // has been laid out — that second mount is the one that sticks.
   const [webviewReady, setWebviewReady] = useState(false);
   const [webviewMountKey, setWebviewMountKey] = useState(0);
-  const splitWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
   const allWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
-  const [splitRatios, setSplitRatios] = useState<number[]>(() => {
-    const n = Math.max(1, splitTabIds.length);
-    return Array(n).fill(100 / n);
-  });
-  const [resizingDividerIndex, setResizingDividerIndex] = useState<number | null>(null);
-  const resizeInfoRef = useRef<{
-    dividerIndex: number;
-    startX: number;
-    containerWidth: number;
-    initialRatios: number[];
-  } | null>(null);
-  const splitContainerRef = useRef<HTMLDivElement | null>(null);
-  const resizeRafRef = useRef<number | null>(null);
+  const [snapFlyoutVisible, setSnapFlyoutVisible] = useState(false);
+  const [snapDropTarget, setSnapDropTarget] = useState<GhostTarget | null>(null);
+  const normalizedSnapLayout: SnapLayoutType = splitLayout in SNAP_LAYOUT_DEFINITIONS
+    ? splitLayout as SnapLayoutType
+    : splitTabIds.length === 4 ? 'quad-grid' : splitTabIds.length === 3 ? 'trio-columns' : 'dual-50-50';
+  const splitGroupActive = splitTabIds.length > 1 && splitTabIds.includes(activeTab.id);
+  function commitSnapDrop(layout: SnapLayoutType, slotIndex: number, draggedId = draggedTabId): void {
+    if (!draggedId || !onSetSnapGroup) return;
+    const capacity = SNAP_LAYOUT_DEFINITIONS[layout].slots.length;
+    if (slotIndex < 0 || slotIndex >= capacity || !tabs?.some((tab) => tab.id === draggedId)) return;
 
-  useEffect(() => {
-    const n = Math.max(1, splitTabIds.length);
-    setSplitRatios(Array(n).fill(100 / n));
-  }, [splitTabIds.length]);
-
-  useEffect(() => {
-    if (resizingDividerIndex === null) return;
-
-    function handleMouseMove(e: MouseEvent) {
-      if (!resizeInfoRef.current) return;
-      const { dividerIndex, startX, containerWidth, initialRatios } = resizeInfoRef.current;
-      const deltaX = e.clientX - startX;
-      const deltaPercent = (deltaX / containerWidth) * 100;
-
-      if (resizeRafRef.current) {
-        cancelAnimationFrame(resizeRafRef.current);
+    const hasGroupContext = splitTabIds.includes(activeTab.id) || splitTabIds.includes(draggedId);
+    let ids = hasGroupContext
+      ? splitTabIds.filter((id) => tabs.some((tab) => tab.id === id)).slice(0, capacity)
+      : [];
+    let slots = ids.map((id) => splitSlotIndexes[splitTabIds.indexOf(id)] ?? splitTabIds.indexOf(id));
+    if (!ids.length) {
+      const partner = activeTab.id !== draggedId ? activeTab.id : tabs.find((tab) => tab.id !== draggedId)?.id;
+      if (partner) {
+        ids = [partner];
+        const firstFree = Array.from({ length: capacity }, (_, index) => index).find((index) => index !== slotIndex) ?? 0;
+        slots = [firstFree];
       }
-
-      resizeRafRef.current = requestAnimationFrame(() => {
-        setSplitRatios(() => {
-          const next = [...initialRatios];
-          const combined = next[dividerIndex] + next[dividerIndex + 1];
-          const minRatio = 10;
-          let newA = initialRatios[dividerIndex] + deltaPercent;
-          newA = Math.max(minRatio, Math.min(combined - minRatio, newA));
-          const newB = combined - newA;
-          next[dividerIndex] = newA;
-          next[dividerIndex + 1] = newB;
-          return next;
-        });
-      });
     }
 
-    function handleMouseUp() {
-      if (resizeRafRef.current) {
-        cancelAnimationFrame(resizeRafRef.current);
-        resizeRafRef.current = null;
+    const currentDraggedIndex = ids.indexOf(draggedId);
+    const targetOccupant = slots.indexOf(slotIndex);
+    if (currentDraggedIndex >= 0) {
+      if (targetOccupant >= 0 && targetOccupant !== currentDraggedIndex) {
+        slots[targetOccupant] = slots[currentDraggedIndex];
       }
-      setResizingDividerIndex(null);
-      resizeInfoRef.current = null;
+      slots[currentDraggedIndex] = slotIndex;
+    } else {
+      if (targetOccupant >= 0) {
+        ids.splice(targetOccupant, 1);
+        slots.splice(targetOccupant, 1);
+      }
+      if (ids.length >= capacity) {
+        ids.pop();
+        slots.pop();
+      }
+      ids.push(draggedId);
+      slots.push(slotIndex);
     }
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      if (resizeRafRef.current) {
-        cancelAnimationFrame(resizeRafRef.current);
-        resizeRafRef.current = null;
-      }
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [resizingDividerIndex]);
-
-  function handleSplitResizeStart(dividerIndex: number, e: React.MouseEvent) {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    if (!splitContainerRef.current) return;
-    const rect = splitContainerRef.current.getBoundingClientRect();
-    resizeInfoRef.current = {
-      dividerIndex,
-      startX: e.clientX,
-      containerWidth: rect.width || 1,
-      initialRatios: [...splitRatios]
-    };
-    setResizingDividerIndex(dividerIndex);
+    const paired = ids.map((id, index) => ({ id, slot: slots[index] ?? index }))
+      .sort((a, b) => a.slot - b.slot);
+    onSetSnapGroup(layout, paired.map(({ id }) => id), paired.map(({ slot }) => slot));
+    setSnapDropTarget(null);
+    setSnapFlyoutVisible(false);
   }
 
+  function handleSnapDragOver(event: React.DragEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    if (!draggedTabId || !browserFrameRef.current) return;
+    const rect = browserFrameRef.current.getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(rect.width, 1)));
+    const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / Math.max(rect.height, 1)));
+    if (y < 0.16) {
+      setSnapFlyoutVisible(true);
+      setSnapDropTarget(null);
+      return;
+    }
+    setSnapFlyoutVisible(false);
+    if (splitGroupActive) {
+      const definition = SNAP_LAYOUT_DEFINITIONS[normalizedSnapLayout];
+      const targetSlot = definition.slots.findIndex((_slot, index) => {
+        const bounds = getSnapSlotBounds(normalizedSnapLayout, index, snapRatios);
+        return x >= bounds.left / 100 && x <= (bounds.left + bounds.width) / 100
+          && y >= bounds.top / 100 && y <= (bounds.top + bounds.height) / 100;
+      });
+      if (targetSlot >= 0) {
+        const slot = definition.slots[targetSlot];
+        setSnapDropTarget({ layout: normalizedSnapLayout, slotIndex: targetSlot, label: slot.name, bounds: getSnapSlotBounds(normalizedSnapLayout, targetSlot, snapRatios) });
+        return;
+      }
+    }
+    setSnapDropTarget(getSnapTargetForPointer(x, y));
+  }
   useLayoutEffect(() => {
-    const activeEl = allWebviewRefs.current[activeTab.id] || splitWebviewRefs.current[activeTab.id];
+    const activeEl = allWebviewRefs.current[activeTab.id];
     if (activeEl) {
       webviewRef.current = activeEl;
     }
   }, [activeTab.id]);
+
+  useEffect(() => {
+    const tabId = pendingTransferredTabId;
+    if (!tabId || !webviewStartupReady || !webviewReady || tabId !== activeTab.id) return undefined;
+    const webview = allWebviewRefs.current[tabId];
+    if (!webview) return undefined;
+
+    let cancelled = false;
+    let checking = false;
+    const confirmAttached = async () => {
+      if (cancelled || checking) return;
+      checking = true;
+      try {
+        // dom-ready can be missed while the destination webview is mounting.
+        // A positive guest id confirms Electron has accepted the tab and owns
+        // its navigation, even while the first document is still loading.
+        const guestId = webview.getWebContentsId();
+        if (!cancelled && Number.isInteger(guestId) && guestId > 0) {
+          onTransferredWebviewReady(tabId);
+        }
+      } catch {
+        // The guest is not attached yet. Retry after it finishes mounting.
+      } finally {
+        checking = false;
+      }
+    };
+    webview.addEventListener('dom-ready', confirmAttached, { once: true });
+    webview.addEventListener('did-stop-loading', confirmAttached, { once: true });
+    const interval = window.setInterval(() => { void confirmAttached(); }, 250);
+    void confirmAttached();
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      webview.removeEventListener('dom-ready', confirmAttached);
+      webview.removeEventListener('did-stop-loading', confirmAttached);
+    };
+  }, [pendingTransferredTabId, webviewStartupReady, webviewReady, activeTab.id, onTransferredWebviewReady]);
 
   useLayoutEffect(() => {
     setWebviewReady(false);
@@ -3437,6 +3730,49 @@ function BrowserMain({
       }
     };
   }, [activeTab.id, webviewMountKey, webviewReady, onWebviewNavigate, onWebviewTitle, onWebviewFavicon, onWebviewLoading, onWebviewMediaPlaying, onSetBrowserError]);
+
+  // Split panes are independently interactive. Keep their tab metadata in sync
+  // even when that pane is not the active tab (the active guest is handled above).
+  useEffect(() => {
+    if (!splitGroupActive || !webviewReady) return;
+    const cleanups: Array<() => void> = [];
+    for (const tabId of splitTabIds) {
+      if (tabId === activeTab.id) continue;
+      const view = allWebviewRefs.current[tabId];
+      if (!view) continue;
+      const onNavigate = (event: Event) => {
+        const url = (event as Event & { url?: string }).url;
+        if (url) onWebviewNavigate(tabId, url);
+      };
+      const onTitle = (event: Event) => {
+        const title = (event as Event & { title?: string }).title;
+        if (title) onWebviewTitle(tabId, title);
+      };
+      const onFavicon = (event: Event) => {
+        const favicons = (event as Event & { favicons?: string[] }).favicons;
+        if (favicons?.[0]) onWebviewFavicon?.(tabId, favicons[0]);
+      };
+      const onStart = () => onWebviewLoading?.(tabId, true);
+      const onStop = () => onWebviewLoading?.(tabId, false);
+      view.addEventListener('did-navigate', onNavigate);
+      view.addEventListener('did-navigate-in-page', onNavigate);
+      view.addEventListener('page-title-updated', onTitle);
+      view.addEventListener('page-favicon-updated', onFavicon);
+      view.addEventListener('did-start-loading', onStart);
+      view.addEventListener('did-stop-loading', onStop);
+      view.addEventListener('did-fail-load', onStop);
+      cleanups.push(() => {
+        view.removeEventListener('did-navigate', onNavigate);
+        view.removeEventListener('did-navigate-in-page', onNavigate);
+        view.removeEventListener('page-title-updated', onTitle);
+        view.removeEventListener('page-favicon-updated', onFavicon);
+        view.removeEventListener('did-start-loading', onStart);
+        view.removeEventListener('did-stop-loading', onStop);
+        view.removeEventListener('did-fail-load', onStop);
+      });
+    }
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }, [splitGroupActive, splitTabIds.join('|'), activeTab.id, webviewReady, webviewMountKey, onWebviewNavigate, onWebviewTitle, onWebviewFavicon, onWebviewLoading]);
 
   // Ctrl/Cmd +, -, 0 — the shortcuts every browser user reaches for.
   useEffect(() => {
@@ -3882,144 +4218,53 @@ function BrowserMain({
             />
           </div>
         ) : null}
-        {draggedTabId && onAddSplitTab && (
+        {draggedTabId && (
           <div
-            className="browser-split-dropzone-overlay"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              onAddSplitTab(draggedTabId);
+            className="snap-drag-surface"
+            onDragOver={handleSnapDragOver}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                setSnapFlyoutVisible(false);
+                setSnapDropTarget(null);
+              }
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              if (snapDropTarget) commitSnapDrop(snapDropTarget.layout, snapDropTarget.slotIndex);
+              else if (!snapFlyoutVisible) {
+                const rect = browserFrameRef.current?.getBoundingClientRect();
+                if (rect) commitSnapDrop('dual-50-50', (event.clientX - rect.left) / rect.width < 0.5 ? 0 : 1);
+              }
             }}
           >
-            <div className="split-dropzone-banner">
-              <Columns2 size={24} />
-              <span>Hier ablegen für Splitscreen-Ansicht</span>
-            </div>
+            <SnapBarFlyout
+              visible={snapFlyoutVisible}
+              onHoverSlot={setSnapDropTarget}
+              onSelectSlot={commitSnapDrop}
+              activeSlot={snapDropTarget ? { layout: snapDropTarget.layout, slotIndex: snapDropTarget.slotIndex } : null}
+            />
+            <SnapGhostOverlay target={snapDropTarget} active={Boolean(snapDropTarget)} />
+            {!snapFlyoutVisible && !snapDropTarget && <div className="snap-drop-hint">Am Rand ablegen oder oben ein Layout wählen</div>}
           </div>
         )}
-        {/* ── Split-view container ─────────────────────────────────────────
-            Always rendered so WebViews are never unmounted when the user
-            switches to a non-split tab (unmounting causes a blank screen
-            because Electron re-creates the renderer process).
-            Hidden via display:none when the active tab is not in the split. */}
-        {webviewReady && splitTabIds && splitTabIds.length > 1 && (
-          <div
-            style={{
-              display: splitTabIds.includes(activeTab.id) ? 'flex' : 'none',
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              zIndex: splitTabIds.includes(activeTab.id) ? 1 : -1
+        {webviewReady && splitGroupActive && (
+          <MultiviewGridContainer
+            layout={normalizedSnapLayout}
+            tabIds={splitTabIds}
+            slotIndexes={splitSlotIndexes}
+            tabs={tabs || []}
+            activeTabId={activeTab.id}
+            ratios={snapRatios}
+            onSetRatio={onSetSnapRatio}
+            onActivateTab={onActivateTab}
+            onRemoveSplitTab={onRemoveSplitTab}
+            onDetachTab={onDetachTab}
+            onMaximizeTab={(tabId) => {
+              onActivateTab?.(tabId);
+              splitTabIds.filter((id) => id !== tabId).forEach((id) => onRemoveSplitTab?.(id));
             }}
-          >
-            {resizingDividerIndex !== null && (
-              <div
-                className="split-resize-overlay"
-                style={{
-                  position: 'fixed',
-                  inset: 0,
-                  zIndex: 99999,
-                  cursor: 'col-resize',
-                  background: 'transparent'
-                }}
-              />
-            )}
-            <div
-              ref={splitContainerRef}
-              className={`browser-split-container is-resizable split-layout-${splitLayout || (splitTabIds.length === 4 ? 'grid' : 'columns')} count-${splitTabIds.length}`}
-              style={{ display: 'flex', flexDirection: 'row', width: '100%', height: '100%' }}
-            >
-              {splitTabIds.map((sTabId, index) => {
-                const tab = tabs?.find((t) => t.id === sTabId);
-                if (!tab) return null;
-                const isPaneActive = tab.id === activeTab.id;
-                return (
-                  <React.Fragment key={tab.id}>
-                    {index > 0 && (
-                      <div
-                        className={`split-resize-divider ${resizingDividerIndex === index - 1 ? 'is-dragging' : ''}`}
-                        onMouseDown={(e) => handleSplitResizeStart(index - 1, e)}
-                      />
-                    )}
-                    <div
-                      className={`browser-split-pane ${isPaneActive ? 'active-pane' : ''}`}
-                      style={{ flex: `${splitRatios[index] ?? (100 / splitTabIds.length)} 1 0` }}
-                      onClick={() => onActivateTab?.(tab.id)}
-                    >
-                      <div className="split-pane-header">
-                        <div className="split-pane-info">
-                          {tab.favicon ? (
-                            <img src={tab.favicon} alt="" className="split-pane-favicon" />
-                          ) : (
-                            <Globe2 size={13} className="split-pane-favicon-fallback" />
-                          )}
-                          <span className="split-pane-title" title={tab.title}>{tab.title}</span>
-                        </div>
-                        <div className="split-pane-controls">
-                          <button
-                            type="button"
-                            className="split-pane-btn"
-                            title="Aktualisieren"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const vw = splitWebviewRefs.current[tab.id];
-                              vw?.reload();
-                            }}
-                          >
-                            <RefreshCw size={11} />
-                          </button>
-                          <button
-                            type="button"
-                            className="split-pane-btn close-split"
-                            title="Splitscreen für diesen Tab beenden"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onRemoveSplitTab?.(tab.id);
-                            }}
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      </div>
-                      <webview
-                        key={`${activeProfile.id}:${safeSpace}:${tab.id}:${webviewMountKey}`}
-                        ref={(el) => {
-                          if (el) {
-                            splitWebviewRefs.current[tab.id] = el;
-                            allWebviewRefs.current[tab.id] = el;
-                            if (tab.id === activeTab.id) {
-                              webviewRef.current = el;
-                            }
-                          } else {
-                            delete splitWebviewRefs.current[tab.id];
-                            delete allWebviewRefs.current[tab.id];
-                          }
-                        }}
-                        src={tab.url}
-                        className="browser-view split-webview"
-                        style={browserWebviewStyle}
-                        partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito)}
-                        allowpopups="true"
-                        plugins="true"
-                        webpreferences="contextIsolation=yes, plugins=yes"
-                        onDidStartLoading={() => onClearBrowserError()}
-                        onDomReady={(event) => {
-                          void hideWebviewScrollbars(event.currentTarget);
-                        }}
-                        onDidFailLoad={(event) => {
-                          if (!event.isMainFrame || event.errorCode === -3) return;
-                          if (event.errorCode < -100) {
-                            onSetBrowserError(`Connection failed (${event.errorDescription})`);
-                          }
-                        }}
-                      />
-                    </div>
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          </div>
+            onDropToSlot={(slotIndex) => { if (draggedTabId) commitSnapDrop(normalizedSnapLayout, slotIndex); }}
+          />
         )}
         {/* ── Normal single-tab viewport ────────────────────────────────────
             Always rendered. Hidden when the active tab is part of a split
@@ -4028,7 +4273,7 @@ function BrowserMain({
         <div
           className="browser-tabs-viewport"
           style={{
-            display: (splitTabIds && splitTabIds.length > 1 && splitTabIds.includes(activeTab.id)) ? 'none' : 'block',
+            display: 'block',
             position: 'absolute',
             inset: 0,
             width: '100%',
@@ -4040,6 +4285,11 @@ function BrowserMain({
         >
           {(tabs && tabs.length > 0 ? tabs : [activeTab]).map((tab) => {
             const isCurrent = tab.id === activeTab.id;
+            const groupIndex = splitTabIds.indexOf(tab.id);
+            const isInActiveSplit = splitGroupActive && groupIndex >= 0;
+            const slotIndex = isInActiveSplit ? (splitSlotIndexes[groupIndex] ?? groupIndex) : -1;
+            const slot = slotIndex >= 0 ? SNAP_LAYOUT_DEFINITIONS[normalizedSnapLayout].slots[slotIndex] : null;
+            const paneBounds = slot ? getSnapSlotBounds(normalizedSnapLayout, slotIndex, snapRatios) : null;
             if (tab.isDiscarded && !isCurrent) return null;
             if (isAiBrowserHomeUrl(tab.url) && !isCurrent) return null;
             return (
@@ -4048,17 +4298,18 @@ function BrowserMain({
                 className={`browser-tab-pane ${isCurrent ? 'active-tab-pane' : 'inactive-tab-pane'}`}
                 style={{
                   position: 'absolute',
-                  inset: 0,
-                  width: '100%',
-                  height: '100%',
+                  top: paneBounds ? `${paneBounds.top}%` : 0,
+                  left: paneBounds ? `${paneBounds.left}%` : 0,
+                  width: paneBounds ? `${paneBounds.width}%` : '100%',
+                  height: paneBounds ? `${paneBounds.height}%` : '100%',
                   minWidth: 0,
                   minHeight: 0,
-                  visibility: isCurrent ? 'visible' : 'hidden',
-                  pointerEvents: isCurrent ? 'auto' : 'none',
-                  zIndex: isCurrent ? 1 : 0
+                  visibility: (isCurrent || isInActiveSplit) ? 'visible' : 'hidden',
+                  pointerEvents: (isCurrent || isInActiveSplit) ? 'auto' : 'none',
+                  zIndex: isInActiveSplit ? 2 : isCurrent ? 1 : 0
                 }}
               >
-                {webviewReady && (
+                {webviewReady && webviewStartupReady && (
                   <webview
                     key={`${activeProfile.id}:${safeSpace}:${tab.id}:${webviewMountKey}`}
                     ref={(el) => {
@@ -4073,7 +4324,7 @@ function BrowserMain({
                     }}
                     src={tab.url}
                     className="browser-view"
-                    style={browserWebviewStyle}
+                    style={isInActiveSplit ? { ...browserWebviewStyle, position: 'absolute', top: 28, height: 'calc(100% - 28px)' } : browserWebviewStyle}
                     partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito)}
                     allowpopups="true"
                     plugins="true"
@@ -4083,6 +4334,7 @@ function BrowserMain({
                     }}
                     onDomReady={(event) => {
                       void hideWebviewScrollbars(event.currentTarget);
+                      if (tab.id === activeTab.id) onTransferredWebviewReady(tab.id);
                     }}
                     onDidFailLoad={(event) => {
                       if (!event.isMainFrame || event.errorCode === -3) return;
@@ -4337,4 +4589,3 @@ function formatBytes(size: number): string {
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
-

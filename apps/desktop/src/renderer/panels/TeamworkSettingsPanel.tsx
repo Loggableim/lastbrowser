@@ -6,7 +6,7 @@
  * - Consensus & Debate strategy presets (cost, balanced, quality)
  * - Maximum subagents capacity slider (1-8) with dynamic auto-scaling
  * - Role overrides (Planner, Worker Pool, Critic, Synthesizer) mapped to detected models
- * - Shared browser grounding & autonomous tool permissions
+ * - Shared browser grounding
  */
 
 import React, { useEffect, useState, useId } from 'react';
@@ -35,7 +35,6 @@ export interface TeamworkConfig {
   auto_scale: boolean;
   max_subagents: number;
   shared_grounding: boolean;
-  allow_autonomous_tools: boolean;
   roles: {
     planner: string;
     worker_pool: string | string[];
@@ -62,7 +61,6 @@ const DEFAULT_CONFIG: TeamworkConfig = {
   auto_scale: true,
   max_subagents: 4,
   shared_grounding: true,
-  allow_autonomous_tools: true,
   roles: {
     planner: 'auto',
     worker_pool: 'auto',
@@ -468,6 +466,33 @@ export function TeamworkSettingsPanel(): JSX.Element {
                       {m.name} ({m.id})
                     </option>
                   ))}
+                </optgroup>
+              ))}
+            </select>
+          </SettingsField>
+
+          <SettingsField
+            label="Worker-Pool"
+            description="Lege fest, welche der aktuell erkannten Modelle parallele Entwürfe erzeugen dürfen. Mehrfachauswahl wird durch Strg/Cmd unterstützt."
+          >
+            <select
+              aria-label="Worker-Pool Modelle"
+              multiple
+              value={Array.isArray(config.roles.worker_pool) ? config.roles.worker_pool : config.roles.worker_pool === 'auto' ? ['auto'] : [config.roles.worker_pool]}
+              onChange={(e) => {
+                const selected = Array.from(e.currentTarget.selectedOptions, (option) => option.value);
+                const normalized = selected.includes('auto') ? ['auto'] : selected;
+                setConfig((prev) => ({
+                  ...prev,
+                  roles: { ...prev.roles, worker_pool: normalized.length ? normalized : ['auto'] }
+                }));
+              }}
+              style={{ width: '100%', minHeight: '7rem', padding: '0.45rem', borderRadius: '6px', background: 'var(--input-bg, rgba(255,255,255,0.05))', color: 'inherit', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))' }}
+            >
+              <option value="auto">Auto (live erkannter Pool)</option>
+              {groupedModels.map(([providerName, modelList]) => (
+                <optgroup key={providerName} label={providerName}>
+                  {modelList.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.id})</option>)}
                 </optgroup>
               ))}
             </select>

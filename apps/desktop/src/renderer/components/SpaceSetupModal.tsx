@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   Sparkles,
@@ -112,30 +112,12 @@ const COLOR_SWATCHES = [
   '#06b6d4'
 ];
 
-const MODEL_OPTIONS = [
+const MODE_OPTIONS = [
   {
     id: 'smart-track',
     name: 'Smart Track Auto-Router (Empfohlen)',
     desc: 'Adaptive Single-Track-Pipeline mit dynamischem Modus (Low, Medium, High).',
     badge: 'Adaptiv'
-  },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Google Gemini 2.5 Flash',
-    desc: 'Extrem schnell, 1M Kontextfenster, multimodal & sparsam.',
-    badge: 'Schnell'
-  },
-  {
-    id: 'gemini-2.5-pro',
-    name: 'Google Gemini 2.5 Pro',
-    desc: 'Maximale logische Tiefe für Code-Reviews und tiefe Recherche.',
-    badge: 'Pro'
-  },
-  {
-    id: 'claude-3-7-sonnet',
-    name: 'Claude 3.7 Sonnet',
-    desc: 'Hervorragendes Coding und nuancierte Text-Generierung.',
-    badge: 'Hybrid'
   },
   {
     id: 'teamwork',
@@ -150,6 +132,20 @@ const MODEL_OPTIONS = [
     badge: 'Lokal'
   }
 ];
+
+const BUILT_IN_MODEL_IDS = new Set(MODE_OPTIONS.map((option) => option.id));
+
+export function isDuplicateSpaceName(name: string, existingNames: string[]): boolean {
+  const normalizedName = name.trim().toLowerCase();
+  return Boolean(normalizedName) && existingNames.some((existing) => existing.trim().toLowerCase() === normalizedName);
+}
+
+export function resolvePresetModel(defaultModel: string, currentModel: string, availableModelIds: string[]): string {
+  const isAvailable = (modelId: string) => BUILT_IN_MODEL_IDS.has(modelId) || availableModelIds.includes(modelId);
+  if (isAvailable(defaultModel)) return defaultModel;
+  if (isAvailable(currentModel)) return currentModel;
+  return 'smart-track';
+}
 
 export function SpaceSetupModal({
   isOpen,
@@ -167,12 +163,33 @@ export function SpaceSetupModal({
   const [selectedApps, setSelectedApps] = useState<{ name: string; url: string; color: string }[]>(
     PRESETS[0].pinnedApps
   );
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; provider_label?: string; provider?: string }>>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    void window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/status' })
+      .then((data: any) => {
+        if (!active || !Array.isArray(data?.models)) return;
+        const models = data.models.filter((item: any) => typeof item?.id === 'string' && item.id.trim());
+        setAvailableModels(models);
+        setModel((current) => current === 'smart-track' || models.some((item: any) => item.id === current)
+          ? current
+          : 'smart-track');
+      })
+      .catch(() => { if (active) setAvailableModels([]); });
+    return () => { active = false; };
+  }, [isOpen]);
 
   const handleSelectPreset = (preset: SpacePreset) => {
     setSelectedPreset(preset);
     setName(preset.name);
     setColor(preset.color);
-    setModel(preset.defaultModel);
+    setModel((current) => resolvePresetModel(
+      preset.defaultModel,
+      current,
+      availableModels.map((availableModel) => availableModel.id)
+    ));
     setStartUrl(preset.startUrl);
     setSelectedApps([...preset.pinnedApps]);
   };
@@ -198,7 +215,8 @@ export function SpaceSetupModal({
     return `spaces/${slug}`;
   }, [customPath, slug]);
 
-  const isNameValid = name.trim().length > 0;
+  const duplicateName = isDuplicateSpaceName(name, existingSpaceNames);
+  const isNameValid = name.trim().length > 0 && !duplicateName;
 
   const handleFinish = () => {
     if (!isNameValid) return;
@@ -293,8 +311,10 @@ export function SpaceSetupModal({
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="z. B. Coding & Dev"
+                    aria-invalid={duplicateName}
                     autoFocus
                   />
+                  {duplicateName && <span className="space-hint" role="alert">Ein Space mit diesem Namen existiert bereits.</span>}
                 </div>
 
                 <div className="space-field-group" style={{ flex: 1 }}>
@@ -337,7 +357,12 @@ export function SpaceSetupModal({
               </p>
 
               <div className="space-models-list">
-                {MODEL_OPTIONS.map((m) => (
+                {[...MODE_OPTIONS, ...availableModels.map((m) => ({
+                  id: m.id,
+                  name: m.name || m.id,
+                  desc: `Verfügbar über ${m.provider_label || m.provider || 'Provider'}.`,
+                  badge: m.provider_label || m.provider || 'Live'
+                }))].map((m) => (
                   <div
                     key={m.id}
                     className={`space-model-item ${model === m.id ? 'active' : ''}`}

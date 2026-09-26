@@ -30,7 +30,6 @@ DEFAULT_TEAMWORK_CONFIG: Dict[str, Any] = {
     "auto_scale": True,
     "max_subagents": 4,      # 1 to 8
     "shared_grounding": True,
-    "allow_autonomous_tools": True,
     "roles": {
         "planner": "auto",
         "worker_pool": "auto",
@@ -81,6 +80,9 @@ def load_teamwork_config(reload: bool = False) -> Dict[str, Any]:
             except Exception:
                 logger.warning("Failed to parse %s, falling back to defaults", cfg_path, exc_info=True)
         # Validation
+        # This option predates tool-capable workers. The current debate workers
+        # cannot execute tools, so do not expose or preserve a misleading flag.
+        config.pop("allow_autonomous_tools", None)
         max_sub = config.get("max_subagents", 4)
         try:
             config["max_subagents"] = max(1, min(8, int(max_sub)))
@@ -110,8 +112,7 @@ def save_teamwork_config(data: Dict[str, Any]) -> Dict[str, Any]:
                 pass
         if "shared_grounding" in data:
             current["shared_grounding"] = bool(data["shared_grounding"])
-        if "allow_autonomous_tools" in data:
-            current["allow_autonomous_tools"] = bool(data["allow_autonomous_tools"])
+        current.pop("allow_autonomous_tools", None)
         if isinstance(data.get("roles"), dict):
             current["roles"].update(data["roles"])
         if isinstance(data.get("hot_swap"), dict):
@@ -177,16 +178,6 @@ def get_teamwork_model_pool() -> List[Dict[str, Any]]:
                 "context_window": m.get("context_window", 128000),
             })
 
-    # Ensure baseline Gemini models exist if no external provider connected
-    if not models:
-        models.append({
-            "id": "gemini-2.5-flash",
-            "name": "Gemini 2.5 Flash",
-            "provider": "google-gemini-cli",
-            "provider_label": "Google Gemini",
-            "tier": "balanced",
-            "context_window": 1048576,
-        })
     return models
 
 
@@ -212,27 +203,36 @@ def evaluate_task_complexity(prompt: str) -> int:
     return min(5, score)
 
 
+def _scaled_worker_target(complexity: int, max_subagents: int) -> int:
+    """Scale from two workers for simple tasks to the configured cap at max complexity."""
+    cap = max(1, min(8, int(max_subagents)))
+    if cap == 1:
+        return 1
+    level = max(1, min(5, int(complexity)))
+    # Linear interpolation keeps the low end economical while allowing the
+    # full configured capacity to be used for the hardest tasks.
+    return min(cap, 2 + ((cap - 2) * (level - 1) + 3) // 4)
+
+
 def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Resolve the specific models and roles for a teamwork session."""
     cfg = config or load_teamwork_config()
     pool = get_teamwork_model_pool()
-    max_sub = cfg.get("max_subagents", 4)
+    try:
+        max_sub = max(1, min(8, int(cfg.get("max_subagents", 4))))
+    except (TypeError, ValueError):
+        max_sub = 4
     auto_scale = cfg.get("auto_scale", True)
     strategy = cfg.get("strategy", "balanced")
     roles_cfg = cfg.get("roles", {})
 
     complexity = evaluate_task_complexity(prompt)
     if auto_scale:
-        if complexity <= 2:
-            target_workers = 2
-        elif complexity <= 4:
-            target_workers = min(3, max_sub)
-        else:
-            target_workers = min(4, max_sub)
+        target_workers = _scaled_worker_target(complexity, max_sub)
     else:
         target_workers = max_sub
 
-    target_workers = max(1, min(target_workers, len(pool) if pool else 1))
+    target_workers = max(1, min(target_workers, len(pool))) if pool else 0
 
     # Split pool into tiers
     fast_models = [m for m in pool if m["tier"] == "fast"]
@@ -283,12 +283,18 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
     if not selected_workers and pool:
         selected_workers = [pool[0]]
 
+    # The planner is a real, single planning pass before the parallel workers.
+    manual_planner = roles_cfg.get("planner")
+    planner = next((m for m in pool if m["id"] == manual_planner), None) if manual_planner and manual_planner != "auto" else None
+    if planner is None:
+        planner = next((m for m in balanced_models), None) or next((m for m in quality_models), None) or (pool[0] if pool else None)
+
     # Critic & Synthesizer models
     manual_critic = roles_cfg.get("critic")
     critic_model = manual_critic if manual_critic and manual_critic != "auto" else None
     if not critic_model:
         # Pick highest reasoning model available
-        critic_cand = next((m["id"] for m in quality_models), None) or next((m["id"] for m in balanced_models), None) or (pool[0]["id"] if pool else "gemini-2.5-flash")
+        critic_cand = next((m["id"] for m in quality_models), None) or next((m["id"] for m in balanced_models), None) or (pool[0]["id"] if pool else "")
         critic_model = critic_cand
 
     manual_synth = roles_cfg.get("synthesizer")
@@ -318,6 +324,7 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
     return {
         "strategy": strategy,
         "complexity": complexity,
+        "planner": planner,
         "workers": workers_with_perspectives,
         "critic": critic_model,
         "synthesizer": synth_model,
@@ -449,6 +456,41 @@ def run_teamwork_turn(
     critic_model = plan["critic"]
     synth_model = plan["synthesizer"]
     pool = plan["pool"]
+    if not workers or not critic_model or not synth_model:
+        raise RuntimeError("Teamwork hat keine aktuell verfügbaren Modelle. Verbinde zuerst mindestens einen Modellanbieter.")
+
+    planner_context = ""
+    planner_model = plan.get("planner")
+    if planner_model:
+        put_event("teamwork_stage", {
+            "stage": "planning",
+            "model": planner_model["id"],
+            "message": "Planer strukturiert die Teilfragen...",
+        })
+        try:
+            planner_resp = call_llm(
+                provider=planner_model["provider"],
+                model=planner_model["id"],
+                messages=[
+                    {"role": "system", "content": "Erstelle einen kurzen Arbeitsplan mit Teilfragen, Randbedingungen und Prüfpunkten. Keine Lösung ausformulieren; maximal 120 Wörter."},
+                    {"role": "user", "content": prompt},
+                ],
+                timeout=30.0,
+            )
+            planner_context = extract_content_or_reasoning(planner_resp)
+            if not planner_context:
+                planner_context = str(planner_resp.choices[0].message.content or "").strip()
+            if planner_context:
+                put_event("teamwork_plan", {"model": planner_model["id"], "content": planner_context})
+        except Exception as e:
+            logger.warning("Teamwork planner failed; continuing without plan: %s", e)
+
+    team_context = grounding_text
+    if planner_context:
+        team_context = f"{team_context}\n\n[ARBEITSPLAN DES PLANERS]\n{planner_context}".strip()
+
+    if cancel_event and cancel_event.is_set():
+        raise InterruptedError("Cancelled during teamwork planning")
 
     put_event("teamwork_stage", {
         "stage": "debate",
@@ -461,7 +503,7 @@ def run_teamwork_turn(
     drafts: List[Dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=len(workers)) as executor:
         futures = {
-            executor.submit(_invoke_worker, w, prompt, grounding_text, pool): w
+            executor.submit(_invoke_worker, w, prompt, team_context, pool): w
             for w in workers
         }
         for future in as_completed(futures):
@@ -514,8 +556,8 @@ def run_teamwork_turn(
         f"Du bist der leitende Reviewer und Critic im Multi-Modell-Teamwork.\n\n"
         f"URSPRÜNGLICHE ANFRAGE:\n{prompt}\n\n"
     )
-    if grounding_text:
-        critic_prompt += f"GEMEINSAMER KONTEXT:\n{grounding_text}\n\n"
+    if team_context:
+        critic_prompt += f"GEMEINSAMER KONTEXT UND ARBEITSPLAN:\n{team_context}\n\n"
 
     critic_prompt += "HIER SIND DIE PARALLELEN ENTWÜRFE DER MODELLE:\n"
     for idx, d in enumerate(successful_drafts, 1):
@@ -564,8 +606,8 @@ def run_teamwork_turn(
         f"Du bist der leitende Synthesizer im Teamwork-Modus von Lastbrowser.\n\n"
         f"URSPRÜNGLICHE NUTZERANFRAGE:\n{prompt}\n\n"
     )
-    if grounding_text:
-        synthesis_prompt += f"GEMEINSAMER KONTEXT:\n{grounding_text}\n\n"
+    if team_context:
+        synthesis_prompt += f"GEMEINSAMER KONTEXT UND ARBEITSPLAN:\n{team_context}\n\n"
 
     synthesis_prompt += "VORGELEGTE ENTWÜRFE DER MODELLE:\n"
     for idx, d in enumerate(successful_drafts, 1):
@@ -601,7 +643,8 @@ def run_teamwork_turn(
 
     metadata_payload = {
         "strategy": cfg.get("strategy", "balanced"),
-        "models_used": [d["model"] for d in drafts] + [critic_model, synth_model],
+        "planner": planner_model["id"] if planner_model else None,
+        "models_used": ([planner_model["id"]] if planner_model else []) + [d["model"] for d in drafts] + [critic_model, synth_model],
         "drafts": [
             {
                 "model": d["model"],

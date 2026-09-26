@@ -11,8 +11,8 @@ export type ServiceLayout = {
   sidekickDir: string;
   webuiDir: string;
   webuiServer: string;
-  /** 'monorepo' = uvicorn cli.web_server:app, 'legacy' = stdlib web/server.py */
-  webuiMode: 'monorepo' | 'legacy';
+  /** Sidekick is served by the in-tree FastAPI application. */
+  webuiMode: 'monorepo';
   pythonExe: string;
   bridgeToken: string;
 };
@@ -78,15 +78,9 @@ export function readSidekickVersion(sidekickDir: string): string | null {
  * legacy:   the older split layout — `python <webui>/server.py`.
  */
 export function buildSidecarLaunch(layout: ServiceLayout, webuiPort: number): SidecarLaunch {
-  if (layout.webuiMode === 'monorepo') {
-    return {
-      args: ['-m', 'uvicorn', 'cli.web_server:app', '--host', '127.0.0.1', '--port', String(webuiPort)],
-      cwd: layout.sidekickDir
-    };
-  }
   return {
-    args: [layout.webuiServer],
-    cwd: layout.webuiDir
+    args: ['-m', 'uvicorn', 'cli.web_server:app', '--host', '127.0.0.1', '--port', String(webuiPort)],
+    cwd: layout.sidekickDir
   };
 }
 
@@ -99,7 +93,7 @@ export function resolveServiceLayout(
   const runtimeDir = path.join(runtimeRoot, 'runtime');
   const servicesDir = path.join(normalizedResources, 'services');
   const bundledSidekickDir = path.join(servicesDir, 'sidekick');
-  const webuiDir = path.join(servicesDir, 'webui');
+  const webuiDir = bundledSidekickDir;
   const resourcesPythonExe = path.join(normalizedResources, 'runtime', 'python', 'python.exe');
   const workspacePythonExe = path.join(normalizedResources, 'apps', 'desktop', 'runtime', 'python', 'python.exe');
   const bundledPythonExe = existsSync(resourcesPythonExe)
@@ -108,26 +102,22 @@ export function resolveServiceLayout(
       ? workspacePythonExe
       : resourcesPythonExe;
 
-  // Prefer a runtime-updated Sidekick copy over the bundled one. The runtime
-  // copy is the live monorepo (FastAPI entrypoint); the bundled copy may be
-  // either the monorepo or the older split layout.
+  // Prefer a runtime-updated Sidekick copy over the bundled in-tree monorepo.
   const updatedDir = runtimeSidekickDir(runtimeRoot);
   const updatedEntry = path.join(updatedDir, 'cli', 'web_server.py');
   const bundledEntry = path.join(bundledSidekickDir, 'cli', 'web_server.py');
   const useUpdated = existsSync(updatedEntry);
   const sidekickDir = useUpdated ? updatedDir : bundledSidekickDir;
-  const monorepoEntry = useUpdated ? updatedEntry : bundledEntry;
-  const webuiMode: 'monorepo' | 'legacy' = existsSync(monorepoEntry) ? 'monorepo' : 'legacy';
+  const sidekickEntry = useUpdated ? updatedEntry : bundledEntry;
 
   return {
     resourcesDir: normalizedResources,
     runtimeDir,
     sidekickDir,
     webuiDir,
-    // In monorepo mode the server is launched as `uvicorn cli.web_server:app`
-    // from sidekickDir; webuiServer then points at that entry file.
-    webuiServer: webuiMode === 'monorepo' ? monorepoEntry : path.join(webuiDir, 'server.py'),
-    webuiMode,
+    // The in-tree monorepo is launched as `uvicorn cli.web_server:app`.
+    webuiServer: sidekickEntry,
+    webuiMode: 'monorepo',
     pythonExe: env.LASTBROWSER_WEBUI_PYTHON || env.HERMES_WEBUI_PYTHON || bundledPythonExe,
     bridgeToken: randomBytes(24).toString('hex')
   };
@@ -604,6 +594,16 @@ export class SidecarServices {
     this.isStopping = false;
     this.status = { ...this.status, sidekick: 'starting' };
 
+    if (!existsSync(this.layout.webuiServer)) {
+      this.status = {
+        ...this.status,
+        sidekick: 'missing',
+        webuiHealth: 'unreachable',
+        lastError: `Bundled Sidekick entrypoint is missing: ${this.layout.webuiServer}`
+      };
+      return this.getStatus();
+    }
+
     let webuiPort: number;
     try {
       webuiPort = await this.portResolver(this.preferredWebuiPort);
@@ -764,7 +764,7 @@ export function findDevelopmentResourcesDir(appPath: string, cwd = process.cwd()
   ];
 
   for (const candidate of candidates) {
-    if (existsSync(path.join(candidate, 'services', 'webui', 'server.py'))) {
+    if (existsSync(path.join(candidate, 'services', 'sidekick', 'cli', 'web_server.py'))) {
       return candidate;
     }
   }

@@ -31,8 +31,8 @@ describe('sidecar service layout', () => {
     const layout = resolveServiceLayout('D:/Lastbrowser/resources', undefined, {});
 
     expect(layout.sidekickDir).toBe('D:\\Lastbrowser\\resources\\services\\sidekick');
-    expect(layout.webuiDir).toBe('D:\\Lastbrowser\\resources\\services\\webui');
-    expect(layout.webuiServer).toBe('D:\\Lastbrowser\\resources\\services\\webui\\server.py');
+    expect(layout.webuiDir).toBe('D:\\Lastbrowser\\resources\\services\\sidekick');
+    expect(layout.webuiServer).toBe('D:\\Lastbrowser\\resources\\services\\sidekick\\cli\\web_server.py');
     expect(layout.pythonExe).toBe('D:\\Lastbrowser\\resources\\runtime\\python\\python.exe');
   });
 
@@ -60,7 +60,7 @@ describe('sidecar service layout', () => {
 
   it('resolves the repo resource root from the built desktop main path', () => {
     const resourcesRoot = mkdtempResourceRoot();
-    const serverPath = path.join(resourcesRoot, 'services', 'webui', 'server.py');
+    const serverPath = path.join(resourcesRoot, 'services', 'sidekick', 'cli', 'web_server.py');
     const builtMainPath = path.join(resourcesRoot, 'apps', 'desktop', 'dist', 'main');
     mkdirSync(path.dirname(serverPath), { recursive: true });
     mkdirSync(builtMainPath, { recursive: true });
@@ -73,8 +73,22 @@ describe('sidecar service layout', () => {
     }
   });
 
+  it('refuses to launch a missing in-tree Sidekick entrypoint', async () => {
+    const layout = resolveServiceLayout('D:/missing/Lastbrowser/resources', undefined, {});
+    const service = new SidecarServices(layout, 8787, (() => {
+      throw new Error('must not spawn when source is absent');
+    }) as never);
+    const status = await service.start();
+    expect(status.sidekick).toBe('missing');
+    expect(status.lastError).toContain('services');
+  });
+
   it('uses the next available WebUI port when the preferred port is already occupied', async () => {
-    const layout = resolveServiceLayout('D:/Lastbrowser/resources');
+    const resourcesRoot = mkdtempResourceRoot();
+    const sidekickEntry = path.join(resourcesRoot, 'services', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(sidekickEntry), { recursive: true });
+    writeFileSync(sidekickEntry, '');
+    const layout = resolveServiceLayout(resourcesRoot);
     const spawned: Array<{ command: string; args: string[]; env?: NodeJS.ProcessEnv }> = [];
     const fakeProcess = new EventEmitter() as EventEmitter & { kill: () => void };
     fakeProcess.kill = () => undefined;
@@ -90,11 +104,16 @@ describe('sidecar service layout', () => {
       async () => 8788
     );
 
-    await service.start();
+    try {
+      await service.start();
 
-    expect(service.getStatus().webuiUrl).toBe('http://127.0.0.1:8788');
-    expect(spawned[0].env?.LASTBROWSER_WEBUI_PORT).toBe('8788');
-    expect(spawned[0].env?.HERMES_WEBUI_PORT).toBe('8788');
+      expect(service.getStatus().webuiUrl).toBe('http://127.0.0.1:8788');
+      expect(spawned[0].env?.LASTBROWSER_WEBUI_PORT).toBe('8788');
+      expect(spawned[0].env?.HERMES_WEBUI_PORT).toBe('8788');
+    } finally {
+      service.stop();
+      rmSync(resourcesRoot, { recursive: true, force: true });
+    }
   });
 
   it('can probe past an occupied local port', async () => {

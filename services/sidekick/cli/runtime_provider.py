@@ -604,14 +604,24 @@ def _resolve_openrouter_runtime(
             cfg_base_url, cfg_provider
         ):
             use_config_base_url = True
+        elif requested_norm == "ollama" and cfg_provider == "ollama" and _config_base_url_trustworthy_for_bare_custom(
+            cfg_base_url, cfg_provider
+        ):
+            use_config_base_url = True
 
     base_url = (
         (explicit_base_url or "").strip()
         or env_custom_base_url
         or (cfg_base_url.strip() if use_config_base_url else "")
         or env_openrouter_base_url
-        or OPENROUTER_BASE_URL
+        or ("http://localhost:11434/v1" if requested_norm == "ollama" else OPENROUTER_BASE_URL)
     ).rstrip("/")
+
+    # Ollama's OpenAI-compatible endpoint lives below /v1. Settings have
+    # historically accepted both the server root and the explicit /v1 URL;
+    # normalize only the Ollama provider so custom proxy paths stay intact.
+    if requested_norm == "ollama" and base_url and not base_url.lower().endswith("/v1"):
+        base_url += "/v1"
 
     # Choose API key based on whether the resolved base_url targets OpenRouter.
     # When hitting OpenRouter, prefer OPENROUTER_API_KEY (issue #289).
@@ -619,7 +629,19 @@ def _resolve_openrouter_runtime(
     # OPENAI_API_KEY so the OpenRouter key doesn't leak to an unrelated
     # provider (issues #420, #560).
     _is_openrouter_url = base_url_host_matches(base_url, "openrouter.ai")
-    if _is_openrouter_url:
+    if requested_norm == "ollama":
+        # Local Ollama is an OpenAI-compatible custom endpoint, not OpenRouter.
+        # Never forward cloud/generic provider keys to it. The separate
+        # Ollama Cloud provider owns OLLAMA_API_KEY.
+        local_ollama_key = ""
+        if cfg_provider == "ollama":
+            providers_cfg = load_config().get("providers", {})
+            if isinstance(providers_cfg, dict):
+                provider_cfg = providers_cfg.get("ollama", {})
+                if isinstance(provider_cfg, dict):
+                    local_ollama_key = str(provider_cfg.get("api_key") or "").strip()
+        api_key_candidates = [explicit_api_key, local_ollama_key]
+    elif _is_openrouter_url:
         api_key_candidates = [
             explicit_api_key,
             os.getenv("OPENROUTER_API_KEY"),
@@ -652,7 +674,7 @@ def _resolve_openrouter_runtime(
     # name instead of silently relabeling to "openrouter" (#2562).
     # Also provide a placeholder API key for local servers that don't require
     # authentication — the OpenAI SDK requires a non-empty api_key string.
-    effective_provider = "custom" if requested_norm == "custom" else "openrouter"
+    effective_provider = "custom" if requested_norm in {"custom", "ollama"} else "openrouter"
 
     # For custom endpoints, check if a credential pool exists
     if effective_provider == "custom" and base_url:

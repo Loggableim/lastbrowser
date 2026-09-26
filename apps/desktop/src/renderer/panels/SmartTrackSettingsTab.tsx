@@ -63,11 +63,10 @@ export const SmartTrackSettingsTab: React.FC = () => {
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://127.0.0.1:4141/api/smart-track/status');
-      if (res.ok) {
-        const data = await res.json();
-        setConfig(data.config);
-        setWall(data.wall);
+      const data = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/smart-track/status' });
+      if (data && typeof data === 'object') {
+        setConfig((data as any).config);
+        setWall((data as any).wall);
       }
     } catch (e) {
       console.error('Failed to load Smart Track status:', e);
@@ -79,11 +78,10 @@ export const SmartTrackSettingsTab: React.FC = () => {
   const handleScan = async () => {
     try {
       setScanning(true);
-      const res = await fetch('http://127.0.0.1:4141/api/smart-track/scan', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        setWall(data.wall);
-        setConfig(data.config);
+      const data = await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/smart-track/scan' });
+      if (data && typeof data === 'object') {
+        setWall((data as any).wall);
+        setConfig((data as any).config);
         triggerSuccess();
       }
     } catch (e) {
@@ -99,14 +97,12 @@ export const SmartTrackSettingsTab: React.FC = () => {
     setConfig(newConfig);
     try {
       setSaving(true);
-      const res = await fetch('http://127.0.0.1:4141/api/smart-track/config', {
+      await window.lastbrowser.sidekick.requestWebui({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newConfig),
+        path: '/api/smart-track/config',
+        body: newConfig,
       });
-      if (res.ok) {
-        triggerSuccess();
-      }
+      triggerSuccess();
     } catch (e) {
       console.error('Failed to save smart track config:', e);
     } finally {

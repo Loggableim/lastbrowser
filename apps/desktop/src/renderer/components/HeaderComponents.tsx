@@ -49,6 +49,7 @@ import type { QuickActionChip } from '../quick-actions.js';
 import type { BrowserProfile } from '../profiles.js';
 import { type SpaceSummary, spaceDisplayName } from '../shell-state.js';
 import type { BrowserTab } from '../tabs.js';
+import { prepareSnapTabDrag } from '../types/snap-layouts.js';
 
 export type UpdateStatus = Awaited<ReturnType<typeof window.lastbrowser.updates.status>>;
 
@@ -639,7 +640,8 @@ export function WindowTitlebar({
                     onActivateTab(tab.id);
                   }
                 }}
-                onDragStart={() => {
+                onDragStart={(event) => {
+                  prepareSnapTabDrag(event.dataTransfer, tab.id);
                   setDragOverInfo(null);
                   onDragStartTab?.(tab.id);
                 }}
@@ -1015,4 +1017,3 @@ export function ModernTitlebar({
     </>
   );
 }
-

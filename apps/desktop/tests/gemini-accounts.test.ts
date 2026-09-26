@@ -133,6 +133,23 @@ describe('useGeminiAccountStore', () => {
     expect(accounts[0].totalSessionsUsed).toBe(0);
   });
 
+  it('replaces metadata for the active OAuth slot while preserving other saved local metadata', () => {
+    const store = useGeminiAccountStore.getState();
+    store.addAccount({ label: 'Old active', email: 'old@gmail.com', flowId: 'old-flow', preferredModel: 'gemini-2.5-flash' });
+    store.addAccount({ label: 'Saved metadata', email: 'saved@gmail.com', flowId: 'saved-flow', preferredModel: 'gemini-2.5-flash' });
+    store.setActiveAccount(useGeminiAccountStore.getState().accounts[0].id);
+
+    useGeminiAccountStore.getState().replaceActiveAccount({
+      label: 'Current OAuth', email: 'current@gmail.com', flowId: 'new-flow', preferredModel: 'gemini-2.5-flash'
+    });
+
+    const accounts = useGeminiAccountStore.getState().accounts;
+    expect(accounts).toHaveLength(2);
+    expect(accounts[0].email).toBe('current@gmail.com');
+    expect(accounts[1].email).toBe('saved@gmail.com');
+    expect(useGeminiAccountStore.getState().currentIndex).toBe(0);
+  });
+
   it('getNextAccount returns null when no accounts are configured', () => {
     const store = useGeminiAccountStore.getState();
     expect(store.getNextAccount()).toBeNull();

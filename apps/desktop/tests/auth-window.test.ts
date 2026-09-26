@@ -55,32 +55,9 @@ describe('auth-window logic', () => {
     expect(isLocalhostCallback('invalid-url')).toBe(false);
   });
 
-  it('strips Electron and app tokens from User-Agent to avoid Google disallowed_useragent', () => {
-    const rawUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Lastbrowser/0.1.26 Chrome/132.0.0.0 Electron/37.10.3 Safari/537.36';
-    const cleaned = cleanOAuthUserAgent(rawUA);
-
-    expect(cleaned).not.toContain('Electron');
-    expect(cleaned).not.toContain('Lastbrowser');
-    expect(cleaned).toContain('Chrome/132.0.0.0');
-    expect(cleaned).toContain('Safari/537.36');
-    expect(cleaned).not.toContain('  ');
-  });
-
-  it('sanitizes Sec-CH-UA client hints by removing Electron and adding Google Chrome brand', () => {
-    const rawSecChUa = '"Chromium";v="134", "Not:A-Brand";v="24", "Electron";v="37"';
-    const sanitized = sanitizeSecChUa(rawSecChUa);
-
-    expect(sanitized).not.toContain('Electron');
-    expect(sanitized).toContain('"Chromium";v="134"');
-    expect(sanitized).toContain('"Google Chrome";v="134"');
-    expect(sanitized).toContain('"Not:A-Brand";v="24"');
-  });
-
-  it('instantiates auth connect window with clean User-Agent and loads URL', () => {
+  it('instantiates a sandboxed generic connect window without auth fingerprint spoofing', () => {
     const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
     const mockWebContents = {
-      getUserAgent: vi.fn().mockReturnValue('Mozilla/5.0 Chrome/132.0.0.0 Electron/37.10.3'),
-      setUserAgent: vi.fn(),
       on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
         listeners[event] = listeners[event] || [];
         listeners[event].push(cb);
@@ -105,10 +82,14 @@ describe('auth-window logic', () => {
       width: 640,
       height: 780,
       title: 'Lastbrowser Connect',
-      autoHideMenuBar: true
+      autoHideMenuBar: true,
+      webPreferences: expect.objectContaining({
+        sandbox: true
+      })
     }));
-    expect(mockWebContents.setUserAgent).toHaveBeenCalledWith('Mozilla/5.0 Chrome/132.0.0.0');
+    expect(mockWebContents).not.toHaveProperty('setUserAgent');
     expect(mockWindow.loadURL).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth?scope=email');
     expect(win).toBe(mockWindow);
   });
+
 });

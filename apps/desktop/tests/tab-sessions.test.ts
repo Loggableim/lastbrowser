@@ -7,6 +7,9 @@ import {
   loadSessionSnapshot,
   removeProfileTabs,
   saveProfileTabs,
+  loadSpaceSnapGroup,
+  saveSpaceSnapGroup,
+  snapGroupsStorageKey,
   saveSessionSnapshot,
   sessionSnapshotStorageKey,
   tabSessionsStorageKey
@@ -182,5 +185,81 @@ describe('per-profile tab persistence', () => {
     expect(snapshot?.state.tabs).toHaveLength(1);
     expect(snapshot?.state.tabs[0].id).toBe('normal-1');
     expect(snapshot?.state.activeTabId).toBe('normal-1');
+  });
+});
+
+describe('per-Space Snap group persistence', () => {
+  it('round-trips occupied tabs and slot indexes independently per profile and Space', () => {
+    const storage = memoryStorage();
+    const group = { layout: 'quad-grid' as const, tabIds: ['a', 'c'], slotIndexes: [0, 3] };
+    saveSpaceSnapGroup('default', 'space-one', group, ['a', 'b', 'c'], storage);
+    saveSpaceSnapGroup('work', 'space-one', { ...group, layout: 'dual-50-50', slotIndexes: [0, 1] }, ['a', 'c'], storage);
+
+    expect(loadSpaceSnapGroup('default', 'space-one', ['a', 'b', 'c'], storage)).toEqual({
+      ...group, ratios: { x: [50], y: [50] }
+    });
+    expect(loadSpaceSnapGroup('default', 'space-two', ['a', 'c'], storage)).toBeNull();
+    expect(loadSpaceSnapGroup('work', 'space-one', ['a', 'c'], storage)?.layout).toBe('dual-50-50');
+    expect(Object.keys(storage.dump())).toContain(snapGroupsStorageKey);
+  });
+
+  it('drops stale ids, duplicate ids and duplicate or invalid slots', () => {
+    const storage = memoryStorage({
+      [snapGroupsStorageKey]: JSON.stringify({
+        'default::home': {
+          layout: 'quad-grid',
+          tabIds: ['a', 'gone', 'a', 'b', 'c', 'd'],
+          slotIndexes: [0, 1, 2, 0, 8, -1]
+        }
+      })
+    });
+    expect(loadSpaceSnapGroup('default', null, ['a', 'b', 'c', 'd'], storage)).toEqual({
+      layout: 'quad-grid', tabIds: ['a'], slotIndexes: [0], ratios: { x: [50], y: [50] }
+    });
+  });
+
+  it('persists resize ratios, clamps extreme values, and defaults old/malformed ratios safely', () => {
+    const storage = memoryStorage();
+    saveSpaceSnapGroup('default', null, {
+      layout: 'quad-grid', tabIds: ['a', 'b'], slotIndexes: [0, 3],
+      ratios: { x: [120], y: [-20] }
+    }, ['a', 'b'], storage);
+    expect(loadSpaceSnapGroup('default', null, ['a', 'b'], storage)?.ratios).toEqual({ x: [95], y: [5] });
+
+    saveSpaceSnapGroup('work', null, {
+      layout: 'trio-columns', tabIds: ['a', 'b', 'c'], slotIndexes: [0, 1, 2],
+      ratios: { x: [70, 20], y: [] }
+    }, ['a', 'b', 'c'], storage);
+    expect(loadSpaceSnapGroup('work', null, ['a', 'b', 'c'], storage)?.ratios).toEqual({ x: [33.33, 66.67], y: [] });
+
+    const legacy = memoryStorage({
+      [snapGroupsStorageKey]: JSON.stringify({
+        'legacy::home': { layout: 'dual-66-33', tabIds: ['x', 'y'], slotIndexes: [0, 1] }
+      })
+    });
+    expect(loadSpaceSnapGroup('legacy', null, ['x', 'y'], legacy)?.ratios).toEqual({ x: [66.67], y: [] });
+  });
+
+  it('rejects malformed and single-view groups and removes an emptied group', () => {
+    const storage = memoryStorage({
+      [snapGroupsStorageKey]: JSON.stringify({
+        'default::home': { layout: 'single', tabIds: ['a'], slotIndexes: [0] },
+        'work::home': { layout: 'dual-50-50', tabIds: ['old'], slotIndexes: [0] }
+      })
+    });
+    expect(loadSpaceSnapGroup('default', null, ['a'], storage)).toBeNull();
+    expect(loadSpaceSnapGroup('work', null, ['new'], storage)).toBeNull();
+    saveSpaceSnapGroup('default', null, null, [], storage);
+    expect(JSON.parse(storage.dump()[snapGroupsStorageKey])).not.toHaveProperty('default::home');
+    expect(JSON.parse(storage.dump()[snapGroupsStorageKey])).toHaveProperty('work::home');
+  });
+
+  it('ignores inherited object property names in malformed stored layouts', () => {
+    const storage = memoryStorage({
+      [snapGroupsStorageKey]: JSON.stringify({
+        'default::home': { layout: 'toString', tabIds: ['a', 'b'], slotIndexes: [0, 1] }
+      })
+    });
+    expect(loadSpaceSnapGroup('default', null, ['a', 'b'], storage)).toBeNull();
   });
 });

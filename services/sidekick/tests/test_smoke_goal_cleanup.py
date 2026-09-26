@@ -62,14 +62,23 @@ def test_goal_clear_removes_state_from_space_store(monkeypatch, tmp_path):
     db.set_meta("goal:smoke-session", json.dumps({"goal": "orphaned", "status": "active", "turns_used": 0, "max_turns": 20, "created_at": 0.0, "last_turn_at": 0.0}))
 
     # The store has an orphaned active goal for a session that no longer exists.
-    assert goal_state_for_session("smoke-session", space_slug="color") is not None
+    profile_home = tmp_path / "home"
+    assert goal_state_for_session(
+        "smoke-session", profile_home=profile_home, space_slug="color"
+    ) is not None
 
-    payload = goal_command_payload("smoke-session", "clear", space_slug="color")
+    payload = goal_command_payload(
+        "smoke-session", "clear", profile_home=profile_home, space_slug="color"
+    )
     assert payload["ok"] is True
     assert payload["action"] == "clear"
 
     # After the clear, the goal must be gone from every read surface.
-    assert goal_state_for_session("smoke-session", space_slug="color") is None
-    status = goal_command_payload("smoke-session", "status", space_slug="color")
+    assert goal_state_for_session(
+        "smoke-session", profile_home=profile_home, space_slug="color"
+    ) is None
+    status = goal_command_payload(
+        "smoke-session", "status", profile_home=profile_home, space_slug="color"
+    )
     assert status["goal"] is None
     assert status["message_key"] == "goal_status_none"

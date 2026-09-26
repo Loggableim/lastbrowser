@@ -17,6 +17,8 @@ import {
   Minimize2,
   Minus,
   Move,
+  MoveLeft,
+  MoveRight,
   PanelLeft,
   RotateCcw,
   Rows3,
@@ -332,6 +334,22 @@ export function DownloadsPanel({
                 onClick={() => handleSetDockMode('dock-sidekick')}
               >
                 <PanelLeft size={13} />
+              </button>
+              <button
+                type="button"
+                className={`downloads-tool-btn ${dockMode === 'dock-topbar-left' ? 'active' : ''}`}
+                title="Links in der oberen Leiste andocken"
+                onClick={() => handleSetDockMode('dock-topbar-left')}
+              >
+                <MoveLeft size={13} />
+              </button>
+              <button
+                type="button"
+                className={`downloads-tool-btn ${dockMode === 'dock-topbar-right' ? 'active' : ''}`}
+                title="Rechts in der oberen Leiste andocken"
+                onClick={() => handleSetDockMode('dock-topbar-right')}
+              >
+                <MoveRight size={13} />
               </button>
               <button
                 type="button"

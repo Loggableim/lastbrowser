@@ -86,6 +86,15 @@ def test_build_model_wall():
         assert wall["high"]["default"] == "gemini-2.5-pro"
 
 
+def test_empty_model_catalog_does_not_inject_gemini_fallbacks():
+    with patch("web.api.config.get_available_models", return_value={"groups": []}):
+        wall = build_model_wall()
+    assert all(tier["models"] == [] and tier["default"] == "" for tier in wall.values())
+    with patch("runtime.smart_track_orchestrator.build_model_wall", return_value=wall):
+        with pytest.raises(RuntimeError, match="keine aktuell verfügbaren Modelle"):
+            resolve_smart_track_model(effort="medium", prompt="Hello")
+
+
 def test_smart_track_config_persistence(tmp_path):
     mock_file = tmp_path / "smart_track.json"
     with patch("runtime.smart_track_orchestrator.get_smart_track_config_path", return_value=mock_file):

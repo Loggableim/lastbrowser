@@ -23,6 +23,12 @@ describe('desktop runtime packaging', () => {
     );
   });
 
+  it('invalidates pre-OpenAI bundled runtimes when preparing the Python runtime', () => {
+    const prepareScript = readFileSync(path.resolve(process.cwd(), 'scripts/prepare-python-runtime.mjs'), 'utf8');
+    expect(prepareScript).toContain("'openai>=1.0,<3'");
+    expect(prepareScript).toContain('runtimeSchema: 4');
+  });
+
   it('uses branded NSIS resources for the assisted installer', () => {
     const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
 

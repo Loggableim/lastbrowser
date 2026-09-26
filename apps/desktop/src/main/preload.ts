@@ -12,7 +12,8 @@ contextBridge.exposeInMainWorld('lastbrowser', {
   },
   system: {
     isDefaultBrowser: () => ipcRenderer.invoke('lastbrowser:system:isDefaultBrowser'),
-    setDefaultBrowser: () => ipcRenderer.invoke('lastbrowser:system:setDefaultBrowser')
+    setDefaultBrowser: () => ipcRenderer.invoke('lastbrowser:system:setDefaultBrowser'),
+    openExternal: (url: string) => ipcRenderer.invoke('lastbrowser:system:openExternal', url)
   },
   i18n: {
     setLocale: (locale: string) => ipcRenderer.invoke('lastbrowser:i18n:setLocale', locale)
@@ -158,6 +159,7 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     submitAppstoreApp: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:submitAppstoreApp', request),
     getSettings: () => ipcRenderer.invoke('lastbrowser:sidekick:getSettings'),
     saveSettings: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:saveSettings', request),
+    notifyChatCompleted: (enabled: boolean) => ipcRenderer.invoke('lastbrowser:notifications:chatCompleted', enabled),
     listGmailAccounts: () => ipcRenderer.invoke('lastbrowser:sidekick:listGmailAccounts'),
     listGmailMessages: (request?: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:listGmailMessages', request),
     readGmailMessage: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:readGmailMessage', request),
@@ -288,6 +290,19 @@ contextBridge.exposeInMainWorld('lastbrowser', {
       const listener = (_event: Electron.IpcRendererEvent, fullscreen: boolean) => callback(fullscreen);
       ipcRenderer.on('lastbrowser:window:fullScreenChanged', listener);
       return () => ipcRenderer.removeListener('lastbrowser:window:fullScreenChanged', listener);
+    },
+    detachTab: (payload: { tab: unknown; screenX: number; screenY: number; spacePath?: string }) =>
+      ipcRenderer.invoke('lastbrowser:window:detachTab', payload),
+    getStartupState: () => ipcRenderer.invoke('lastbrowser:window:getStartupState') as Promise<{
+      isDetachedWindow: boolean;
+      transfer: { transferId: string; tab: unknown; spacePath?: string } | null;
+    }>,
+    ackDetachedTab: (transferId: string, tabId: string) => ipcRenderer.invoke('lastbrowser:window:ackDetachedTab', transferId, tabId) as Promise<boolean>,
+    getDisplays: () => ipcRenderer.invoke('lastbrowser:window:getDisplays'),
+    onInitDetachedTab: (callback: (payload: { tab: unknown; spacePath?: string }) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: { tab: unknown; spacePath?: string }) => callback(data);
+      ipcRenderer.on('lastbrowser:browser:initDetachedTab', listener);
+      return () => ipcRenderer.removeListener('lastbrowser:browser:initDetachedTab', listener);
     }
   },
   cdp: {

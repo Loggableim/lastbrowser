@@ -403,6 +403,7 @@ declare global {
         submitAppstoreApp: (request: { manifest: Record<string, unknown> }) => Promise<Record<string, unknown>>;
         getSettings: () => Promise<Record<string, unknown>>;
         saveSettings: (request: { settings: Record<string, unknown> }) => Promise<Record<string, unknown>>;
+        notifyChatCompleted: (enabled: boolean) => Promise<boolean>;
         listGmailAccounts: () => Promise<Record<string, unknown>>;
         listGmailMessages: (request?: { folder?: string; limit?: number; max?: number; account?: string }) => Promise<Record<string, unknown>>;
         readGmailMessage: (request: { id?: string; messageId?: string; threadId?: string; account?: string }) => Promise<Record<string, unknown>>;
@@ -549,6 +550,11 @@ declare global {
         toggleFullScreen?: () => Promise<boolean>;
         onMaximizeChange?: (callback: (maximized: boolean) => void) => () => void;
         onFullScreenChange?: (callback: (fullscreen: boolean) => void) => () => void;
+        detachTab?: (payload: { tab: unknown; screenX: number; screenY: number; spacePath?: string }) => Promise<{ success: boolean; windowId?: number; error?: string }>;
+        getStartupState?: () => Promise<{ isDetachedWindow: boolean; transfer: { transferId: string; tab: unknown; spacePath?: string } | null }>;
+        ackDetachedTab?: (transferId: string, tabId: string) => Promise<boolean>;
+        getDisplays?: () => Promise<Array<{ id: number; bounds: { x: number; y: number; width: number; height: number }; workArea: { x: number; y: number; width: number; height: number }; scaleFactor: number }>>;
+        onInitDetachedTab?: (callback: (payload: { tab: unknown; spacePath?: string }) => void) => () => void;
       };
       cdp?: {
         status: () => Promise<{
@@ -568,6 +574,7 @@ declare global {
       system?: {
         isDefaultBrowser: () => Promise<boolean>;
         setDefaultBrowser: () => Promise<boolean>;
+        openExternal: (url: string) => Promise<boolean>;
       };
       i18n?: {
         setLocale: (locale: string) => Promise<boolean>;

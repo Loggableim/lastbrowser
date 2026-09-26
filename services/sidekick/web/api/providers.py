@@ -1515,14 +1515,6 @@ def set_provider_key(provider_id: str, api_key: str | None) -> dict[str, Any]:
                      f"Use `sidekick model` in the terminal to configure it.",
         }
 
-    env_var = _PROVIDER_ENV_VAR.get(provider_id)
-    if not env_var:
-        return {
-            "ok": False,
-            "error": f"Cannot configure API key for '{_PROVIDER_DISPLAY.get(provider_id, provider_id)}'. "
-                     f"This provider does not have a known env var mapping.",
-        }
-
     # Validate API key format (basic sanity check)
     if api_key:
         api_key = api_key.strip()
@@ -1530,6 +1522,55 @@ def set_provider_key(provider_id: str, api_key: str | None) -> dict[str, Any]:
             return {"ok": False, "error": "API key must not contain newline characters."}
         if len(api_key) < 8:
             return {"ok": False, "error": "API key appears too short."}
+
+    # Local Ollama keys are deliberately not stored as OLLAMA_API_KEY: that
+    # variable is reserved for Ollama Cloud and must never leak to loopback
+    # endpoints. Keep the local credential provider-scoped in config.yaml.
+    if provider_id == "ollama":
+        try:
+            import web.api.config as _config
+
+            config_path = _config._get_config_path()
+            with _config._cfg_lock:
+                cfg = _config._load_yaml_config_file(config_path)
+                providers_cfg = cfg.get("providers")
+                if not isinstance(providers_cfg, dict):
+                    providers_cfg = {}
+                provider_cfg = providers_cfg.get("ollama")
+                if not isinstance(provider_cfg, dict):
+                    provider_cfg = {}
+                if api_key:
+                    provider_cfg["api_key"] = api_key
+                else:
+                    provider_cfg.pop("api_key", None)
+                if provider_cfg:
+                    providers_cfg["ollama"] = provider_cfg
+                else:
+                    providers_cfg.pop("ollama", None)
+                if providers_cfg:
+                    cfg["providers"] = providers_cfg
+                else:
+                    cfg.pop("providers", None)
+                _config._save_yaml_config_file(config_path, cfg)
+            _config.reload_config()
+            invalidate_models_cache()
+        except Exception as exc:
+            logger.exception("Failed to save local Ollama API key")
+            return {"ok": False, "error": f"Failed to save API key: {exc}"}
+        return {
+            "ok": True,
+            "provider": provider_id,
+            "display_name": _PROVIDER_DISPLAY.get(provider_id, provider_id),
+            "action": "updated" if api_key else "removed",
+        }
+
+    env_var = _PROVIDER_ENV_VAR.get(provider_id)
+    if not env_var:
+        return {
+            "ok": False,
+            "error": f"Cannot configure API key for '{_PROVIDER_DISPLAY.get(provider_id, provider_id)}'. "
+                     f"This provider does not have a known env var mapping.",
+        }
 
     env_path = _get_sidekick_home() / ".env"
     try:

@@ -27,6 +27,7 @@ import {
 import type { BrowserTab } from '../tabs.js';
 import type { LastbrowserPanelId, SpaceSummary } from '../shell-state.js';
 import { spaceDisplayName } from '../shell-state.js';
+import { prepareSnapTabDrag } from '../types/snap-layouts.js';
 import { brandAssets } from '../brand.js';
 import { PinnedAppGrid, type PinnedApp } from './PinnedAppGrid.js';
 import { NovaDock } from './NovaDock.js';
@@ -409,7 +410,7 @@ export function SidekickSidebar({
                         tabIndex={0}
                         draggable
                         aria-selected={isActive}
-                        className={`vertical-tab-item ${isActive ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.incognito ? 'incognito' : ''} ${tab.isDiscarded ? 'discarded' : ''} ${draggedTabId === tab.id ? 'dragging' : ''} ${dragMode ? `drag-over-${dragMode}` : ''}`}
+                        className={`vertical-tab-item ${isActive ? 'active' : ''} ${tab.pinned ? 'pinned' : ''} ${tab.incognito ? 'incognito' : ''} ${tab.isDiscarded ? 'discarded' : ''} ${draggedTabId === tab.id ? 'dragging' : ''} ${dragMode ? `drag-over-${dragMode}` : ''} ${splitTabIds.includes(tab.id) ? 'is-in-snap-group' : ''}`}
                         onClick={() => {
                           if (tab.isDiscarded) onWakeTab?.(tab.id);
                           onActivateTab(tab.id);
@@ -421,7 +422,8 @@ export function SidekickSidebar({
                             onActivateTab(tab.id);
                           }
                         }}
-                        onDragStart={() => {
+                        onDragStart={(event) => {
+                          prepareSnapTabDrag(event.dataTransfer, tab.id);
                           setDragOverInfo(null);
                           onDragStartTab?.(tab.id);
                         }}
@@ -488,6 +490,12 @@ export function SidekickSidebar({
                         <span className="vtab-title" title={tab.title}>
                           {tab.title}
                         </span>
+
+                        {splitTabIds.includes(tab.id) && (
+                          <span className="vtab-snap-badge" title="Im aktiven Multiview-Layout">
+                            Snap
+                          </span>
+                        )}
 
                         {dragMode === 'split' && (
                           <div className="vtab-split-drop-badge">

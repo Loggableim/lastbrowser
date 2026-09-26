@@ -47,8 +47,10 @@ describe('Phase 2 Browser Fixes: Sidebar, Spaces, Multiscreen & Summarize Bar', 
       const appSource = readRendererFile('App.tsx');
       const partitionUsages = appSource.match(/computeSpacePartition\(activeProfile\.id,\s*activeSpacePath,\s*tab\.incognito\)/g);
       expect(partitionUsages).not.toBeNull();
-      // Used for both split webviews and single viewport webview
-      expect(partitionUsages!.length).toBeGreaterThanOrEqual(2);
+      // Every tab is rendered once in the shared viewport; split panes reuse
+      // those same guests instead of mounting a second set of webviews.
+      expect(partitionUsages!.length).toBe(1);
+      expect(appSource).toContain('partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito)}');
     });
   });
 
@@ -74,25 +76,41 @@ describe('Phase 2 Browser Fixes: Sidebar, Spaces, Multiscreen & Summarize Bar', 
   });
 
   describe('3. Multiscreen Tab-Switching Lock', () => {
-    it('ensures split screen and normal viewport are toggled by CSS display, not conditional unmounting', () => {
+    it('keeps one mounted webview per tab while split and normal panes change visibility', () => {
       const appSource = readRendererFile('App.tsx');
-      // Both branches are always in the DOM; visibility is controlled via display:none.
-      // This prevents WebView remounting when switching between split and non-split tabs.
-      expect(appSource).toContain("splitTabIds.includes(activeTab.id) ? 'flex' : 'none'");
-      expect(appSource).toContain("splitTabIds.includes(activeTab.id)) ? 'none' : 'block'");
-      // Split container is still conditional on having ≥2 tabs in split
-      expect(appSource).toContain('splitTabIds && splitTabIds.length > 1');
+      expect(appSource).toContain('className="browser-tabs-viewport"');
+      expect(appSource).toContain('(tabs && tabs.length > 0 ? tabs : [activeTab]).map((tab) => {');
+      expect(appSource).toContain('visibility: (isCurrent || isInActiveSplit) ? \'visible\' : \'hidden\'');
+      expect(appSource).toContain('{webviewReady && webviewStartupReady && (');
+      expect(appSource).toContain('className={`browser-tab-pane ${isCurrent ?');
     });
   });
 
   describe('4. Multiscreen Pane Resizing', () => {
-    it('implements splitRatios state, divider dragging, and overlay in App.tsx', () => {
+    it('uses the Multiview grid ratio state, dividers, and snap points', () => {
       const appSource = readRendererFile('App.tsx');
-      expect(appSource).toContain('const [splitRatios, setSplitRatios] = useState<number[]>(');
-      expect(appSource).toContain('handleSplitResizeStart(index - 1, e)');
-      expect(appSource).toContain('split-resize-divider');
-      expect(appSource).toContain('split-resize-overlay');
-      expect(appSource).toContain('flex: `${splitRatios[index] ??');
+      const gridSource = readRendererFile('components/MultiviewGridContainer.tsx');
+      const layoutTests = readFileSync(path.resolve(process.cwd(), 'tests/snap-layouts.test.ts'), 'utf8');
+      expect(appSource).toContain('const [snapRatios, setSnapRatios] = useState');
+      expect(appSource).toContain('snapRatios={snapRatios}');
+      expect(appSource).toContain('onSetSnapRatio={handleSetSnapRatio}');
+      expect(appSource).toContain('onSetRatio={onSetSnapRatio}');
+      expect(gridSource).toContain('const SNAP_POINTS = [25, 33.33, 50, 66.67, 75]');
+      expect(gridSource).toContain('className="multiview-divider-vertical"');
+      expect(gridSource).toContain('className="multiview-divider-horizontal"');
+      expect(layoutTests).toContain('keeps dynamic slot geometry aligned with resized dividers');
+    });
+  });
+
+  describe('4a. Per-Space Snap group restoration', () => {
+    it('saves and restores valid snap groups for the active profile and Space', () => {
+      const appSource = readRendererFile('App.tsx');
+      const sessions = readRendererFile('tab-sessions.ts');
+      expect(appSource).toContain('savePersistedSnapGroup(activeProfileId, activeSpacePath');
+      expect(appSource).toContain('loadPersistedSnapGroup(activeProfileId, newSpacePath, nextTabs)');
+      expect(appSource).toContain('loadPersistedSnapGroup(activeProfileId, activeSpacePath, restoredTabs)');
+      expect(sessions).toContain("export const snapGroupsStorageKey = 'lastbrowser.snapGroups.v1'");
+      expect(sessions).toContain('Object.hasOwn(SNAP_LAYOUT_DEFINITIONS, layout)');
     });
   });
 

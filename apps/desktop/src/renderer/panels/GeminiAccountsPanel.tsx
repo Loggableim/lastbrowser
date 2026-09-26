@@ -1,21 +1,18 @@
 /**
- * Phase 12 – Google Accounts Panel (Multi-OAuth Round-Robin)
+ * Google Code Assist OAuth account settings.
  *
  * Settings panel for managing multiple connected Google accounts
- * for the `google-gemini-cli` provider with round-robin token distribution.
+ * The Sidekick runtime currently stores one active Code Assist OAuth identity.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronRight,
   ExternalLink,
   Loader2,
   Plus,
   RefreshCw,
-  Shuffle,
-  Trash2,
   User,
   UserCheck,
   Zap
@@ -42,10 +39,10 @@ function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function openOAuthUrl(url: string): void {
+function openInSystemBrowser(url: string): void {
   if (!url) return;
-  if (window.lastbrowser?.auth?.openConnectWindow) {
-    void window.lastbrowser.auth.openConnectWindow(url);
+  if (window.lastbrowser?.system?.openExternal) {
+    void window.lastbrowser.system.openExternal(url);
   } else {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
@@ -56,16 +53,10 @@ function openOAuthUrl(url: string): void {
 function AccountRow({
   account,
   isActive,
-  isNext,
-  onMakeActive,
-  onRemove,
   onRename
 }: {
   account: GeminiOAuthAccount;
   isActive: boolean;
-  isNext: boolean;
-  onMakeActive: () => void;
-  onRemove: () => void;
   onRename: (label: string) => void;
 }): JSX.Element {
   const [editing, setEditing] = useState(false);
@@ -78,7 +69,7 @@ function AccountRow({
   }
 
   return (
-    <div className={`gemini-account-row ${isActive ? 'active' : ''} ${isNext ? 'next-up' : ''}`}>
+    <div className={`gemini-account-row ${isActive ? 'active' : ''}`}>
       <div className="gemini-account-avatar" title={account.email}>
         {isActive ? <UserCheck size={18} /> : <User size={18} />}
       </div>
@@ -117,31 +108,6 @@ function AccountRow({
             Active
           </span>
         )}
-        {isNext && !isActive && (
-          <span className="gemini-badge next" title="Next in round-robin queue">
-            Next ↑
-          </span>
-        )}
-      </div>
-
-      <div className="gemini-account-actions">
-        {!isActive && (
-          <button
-            className="gemini-action-btn"
-            onClick={onMakeActive}
-            title="Make this account active now"
-          >
-            <ChevronRight size={14} />
-            Use now
-          </button>
-        )}
-        <button
-          className="gemini-action-btn danger"
-          onClick={onRemove}
-          title="Disconnect this account"
-        >
-          <Trash2 size={14} />
-        </button>
       </div>
     </div>
   );
@@ -170,24 +136,60 @@ function OAuthFlowCard({
     return (
       <div className="gemini-oauth-card waiting">
         <div className="gemini-oauth-card-header">
-          <span className="gemini-oauth-title">📲 Open Google sign-in</span>
-          <button className="gemini-action-btn" onClick={onCancel}>Cancel</button>
+          <span className="gemini-oauth-title">📲 Google-Anmeldung starten</span>
+          <button className="gemini-action-btn" onClick={onCancel}>Abbrechen</button>
         </div>
         <p className="gemini-oauth-instruction">
           {flow.userCode
-            ? 'Visit the link below and enter the code to connect your Google account.'
-            : 'Sign in with your Google account in the opened window to authorize Lastbrowser.'}
+            ? 'Öffnen Sie den Link und geben Sie den untenstehenden Code ein:'
+            : 'Melden Sie sich mit Ihrem Google-Konto an, um Lastbrowser zu autorisieren.'}
         </p>
-        <a
-          className="gemini-oauth-uri"
-          href={targetUrl}
-          onClick={(e) => {
-            e.preventDefault();
-            openOAuthUrl(targetUrl);
-          }}
-        >
-          {targetUrl} <ExternalLink size={12} />
-        </a>
+
+        <div className="gemini-oauth-actions" style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: '12px 0 10px 0' }}>
+          <button
+            type="button"
+            className="gemini-action-btn primary"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '10px 16px',
+              fontSize: '13px',
+              fontWeight: 600,
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%)',
+              color: '#ffffff',
+              border: '1px solid rgba(66, 133, 244, 0.4)',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(26, 115, 232, 0.35)'
+            }}
+            onClick={() => openInSystemBrowser(targetUrl)}
+            title="Öffnet Google Sign-In in Ihrem Standardbrowser (Chrome / Edge / Firefox)"
+          >
+            <ExternalLink size={15} />
+            <span>Im Standardbrowser anmelden (Empfohlen)</span>
+          </button>
+
+        </div>
+
+        <div style={{
+          fontSize: '11px',
+          lineHeight: '1.45',
+          color: '#cbd5e1',
+          background: 'rgba(30, 58, 138, 0.25)',
+          border: '1px solid rgba(59, 130, 246, 0.3)',
+          borderRadius: '6px',
+          padding: '8px 12px',
+          margin: '8px 0 10px 0'
+        }}>
+          💡 <strong>Hinweis zu Google-Sicherheitsprüfungen:</strong> Google blockiert häufig Anmeldungen in eingebetteten App-Fenstern mit der Meldung <em>„Dieser Browser oder diese App ist unter Umständen nicht sicher“</em>. Über <strong>„Im Standardbrowser anmelden“</strong> nutzen Sie Ihr bereits angemeldetes Google-Konto sicher und ohne Passworteingabe.
+        </div>
+
+        <div style={{ fontSize: '11px', color: '#64748b', wordBreak: 'break-all', marginBottom: '8px' }}>
+          URL: <a href={targetUrl} onClick={(e) => { e.preventDefault(); openInSystemBrowser(targetUrl); }} style={{ color: '#60a5fa' }}>{targetUrl}</a>
+        </div>
+
         {flow.userCode && (
           <div className="gemini-oauth-code-row">
             <span className="gemini-oauth-code">{flow.userCode}</span>
@@ -196,12 +198,12 @@ function OAuthFlowCard({
               onClick={() => { void navigator.clipboard.writeText(flow.userCode!); }}
               title="Copy code"
             >
-              Copy
+              Kopieren
             </button>
           </div>
         )}
         <p className="gemini-oauth-hint">
-          <Loader2 size={12} className="spin" /> Waiting for authorisation…
+          <Loader2 size={12} className="spin" /> Warte auf Autorisierung…
         </p>
       </div>
     );
@@ -240,23 +242,15 @@ export function GeminiAccountsPanel({ sidekickReady }: GeminiAccountsPanelProps)
   const {
     accounts,
     currentIndex,
-    roundRobinEnabled,
-    rotatePerSession,
-    addAccount,
-    removeAccount,
+    replaceActiveAccount,
     renameAccount,
-    setRoundRobinEnabled,
-    setRotatePerSession,
-    setActiveAccount,
-    getNextAccount
   } = useGeminiAccountStore();
 
   const [flow, setFlow] = useState<AddAccountFlow>({ state: 'idle' });
   const [labelDraft, setLabelDraft] = useState('');
+  const activeFlowId = useRef<string | null>(null);
 
-  // Index of the next account in the queue (without advancing the pointer).
-  const nextIndex = accounts.length === 0 ? -1 : (currentIndex % accounts.length);
-  const upcomingIndex = accounts.length < 2 ? -1 : ((currentIndex + 1) % accounts.length);
+  const activeAccount = accounts[currentIndex] ?? accounts[0];
 
   // ─── OAuth Flow ────────────────────────────────────────────────────────────
 
@@ -272,6 +266,7 @@ export function GeminiAccountsPanel({ sidekickReady }: GeminiAccountsPanelProps)
         setFlow({ state: 'error', error: response?.error || 'Could not start OAuth flow.' });
         return;
       }
+      activeFlowId.current = response.flow_id;
 
       const authUrl = response.auth_url;
       const verificationUri = response.verification_uri;
@@ -287,7 +282,7 @@ export function GeminiAccountsPanel({ sidekickReady }: GeminiAccountsPanelProps)
 
       let opened = false;
       if (authUrl && !response.user_code) {
-        openOAuthUrl(authUrl);
+        openInSystemBrowser(authUrl);
         opened = true;
       }
 
@@ -299,7 +294,7 @@ export function GeminiAccountsPanel({ sidekickReady }: GeminiAccountsPanelProps)
         await new Promise((resolve) => setTimeout(resolve, interval));
 
         // Check if user cancelled.
-        if (flow.state === 'idle' || flow.state === 'cancelled') return;
+        if (activeFlowId.current !== response.flow_id) return;
 
         const poll = await window.lastbrowser.sidekick.pollOAuth(response.flow_id).catch(() => null);
         const status = poll?.status;
@@ -307,14 +302,18 @@ export function GeminiAccountsPanel({ sidekickReady }: GeminiAccountsPanelProps)
         const liveAuthUrl = (poll as { auth_url?: string })?.auth_url;
         if (!opened && liveAuthUrl && !response.user_code) {
           setFlow((prev) => ({ ...prev, authUrl: liveAuthUrl }));
-          openOAuthUrl(liveAuthUrl);
+          openInSystemBrowser(liveAuthUrl);
           opened = true;
         }
 
         if (status === 'success') {
           const pollEmail = (poll as { email?: string })?.email;
-          const email = typeof pollEmail === 'string' ? pollEmail : (label || `google-account-${Date.now()}`);
-          addAccount({ label, email, flowId: response.flow_id, preferredModel: 'gemini-2.5-flash' });
+          const email = typeof pollEmail === 'string' && pollEmail.includes('@')
+            ? pollEmail
+            : `Google account ${accounts.length + 1}`;
+          if (activeFlowId.current !== response.flow_id) return;
+          replaceActiveAccount({ label, email, flowId: response.flow_id, preferredModel: 'gemini-2.5-flash' });
+          activeFlowId.current = null;
           setFlow({ state: 'success' });
           setLabelDraft('');
           // Auto-dismiss after 2s.
@@ -323,18 +322,22 @@ export function GeminiAccountsPanel({ sidekickReady }: GeminiAccountsPanelProps)
         }
 
         if (status === 'expired' || status === 'error' || status === 'cancelled') {
+          activeFlowId.current = null;
           setFlow({ state: 'error', error: `Authentication ${status}.` });
           return;
         }
       }
 
+      activeFlowId.current = null;
       setFlow({ state: 'error', error: 'Authentication timed out.' });
     } catch (err) {
+      activeFlowId.current = null;
       setFlow({ state: 'error', error: err instanceof Error ? err.message : String(err) });
     }
-  }, [sidekickReady, labelDraft, accounts.length, addAccount, flow.state]);
+  }, [sidekickReady, labelDraft, accounts.length, replaceActiveAccount]);
 
   function cancelOAuth(): void {
+    activeFlowId.current = null;
     if (flow.flowId) {
       void window.lastbrowser.sidekick.cancelOAuth({ flowId: flow.flowId, provider: 'google-gemini-cli' }).catch(() => null);
     }
@@ -354,54 +357,24 @@ export function GeminiAccountsPanel({ sidekickReady }: GeminiAccountsPanelProps)
           <div>
             <h3 className="gemini-accounts-title">Google Accounts</h3>
             <p className="gemini-accounts-subtitle">
-              Connect multiple Google accounts. Lastbrowser distributes requests evenly across all accounts.
+              Connect the Google account used by Gemini CLI / Code Assist. Gemini API-key access is configured separately.
             </p>
           </div>
         </div>
       </div>
 
-      {/* ── Round-Robin Controls ── */}
-      <div className="gemini-rr-controls">
-        <label className="gemini-rr-toggle">
-          <Shuffle size={15} />
-          <span>
-            <strong>Round-Robin</strong>
-            <em>Distribute token usage evenly across all accounts</em>
-          </span>
-          <input
-            type="checkbox"
-            checked={roundRobinEnabled}
-            onChange={(e) => setRoundRobinEnabled(e.target.checked)}
-          />
-          <span className="gemini-rr-toggle-thumb" />
-        </label>
-
-        {roundRobinEnabled && (
-          <label className="gemini-rr-mode">
-            <Zap size={13} />
-            <span>Rotate per</span>
-            <select
-              value={rotatePerSession ? 'session' : 'message'}
-              onChange={(e) => setRotatePerSession(e.target.value === 'session')}
-            >
-              <option value="session">New session</option>
-              <option value="message">Every message</option>
-            </select>
-          </label>
-        )}
+      <div className="gemini-rr-controls" role="note">
+        <p>The backend supports one active OAuth account. Signing in with another Google account replaces those credentials. Any account rows below are preserved local metadata only and are not rotated through chat requests.</p>
       </div>
 
       {/* ── Account List ── */}
       {accounts.length > 0 && (
         <div className="gemini-account-list">
-          {accounts.map((account, idx) => (
+          {accounts.map((account) => (
             <AccountRow
               key={account.id}
               account={account}
-              isActive={idx === nextIndex}
-              isNext={idx === upcomingIndex && roundRobinEnabled}
-              onMakeActive={() => setActiveAccount(account.id)}
-              onRemove={() => removeAccount(account.id)}
+              isActive={false}
               onRename={(label) => renameAccount(account.id, label)}
             />
           ))}
@@ -445,28 +418,7 @@ export function GeminiAccountsPanel({ sidekickReady }: GeminiAccountsPanelProps)
       )}
 
       {/* ── Usage Stats ── */}
-      {accounts.length > 1 && (
-        <div className="gemini-usage-bar">
-          <span className="gemini-usage-label">Token distribution</span>
-          <div className="gemini-usage-track">
-            {accounts.map((account) => {
-              const total = accounts.reduce((s, a) => s + a.totalSessionsUsed, 0) || 1;
-              const pct = Math.round((account.totalSessionsUsed / total) * 100);
-              return (
-                <div
-                  key={account.id}
-                  className="gemini-usage-segment"
-                  style={{ flexGrow: account.totalSessionsUsed || 0.5 }}
-                  title={`${account.label}: ${account.totalSessionsUsed} sessions (${pct}%)`}
-                />
-              );
-            })}
-          </div>
-          <span className="gemini-usage-hint">
-            {accounts.reduce((s, a) => s + a.totalSessionsUsed, 0)} total sessions
-          </span>
-        </div>
-      )}
+      {activeAccount && <p className="gemini-refresh-hint">The active OAuth identity is managed by Sidekick. It is not the Gemini API key setting.</p>}
 
       {/* ── Refresh hint ── */}
       {accounts.length > 0 && (

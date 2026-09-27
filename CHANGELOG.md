@@ -5,6 +5,24 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.35] - 2026-09-27
+
+### Highlights
+- **Window Controls & Detached Tab IPC:** Dynamically routes window actions per sender `webContents`. Closing an undocked or detached multiview tab cleanly destroys that secondary window without closing the main browser or triggering tray minimization.
+- **Zen Sidebar 3-State Engine:** Enhanced Zen browsing mode with three distinct states (hidden, 48px slim icon dock, expanded). Left-edge hover sensor smoothly reveals the sidebar overlay; collapsing from the overlay retains Zen mode in the slim dock.
+- **Tab Pinning, RAM Protection & Space Audio Continuity:** Pinned tabs are permanently exempt from background memory discarders. Tabs playing audio (YouTube Music, Spotify, web radio) remain active across Space switches through an unthrottled background webview (`backgroundThrottling=no`), eliminating audio cutoffs.
+- **Appearance Engine & Accessibility:** 4-tier Glassmorphism system (solid, subtle, modern, deep), fully overhauled light theme contrast, new maximal-contrast *Vision Impaired* theme (high-contrast black/white/yellow/cyan, 16px minimum sans-serif font, 2px borders, 3px focus rings), custom skin colors, and global UI zoom/font scaling.
+- **NovaDock Shell Decoupling:** Decoupled `<NovaDock />` from the left sidebar into a modular shell component with support for Top, Bottom, Right, and Floating Draggable overlay modes with orientation toggle and anti-clipping margins.
+- **Chat & Copilot Layouts:** Refactored chat rendering into Bubbles, Compact Stream, and Expanded Document Canvas modes with strict horizontal overflow protection for syntax-highlighted code blocks, grounding badges, and process cards.
+- **Sidekick Standalone Migration:** First-Run Setup Wizard automatically detects and imports standalone Sidekick configurations and Supermemory databases (`%USERPROFILE%\.sidekick`, `supermemory.db`) with filesystem hardening against symlink and directory-traversal vulnerabilities.
+- **Google Gemini CLI Decommission:** Formally decommissioned the legacy `google-gemini-cli` subscription OAuth provider following Google's sunset of consumer Code Assist endpoints; hardened auxiliary client fallback routing and updated system architecture documentation.
+
+### Verification
+- Desktop: 98 test suites, 846/846 unit and integration tests passed (100% green).
+- Microsoft Store certification preflight: 27/27 automated checks passed (`[PASS]`).
+- Clean TypeScript and Vite production builds with 0 errors.
+- Bundled and verified Castlabs Widevine VMP DRM signing and Authenticode code-signing.
+
 ## [0.1.34] - 2026-09-26
 
 ### Fixed

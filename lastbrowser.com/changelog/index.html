@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Changelog &amp; Roadmap – Lastbrowser</title>
-<meta name="description" content="Versionshistorie und Roadmap von Lastbrowser: Alle Updates von v0.1.33 Public Beta bis zu früheren Meilensteinen und geplanten Features.">
+<meta name="description" content="Versionshistorie und Roadmap von Lastbrowser: Alle Updates von v0.1.35 Public Beta bis zu früheren Meilensteinen und geplanten Features.">
 <meta property="og:title" content="Changelog &amp; Roadmap – Lastbrowser">
 <meta property="og:description" content="Alle Neuerungen, Fehlerbehebungen und Meilensteine von Lastbrowser im Überblick.">
 <meta property="og:type" content="website">
@@ -111,7 +111,7 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
   <div class="container inner">
     <a href="/" class="logo">
       <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser">
-      <div><strong>Lastbrowser</strong><span>v0.1.33 Beta · AI-Native</span></div>
+      <div><strong>Lastbrowser</strong><span>v0.1.35 Beta · AI-Native</span></div>
     </a>
     <div class="links">
       <a href="/">Home</a>
@@ -137,14 +137,40 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
 
   <div class="timeline">
 
-    <!-- v0.1.33 -->
+    <!-- v0.1.35 -->
     <div class="release-entry">
       <div class="release-bullet highlight"></div>
       <article class="release-card current">
         <div class="release-header">
           <div style="display:flex;align-items:center;gap:12px">
-            <span class="release-tag">v0.1.33</span>
+            <span class="release-tag">v0.1.35</span>
             <span class="badge-now">Aktueller Beta-Release</span>
+          </div>
+          <span class="release-date">27. September 2026</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;font-weight:600">
+          Meilenstein-Release: Space-Audio-Keepalive, Zen-3-Zustände, Appearance-Engine mit 4 Glass-Stufen &amp; Vision Impaired, NovaDock-Entkopplung, Standalone-Migration &amp; Chat-Layouts.
+        </p>
+        <ul class="release-list">
+          <li><strong>Space-Audio-Keepalive &amp; RAM-Schutz:</strong> Gepinnte Tabs sind vor RAM-Discardern geschützt. Tabs mit Audiowiedergabe (YouTube Music, Spotify) behalten beim Space-Wechsel ihre Webview im Hintergrund mit <code>backgroundThrottling=no</code> ohne Tonaussetzer.</li>
+          <li><strong>Zen-Sidebar 3-Zustands-Engine:</strong> Nahtloses Umschalten zwischen Ausgeklappt, 48px Slim-Icon-Dock und Vollbild-Canvas mit Hover-Sensor am linken Rand.</li>
+          <li><strong>Appearance-Engine &amp; Barrierefreiheit:</strong> 4 Glassmorphism-Stufen (Solid, Subtle, Modern, Deep), repariertes helles Farbschema, neues kontrastmaximiertes Theme <em>Vision Impaired</em> (Schwarz/Weiß/Gelb/Cyan, 16px Schrift, 2px Rahmen), Skins &amp; Zoom-Skalierung.</li>
+          <li><strong>NovaDock-Entkopplung:</strong> Positionierung oben, unten, rechts oder als frei verschiebbares schwebendes Overlay mit Ausrichtungswechsel und Anti-Clipping.</li>
+          <li><strong>Window Controls &amp; Detached IPC:</strong> Zuverlässiges Schließen abgedockter Splitscreen-Tabs ohne Schließen des Hauptbrowser-Fensters.</li>
+          <li><strong>Sidekick Standalone Migration:</strong> Import-Assistent im First-Run Wizard übernimmt bestehende lokale Sidekick-Datenbanken (<code>supermemory.db</code>, Profile) mit Symlink-Härtung.</li>
+          <li><strong>Chat &amp; Copilot Layouts:</strong> Umschaltung zwischen Bubbles, Compact Stream und Expanded Document Canvas ohne horizontalen Code-Overflow.</li>
+          <li><strong>Qualität &amp; Signierung:</strong> 846/846 Tests grün (98 Suiten), 27/27 Microsoft Store Preflight Checks bestanden, Castlabs Widevine VMP signiert.</li>
+        </ul>
+      </article>
+    </div>
+
+    <!-- v0.1.33 -->
+    <div class="release-entry">
+      <div class="release-bullet"></div>
+      <article class="release-card">
+        <div class="release-header">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="release-tag">v0.1.33</span>
           </div>
           <span class="release-date">25. September 2026</span>
         </div>

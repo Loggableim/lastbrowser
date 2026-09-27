@@ -3564,22 +3564,19 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                             setOllamaTestResult(t('settings.panels.providers.testing'));
                             try {
                               const isCloud = ollamaModalProviderId === 'ollama-cloud';
-                              const baseUrl = ollamaUrl.trim().replace(/\/$/, '');
-                              const testUrl = isCloud
-                                ? `${baseUrl.replace(/\/v1$/i, '')}/v1/models`
-                                : `${baseUrl}/api/tags`;
-                              const headers: Record<string, string> ={};
-                              if (ollamaKey.trim()) {
-                                headers['Authorization'] = `Bearer ${ollamaKey.trim()}`;
-                              }
-                              const res = await fetch(testUrl, {
-                                headers,
-                                signal: AbortSignal.timeout(6000)
+                              const result = await window.lastbrowser.sidekick.requestWebui({
+                                method: 'POST',
+                                path: '/api/providers/test',
+                                body: {
+                                  provider: ollamaModalProviderId,
+                                  base_url: ollamaUrl.trim(),
+                                  api_key: ollamaKey.trim()
+                                }
                               });
-                              if (res.ok) {
+                              if (result.ok) {
                                 setOllamaTestResult(`✓ ${t('settings.panels.providers.connectionSuccess')} — ${isCloud ? 'Ollama Cloud' : 'Ollama'}`);
                               } else {
-                                setOllamaTestResult(`✗ ${t('settings.panels.providers.connectionError')} (HTTP ${res.status}: ${res.statusText || t('common.error')})`);
+                                setOllamaTestResult(`✗ ${t('settings.panels.providers.connectionError')}: ${String(result.error || t('common.error'))}`);
                               }
                             } catch (err) {
                               setOllamaTestResult(`✗ ${t('settings.panels.providers.connectionError')}: ${err instanceof Error ? err.message : String(err)}`);

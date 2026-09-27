@@ -2360,7 +2360,7 @@ from web.api.streaming import (
     cancel_stream,
     _materialize_pending_user_turn_before_error,
 )
-from web.api.providers import get_providers, get_provider_quota, set_provider_key, set_provider_models, normalize_provider_model_allowlist, remove_provider_key
+from web.api.providers import get_providers, get_provider_quota, set_provider_key, set_provider_models, normalize_provider_model_allowlist, remove_provider_key, probe_ollama_connection
 from web.api.onboarding import (
     apply_onboarding_setup,
     get_onboarding_status,
@@ -7124,6 +7124,17 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, str(e), 500)
 
     # â”€â”€ Providers (POST) â”€â”€
+    if parsed.path == "/api/providers/test":
+        result = probe_ollama_connection(
+            str(body.get("provider") or ""),
+            str(body.get("base_url") or ""),
+            str(body.get("api_key") or ""),
+        )
+        if result.get("ok"):
+            return j(handler, result)
+        status = int(result.get("status") or 400) if result.get("error") == "provider_http_error" else 400
+        return bad(handler, str(result.get("error") or "Provider connection failed."), status)
+
     if parsed.path == "/api/providers":
         provider_id = (body.get("provider") or "").strip().lower()
         if not provider_id:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+import pytest
+
 
 def test_local_ollama_key_is_saved_provider_scoped_without_changing_cloud_env(monkeypatch, tmp_path):
     from web.api import config, providers
@@ -32,6 +34,61 @@ def test_local_ollama_key_is_saved_provider_scoped_without_changing_cloud_env(mo
     finally:
         monkeypatch.setattr(config, "_get_config_path", original_config_path)
         config.reload_config()
+
+
+def test_ollama_connection_probe_runs_in_backend_and_does_not_persist_key(monkeypatch):
+    from web.api import providers
+
+    calls = []
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"models":[{"id":"test-model"}]}'
+
+    class Opener:
+        def open(self, request, timeout):
+            calls.append((request, timeout))
+            return Response()
+
+    def fake_build_opener(handler):
+        from web.api.providers import _NoRedirectHandler
+        assert handler is _NoRedirectHandler
+        assert handler().redirect_request(None, None, 302, "Found", {}, "https://attacker.test/") is None
+        return Opener()
+
+    monkeypatch.setattr(providers.urllib.request, "build_opener", fake_build_opener)
+    result = providers.probe_ollama_connection(
+        "ollama-cloud", "https://ollama.com/v1", "ollama-test-credential"
+    )
+
+    assert result == {"ok": True, "provider": "ollama-cloud", "model_count": 1}
+    request, timeout = calls[0]
+    assert request.full_url == "https://ollama.com/v1/models"
+    assert request.get_header("Authorization") == "Bearer ollama-test-credential"
+    assert timeout == 8
+
+
+def test_ollama_connection_probe_rejects_non_loopback_local_endpoint(monkeypatch):
+    from web.api import providers
+
+    def unexpected_build_opener(*_args, **_kwargs):
+        raise AssertionError("invalid endpoint must not be contacted")
+
+    monkeypatch.setattr(providers.urllib.request, "build_opener", unexpected_build_opener)
+    assert providers.probe_ollama_connection(
+        "ollama", "http://example.test:11434", "test-local-key"
+    ) == {"ok": False, "error": "local_ollama_must_use_loopback"}
+    assert providers.probe_ollama_connection(
+        "ollama-cloud", "https://ollama.com.attacker.test/v1", "test-cloud-key"
+    ) == {"ok": False, "error": "invalid_ollama_cloud_base_url"}
 
 
 def test_model_discovery_uses_provider_scoped_ollama_credentials(monkeypatch):
@@ -77,6 +134,127 @@ def test_ollama_cloud_model_discovery_uses_ollama_key_only_on_official_host(monk
     }
     assert _configured_model_probe_api_key(base_url="https://ollama.com/v1", **args) == "cloud-test-only"
     assert _configured_model_probe_api_key(base_url="https://ollama.com.attacker.test/v1", **args) == ""
+    # A provider setting stored in config.yaml is also valid for discovery,
+    # but only for the official host over TLS.
+    configured_args = {
+        **args,
+        "config": {"providers": {"ollama-cloud": {"api_key": "configured-cloud-test-only"}}},
+    }
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    assert _configured_model_probe_api_key(base_url="https://api.ollama.com/v1", **configured_args) == "configured-cloud-test-only"
+    assert _configured_model_probe_api_key(base_url="http://ollama.com/v1", **configured_args) == ""
+    assert _configured_model_probe_api_key(base_url="https://ollama.com.attacker.test/v1", **configured_args) == ""
+
+
+def test_ollama_cloud_runtime_resolves_provider_scoped_config_key(monkeypatch):
+    from cli import runtime_provider
+
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    # The host may have a real Ollama credential in its user .env file.
+    # This test specifically verifies the config.yaml source, so isolate that
+    # source too instead of allowing machine credentials to win precedence.
+    monkeypatch.setattr("cli.config.get_env_value", lambda _name: None)
+    monkeypatch.setattr(runtime_provider, "load_pool", lambda _provider: None)
+    monkeypatch.setattr(
+        "cli.config.load_config",
+        lambda: {"providers": {"ollama-cloud": {"api_key": "config-cloud-test-key"}}},
+    )
+    monkeypatch.setattr(
+        runtime_provider,
+        "_get_model_config",
+        lambda: {"provider": "ollama-cloud", "default": "deepseek-v4-flash"},
+    )
+
+    credentials = runtime_provider.resolve_runtime_provider(requested="ollama-cloud")
+
+    assert credentials["api_key"] == "config-cloud-test-key"
+    assert credentials["source"] == "config:providers.ollama-cloud"
+    assert credentials["provider"] == "ollama-cloud"
+    assert credentials["base_url"] == "https://ollama.com/v1"
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://ollama.com/v1",
+        "https://ollama.com.attacker.test/v1",
+        "http://127.0.0.1:11434/v1",
+    ],
+)
+def test_ollama_cloud_runtime_rejects_non_official_key_destinations(monkeypatch, base_url):
+    from cli import runtime_provider
+    from cli.auth import AuthError
+
+    monkeypatch.setenv("OLLAMA_API_KEY", "cloud-test-key")
+    monkeypatch.setenv("OLLAMA_BASE_URL", base_url)
+    monkeypatch.setattr(runtime_provider, "load_pool", lambda _provider: None)
+    monkeypatch.setattr(
+        runtime_provider,
+        "_get_model_config",
+        lambda: {"provider": "ollama-cloud", "default": "deepseek-v4-flash"},
+    )
+
+    with pytest.raises(AuthError) as exc:
+        runtime_provider.resolve_runtime_provider(requested="ollama-cloud")
+
+    assert exc.value.code == "invalid_ollama_cloud_base_url"
+
+
+def test_ollama_cloud_runtime_accepts_official_https_host_override(monkeypatch):
+    from cli import runtime_provider
+
+    monkeypatch.setenv("OLLAMA_API_KEY", "cloud-test-key")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://api.ollama.com/v1")
+    monkeypatch.setattr(runtime_provider, "load_pool", lambda _provider: None)
+    monkeypatch.setattr(
+        runtime_provider,
+        "_get_model_config",
+        lambda: {"provider": "ollama-cloud", "default": "deepseek-v4-flash"},
+    )
+
+    credentials = runtime_provider.resolve_runtime_provider(requested="ollama-cloud")
+
+    assert credentials["base_url"] == "https://api.ollama.com/v1"
+
+
+def test_ollama_cloud_runtime_rejects_non_official_credential_pool_endpoint(monkeypatch):
+    from types import SimpleNamespace
+
+    from cli import runtime_provider
+
+    entry = SimpleNamespace(
+        access_token="pool-cloud-test-key",
+        runtime_api_key=None,
+        base_url="http://127.0.0.1:11434/v1",
+        runtime_base_url=None,
+        source="test-pool",
+    )
+    pool = SimpleNamespace(has_credentials=lambda: True, select=lambda: entry)
+    monkeypatch.setattr(runtime_provider, "load_pool", lambda _provider: pool)
+    monkeypatch.setattr(
+        runtime_provider,
+        "_get_model_config",
+        lambda: {"provider": "ollama-cloud", "default": "deepseek-v4-flash"},
+    )
+
+    with pytest.raises(runtime_provider.AuthError) as exc:
+        runtime_provider.resolve_runtime_provider(requested="ollama-cloud")
+
+    assert exc.value.code == "invalid_ollama_cloud_base_url"
+
+
+def test_ollama_cloud_runtime_rejects_explicit_non_official_endpoint(monkeypatch):
+    from cli import runtime_provider
+
+    with pytest.raises(runtime_provider.AuthError) as exc:
+        runtime_provider.resolve_runtime_provider(
+            requested="ollama-cloud",
+            explicit_api_key="explicit-cloud-test-key",
+            explicit_base_url="http://127.0.0.1:11434/v1",
+        )
+
+    assert exc.value.code == "invalid_ollama_cloud_base_url"
 
 
 def test_other_provider_probe_keeps_provider_scoped_config_key_precedence(monkeypatch):

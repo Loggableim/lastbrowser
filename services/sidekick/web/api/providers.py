@@ -17,6 +17,7 @@ import threading
 import urllib.error
 import urllib.request
 import importlib.util
+from urllib.parse import urlsplit
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -1683,6 +1684,64 @@ def set_provider_models(provider_id: str, models: Any) -> dict[str, Any]:
     config_module.reload_config()
     config_module.invalidate_models_cache()
     return {"ok": True, "provider": "openrouter", "models": normalized}
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, _request, _fp, _code, _message, _headers, _new_url):
+        return None
+
+
+def probe_ollama_connection(provider_id: str, base_url: str, api_key: str = "") -> dict[str, Any]:
+    """Probe an Ollama endpoint from Sidekick, avoiding renderer CORS failures.
+
+    Only the official HTTPS Cloud endpoints and loopback local endpoints are
+    accepted. Credentials are sent only in the request header and are never
+    persisted or included in the result.
+    """
+    provider = str(provider_id or "").strip().lower()
+    url = str(base_url or "").strip().rstrip("/")
+    key = str(api_key or "").strip()
+    if provider not in {"ollama", "ollama-cloud"}:
+        return {"ok": False, "error": "unsupported_provider"}
+    try:
+        parsed = urlsplit(url)
+        host = (parsed.hostname or "").lower()
+        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError
+        if provider == "ollama-cloud":
+            if parsed.scheme != "https" or host not in {"ollama.com", "api.ollama.com"} or parsed.port not in (None, 443):
+                return {"ok": False, "error": "invalid_ollama_cloud_base_url"}
+            if not key:
+                return {"ok": False, "error": "api_key_required"}
+            endpoint = url if url.lower().endswith("/v1") else f"{url}/v1"
+            endpoint = f"{endpoint}/models"
+        else:
+            if parsed.scheme not in {"http", "https"} or host not in {"localhost", "127.0.0.1", "::1"}:
+                return {"ok": False, "error": "local_ollama_must_use_loopback"}
+            root = url[:-3] if url.lower().endswith("/v1") else url
+            endpoint = f"{root}/api/tags"
+    except (ValueError, UnicodeError):
+        return {"ok": False, "error": "invalid_base_url"}
+
+    headers = {"Accept": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    request = urllib.request.Request(endpoint, headers=headers)
+    try:
+        opener = urllib.request.build_opener(_NoRedirectHandler)
+        with opener.open(request, timeout=8) as response:
+            if response.status < 200 or response.status >= 300:
+                return {"ok": False, "error": "provider_http_error", "status": response.status}
+            try:
+                payload = json.loads(response.read().decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return {"ok": False, "error": "invalid_provider_response"}
+            model_list = payload.get("models", []) if isinstance(payload, dict) else []
+            return {"ok": True, "provider": provider, "model_count": len(model_list) if isinstance(model_list, list) else 0}
+    except urllib.error.HTTPError as exc:
+        return {"ok": False, "error": "provider_http_error", "status": exc.code}
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return {"ok": False, "error": "provider_unreachable"}
 
 
 def remove_provider_key(provider_id: str) -> dict[str, Any]:

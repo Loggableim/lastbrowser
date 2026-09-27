@@ -10,9 +10,10 @@ describe('Ollama settings configuration flow', () => {
     expect(source).toContain("const currentProviderSettings = activeProvider === option.id ? settings : providerConfig;");
   });
 
-  it('uses the OpenAI-compatible Ollama Cloud v1 endpoint consistently', () => {
+  it('probes Ollama through Sidekick so Cloud requests do not depend on renderer CORS', () => {
     expect(source).toContain("'https://ollama.com/v1'");
-    expect(source).toContain("`${baseUrl.replace(/\\/v1$/i, '')}/v1/models`");
+    expect(source).toContain("path: '/api/providers/test'");
+    expect(source).not.toContain('fetch(testUrl');
     expect(source).toContain("path: '/api/providers'");
   });
 });

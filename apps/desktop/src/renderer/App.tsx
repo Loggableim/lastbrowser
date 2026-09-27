@@ -3059,6 +3059,7 @@ export function App(): JSX.Element {
                   activeSessionId={activeSessionId}
                   activeTab={activeTab}
                   activeProfile={activeProfile}
+                  lastChatTurnUsage={lastChatTurnUsage}
                   webviewStartupReady={windowStartupReady}
                   onTransferredWebviewReady={handleTransferredWebviewReady}
                   pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
@@ -3381,6 +3382,7 @@ export function App(): JSX.Element {
               activeSessionId={activeSessionId}
               activeTab={activeTab}
               activeProfile={activeProfile}
+              lastChatTurnUsage={lastChatTurnUsage}
               webviewStartupReady={windowStartupReady}
               onTransferredWebviewReady={handleTransferredWebviewReady}
               pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
@@ -3599,7 +3601,8 @@ function BrowserMain({
   onDetachTab,
   onSetSplitLayout,
   botName = 'Nova',
-  desktopSettings = null
+  desktopSettings = null,
+  lastChatTurnUsage = null
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -3672,6 +3675,7 @@ function BrowserMain({
   onSetSplitLayout?: (layout: SplitLayoutMode) => void;
   botName?: string;
   desktopSettings?: DesktopSettingsRecord | null;
+  lastChatTurnUsage?: { sessionId: string; usage: NativeChatTurnUsage } | null;
 }): JSX.Element {
   const browserWebviewStyle = {
     width: '100%',

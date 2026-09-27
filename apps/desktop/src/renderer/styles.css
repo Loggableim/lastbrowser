@@ -3564,7 +3564,7 @@ html.theme-light select optgroup {
 }
 
 .settings-native-grid {
-  grid-template-columns: 258px minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
 }
 
 .settings-section-nav {
@@ -3605,19 +3605,25 @@ html.theme-light select optgroup {
 }
 
 .settings-section-button {
+  display: flex !important;
+  flex-direction: row;
   justify-content: flex-start !important;
   align-items: flex-start !important;
   width: 100%;
-  padding: 10px;
+  height: auto !important;
+  min-height: 52px;
+  padding: 10px 12px;
+  gap: 10px;
   text-align: left;
 }
 
 .settings-section-button-icon {
   display: grid;
   place-items: center;
-  flex: 0 0 auto;
+  flex: 0 0 30px;
   width: 30px;
   height: 30px;
+  margin-top: 2px;
   border-radius: 9px;
   color: #00d9ff;
   background: rgba(0, 217, 255, .08);
@@ -3625,20 +3631,27 @@ html.theme-light select optgroup {
 }
 
 .settings-section-button-text {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  gap: 2px;
+  flex: 1 1 auto;
+  gap: 3px;
 }
 
 .settings-section-button-text strong {
+  display: block;
   color: #ffffff;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .settings-section-button-text small {
+  display: block;
   color: rgba(232, 242, 255, .58);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.35;
+  word-break: break-word;
 }
 
 .settings-panel-scroll {
@@ -3786,34 +3799,41 @@ html.theme-light select optgroup {
   accent-color: #00d9ff;
 }
 
-.settings-theme-grid,
-.settings-skin-grid,
+.settings-theme-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
 .settings-size-grid {
   display: grid;
   gap: 10px;
-}
-
-.settings-theme-grid,
-.settings-size-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .settings-skin-grid {
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
 }
 
 .settings-theme-btn,
-.settings-skin-btn,
-.settings-size-btn {
-  display: grid;
+.settings-editor .settings-theme-btn {
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
   gap: 8px;
   min-width: 0;
-  padding: 10px;
+  min-height: 110px;
+  height: auto;
+  padding: 12px;
   border: 1px solid rgba(255, 255, 255, .08);
   border-radius: 12px;
   color: rgba(232, 242, 255, .76);
   background: rgba(255, 255, 255, .045);
   cursor: pointer;
+  text-align: left;
 }
 
 .settings-theme-btn.active,
@@ -3831,6 +3851,68 @@ html.theme-light select optgroup {
   color: #00d9ff;
 }
 
+.settings-theme-btn strong,
+.settings-editor .settings-theme-btn strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.3;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+}
+
+.settings-theme-btn > span:not(.settings-theme-preview),
+.settings-editor .settings-theme-btn > span:not(.settings-theme-preview) {
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+  color: rgba(232, 242, 255, .6);
+}
+
+.settings-skin-btn,
+.settings-editor .settings-skin-btn {
+  display: flex !important;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  height: auto;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 10px;
+  color: rgba(232, 242, 255, .76);
+  background: rgba(255, 255, 255, .045);
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-skin-btn strong,
+.settings-editor .settings-skin-btn strong {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: normal;
+  font-size: 12px;
+}
+
+.settings-size-btn {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 12px;
+  color: rgba(232, 242, 255, .76);
+  background: rgba(255, 255, 255, .045);
+  cursor: pointer;
+}
+
 .settings-size-btn.active span {
   border-color: rgba(0, 217, 255, 0.5);
   color: #00d9ff;
@@ -3839,21 +3921,11 @@ html.theme-light select optgroup {
 
 .settings-theme-preview {
   display: block;
-  height: 44px;
-  border-radius: 9px;
+  width: 100%;
+  height: 48px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, .1);
-}
-
-.settings-theme-preview-dark {
-  background: linear-gradient(135deg, #0a1323, #152339);
-}
-
-.settings-theme-preview-light {
-  background: linear-gradient(135deg, #f4f7fb, #d9e3f1);
-}
-
-.settings-theme-preview-system {
-  background: linear-gradient(90deg, #f4f7fb 50%, #0a1323 50%);
+  flex-shrink: 0;
 }
 
 .settings-skin-dots {
@@ -15723,31 +15795,32 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
   color: #FFFFFF;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 16px;
-}
-
-.theme-vision-impaired * {
-  font-size: max(16px, 1em) !important;
-  font-family: Arial, Helvetica, sans-serif !important;
+  line-height: 1.5;
 }
 
 .theme-vision-impaired body {
   background: #000000;
   color: #FFFFFF;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
 .theme-vision-impaired .modern-titlebar,
 .theme-vision-impaired .sidekick-sidebar,
 .theme-vision-impaired .settings-card,
 .theme-vision-impaired .system-panel,
+.theme-vision-impaired .native-work-card,
+.theme-vision-impaired .settings-editor,
 .theme-vision-impaired .zen-sidebar-overlay {
   background: #000000;
   color: #FFFFFF;
+  border-color: #737373;
 }
 
 .theme-vision-impaired input,
 .theme-vision-impaired select,
 .theme-vision-impaired textarea,
-.theme-vision-impaired button,
+.theme-vision-impaired .settings-editor button,
+.theme-vision-impaired .settings-section-button,
 .theme-vision-impaired .settings-seg-btn,
 .theme-vision-impaired .settings-theme-btn,
 .theme-vision-impaired .settings-skin-btn,
@@ -15772,11 +15845,51 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
 }
 
 .theme-vision-impaired .settings-theme-btn.active,
+.theme-vision-impaired .settings-skin-btn.active,
 .theme-vision-impaired .settings-seg-btn.active,
+.theme-vision-impaired .settings-section-button.active,
 .theme-vision-impaired .drawer-tab-btn.active {
-  background: #FFD700;
-  color: #000000;
-  border-color: #FFD700;
+  background: #FFD700 !important;
+  color: #000000 !important;
+  border-color: #FFD700 !important;
+  font-weight: 700;
+}
+
+.theme-vision-impaired .settings-theme-btn.active strong,
+.theme-vision-impaired .settings-theme-btn.active span,
+.theme-vision-impaired .settings-skin-btn.active strong,
+.theme-vision-impaired .settings-section-button.active strong,
+.theme-vision-impaired .settings-section-button.active small,
+.theme-vision-impaired .drawer-tab-btn.active strong,
+.theme-vision-impaired .drawer-tab-btn.active span {
+  color: #000000 !important;
+}
+
+.theme-vision-impaired .settings-section-button strong {
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.theme-vision-impaired .settings-section-button small {
+  color: #E2E8F0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.theme-vision-impaired .settings-card-header strong,
+.theme-vision-impaired .settings-editor-head strong {
+  color: #FFFFFF;
+  font-size: 18px;
+}
+
+.theme-vision-impaired .settings-card-header p,
+.theme-vision-impaired .settings-editor-head span,
+.theme-vision-impaired .settings-field small,
+.theme-vision-impaired .settings-field-info small {
+  color: #E2E8F0;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .theme-vision-impaired input::placeholder,

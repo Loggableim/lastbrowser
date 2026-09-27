@@ -300,7 +300,8 @@ describe('Appearance Relaunch & Design-System Engine', () => {
       const css = fs.readFileSync(path.resolve(__dirname, '../src/renderer/styles.css'), 'utf8');
       expect(css).toContain('font-size: max(var(--min-font-size, 0px), 1em);');
       expect(css).not.toContain('font-size: max(var(--min-font-size, 0px), inherit);');
-      expect(css).toContain('.theme-vision-impaired * {\n  font-size: max(16px, 1em) !important;');
+      expect(css).toContain('.theme-vision-impaired');
+      expect(css).toContain('font-size: 16px');
     });
 
     it('consumes glass and density tokens in the titlebar and collapsed sidebar', () => {

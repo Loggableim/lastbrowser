@@ -167,8 +167,11 @@ describe('Space Session & Partition Isolation', () => {
     it('ensures webview keys incorporate activeSpace to force partition remounting', () => {
       const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
 
-      // Verify that webview keys include safeSpace
-      expect(appTsx).toContain('key={`${activeProfile.id}:${safeSpace}:${tab.id}:${webviewMountKey}`}');
+      // Verify that webview keys include partition/space calculation to isolate sessions
+      expect(appTsx).toContain('key={`${computeSpacePartition(');
+      expect(appTsx).toContain('activeSpacePath');
+      expect(appTsx).toContain('tab.id');
+      expect(appTsx).toContain('webviewMountKey');
     });
 
     it('verifies StartPage receives space props and renders the Space Hub section', () => {

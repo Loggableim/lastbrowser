@@ -1080,22 +1080,46 @@ def _validate_migration_source(source_home: str) -> Path:
     source = Path(raw).expanduser()
     if not source.is_absolute():
         raise ValueError("source_home must be an absolute path")
+    if ".." in Path(raw).parts:
+        raise ValueError("source_home must not contain '..'")
+    if not source.exists():
+        raise ValueError(f"source home does not exist: {raw}")
+    if _migration_path_is_link(source):
+        raise ValueError("source_home must not be a symlink or junction")
     resolved = source.resolve()
-    # The source must be a .sidekick home (or contain one) and must exist.
-    if resolved.name == ".sidekick":
+    # Accept only recognized data-home shapes. Do not let a caller nominate an
+    # arbitrary directory (or its spaces/profiles children) as a migration.
+    if resolved.name.lower() in {".sidekick", "sidekick"}:
         home = resolved
     elif (resolved / ".sidekick").is_dir():
         home = resolved / ".sidekick"
+    elif (resolved / "sidekick").is_dir():
+        home = resolved / "sidekick"
     else:
-        home = resolved
+        raise ValueError("source_home must be a .sidekick or sidekick data directory, or its parent")
     if not home.is_dir():
         raise ValueError(f"source home does not exist: {raw}")
-    # Traversal guard: the resolved path must stay inside itself (no symlink tricks
-    # producing a path outside the requested root are possible after resolve(), but
-    # reject obviously suspicious inputs anyway).
-    if ".." in Path(raw).parts:
-        raise ValueError("source_home must not contain '..'")
+    if _migration_path_is_link(home):
+        raise ValueError("source_home must not be a symlink or junction")
     return home
+
+
+def _migration_path_is_link(path: Path) -> bool:
+    """Detect symlinks and Windows junctions without resolving their targets."""
+    if path.is_symlink():
+        return True
+    is_junction = getattr(path, "is_junction", None)
+    return bool(is_junction and is_junction())
+
+
+def _assert_migration_tree_has_no_links(root: Path) -> None:
+    """Reject links before import; copytree uses symlinks=True as a second guard."""
+    for current, dirs, files in os.walk(root, followlinks=False):
+        current_path = Path(current)
+        for name in [*dirs, *files]:
+            child = current_path / name
+            if _migration_path_is_link(child):
+                raise ValueError(f"Migration source contains a symlink or junction: {child.name}")
 
 
 def detect_standalone_install(body: dict) -> dict:
@@ -1114,23 +1138,10 @@ def detect_standalone_install(body: dict) -> dict:
     }
 
 
-def _backup_existing(target: Path) -> None:
-    """Move an existing target aside with a .bak suffix (never overwrite silently)."""
-    if not target.exists():
-        return
-    backup = target.with_name(target.name + ".bak")
-    counter = 1
-    while backup.exists():
-        backup = target.with_name(f"{target.name}.bak{counter}")
-        counter += 1
-        if counter > 99:
-            raise RuntimeError(f"too many backups for {target.name}")
-    target.rename(backup)
-
-
 def migrate_standalone_install(body: dict) -> dict:
     """Copy selected components from a standalone install into the active home."""
     import shutil
+    import uuid
 
     source = _validate_migration_source(body.get("source_home") or "")
     items = body.get("items") or {}
@@ -1141,6 +1152,54 @@ def migrate_standalone_install(body: dict) -> dict:
     skipped: list[str] = []
     errors: list[str] = []
 
+    def backup_path(target: Path) -> Path | None:
+        if not target.exists():
+            return None
+        backup = target.with_name(target.name + ".bak")
+        counter = 1
+        while backup.exists():
+            backup = target.with_name(f"{target.name}.bak{counter}")
+            counter += 1
+            if counter > 99:
+                raise RuntimeError(f"too many backups for {target.name}")
+        return backup
+
+    def replace_with_staged_copy(name: str, src: Path, dst: Path, is_directory: bool) -> None:
+        stage = destination / f".{name}.migration-{uuid.uuid4().hex}"
+        backup: Path | None = None
+        try:
+            if _migration_path_is_link(src):
+                raise ValueError("source component is a symlink or junction")
+            _assert_migration_tree_has_no_links(src) if is_directory else None
+            if is_directory:
+                # Never follow source symlinks, even if one appears after the
+                # initial scan. The staged copy is checked again before install.
+                shutil.copytree(src, stage, symlinks=True)
+                _assert_migration_tree_has_no_links(stage)
+            else:
+                shutil.copy2(src, stage, follow_symlinks=False)
+                if _migration_path_is_link(stage):
+                    raise ValueError("source file changed to a symlink during migration")
+
+            backup = backup_path(dst)
+            if backup is not None:
+                dst.rename(backup)
+            try:
+                stage.rename(dst)
+            except Exception:
+                if backup is not None and backup.exists() and not dst.exists():
+                    backup.rename(dst)
+                raise
+            copied.append(name)
+        finally:
+            if stage.is_dir() and not _migration_path_is_link(stage):
+                shutil.rmtree(stage, ignore_errors=True)
+            elif stage.exists() or _migration_path_is_link(stage):
+                try:
+                    stage.unlink()
+                except OSError:
+                    pass
+
     def copy_dir(name: str) -> None:
         src = source / name
         dst = destination / name
@@ -1148,10 +1207,7 @@ def migrate_standalone_install(body: dict) -> dict:
             skipped.append(name)
             return
         try:
-            if dst.exists():
-                _backup_existing(dst)
-            shutil.copytree(src, dst)
-            copied.append(name)
+            replace_with_staged_copy(name, src, dst, True)
         except Exception as exc:  # noqa: BLE001 - report per-item errors
             errors.append(f"{name}: {exc}")
 
@@ -1162,10 +1218,7 @@ def migrate_standalone_install(body: dict) -> dict:
             skipped.append(name)
             return
         try:
-            if dst.exists():
-                _backup_existing(dst)
-            shutil.copy2(src, dst)
-            copied.append(name)
+            replace_with_staged_copy(name, src, dst, False)
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{name}: {exc}")
 

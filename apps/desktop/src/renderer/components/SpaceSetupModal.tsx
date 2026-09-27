@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useDesktopI18n } from '../i18n.js';
+import type { DesktopTranslationKey } from '../i18n/keys.js';
 import {
   X,
   Sparkles,
@@ -28,7 +30,7 @@ export interface SpaceSetupData {
 export interface SpaceSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateSpace: (data: SpaceSetupData) => Promise<boolean>;
+  onCreateSpace: (data: SpaceSetupData) => Promise<boolean | string>;
   existingSpaceNames?: string[];
 }
 
@@ -162,11 +164,15 @@ export function resolvePresetModel(defaultModel: string, currentModel: string, a
 
 export async function submitSpaceSetup(
   data: SpaceSetupData,
-  onCreateSpace: (data: SpaceSetupData) => Promise<boolean>,
-  onClose: () => void
+  onCreateSpace: (data: SpaceSetupData) => Promise<boolean | string>,
+  onClose: () => void,
+  createFailedMessage = 'Could not create the Space. Check the storage path and try again.'
 ): Promise<Error | null> {
   try {
-    if (!await onCreateSpace(data)) return new Error('Der Space konnte nicht erstellt werden. Bitte prüfe den Speicherort und versuche es erneut.');
+    const result = await onCreateSpace(data);
+    if (result !== true) {
+      return new Error(typeof result === 'string' && result.trim() ? result : createFailedMessage);
+    }
     onClose();
     return null;
   } catch (error) {
@@ -180,9 +186,10 @@ export function SpaceSetupModal({
   onCreateSpace,
   existingSpaceNames = []
 }: SpaceSetupModalProps): React.JSX.Element | null {
+  const { t } = useDesktopI18n();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedPreset, setSelectedPreset] = useState<SpacePreset>(PRESETS[0]);
-  const [name, setName] = useState(PRESETS[0].name);
+  const [name, setName] = useState(() => t('spaceSetup.preset.coding'));
   const [color, setColor] = useState(PRESETS[0].color);
   const [customPath, setCustomPath] = useState('');
   const [model, setModel] = useState(PRESETS[0].defaultModel);
@@ -214,7 +221,13 @@ export function SpaceSetupModal({
 
   const handleSelectPreset = (preset: SpacePreset) => {
     setSelectedPreset(preset);
-    setName(preset.name);
+    const presetNameKeys: Record<string, DesktopTranslationKey> = {
+      'coding-dev': 'spaceSetup.preset.coding',
+      'research-writing': 'spaceSetup.preset.research',
+      'media-creative': 'spaceSetup.preset.media',
+      'custom-blank': 'spaceSetup.preset.blank'
+    };
+    setName(t(presetNameKeys[preset.id]));
     setColor(preset.color);
     setModel((current) => resolvePresetModel(
       preset.defaultModel,
@@ -268,7 +281,7 @@ export function SpaceSetupModal({
       model,
       pinnedApps: selectedApps,
       startUrl: startUrl.trim() || 'app://browser-home'
-    }, onCreateSpace, onClose);
+    }, onCreateSpace, onClose, t('spaceSetup.createFailed'));
     if (error) setCreateError(error.message);
     setIsSubmitting(false);
   };
@@ -277,7 +290,7 @@ export function SpaceSetupModal({
 
   return (
     <div className="space-setup-modal-backdrop" onClick={() => { if (!isSubmitting) onClose(); }}>
-      <div className="space-setup-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-busy={isSubmitting}>
+      <div className="space-setup-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-busy={isSubmitting} aria-labelledby="space-setup-title">
         {/* Header */}
         <div className="space-setup-modal-header">
           <div className="space-setup-header-title">
@@ -285,11 +298,11 @@ export function SpaceSetupModal({
               <FolderPlus size={18} />
             </div>
             <div>
-              <h3>Neuen Space einrichten</h3>
-              <p>Strukturierter Arbeitsbereich mit eigenem Profil, KI-Modell & Apps</p>
+              <h3 id="space-setup-title">{t('spaceSetup.title')}</h3>
+              <p>{t('spaceSetup.subtitle')}</p>
             </div>
           </div>
-          <button type="button" className="space-setup-close-btn" onClick={onClose} aria-label="Schließen" disabled={isSubmitting}>
+          <button type="button" className="space-setup-close-btn" onClick={onClose} aria-label={t('common.close')} disabled={isSubmitting}>
             <X size={16} />
           </button>
         </div>
@@ -297,9 +310,9 @@ export function SpaceSetupModal({
         {/* Steps Breadcrumb */}
         <div className="space-setup-stepper">
           {[
-            { num: 1, label: '1. Vorlage & Basis' },
-            { num: 2, label: '2. KI-Modell' },
-            { num: 3, label: '3. Web-Apps & Start' }
+            { num: 1, label: t('spaceSetup.stepTemplate') },
+            { num: 2, label: t('spaceSetup.stepModel') },
+            { num: 3, label: t('spaceSetup.stepApps') }
           ].map((s) => (
             <div
               key={s.num}
@@ -319,9 +332,18 @@ export function SpaceSetupModal({
           {/* STEP 1: Presets & Basic Info */}
           {step === 1 && (
             <div className="space-step-content">
-              <label className="space-setup-label">Wähle eine Vorlage</label>
+              <label className="space-setup-label">{t('spaceSetup.chooseTemplate')}</label>
               <div className="space-presets-grid">
                 {PRESETS.map((p) => (
+                  (() => {
+                    const presetCopyKeys: Record<string, [DesktopTranslationKey, DesktopTranslationKey]> = {
+                      'coding-dev': ['spaceSetup.preset.coding', 'spaceSetup.preset.codingDescription'],
+                      'research-writing': ['spaceSetup.preset.research', 'spaceSetup.preset.researchDescription'],
+                      'media-creative': ['spaceSetup.preset.media', 'spaceSetup.preset.mediaDescription'],
+                      'custom-blank': ['spaceSetup.preset.blank', 'spaceSetup.preset.blankDescription']
+                    };
+                    const [nameKey, descriptionKey] = presetCopyKeys[p.id];
+                    return (
                   <div
                     key={p.id}
                     className={`space-preset-card ${selectedPreset.id === p.id ? 'active' : ''}`}
@@ -332,8 +354,8 @@ export function SpaceSetupModal({
                       {p.icon}
                     </div>
                     <div className="preset-card-info">
-                      <strong>{p.name}</strong>
-                      <p>{p.description}</p>
+                      <strong>{t(nameKey)}</strong>
+                      <p>{t(descriptionKey)}</p>
                     </div>
                     {selectedPreset.id === p.id && (
                       <div className="preset-check-badge" style={{ background: p.color }}>
@@ -341,26 +363,28 @@ export function SpaceSetupModal({
                       </div>
                     )}
                   </div>
+                    );
+                  })()
                 ))}
               </div>
 
               <div className="space-setup-form-row">
                 <div className="space-field-group" style={{ flex: 2 }}>
-                  <label className="space-setup-label">Name des Space</label>
+                  <label className="space-setup-label">{t('spaceSetup.name')}</label>
                   <input
                     type="text"
                     className="space-setup-input"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="z. B. Coding & Dev"
+                    placeholder={t('spaceSetup.namePlaceholder')}
                     aria-invalid={duplicateName}
                     autoFocus
                   />
-                  {duplicateName && <span className="space-hint" role="alert">Ein Space mit diesem Namen existiert bereits.</span>}
+                  {duplicateName && <span className="space-hint" role="alert">{t('spaceSetup.duplicateName')}</span>}
                 </div>
 
                 <div className="space-field-group" style={{ flex: 1 }}>
-                  <label className="space-setup-label">Farb-Akzent</label>
+                  <label className="space-setup-label">{t('spaceSetup.colorAccent')}</label>
                   <div className="space-color-swatches">
                     {COLOR_SWATCHES.map((swatch) => (
                       <button
@@ -369,7 +393,7 @@ export function SpaceSetupModal({
                         className={`space-color-dot ${color === swatch ? 'active' : ''}`}
                         style={{ background: swatch }}
                         onClick={() => setColor(swatch)}
-                        aria-label={`Farbe ${swatch}`}
+                        aria-label={t('spaceSetup.colorSwatch', { color: swatch })}
                       />
                     ))}
                   </div>
@@ -377,7 +401,7 @@ export function SpaceSetupModal({
               </div>
 
               <div className="space-field-group" style={{ marginTop: 12 }}>
-                <label className="space-setup-label">Speicherort / Pfad (Optional)</label>
+                <label className="space-setup-label">{t('spaceSetup.pathOptional')}</label>
                 <input
                   type="text"
                   className="space-setup-input"
@@ -385,7 +409,7 @@ export function SpaceSetupModal({
                   onChange={(e) => setCustomPath(e.target.value)}
                   placeholder={resolvedPath}
                 />
-                <span className="space-hint">Wird standardmäßig in <code>~/.sidekick/{resolvedPath}</code> isoliert.</span>
+                <span className="space-hint">{t('spaceSetup.pathHint', { path: resolvedPath })}</span>
               </div>
             </div>
           )}
@@ -393,16 +417,21 @@ export function SpaceSetupModal({
           {/* STEP 2: AI Model Selection */}
           {step === 2 && (
             <div className="space-step-content">
-              <label className="space-setup-label">Standard-KI für diesen Space</label>
+              <label className="space-setup-label">{t('spaceSetup.modelLabel')}</label>
               <p className="space-step-description">
-                Jeder Space kann ein bevorzugtes Modell oder Routing nutzen. Der Chat startet automatisch in diesem Modus.
+                {t('spaceSetup.modelDescription')}
               </p>
 
               <div className="space-models-list">
-                {[...MODE_OPTIONS, ...availableModels.map((m) => ({
+                {[...MODE_OPTIONS.map((mode) => ({
+                  ...mode,
+                  nameKey: `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrack' : mode.id === 'teamwork' ? 'teamwork' : 'ollama'}` as DesktopTranslationKey,
+                  descKey: `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrackDescription' : mode.id === 'teamwork' ? 'teamworkDescription' : 'ollamaDescription'}` as DesktopTranslationKey,
+                  badgeKey: `spaceSetup.model.${mode.id === 'smart-track' ? 'adaptive' : mode.id === 'teamwork' ? 'multiAgent' : 'local'}` as DesktopTranslationKey
+                })), ...availableModels.map((m) => ({
                   id: m.id,
                   name: m.name || m.id,
-                  desc: `Verfügbar über ${m.provider_label || m.provider || 'Provider'}.`,
+                  desc: t('spaceSetup.model.availableVia', { provider: m.provider_label || m.provider || 'Provider' }),
                   badge: m.provider_label || m.provider || 'Live'
                 }))].map((m) => (
                   <div
@@ -419,10 +448,10 @@ export function SpaceSetupModal({
                     </div>
                     <div className="model-item-details">
                       <div className="model-item-title-row">
-                        <strong>{m.name}</strong>
-                        <span className="model-badge">{m.badge}</span>
+                        <strong>{'nameKey' in m ? t(m.nameKey) : m.name}</strong>
+                        <span className="model-badge">{'badgeKey' in m ? t(m.badgeKey) : m.badge}</span>
                       </div>
-                      <p>{m.desc}</p>
+                      <p>{'descKey' in m ? t(m.descKey) : m.desc}</p>
                     </div>
                   </div>
                 ))}
@@ -433,9 +462,9 @@ export function SpaceSetupModal({
           {/* STEP 3: Pinned Web Apps & Start Tab */}
           {step === 3 && (
             <div className="space-step-content">
-              <label className="space-setup-label">Angeheftete Web-Apps</label>
+              <label className="space-setup-label">{t('spaceSetup.appsLabel')}</label>
               <p className="space-step-description">
-                Wähle die Standard-Webapps, die in der Seitenleiste dieses Space angeheftet werden sollen:
+                {t('spaceSetup.appsDescription')}
               </p>
 
               <div className="space-apps-selector-grid">
@@ -458,32 +487,32 @@ export function SpaceSetupModal({
                   })
                 ) : (
                   <p className="space-hint" style={{ gridColumn: '1 / -1' }}>
-                    Keine vorausgewählten Apps für diese Vorlage. Du kannst Apps jederzeit über das Dock hinzufügen.
+                    {t('spaceSetup.noPresetApps')}
                   </p>
                 )}
               </div>
 
               <div className="space-setup-form-row" style={{ marginTop: 12 }}>
                 <div className="space-field-group" style={{ flex: 1 }}>
-                  <label className="space-setup-label" htmlFor="space-custom-app-name">Eigene App anheften</label>
-                  <input id="space-custom-app-name" className="space-setup-input" value={customAppName} onChange={(event) => setCustomAppName(event.target.value)} placeholder="Name" />
+                  <label className="space-setup-label" htmlFor="space-custom-app-name">{t('spaceSetup.customAppName')}</label>
+                  <input id="space-custom-app-name" className="space-setup-input" value={customAppName} onChange={(event) => setCustomAppName(event.target.value)} placeholder={t('spaceSetup.namePlaceholderCustom')} />
                 </div>
                 <div className="space-field-group" style={{ flex: 2 }}>
-                  <label className="space-setup-label" htmlFor="space-custom-app-url">Webadresse</label>
-                  <input id="space-custom-app-url" className="space-setup-input" value={customAppUrl} onChange={(event) => setCustomAppUrl(event.target.value)} placeholder="https://…" />
+                  <label className="space-setup-label" htmlFor="space-custom-app-url">{t('spaceSetup.webAddress')}</label>
+                  <input id="space-custom-app-url" className="space-setup-input" value={customAppUrl} onChange={(event) => setCustomAppUrl(event.target.value)} placeholder={t('spaceSetup.urlPlaceholder')} />
                 </div>
-                <button type="button" className="space-btn secondary" disabled={!normalizePinnedApp(customAppName, customAppUrl) || selectedApps.some((app) => app.url === normalizePinnedApp(customAppName, customAppUrl)?.url)} onClick={addCustomApp}>App hinzufügen</button>
+                <button type="button" className="space-btn secondary" disabled={!normalizePinnedApp(customAppName, customAppUrl) || selectedApps.some((app) => app.url === normalizePinnedApp(customAppName, customAppUrl)?.url)} onClick={addCustomApp}>{t('spaceSetup.addApp')}</button>
               </div>
-              {selectedApps.length > 0 && <div className="space-hint" aria-live="polite">Angeheftet: {selectedApps.map((app) => app.name).join(', ')}</div>}
+              {selectedApps.length > 0 && <div className="space-hint" aria-live="polite">{t('spaceSetup.pinnedApps', { apps: selectedApps.map((app) => app.name).join(', ') })}</div>}
 
               <div className="space-field-group" style={{ marginTop: 18 }}>
-                <label className="space-setup-label">Start-Webseite beim Öffnen</label>
+                <label className="space-setup-label">{t('spaceSetup.startPage')}</label>
                 <input
                   type="text"
                   className="space-setup-input"
                   value={startUrl}
                   onChange={(e) => setStartUrl(e.target.value)}
-                  placeholder="https://..."
+                  placeholder={t('spaceSetup.startPagePlaceholder')}
                 />
               </div>
             </div>
@@ -501,11 +530,11 @@ export function SpaceSetupModal({
               onClick={() => setStep((step - 1) as 1 | 2 | 3)}
             >
               <ArrowLeft size={14} />
-              <span>Zurück</span>
+              <span>{t('common.back')}</span>
             </button>
           ) : (
             <button type="button" className="space-btn secondary" onClick={onClose} disabled={isSubmitting}>
-              Abbrechen
+              {t('common.cancel')}
             </button>
           )}
 
@@ -517,7 +546,7 @@ export function SpaceSetupModal({
               onClick={() => setStep((step + 1) as 1 | 2 | 3)}
               style={{ background: color, color: '#000000' }}
             >
-              <span>Weiter</span>
+              <span>{t('common.next')}</span>
               <ArrowRight size={14} />
             </button>
           ) : (
@@ -529,7 +558,7 @@ export function SpaceSetupModal({
               style={{ background: color, color: '#000000' }}
             >
               <Check size={15} />
-              <span>{isSubmitting ? 'Space wird erstellt …' : 'Space erstellen & öffnen'}</span>
+              <span>{isSubmitting ? t('spaceSetup.submitting') : t('spaceSetup.createAndOpen')}</span>
             </button>
           )}
         </div>

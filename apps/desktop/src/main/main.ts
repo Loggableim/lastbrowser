@@ -162,6 +162,7 @@ import { configureDrmWidevine, initializeCastlabsWidevine } from './drm.js';
 import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { registerDefaultSidekickMigrationIpc } from './sidekick-migration.js';
+import { withSidekickWebuiReady } from './sidekick-readiness.js';
 import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTerminalIds, closeAllTerminals } from './terminal-process.js';
 import { createAppTray, setupMinimizeToTray, type TrayController } from './tray.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
@@ -456,7 +457,15 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:renameWorkspaceEntry', (_event, request) => renameWorkspaceEntry(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:createWorkspaceDirectory', (_event, request) => createWorkspaceDirectory(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:deleteWorkspaceEntry', (_event, request) => deleteWorkspaceEntry(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:addSpace', (_event, request) => addSpace(requireWebuiUrl(), request));
+  ipcMain.handle('lastbrowser:sidekick:addSpace', async (_event, request) => {
+    const sidecar = services;
+    if (!sidecar) throw new Error('Sidekick service is not available yet. Try again shortly.');
+    await sidecar.start();
+    return withSidekickWebuiReady(
+      () => sidecar.getStatus(),
+      (webuiUrl) => addSpace(webuiUrl, request)
+    );
+  });
   ipcMain.handle('lastbrowser:sidekick:removeSpace', (_event, request) => removeSpace(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:renameSpace', (_event, request) => renameSpace(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:reorderSpaces', (_event, request) => reorderSpaces(requireWebuiUrl(), request));
@@ -680,8 +689,9 @@ function registerIpc(): void {
           await destinationGuest.navigationHistory.restore(transfer.payload.navigationHistory);
         }
       } catch (error) {
-        console.error('[lastbrowser] Failed to restore detached tab navigation history:', error);
-        return false;
+        // The webview has already loaded the transferred URL. Keep that live
+        // page and complete the handoff if Electron rejects history restore.
+        console.warn('[lastbrowser] Could not restore detached tab navigation history; preserving the loaded page:', error);
       }
       // The window may have closed while Chromium was restoring the page.
       if (detachedTabTransfers.get(event.sender.id) !== transfer) return false;
@@ -1057,6 +1067,7 @@ app.whenReady().then(async () => {
   void extensionManager.init();
   appTray = createAppTray({
     getMainWindow: () => mainWindow,
+    getWindows: () => BrowserWindow.getAllWindows(),
     getServices: () => services,
     resourcesDir: appResourcesDir(),
     onQuit: () => {

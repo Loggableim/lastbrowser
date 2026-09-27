@@ -48,7 +48,7 @@ KERNFEATURES:
 • Arbeiten Sie parallel: 70 % Web-Inhalt links, 30 % Nova KI-Copilot rechts mit Syntax-Highlighting und Prompt-Templates.
 • Deep Tab Intelligence (@tabs): Erfassen und analysieren Sie den Inhalt mehrerer Tabs gleichzeitig. Erstellen Sie Wettbewerbsvergleiche, Tabellen-Synthesen oder Zusammenfassungen über Tab-Grenzen hinweg.
 • Klickbare Zitate mit Grounding Anchors: Jede Aussage des Assistenten verlinkt direkt auf die Fundstelle im Quell-Tab und hebt die Textpassage mit flüssigem Scrolling hervor.
-• Bring Your Own Key (BYOK): Nahtlose Anbindung an die Google Gemini CLI (Multi-Account Round-Robin) sowie persönliche API-Schlüssel für Anthropic Claude und OpenAI.
+• Bring Your Own Key (BYOK): Verbinden Sie unterstützte KI-Provider mit Ihren eigenen Zugangsdaten. Gemini-CLI-Subscription-OAuth und Multi-Account-Round-Robin sind nicht verfügbar.
 
 ⚡ Leistungsstarke Power-Tools & Entwickler-Werkzeuge
 • Echtes ConPTY Pseudo-Terminal: Integriertes Windows-Terminal direkt in der Sidebar – nahtloser Wechsel zwischen nativer PowerShell und Sidekick TUI.
@@ -110,7 +110,7 @@ KEY CAPABILITIES:
 • Multitask effortlessly: 70% web canvas on the left, 30% Nova AI Copilot on the right with full syntax highlighting and prompt templates.
 • Deep Tab Intelligence (@tabs): Synthesize and query content across multiple active tabs simultaneously. Compare competitor pricing, extract tables, or generate cross-source summaries.
 • Grounding Citation Badges: Every answer provides direct clickable citation anchors that smoothly scroll to and illuminate the exact source passage in the target tab.
-• Bring Your Own Key (BYOK): Directly connects with the Google Gemini CLI (multi-account round-robin) or your personal API keys for Anthropic Claude and OpenAI.
+• Bring Your Own Key (BYOK): Connect supported AI providers using your own credentials. Gemini CLI subscription OAuth and multi-account round-robin are unavailable.
 
 ⚡ Integrated Power Tools for Developers & Creators
 • Native ConPTY Terminal: Built-in pseudo-terminal supporting PowerShell and Sidekick Curses/TUI directly within the sidebar.

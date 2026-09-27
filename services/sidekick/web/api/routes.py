@@ -13210,7 +13210,10 @@ def _handle_workspace_add(handler, body):
     # _is_blocked_system_path honours user-tmp carve-outs (e.g. /var/folders on
     # macOS) so pytest's tmp_path_factory paths and other legit user-tmp dirs
     # still register cleanly.
-    candidate = Path(path_str).expanduser().resolve()
+    try:
+        candidate = _resolve_workspace_add_candidate(path_str)
+    except ValueError as e:
+        return bad(handler, str(e))
     if _is_blocked_system_path(candidate):
         return bad(handler, f"Path points to a system directory: {candidate}")
     # Now safe to create the directory if requested
@@ -13221,7 +13224,7 @@ def _handle_workspace_add(handler, body):
             return bad(handler, f"Could not create directory: {_sanitize_error(e)}")
     # Full validation (exists, is_dir) â€” should pass now that dir exists
     try:
-        p = validate_workspace_to_add(path_str)
+        p = validate_workspace_to_add(str(candidate))
     except ValueError as e:
         return bad(handler, str(e))
     wss = load_workspaces()
@@ -13230,6 +13233,27 @@ def _handle_workspace_add(handler, body):
     wss.append({"path": str(p), "name": name or p.name})
     save_workspaces(wss)
     return j(handler, {"ok": True, "workspaces": wss})
+
+
+def _resolve_workspace_add_candidate(path_str: str) -> Path:
+    """Resolve relative Add Space paths under the active Sidekick home.
+
+    The desktop starts the Sidekick process with its source directory as cwd.
+    Resolving a wizard path such as ``spaces/my-project`` against cwd would
+    therefore create user data inside the installed/repository source tree.
+    Absolute paths remain explicit user-selected workspace locations.
+    """
+    requested = Path(path_str).expanduser()
+    if requested.is_absolute():
+        return requested.resolve()
+
+    sidekick_home = Path(get_active_webui_home()).expanduser().resolve()
+    candidate = (sidekick_home / requested).resolve()
+    try:
+        candidate.relative_to(sidekick_home)
+    except ValueError as exc:
+        raise ValueError("Relative workspace paths must remain inside the Sidekick data home.") from exc
+    return candidate
 
 
 def _handle_workspace_remove(handler, body):

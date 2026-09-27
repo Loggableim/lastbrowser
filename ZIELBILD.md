@@ -13,7 +13,7 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 
 - [x] **Phase 1: Stabilitätsfundament** (Zustand Stores, App.tsx Modularisierung, 6 Locales i18n, node-pty Terminal, auto-generierter 418-Endpunkte-API-Katalog, Multi-Monitor Window Dragging)
 - [x] **Phase 2: Modularisierung & Kernfeatures (v0.1.26)** (Sub-Panels ausgelagert, Netscape/JSON Lesezeichen-Import/Export, Session-Snapshots, Visual Adblock Shield)
-- [x] **Phase 3: Auth, Modellkatalog & Setup Assistant** (In-App OAuth Connect Window, Gemini CLI Modellparität, Fullscreen First-Run Wizard, 5 Persönlichkeitsprofile)
+- [x] **Phase 3: Auth, Modellkatalog & Setup Assistant** (Provider-Authentifizierung gemäß jeweiligem Provider-Flow, Fullscreen First-Run Wizard, 5 Persönlichkeitsprofile; Gemini-CLI-Subscription-OAuth nicht verfügbar)
 - [x] **Phase 4: Shortcuts, Omnibox & Speed Dial (v0.1.27)** (Globaler IPC-Shortcut-Dispatcher, Omnibox-Autocomplete mit Live-Suggestions, Startseiten Speed-Dial)
 - [x] **Phase 5: Browser Polish & UX (v0.1.28)** (Tab-Favicons, Lade-Spinner, dynamischer Stop/Reload-Button, Webview Crash-Recovery, F11 Vollbild, Download-Aktivitätsindikator, 306 Unit-Tests grün)
 - [x] **Phase 6: Browser Power-Features (v0.1.29)** (Rechtsklick „Element untersuchen“ / DevTools Inspect mit Auto-Open, Rechtsklick „Deep Research mit [Assistenten-Name]“, Tab Audio-Indikator & Per-Tab Mute, Privater / Inkognito-Modus mit in-memory-incognito Partition & Ctrl+Shift+N, 309 Unit-Tests grün)
@@ -22,7 +22,7 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 - [x] **Phase 9: Modernes UI-Redesign (Sidekick + Zen Synthese mit einklappbarer Sidebar)** (Einklappbare vertikale Tabs, Wegfall horizontaler Tabs, 48px Slim-Dock, Pinned-Grid, Sidekick-Startseiten-Dashboard, 70/30 Copilot Split-View)
 - [x] **Phase 10: Agentic Browsing & Deep Tab Intelligence (Comet-Parität)** (10.1 Cross-Tab Context Synthesis `@tabs`, 10.6 CometJacking & Prompt-Injection Guardrails, Clickable Citation Badges)
 - [x] **Phase 11: Agentic Workflow Templates & Quick Action Hub** (Kuratierte 1-Klick Recherche- & Analyse-Workflows, Empty-State Quick-Launcher, Command Palette Integration)
-- [x] **Phase 12: Google Gemini CLI Provider & Multi-Account Round-Robin** (Gemini CLI Anbindung, Multi-Account Round-Robin, Auto-Failover, Default-Modell `gemini-3.8-flash`)
+- [!] **Phase 12: Gemini CLI Subscription-OAuth & Round-Robin – nicht verfügbar** (Google stellte den Consumer-Code-Assist-Zugriff am 18.06.2026 ein; Lastbrowser blockiert diesen Provider. Gespeicherte Alt-Credentials sind keine nutzbaren Zugangsdaten.)
 - [x] **Phase 13: UI-Synthese, Nova AI Branding & Power-Tools Integration (v0.1.31)** (Re-Branding zu Nova AI, Menü-Synthese der 17+ Power-Panels, Top-64 Pinned-Apps-Katalog, Draggable AI-Action-Bar, dynamische Live-Modellauswahl via Google CLI Quota-Discovery, 48 Spezial-Skills, Phasing-out des Classic Layouts)
 - [x] **Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur) (v0.1.31)** (Konsolidierung von Chrome MV3 WebExtensions und nativen Nova MCP-Skills, Ablösung des alten „App Store“-Begriffs, Workspace-Scoping, Berechtigungs-Sandboxing)
 - [x] **Store-Release Readiness: Microsoft Partner Center (Win32 / NSIS)** (27/27 Preflight Checks, WACK / Silent-Install `/S` Compliance, Store-Listing DE/EN, IARC-Guide, Local-First Privacy Policy)
@@ -262,16 +262,9 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
 
 ---
 
-## 8. Spezifikation Phase 12: Google Gemini CLI Provider & Multi-Account Round-Robin [x] (Umgesetzt v0.1.30)
-1. **Google Gemini CLI Anbindung:**
-   - [x] Auslesen der lokalen CLI-Credentials (`~/.gemini/credentials.json` bzw. `%APPDATA%\gemini`) identisch zur Antigravity-/Gravity-Toolchain.
-   - [x] Automatisches Token-Refreshing ohne erneuten Browser-Login.
-2. **Multi-Account Round-Robin Load Balancing:**
-   - [x] Unterstützung beliebig vieler Google-Accounts mit persistentem Account-Speicher (`geminiAccounts.ts`).
-   - [x] Gleichmäßige Verteilung des Token-Verbrauchs durch zyklisches Round-Robin bei jeder Modellanfrage.
-   - [x] Auto-Failover: Tritt ein Quota-Limit (HTTP 429) auf, springt der Request sofort zum nächsten aktiven Account.
-3. **Default-Modell: `gemini-3.8-flash`:**
-   - [x] `gemini-3.8-flash` als primäres Standardmodell für alle Chats, Recherchen und Agenten-Workflows hinterlegt.
+## 8. Phase 12: Gemini CLI Subscription-OAuth & Round-Robin – nicht verfügbar
+
+Der frühere `google-gemini-cli`-Provider ist in Lastbrowser absichtlich deaktiviert. Google stellte den Consumer-Code-Assist-Zugriff am 18.06.2026 ein; gespeicherte OAuth-Tokens und Account-Metadaten ermöglichen deshalb keine Inferenz. Lastbrowser bietet für diesen Provider weder Login noch Modellkatalog, Account-Rotation oder Quota-Failover an. Eine lokale Round-Robin-Metadatenfunktion ist kein Nachweis für ausführbare Anfragen. Gemini API und Vertex AI sind separate, eigenständig zu konfigurierende Provider und kein Ersatz für Subscription-OAuth.
 
 ---
 
@@ -324,15 +317,12 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
      - Standardzustand A: **Kompakter Mini-Mode / Slim Dock (48px)**.
      - Standardzustand B: **Vollständig Ausgeklappt (~240px)**.
 
-### 13.6 Universelle Modellauswahl & Dynamische Live-Discovery (Gemini CLI & Provider-Sync) [x]
+### 13.6 Universelle Modellauswahl & Provider-Sync [x]
 1. **Ablösung des statischen Hardcodings:**
    - Die bisherigen, statisch im Frontend hinterlegten Mock-Arrays (`AVAILABLE_MODELS` in `CopilotSplitView.tsx`, `setup-state.ts`, etc.) werden vollständig durch eine dynamische Anbindung an die Backend-API (`/api/models` / `/api/models/live`) ersetzt.
    - Veraltete oder nicht mehr im Code-Assist-Endpoint existierende Modell-IDs (wie `gemini-1.5-*`) werden aus allen Katalogen entfernt.
-2. **Dynamische Live-Discovery über Google Cloud Code Assist API:**
-   - **Backend (`services/sidekick/`):**
-     - Bei aktivem Google-CLI-Login (`google-gemini-cli`) ruft das Backend über `retrieve_user_quota()` in `services/sidekick/runtime/google_code_assist.py` den Endpunkt `POST https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota` mit dem OAuth-Bearer-Token auf.
-     - Google liefert ein `buckets[]`-Array mit den exakten, für das angemeldete Google-Konto provisionierten `modelId`s (z. B. `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3-flash-preview`, `gemini-3.1-pro-preview`) sowie dem aktuellen Kontingentstand (`remainingFraction`).
-     - Der API-Endpunkt `/api/models` spiegelt diese Liste direkt in der Gruppe `google-gemini-cli` mit Quota-Informationen wider.
+2. **Provider-spezifische Modellerkennung:**
+   - Der deaktivierte Provider `google-gemini-cli` liefert weder Authentifizierung noch Modelle oder Quota-Daten. Gemini API und Vertex AI müssen über ihre eigenen Provider-Zugangsdaten und unterstützten Modellkataloge laufen.
 3. **Pre-Login & Offline-Fallback:**
    - Vor dem Login (`GOOGLE CLI CONNECT`) oder bei Netzwerkunterbrechung zeigt der Picker eine verifizierte Standardauswahl der stabilen Produktionsmodelle:
      - `gemini-2.5-flash` (Standard • Schnell & Kosteneffizient)
@@ -340,11 +330,11 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
    - Sobald das Konto verbunden ist (`GOOGLE CLI READY`), aktualisiert sich das Dropdown in Echtzeit mit den real verfügbaren Modellen des Accounts.
 4. **UI-Darstellung & Quota-Badges:**
    - Dynamischer Dropdown-Picker im Chat- und Copilot-SplitView:
-     - **Google Gemini CLI:** Anzeige der live entdeckten Modelle inkl. Kontingent-Badge (z. B. *„Gemini 2.5 Flash • 85% Kontingent verfügbar“*) und des aktiven Round-Robin Google-Accounts.
+     - **Google Gemini CLI (`google-gemini-cli`):** nicht verfügbar; alte OAuth-Tokens, Quota-Abfragen und statische Legacy-Modelllisten dürfen keine auswählbaren Modelle oder Inferenz erzeugen.
      - **Anthropic:** `claude-3-5-sonnet`, `claude-3-opus`, `claude-3-5-haiku`.
      - **OpenAI:** `gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini`.
      - **Lokale Modelle:** Erkannte Ollama- / LocalAI-Instanzen.
-   - Auto-Failover: Ist ein Modell oder Account quota-erschöpft (HTTP 429 / `remainingFraction == 0`), wechselt der Provider-Runner nahtlos zum nächsten konfigurierten Google-Account oder bietet einen automatischen Modell-Fallback an.
+   - Auto-Failover darf nur auf tatsächlich verfügbare und konfigurierte Provider bzw. Accounts routen. Lokale Alt-Account-Metadaten umgehen keine Anbieterlimits.
 
 ### 13.7 Agentic Workflows: Kategorisiertes Dropout-Menü mit 12+ Skills pro Kategorie [x]
 1. **Erweitertes Dropout-Menü:**
@@ -506,5 +496,4 @@ Jeder nachfolgende Agent arbeitet nach folgenden Regeln:
 5. **Typensicherheit & Import-Integrität:** `npm run build` (`build:main` und `build:renderer`) müssen 0 TypeScript- und Vite-Fehler aufweisen. Keine ungebundenen JSX-Komponenten verwenden (jeder verwendete Bezeichner muss explizit importiert sein).
 6. **Dokumentenpflege:** Nach erfolgreicher Umsetzung den Haken in diesem Zielbild (`[x]`) und im Backlog setzen.
 7. **Panel-Integrität:** Beim Bearbeiten oder Refaktorisieren von Panels sicherstellen, dass alle Sub-Komponenten (z. B. `AdvancedWebUiTools`) sauber importiert sind und beim Mounten keine ReferenceErrors werfen.
-
 

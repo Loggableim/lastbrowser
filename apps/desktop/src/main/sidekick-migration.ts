@@ -58,8 +58,11 @@ export function detectStandaloneSidekickInstall(
 
   for (const base of candidatePaths) {
     if (!base) continue;
-    const sidekickDir = join(base, '.sidekick');
-    if (existsSync(sidekickDir)) {
+    // Windows standalone installs have used both a hidden home folder and
+    // the conventional %APPDATA%\\sidekick directory. Try both spellings.
+    const candidates = [join(base, '.sidekick'), join(base, 'sidekick')];
+    for (const sidekickDir of candidates) {
+      if (!existsSync(sidekickDir)) continue;
       homeDir = sidekickDir;
       components.spaces = existsSync(join(sidekickDir, 'spaces'));
       components.supermemory = existsSync(join(sidekickDir, 'supermemory.db'));
@@ -67,6 +70,7 @@ export function detectStandaloneSidekickInstall(
       components.config = existsSync(join(sidekickDir, 'config.yaml'));
       break;
     }
+    if (homeDir) break;
   }
 
   return {

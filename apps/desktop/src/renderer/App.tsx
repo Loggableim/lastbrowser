@@ -237,6 +237,8 @@ import { ShellRail } from './components/ShellRail.js';
 import { ContextSidebar, panelContextItems, type SidekickMessage } from './components/ContextSidebar.js';
 import { AddressBar } from './components/AddressBar.js';
 import { useTabStore, type SplitLayoutMode } from './stores/useTabStore.js';
+import { mergeSpaceAudioTabs, subscribeToWebviewMediaState, type SpaceAudioKeepaliveEntry } from './space-audio-keepalive.js';
+import { resolveCanonicalSpacePath } from './space-paths.js';
 import { usePanelStore } from './stores/usePanelStore.js';
 import { useChatStore } from './stores/useChatStore.js';
 import { loadSpaceModel, removeSpaceModel, saveSpaceModel } from './space-models.js';
@@ -473,6 +475,7 @@ export function applyDesktopAppearance(settings: DesktopSettingsRecord | null): 
   root.classList.toggle('theme-light', resolvedTheme === 'light');
   root.classList.toggle('theme-dark', resolvedTheme === 'dark');
   root.classList.toggle('theme-oled', resolvedTheme === 'oled');
+  root.classList.toggle('theme-vision-impaired', resolvedTheme === 'vision-impaired');
   root.classList.toggle('theme-system', theme === 'system');
   root.style.colorScheme = resolvedTheme === 'light' ? 'light' : 'dark';
 
@@ -768,12 +771,8 @@ export function App(): JSX.Element {
   const zenSidebarTimerRef = useRef<number | null>(null);
   const [zenFloatingMode, setZenFloatingMode] = useState<SidebarMode>('expanded');
   const [spaceSetupModalOpen, setSpaceSetupModalOpen] = useState(false);
-  // Audio keepalive across spaces (goal.md Paket 3): pinned tabs that are
-  // playing audio keep a hidden webview mounted when their space is left, so
-  // music (e.g. YouTube Music) continues seamlessly while the user works in
-  // another space. Entries are removed when the user returns to the space
-  // (the main layer remounts the tab) or when the space is deleted.
-  const [audioKeepalive, setAudioKeepalive] = useState<Array<{ tab: BrowserTab; spacePath: string; profileId: string }>>([]);
+  // Keep the original WebView guest in BrowserMain while its Space is inactive.
+  const [audioKeepalive, setAudioKeepalive] = useState<SpaceAudioKeepaliveEntry[]>([]);
 
   const handleZenSidebarEnter = useCallback(() => {
     if (zenSidebarTimerRef.current) {
@@ -1590,12 +1589,15 @@ export function App(): JSX.Element {
     //    music keeps playing across space switches (goal.md Paket 3).
     //    The webviews live in the BrowserMain layer; reach them through the DOM
     //    and match each element to its tab via the data-tab-id attribute.
-    //    Keepalive webviews (audio-keepalive layer) carry no data-tab-id, so
-    //    they are never muted by a later space switch either.
+    //    Previously kept-alive pinned audio tabs also remain exempt when
+    //    leaving additional spaces.
     try {
-      const exemptTabIds = new Set(
-        tabs.filter((tab) => tab.pinned && tab.isPlayingAudio).map((tab) => tab.id)
-      );
+      const exemptTabIds = new Set([
+        ...tabs.filter((tab) => tab.pinned && tab.isPlayingAudio).map((tab) => tab.id),
+        ...audioKeepalive
+          .filter((entry) => entry.profileId === activeProfileId && entry.tab.pinned && entry.tab.isPlayingAudio)
+          .map((entry) => entry.tab.id)
+      ]);
       document.querySelectorAll<HTMLElement>('webview[data-tab-id]').forEach((el) => {
         const tabId = el.getAttribute('data-tab-id') || '';
         if (exemptTabIds.has(tabId)) return;
@@ -1605,11 +1607,11 @@ export function App(): JSX.Element {
       });
     } catch {}
 
-    // 2b. Audio keepalive: pinned tabs that are playing audio get a hidden
-    //     webview in the keepalive layer so they survive the tab-list swap
-    //     below and keep playing. Entries for the TARGET space are dropped —
-    //     the main layer remounts those tabs, and a second webview for the
-    //     same tab would double the audio.
+    // 2b. Keep the original tab record in BrowserMain so React retains its
+    //     keyed WebView guest and media session while the tab's Space is away.
+    //     Entries for the TARGET space are removed because its normal tab row
+    //     takes over the same keyed WebView. Never create a second guest from
+    //     the URL: that loses page state and can restart or block playback.
     if (!isDetachedWindow) {
       const keepaliveCandidates = tabs
         .filter((tab) => tab.pinned && tab.isPlayingAudio)
@@ -1653,7 +1655,7 @@ export function App(): JSX.Element {
     if (spaceModel) useChatStore.getState().setSelectedModel(spaceModel);
     setBrowserMode(isAiBrowserHomeUrl(nextTabs.find((t) => t.id === nextActiveId)?.url || '') ? 'home' : 'web');
     setBrowserLoadError('');
-  }, [activeProfileId, activeSpacePath, tabs, activeTabId, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, isDetachedWindow, setTabs, setActiveTabId, clearSplitTabs, setSnapGroup, setSplitLayout, setBrowserMode, setBrowserLoadError, knownSpacePaths]);
+  }, [activeProfileId, activeSpacePath, tabs, audioKeepalive, activeTabId, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, isDetachedWindow, setTabs, setActiveTabId, clearSplitTabs, setSnapGroup, setSplitLayout, setBrowserMode, setBrowserLoadError, knownSpacePaths]);
 
   const handleDetachTab = useCallback(async (tabToDetach: BrowserTab, screenX?: number, screenY?: number, guestWebContentsId?: number) => {
     if (window.lastbrowser?.window?.detachTab) {
@@ -2511,39 +2513,47 @@ export function App(): JSX.Element {
     }
   }
 
-  async function addSpaceNative(path: string, name: string): Promise<boolean> {
+  async function addSpaceNative(path: string, name: string): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
     try {
       const result = await window.lastbrowser.sidekick.addSpace({ path, name, create: true });
       const nextSpaces = Array.isArray(result.workspaces) ? result.workspaces : spaces;
+      const canonicalPath = resolveCanonicalSpacePath(path, nextSpaces);
+      if (!canonicalPath) {
+        const message = 'The backend created the Space but did not return its canonical path.';
+        setSpacesError(message);
+        return { ok: false, error: message };
+      }
       setSpaces(nextSpaces);
       setSpacesError('');
-      handleSpaceSelect(path);
-      return true;
+      handleSpaceSelect(canonicalPath);
+      return { ok: true, path: canonicalPath };
     } catch (error) {
-      setSpacesError(error instanceof Error ? error.message : String(error));
-      return false;
+      const message = error instanceof Error ? error.message : String(error);
+      setSpacesError(message);
+      return { ok: false, error: message };
     }
   }
 
   const handleCreateSpaceFromModal = useCallback(async (data: SpaceSetupData) => {
     try {
       const created = await addSpaceNative(data.path, data.name);
-      if (!created) return false;
+      if (!created.ok) return created.error;
+      const createdSpacePath = created.path;
       if (data.model) {
-        saveSpaceModel(data.path, data.model, window.localStorage);
+        saveSpaceModel(createdSpacePath, data.model, window.localStorage);
         useChatStore.getState().setSelectedModel(data.model);
       }
       if (data.pinnedApps && data.pinnedApps.length > 0) {
         data.pinnedApps.forEach((app) => {
           const existingVisibleApp = usePinnedAppStore.getState().apps.some((existing) =>
-            existing.url === app.url && (!existing.spacePath || existing.spacePath === data.path)
+            existing.url === app.url && (!existing.spacePath || existing.spacePath === createdSpacePath)
           );
           if (existingVisibleApp) return;
           usePinnedAppStore.getState().addApp({
             name: app.name,
             url: app.url,
             color: app.color || data.color,
-            spacePath: data.path
+            spacePath: createdSpacePath
           });
         });
       }
@@ -2554,7 +2564,7 @@ export function App(): JSX.Element {
     } catch (err) {
       console.error('[App] Failed to create space from modal:', err);
       setSpacesError(err instanceof Error ? err.message : String(err));
-      return false;
+      return err instanceof Error ? err.message : String(err);
     }
   }, [spaces, handleSpaceSelect, addTab]);
 
@@ -3054,6 +3064,7 @@ export function App(): JSX.Element {
                   pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
                   onboardingStatus={onboardingStatus}
                   tabs={tabs}
+                  audioKeepalive={audioKeepalive}
                   splitTabIds={splitTabIds}
                   splitSlotIndexes={splitSlotIndexes}
                   splitLayout={splitLayout}
@@ -3375,6 +3386,7 @@ export function App(): JSX.Element {
               pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
               onboardingStatus={onboardingStatus}
               tabs={tabs}
+              audioKeepalive={audioKeepalive}
               splitTabIds={splitTabIds}
               splitSlotIndexes={splitSlotIndexes}
               splitLayout={splitLayout}
@@ -3511,42 +3523,6 @@ export function App(): JSX.Element {
         <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />
         <CommandPalette />
 
-        {/* Audio keepalive layer (goal.md Paket 3): hidden webviews for pinned
-            tabs that were playing audio when their space was left. The 1px
-            container stays inside the viewport so Chromium does not
-            occlusion-suspend the guest; backgroundThrottling=no keeps media
-            active. These webviews intentionally carry NO data-tab-id so the
-            space-switch mute logic never touches them. */}
-        {audioKeepalive.length > 0 && (
-          <div
-            className="audio-keepalive-layer"
-            aria-hidden="true"
-            style={{
-              position: 'fixed',
-              right: 0,
-              bottom: 0,
-              width: 1,
-              height: 1,
-              opacity: 0,
-              pointerEvents: 'none',
-              zIndex: 0,
-              overflow: 'hidden'
-            }}
-          >
-            {audioKeepalive.map((entry) => (
-              <webview
-                key={`keepalive:${entry.tab.id}`}
-                src={entry.tab.url}
-                className="browser-view"
-                style={{ width: 1, height: 1 }}
-                partition={computeSpacePartition(entry.profileId, entry.spacePath, entry.tab.incognito, knownSpacePaths)}
-                allowpopups="true"
-                plugins="true"
-                webpreferences="contextIsolation=yes, plugins=yes, backgroundThrottling=no"
-              />
-            ))}
-          </div>
-        )}
     </div>
     </DesktopI18nProvider>
   );
@@ -3609,6 +3585,7 @@ function BrowserMain({
   searchEngineId,
   onSearchEngineChange,
   tabs,
+  audioKeepalive = [],
   splitTabIds = [],
   splitSlotIndexes = [],
   splitLayout = 'columns',
@@ -3680,6 +3657,7 @@ function BrowserMain({
   searchEngineId: string;
   onSearchEngineChange: (id: string) => void;
   tabs?: BrowserTab[];
+  audioKeepalive?: SpaceAudioKeepaliveEntry[];
   splitTabIds?: string[];
   splitSlotIndexes?: number[];
   splitLayout?: SplitLayoutMode;
@@ -3703,7 +3681,14 @@ function BrowserMain({
   } as React.CSSProperties;
 
   const knownSpacePaths = spaces.map((space) => space.path);
-  const safeSpace = computeSpacePartition(activeProfile.id, activeSpacePath, false, knownSpacePaths).replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+  const activeTabs = tabs && tabs.length > 0 ? tabs : [activeTab];
+  const activeTabIds = new Set(activeTabs.map((tab) => tab.id));
+  const keepaliveById = new Map(
+    audioKeepalive
+      .filter((entry) => entry.profileId === activeProfile.id && entry.spacePath !== activeSpacePath)
+      .map((entry) => [entry.tab.id, entry] as const)
+  );
+  const renderedTabs = mergeSpaceAudioTabs(activeTabs, audioKeepalive, activeSpacePath, activeProfile.id);
 
 
 
@@ -3716,6 +3701,13 @@ function BrowserMain({
   const [webviewReady, setWebviewReady] = useState(false);
   const [webviewMountKey, setWebviewMountKey] = useState(0);
   const allWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
+  const webviewMediaCleanupRefs = useRef<Record<string, () => void>>({});
+  const onWebviewMediaPlayingRef = useRef(onWebviewMediaPlaying);
+  onWebviewMediaPlayingRef.current = onWebviewMediaPlaying;
+  useEffect(() => () => {
+    Object.values(webviewMediaCleanupRefs.current).forEach((cleanup) => cleanup());
+    webviewMediaCleanupRefs.current = {};
+  }, []);
   const [snapFlyoutVisible, setSnapFlyoutVisible] = useState(false);
   const [snapDropTarget, setSnapDropTarget] = useState<GhostTarget | null>(null);
   const normalizedSnapLayout: SnapLayoutType = splitLayout in SNAP_LAYOUT_DEFINITIONS
@@ -3966,13 +3958,6 @@ function BrowserMain({
       onWebviewLoading?.(activeTab.id, false);
       onSetBrowserError?.('The web page crashed or was terminated unexpectedly.');
     };
-    const onMediaStarted = () => {
-      onWebviewMediaPlaying?.(activeTab.id, true);
-    };
-    const onMediaPaused = () => {
-      onWebviewMediaPlaying?.(activeTab.id, false);
-    };
-
     const attach = () => {
       if (cancelled) return;
       const view = webviewRef.current;
@@ -3989,8 +3974,6 @@ function BrowserMain({
       view.addEventListener('did-stop-loading', onStopLoading);
       view.addEventListener('did-fail-load', onFailLoad);
       view.addEventListener('render-process-gone', onCrash);
-      view.addEventListener('media-started-playing', onMediaStarted);
-      view.addEventListener('media-paused', onMediaPaused);
     };
     attach();
 
@@ -4006,8 +3989,6 @@ function BrowserMain({
           attached.removeEventListener('did-stop-loading', onStopLoading);
           attached.removeEventListener('did-fail-load', onFailLoad);
           attached.removeEventListener('render-process-gone', onCrash);
-          attached.removeEventListener('media-started-playing', onMediaStarted);
-          attached.removeEventListener('media-paused', onMediaPaused);
         } catch {
           // ignore
         }
@@ -4581,8 +4562,10 @@ function BrowserMain({
             overflow: 'hidden'
           }}
         >
-          {(tabs && tabs.length > 0 ? tabs : [activeTab]).map((tab) => {
+          {renderedTabs.map((tab) => {
             const isCurrent = tab.id === activeTab.id;
+            const keepaliveEntry = keepaliveById.get(tab.id);
+            const isAudioKeepalive = Boolean(keepaliveEntry && !activeTabIds.has(tab.id));
             const groupIndex = splitTabIds.indexOf(tab.id);
             const isInActiveSplit = splitGroupActive && groupIndex >= 0;
             const slotIndex = isInActiveSplit ? (splitSlotIndexes[groupIndex] ?? groupIndex) : -1;
@@ -4597,13 +4580,17 @@ function BrowserMain({
                 className={`browser-tab-pane ${isCurrent ? 'active-tab-pane' : 'inactive-tab-pane'}`}
                 style={{
                   position: 'absolute',
-                  top: paneBounds ? `${paneBounds.top}%` : 0,
-                  left: paneBounds ? `${paneBounds.left}%` : 0,
-                  width: paneBounds ? `${paneBounds.width}%` : '100%',
-                  height: paneBounds ? `${paneBounds.height}%` : '100%',
+                  ...(isAudioKeepalive
+                    ? { right: 0, bottom: 0, width: 1, height: 1, opacity: 0 }
+                    : {
+                        top: paneBounds ? `${paneBounds.top}%` : 0,
+                        left: paneBounds ? `${paneBounds.left}%` : 0,
+                        width: paneBounds ? `${paneBounds.width}%` : '100%',
+                        height: paneBounds ? `${paneBounds.height}%` : '100%'
+                      }),
                   minWidth: 0,
                   minHeight: 0,
-                  visibility: (isCurrent || isInActiveSplit) ? 'visible' : 'hidden',
+                  visibility: (isCurrent || isInActiveSplit || isAudioKeepalive) ? 'visible' : 'hidden',
                   pointerEvents: (isCurrent || isInActiveSplit) ? 'auto' : 'none',
                   zIndex: isInActiveSplit ? 2 : isCurrent ? 1 : 0
                 }}
@@ -4614,25 +4601,47 @@ function BrowserMain({
                   </div>
                 ) : webviewReady && webviewStartupReady && (
                   <webview
-                    key={`${activeProfile.id}:${safeSpace}:${tab.id}:${webviewMountKey}`}
+                    key={`${computeSpacePartition(
+                      keepaliveEntry?.profileId ?? activeProfile.id,
+                      keepaliveEntry?.spacePath ?? activeSpacePath,
+                      tab.incognito,
+                      knownSpacePaths
+                    )}:${tab.id}:${webviewMountKey}`}
                     ref={(el) => {
                       if (el) {
                         allWebviewRefs.current[tab.id] = el;
+                        webviewMediaCleanupRefs.current[tab.id]?.();
+                        webviewMediaCleanupRefs.current[tab.id] = subscribeToWebviewMediaState(
+                          el,
+                          tab.id,
+                          (tabId, isPlaying) => onWebviewMediaPlayingRef.current?.(tabId, isPlaying)
+                        );
                         if (tab.id === activeTab.id) {
                           webviewRef.current = el;
                         }
                       } else {
+                        webviewMediaCleanupRefs.current[tab.id]?.();
+                        delete webviewMediaCleanupRefs.current[tab.id];
                         delete allWebviewRefs.current[tab.id];
                       }
                     }}
                     src={tab.url}
                     data-tab-id={tab.id}
                     className="browser-view"
-                    style={isInActiveSplit ? { ...browserWebviewStyle, position: 'absolute', top: 28, height: 'calc(100% - 28px)' } : browserWebviewStyle}
-                    partition={computeSpacePartition(activeProfile.id, activeSpacePath, tab.incognito, knownSpacePaths)}
+                    style={isAudioKeepalive
+                      ? browserWebviewStyle
+                      : isInActiveSplit
+                        ? { ...browserWebviewStyle, position: 'absolute', top: 28, height: 'calc(100% - 28px)' }
+                        : browserWebviewStyle}
+                    partition={computeSpacePartition(
+                      keepaliveEntry?.profileId ?? activeProfile.id,
+                      keepaliveEntry?.spacePath ?? activeSpacePath,
+                      tab.incognito,
+                      knownSpacePaths
+                    )}
                     allowpopups="true"
                     plugins="true"
-                    webpreferences="contextIsolation=yes, plugins=yes"
+                    webpreferences={tab.pinned ? 'contextIsolation=yes, plugins=yes, backgroundThrottling=no' : 'contextIsolation=yes, plugins=yes'}
                     onDidStartLoading={() => {
                       if (tab.id === activeTab.id) onClearBrowserError();
                     }}

@@ -18,6 +18,7 @@ vi.mock('electron', () => {
       emitter.setToolTip = vi.fn();
       emitter.setContextMenu = vi.fn();
       emitter.destroy = vi.fn();
+      emitter.isDestroyed = vi.fn(() => false);
       return emitter;
     }),
     nativeImage: {
@@ -27,9 +28,62 @@ vi.mock('electron', () => {
   };
 });
 
-import { buildTrayContextMenu, setupMinimizeToTray, resolveTrayIconPath } from '../src/main/tray.js';
+import { buildTrayContextMenu, createAppTray, setupMinimizeToTray, resolveTrayIconPath, revealBrowserWindows } from '../src/main/tray.js';
 
 describe('system tray and background operation', () => {
+  it('restores detached windows from the tray and focuses the main window', () => {
+    const main = {
+      isDestroyed: vi.fn(() => false),
+      isMinimized: vi.fn(() => true),
+      isVisible: vi.fn(() => false),
+      restore: vi.fn(), show: vi.fn(), focus: vi.fn()
+    };
+    const detached = {
+      isDestroyed: vi.fn(() => false),
+      isMinimized: vi.fn(() => false),
+      isVisible: vi.fn(() => false),
+      restore: vi.fn(), show: vi.fn(), focus: vi.fn()
+    };
+    const closed = {
+      isDestroyed: vi.fn(() => true),
+      isMinimized: vi.fn(), isVisible: vi.fn(),
+      restore: vi.fn(), show: vi.fn(), focus: vi.fn()
+    };
+
+    revealBrowserWindows([main, detached, closed], main);
+
+    expect(main.restore).toHaveBeenCalledOnce();
+    expect(main.show).toHaveBeenCalledOnce();
+    expect(detached.restore).not.toHaveBeenCalled();
+    expect(detached.show).toHaveBeenCalledOnce();
+    expect(closed.show).not.toHaveBeenCalled();
+    expect(main.focus).toHaveBeenCalledOnce();
+    expect(detached.focus).not.toHaveBeenCalled();
+  });
+
+  it('wires the tray icon click to all app windows, including detached ones', () => {
+    const main = {
+      isDestroyed: () => false, isMinimized: () => false, isVisible: () => true,
+      restore: vi.fn(), show: vi.fn(), focus: vi.fn()
+    };
+    const detached = {
+      isDestroyed: () => false, isMinimized: () => false, isVisible: () => false,
+      restore: vi.fn(), show: vi.fn(), focus: vi.fn()
+    };
+    const trayController = createAppTray({
+      getMainWindow: () => main as any,
+      getWindows: () => [main, detached] as any,
+      getServices: () => null,
+      resourcesDir: 'C:/missing'
+    });
+
+    (trayController.tray as any).emit('click');
+
+    expect(detached.show).toHaveBeenCalledOnce();
+    expect(main.focus).toHaveBeenCalledOnce();
+    trayController.destroy();
+  });
+
   it('builds context menu reflecting offline services and inactive gateway', () => {
     const actions = {
       showWindow: vi.fn(),

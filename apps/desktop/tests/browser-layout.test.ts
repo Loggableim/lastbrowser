@@ -155,7 +155,9 @@ describe('browser shell layout', () => {
 
     expect(source).toContain('const browserWebviewStyle = {');
     expect(source).toContain("height: '100%'");
-    expect(source).toContain('style={isInActiveSplit ? { ...browserWebviewStyle');
+    expect(source).toContain('style={isAudioKeepalive');
+    expect(source).toContain('? browserWebviewStyle');
+    expect(source).toContain(': isInActiveSplit');
     expect(source).toContain(': browserWebviewStyle}');
     expect(source).not.toContain('useBrowserViewportHeight(');
 

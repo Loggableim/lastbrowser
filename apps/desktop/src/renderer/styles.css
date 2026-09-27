@@ -15725,6 +15725,11 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
   font-size: 16px;
 }
 
+.theme-vision-impaired * {
+  font-size: max(16px, 1em) !important;
+  font-family: Arial, Helvetica, sans-serif !important;
+}
+
 .theme-vision-impaired body {
   background: #000000;
   color: #FFFFFF;
@@ -17197,7 +17202,7 @@ body {
 
 /* Minimum Font Size Enforcement */
 body, p, span, div, button, input {
-  font-size: max(var(--min-font-size, 0px), inherit);
+  font-size: max(var(--min-font-size, 0px), 1em);
 }
 
 /* Ollama Configuration Modal */

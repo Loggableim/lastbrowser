@@ -68,6 +68,10 @@ OPENROUTER_MODELS: list[tuple[str, str]] = [
 
 _openrouter_catalog_cache: list[tuple[str, str]] | None = None
 
+# Providers retained in the static catalog solely for migration/status
+# compatibility must not become selectable through offline model fallbacks.
+_UNAVAILABLE_INFERENCE_PROVIDERS = frozenset({"google-gemini-cli"})
+
 
 # Fallback Vercel AI Gateway snapshot used when the live catalog is unavailable.
 # OSS / open-weight models prioritized first, then closed-source by family.
@@ -964,6 +968,8 @@ def curated_models_for_provider(
     is unreachable.
     """
     normalized = normalize_provider(provider)
+    if normalized in _UNAVAILABLE_INFERENCE_PROVIDERS:
+        return []
     if normalized == "openrouter":
         return fetch_openrouter_models(force_refresh=force_refresh)
 
@@ -1071,7 +1077,7 @@ def detect_static_provider_for_model(
     # Skip "custom" and "openrouter" — custom has no model catalog, and
     # openrouter requires an explicit model name to be useful.
     resolved_provider = _PROVIDER_ALIASES.get(name_lower, name_lower)
-    if resolved_provider not in {"custom", "openrouter"}:
+    if resolved_provider not in {"custom", "openrouter"} | _UNAVAILABLE_INFERENCE_PROVIDERS:
         default_models = _PROVIDER_MODELS.get(resolved_provider, [])
         if (
             resolved_provider in _PROVIDER_LABELS
@@ -1087,7 +1093,7 @@ def detect_static_provider_for_model(
 
     # --- Step 1: check static provider catalogs for a direct match ---
     for pid, models in _PROVIDER_MODELS.items():
-        if pid in current_keys or pid in _AGGREGATOR_PROVIDERS:
+        if pid in current_keys or pid in _AGGREGATOR_PROVIDERS or pid in _UNAVAILABLE_INFERENCE_PROVIDERS:
             continue
         if any(name_lower == m.lower() for m in models):
             return (pid, name)

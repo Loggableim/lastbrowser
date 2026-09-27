@@ -35,9 +35,16 @@ def test_round_robin_metadata_cycles_usable_accounts(monkeypatch):
 
 
 def test_google_cli_catalog_does_not_advertise_unavailable_subscription_models():
-    from cli.models import provider_model_ids
+    from cli.models import curated_models_for_provider, provider_model_ids
 
     assert provider_model_ids("google-gemini-cli") == []
+    assert curated_models_for_provider("google-gemini-cli") == []
+
+
+def test_static_model_detection_does_not_route_to_unavailable_google_cli():
+    from cli.models import detect_provider_for_model
+
+    assert detect_provider_for_model("gemini-3-flash-preview", "openrouter") is None
 
 
 def test_google_cli_auth_add_rejects_before_pool_or_browser_flow(monkeypatch):

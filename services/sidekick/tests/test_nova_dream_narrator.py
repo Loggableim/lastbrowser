@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 from urllib import request as urllib_request
 
@@ -11,8 +12,8 @@ import pytest
 MODULE_PATH = Path("C:/sidekick/home/spaces/nova/dream_narrator.py")
 
 pytestmark = pytest.mark.skipif(
-    not MODULE_PATH.exists(),
-    reason="Nova dream narrator belongs to an optional local Space",
+    os.environ.get("LASTBROWSER_TEST_LOCAL_SPACE_BRIDGES") != "1" or not MODULE_PATH.exists(),
+    reason="Nova dream narrator is a user-local optional file; opt in with LASTBROWSER_TEST_LOCAL_SPACE_BRIDGES=1",
 )
 
 

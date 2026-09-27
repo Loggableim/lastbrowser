@@ -35,6 +35,22 @@ describe('detectStandaloneSidekickInstall', () => {
     expect(report.components.config).toBe(true);
   });
 
+  it('detects the conventional AppData\\sidekick directory as well as .sidekick', () => {
+    const deps = makeFakeDeps(new Set([
+      'C:/Users/test/AppData/Roaming/sidekick',
+      'C:/Users/test/AppData/Roaming/sidekick/spaces',
+      'C:/Users/test/AppData/Roaming/sidekick/profiles'
+    ]));
+
+    const report = detectStandaloneSidekickInstall(['C:/Users/test/AppData/Roaming'], deps);
+
+    expect(report).toMatchObject({
+      found: true,
+      homeDir: 'C:/Users/test/AppData/Roaming/sidekick',
+      components: { spaces: true, profiles: true, supermemory: false, config: false }
+    });
+  });
+
   it('reports not found when no .sidekick dir exists in any candidate', () => {
     const deps = makeFakeDeps(new Set());
     const report = detectStandaloneSidekickInstall(['C:/nowhere', ''], deps);

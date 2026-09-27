@@ -48,6 +48,12 @@ class TestValidateMigrationSource:
         parent = standalone_home.parent
         assert _validate_migration_source(str(parent)) == standalone_home.resolve()
 
+    def test_accepts_appdata_sidekick_home_and_its_parent(self, tmp_path: Path) -> None:
+        sidekick_home = tmp_path / "AppData" / "Roaming" / "sidekick"
+        sidekick_home.mkdir(parents=True)
+        assert _validate_migration_source(str(sidekick_home)) == sidekick_home.resolve()
+        assert _validate_migration_source(str(sidekick_home.parent)) == sidekick_home.resolve()
+
     def test_rejects_missing_home(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="does not exist"):
             _validate_migration_source(str(tmp_path / "nope"))
@@ -63,6 +69,22 @@ class TestValidateMigrationSource:
     def test_rejects_traversal(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match=r"\.\."):
             _validate_migration_source(str(tmp_path / ".." / "escape"))
+
+    def test_rejects_arbitrary_directory(self, tmp_path: Path) -> None:
+        arbitrary = tmp_path / "documents"
+        arbitrary.mkdir()
+        (arbitrary / "spaces").mkdir()
+        with pytest.raises(ValueError, match="sidekick data directory"):
+            _validate_migration_source(str(arbitrary))
+
+    def test_rejects_symlinked_source_home(self, standalone_home: Path, tmp_path: Path) -> None:
+        link = tmp_path / "sidekick"
+        try:
+            link.symlink_to(standalone_home, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlink creation is not available")
+        with pytest.raises(ValueError, match="symlink or junction"):
+            _validate_migration_source(str(link))
 
 
 class TestDetectStandaloneInstall:
@@ -105,6 +127,54 @@ class TestMigrateStandaloneInstall:
         # New content in place, old content preserved under .bak
         assert (destination_home / "spaces" / "work" / "note.md").exists()
         assert (destination_home / "spaces.bak" / "old" / "old.txt").read_text(encoding="utf-8") == "old"
+
+    def test_copy_failure_keeps_existing_destination_in_place(
+        self, standalone_home: Path, destination_home: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import shutil
+
+        existing = destination_home / "spaces"
+        existing.mkdir()
+        (existing / "keep.txt").write_text("existing", encoding="utf-8")
+        real_copytree = shutil.copytree
+
+        def fail_copytree(*args, **kwargs):
+            raise OSError("simulated disk full")
+
+        monkeypatch.setattr(shutil, "copytree", fail_copytree)
+        report = migrate_standalone_install({
+            "source_home": str(standalone_home),
+            "items": {"spaces": True, "supermemory": False, "profiles": False},
+        })
+
+        monkeypatch.setattr(shutil, "copytree", real_copytree)
+        assert report["copied"] == []
+        assert len(report["errors"]) == 1
+        assert (destination_home / "spaces" / "keep.txt").read_text(encoding="utf-8") == "existing"
+        assert not (destination_home / "spaces.bak").exists()
+        assert not list(destination_home.glob(".spaces.migration-*"))
+
+    def test_rejects_symlinks_inside_selected_tree_without_copying(
+        self, standalone_home: Path, destination_home: Path
+    ) -> None:
+        outside = destination_home.parent / "outside-secret.txt"
+        outside.write_text("must not be imported", encoding="utf-8")
+        link = standalone_home / "spaces" / "work" / "external.txt"
+        try:
+            link.symlink_to(outside)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlink creation is not available")
+
+        report = migrate_standalone_install({
+            "source_home": str(standalone_home),
+            "items": {"spaces": True, "supermemory": False, "profiles": False},
+        })
+
+        assert report["copied"] == []
+        assert any("symlink or junction" in error for error in report["errors"])
+        assert not (destination_home / "spaces").exists()
+        assert outside.read_text(encoding="utf-8") == "must not be imported"
+        assert not list(destination_home.glob(".spaces.migration-*"))
 
     def test_skips_missing_components(self, standalone_home: Path, destination_home: Path) -> None:
         report = migrate_standalone_install({

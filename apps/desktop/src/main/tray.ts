@@ -11,10 +11,33 @@ export type TrayController = {
 
 export type TrayOptions = {
   getMainWindow: () => BrowserWindow | null;
+  getWindows?: () => BrowserWindow[];
   getServices: () => SidecarServices | null;
   resourcesDir?: string;
   onQuit?: () => void;
 };
+
+export type TrayWindowTarget = {
+  isDestroyed(): boolean;
+  isMinimized(): boolean;
+  isVisible(): boolean;
+  restore(): void;
+  show(): void;
+  focus(): void;
+};
+
+/** Restore hidden/minimized windows as a group so detached windows stay reachable from the tray. */
+export function revealBrowserWindows(windows: TrayWindowTarget[], preferred?: TrayWindowTarget | null): void {
+  for (const win of windows) {
+    if (win.isDestroyed()) continue;
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
+  }
+  const target = preferred && !preferred.isDestroyed()
+    ? preferred
+    : windows.find((win) => !win.isDestroyed());
+  target?.focus();
+}
 
 export function resolveTrayIconPath(resourcesDir?: string): string {
   const candidates: string[] = [];
@@ -98,11 +121,9 @@ export function createAppTray(options: TrayOptions): TrayController {
   }
 
   const showWindow = () => {
-    const win = options.getMainWindow();
-    if (!win) return;
-    if (win.isMinimized()) win.restore();
-    if (!win.isVisible()) win.show();
-    win.focus();
+    const main = options.getMainWindow();
+    const windows = options.getWindows?.() ?? (main ? [main] : []);
+    revealBrowserWindows(windows, main);
   };
 
   const toggleGateway = async () => {

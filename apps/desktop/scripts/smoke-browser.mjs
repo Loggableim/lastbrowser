@@ -143,7 +143,7 @@ async function main() {
   mkdirSync(SMOKE_PROFILE_DIR, { recursive: true });
   const child = spawn(EXE, launchArgs, {
     detached: true,
-    stdio: 'ignore'
+    stdio: process.env.LASTBROWSER_SMOKE_LOG === '1' ? 'inherit' : 'ignore'
   });
   smokeChild = child;
   child.unref();
@@ -322,6 +322,21 @@ async function main() {
     }
     return false;
   };
+  // Modal entrance animations can remain on their first opacity frame while
+  // an Electron window is occluded. For the Space setup smoke, visibility is
+  // determined by layout and visibility styles; opacity is animation state,
+  // not whether React mounted the interactive dialog.
+  const waitForLaidOutUi = async (selector, expected) => {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const state = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const element = document.querySelector(${JSON.stringify(selector)}); if (!element) return false; const style = getComputedStyle(element); const rect = element.getBoundingClientRect(); return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0; })()`,
+        returnByValue: true
+      });
+      if (state.result.value === expected) return true;
+      await sleep(150);
+    }
+    return false;
+  };
   const panelInitiallyOpened = await waitForDownloads('.downloads-panel', true);
   check('Downloads opens from the visible toolbar trigger', downloadsOpen.result.value === 'CLICKED' && panelInitiallyOpened,
     `${downloadsOpen.result.value}, panel=${panelInitiallyOpened}`);
@@ -432,9 +447,9 @@ async function main() {
     expression: `(() => { const button = document.querySelector('.workspace-picker-flyout .workspace-create-btn'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
     returnByValue: true
   });
-  const spaceSetupVisible = await waitForUi('.space-setup-modal[role="dialog"]', true);
+  const spaceSetupVisible = await waitForLaidOutUi('.space-setup-modal[role="dialog"]', true);
   check('Space setup opens from the workspace picker', workspacePickerReady && openWorkspacePicker.result.value === 'CLICKED' && workspaceFlyoutReady && openSpaceSetup.result.value === 'CLICKED' && spaceSetupVisible,
-    `expand=${expandSidebar.result.value}, picker=${workspaceFlyoutReady}, wizard=${spaceSetupVisible}`);
+    `expand=${expandSidebar.result.value}, picker=${workspaceFlyoutReady}, button=${openSpaceSetup.result.value}, wizard=${spaceSetupVisible}`);
   const closeSpaceSetup = await cdp.send('Runtime.evaluate', {
     expression: `(() => { const button = document.querySelector('.space-setup-close-btn'); if (!button) return false; button.click(); return true; })()`,
     returnByValue: true
@@ -905,33 +920,69 @@ async function main() {
     if (detachedShell) break;
     await sleep(200);
   }
-  let detachedInfo = { tabs: 0, ready: 'missing' };
+  let detachedInfo = { tabs: 0, ready: 'missing', webviews: [], transferPending: null };
   let detachedCdp = null;
   if (detachedShell?.webSocketDebuggerUrl) {
     detachedCdp = new CDP(detachedShell.webSocketDebuggerUrl);
-    for (let i = 0; i < 50; i++) {
-      try {
-        const state = await detachedCdp.send('Runtime.evaluate', {
-          expression: `JSON.stringify({ ready: document.readyState, tabs: document.querySelectorAll('.vertical-tab-item').length })`,
-          returnByValue: true
-        });
-        detachedInfo = JSON.parse(state.result.value);
-        if (detachedInfo.ready === 'complete' && detachedInfo.tabs === 1) break;
-      } catch { /* wait for the secondary renderer to initialize */ }
-      await sleep(200);
-    }
   }
   let sourceInfo = { multiview: true, tabs: 0 };
-  for (let i = 0; i < 50; i++) {
+  // A detached renderer can take several seconds to attach its guest WebView.
+  // Poll both windows through the main-process ACK timeout rather than taking
+  // a one-time snapshot of the destination shell before React has mounted it.
+  for (let i = 0; i < 110; i++) {
+    if (detachedCdp) {
+      try {
+        const state = await detachedCdp.send('Runtime.evaluate', {
+          expression: `(async () => {
+            const allWebviews = [...document.querySelectorAll('webview')].map((view) => {
+              let guestId = null;
+              try { guestId = view.getWebContentsId(); } catch {}
+              const rect = view.getBoundingClientRect();
+              return {
+                tabId: view.getAttribute('data-tab-id'),
+                guestId,
+                src: view.getAttribute('src'),
+                className: view.className,
+                attributes: view.getAttributeNames(),
+                width: rect.width,
+                height: rect.height
+              };
+            });
+            let startup = null;
+            try { startup = await window.lastbrowser?.window?.getStartupState?.(); } catch {}
+            const frame = document.querySelector('.browser-webview-frame');
+            const frameRect = frame?.getBoundingClientRect();
+            return JSON.stringify({
+              ready: document.readyState,
+              tabs: document.querySelectorAll('.vertical-tab-item').length,
+              webviews: allWebviews.filter((view) => view.tabId),
+              allWebviews,
+              transferPending: Boolean(startup?.transfer),
+              shellClass: document.querySelector('.app-shell')?.className || '',
+              frame: frame ? { display: getComputedStyle(frame).display, visibility: getComputedStyle(frame).visibility, width: frameRect?.width, height: frameRect?.height } : null
+            });
+          })()`,
+          awaitPromise: true,
+          returnByValue: true
+        }, 1000);
+        detachedInfo = JSON.parse(state.result.value);
+      } catch {
+        const currentTargets = await cdpList();
+        if (!currentTargets.some((target) => target.id === detachedShell?.id)) break;
+        // The secondary renderer can still be initializing; retry while its
+        // BrowserWindow remains alive, with a bounded CDP call timeout.
+      }
+    }
     const sourceAfterDetach = await cdp.send('Runtime.evaluate', {
       expression: `JSON.stringify({ multiview: Boolean(document.querySelector('.multiview-grid-container')), tabs: document.querySelectorAll('.vertical-tab-item').length })`,
       returnByValue: true
-    });
+    }, 1000);
     sourceInfo = JSON.parse(sourceAfterDetach.result.value);
-    if (sourceInfo.tabs === 1 && !sourceInfo.multiview) break;
+    const attachedGuest = detachedInfo.webviews?.some((view) => Number.isInteger(view.guestId) && view.guestId > 0);
+    if (detachedInfo.tabs === 1 && attachedGuest && !detachedInfo.transferPending && sourceInfo.tabs === 1 && !sourceInfo.multiview) break;
     await sleep(200);
   }
-  check('detaching a split pane opens a second window and transfers exactly one tab', detachDragStart.result.value && detachButton.result.value && Boolean(detachedShell) && detachedInfo.tabs === 1 && sourceInfo.tabs === 1 && !sourceInfo.multiview, `newWindow=${Boolean(detachedShell)}, detachedTabs=${detachedInfo.tabs}, sourceTabs=${sourceInfo.tabs}, sourceMultiview=${sourceInfo.multiview}`);
+  check('detaching a split pane opens a second window and transfers exactly one tab', detachDragStart.result.value && detachButton.result.value && Boolean(detachedShell) && detachedInfo.tabs === 1 && sourceInfo.tabs === 1 && !sourceInfo.multiview, `newWindow=${Boolean(detachedShell)}, detachedTabs=${detachedInfo.tabs}, detached=${JSON.stringify(detachedInfo)}, sourceTabs=${sourceInfo.tabs}, sourceMultiview=${sourceInfo.multiview}`);
   detachedCdp?.close();
 
   const shellShot = await cdp.send('Page.captureScreenshot', { format: 'png' });

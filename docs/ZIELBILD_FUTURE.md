@@ -34,7 +34,7 @@ Das Teamwork-System überträgt das Konzept autonomer Entwickler- und Recherche-
   - **2. Parallele Worker-Agenten (Web Scraper & Analyst):** Bis zu 3 Sub-Agenten scannen gleichzeitig geöffnete Tabs und externe Quellen (Brave Search / Fetch).
   - **3. Adversarial Reviewer (Faktenprüfer & Kritiker):** Prüft die Fundstellen unabhängig gegen Halluzinationen, validiert Zahlen und erzwingt saubere Quellen-Zitate (`[Tab 1]`, `[Quelle B]`).
 * **UI-Integration:** Modus-Umschalter im Chat: `[ ⚡ Schnell-Chat ]` vs. `[ 👥 Nova Teamwork / Deep Mode ]` mit sichtbarem Milestone-Tracker.
-* **Token-Superkraft:** Ausnutzung des bestehenden **Gemini CLI Multi-Account Round-Robins**, um die parallelen Anfragen der Worker ohne Quota-Limits (HTTP 429) über mehrere Google-Accounts zu verteilen.
+* **Modellkapazität:** Teamwork verteilt parallele Anfragen nur auf tatsächlich verfügbare und konfigurierte Provider. Der frühere Gemini-CLI-/Code-Assist-Subscription-OAuth-Weg ist seit Googles Einstellung des Consumer-Zugriffs am 18.06.2026 nicht verfügbar; gespeicherte Account-Metadaten oder Round-Robin-Zähler umgehen keine Quota-Limits. Unterstützte Gemini-API- oder Vertex-Zugänge müssen separat konfiguriert und nach ihren jeweiligen Kontingenten abgerechnet bzw. begrenzt werden.
 
 ### Stufe 2: Visuelle Kanban-Integration & Task-Board
 * **Ziel:** Transparente Echtzeit-Verfolgung der Agenten-Aktivitäten im nativen Kanban-Board (`panels/KanbanPanel.tsx`).

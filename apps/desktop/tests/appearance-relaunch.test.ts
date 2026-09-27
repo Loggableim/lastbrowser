@@ -200,6 +200,15 @@ describe('Appearance Relaunch & Design-System Engine', () => {
       expect(root.style.getPropertyValue('--user-accent-glow')).toContain('0.45');
     });
 
+    it('restores the vision-impaired theme class from persisted settings and clears it for other themes', () => {
+      applyDesktopAppearance({ theme: 'vision-impaired', skin: 'default' });
+      expect(documentMock.documentElement.dataset.theme).toBe('vision-impaired');
+      expect(documentMock.documentElement.classList.contains('theme-vision-impaired')).toBe(true);
+
+      applyDesktopAppearance({ theme: 'dark', skin: 'default' });
+      expect(documentMock.documentElement.classList.contains('theme-vision-impaired')).toBe(false);
+    });
+
     it('removes custom accent variables when switching back to a preset skin', () => {
       applyDesktopAppearance({
         theme: 'dark',
@@ -285,6 +294,15 @@ describe('Appearance Relaunch & Design-System Engine', () => {
   });
 
   describe('7. Appearance controls affect browser chrome', () => {
+    it('uses valid CSS math for the configurable minimum font size', () => {
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const css = fs.readFileSync(path.resolve(__dirname, '../src/renderer/styles.css'), 'utf8');
+      expect(css).toContain('font-size: max(var(--min-font-size, 0px), 1em);');
+      expect(css).not.toContain('font-size: max(var(--min-font-size, 0px), inherit);');
+      expect(css).toContain('.theme-vision-impaired * {\n  font-size: max(16px, 1em) !important;');
+    });
+
     it('consumes glass and density tokens in the titlebar and collapsed sidebar', () => {
       const fs = require('node:fs');
       const path = require('node:path');

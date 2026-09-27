@@ -1629,13 +1629,16 @@ def _try_anthropic(explicit_api_key: str = None) -> Tuple[Optional[Any], Optiona
         return None, None
 
     pool_present, entry = _select_pool_entry("anthropic")
-    if pool_present:
-        if entry is None:
-            return None, None
-        token = explicit_api_key or _pool_runtime_api_key(entry)
-    else:
+    if not pool_present or entry is None:
+        # A configured OAuth pool may exist while every entry is exhausted or
+        # otherwise unavailable. That must not shadow a separately configured
+        # API key (or another token source supported by the adapter).
         entry = None
         token = explicit_api_key or resolve_anthropic_token()
+    else:
+        token = explicit_api_key or _pool_runtime_api_key(entry)
+        if not token:
+            token = resolve_anthropic_token()
     if not token:
         return None, None
 

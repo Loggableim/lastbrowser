@@ -1391,8 +1391,8 @@ async function main() {
       return {
         from,
         to,
-        fromHit: document.elementFromPoint(from.x, from.y)?.className || '',
-        toHit: document.elementFromPoint(to.x, to.y)?.className || ''
+        fromHit: document.elementFromPoint(from.x, from.y)?.closest('.multiview-divider-horizontal')?.className || document.elementFromPoint(from.x, from.y)?.className || '',
+        toHit: document.elementFromPoint(to.x, to.y)?.closest('.multiview-divider-horizontal')?.className || document.elementFromPoint(to.x, to.y)?.className || ''
       };
     })()`,
     returnByValue: true

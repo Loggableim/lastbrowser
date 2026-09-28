@@ -15,12 +15,11 @@ const BETA_UNTESTED: ProviderVerification = {
 export function providerVerification(providerId: string): ProviderVerification {
   switch (providerId.trim().toLowerCase()) {
     case 'antigravity':
-      // OAuth stack + loadCodeAssist + onboardUser verified live against
-      // cloudcode-pa.googleapis.com on 2026-09-28 (free-tier: Antigravity).
+      // OAuth and onboarding reached the provider, but inference returned a
+      // quota response. No successful Lastbrowser chat has been verified.
       return {
-        statusKey: 'settings.panels.providers.ollamaCloudLiveVerified',
-        evidenceKey: 'settings.panels.providers.antigravityWaiting',
-        verified: true
+        ...BETA_UNTESTED,
+        evidenceKey: 'settings.panels.providers.antigravityQuotaOnly',
       };
     case 'ollama-cloud':
       return {

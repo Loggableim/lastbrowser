@@ -670,6 +670,7 @@ export const desktopTranslationKeys = [
   'settings.panels.providers.antigravityEmptyHint',
   'settings.panels.providers.antigravityStarting',
   'settings.panels.providers.antigravityWaiting',
+  'settings.panels.providers.antigravityQuotaOnly',
   'settings.panels.providers.cancel',
   'settings.panels.providers.codexExpired',
   'settings.panels.providers.codexRetrying',

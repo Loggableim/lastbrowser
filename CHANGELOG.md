@@ -5,6 +5,15 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.36] - 2026-09-28 (local installer build)
+
+### Fixes
+- Corrected provider verification so Antigravity is not shown as chat-tested based only on OAuth and onboarding; the UI now reports that inference reached quota and a successful chat is still unverified.
+
+This is a local install build, not a published release.
+
+---
+
 ## [0.1.35] - 2026-09-27
 
 ### Highlights

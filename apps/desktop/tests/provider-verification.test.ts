@@ -6,7 +6,7 @@ import { createDesktopI18n, desktopLocaleIds } from '../src/renderer/i18n.js';
 // added provider must remain untested unless a live successful chat call is
 // recorded in the audit evidence. A catalog response alone is insufficient.
 const ONBOARDING_PROVIDER_IDS = [
-  'openrouter', 'anthropic', 'openai-codex', 'openai', 'google-gemini-cli',
+  'openrouter', 'anthropic', 'openai-codex', 'openai', 'google-gemini-cli', 'antigravity',
   'ollama', 'ollama-cloud', 'lmstudio', 'custom', 'gemini', 'deepseek',
   'xiaomi', 'zai', 'nvidia', 'mistralai', 'x-ai',
   // Other canonical Sidekick runtime providers and current provider plugins.
@@ -44,6 +44,13 @@ describe('provider verification claims', () => {
     expect(result.evidenceKey).toBe('settings.panels.providers.ollamaCloudCatalogOnly');
   });
 
+  it('does not claim Antigravity chat success from OAuth and onboarding alone', () => {
+    const result = providerVerification('antigravity');
+    expect(result.verified).toBe(false);
+    expect(result.statusKey).toBe('settings.panels.providers.betaUntested');
+    expect(result.evidenceKey).toBe('settings.panels.providers.antigravityQuotaOnly');
+  });
+
   it('keeps Morph beta and exposes the live output-limit anomaly', () => {
     const result = providerVerification('morph');
     expect(result.verified).toBe(false);
@@ -64,6 +71,7 @@ describe('provider verification claims', () => {
       expect(i18n.t('settings.panels.providers.ollamaCloudLiveVerified')).not.toBe('settings.panels.providers.ollamaCloudLiveVerified');
       expect(i18n.t('settings.panels.providers.openrouterLiveTested')).not.toBe('settings.panels.providers.openrouterLiveTested');
       expect(i18n.t('settings.panels.providers.openrouterChatEvidence')).not.toBe('settings.panels.providers.openrouterChatEvidence');
+      expect(i18n.t('settings.panels.providers.antigravityQuotaOnly')).not.toBe('settings.panels.providers.antigravityQuotaOnly');
       expect(i18n.t('settings.panels.providers.betaUntested').toLowerCase()).toContain(locale === 'ru' ? 'бета' : locale === 'fr' ? 'bêta' : 'beta');
     }
   });

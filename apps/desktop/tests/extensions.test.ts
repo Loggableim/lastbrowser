@@ -245,8 +245,9 @@ describe('extensions engine', () => {
       loadedExtensions = new Map();
       fakeSession = {
         loadExtension: vi.fn(async (extPath: string) => {
-          loadedExtensions.set(path.basename(extPath), extPath);
-          return { id: path.basename(extPath), name: 'Fake Ext' };
+          const chromiumExtensionId = `chromium-${path.basename(extPath)}`;
+          loadedExtensions.set(chromiumExtensionId, extPath);
+          return { id: chromiumExtensionId, name: 'Fake Ext' };
         }),
         removeExtension: vi.fn((extId: string) => {
           loadedExtensions.delete(extId);
@@ -318,7 +319,8 @@ describe('extensions engine', () => {
       // Disable
       const disabled = await manager.toggle(record.id, false);
       expect(disabled.enabled).toBe(false);
-      expect(fakeSession.removeExtension).toHaveBeenCalledWith(record.id);
+      expect(fakeSession.removeExtension).toHaveBeenCalledWith('chromium-toggle-test');
+      expect(loadedExtensions.has('chromium-toggle-test')).toBe(false);
 
       // Enable
       const enabled = await manager.toggle(record.id, true);
@@ -368,8 +370,8 @@ describe('extensions engine', () => {
       expect(persistentSession.loadExtension).toHaveBeenCalledTimes(1);
 
       await manager.toggleIncognito(record.id, false);
-      expect(incognitoSession.removeExtension).toHaveBeenCalledWith(record.id);
-      expect(persistentSession.removeExtension).not.toHaveBeenCalledWith(record.id);
+      expect(incognitoSession.removeExtension).toHaveBeenCalledWith('incognito-extension');
+      expect(persistentSession.removeExtension).not.toHaveBeenCalledWith('incognito-extension');
     });
 
     it('applies the same incognito opt-in gate to Chrome Web Store installs', async () => {
@@ -423,7 +425,7 @@ describe('extensions engine', () => {
       const removed = await manager.remove(record.id);
       expect(removed).toBe(true);
       expect(manager.list().length).toBe(0);
-      expect(fakeSession.removeExtension).toHaveBeenCalledWith(record.id);
+      expect(fakeSession.removeExtension).toHaveBeenCalledWith('chromium-remove-test');
     });
   });
 });

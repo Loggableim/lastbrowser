@@ -15,7 +15,7 @@
  * Exits 0 on success, 1 on failure. Screenshots land in ./smoke-output/.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import net from 'node:net';
@@ -37,7 +37,8 @@ const addressEntryTrace = [];
 const TEST_URL = process.env.LASTBROWSER_SMOKE_URL || 'example.com';
 const INTERACTIVE_PAUSE_MS = Number(process.env.LASTBROWSER_SMOKE_INTERACTIVE_MS || 0);
 const OUT_DIR = path.resolve(process.cwd(), 'smoke-output');
-const SMOKE_PROFILE_DIR = path.join(os.tmpdir(), `lastbrowser-browser-smoke-${process.pid}`);
+const SMOKE_PROFILE_DIR = mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-browser-smoke-'));
+const SMOKE_EXTENSION_DIR = path.join(SMOKE_PROFILE_DIR, 'fixture-extension');
 const LOCAL_MAIN_ENTRY = path.resolve(import.meta.dirname, '..', 'dist', 'main', 'main.js');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -263,6 +264,14 @@ async function main() {
     ...(isElectronBinary && existsSync(LOCAL_MAIN_ENTRY) ? [LOCAL_MAIN_ENTRY] : [])
   ];
   mkdirSync(SMOKE_PROFILE_DIR, { recursive: true });
+  mkdirSync(SMOKE_EXTENSION_DIR, { recursive: true });
+  writeFileSync(path.join(SMOKE_EXTENSION_DIR, 'manifest.json'), JSON.stringify({
+    manifest_version: 3,
+    name: 'Lastbrowser Smoke Extension',
+    version: '1.0.0',
+    content_scripts: [{ matches: ['https://example.com/*'], js: ['smoke.js'], run_at: 'document_idle' }]
+  }, null, 2));
+  writeFileSync(path.join(SMOKE_EXTENSION_DIR, 'smoke.js'), `document.documentElement.dataset.lastbrowserSmokeExtension = 'loaded';`);
   const child = spawn(EXE, launchArgs, {
     detached: true,
     stdio: process.env.LASTBROWSER_SMOKE_LOG === '1' ? 'inherit' : 'ignore'
@@ -613,6 +622,56 @@ async function main() {
   const settingsVisible = await waitForUi('.app-shell.panel-settings', true);
   check('settings navigation opens the settings panel', settingsSidebarReady && openSettings.result.value === 'CLICKED' && settingsVisible,
     `expand=${expandForSettings.result.value}, ${openSettings.result.value}, visible=${settingsVisible}`);
+
+  // Exercise the Appearance controls through the running settings UI and
+  // verify both the live DOM effect and the saved profile value. This profile
+  // is isolated and removed at the end of the smoke run.
+  const openAppearance = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = [...document.querySelectorAll('.settings-section-button')].find(el => /appearance|darstellung/i.test(el.innerText || '')); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    returnByValue: true
+  });
+  const appearanceReady = await waitForUi('.settings-theme-grid', true);
+  const appearancePreview = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const theme = document.querySelector('.settings-theme-grid button:nth-of-type(2)');
+      const skins = [...document.querySelectorAll('.settings-skin-btn')];
+      const skin = skins.find(button => !button.classList.contains('active'));
+      const size = document.querySelector('.settings-size-grid button:nth-of-type(3)');
+      const layout = document.querySelector('.settings-layout-grid button:nth-of-type(2)');
+      if (!theme || !skin || !size || !layout) return { ready: false };
+      theme.click(); skin.click(); size.click(); layout.click();
+      return { ready: true, expectedSkin: skin.querySelector('strong')?.textContent?.trim() || '' };
+    })()`,
+    returnByValue: true
+  });
+  await sleep(300);
+  const previewState = await cdp.send('Runtime.evaluate', {
+    expression: `JSON.stringify({ theme: document.documentElement.dataset.theme, skin: document.documentElement.dataset.skin, font: document.documentElement.dataset.fontSize, layout: document.documentElement.dataset.messageLayout, colorScheme: getComputedStyle(document.documentElement).colorScheme })`,
+    returnByValue: true
+  });
+  const liveAppearance = JSON.parse(previewState.result.value || '{}');
+  const appearanceSaved = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.settings-floating-action-bar .primary-action'); if (!button) return 'AUTO_SAVE'; if (button.disabled) return 'NOT_READY'; button.click(); return 'CLICKED'; })()`,
+    returnByValue: true
+  });
+  let savedAppearance = null;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const saved = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { try { return JSON.stringify(JSON.parse(localStorage.getItem('lastbrowser.desktopSettings.v1') || '{}')); } catch { return '{}'; } })()`,
+      returnByValue: true
+    });
+    savedAppearance = JSON.parse(saved.result.value || '{}');
+    if (savedAppearance.theme === 'light' && savedAppearance.font_size === 'large' && savedAppearance.message_layout === 'compact') break;
+    await sleep(150);
+  }
+  const appearancePassed = openAppearance.result.value === 'CLICKED' && appearanceReady
+    && appearancePreview.result.value?.ready && liveAppearance.theme === 'light'
+    && liveAppearance.skin && liveAppearance.font === 'large' && liveAppearance.layout === 'compact'
+    && liveAppearance.colorScheme === 'light' && ['CLICKED', 'AUTO_SAVE'].includes(appearanceSaved.result.value)
+    && savedAppearance.theme === 'light' && savedAppearance.font_size === 'large' && savedAppearance.message_layout === 'compact';
+  check('Appearance controls update the live theme, skin, font and message layout and persist', appearancePassed,
+    `section=${openAppearance.result.value}/${appearanceReady}, preview=${JSON.stringify(liveAppearance)}, saved=${JSON.stringify({ theme: savedAppearance.theme, skin: savedAppearance.skin, font_size: savedAppearance.font_size, message_layout: savedAppearance.message_layout })}`);
+
   const returnToWeb = await cdp.send('Runtime.evaluate', {
     expression: `(() => { const button = document.querySelector('.modern-back-to-web-btn'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
     returnByValue: true
@@ -620,6 +679,44 @@ async function main() {
   const browserPanelRestored = await waitForUi('.browser-webview-frame', true);
   check('returning from settings restores the browser panel', returnToWeb.result.value === 'CLICKED' && browserPanelRestored,
     `${returnToWeb.result.value}, visible=${browserPanelRestored}`);
+
+  const enterZen = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('button[aria-label="Toggle Sidebar"]'); if (!button || document.querySelector('.app-shell.zen-mode')) return 'NOT_READY'; button.click(); return 'CLICKED'; })()`,
+    returnByValue: true
+  });
+  let zenActive = false;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', { expression: `Boolean(document.querySelector('.app-shell.zen-mode .zen-left-hover-sensor'))`, returnByValue: true });
+    if (state.result.value) { zenActive = true; break; }
+    await sleep(100);
+  }
+  const zenSensor = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const element = document.querySelector('.zen-left-hover-sensor'); if (!element) return null; const rect = element.getBoundingClientRect(); return { x: Math.max(1, rect.left + Math.min(rect.width / 2, 3)), y: rect.top + rect.height / 2, rect: { x: rect.x, width: rect.width, height: rect.height } }; })()`,
+    returnByValue: true
+  });
+  if (zenSensor.result.value) {
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: zenSensor.result.value.x, y: zenSensor.result.value.y });
+  }
+  let zenRevealed = false;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', { expression: `Boolean(document.querySelector('.zen-sidebar-overlay.zen-revealed'))`, returnByValue: true });
+    if (state.result.value) { zenRevealed = true; break; }
+    await sleep(100);
+  }
+  if (zenRevealed) {
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 500, y: 400 });
+    await sleep(500);
+  }
+  const zenHiddenAfterLeave = zenRevealed && (await cdp.send('Runtime.evaluate', {
+    expression: `!document.querySelector('.zen-sidebar-overlay')?.classList.contains('zen-revealed')`,
+    returnByValue: true
+  })).result.value;
+  check('Zen sidebar reveals on left-edge hover and hides after leaving', enterZen.result.value === 'CLICKED' && zenActive && zenSensor.result.value && zenRevealed && zenHiddenAfterLeave,
+    `enter=${enterZen.result.value}, active=${zenActive}, sensor=${JSON.stringify(zenSensor.result.value?.rect)}, revealed=${zenRevealed}, hiddenAfterLeave=${zenHiddenAfterLeave}`);
+  await cdp.send('Runtime.evaluate', {
+    expression: `document.querySelector('button[aria-label="Toggle Sidebar"]')?.click(); document.querySelector('button[aria-label="Toggle Sidebar"]')?.click();`,
+    returnByValue: true
+  });
 
   // Exercise the full Space setup flow in the isolated profile. The audio
   // continuity check below needs a second real Space to switch to and back.
@@ -794,6 +891,71 @@ async function main() {
       check('bookmark toolbar removes the active page cleanly', removeBookmark.result.value && bookmarkRemoved && bookmarkAbsent,
         `remove=${removeBookmark.result.value}, marked=${bookmarkRemoved}, absent=${bookmarkAbsent}`);
 
+      // Exercise the per-site permission UI and main-process policy against
+      // the real https guest. The isolated profile keeps this trust entry out
+      // of the user's browser data.
+      webviewSmokePhase = 'site permission trust and revoke';
+      const permissionOrigin = new URL(info.url).origin;
+      const trustSite = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const button = document.querySelector('.site-permission-trigger'); if (!button || !button.getClientRects().length) return 'NOT_AVAILABLE'; button.click(); return 'CLICKED'; })()`,
+        returnByValue: true
+      });
+      let siteTrusted = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `window.lastbrowser.permissions.trustedOrigins()`,
+          awaitPromise: true,
+          returnByValue: true
+        });
+        if (Array.isArray(state.result.value) && state.result.value.includes(permissionOrigin)) { siteTrusted = true; break; }
+        await sleep(100);
+      }
+      const trustedMedia = await cdp.send('Runtime.evaluate', {
+        expression: `window.lastbrowser.permissions.decide({ permission: 'media', origin: ${JSON.stringify(permissionOrigin)} })`,
+        awaitPromise: true,
+        returnByValue: true
+      });
+      const unrelatedPermission = await cdp.send('Runtime.evaluate', {
+        expression: `window.lastbrowser.permissions.decide({ permission: 'geolocation', origin: ${JSON.stringify(permissionOrigin)} })`,
+        awaitPromise: true,
+        returnByValue: true
+      });
+      const openPermissions = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const button = document.querySelector('.permissions-trigger'); if (!button) return 'NOT_AVAILABLE'; button.click(); return 'CLICKED'; })()`,
+        returnByValue: true
+      });
+      const permissionPanelReady = await waitForUi('.permissions-panel[role="dialog"]', true);
+      const permissionRow = await cdp.send('Runtime.evaluate', {
+        expression: `document.querySelector('.permissions-panel .permission-origin')?.textContent?.trim() || ''`,
+        returnByValue: true
+      });
+      const revokePermission = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const button = document.querySelector('.permissions-panel .permission-row button'); if (!button) return false; button.click(); return true; })()`,
+        returnByValue: true
+      });
+      let siteRevoked = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `window.lastbrowser.permissions.trustedOrigins()`,
+          awaitPromise: true,
+          returnByValue: true
+        });
+        if (Array.isArray(state.result.value) && !state.result.value.includes(permissionOrigin)) { siteRevoked = true; break; }
+        await sleep(100);
+      }
+      const revokedMedia = await cdp.send('Runtime.evaluate', {
+        expression: `window.lastbrowser.permissions.decide({ permission: 'media', origin: ${JSON.stringify(permissionOrigin)} })`,
+        awaitPromise: true,
+        returnByValue: true
+      });
+      const permissionPassed = trustSite.result.value === 'CLICKED' && siteTrusted
+        && trustedMedia.result.value === 'allow' && unrelatedPermission.result.value === 'deny'
+        && openPermissions.result.value === 'CLICKED' && permissionPanelReady
+        && permissionRow.result.value === permissionOrigin && revokePermission.result.value
+        && siteRevoked && revokedMedia.result.value === 'deny';
+      check('site permissions grant and revoke camera access without granting geolocation', permissionPassed,
+        `trust=${trustSite.result.value}/${siteTrusted}, media=${trustedMedia.result.value}->${revokedMedia.result.value}, geolocation=${unrelatedPermission.result.value}, panel=${permissionPanelReady}, row=${permissionRow.result.value}, revoked=${siteRevoked}`);
+
       // Start real WebAudio from a trusted page click, pin the tab, switch
       // Spaces away and back, then verify the same Electron guest stays alive
       // and unmuted. The isolated smoke profile is removed after the run.
@@ -935,6 +1097,90 @@ async function main() {
         expression: `document.querySelector('.vertical-tab-item.pinned .vertical-tab-pin-btn')?.click()`,
         returnByValue: true
       });
+
+      // Install a throwaway local MV3 extension through the real Electron IPC,
+      // verify its content script, exercise disable/re-enable, then remove it.
+      // Its source and profile are both private to this smoke run.
+      webviewSmokePhase = 'extension install, toggle and removal';
+      const installExtension = await cdp.send('Runtime.evaluate', {
+        expression: `(async () => { try { const record = await window.lastbrowser.extensions.installUnpacked(${JSON.stringify(SMOKE_EXTENSION_DIR)}); const list = await window.lastbrowser.extensions.list(); return { id: record?.id || '', installed: Array.isArray(list) && list.some(item => item.id === record?.id), enabled: record?.enabled === true, error: '' }; } catch (error) { return { id: '', installed: false, enabled: false, error: String(error) }; } })()`,
+        awaitPromise: true,
+        returnByValue: true
+      });
+      const extensionState = installExtension.result.value || {};
+      const reloadExtensionPage = async () => {
+        const before = await wvCdp.send('Runtime.evaluate', {
+          expression: `performance.timeOrigin`,
+          returnByValue: true
+        });
+        const reload = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const button = document.querySelector('button[aria-label="Reload"]'); if (!button) return false; button.click(); return true; })()`,
+          returnByValue: true
+        });
+        if (!reload.result.value) return false;
+
+        let observer = null;
+        let observerTargetId = '';
+        try {
+          for (let attempt = 0; attempt < 60; attempt++) {
+            const target = (await cdpList()).find((item) => item.type === 'webview' && item.url.includes('example.com'));
+            if (target && target.id !== observerTargetId) {
+              observer?.close();
+              observer = new CDP(target.webSocketDebuggerUrl);
+              observerTargetId = target.id;
+            }
+            if (observer) {
+              try {
+                const state = await observer.send('Runtime.evaluate', {
+                  expression: `JSON.stringify({ ready: document.readyState, timeOrigin: performance.timeOrigin, loaded: document.documentElement?.dataset?.lastbrowserSmokeExtension === 'loaded' })`,
+                  returnByValue: true
+                }, 1000);
+                const pageState = JSON.parse(state.result.value || '{}');
+                if (pageState.ready === 'complete' && pageState.timeOrigin !== before.result.value) {
+                  return pageState.loaded;
+                }
+              } catch {
+                // Electron may replace a guest target during a reload. Reattach below.
+                observer.close();
+                observer = null;
+                observerTargetId = '';
+              }
+            }
+            await sleep(150);
+          }
+          return false;
+        } finally {
+          observer?.close();
+        }
+      };
+      const extensionScriptLoaded = extensionState.id ? await reloadExtensionPage() : false;
+      let extensionDisabled = false;
+      let extensionRemoved = false;
+      let extensionReenabled = false;
+      if (extensionState.id) {
+        const disabled = await cdp.send('Runtime.evaluate', {
+          expression: `window.lastbrowser.extensions.toggle({ id: ${JSON.stringify(extensionState.id)}, enabled: false })`,
+          awaitPromise: true,
+          returnByValue: true
+        });
+        extensionDisabled = disabled.result.value?.enabled === false && !(await reloadExtensionPage());
+        const enabled = await cdp.send('Runtime.evaluate', {
+          expression: `window.lastbrowser.extensions.toggle({ id: ${JSON.stringify(extensionState.id)}, enabled: true })`,
+          awaitPromise: true,
+          returnByValue: true
+        });
+        extensionReenabled = enabled.result.value?.enabled === true && await reloadExtensionPage();
+        const removed = await cdp.send('Runtime.evaluate', {
+          expression: `(async () => { const removed = await window.lastbrowser.extensions.remove(${JSON.stringify(extensionState.id)}); const list = await window.lastbrowser.extensions.list(); return removed === true && !list.some(item => item.id === ${JSON.stringify(extensionState.id)}); })()`,
+          awaitPromise: true,
+          returnByValue: true
+        });
+        extensionRemoved = removed.result.value === true;
+      }
+      check('local extension installs, injects, disables, re-enables and removes cleanly',
+        extensionState.installed && extensionState.enabled && extensionScriptLoaded && extensionDisabled && extensionReenabled && extensionRemoved,
+        `installed=${extensionState.installed}, script=${extensionScriptLoaded}, disabled=${extensionDisabled}, reenabled=${extensionReenabled}, removed=${extensionRemoved}${extensionState.error ? `, error=${extensionState.error}` : ''}`);
+
       webviewSmokePhase = 'browser history and back/forward interactions';
       const navigateTestPage = async (url, expectedHost) => {
         const submitted = await enterAddressThroughKeyboard(cdp, url);
@@ -1769,10 +2015,18 @@ function stopSmokeApp(child) {
       try { process.kill(child.pid, 'SIGTERM'); } catch { /* already exited */ }
     }
   }
-  const expectedProfile = path.resolve(os.tmpdir(), `lastbrowser-browser-smoke-${process.pid}`);
-  if (path.resolve(SMOKE_PROFILE_DIR) === expectedProfile
-    && path.basename(expectedProfile).startsWith('lastbrowser-browser-smoke-')) {
-    try { rmSync(expectedProfile, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+  const tempRoot = path.resolve(os.tmpdir());
+  const profile = path.resolve(SMOKE_PROFILE_DIR);
+  if (path.dirname(profile) === tempRoot
+    && path.basename(profile).startsWith('lastbrowser-browser-smoke-')) {
+    // Windows can release Electron profile handles shortly after taskkill
+    // returns. Retry a bounded number of times so a completed smoke run does
+    // not leave stale state that can collide with a later process ID.
+    const delay = new Int32Array(new SharedArrayBuffer(4));
+    for (let attempt = 0; attempt < 20 && existsSync(profile); attempt++) {
+      try { rmSync(profile, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 }); } catch { /* retry below */ }
+      if (existsSync(profile)) Atomics.wait(delay, 0, 0, 100);
+    }
   }
 }
 

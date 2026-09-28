@@ -382,6 +382,10 @@ export class ExtensionManager {
   private baseDir: string;
   private registryFile: string;
   private records: Map<string, ExtensionRecord> = new Map();
+  // The app-facing record ID is not always Chromium's extension ID. In
+  // particular, unpacked extensions use a local folder-derived record ID,
+  // while Electron returns the actual ID required by removeExtension().
+  private loadedExtensionIds = new WeakMap<Session, Map<string, string>>();
   private getActiveSessions: () => Session[];
 
   constructor(userDataDir: string, getActiveSessions: () => Session[]) {
@@ -422,7 +426,7 @@ export class ExtensionManager {
       try {
         // session.loadExtension loads the extension into Chromium's webview engine
         if (typeof session.loadExtension === 'function') {
-          await session.loadExtension(record.path, { allowFileAccess: true });
+          await this.loadRecordIntoSession(session, record);
         }
       } catch (error) {
         console.warn(`[extensions] Failed to load extension ${record.name} (${record.id}):`, error);
@@ -604,7 +608,7 @@ export class ExtensionManager {
       if (options.incognitoOnly && !isIncognito) continue;
       try {
         if (typeof session.loadExtension === 'function') {
-          await session.loadExtension(record.path, { allowFileAccess: true });
+          await this.loadRecordIntoSession(session, record);
         }
       } catch (err) {
         console.warn(`[extensions] Could not load ${record.id} in session:`, err);
@@ -620,13 +624,28 @@ export class ExtensionManager {
     for (const session of sessions) {
       if (options.incognitoOnly && !isInMemorySession(session)) continue;
       try {
-        if (typeof session.removeExtension === 'function') {
-          session.removeExtension(extensionId);
+        const loadedIds = this.loadedExtensionIds.get(session);
+        const electronExtensionId = loadedIds?.get(extensionId);
+        if (electronExtensionId && typeof session.removeExtension === 'function') {
+          session.removeExtension(electronExtensionId);
         }
+        loadedIds?.delete(extensionId);
       } catch (err) {
         console.warn(`[extensions] Could not remove ${extensionId} from session:`, err);
       }
     }
+  }
+
+  private async loadRecordIntoSession(session: Session, record: ExtensionRecord): Promise<void> {
+    let loadedIds = this.loadedExtensionIds.get(session);
+    if (!loadedIds) {
+      loadedIds = new Map<string, string>();
+      this.loadedExtensionIds.set(session, loadedIds);
+    }
+    if (loadedIds.has(record.id)) return;
+
+    const loaded = await session.loadExtension(record.path, { allowFileAccess: true });
+    loadedIds.set(record.id, loaded.id);
   }
 
   private loadRegistry(): void {

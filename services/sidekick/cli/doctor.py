@@ -571,7 +571,10 @@ def run_doctor(args):
     if in_venv:
         check_ok("Virtual environment active")
     else:
-        check_warn("Not in virtual environment", "(recommended)")
+        # Lastbrowser ships a self-contained Python runtime which intentionally
+        # runs outside venv. This is a setup preference for standalone installs,
+        # not a health problem for the desktop app.
+        check_info("Virtual environment not active (optional; Lastbrowser manages its Python runtime)")
     
     # =========================================================================
     # Check: Required packages
@@ -604,9 +607,9 @@ def run_doctor(args):
     for module, name in optional_packages:
         try:
             __import__(module)
-            check_ok(name, "(optional)")
+            check_info(f"{name} installed (optional)")
         except ImportError:
-            check_warn(name, "(optional, not installed)")
+            check_info(f"{name} not installed (optional)")
 
     # Provider credentials supplied in Lastbrowser's local key vault are
     # injected into the sidecar environment rather than written to .env.
@@ -1258,7 +1261,7 @@ def run_doctor(args):
     elif _is_termux():
         check_info("Docker backend is not available inside Termux (expected on Android)")
     else:
-        check_warn("docker not found", "(optional)")
+        check_info("Docker not installed (optional; required only for container-based tools)")
     
     # SSH (if using ssh backend)
     if terminal_env == "ssh":
@@ -1361,7 +1364,7 @@ def run_doctor(args):
             for step in _termux_browser_setup_steps(node_installed=True):
                 check_info(step)
         else:
-            check_warn("agent-browser not installed", "(run: npm install)")
+            check_info("agent-browser not installed (optional browser automation integration)")
 
         # Chromium presence — the browser tools silently fail to register when
         # agent-browser is found but no Playwright-managed Chromium is on disk
@@ -1419,7 +1422,7 @@ def run_doctor(args):
         for step in _termux_browser_setup_steps(node_installed=False):
             check_info(step)
     else:
-        check_warn("Node.js not found", "(optional, needed for browser tools)")
+        check_info("Node.js not installed (optional; required for browser automation tools)")
     
     # npm audit for all Node.js packages
     _npm_bin = _safe_which("npm")
@@ -1832,7 +1835,7 @@ def run_doctor(args):
         else:
             check_warn("tinker-atropos requires Python 3.11+", f"(current: {py_version.major}.{py_version.minor})")
     else:
-        check_warn("tinker-atropos not found", "(run: git submodule update --init --recursive)")
+        check_info("tinker-atropos not installed (optional RL training feature)")
     
     # =========================================================================
     # Check: Tool Availability
@@ -1856,9 +1859,9 @@ def run_doctor(args):
             env_vars = item.get("missing_vars") or item.get("env_vars") or []
             if env_vars:
                 vars_str = ", ".join(env_vars)
-                check_warn(item["name"], f"(missing {vars_str})")
+                check_info(f"{item['name']} unavailable (optional; missing {vars_str})")
             else:
-                check_warn(item["name"], "(system dependency not met)")
+                check_info(f"{item['name']} unavailable (optional integration dependency not met)")
 
         # Count disabled tools with API key requirements
         api_disabled = [u for u in unavailable if (u.get("missing_vars") or u.get("env_vars"))]
@@ -1891,7 +1894,7 @@ def run_doctor(args):
         if q_count > 0:
             check_warn(f"{q_count} skill(s) in quarantine", "(pending review)")
     else:
-        check_warn("Skills Hub directory not initialized", "(run: sidekick skills list)")
+        check_info("Skills Hub not initialized (created when you first use skills)")
 
     from cli.config import get_env_value
 
@@ -1912,7 +1915,7 @@ def run_doctor(args):
     elif _gh_authenticated():
         check_ok("GitHub authenticated via gh CLI", "(full API access — no GITHUB_TOKEN needed)")
     else:
-        check_warn("No GITHUB_TOKEN", f"(60 req/hr rate limit — set in {_DHH}/.env for better rates)")
+        check_info(f"GitHub token not configured (unauthenticated API rate limit applies; add GITHUB_TOKEN to {_DHH}/.env for higher limits)")
 
     # =========================================================================
     # Memory Provider (only check the active provider, if any)

@@ -1,10 +1,60 @@
 import { describe, expect, it, vi } from 'vitest';
+vi.mock('../src/main/auth-window.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/main/auth-window.js')>();
+  return { ...actual, openAuthConnectWindow: vi.fn() };
+});
+
 import {
   browserOpenTabChannel,
-  buildBrowserContextMenuTemplate
+  buildBrowserContextMenuTemplate,
+  installWindowOpenBridge,
+  openContextMenuExternalUrl
 } from '../src/main/browser-context-menu.js';
+import { openAuthConnectWindow } from '../src/main/auth-window.js';
 
 describe('browser context menu', () => {
+  it('opens only HTTP(S) window.open targets as internal tabs and keeps OAuth in Connect', () => {
+    let openHandler: ((details: { url: string }) => { action: 'deny' | 'allow' }) | undefined;
+    const setWindowOpenHandler = vi.fn((handler: typeof openHandler) => { openHandler = handler; });
+    const send = vi.fn();
+    const shellOpenExternal = vi.fn(async () => {});
+    const contents = { setWindowOpenHandler } as never;
+    const shell = { openExternal: shellOpenExternal } as never;
+
+    installWindowOpenBridge(contents, () => ({ webContents: { send } } as never), shell);
+
+    expect(setWindowOpenHandler).toHaveBeenCalledOnce();
+    expect(openHandler?.({ url: 'https://example.com/path' })).toEqual({ action: 'deny' });
+    expect(send).toHaveBeenCalledWith(browserOpenTabChannel, 'https://example.com/path');
+    expect(openHandler?.({ url: 'http://example.com/path' })).toEqual({ action: 'deny' });
+    expect(send).toHaveBeenLastCalledWith(browserOpenTabChannel, 'http://example.com/path');
+
+    for (const url of ['file:///C:/Users/test/secret.txt', 'javascript:alert(1)', 'intent://open/#Intent;scheme=foo;end', 'mailto:test@example.com']) {
+      expect(openHandler?.({ url })).toEqual({ action: 'deny' });
+    }
+    expect(shellOpenExternal).not.toHaveBeenCalled();
+
+    openHandler?.({ url: 'https://accounts.google.com/o/oauth2/v2/auth' });
+    expect(openAuthConnectWindow).toHaveBeenCalledOnce();
+  });
+
+  it('validates explicit context-menu system launches and permits only HTTP(S)/mailto', async () => {
+    const shellOpenExternal = vi.fn(async () => {});
+    const shell = { openExternal: shellOpenExternal } as never;
+
+    for (const url of ['file:///C:/Users/test/secret.txt', 'javascript:alert(1)', 'intent://open/#Intent;scheme=foo;end']) {
+      await expect(openContextMenuExternalUrl(url, shell)).resolves.toBe(false);
+    }
+    expect(shellOpenExternal).not.toHaveBeenCalled();
+
+    await expect(openContextMenuExternalUrl('https://example.com/path', shell)).resolves.toBe(true);
+    await expect(openContextMenuExternalUrl('http://example.com/path', shell)).resolves.toBe(true);
+    await expect(openContextMenuExternalUrl('mailto:test@example.com', shell)).resolves.toBe(true);
+    expect(shellOpenExternal).toHaveBeenNthCalledWith(1, 'https://example.com/path');
+    expect(shellOpenExternal).toHaveBeenNthCalledWith(2, 'http://example.com/path');
+    expect(shellOpenExternal).toHaveBeenNthCalledWith(3, 'mailto:test@example.com');
+  });
+
   it('builds link actions that open links in Lastbrowser tabs', () => {
     const openLinkInNewTab = vi.fn();
     const copyText = vi.fn();

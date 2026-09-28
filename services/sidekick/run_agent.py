@@ -100,6 +100,19 @@ class _OpenAIProxy:
 
 OpenAI = _OpenAIProxy()
 
+
+def _append_stream_reasoning_details(target: list, delta) -> None:
+    """Preserve OpenRouter's structured reasoning chunks from a stream delta."""
+    details = getattr(delta, "reasoning_details", None)
+    if details is None:
+        model_extra = getattr(delta, "model_extra", None)
+        if isinstance(model_extra, dict):
+            details = model_extra.get("reasoning_details")
+    if isinstance(details, list):
+        target.extend(details)
+    elif isinstance(details, dict):
+        target.append(details)
+
 # Load .env from ~/.sidekick/.env first, then project root as dev fallback.
 # User-managed env files should override stale shell exports on restart.
 from cli.env_loader import load_sidekick_dotenv as load_sidekick_dotenv
@@ -7819,6 +7832,7 @@ class AIAgent:
             model_name = None
             role = "assistant"
             reasoning_parts: list = []
+            reasoning_details_parts: list = []
             usage_obj = None
             for chunk in stream:
                 last_chunk_time["t"] = time.time()
@@ -7863,6 +7877,7 @@ class AIAgent:
                     reasoning_parts.append(reasoning_text)
                     _fire_first_delta()
                     self._fire_reasoning_delta(reasoning_text)
+                _append_stream_reasoning_details(reasoning_details_parts, delta)
 
                 # Accumulate text content — fire callback only when no tool calls
                 if delta and delta.content:
@@ -8010,6 +8025,7 @@ class AIAgent:
                 content=full_content,
                 tool_calls=mock_tool_calls,
                 reasoning_content=full_reasoning,
+                reasoning_details=reasoning_details_parts or None,
             )
             mock_choice = SimpleNamespace(
                 index=0,

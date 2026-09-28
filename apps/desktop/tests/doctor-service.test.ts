@@ -178,7 +178,7 @@ describe('doctor diagnosis service & parser', () => {
         spawned.push({ command, args, options });
         setTimeout(() => {
           fakeProcess.stdout.emit('data', Buffer.from(sampleCliDoctorOutput));
-          fakeProcess.emit('exit', 1);
+          fakeProcess.emit('close', 1);
         }, 10);
         return fakeProcess as never;
       }) as never,
@@ -213,7 +213,7 @@ describe('doctor diagnosis service & parser', () => {
         spawned.push({ command, args, options });
         setTimeout(() => {
           fakeProcess.stdout.emit('data', Buffer.from('◆ System\n  ✓ Repaired\n'));
-          fakeProcess.emit('exit', 0);
+          fakeProcess.emit('close', 0);
         }, 10);
         return fakeProcess as never;
       }) as never,
@@ -226,5 +226,49 @@ describe('doctor diagnosis service & parser', () => {
     expect(spawned[0].args).toEqual(['-m', 'sidekick_cli.main', 'doctor', '--fix']);
     expect(report.summary.passed).toBe(1);
     expect(report.summary.failures).toBe(0);
+  });
+
+  it('preserves Doctor failure markers split across UTF-8 stdout and stderr chunks', async () => {
+    const layout = resolveServiceLayout('D:/Lastbrowser/resources');
+    const fakeProcess = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+    };
+    fakeProcess.stdout = new EventEmitter();
+    fakeProcess.stderr = new EventEmitter();
+
+    const service = new SidecarServices(
+      layout,
+      8787,
+      (() => {
+        setTimeout(() => {
+          const stdout = Buffer.from('◆ Database\n  ✗ state.db corrupt\n', 'utf8');
+          const markerByte = stdout.indexOf(Buffer.from('✗', 'utf8'));
+          fakeProcess.stdout.emit('data', stdout.subarray(0, markerByte + 1));
+          fakeProcess.stdout.emit('data', stdout.subarray(markerByte + 1));
+          const stderr = Buffer.from('  ⚠ recovery pending\n', 'utf8');
+          const warningByte = stderr.indexOf(Buffer.from('⚠', 'utf8'));
+          fakeProcess.stderr.emit('data', stderr.subarray(0, warningByte + 2));
+          fakeProcess.stderr.emit('data', stderr.subarray(warningByte + 2));
+          fakeProcess.emit('close', 2);
+        }, 10);
+        return fakeProcess as never;
+      }) as never,
+      async () => 8787
+    );
+
+    const report = await service.runDoctor();
+    expect(report.categories[0]).toEqual({
+      name: 'Database',
+      checks: [
+        { type: 'fail', text: 'state.db corrupt' },
+        { type: 'warn', text: 'recovery pending' }
+      ],
+      status: 'fail'
+    });
+    expect(report.summary.failures).toBe(1);
+    expect(report.summary.warnings).toBe(1);
+    expect(report.rawOutput).toContain('✗ state.db corrupt');
+    expect(report.rawOutput).toContain('⚠ recovery pending');
   });
 });

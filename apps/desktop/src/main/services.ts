@@ -1,4 +1,5 @@
 import { ChildProcess, spawn } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -530,6 +531,9 @@ export class SidecarServices {
 
       let stdout = '';
       let stderr = '';
+      const stdoutDecoder = new StringDecoder('utf8');
+      const stderrDecoder = new StringDecoder('utf8');
+      let settled = false;
 
       try {
         const proc = this.spawnImpl(this.layout.pythonExe, args, {
@@ -540,22 +544,30 @@ export class SidecarServices {
         });
 
         proc.stdout?.on('data', (chunk: Buffer) => {
-          stdout += chunk.toString();
+          stdout += stdoutDecoder.write(chunk);
         });
 
         proc.stderr?.on('data', (chunk: Buffer) => {
-          stderr += chunk.toString();
+          stderr += stderrDecoder.write(chunk);
         });
 
         proc.once('error', (err: Error) => {
+          if (settled) return;
+          settled = true;
           const report = parseDoctorOutput(
-            `Error executing doctor: ${err.message}\n${stderr}`,
+            `Error executing doctor: ${err.message}\n${stderr}${stderrDecoder.end()}`,
             1
           );
           resolve(report);
         });
 
-        proc.once('exit', (code) => {
+        // Wait for close rather than exit: child-process output streams may
+        // still have buffered data after exit has fired.
+        proc.once('close', (code) => {
+          if (settled) return;
+          settled = true;
+          stdout += stdoutDecoder.end();
+          stderr += stderrDecoder.end();
           const combined = stdout + (stderr ? `\n${stderr}` : '');
           const report = parseDoctorOutput(combined, code ?? 0);
           resolve(report);

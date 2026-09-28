@@ -7,7 +7,7 @@ import type {
   Shell,
   WebContents
 } from 'electron';
-import { isOAuthUrl, openAuthConnectWindow } from './auth-window.js';
+import { isOAuthUrl, openAuthConnectWindow, openExternalUrl } from './auth-window.js';
 
 export const browserOpenTabChannel = 'lastbrowser:browser:openTab';
 export const browserOpenIncognitoTabChannel = 'lastbrowser:browser:openIncognitoTab';
@@ -304,7 +304,7 @@ export function registerBrowserContextMenu({
         reload: () => contents.reload(),
         openLinkInNewTab: (url) => getWindow()?.webContents.send(browserOpenTabChannel, url),
         openLinkInIncognitoTab: (url) => getWindow()?.webContents.send(browserOpenIncognitoTabChannel, url),
-        openExternal: (url) => void shell.openExternal(url),
+        openExternal: (url) => void openContextMenuExternalUrl(url, shell),
         copyText: (text) => clipboard.writeText(text),
         inspect: (x, y) => {
           if (!contents.isDevToolsOpened()) {
@@ -321,7 +321,7 @@ export function registerBrowserContextMenu({
   });
 }
 
-function installWindowOpenBridge(
+export function installWindowOpenBridge(
   contents: WebContents,
   getWindow: () => BrowserWindow | null,
   shell: Shell
@@ -338,13 +338,21 @@ function installWindowOpenBridge(
     }
     if (isHttpUrl(url)) {
       getWindow()?.webContents.send(browserOpenTabChannel, url);
-    } else {
-      void shell.openExternal(url);
     }
     return { action: 'deny' };
   });
 }
 
+/** Launch a link from the explicit context-menu action only after protocol validation. */
+export function openContextMenuExternalUrl(url: string, shell: Shell): Promise<boolean> {
+  return openExternalUrl(url, { shellOpenExternal: (targetUrl) => shell.openExternal(targetUrl) });
+}
+
 function isHttpUrl(url: string): boolean {
-  return /^https?:\/\//i.test(url);
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
 }

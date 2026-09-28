@@ -9,7 +9,7 @@ from runtime.provider_response_state import (
 )
 from runtime.auxiliary_client import call_llm
 from web.api.providers import get_provider_quota
-from run_agent import AIAgent
+from run_agent import AIAgent, _append_stream_reasoning_details
 
 
 def test_records_rate_limit_headers_and_usage_metadata_for_provider():
@@ -174,3 +174,29 @@ def test_ollama_cloud_length_response_with_structured_reasoning_is_not_retried_a
         SimpleNamespace(content="Here is the answer.", reasoning_content="thinking", tool_calls=[])
     ) is False
     assert agent._is_thinking_budget_exhausted(response, has_tool_calls=True) is False
+
+
+def test_openrouter_stream_reasoning_details_are_preserved_for_empty_length_response():
+    """OpenRouter reasoning_details-only deltas must remain detectable after streaming."""
+    agent = AIAgent.__new__(AIAgent)
+    details = []
+    _append_stream_reasoning_details(
+        details,
+        SimpleNamespace(reasoning_details=[
+            {"type": "reasoning.summary", "summary": "planning"},
+        ]),
+    )
+    _append_stream_reasoning_details(
+        details,
+        SimpleNamespace(reasoning_details={"type": "reasoning.summary", "summary": " more"}),
+    )
+
+    response = SimpleNamespace(content=None, reasoning_content=None, reasoning_details=details, tool_calls=[])
+    assert details == [
+        {"type": "reasoning.summary", "summary": "planning"},
+        {"type": "reasoning.summary", "summary": " more"},
+    ]
+    assert agent._is_thinking_budget_exhausted(response) is True
+    assert agent._is_thinking_budget_exhausted(
+        SimpleNamespace(content="Visible answer", reasoning_content=None, reasoning_details=details, tool_calls=[])
+    ) is False

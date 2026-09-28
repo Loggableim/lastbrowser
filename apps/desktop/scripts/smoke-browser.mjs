@@ -657,6 +657,63 @@ async function main() {
   check('settings navigation opens the settings panel', settingsSidebarReady && openSettings.result.value === 'CLICKED' && settingsVisible,
     `expand=${expandForSettings.result.value}, ${openSettings.result.value}, visible=${settingsVisible}`);
 
+  // Change the UI locale from the Preferences screen, assert both the live
+  // translated text and persisted renderer preference, then restore the prior
+  // locale so the remaining smoke assertions keep their expected labels.
+  const openPreferences = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelectorAll('.settings-section-button')[2]; if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    returnByValue: true
+  });
+  const preferencesReady = await waitForUi('.settings-panel-scroll select', true);
+  const localeChange = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const select = [...document.querySelectorAll('.settings-panel-scroll select')].find(item => [...item.options].some(option => option.value === 'ru'));
+      if (!select) return { changed: false, reason: 'language selector not found' };
+      const previous = select.value;
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'ru');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return { changed: true, previous };
+    })()`,
+    returnByValue: true
+  });
+  let localeLive = null;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', {
+      expression: `JSON.stringify({ lang: document.documentElement.lang, stored: localStorage.getItem('lastbrowser.locale'), preferencesHeading: document.querySelector('.settings-section-button.active .settings-section-button-text strong')?.textContent?.trim() || '' })`,
+      returnByValue: true
+    });
+    localeLive = JSON.parse(state.result.value || '{}');
+    if (localeLive.lang === 'ru' && localeLive.stored === 'ru') break;
+    await sleep(100);
+  }
+  const localeTranslated = /предпочт|настройк/i.test(localeLive?.preferencesHeading || '');
+  const localeApplied = openPreferences.result.value === 'CLICKED' && preferencesReady
+    && localeChange.result.value?.changed === true && localeLive?.lang === 'ru'
+    && localeLive?.stored === 'ru' && localeTranslated;
+  const restoreLocale = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const select = [...document.querySelectorAll('.settings-panel-scroll select')].find(item => [...item.options].some(option => option.value === 'en'));
+      if (!select) return false;
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'en');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`,
+    returnByValue: true
+  });
+  let localeRestored = false;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', {
+      expression: `document.documentElement.lang === 'en' && localStorage.getItem('lastbrowser.locale') === 'en'`,
+      returnByValue: true
+    });
+    if (state.result.value) { localeRestored = true; break; }
+    await sleep(100);
+  }
+  check('Preferences changes locale live and persists it in the isolated profile', localeApplied && restoreLocale.result.value && localeRestored,
+    `preferences=${openPreferences.result.value}/${preferencesReady}, change=${JSON.stringify(localeChange.result.value)}, live=${JSON.stringify(localeLive)}, restore=${restoreLocale.result.value}/${localeRestored}`);
+
   // Exercise the Appearance controls through the running settings UI and
   // verify both the live DOM effect and the saved profile value. This profile
   // is isolated and removed at the end of the smoke run.
@@ -1087,7 +1144,7 @@ async function main() {
       }
       const audioStateDetected = await waitForUi('.vertical-tab-item.active .vtab-audio-btn', true);
       const pinAudioTab = await cdp.send('Runtime.evaluate', {
-        expression: `(() => { const active = document.querySelector('.vertical-tab-item.active'); const pin = active?.querySelector('.vertical-tab-pin-btn'); const view = document.querySelector('webview.browser-view'); if (!active || !pin || !view) return null; const space = document.querySelector('.workspace-badge-name')?.textContent?.trim() || ''; pin.click(); return { tabId: view.getAttribute('data-tab-id'), guestId: view.getWebContentsId(), space }; })()`,
+        expression: `(() => { const active = document.querySelector('.vertical-tab-item.active'); const pin = active?.querySelector('.vertical-tab-pin-btn'); const view = document.querySelector('webview.browser-view'); if (!active || !pin || !view) return null; const space = document.querySelector('.workspace-badge-name')?.textContent?.trim() || ''; const title = active.querySelector('.vtab-title')?.textContent?.trim() || ''; pin.click(); return { tabId: view.getAttribute('data-tab-id'), guestId: view.getWebContentsId(), title, space }; })()`,
         returnByValue: true
       });
       const pinnedState = await waitForUi('.vertical-tab-item.active.pinned', true);
@@ -1184,10 +1241,21 @@ async function main() {
         expression: `window.__lastbrowserSmokeAudio?.player?.pause()`,
         returnByValue: true
       });
-      await cdp.send('Runtime.evaluate', {
-        expression: `document.querySelector('.vertical-tab-item.pinned .vertical-tab-pin-btn')?.click()`,
+      const unpinAudioTab = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const title = ${JSON.stringify(pinAudioTab.result.value?.title || '')}; const tab = [...document.querySelectorAll('.vertical-tab-item.pinned')].find(item => item.querySelector('.vtab-title')?.textContent?.trim() === title); const button = tab?.querySelector('.vertical-tab-pin-btn'); if (!button) return false; button.click(); return true; })()`,
         returnByValue: true
       });
+      let audioTabUnpinned = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const title = ${JSON.stringify(pinAudioTab.result.value?.title || '')}; const tab = [...document.querySelectorAll('.vertical-tab-item')].find(item => item.querySelector('.vtab-title')?.textContent?.trim() === title); return Boolean(tab && !tab.classList.contains('pinned')); })()`,
+          returnByValue: true
+        });
+        if (state.result.value) { audioTabUnpinned = true; break; }
+        await sleep(100);
+      }
+      check('pinned audio tab can be unpinned after returning to its Space', Boolean(unpinAudioTab.result.value) && audioTabUnpinned,
+        `click=${JSON.stringify(unpinAudioTab.result.value)}, unpinned=${audioTabUnpinned}`);
 
       // Install a throwaway local MV3 extension through the real Electron IPC,
       // verify its content script, exercise disable/re-enable, then remove it.
@@ -1830,6 +1898,125 @@ async function main() {
   });
   const closedInfo = JSON.parse(closeState.result.value);
   check('removing a pane created by a real mouse drag returns to single view and preserves its tab', closeDragStart.result.value && closeDragDrop.result.value && closeBeforeState.occupied >= 2 && closePane.result.value && !closedInfo.multiview && closedInfo.tabs === 2, `dragSource=${closeGeometry?.sourceHit || 'none'}, splitCreated=${closeDragDrop.result.value}, occupiedBefore=${closeBeforeState.occupied}, multiview=${closedInfo.multiview}, tabs=${closedInfo.tabs}`);
+
+  // Exercise a second layout through trusted mouse input. Starting with two
+  // tabs, dropping onto Trio column 3 should keep those two unique tabs in
+  // slots 1 and 3 and leave slot 2 visibly empty; a third available tab is
+  // created first so this also verifies that unassigned tabs stay unassigned.
+  const trioTabCount = await cdp.send('Runtime.evaluate', {
+    expression: `document.querySelectorAll('.vertical-tab-item').length`,
+    returnByValue: true
+  });
+  const trioCreateTab = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.vertical-new-tab-btn'); if (!button) return false; button.click(); return true; })()`,
+    returnByValue: true
+  });
+  let trioThirdTabAvailable = false;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const current = await cdp.send('Runtime.evaluate', {
+      expression: `document.querySelectorAll('.vertical-tab-item').length`,
+      returnByValue: true
+    });
+    if (current.result.value > trioTabCount.result.value) { trioThirdTabAvailable = true; break; }
+    await sleep(100);
+  }
+  const trioGeometryResult = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const tabs = [...document.querySelectorAll('.vertical-tab-item')];
+      const hitPointFor = (tab) => {
+        const rect = tab.getBoundingClientRect(), y = rect.top + rect.height / 2;
+        for (const offset of [24, 8, Math.min(rect.width * 0.5, 110), Math.max(8, rect.width - 18)]) {
+          const point = { x: rect.left + offset, y }, hit = document.elementFromPoint(point.x, point.y);
+          if (hit && (hit === tab || tab.contains(hit))) return point;
+        }
+        return null;
+      };
+      const source = tabs.find(tab => !tab.classList.contains('active') && !tab.classList.contains('pinned') && hitPointFor(tab));
+      const frame = document.querySelector('.browser-webview-frame');
+      if (!source || !frame) return null;
+      const target = frame.getBoundingClientRect(), from = hitPointFor(source);
+      return { from, to: { x: target.left + target.width * 0.5, y: target.top + target.height * 0.05 }, title: source.querySelector('.vtab-title')?.textContent?.trim() || '' };
+    })()` ,
+    returnByValue: true
+  });
+  const trioGeometry = trioGeometryResult.result.value;
+  const trioDragReady = trioThirdTabAvailable && Boolean(trioCreateTab.result.value && trioGeometry?.from && trioGeometry?.to);
+  if (trioDragReady) {
+    await pressMouse(cdp, trioGeometry.from);
+    await moveHeldMouse(cdp, trioGeometry.from, trioGeometry.to);
+  }
+  let trioFlyoutReady = false;
+  for (let attempt = 0; attempt < 20 && trioDragReady; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', {
+      expression: `Boolean(document.querySelector('.snap-bar-flyout.is-visible .snap-card-preview.layout-trio-columns .snap-card-slot.slot-2'))`,
+      returnByValue: true
+    });
+    if (state.result.value) { trioFlyoutReady = true; break; }
+    await sleep(100);
+  }
+  const trioSlotGeometry = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const slot = document.querySelector('.snap-bar-flyout.is-visible .snap-card-preview.layout-trio-columns .snap-card-slot.slot-2'); if (!slot) return null; const rect = slot.getBoundingClientRect(); return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; })()`,
+    returnByValue: true
+  });
+  const trioSlotPoint = trioSlotGeometry.result.value;
+  let trioDragOverObserved = false;
+  if (trioDragReady && trioFlyoutReady && trioSlotPoint) {
+    await moveHeldMouse(cdp, trioGeometry.to, trioSlotPoint, 6);
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const observed = await cdp.send('Runtime.evaluate', {
+        expression: `Boolean((window.__lastbrowserSmokeDragTrace || []).some(event => event.type === 'dragover' && event.target.includes('snap-card-slot')))` ,
+        returnByValue: true
+      });
+      trioDragOverObserved = Boolean(observed.result.value);
+      if (trioDragOverObserved) break;
+      await sleep(100);
+    }
+    await releaseMouse(cdp, trioSlotPoint);
+  } else if (trioDragReady) {
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await releaseMouse(cdp, trioGeometry.to);
+  }
+  let trioState = null;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', {
+      expression: `JSON.stringify((() => { const grid = document.querySelector('.multiview-grid-container'); const panes = [...document.querySelectorAll('.multiview-pane-chrome')]; return { layout: grid?.className || '', paneCount: panes.length, occupied: panes.filter(pane => pane.classList.contains('occupied')).length, empty: panes.filter(pane => pane.classList.contains('empty')).map(pane => ({ left: pane.style.left, label: pane.querySelector('.multiview-empty-label')?.textContent?.trim() || '' })), titles: [...document.querySelectorAll('.multiview-pane-title')].map(title => title.textContent?.trim() || ''), tabCount: document.querySelectorAll('.vertical-tab-item').length }; })())`,
+      returnByValue: true
+    });
+    trioState = JSON.parse(state.result.value || '{}');
+    if (trioState.layout.includes('layout-trio-columns')) break;
+    await sleep(100);
+  }
+  const trioEmptySlotExpected = trioState?.empty?.length === 1
+    && trioState.empty[0].left === '33.33%'
+    && Boolean(trioState.empty[0].label);
+  check('native mouse drop selects Trio columns and preserves the explicitly empty middle slot', trioDragReady && trioFlyoutReady && Boolean(trioSlotPoint)
+    && trioState?.layout.includes('layout-trio-columns')
+    && trioState.paneCount === 3 && trioState.occupied === 2 && trioEmptySlotExpected
+    && new Set(trioState.titles).size === 2 && trioState.tabCount >= 3,
+  `tabs=${trioState?.tabCount}, source=${trioGeometry?.title || 'none'}, flyout=${trioFlyoutReady}, slotDragOver=${trioDragOverObserved}, layout=${trioState?.layout}, occupied=${trioState?.occupied}, empty=${JSON.stringify(trioState?.empty)}, unique=${new Set(trioState?.titles || []).size}`);
+  // Leave the later history/detach fixtures in the regular single-view state.
+  const maximizeTrio = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.multiview-pane-chrome.active-pane .multiview-pane-controls .multiview-pane-btn:nth-child(2)'); if (!button) return false; button.click(); return true; })()`,
+    returnByValue: true
+  });
+  let trioCleanup = false;
+  if (maximizeTrio.result.value && await waitForUi('.multiview-grid-container', false)) {
+    const closeExtraTab = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { if (document.querySelectorAll('.vertical-tab-item').length <= ${trioTabCount.result.value}) return true; const close = document.querySelector('.vertical-tab-item.active .vtab-close-btn'); if (!close) return false; close.click(); return true; })()`,
+      returnByValue: true
+    });
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const count = await cdp.send('Runtime.evaluate', {
+        expression: `document.querySelectorAll('.vertical-tab-item').length`,
+        returnByValue: true
+      });
+      if (closeExtraTab.result.value && count.result.value === trioTabCount.result.value) { trioCleanup = true; break; }
+      await sleep(100);
+    }
+  }
+  check('Trio smoke cleanup restores the original tab count for following checks', trioCleanup,
+    `maximize=${maximizeTrio.result.value}, tabs=${trioState?.tabCount}->${trioTabCount.result.value}, cleaned=${trioCleanup}`);
 
   const waitForActiveGuestUrl = async (host) => {
     for (let attempt = 0; attempt < 60; attempt++) {

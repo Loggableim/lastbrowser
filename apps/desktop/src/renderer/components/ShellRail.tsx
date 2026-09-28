@@ -1,12 +1,23 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { brandAssets } from '../brand.js';
+import { brandAssets, sidebarIconForPanel } from '../brand.js';
 import {
   type LastbrowserPanelId,
   isInstalledSidebarApp,
-  lastbrowserPanels
+  lastbrowserPanels,
+  panelLabelTranslationKey
 } from '../shell-state.js';
+import { useDesktopI18n } from '../i18n.js';
+import type { DesktopTranslationKey } from '../i18n/keys.js';
+
+export function getShellRailLabels(
+  translate: (key: DesktopTranslationKey) => string,
+  panelId: LastbrowserPanelId
+): { label: string; ariaLabel: string; title: string; hoverLabel: string } {
+  const label = translate(panelLabelTranslationKey(panelId));
+  return { label, ariaLabel: label, title: label, hoverLabel: label };
+}
 
 export type ShellRailProps = {
   activePanel: LastbrowserPanelId;
@@ -23,6 +34,7 @@ export function ShellRail({
   onPanel,
   onToggleLeft
 }: ShellRailProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const [hoverLabel, setHoverLabel] = useState<{ text: string; left: number; top: number } | null>(null);
   const showHoverLabel = (event: React.SyntheticEvent<HTMLElement>, text: string) => {
     if (!leftCollapsed) return;
@@ -36,56 +48,61 @@ export function ShellRail({
   const settingsPanel =
     lastbrowserPanels.find((panel) => panel.id === 'settings') ||
     lastbrowserPanels[lastbrowserPanels.length - 1];
+  const settingsLabels = getShellRailLabels(t, settingsPanel.id);
+  const toggleSidebarLabel = t('sidebar.drawer.toggleSidebar');
 
   return (
-    <nav className="shell-rail" aria-label="Lastbrowser navigation">
+    <nav className="shell-rail" aria-label={t('sidebar.drawer.navigation')}>
       <div className="rail-main">
-        {visiblePanels.map((panel) => (
+        {visiblePanels.map((panel) => {
+          const labels = getShellRailLabels(t, panel.id);
+          return (
           <button
             key={panel.id}
             type="button"
             className={`rail-button ${activePanel === panel.id ? 'active' : ''}`}
-            aria-label={panel.label}
-            title={leftCollapsed ? undefined : panel.tooltip}
-            onMouseEnter={(event) => showHoverLabel(event, panel.label)}
+            aria-label={labels.ariaLabel}
+            title={labels.title}
+            onMouseEnter={(event) => showHoverLabel(event, labels.hoverLabel)}
             onMouseLeave={hideHoverLabel}
-            onFocus={(event) => showHoverLabel(event, panel.label)}
+            onFocus={(event) => showHoverLabel(event, labels.hoverLabel)}
             onBlur={hideHoverLabel}
             onClick={() => onPanel(panel.id)}
           >
-            <img src={brandAssets.sidebarIcons[panel.id]} alt="" />
-            <span>{panel.label}</span>
+            <img src={sidebarIconForPanel(panel.id)} alt="" />
+            <span>{labels.label}</span>
           </button>
-        ))}
+          );
+        })}
       </div>
       <div className="rail-bottom">
         <button
           type="button"
           className="rail-collapse"
-          aria-label="Sidebar ein-/ausblenden"
-          title={leftCollapsed ? undefined : 'Toggle sidebar'}
-          onMouseEnter={(event) => showHoverLabel(event, 'Sidebar ein-/ausblenden')}
+          aria-label={toggleSidebarLabel}
+          title={toggleSidebarLabel}
+          onMouseEnter={(event) => showHoverLabel(event, toggleSidebarLabel)}
           onMouseLeave={hideHoverLabel}
-          onFocus={(event) => showHoverLabel(event, 'Sidebar ein-/ausblenden')}
+          onFocus={(event) => showHoverLabel(event, toggleSidebarLabel)}
           onBlur={hideHoverLabel}
           onClick={onToggleLeft}
         >
           {leftCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-          <span>Sidebar ein-/ausblenden</span>
+          <span>{toggleSidebarLabel}</span>
         </button>
         <button
           type="button"
           className={`rail-button ${activePanel === 'settings' ? 'active' : ''}`}
-          aria-label={settingsPanel.label}
-          title={leftCollapsed ? undefined : settingsPanel.tooltip}
-          onMouseEnter={(event) => showHoverLabel(event, settingsPanel.label)}
+          aria-label={settingsLabels.ariaLabel}
+          title={settingsLabels.title}
+          onMouseEnter={(event) => showHoverLabel(event, settingsLabels.hoverLabel)}
           onMouseLeave={hideHoverLabel}
-          onFocus={(event) => showHoverLabel(event, settingsPanel.label)}
+          onFocus={(event) => showHoverLabel(event, settingsLabels.hoverLabel)}
           onBlur={hideHoverLabel}
           onClick={() => onPanel('settings')}
         >
           <img src={brandAssets.sidebarIcons.settings} alt="" />
-          <span>{settingsPanel.label}</span>
+          <span>{settingsLabels.label}</span>
         </button>
       </div>
       {leftCollapsed && hoverLabel && typeof document !== 'undefined' && createPortal(

@@ -1,3 +1,5 @@
+import type { LastbrowserPanelId } from './shell-state.js';
+
 export const brandAssets = {
   logo: './lastbrowser-logo.png',
   appIcon256: './app-icon-256.png',
@@ -28,3 +30,9 @@ export const brandAssets = {
     sidekick: './sidebar-icons/30-sidekick-modern-popart.png'
   }
 } as const;
+
+const sidebarIconsByPanel: Partial<Record<LastbrowserPanelId, string>> = brandAssets.sidebarIcons;
+
+export function sidebarIconForPanel(panelId: LastbrowserPanelId): string {
+  return sidebarIconsByPanel[panelId] ?? brandAssets.sidebarIcons.spark;
+}

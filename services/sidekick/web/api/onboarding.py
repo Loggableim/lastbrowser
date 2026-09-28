@@ -78,6 +78,20 @@ _SUPPORTED_PROVIDER_SETUPS = {
         "oauth_provider": "openai-codex",
         "oauth_label": "ChatGPT account",
     },
+    "antigravity": {
+        "label": "Antigravity (Google)",
+        # Antigravity uses per-account OAuth tokens in the credential pool
+        # (multi-account round-robin). No API key; the provider must be written
+        # into config.yaml after login so the runtime selects it.
+        "env_var": "SIDEKICK_ANTIGRAVITY_UNUSED",
+        "default_model": "gemini-2.5-flash",
+        "requires_base_url": False,
+        "key_optional": True,
+        "models": list(_PROVIDER_MODELS.get("antigravity", [])),
+        "category": "easy_start",
+        "oauth_provider": "antigravity",
+        "oauth_label": "Google account",
+    },
     "openai": {
         "label": "OpenAI",
         "env_var": "OPENAI_API_KEY",
@@ -630,7 +644,7 @@ def _provider_oauth_authenticated(provider: str, sidekick_home: "Path") -> bool:
     if provider == "google-gemini-cli":
         return False
 
-    _known_oauth_providers = {"openai-codex", "copilot", "copilot-acp", "qwen-oauth", "nous", "anthropic"}
+    _known_oauth_providers = {"openai-codex", "copilot", "copilot-acp", "qwen-oauth", "nous", "anthropic", "antigravity"}
     if provider not in _known_oauth_providers:
         return False
     try:

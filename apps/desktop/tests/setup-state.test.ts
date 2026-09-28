@@ -54,6 +54,36 @@ describe('cloud first-run setup state', () => {
     expect(openConnectWindow).not.toHaveBeenCalled();
   });
 
+  it('opens the ChatGPT Codex OAuth URL in the dedicated connect window and reports failure', async () => {
+    const openConnectWindow = vi.fn(async () => true);
+    const opened = await openProviderOAuthUrl('openai-codex', 'https://auth.openai.com/authorize', {
+      openConnectWindow
+    });
+
+    expect(openConnectWindow).toHaveBeenCalledWith('https://auth.openai.com/authorize');
+    expect(opened).toBe(true);
+
+    const rejectedOpen = await openProviderOAuthUrl('openai-codex', 'https://auth.openai.com/authorize', {
+      openConnectWindow: vi.fn(async () => false)
+    });
+    expect(rejectedOpen).toBe(false);
+  });
+
+  it('prefers the system browser for Codex device sign-in and falls back if it is unavailable', async () => {
+    const openExternal = vi.fn(async () => true);
+    const openConnectWindow = vi.fn(async () => true);
+    expect(await openProviderOAuthUrl('openai-codex', 'https://auth.openai.com/codex/device', {
+      openExternal, openConnectWindow
+    })).toBe(true);
+    expect(openExternal).toHaveBeenCalledOnce();
+    expect(openConnectWindow).not.toHaveBeenCalled();
+
+    expect(await openProviderOAuthUrl('openai-codex', 'https://auth.openai.com/codex/device', {
+      openExternal: vi.fn(async () => false), openConnectWindow
+    })).toBe(true);
+    expect(openConnectWindow).toHaveBeenCalledOnce();
+  });
+
   it('requires setup until local cloud setup state and backend readiness agree', () => {
     const readyStatus = { system: { chat_ready: true } };
 
@@ -119,6 +149,7 @@ describe('cloud first-run setup state', () => {
   it('shows cloud provider fallbacks before the onboarding API responds', () => {
     expect(cloudProviderOptions(null).map((option) => option.id)).toEqual([
       'openai-codex',
+      'antigravity',
       'ollama',
       'ollama-cloud',
       'openrouter',

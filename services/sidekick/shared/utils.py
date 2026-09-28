@@ -14,7 +14,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any, Union
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 import yaml
 
@@ -213,4 +213,21 @@ def base_url_host_matches(url: str, hostname: str) -> bool:
             return parsed.hostname == hostname or parsed.hostname.endswith("." + hostname)
         return False
     except Exception:
+        return False
+
+
+def is_official_ollama_cloud_url(url: str) -> bool:
+    """Return whether a URL targets Ollama Cloud over an unambiguous HTTPS origin."""
+    try:
+        parsed = urlsplit(str(url or "").strip())
+        return (
+            parsed.scheme.lower() == "https"
+            and (parsed.hostname or "").lower() in {"ollama.com", "api.ollama.com"}
+            and parsed.port in (None, 443)
+            and not parsed.username
+            and not parsed.password
+            and not parsed.query
+            and not parsed.fragment
+        )
+    except ValueError:
         return False

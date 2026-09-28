@@ -606,13 +606,56 @@ def _public_start_payload(flow_id: str, flow: dict[str, Any]) -> dict[str, Any]:
     provider = flow.get("provider", "openai-codex")
     if provider == "anthropic":
         return _anthropic_public_start_payload(flow_id, flow)
+    if provider == "antigravity":
+        return _antigravity_public_start_payload(flow_id, flow)
     return _codex_public_start_payload(flow_id, flow)
+
+
+def _antigravity_public_start_payload(flow_id: str, flow: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "ok": True,
+        "provider": "antigravity",
+        "flow_id": flow_id,
+        "status": flow.get("status", "pending"),
+        "poll_interval_seconds": flow.get("poll_interval_seconds", 3),
+    }
+    if flow.get("auth_url"):
+        payload["auth_url"] = flow["auth_url"]
+        payload["action_required"] = (
+            "Sign in with your Google account in the browser window that opened. "
+            "Each login adds one account to the Antigravity round-robin pool."
+        )
+    if flow.get("expires_at"):
+        payload["expires_at"] = flow["expires_at"]
+    return payload
+
+
+def _antigravity_public_status_payload(flow_id: str, flow: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "ok": flow.get("status") == "success",
+        "provider": "antigravity",
+        "flow_id": flow_id,
+        "status": flow.get("status", "error"),
+    }
+    if flow.get("status") == "pending" and flow.get("auth_url"):
+        payload["auth_url"] = flow["auth_url"]
+        payload["action_required"] = (
+            "Complete the Google sign-in in your browser to connect this account."
+        )
+    if flow.get("status") == "success" and flow.get("email"):
+        payload["email"] = flow["email"]
+    if flow.get("status") == "error" and flow.get("error"):
+        payload["error_code"] = flow.get("error_code", "antigravity_oauth_error")
+        payload["error"] = flow["error"]
+    return payload
 
 
 def _public_status_payload(flow_id: str, flow: dict[str, Any]) -> dict[str, Any]:
     provider = flow.get("provider", "openai-codex")
     if provider == "anthropic":
         return _anthropic_public_status_payload(flow_id, flow)
+    if provider == "antigravity":
+        return _antigravity_public_status_payload(flow_id, flow)
     if provider == "google-gemini-cli":
         return {
             "ok": False,
@@ -750,6 +793,54 @@ def _start_anthropic_flow(sidekick_home: Path) -> dict[str, Any]:
     return _public_start_payload(flow_id, flow)
 
 
+def _spawn_antigravity_oauth_worker(flow_id: str) -> None:
+    """Run the Antigravity browser OAuth in a background thread.
+
+    The flow publishes the auth URL into the flow record so the frontend can
+    open it; on success the account lands in the antigravity credential pool
+    (round-robin). Multiple sequential logins add multiple accounts.
+    """
+    def worker() -> None:
+        try:
+            from runtime.antigravity_oauth import start_antigravity_oauth_flow
+
+            def publish_auth_url(url: str) -> None:
+                with _OAUTH_FLOWS_LOCK:
+                    current = _OAUTH_FLOWS.get(flow_id)
+                    if current and current.get("status") == "pending":
+                        current["auth_url"] = url
+                        current["updated_at"] = time.time()
+
+            creds = start_antigravity_oauth_flow(
+                open_browser=False,
+                callback_wait_seconds=GOOGLE_FLOW_MAX_WAIT_SECONDS,
+                on_auth_url=publish_auth_url,
+                cancel_event=_OAUTH_FLOWS.get(flow_id, {}).get("cancel_event"),
+            )
+            with _OAUTH_FLOWS_LOCK:
+                flow = _OAUTH_FLOWS.get(flow_id)
+                if flow:
+                    flow.update({
+                        "status": "success",
+                        "email": creds.email,
+                        "updated_at": time.time(),
+                    })
+        except Exception as exc:
+            logger.warning("Antigravity OAuth flow failed: %s", exc)
+            with _OAUTH_FLOWS_LOCK:
+                flow = _OAUTH_FLOWS.get(flow_id)
+                if flow:
+                    code = getattr(exc, "code", "antigravity_oauth_error")
+                    flow.update({
+                        "status": "error",
+                        "error_code": code,
+                        "error": str(exc),
+                        "updated_at": time.time(),
+                    })
+
+    threading.Thread(target=worker, name="sidekick-antigravity-oauth", daemon=True).start()
+
+
 def start_onboarding_oauth_flow(body: dict[str, Any] | None) -> dict[str, Any]:
     """Start the supported onboarding OAuth flow.
 
@@ -758,10 +849,27 @@ def start_onboarding_oauth_flow(body: dict[str, Any] | None) -> dict[str, Any]:
     """
     _cleanup_oauth_flows()
     provider = str((body or {}).get("provider") or "").strip().lower()
+    if provider == "antigravity":
+        # Antigravity multi-account OAuth: each completed login adds one
+        # Google account to the round-robin pool.
+        flow_id = uuid.uuid4().hex
+        flow = {
+            "provider": "antigravity",
+            "status": "pending",
+            "expires_at": time.time() + GOOGLE_FLOW_MAX_WAIT_SECONDS,
+            "poll_interval_seconds": 3,
+            "cancel_event": threading.Event(),
+            "created_at": time.time(),
+            "updated_at": time.time(),
+        }
+        with _OAUTH_FLOWS_LOCK:
+            _OAUTH_FLOWS[flow_id] = flow
+        _spawn_antigravity_oauth_worker(flow_id)
+        return _antigravity_public_start_payload(flow_id, flow)
     if provider not in _ALLOWED_ONBOARDING_OAUTH_PROVIDERS:
         if provider in _REJECTED_ONBOARDING_OAUTH_PROVIDERS or provider:
             raise ValueError(
-                "Only OpenAI Codex and Anthropic/Claude OAuth are supported "
+                "Only OpenAI Codex, Anthropic/Claude, and Antigravity OAuth are supported "
                 "in WebUI onboarding right now"
             )
         raise ValueError("provider is required")
@@ -831,7 +939,7 @@ def cancel_onboarding_oauth_flow(body: dict[str, Any] | None) -> dict[str, Any]:
     if not fid:
         raise ValueError("flow_id is required")
     requested_provider = _normalize_onboarding_oauth_provider(str((body or {}).get("provider") or ""))
-    if requested_provider not in {"openai-codex", "anthropic"}:
+    if requested_provider not in {"openai-codex", "anthropic", "antigravity"}:
         requested_provider = "openai-codex"
     with _OAUTH_FLOWS_LOCK:
         flow = _OAUTH_FLOWS.get(fid)

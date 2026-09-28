@@ -36,6 +36,26 @@ describe('sidecar service layout', () => {
     expect(layout.pythonExe).toBe('D:\\Lastbrowser\\resources\\runtime\\python\\python.exe');
   });
 
+  it('ignores a legacy runtime Sidekick overlay and always uses the in-tree bundle', () => {
+    const resourcesRoot = mkdtempResourceRoot();
+    const legacyRuntimeRoot = path.join(resourcesRoot, 'user-data');
+    const bundledEntry = path.join(resourcesRoot, 'services', 'sidekick', 'cli', 'web_server.py');
+    const legacyEntry = path.join(legacyRuntimeRoot, 'runtime', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(bundledEntry), { recursive: true });
+    mkdirSync(path.dirname(legacyEntry), { recursive: true });
+    writeFileSync(bundledEntry, '# bundled source\n');
+    writeFileSync(legacyEntry, '# legacy downloaded overlay\n');
+
+    try {
+      const layout = resolveServiceLayout(resourcesRoot, legacyRuntimeRoot, {});
+      expect(layout.sidekickDir).toBe(path.join(resourcesRoot, 'services', 'sidekick'));
+      expect(layout.webuiServer).toBe(bundledEntry);
+      expect(layout.sidekickDir).not.toContain(path.join('runtime', 'sidekick'));
+    } finally {
+      rmSync(resourcesRoot, { recursive: true, force: true });
+    }
+  });
+
   it('respects an explicit public Python override for development and portable installs', () => {
     const layout = resolveServiceLayout('D:/Lastbrowser/resources', undefined, {
       LASTBROWSER_WEBUI_PYTHON: 'D:/Portable/Python/python.exe'

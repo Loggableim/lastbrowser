@@ -550,6 +550,13 @@ export class ExtensionManager {
     record.allowInIncognito = allow;
     this.records.set(extensionId, record);
     this.saveRegistry();
+    if (record.enabled) {
+      if (allow) {
+        await this.loadRecordIntoSessions(record, { incognitoOnly: true });
+      } else {
+        await this.unloadRecordFromSessions(extensionId, { incognitoOnly: true });
+      }
+    }
     return record;
   }
 
@@ -586,9 +593,15 @@ export class ExtensionManager {
     return result.filePaths[0];
   }
 
-  private async loadRecordIntoSessions(record: ExtensionRecord): Promise<void> {
+  private async loadRecordIntoSessions(
+    record: ExtensionRecord,
+    options: { incognitoOnly?: boolean } = {}
+  ): Promise<void> {
     const sessions = this.getActiveSessions();
     for (const session of sessions) {
+      const isIncognito = isInMemorySession(session);
+      if (isIncognito && !record.allowInIncognito) continue;
+      if (options.incognitoOnly && !isIncognito) continue;
       try {
         if (typeof session.loadExtension === 'function') {
           await session.loadExtension(record.path, { allowFileAccess: true });
@@ -599,9 +612,13 @@ export class ExtensionManager {
     }
   }
 
-  private async unloadRecordFromSessions(extensionId: string): Promise<void> {
+  private async unloadRecordFromSessions(
+    extensionId: string,
+    options: { incognitoOnly?: boolean } = {}
+  ): Promise<void> {
     const sessions = this.getActiveSessions();
     for (const session of sessions) {
+      if (options.incognitoOnly && !isInMemorySession(session)) continue;
       try {
         if (typeof session.removeExtension === 'function') {
           session.removeExtension(extensionId);
@@ -638,5 +655,13 @@ export class ExtensionManager {
     } catch (err) {
       console.warn('[extensions] Failed to save registry:', err);
     }
+  }
+}
+
+function isInMemorySession(session: Session): boolean {
+  try {
+    return (session as Session & { isInMemory?: () => boolean }).isInMemory?.() === true;
+  } catch {
+    return false;
   }
 }

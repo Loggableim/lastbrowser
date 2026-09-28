@@ -20,3 +20,28 @@ export function resolveCanonicalSpacePath(
   const suffixMatches = spaces.filter((space) => normalizePathForComparison(space.path).endsWith(suffix));
   return suffixMatches.length === 1 ? suffixMatches[0].path : null;
 }
+
+/** Ignore a Space refresh response that started before a local create/rename/delete. */
+export function isCurrentSpaceDirectorySnapshot(requestRevision: number, currentRevision: number): boolean {
+  return requestRevision === currentRevision;
+}
+
+/** A delayed listSpaces response must not undo a more recent user selection. */
+export function resolveRefreshedActiveSpacePath(options: {
+  currentPath: string;
+  availablePaths: string[];
+  lastPath?: string;
+  selectionRevisionAtRequest: number;
+  currentSelectionRevision: number;
+}): string {
+  const {
+    currentPath,
+    availablePaths,
+    lastPath,
+    selectionRevisionAtRequest,
+    currentSelectionRevision
+  } = options;
+  if (selectionRevisionAtRequest !== currentSelectionRevision) return currentPath;
+  if (currentPath && (availablePaths.includes(currentPath) || currentPath === 'home')) return currentPath;
+  return lastPath || availablePaths[0] || '';
+}

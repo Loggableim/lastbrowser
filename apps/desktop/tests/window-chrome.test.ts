@@ -22,6 +22,7 @@ describe('window chrome', () => {
     expect(options.title).toBe('Lastbrowser');
     expect(options.webPreferences?.nodeIntegration).toBe(false);
     expect(options.webPreferences?.contextIsolation).toBe(true);
-    expect(options.webPreferences?.preload).toBe('C:\\Lastbrowser\\resources\\app.asar\\dist\\main\\preload.js');
+    expect(options.webPreferences?.sandbox).toBe(true);
+    expect(options.webPreferences?.preload).toBe('C:\\Lastbrowser\\resources\\app.asar\\dist\\main\\preload.cjs');
   });
 });

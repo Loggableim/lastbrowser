@@ -2111,19 +2111,37 @@ async def list_workspaces():
             for s in ws
             if isinstance(s, dict) and s.get("slug")
         }
+        existing_workspace_paths = {
+            os.path.normcase(str(Path(str(s.get("path") or "")).expanduser().resolve()))
+            for s in ws
+            if isinstance(s, dict) and str(s.get("path") or "").strip()
+        }
         spaces = []
         for w in get_all_workspaces():
             slug = str(getattr(w, "slug", "") or "").strip().lower()
             if slug and slug in existing_space_slugs:
                 continue
+            project_dir = str(w.get_project_dir() or "").strip()
+            if not project_dir:
+                # Agent spaces without a project directory have no browser
+                # workspace to switch to and would otherwise leak as blank,
+                # duplicate cards in the desktop Space picker.
+                continue
+            workspace_path = str(Path(project_dir).expanduser().resolve())
+            path_key = os.path.normcase(workspace_path)
+            if path_key in existing_workspace_paths:
+                continue
             spaces.append(
                 {
-                    "path": w.get_project_dir() or "",
+                    "path": workspace_path,
                     "name": w.name,
                     "slug": w.slug,
                     "is_space": True,
                 }
             )
+            existing_workspace_paths.add(path_key)
+            if slug:
+                existing_space_slugs.add(slug)
         ws.extend(spaces)
     except Exception:
         _log.exception("GET /api/workspaces: failed to merge space-engine workspaces")

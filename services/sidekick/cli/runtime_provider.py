@@ -29,7 +29,7 @@ from cli.auth import (
 )
 from cli.config import get_compatible_custom_providers, load_config
 from runtime._compat.shim_constants import OPENROUTER_BASE_URL
-from shared.utils import base_url_host_matches, base_url_hostname
+from shared.utils import base_url_host_matches, base_url_hostname, is_official_ollama_cloud_url
 
 
 def _normalize_custom_provider_name(value: str) -> str:
@@ -176,6 +176,27 @@ def _parse_api_mode(raw: Any) -> Optional[str]:
     return None
 
 
+def _require_official_ollama_cloud_endpoint(base_url: str) -> None:
+    """Prevent the Ollama Cloud API key from reaching a nonofficial host."""
+    if not is_official_ollama_cloud_url(base_url):
+        raise AuthError(
+            "Ollama Cloud credentials may only be sent to the official HTTPS ollama.com endpoint.",
+            provider="ollama-cloud",
+            code="invalid_ollama_cloud_base_url",
+        )
+
+
+def _ambient_api_key_for_endpoint(base_url: str) -> str:
+    """Return an ambient API key only when its provider matches the host."""
+    if base_url_host_matches(base_url, "api.openai.com"):
+        return os.getenv("OPENAI_API_KEY", "").strip()
+    if base_url_host_matches(base_url, "openrouter.ai"):
+        return os.getenv("OPENROUTER_API_KEY", "").strip()
+    if is_official_ollama_cloud_url(base_url):
+        return os.getenv("OLLAMA_API_KEY", "").strip()
+    return ""
+
+
 def _resolve_runtime_from_pool_entry(
     *,
     provider: str,
@@ -205,6 +226,9 @@ def _resolve_runtime_from_pool_entry(
     elif provider == "google-gemini-cli":
         api_mode = "chat_completions"
         base_url = base_url or "cloudcode-pa://google"
+    elif provider == "antigravity":
+        api_mode = "chat_completions"
+        base_url = base_url or "cloudcode-pa://antigravity"
     elif provider == "minimax-oauth":
         # MiniMax OAuth tokens are valid only against the Anthropic Messages
         # compatible endpoint. Do not honor stale model.api_mode values from a
@@ -222,6 +246,8 @@ def _resolve_runtime_from_pool_entry(
         base_url = cfg_base_url or base_url or "https://api.anthropic.com"
     elif provider == "openrouter":
         base_url = base_url or OPENROUTER_BASE_URL
+    elif provider == "ollama-cloud":
+        base_url = base_url or (PROVIDER_REGISTRY.get(provider).inference_base_url if PROVIDER_REGISTRY.get(provider) else "")
     elif provider == "xai":
         api_mode = "codex_responses"
     elif provider == "nous":
@@ -255,6 +281,9 @@ def _resolve_runtime_from_pool_entry(
         # For Anthropic-style endpoints, strip /v1 suffix
         if api_mode == "anthropic_messages":
             base_url = re.sub(r"/v1/?$", "", base_url)
+
+    if provider == "ollama-cloud":
+        _require_official_ollama_cloud_endpoint(base_url)
     else:
         configured_provider = str(model_cfg.get("provider") or "").strip().lower()
         # Honour model.base_url from config.yaml when the configured provider
@@ -268,7 +297,11 @@ def _resolve_runtime_from_pool_entry(
             if cfg_base_url:
                 base_url = cfg_base_url
         configured_mode = _parse_api_mode(model_cfg.get("api_mode"))
-        if provider in {"opencode-zen", "opencode-go"}:
+        if provider == "openai":
+            # Credential-pool entries are still direct API-key OpenAI. Keep
+            # them separate from the openai-codex OAuth/Responses branch.
+            api_mode = "chat_completions"
+        elif provider in {"opencode-zen", "opencode-go"}:
             # Re-derive api_mode from the effective model rather than the
             # persisted api_mode: the opencode providers serve both
             # anthropic_messages and chat_completions models, so the previous
@@ -509,8 +542,7 @@ def _resolve_named_custom_runtime(
             return pool_result
         api_key_candidates = [
             (explicit_api_key or "").strip(),
-            os.getenv("OPENAI_API_KEY", "").strip(),
-            os.getenv("OPENROUTER_API_KEY", "").strip(),
+            _ambient_api_key_for_endpoint(base_url),
         ]
         api_key = next(
             (c for c in api_key_candidates if has_usable_secret(c)),
@@ -550,8 +582,7 @@ def _resolve_named_custom_runtime(
         (explicit_api_key or "").strip(),
         str(custom_provider.get("api_key", "") or "").strip(),
         os.getenv(str(custom_provider.get("key_env", "") or "").strip(), "").strip(),
-        os.getenv("OPENAI_API_KEY", "").strip(),
-        os.getenv("OPENROUTER_API_KEY", "").strip(),
+        _ambient_api_key_for_endpoint(base_url),
     ]
     api_key = next((candidate for candidate in api_key_candidates if has_usable_secret(candidate)), "")
 
@@ -623,11 +654,8 @@ def _resolve_openrouter_runtime(
     if requested_norm == "ollama" and base_url and not base_url.lower().endswith("/v1"):
         base_url += "/v1"
 
-    # Choose API key based on whether the resolved base_url targets OpenRouter.
-    # When hitting OpenRouter, prefer OPENROUTER_API_KEY (issue #289).
-    # When hitting a custom endpoint (e.g. Z.ai, local LLM), prefer
-    # OPENAI_API_KEY so the OpenRouter key doesn't leak to an unrelated
-    # provider (issues #420, #560).
+    # Choose ambient credentials by exact provider host. A provider key must
+    # never be sent to another provider or to an unrelated custom endpoint.
     _is_openrouter_url = base_url_host_matches(base_url, "openrouter.ai")
     if requested_norm == "ollama":
         # Local Ollama is an OpenAI-compatible custom endpoint, not OpenRouter.
@@ -645,7 +673,6 @@ def _resolve_openrouter_runtime(
         api_key_candidates = [
             explicit_api_key,
             os.getenv("OPENROUTER_API_KEY"),
-            os.getenv("OPENAI_API_KEY"),
         ]
     else:
         # Custom endpoint: use api_key from config when using config base_url (#1760).
@@ -655,13 +682,15 @@ def _resolve_openrouter_runtime(
         # "ollama.com" (e.g. http://127.0.0.1/ollama.com/v1) or whose
         # hostname is a look-alike (ollama.com.attacker.test) must not
         # receive the Ollama credential. See GHSA-76xc-57q6-vm5m.
-        _is_ollama_url = base_url_host_matches(base_url, "ollama.com")
+        _is_ollama_url = (
+            base_url.lower().startswith("https://")
+            and base_url_host_matches(base_url, "ollama.com")
+        )
         api_key_candidates = [
             explicit_api_key,
             (cfg_api_key if use_config_base_url else ""),
             (os.getenv("OLLAMA_API_KEY") if _is_ollama_url else ""),
-            os.getenv("OPENAI_API_KEY"),
-            os.getenv("OPENROUTER_API_KEY"),
+            _ambient_api_key_for_endpoint(base_url),
         ]
     api_key = next(
         (str(candidate or "").strip() for candidate in api_key_candidates if has_usable_secret(candidate)),
@@ -887,13 +916,18 @@ def _resolve_explicit_runtime(
         if pconfig.base_url_env_var:
             env_url = os.getenv(pconfig.base_url_env_var, "").strip().rstrip("/")
 
+        configured_provider = str(model_cfg.get("provider") or "").strip().lower()
+        configured_base_url = ""
+        if configured_provider == provider:
+            configured_base_url = str(model_cfg.get("base_url") or "").strip().rstrip("/")
+
         base_url = explicit_base_url
         if not base_url:
             if provider in {"kimi-coding", "kimi-coding-cn"}:
                 creds = resolve_api_key_provider_credentials(provider)
                 base_url = creds.get("base_url", "").rstrip("/")
             else:
-                base_url = env_url or pconfig.inference_base_url
+                base_url = env_url or configured_base_url or pconfig.inference_base_url
 
         api_key = explicit_api_key
         if not api_key:
@@ -902,8 +936,16 @@ def _resolve_explicit_runtime(
             if not base_url:
                 base_url = creds.get("base_url", "").rstrip("/")
 
+        if provider == "ollama-cloud":
+            _require_official_ollama_cloud_endpoint(base_url)
+
         api_mode = "chat_completions"
-        if provider == "copilot":
+        if provider == "openai":
+            # The public API-key provider uses OpenAI's Chat Completions
+            # endpoint. The api.openai.com hostname alone must not route it
+            # through the separate Codex Responses/OAuth path.
+            api_mode = "chat_completions"
+        elif provider == "copilot":
             api_mode = _copilot_runtime_api_mode(model_cfg, api_key)
         elif provider == "xai":
             api_mode = "codex_responses"
@@ -951,8 +993,30 @@ def resolve_runtime_provider(
 
     if requested_provider in {"google-gemini-cli", "gemini-cli", "gemini-oauth"}:
         raise auth_mod._google_gemini_cli_unavailable()
+
+    # Antigravity: the successor to consumer Gemini CLI sign-in. Multi-account
+    # OAuth pool with round-robin rotation (runtime.antigravity_oauth).
+    if requested_provider == "antigravity":
+        from runtime.antigravity_oauth import get_antigravity_auth_status
+
+        status = get_antigravity_auth_status()
+        if not status.get("connected_accounts"):
+            raise auth_mod.AuthError(
+                "No Antigravity account is connected. Add one in Settings → Providers → Antigravity.",
+                provider="antigravity",
+                code="antigravity_not_logged_in",
+            )
+        return {
+            "provider": "antigravity",
+            "api_mode": "chat_completions",
+            "base_url": "cloudcode-pa://antigravity",
+            "api_key": "antigravity-oauth",
+            "source": "antigravity-oauth",
+            "requested_provider": requested_provider,
+        }
+
     if any(
-        str(url or "").strip().lower().startswith("cloudcode-pa://")
+        str(url or "").strip().lower().startswith("cloudcode-pa://google")
         for url in (explicit_base_url, _get_model_config().get("base_url"))
     ):
         raise auth_mod._google_gemini_cli_unavailable()
@@ -1339,9 +1403,21 @@ def resolve_runtime_provider(
         cfg_base_url = ""
         if cfg_provider == provider:
             cfg_base_url = (model_cfg.get("base_url") or "").strip().rstrip("/")
-        base_url = cfg_base_url or creds.get("base_url", "").rstrip("/")
+        if provider == "openai":
+            # For direct OpenAI API-key usage, provider env override wins over
+            # the provider-scoped model endpoint; absent that, config wins over
+            # the public API default returned by the credentials helper.
+            openai_env_url = os.getenv("OPENAI_BASE_URL", "").strip().rstrip("/")
+            base_url = openai_env_url or cfg_base_url or creds.get("base_url", "").rstrip("/")
+        else:
+            base_url = cfg_base_url or creds.get("base_url", "").rstrip("/")
         api_mode = "chat_completions"
-        if provider == "copilot":
+        if provider == "openai":
+            # Keep the API-key integration on its public chat API even though
+            # the base URL is api.openai.com. Codex OAuth is handled above by
+            # the explicit openai-codex branch and uses codex_responses.
+            api_mode = "chat_completions"
+        elif provider == "copilot":
             api_mode = _copilot_runtime_api_mode(model_cfg, creds.get("api_key", ""))
         elif provider == "xai":
             api_mode = "codex_responses"

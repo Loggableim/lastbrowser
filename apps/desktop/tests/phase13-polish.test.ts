@@ -71,27 +71,13 @@ describe('Phase 13 In-App UI Polish: Top-64 Pinned Apps & Universal Model Picker
   });
 
   describe('2. Universeller Modell-Picker in Nova AI', () => {
-    it('verifies AVAILABLE_MODELS contains all requested models and categories', () => {
+    it('keeps provider models out of the static catalog until live discovery', () => {
       const modelIds = AVAILABLE_MODELS.map((m) => m.id);
 
-      // Gemini CLI models must come from the live account catalog, not this static list.
-      expect(modelIds.filter((id) => id.startsWith('gemini-'))).toEqual([]);
-      expect(AVAILABLE_MODELS.some((model) => model.category === 'gemini')).toBe(false);
-
-      // Anthropic models
-      expect(modelIds).toContain('claude-3-5-sonnet');
-      expect(modelIds).toContain('claude-3-opus');
-
-      // OpenAI models
-      expect(modelIds).toContain('gpt-4o');
-      expect(modelIds).toContain('gpt-4o-mini');
-
-      // Local models
-      expect(modelIds).toContain('ollama-local');
-
-      // Gemini CLI has no fabricated static default.
-      const defaultModel = AVAILABLE_MODELS.find((m) => m.isDefault);
-      expect(defaultModel?.category).not.toBe('gemini');
+      // Only orchestration modes are local choices. Provider models, including
+      // Anthropic, OpenAI, Gemini, and Ollama, must come from live discovery.
+      expect(modelIds).toEqual(['teamwork', 'smart-track-low', 'smart-track-medium', 'smart-track-high']);
+      expect(AVAILABLE_MODELS.every((model) => model.category === 'teamwork')).toBe(true);
     });
 
     it('verifies CopilotSplitView unlocks model picker in Header and shows active Gemini account', () => {
@@ -123,14 +109,14 @@ describe('Phase 13 In-App UI Polish: Top-64 Pinned Apps & Universal Model Picker
       const store = useChatStore.getState();
       expect(store.selectedModel).toBeDefined();
 
-      store.setSelectedModel('claude-3-5-sonnet');
-      expect(useChatStore.getState().selectedModel).toBe('claude-3-5-sonnet');
+      store.setSelectedModel('anthropic/discovered-model');
+      expect(useChatStore.getState().selectedModel).toBe('anthropic/discovered-model');
 
-      store.setSelectedModel('gpt-4o');
-      expect(useChatStore.getState().selectedModel).toBe('gpt-4o');
+      store.setSelectedModel('openai/discovered-model');
+      expect(useChatStore.getState().selectedModel).toBe('openai/discovered-model');
 
-      store.setSelectedModel('gemini-2.5-flash');
-      expect(useChatStore.getState().selectedModel).toBe('gemini-2.5-flash');
+      store.setSelectedModel('google/discovered-model');
+      expect(useChatStore.getState().selectedModel).toBe('google/discovered-model');
     });
   });
 

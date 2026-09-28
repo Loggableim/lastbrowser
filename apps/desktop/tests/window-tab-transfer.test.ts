@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   detachRequestKey,
+  ensureDetachedPageReady,
   isGuestOwnedByRenderer,
+  matchesNavigationHistorySnapshot,
+  normalizeRestoredNavigationHistory,
   parseDetachTabPayload,
   PendingTabDetachRegistry,
   serializeNavigationHistory
@@ -44,6 +47,88 @@ describe('Main-process detached tab request handling', () => {
       ],
       index: 0
     });
+  });
+
+  it('requires the restored active history index even when URLs are duplicated', () => {
+    const snapshot = {
+      entries: [
+        { url: 'https://same.example/', title: 'Same' },
+        { url: 'https://same.example/', title: 'Same' },
+        { url: 'https://other.example/', title: 'Other' }
+      ],
+      index: 1
+    };
+    expect(matchesNavigationHistorySnapshot(snapshot, snapshot.entries, 1)).toBe(true);
+    expect(matchesNavigationHistorySnapshot(snapshot, snapshot.entries, 0)).toBe(false);
+    expect(matchesNavigationHistorySnapshot(snapshot, snapshot.entries.slice(0, 2), 1)).toBe(false);
+  });
+
+  it.each([
+    ['initial about:blank', 'about:blank'],
+    ['duplicate source URL', 'https://second.example/']
+  ])('normalizes a trailing %s entry and keeps the snapshot URL active', async (_kind, extraUrl) => {
+    const snapshot = {
+      entries: [
+        { url: 'https://first.example/', title: 'First' },
+        { url: 'https://second.example/', title: 'Second' }
+      ],
+      index: 1
+    };
+    const entries = [...snapshot.entries.map(({ url }) => ({ url })), { url: extraUrl }];
+    let activeIndex = 2;
+    const operations: string[] = [];
+    const history = {
+      getAllEntries: () => entries,
+      getActiveIndex: () => activeIndex,
+      getEntryAtIndex: (index: number) => entries[index] ?? null,
+      removeEntryAtIndex: (index: number) => {
+        operations.push(`remove:${index}`);
+        if (index === activeIndex) return false;
+        entries.splice(index, 1);
+        if (index < activeIndex) activeIndex -= 1;
+        return true;
+      }
+    };
+    const navigateToIndex = vi.fn(async (index: number) => {
+      operations.push(`navigate:${index}`);
+      activeIndex = index;
+    });
+
+    await expect(normalizeRestoredNavigationHistory(snapshot, history, navigateToIndex)).resolves.toBe(true);
+    expect(navigateToIndex).toHaveBeenCalledWith(snapshot.index);
+    expect(operations).toEqual(['navigate:1', 'remove:2']);
+    expect(matchesNavigationHistorySnapshot(snapshot, history.getAllEntries(), history.getActiveIndex())).toBe(true);
+  });
+
+  it('fails closed without pruning entries when restored history diverges from the source sequence', async () => {
+    const snapshot = {
+      entries: [
+        { url: 'https://first.example/', title: 'First' },
+        { url: 'https://second.example/', title: 'Second' }
+      ],
+      index: 1
+    };
+    const entries = [{ url: 'https://other.example/' }, { url: 'https://second.example/' }];
+    const history = {
+      getAllEntries: () => entries,
+      getActiveIndex: () => 1,
+      getEntryAtIndex: (index: number) => entries[index] ?? null,
+      removeEntryAtIndex: vi.fn(() => true)
+    };
+    const navigateToIndex = vi.fn(async () => undefined);
+
+    await expect(normalizeRestoredNavigationHistory(snapshot, history, navigateToIndex)).resolves.toBe(false);
+    expect(navigateToIndex).not.toHaveBeenCalled();
+    expect(history.removeEntryAtIndex).not.toHaveBeenCalled();
+  });
+
+  it('does not report a detached page ready when both history restore and URL fallback fail', async () => {
+    const fallback = vi.fn(async () => { throw new Error('navigation failed'); });
+    await expect(ensureDetachedPageReady(false, fallback)).resolves.toBe(false);
+    expect(fallback).toHaveBeenCalledOnce();
+    await expect(ensureDetachedPageReady(true, fallback)).resolves.toBe(true);
+    expect(fallback).toHaveBeenCalledOnce();
+    await expect(ensureDetachedPageReady(false, async () => 'loaded')).resolves.toBe(true);
   });
 
   it('omits invalid or unavailable navigation history rather than restoring malformed entries', () => {

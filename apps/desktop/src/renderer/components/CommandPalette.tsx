@@ -540,7 +540,13 @@ export function buildSidekickCliCommands(
   ];
 }
 
-export function CommandPalette(): JSX.Element | null {
+export function CommandPalette({
+  onToggleTabPinned,
+  onToggleTabMute
+}: {
+  onToggleTabPinned: (tabId: string) => void;
+  onToggleTabMute: (tabId: string) => void;
+}): JSX.Element | null {
   const { t } = useDesktopI18n();
   const { commandPaletteOpen, setCommandPaletteOpen, setActivePanel, toggleFindOpen, setDownloadsOpen, setHistoryOpen, setPermissionsOpen } =
     usePanelStore();
@@ -553,9 +559,7 @@ export function CommandPalette(): JSX.Element | null {
     reopenClosedTab,
     closeDuplicateTabs,
     sortTabsByDomain,
-    closeUnpinnedTabs,
-    toggleTabPinned,
-    toggleTabMute
+    closeUnpinnedTabs
   } = useTabStore();
 
   const [query, setQuery] = useState('');
@@ -954,18 +958,18 @@ export function CommandPalette(): JSX.Element | null {
         icon: <Pin size={16} />,
         keywords: ['pin', 'anpinnen', 'festheften', 'fixieren'],
         action: () => {
-          if (activeTab) toggleTabPinned(activeTab.id);
+          if (activeTab) onToggleTabPinned(activeTab.id);
         }
       },
       {
         id: 'tab-toggle-mute',
-        title: activeTab?.muted ? 'Audio aktivieren (Unmute)' : 'Tab stummschalten (Mute)',
+        title: activeTab?.isMuted ? 'Audio aktivieren (Unmute)' : 'Tab stummschalten (Mute)',
         description: 'Schaltet die Audioausgabe des Tabs stumm oder aktiv',
         category: 'Tabs',
-        icon: activeTab?.muted ? <Volume2 size={16} /> : <VolumeX size={16} />,
+        icon: activeTab?.isMuted ? <Volume2 size={16} /> : <VolumeX size={16} />,
         keywords: ['mute', 'stumm', 'lautstärke', 'ton', 'audio', 'sound'],
         action: () => {
-          if (activeTab) toggleTabMute(activeTab.id);
+          if (activeTab) onToggleTabMute(activeTab.id);
         }
       },
 
@@ -1112,8 +1116,8 @@ export function CommandPalette(): JSX.Element | null {
     setPermissionsOpen,
     sortTabsByDomain,
     toggleFindOpen,
-    toggleTabMute,
-    toggleTabPinned,
+    onToggleTabMute,
+    onToggleTabPinned,
     t
   ]);
 

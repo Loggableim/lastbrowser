@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Features &amp; Browser-Vergleich – Lastbrowser</title>
-<meta name="description" content="Alle Features von Lastbrowser im Detail: Nova AI, 100% isolierte Spaces, Unified Extension &amp; MCP Hub, Widevine DRM, ConPTY Terminal und der direkte Vergleich mit Chrome, Edge, Brave &amp; Arc.">
+<meta name="description" content="Alle Features von Lastbrowser im Detail: Nova AI, getrennte Space-Sitzungen, Unified Extension &amp; MCP Hub, Widevine DRM, ConPTY Terminal und der direkte Vergleich mit Chrome, Edge, Brave &amp; Arc.">
 <meta property="og:title" content="Features &amp; Browser-Vergleich – Lastbrowser">
 <meta property="og:description" content="Entdecken Sie die 5 Kernsäulen von Lastbrowser und den direkten Vergleich mit Chrome, Edge, Brave und Arc.">
 <meta property="og:type" content="website">
@@ -123,7 +123,7 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
   <div class="container inner">
     <a href="/" class="logo">
       <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser">
-      <div><strong>Lastbrowser</strong><span>v0.1.35 Beta · AI-Native</span></div>
+      <div><strong>Lastbrowser</strong><span>v0.1.34 Beta · AI-Native</span></div>
     </a>
     <div class="links">
       <a href="/">Home</a>
@@ -139,7 +139,7 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
 
 <header class="hero">
   <div class="container">
-    <div class="pill-badge">✦ Tiefe Einblicke in die Architektur · v0.1.35 Public Beta</div>
+    <div class="pill-badge">✦ Tiefe Einblicke in die Architektur · v0.1.34 Public Beta</div>
     <h1>Entwickelt für <span class="grad">Fokus, Freiheit &amp; Datenkontrolle</span>.</h1>
     <p class="lead">Entdecken Sie die fünf architektonischen Säulen von Lastbrowser und erfahren Sie, wie er sich fundamental von Standard-Browsern unterscheidet.</p>
   </div>
@@ -177,7 +177,7 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
     </div>
     <div>
       <span class="pillar-badge" style="background:rgba(37,99,255,.18);color:var(--cyan);border:1px solid rgba(0,229,255,.3)">Säule 2 · Multitasking</span>
-      <h3>Isolierte Spaces mit 100% Session-Partitionierung</h3>
+      <h3>Spaces mit getrennten Browser-Sitzungen</h3>
       <p>
         Vergessen Sie unübersichtliche Profil-Fenster oder Session-Leaks. In Lastbrowser besitzt jeder Space einen eigenständigen Partitions-Schlüssel (<code>persist:profile:space</code>).
       </p>
@@ -223,14 +223,14 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
       <span class="pillar-badge" style="background:rgba(255,45,143,.18);color:var(--magenta);border:1px solid rgba(255,45,143,.3)">Säule 4 · Entertainment</span>
       <h3>Castlabs Widevine DRM für Netflix, Disney+ &amp; Co.</h3>
       <p>
-        Lastbrowser setzt auf die offizielle <strong>Castlabs Electron-Runtime</strong> mit hardwarebeschleunigtem Widevine CDM und Video Multi-Part Protection (VMP) Signierung.
+        Lastbrowser setzt auf die <strong>Castlabs Electron-Runtime</strong> mit Widevine CDM für kompatible geschützte Medien. Die Wiedergabe hängt von den Anforderungen des jeweiligen Streaming-Dienstes ab.
       </p>
       <p>
         Geschützte Medieninhalte von Netflix, Disney+, Spotify und Amazon Prime laufen nahtlos in gestochen scharfer Auflösung. Nutzen Sie den synchronen <strong>Split-View</strong>, um auf der linken Seite ein Video oder Webinar laufen zu lassen, während Nova AI rechts Notizen und Transkripte anfertigt.
       </p>
       <div class="pillar-tags">
-        <div class="pillar-tag">Widevine L3 Hardware-CDM</div>
-        <div class="pillar-tag">VMP Code-Signing</div>
+        <div class="pillar-tag">Widevine CDM</div>
+        <div class="pillar-tag">Castlabs Electron</div>
         <div class="pillar-tag">Synchroner Split-View</div>
       </div>
     </div>
@@ -287,7 +287,7 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
             <td><span class="no">✗ Feste Arc Max Cloud</span></td>
           </tr>
           <tr>
-            <td><strong>100% isolierte Spaces &amp; Sessions</strong></td>
+            <td><strong>Getrennte Space-Sitzungen</strong></td>
             <td class="highlight"><span class="yes">✓ Volle Partitions-Trennung</span></td>
             <td><span class="no">✗ Nur Fenster-Profile</span></td>
             <td><span class="no">✗ Nur Fenster-Profile</span></td>
@@ -312,7 +312,7 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
           </tr>
           <tr>
             <td><strong>Widevine DRM (Netflix, Disney+, Spotify)</strong></td>
-            <td class="highlight"><span class="yes">✓ Castlabs VMP signiert</span></td>
+            <td class="highlight"><span class="yes">✓ Castlabs-Widevine-Integration</span></td>
             <td><span class="yes">✓ Unterstützt</span></td>
             <td><span class="yes">✓ Unterstützt</span></td>
             <td><span class="yes">✓ Unterstützt</span></td>
@@ -350,7 +350,7 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
   <!-- CTA Banner -->
   <section class="cta-banner">
     <h2>Erleben Sie den Unterschied selbst</h2>
-    <p>Laden Sie die öffentliche Beta (v0.1.35) herunter und starten Sie direkt durch.</p>
+    <p>Laden Sie die öffentliche Beta (v0.1.34) herunter und starten Sie direkt durch.</p>
     <a class="btn btn-primary" href="/download/">
       <span>Jetzt kostenlos herunterladen</span>
     </a>

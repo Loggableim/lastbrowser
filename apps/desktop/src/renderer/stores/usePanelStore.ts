@@ -15,6 +15,12 @@ import {
   workspacePanelWidthStorageKey,
   workspacePanelCollapsedStorageKey
 } from '../shell-state.js';
+import {
+  type VisionImpairedConfig,
+  applyVisionImpairedToDom,
+  loadVisionImpairedConfig,
+  saveVisionImpairedConfig
+} from './a11y-config.js';
 
 const DEFAULT_CONTEXT_SIDEBAR_WIDTH = 280;
 const MIN_CONTEXT_SIDEBAR_WIDTH = 220;
@@ -143,6 +149,8 @@ export interface PanelState {
   a11yMinFontSize: number;
   a11yUiZoom: number;
   a11yFocusRings: boolean;
+  /** Vision-Impaired Mode 2.0 (docs/visionimpaired.md) — one object, one storage key. */
+  visionImpaired: VisionImpairedConfig;
 
   setActivePanel(panel: LastbrowserPanelId): void;
   setLeftSidebarCollapsed(collapsed: boolean | ((current: boolean) => boolean)): void;
@@ -181,6 +189,8 @@ export interface PanelState {
   setA11yMinFontSize(val: number): void;
   setA11yUiZoom(val: number): void;
   setA11yFocusRings(val: boolean): void;
+  /** Patches the Vision-Impaired 2.0 config, persists it, and re-syncs the DOM. */
+  setVisionImpaired(patch: Partial<VisionImpairedConfig>): void;
 }
 
 export const sidebarModeStorageKey = 'lastbrowser.sidebarMode.v1';
@@ -466,6 +476,8 @@ const initialA11yDyslexicFont = loadA11yDyslexicFont();
 const initialA11yMinFontSize = loadA11yMinFontSize();
 const initialA11yUiZoom = loadA11yUiZoom();
 const initialA11yFocusRings = loadA11yFocusRings();
+const initialVisionImpaired = loadVisionImpairedConfig();
+applyVisionImpairedToDom(initialVisionImpaired);
 syncA11yToDom(
   initialA11yHighContrast,
   initialA11yDyslexicFont,
@@ -491,6 +503,7 @@ export const usePanelStore = create<PanelState>((set) => ({
   a11yMinFontSize: initialA11yMinFontSize,
   a11yUiZoom: initialA11yUiZoom,
   a11yFocusRings: initialA11yFocusRings,
+  visionImpaired: initialVisionImpaired,
   contextSidebarCollapsed: false,
   contextSidebarWidth: loadNumericPreference(
     undefined,
@@ -827,5 +840,12 @@ export const usePanelStore = create<PanelState>((set) => ({
     }
     applyA11yFocusRingsToDom(val);
     set({ a11yFocusRings: val });
+  },
+
+  setVisionImpaired: (patch) => {
+    const next: VisionImpairedConfig = { ...usePanelStore.getState().visionImpaired, ...patch };
+    saveVisionImpairedConfig(next);
+    applyVisionImpairedToDom(next);
+    set({ visionImpaired: next });
   }
 }));

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   SpaceSetupModal,
+  createSpaceSetupDefaults,
   isDuplicateSpaceName,
   normalizePinnedApp,
   resolvePresetModel,
@@ -21,6 +24,25 @@ const setupData: SpaceSetupData = {
 };
 
 describe('Space setup validation and model defaults', () => {
+  it('reinitializes the wizard when it is opened for another Space', () => {
+    const defaults = createSpaceSetupDefaults('Coding & Dev');
+    expect(defaults.step).toBe(1);
+    expect(defaults.preset.id).toBe('coding-dev');
+    expect(defaults.name).toBe('Coding & Dev');
+    expect(isDuplicateSpaceName(defaults.name, ['Space A'])).toBe(false);
+    expect(defaults.model).toBe('smart-track');
+    expect(defaults.customPath).toBe('');
+    expect(defaults.customAppName).toBe('');
+    expect(defaults.customAppUrl).toBe('');
+    expect(defaults.createError).toBe('');
+
+    const source = readFileSync(resolve(__dirname, '../src/renderer/components/SpaceSetupModal.tsx'), 'utf8');
+    expect(source).toMatch(/if \(!isOpen\) return;\s*const defaults = createSpaceSetupDefaults/);
+    for (const reset of ['setStep(defaults.step)', 'setName(defaults.name)', 'setCustomPath(defaults.customPath)', 'setCreateError(defaults.createError)']) {
+      expect(source).toContain(reset);
+    }
+  });
+
   it('detects duplicate names after trimming and without case sensitivity', () => {
     expect(isDuplicateSpaceName('  Research  ', ['research'])).toBe(true);
     expect(isDuplicateSpaceName('Research', ['Coding', ' research '])).toBe(true);
@@ -28,11 +50,29 @@ describe('Space setup validation and model defaults', () => {
     expect(isDuplicateSpaceName('   ', [''])).toBe(false);
   });
 
-  it('uses the preset model only when available, otherwise preserves a live choice', () => {
-    expect(resolvePresetModel('gemini-2.5-pro', 'openai/gpt-live', ['openai/gpt-live'])).toBe('openai/gpt-live');
-    expect(resolvePresetModel('gemini-2.5-pro', 'gemini-2.5-pro', ['openai/gpt-live'])).toBe('smart-track');
-    expect(resolvePresetModel('smart-track', 'openai/gpt-live', ['openai/gpt-live'])).toBe('smart-track');
-    expect(resolvePresetModel('openai/gpt-live', 'smart-track', ['openai/gpt-live'])).toBe('openai/gpt-live');
+  it('preserves a live model choice and falls back safely when it is unavailable', () => {
+    expect(resolvePresetModel('openai/gpt-live', ['openai/gpt-live'])).toBe('openai/gpt-live');
+    expect(resolvePresetModel('gemini-2.5-pro', ['openai/gpt-live'])).toBe('smart-track');
+    expect(resolvePresetModel('openai/gpt-live', [])).toBe('smart-track');
+    expect(resolvePresetModel('teamwork', ['openai/gpt-live'])).toBe('teamwork');
+  });
+
+  it('does not persist obsolete Gemini preset defaults into a newly created Space', async () => {
+    const source = readFileSync(resolve(__dirname, '../src/renderer/components/SpaceSetupModal.tsx'), 'utf8');
+    expect(source).not.toContain('gemini-2.5-pro');
+    expect(source).not.toContain('gemini-2.5-flash');
+
+    let savedData: SpaceSetupData | undefined;
+    const selectedModel = resolvePresetModel('gemini-2.5-pro', ['openai/gpt-live']);
+    const result = await submitSpaceSetup(
+      { ...setupData, model: selectedModel },
+      async (data) => { savedData = data; return true; },
+      () => undefined
+    );
+
+    expect(result).toBeNull();
+    expect(savedData?.model).toBe('smart-track');
+    expect(savedData?.model).not.toMatch(/^gemini-2\.5-(?:pro|flash)$/);
   });
 
   it('accepts custom HTTP(S) pinned apps and rejects invalid or unsafe URLs', () => {

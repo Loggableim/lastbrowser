@@ -140,7 +140,12 @@ function normalizeSnapRatios(value: unknown, layout: SnapLayoutType): SnapLayout
     });
   };
   const x = normalizeAxis(candidate.x, defaults.x);
-  const y = normalizeAxis(candidate.y, defaults.y);
+  // Older quad sessions stored one shared row height. Keep that height in
+  // both columns when upgrading to independent dividers.
+  const storedY = layout === 'quad-grid' && Array.isArray(candidate.y) && candidate.y.length === 1
+    ? [candidate.y[0], candidate.y[0]]
+    : candidate.y;
+  const y = normalizeAxis(storedY, defaults.y);
   // Multi-divider layouts must remain ordered with at least a 5% pane between dividers.
   if (layout === 'trio-columns' && x[1] <= x[0] + 4) return { x: defaults.x, y };
   return { x, y };
@@ -264,19 +269,26 @@ export const sessionSnapshotStorageKey = 'lastbrowser.sessionSnapshot.v1';
 export type SessionSnapshot = {
   timestamp: number;
   profileId: string;
+  /** Space that owned these tabs; absent on legacy snapshots (treated as home). */
+  spacePath?: string;
   state: ProfileTabState;
 };
 
 export function saveSessionSnapshot(
   profileId: string,
   state: ProfileTabState,
-  storage: WriteStorage = window.localStorage
+  storage: ReadWriteStorage = window.localStorage,
+  spacePath?: string | null
 ): void {
   const persistableTabs = state.tabs.filter((tab) => !tab.incognito);
-  if (!persistableTabs.length) return;
+  if (!persistableTabs.length) {
+    clearSessionSnapshot(storage);
+    return;
+  }
   const snapshot: SessionSnapshot = {
     timestamp: Date.now(),
     profileId,
+    spacePath: spacePath ?? '',
     state: {
       tabs: persistableTabs.map((tab) => ({ ...tab })),
       activeTabId: persistableTabs.some((t) => t.id === state.activeTabId)
@@ -289,7 +301,8 @@ export function saveSessionSnapshot(
 
 export function loadSessionSnapshot(
   profileId?: string,
-  storage: ReadStorage = window.localStorage
+  storage: ReadStorage = window.localStorage,
+  spacePath?: string | null
 ): SessionSnapshot | null {
   const raw = storage.getItem(sessionSnapshotStorageKey);
   if (!raw) return null;
@@ -303,11 +316,16 @@ export function loadSessionSnapshot(
     if (profileId && candidate.profileId !== profileId) {
       return null;
     }
+    if (candidate.spacePath !== undefined && typeof candidate.spacePath !== 'string') return null;
+    // Old snapshots predate Space ownership and are only safe to restore in
+    // home (represented by an empty path). Never leak another Space's tabs.
+    if (spacePath !== undefined && (candidate.spacePath ?? '') !== (spacePath ?? '')) return null;
     const normalizedState = normalizeTabState(candidate.state);
     if (!normalizedState.tabs.length) return null;
     return {
       timestamp: candidate.timestamp,
       profileId: candidate.profileId,
+      ...(candidate.spacePath !== undefined ? { spacePath: candidate.spacePath } : {}),
       state: normalizedState
     };
   } catch {

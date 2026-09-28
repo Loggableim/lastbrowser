@@ -80,6 +80,35 @@ export const desktopTranslationKeys = [
   'browser.actions.explain',
   'browser.actions.research',
   'browser.actions.summarize',
+  'browser.startPage.greeting.morning',
+  'browser.startPage.greeting.morningSubline',
+  'browser.startPage.greeting.afternoon',
+  'browser.startPage.greeting.afternoonSubline',
+  'browser.startPage.greeting.evening',
+  'browser.startPage.greeting.eveningSubline',
+  'browser.startPage.greeting.night',
+  'browser.startPage.greeting.nightSubline',
+  'browser.startPage.clockLabel',
+  'browser.startPage.openCommandPalette',
+  'browser.startPage.commandPalette',
+  'browser.startPage.searchPlaceholder',
+  'browser.startPage.askNovaTitle',
+  'browser.startPage.askNova',
+  'browser.startPage.open',
+  'browser.startPage.quickActions',
+  'browser.startPage.actions.research',
+  'browser.startPage.actions.tabsSummary',
+  'browser.startPage.actions.sortTabs',
+  'browser.startPage.actions.diagnostics',
+  'browser.startPage.actions.commandPalette',
+  'browser.startPage.isolatedWorkspaces',
+  'browser.startPage.spacesSessions',
+  'browser.startPage.spaceIsolationTooltip',
+  'browser.startPage.separateLogins',
+  'browser.startPage.createSpaceTitle',
+  'browser.startPage.newSpace',
+  'browser.startPage.speedDial',
+  'browser.startPage.quickLaunch',
   'browser.aiBrowser.askPlaceholder',
   'browser.aiBrowser.emptyDescription',
   'browser.aiBrowser.emptyTitle',
@@ -100,6 +129,14 @@ export const desktopTranslationKeys = [
   'browser.chrome.sidekickOnline',
   'browser.chrome.searchPlaceholder',
   'browser.chrome.updateRetry',
+  'browser.omnibox.addBookmark',
+  'browser.omnibox.addressLabel',
+  'browser.omnibox.bookmarkBadge',
+  'browser.omnibox.historyBadge',
+  'browser.omnibox.navigate',
+  'browser.omnibox.openUrl',
+  'browser.omnibox.removeBookmark',
+  'browser.omnibox.searchSuggestion',
   'browser.page.openBrowser',
   'browser.page.empty',
   'browser.page.emptyHint',
@@ -127,6 +164,7 @@ export const desktopTranslationKeys = [
   'chat.profile',
   'chat.readOnly',
   'chat.reasoning',
+  'chat.runtimeStarting',
   'chat.startOrSelect',
   'chat.stop',
   'chat.send',
@@ -136,6 +174,8 @@ export const desktopTranslationKeys = [
   'chat.tokensPerSecond',
   'chat.title',
   'chat.workspace',
+  'copilot.emptyTitle',
+  'copilot.emptyDescription',
   'discord.ban',
   'discord.channels',
   'discord.detail',
@@ -461,6 +501,78 @@ export const desktopTranslationKeys = [
   'settings.panels.appearance.saving',
   'settings.panels.appearance.accessibility',
   'settings.panels.appearance.accessibilityDescription',
+  'settings.panels.appearance.viModeTitle',
+  'settings.panels.appearance.viModeDescription',
+  'settings.panels.appearance.viEnable',
+  'settings.panels.appearance.viEnableDescription',
+  'settings.panels.appearance.viFont',
+  'settings.panels.appearance.viFontDescription',
+  'settings.panels.appearance.viFontSystem',
+  'settings.panels.appearance.viFontAtkinson',
+  'settings.panels.appearance.viFontLexend',
+  'settings.panels.appearance.viEnhancedSpacing',
+  'settings.panels.appearance.viEnhancedSpacingDescription',
+  'settings.panels.appearance.viBoldWeight',
+  'settings.panels.appearance.viBoldWeightDescription',
+  'settings.panels.appearance.viNoEllipsis',
+  'settings.panels.appearance.viNoEllipsisDescription',
+  'settings.panels.appearance.viBionicReading',
+  'settings.panels.appearance.viBionicReadingDescription',
+  'settings.panels.appearance.viSmartInvert',
+  'settings.panels.appearance.viSmartInvertDescription',
+  'settings.panels.appearance.viAntiHalation',
+  'settings.panels.appearance.viAntiHalationDescription',
+  'settings.panels.appearance.viSoftContrast',
+  'settings.panels.appearance.viSoftContrastDescription',
+  'settings.panels.appearance.viReduceMotion',
+  'settings.panels.appearance.viReduceMotionDescription',
+  'settings.panels.appearance.viMinTarget',
+  'settings.panels.appearance.viMinTargetDescription',
+  'settings.panels.appearance.viPalette',
+  'settings.panels.appearance.viPaletteAmbra',
+  'settings.panels.appearance.viPaletteOnyx',
+  'settings.panels.appearance.viPaletteIvory',
+  'settings.panels.appearance.viPaletteMonochrom',
+  'settings.panels.appearance.viCvdFilter',
+  'settings.panels.appearance.viCvdNone',
+  'settings.panels.appearance.viCvdProtanopia',
+  'settings.panels.appearance.viCvdDeuteranopia',
+  'settings.panels.appearance.viCvdTritanopia',
+  'settings.panels.appearance.viCvdAchromatopsia',
+  'settings.panels.appearance.viCursorSize',
+  'settings.panels.appearance.viCursorNormal',
+  'settings.panels.appearance.viCursorLarge',
+  'settings.panels.appearance.viCursorHuge',
+  'settings.panels.appearance.viCursorMega',
+  'settings.panels.appearance.viShakeToLocate',
+  'settings.panels.appearance.viShakeToLocateDescription',
+  'settings.panels.appearance.viLoupe',
+  'settings.panels.appearance.viLoupeDescription',
+  'settings.panels.appearance.viLoupePosition',
+  'settings.panels.appearance.viLoupePosTop',
+  'settings.panels.appearance.viLoupePosBottom',
+  'settings.panels.appearance.viLoupePosLeft',
+  'settings.panels.appearance.viLoupePosRight',
+  'settings.panels.appearance.viLoupeSize',
+  'settings.panels.appearance.viLoupeFactor',
+  'settings.panels.appearance.viSuperTabs',
+  'settings.panels.appearance.viSuperTabsDescription',
+  'settings.panels.appearance.viEnlargedTopBar',
+  'settings.panels.appearance.viEnlargedTopBarDescription',
+  'settings.panels.appearance.viSplitMagnifier',
+  'settings.panels.appearance.viSplitMagnifierDescription',
+  'settings.panels.appearance.viAudioChime',
+  'settings.panels.appearance.viAudioChimeDescription',
+  'settings.panels.appearance.viTestCard',
+  'settings.panels.appearance.viTestCardDescription',
+  'settings.panels.appearance.viTestHeading',
+  'settings.panels.appearance.viTestFlow',
+  'settings.panels.appearance.viTestCode',
+  'settings.panels.appearance.viTestButton',
+  'settings.panels.appearance.viTestInput',
+  'settings.panels.appearance.viTestFontSize',
+  'settings.panels.appearance.viTestLineHeight',
+  'settings.panels.appearance.viReset',
   'settings.panels.appearance.highContrast',
   'settings.panels.appearance.highContrastDescription',
   'settings.panels.appearance.dyslexicFont',
@@ -545,13 +657,24 @@ export const desktopTranslationKeys = [
   'settings.panels.providers.ollamaCloudLiveVerified',
   'settings.panels.providers.ollamaCloudCatalogOnly',
   'settings.panels.providers.openrouterCatalogOnly',
+  'settings.panels.providers.openrouterLiveTested',
+  'settings.panels.providers.openrouterChatEvidence',
   'settings.panels.providers.morphTokenLimitWarning',
   'settings.panels.providers.geminiSubscriptionTitle',
   'settings.panels.providers.geminiSubscriptionMigration',
   'settings.panels.providers.geminiSubscriptionDocs',
   'settings.panels.providers.geminiSubscriptionAnnouncement',
   'settings.panels.providers.geminiSubscriptionApiKey',
+  'settings.panels.providers.antigravityRoundRobinHint',
+  'settings.panels.providers.antigravityAddAccount',
+  'settings.panels.providers.antigravityEmptyHint',
+  'settings.panels.providers.antigravityStarting',
+  'settings.panels.providers.antigravityWaiting',
   'settings.panels.providers.cancel',
+  'settings.panels.providers.codexExpired',
+  'settings.panels.providers.codexRetrying',
+  'settings.panels.providers.codexIncomplete',
+  'settings.panels.providers.codexCancelled',
   'settings.panels.providers.apiKey',
   'skills.createSkill',
   'skills.delete',
@@ -624,8 +747,13 @@ export const desktopTranslationKeys = [
   'sidebar.drawer.zenMode',
   'sidebar.drawer.zenModeTitle',
   'sidebar.drawer.settings',
+  'sidebar.drawer.navigation',
+  'sidebar.drawer.toggleSidebar',
   'sidebar.drawer.expandSidebar',
   'sidebar.drawer.help',
+  'sidebar.space.workspace',
+  'sidebar.space.switch',
+  'sidebar.space.spaces',
   'sidebar.items.chat.title',
   'sidebar.items.chat.desc',
   'sidebar.items.agents.title',
@@ -795,12 +923,8 @@ export const desktopTranslationKeys = [
   'settings.panels.system.availableVersion',
   'settings.panels.system.sidekickRuntime',
   'settings.panels.system.sidekickRuntimeDescription',
+  'settings.panels.system.updatedWithLastbrowser',
   'settings.panels.system.version',
-  'settings.panels.system.source',
-  'settings.panels.system.updatedCopy',
-  'settings.panels.system.bundled',
-  'settings.panels.system.checkSidekick',
-  'settings.panels.system.updateSidekick',
   'settings.panels.system.developerApiTools',
   'settings.panels.system.developerApiToolsDescription',
   'spaceSetup.title',
@@ -849,7 +973,166 @@ export const desktopTranslationKeys = [
   'spaceSetup.startPagePlaceholder',
   'spaceSetup.submitting',
   'spaceSetup.createAndOpen',
-  'spaceSetup.createFailed'
+  'spaceSetup.createFailed',
+  'snap.title',
+  'snap.dragInstruction',
+  'snap.dragHint',
+  'snap.tabHere',
+  'snap.dragToMoveOrDetach',
+  'snap.detachTab',
+  'snap.maximizePane',
+  'snap.removePane',
+  'snap.resizePane',
+  'snap.layout.dual-50-50.label', 'snap.layout.dual-50-50.description',
+  'snap.layout.dual-66-33.label', 'snap.layout.dual-66-33.description',
+  'snap.layout.dual-33-66.label', 'snap.layout.dual-33-66.description',
+  'snap.layout.dual-75-25.label', 'snap.layout.dual-75-25.description',
+  'snap.layout.dual-25-75.label', 'snap.layout.dual-25-75.description',
+  'snap.layout.trio-stacked-right.label', 'snap.layout.trio-stacked-right.description',
+  'snap.layout.trio-stacked-left.label', 'snap.layout.trio-stacked-left.description',
+  'snap.layout.trio-main-right.label', 'snap.layout.trio-main-right.description',
+  'snap.layout.trio-columns.label', 'snap.layout.trio-columns.description',
+  'snap.layout.quad-grid.label', 'snap.layout.quad-grid.description',
+  'snap.slot.left', 'snap.slot.right', 'snap.slot.main',
+  'snap.slot.left25', 'snap.slot.right75', 'snap.slot.left33', 'snap.slot.right67',
+  'snap.slot.left67', 'snap.slot.right33', 'snap.slot.left75', 'snap.slot.right25',
+  'snap.slot.topLeft', 'snap.slot.bottomLeft', 'snap.slot.topRight', 'snap.slot.bottomRight',
+  'snap.slot.mainRight', 'snap.slot.column1', 'snap.slot.column2', 'snap.slot.column3',
+  'snap.slot.quadTopLeft', 'snap.slot.quadTopRight', 'snap.slot.quadBottomLeft', 'snap.slot.quadBottomRight'
+  , 'sidebar.space.new'
+  , 'sidebar.zen.dock'
+  , 'sidebar.tabs.header'
+  , 'sidebar.tabs.private'
+  , 'sidebar.tabs.sleeping'
+  , 'sidebar.tabs.snap'
+  , 'sidebar.tabs.split'
+  , 'sidebar.tabs.pin'
+  , 'sidebar.tabs.unpin'
+  , 'sidebar.tabs.mute'
+  , 'sidebar.tabs.unmute'
+  , 'sidebar.tabs.endSplit'
+  , 'sidebar.tabs.openSplit'
+  , 'sidebar.tabs.close'
+  , 'sidebar.tabs.new'
+  , 'sidebar.downloads'
+  , 'sidebar.drawer.sections'
+  , 'sidebar.drawer.aiRegion'
+  , 'sidebar.drawer.workflowRegion'
+  , 'sidebar.drawer.toolsRegion'
+  , 'sidebar.drawer.aiHeading'
+  , 'sidebar.drawer.workflowHeading'
+  , 'sidebar.drawer.toolsHeading'
+  , 'teamwork.loading'
+  , 'teamwork.tab'
+  , 'teamwork.smartTrackTab'
+  , 'teamwork.header.title'
+  , 'teamwork.header.status'
+  , 'teamwork.header.description'
+  , 'teamwork.reset'
+  , 'teamwork.saving'
+  , 'teamwork.saved'
+  , 'teamwork.save'
+  , 'teamwork.mode.title'
+  , 'teamwork.mode.description'
+  , 'teamwork.mode.enabled'
+  , 'teamwork.mode.enabledDescription'
+  , 'teamwork.strategy.title'
+  , 'teamwork.strategy.description'
+  , 'teamwork.strategy.cost'
+  , 'teamwork.strategy.costDescription'
+  , 'teamwork.strategy.balanced'
+  , 'teamwork.strategy.balancedDescription'
+  , 'teamwork.strategy.quality'
+  , 'teamwork.strategy.qualityDescription'
+  , 'teamwork.capacity.title'
+  , 'teamwork.capacity.description'
+  , 'teamwork.capacity.max'
+  , 'teamwork.capacity.agent'
+  , 'teamwork.capacity.agents'
+  , 'teamwork.capacity.minimum'
+  , 'teamwork.capacity.recommended'
+  , 'teamwork.capacity.maximum'
+  , 'teamwork.autoScale'
+  , 'teamwork.autoScaleDescription'
+  , 'teamwork.sharedGrounding'
+  , 'teamwork.sharedGroundingDescription'
+  , 'teamwork.roles.title'
+  , 'teamwork.roles.description'
+  , 'teamwork.roles.planner'
+  , 'teamwork.roles.plannerDescription'
+  , 'teamwork.roles.workerPool'
+  , 'teamwork.roles.workerPoolDescription'
+  , 'teamwork.roles.critic'
+  , 'teamwork.roles.criticDescription'
+  , 'teamwork.roles.synthesizer'
+  , 'teamwork.roles.synthesizerDescription'
+  , 'teamwork.roles.autoStrategy'
+  , 'teamwork.roles.autoPool'
+  , 'teamwork.modelPool.title'
+  , 'teamwork.modelPool.description'
+  , 'teamwork.modelPool.recognizedOne'
+  , 'teamwork.modelPool.recognizedMany'
+  , 'teamwork.modelPool.empty'
+  , 'smartTrack.loading'
+  , 'smartTrack.title'
+  , 'smartTrack.description'
+  , 'smartTrack.scan'
+  , 'smartTrack.scanning'
+  , 'smartTrack.saved'
+  , 'smartTrack.enabled'
+  , 'smartTrack.enabledDescription'
+  , 'smartTrack.autoScan'
+  , 'smartTrack.autoScanDescription'
+  , 'smartTrack.autoScanNote'
+  , 'smartTrack.modelWall'
+  , 'smartTrack.tier.low'
+  , 'smartTrack.tier.lowDescription'
+  , 'smartTrack.tier.medium'
+  , 'smartTrack.tier.mediumDescription'
+  , 'smartTrack.tier.high'
+  , 'smartTrack.tier.highDescription'
+  , 'smartTrack.model.default'
+  , 'smartTrack.model.none'
+  , 'smartTrack.model.coding'
+  , 'smartTrack.model.reasoning'
+  , 'smartTrack.assignment'
+  , 'smartTrack.model.auto'
+  , 'smartTrack.advanced'
+  , 'smartTrack.preplan'
+  , 'smartTrack.preplanDescription'
+  , 'smartTrack.effort.low'
+  , 'smartTrack.effort.medium'
+  , 'smartTrack.effort.high'
+  , 'smartTrack.intent.coding'
+  , 'smartTrack.intent.web'
+  , 'smartTrack.intent.reasoning'
+  , 'smartTrack.intent.general'
+  , 'smartTrack.singleTrack'
+  , 'smartTrack.modelId'
+  , 'smartTrack.executionTime'
+  , 'downloads.title'
+  , 'downloads.active'
+  , 'downloads.empty'
+  , 'downloads.savedTo'
+  , 'downloads.cancelled'
+  , 'downloads.interrupted'
+  , 'downloads.remove'
+  , 'downloads.restoreHint'
+  , 'downloads.pillActive'
+  , 'downloads.pillCompleted'
+  , 'downloads.close'
+  , 'downloads.undock'
+  , 'downloads.dockTabs'
+  , 'downloads.dockSidekick'
+  , 'downloads.dockTopLeft'
+  , 'downloads.dockTopRight'
+  , 'downloads.float'
+  , 'downloads.dockDropdown'
+  , 'downloads.minimize'
+  , 'downloads.clearCompleted'
+  , 'downloads.drag'
+  , 'settings.panels.appearance.viTestApply'
+  , 'settings.panels.appearance.viTestPreview'
 ] as const;
 
 export type DesktopTranslationKey = (typeof desktopTranslationKeys)[number];

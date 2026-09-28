@@ -79,7 +79,11 @@ export function AdvancedWebUiTools({
     setRunning(true);
     setError('');
     try {
-      const query = parseJsonObject(queryText);
+      const parsedQuery = parseJsonObject(queryText);
+      const query = Object.fromEntries(Object.entries(parsedQuery).filter((entry): entry is [string, string | number | boolean | null] => {
+        const value = entry[1];
+        return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+      }));
       const body = action.method === 'GET' ? undefined : parseJsonObject(bodyText);
       const payload = await window.lastbrowser.sidekick.requestWebui({
         method: action.method,

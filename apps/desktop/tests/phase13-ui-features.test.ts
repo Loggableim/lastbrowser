@@ -148,16 +148,36 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
   });
 
   describe('CopilotSplitView Dynamic Model Picker & Categorized Workflows', () => {
-    it('keeps retired Gemini CLI models out of the static list while retaining other providers', () => {
-      expect(AVAILABLE_MODELS.length).toBeGreaterThanOrEqual(6);
+    it('offers no static provider models before live discovery', () => {
+      expect(AVAILABLE_MODELS).toHaveLength(4);
       const modelIds = AVAILABLE_MODELS.map((m) => m.id);
-      expect(modelIds.some((id) => id.startsWith('gemini-'))).toBe(false);
-      expect(modelIds).toContain('claude-sonnet-4.6');
-      expect(modelIds).toContain('gpt-5.5');
-      expect(modelIds).toContain('deepseek-reasoner');
-      expect(modelIds).toContain('llama3.3');
+      expect(modelIds).toEqual(['teamwork', 'smart-track-low', 'smart-track-medium', 'smart-track-high']);
+      expect(AVAILABLE_MODELS.every((m) => m.category === 'teamwork')).toBe(true);
 
-      expect(AVAILABLE_MODELS.some((m) => m.category === 'gemini')).toBe(false);
+      const source = readRendererFile('components/CopilotSplitView.tsx');
+      expect(source).toContain('const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS)');
+      expect(source).toContain('if (alive) setModelList(AVAILABLE_MODELS)');
+      expect(source).not.toContain('...prev.filter((item) => item.category !== \'gemini\'');
+    });
+
+    it('selects snap slots with native click and keyboard button activation', () => {
+      const source = readRendererFile('components/SnapBarFlyout.tsx');
+      expect(source).toContain('type="button"');
+      expect(source).toContain('onClick={() => onSelectSlot?.(layoutKey, idx)}');
+      expect(source).toContain('onFocus={handleMouseEnter}');
+      expect(source).not.toContain('onMouseUp={handleMouseUp}');
+    });
+
+    it('uses native buttons for Teamwork strategy choices and Smart Track process accordions', () => {
+      const teamwork = readRendererFile('panels/TeamworkSettingsPanel.tsx');
+      expect((teamwork.match(/aria-pressed=\{config\.strategy ===/g) || []).length).toBe(3);
+      expect((teamwork.match(/type="button"/g) || []).length).toBeGreaterThanOrEqual(5);
+
+      const smartTrackCard = readRendererFile('components/SmartTrackProcessCard.tsx');
+      expect(smartTrackCard).toContain('aria-expanded={expanded}');
+      expect(smartTrackCard).toContain('aria-expanded={preplanOpen}');
+      expect(smartTrackCard).toContain('aria-controls={`${detailsId}-details`}');
+      expect(smartTrackCard).toContain('aria-controls={`${detailsId}-preplan`}');
     });
 
     it('implements interactive model dropdown and workflow search & categories in CopilotSplitView.tsx', () => {
@@ -181,6 +201,14 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
   });
 
   describe('Appearance Settings Modernization', () => {
+    it('shows Sidekick as updated with Lastbrowser without separate update controls', () => {
+      const source = readRendererFile('panels/SystemPanels.tsx');
+      expect(source).toContain("t('settings.panels.system.updatedWithLastbrowser')");
+      expect(source).not.toContain('checkSidekickUpdate');
+      expect(source).not.toContain('applySidekickUpdate');
+      expect(source).not.toContain('sidekickUpdate.status');
+    });
+
     it('provides Zen exit default mode and Action Bar dock settings in SystemPanels.tsx', () => {
       const source = readRendererFile('panels/SystemPanels.tsx');
 
@@ -307,8 +335,10 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
 
       const startPage = readRendererFile('panels/NativeBrowserStartPage.tsx');
       expect(startPage).toContain('effectiveBotName');
-      expect(startPage).toContain('Frag Nova');
-      expect(startPage).toContain('Nova Schnellaktionen');
+      expect(startPage).toContain("t('browser.startPage.askNovaTitle')");
+      expect(startPage).toContain("t('browser.startPage.askNova', { botName: effectiveBotName })");
+      expect(startPage).toContain("t('browser.startPage.searchPlaceholder', { botName: effectiveBotName })");
+      expect(startPage).toContain("t('browser.startPage.quickActions')");
       expect(startPage).not.toContain('Nova AI Copilot');
       expect(startPage).not.toContain('Sidekick AI Copilot');
     });

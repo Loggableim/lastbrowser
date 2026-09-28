@@ -13,32 +13,29 @@ describe('startpage atmospheric dashboard helpers', () => {
   it('returns morning greeting between 5:00 and 11:59', () => {
     const d = new Date(2026, 8, 21, 8, 30);
     const res = getDashboardGreeting(d);
-    expect(res.greeting).toBe('Guten Morgen');
-    expect(res.subline).toContain('Nova');
-
-    const customRes = getDashboardGreeting(d, 'Aria');
-    expect(customRes.subline).toContain('Aria');
+    expect(res.greetingKey).toBe('browser.startPage.greeting.morning');
+    expect(res.sublineKey).toBe('browser.startPage.greeting.morningSubline');
   });
 
   it('returns afternoon greeting between 12:00 and 17:59', () => {
     const d = new Date(2026, 8, 21, 14, 15);
     const res = getDashboardGreeting(d);
-    expect(res.greeting).toBe('Guten Tag');
-    expect(res.subline).toBeTruthy();
+    expect(res.greetingKey).toBe('browser.startPage.greeting.afternoon');
+    expect(res.sublineKey).toBe('browser.startPage.greeting.afternoonSubline');
   });
 
   it('returns evening greeting between 18:00 and 22:59', () => {
     const d = new Date(2026, 8, 21, 20, 0);
     const res = getDashboardGreeting(d);
-    expect(res.greeting).toBe('Guten Abend');
-    expect(res.subline).toBeTruthy();
+    expect(res.greetingKey).toBe('browser.startPage.greeting.evening');
+    expect(res.sublineKey).toBe('browser.startPage.greeting.eveningSubline');
   });
 
   it('returns night greeting between 23:00 and 4:59', () => {
     const d = new Date(2026, 8, 21, 2, 0);
     const res = getDashboardGreeting(d);
-    expect(res.greeting).toBe('Gute Nacht');
-    expect(res.subline).toContain('Nachtsession');
+    expect(res.greetingKey).toBe('browser.startPage.greeting.night');
+    expect(res.sublineKey).toBe('browser.startPage.greeting.nightSubline');
   });
 
   it('formats time with leading zeroes', () => {
@@ -69,6 +66,7 @@ describe('startpage atmospheric dashboard helpers', () => {
 
     const tabsSummary = DASHBOARD_QUICK_ACTIONS.find((a) => a.id === 'tabs-summary');
     expect(tabsSummary?.prompt).toContain('@tabs');
+    expect(tabsSummary?.labelKey).toBe('browser.startPage.actions.tabsSummary');
   });
 
   it('maintains compatibility with default speed dial items', () => {
@@ -79,5 +77,13 @@ describe('startpage atmospheric dashboard helpers', () => {
     const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
     const browserMainSection = appTsx.slice(appTsx.indexOf('function BrowserMain('));
     expect(browserMainSection).not.toContain('setupState.');
+  });
+
+  it('stacks the add-Space card title and description instead of letting text run together', () => {
+    const styles = fs.readFileSync(path.resolve(__dirname, '../src/renderer/styles.css'), 'utf8');
+    const cardTextRule = styles.match(/\.startpage-add-card-text\s*\{([^}]*)\}/)?.[1] || '';
+    expect(cardTextRule).toContain('display: flex');
+    expect(cardTextRule).toContain('flex-direction: column');
+    expect(cardTextRule).toContain('gap: 3px');
   });
 });

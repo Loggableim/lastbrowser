@@ -1,25 +1,100 @@
-import { describe, expect, it } from 'vitest';
-import { createPermissionController } from '../src/main/permissions.js';
+import { describe, expect, it, vi } from 'vitest';
+import { createPermissionController, resolvePermissionRequest, shouldPromptForNotificationPermission } from '../src/main/permissions.js';
 
 describe('permission controller', () => {
-  it('allows page-local permissions and DRM protected-media-identifier', () => {
+  it('allows only low-risk page-local permissions and DRM playback', () => {
     const c = createPermissionController();
     expect(c.decide('fullscreen', 'https://example.com')).toBe('allow');
     expect(c.decide('pointerLock', 'https://example.com')).toBe('allow');
-    expect(c.decide('keyboardLock', 'https://example.com')).toBe('allow');
     expect(c.decide('clipboard-sanitized-write', 'https://example.com')).toBe('allow');
-    expect(c.decide('protected-media-identifier', 'https://www.netflix.com')).toBe('allow');
-    expect(c.decide('protectedMediaIdentifier', 'https://www.netflix.com')).toBe('allow');
     expect(c.decide('mediaKeySystem', 'https://www.netflix.com')).toBe('allow');
-    expect(c.decide('storage-access', 'https://www.disneyplus.com')).toBe('allow');
-    expect(c.decide('top-level-storage-access', 'https://www.disneyplus.com')).toBe('allow');
-    expect(c.decide('window-management', 'https://www.netflix.com')).toBe('allow');
-    expect(c.decide('protected-media-identifier', 'https://open.spotify.com')).toBe('allow');
+  });
+
+  it('denies sensitive browser capabilities without an explicit consent flow', () => {
+    const c = createPermissionController();
+    for (const permission of [
+      'keyboardLock',
+      'storage-access',
+      'top-level-storage-access',
+      'window-management',
+      'window-placement',
+      'local-fonts',
+      'protected-media-identifier',
+      'protectedMediaIdentifier'
+    ]) {
+      expect(c.decide(permission, 'https://example.com')).toBe('deny');
+    }
   });
 
   it('denies camera and microphone by default', () => {
     const c = createPermissionController();
     expect(c.decide('media', 'https://example.com')).toBe('deny');
+  });
+
+  it('denies website notifications until separately approved and supports revocation', () => {
+    const c = createPermissionController();
+    expect(c.decide('notifications', 'https://example.com')).toBe('deny');
+
+    c.trustNotificationOrigin('https://example.com/path');
+    expect(c.notificationOrigins()).toEqual(['https://example.com']);
+    expect(c.decide('notifications', 'https://example.com')).toBe('allow');
+    expect(c.decide('notifications', 'https://other.example')).toBe('deny');
+    expect(c.decide('media', 'https://example.com')).toBe('deny');
+
+    c.revokeNotificationOrigin('https://example.com');
+    expect(c.notificationOrigins()).toEqual([]);
+    expect(c.decide('notifications', 'https://example.com')).toBe('deny');
+  });
+
+  it('loads, replaces, and notifies notification permission grants independently of media grants', () => {
+    const c = createPermissionController(['https://camera.example'], ['https://old.example/path']);
+    const seen: string[][] = [];
+    c.onNotificationTrustedChange((origins) => seen.push(origins));
+    expect(c.notificationOrigins()).toEqual(['https://old.example']);
+    c.setNotificationOrigins(['https://new.example/path', 'file:///private']);
+    expect(c.notificationOrigins()).toEqual(['https://new.example']);
+    expect(c.trustedOrigins()).toEqual(['https://camera.example']);
+    expect(seen).toEqual([['https://new.example']]);
+  });
+
+  it('prompts only for top-level HTTP(S) notification permission requests', () => {
+    expect(shouldPromptForNotificationPermission('notifications', true, 'https://example.com/path')).toBe(true);
+    expect(shouldPromptForNotificationPermission('notifications', false, 'https://example.com')).toBe(false);
+    expect(shouldPromptForNotificationPermission('media', true, 'https://example.com')).toBe(false);
+    expect(shouldPromptForNotificationPermission('notifications', true, 'file:///private')).toBe(false);
+    expect(shouldPromptForNotificationPermission('notifications', true, 'not a URL')).toBe(false);
+  });
+
+  it('requires an explicit prompt decision, remembers allow, and does not prompt again', async () => {
+    const c = createPermissionController();
+    const prompt = vi.fn(async () => true);
+    expect(await resolvePermissionRequest(c, 'notifications', true, 'https://example.com/path', prompt)).toBe(true);
+    expect(c.decide('notifications', 'https://example.com')).toBe('allow');
+    expect(prompt).toHaveBeenCalledOnce();
+    expect(prompt).toHaveBeenCalledWith('https://example.com');
+
+    expect(await resolvePermissionRequest(c, 'notifications', true, 'https://example.com/other', prompt)).toBe(true);
+    expect(prompt).toHaveBeenCalledOnce();
+  });
+
+  it('denies prompt rejection and iframe requests without granting the origin', async () => {
+    const c = createPermissionController();
+    const prompt = vi.fn(async () => false);
+    expect(await resolvePermissionRequest(c, 'notifications', true, 'https://example.com', prompt)).toBe(false);
+    expect(c.decide('notifications', 'https://example.com')).toBe('deny');
+    expect(await resolvePermissionRequest(c, 'notifications', false, 'https://example.com', prompt)).toBe(false);
+    expect(prompt).toHaveBeenCalledOnce();
+  });
+
+  it('revokes a notification grant so the next request requires a fresh prompt', async () => {
+    const c = createPermissionController();
+    const allow = vi.fn(async () => true);
+    await resolvePermissionRequest(c, 'notifications', true, 'https://example.com', allow);
+    c.revokeNotificationOrigin('https://example.com');
+    expect(c.decide('notifications', 'https://example.com')).toBe('deny');
+    const deny = vi.fn(async () => false);
+    expect(await resolvePermissionRequest(c, 'notifications', true, 'https://example.com', deny)).toBe(false);
+    expect(deny).toHaveBeenCalledOnce();
   });
 
   it('denies geolocation', () => {

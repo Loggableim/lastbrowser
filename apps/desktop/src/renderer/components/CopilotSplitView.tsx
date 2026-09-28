@@ -28,8 +28,7 @@ import {
   X,
   Zap
 } from 'lucide-react';
-import type { DesktopChatMessage } from '../bridge.js';
-import type { DesktopSessionSummary } from '../sidekick-client.js';
+import type { DesktopChatMessage, DesktopSessionSummary } from '../shell-state.js';
 import { RichTextRenderer } from '../NativeRichText.js';
 import { AiFeedbackModal } from './AiFeedbackModal.js';
 import { TeamworkProcessCard, type TeamworkMetadata } from './TeamworkProcessCard.js';
@@ -97,101 +96,6 @@ export const AVAILABLE_MODELS: AvailableModelItem[] = [
     badge: 'Maximale Tiefe • Reasoning & Vorplanung',
     badgeClass: 'teamwork',
     isDefault: false
-  },
-  // Anthropic
-  {
-    id: 'claude-3-5-sonnet',
-    label: 'Claude 3.5 Sonnet',
-    provider: 'Anthropic',
-    category: 'claude',
-    badge: 'Code & Logik',
-    badgeClass: 'claude'
-  },
-  {
-    id: 'claude-3-opus',
-    label: 'Claude 3 Opus',
-    provider: 'Anthropic',
-    category: 'claude',
-    badge: 'Komplexe Analyse',
-    badgeClass: 'claude'
-  },
-  {
-    id: 'claude-sonnet-4.6',
-    label: 'Claude Sonnet 4.6',
-    provider: 'Anthropic',
-    category: 'claude',
-    badge: 'Code & Analyse',
-    badgeClass: 'claude'
-  },
-
-  // OpenAI
-  {
-    id: 'gpt-4o',
-    label: 'GPT-4o',
-    provider: 'OpenAI',
-    category: 'openai',
-    badge: 'Omni Flaggschiff',
-    badgeClass: 'openai'
-  },
-  {
-    id: 'gpt-4o-mini',
-    label: 'GPT-4o Mini',
-    provider: 'OpenAI',
-    category: 'openai',
-    badge: 'Schnell & Günstig',
-    badgeClass: 'openai'
-  },
-  {
-    id: 'gpt-5.5',
-    label: 'GPT-5.5',
-    provider: 'OpenAI',
-    category: 'openai',
-    badge: 'Flaggschiff',
-    badgeClass: 'openai'
-  },
-
-  // Lokale & Cloud-Ollama Modelle
-  {
-    id: 'deepseek-v4-flash',
-    label: 'DeepSeek V4 Flash',
-    provider: 'Ollama Cloud',
-    category: 'local',
-    badge: 'Ollama Cloud • Fast Reasoning',
-    badgeClass: 'ollama'
-  },
-  {
-    id: 'qwen3:32b',
-    label: 'Qwen 3 (32B)',
-    provider: 'Ollama Cloud',
-    category: 'local',
-    badge: 'Ollama Cloud • Code & Chat',
-    badgeClass: 'ollama'
-  },
-  {
-    id: 'ollama-local',
-    label: 'Ollama / LocalAI',
-    provider: 'Lokal',
-    category: 'local',
-    badge: 'Offline • Privat (11434)',
-    badgeClass: 'ollama'
-  },
-  {
-    id: 'llama3.3',
-    label: 'Llama 3.3 (70B)',
-    provider: 'Ollama',
-    category: 'local',
-    badge: 'Lokal • Offline',
-    badgeClass: 'ollama'
-  },
-
-  // Weitere
-  {
-    id: 'deepseek-reasoner',
-    label: 'DeepSeek R1',
-    provider: 'DeepSeek',
-    category: 'other',
-    badge: 'Reasoning',
-    badgeClass: 'deepseek'
   }
 ];
 
@@ -257,7 +161,8 @@ export function CopilotSplitView({
   const currentGeminiAccount = activeAccount();
   const { selectedModel, setSelectedModel } = useChatStore();
 
-  const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS.filter((item) => item.category !== 'gemini'));
+  // Provider models are selectable only after the live backend catalog returns them.
+  const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS);
   const [teamworkEnabled, setTeamworkEnabled] = useState(true);
   const [smartTrackEnabled, setSmartTrackEnabled] = useState(true);
 
@@ -294,12 +199,19 @@ export function CopilotSplitView({
     let alive = true;
     async function loadLiveModels() {
       try {
-        if (!window?.lastbrowser?.sidekick?.requestWebui) return;
+        if (!window?.lastbrowser?.sidekick?.requestWebui) {
+          setModelList(AVAILABLE_MODELS);
+          return;
+        }
         const res = (await window.lastbrowser.sidekick.requestWebui({
           method: 'GET',
           path: '/api/models'
         })) as { groups?: Array<{ provider_id?: string; provider?: string; account?: string; models?: Array<any> }> } | null;
-        if (!alive || !res || !Array.isArray(res.groups)) return;
+        if (!alive) return;
+        if (!res || !Array.isArray(res.groups)) {
+          setModelList(AVAILABLE_MODELS);
+          return;
+        }
 
         // Replace the model picker baseline with the live provider catalog;
         // Gemini IDs are account/tier specific and must not use stale entries.
@@ -379,17 +291,14 @@ export function CopilotSplitView({
           onSelectModel?.(reconciledGeminiModel);
         }
 
-        if (dynamicModels.length > 0) {
-          setModelList((prev) => [
-            ...dynamicModels,
-            ...prev.filter((item) => item.category !== 'gemini' && !dynamicModels.some((model) => model.id === item.id))
-          ]);
-        } else {
-          setModelList((prev) => prev.filter((item) => item.category !== 'gemini'));
-        }
+        setModelList([
+          ...dynamicModels,
+          ...AVAILABLE_MODELS.filter((item) => !dynamicModels.some((model) => model.id === item.id))
+        ]);
       } catch {
-        // Do not advertise stale Gemini IDs when live Code Assist discovery fails.
-        if (alive) setModelList((prev) => prev.filter((item) => item.category !== 'gemini'));
+        // On discovery failure, retain only built-in orchestrators; cached model IDs
+        // must not imply that a provider is configured or currently available.
+        if (alive) setModelList(AVAILABLE_MODELS);
       }
     }
     void loadLiveModels();
@@ -418,12 +327,12 @@ export function CopilotSplitView({
           m.id === activeModelId ||
           m.label.toLowerCase() === activeModelId.toLowerCase() ||
           activeModelId.toLowerCase().includes(m.id.toLowerCase())
-      ) || visibleModelList[0] || {
+      ) || {
         id: activeModelId || 'default',
         label: activeModelId || 'Modell wird geladen',
         provider: 'Provider',
         category: 'other' as const,
-        badge: 'Lade aktuellen Provider-Katalog',
+        badge: 'Nicht im aktuellen Provider-Katalog',
         badgeClass: 'other'
       }
     );
@@ -994,11 +903,8 @@ export function CopilotSplitView({
             <div className="copilot-empty-icon">
               <img src={brandAssets.sidekickAvatar} alt={botName} className="copilot-empty-avatar" draggable={false} />
             </div>
-            <h4>Frag {botName} zur aktuellen Seite</h4>
-            <p>
-              Erhalte Zusammenfassungen, Übersetzungen, Code-Analysen oder starte
-              automatisierte Recherche-Agenten.
-            </p>
+            <h4>{t('copilot.emptyTitle', { botName })}</h4>
+            <p>{t('copilot.emptyDescription')}</p>
 
             {quickActions && quickActions.length > 0 && (
               <div className="copilot-starter-chips">
@@ -1035,10 +941,10 @@ export function CopilotSplitView({
 
                   <div className={`copilot-bubble ${isUser ? 'user' : 'assistant'}`}>
                     <div className="copilot-bubble-body">
-                      {isAssistant && msg.teamwork && (
+                      {isAssistant && Boolean(msg.teamwork) && (
                         <TeamworkProcessCard metadata={msg.teamwork as TeamworkMetadata} />
                       )}
-                      {isAssistant && msg.smartTrack && (
+                      {isAssistant && Boolean(msg.smartTrack) && (
                         <SmartTrackProcessCard metadata={msg.smartTrack} />
                       )}
                       {isAssistant && msg.pending && activeModelItem.id === 'teamwork' && (

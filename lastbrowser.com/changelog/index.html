@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Changelog &amp; Roadmap – Lastbrowser</title>
-<meta name="description" content="Versionshistorie und Roadmap von Lastbrowser: Alle Updates von v0.1.35 Public Beta bis zu früheren Meilensteinen und geplanten Features.">
+<meta name="description" content="Versionshistorie und Roadmap von Lastbrowser: Öffentliche Versionen und kommende Release-Kandidaten.">
 <meta property="og:title" content="Changelog &amp; Roadmap – Lastbrowser">
 <meta property="og:description" content="Alle Neuerungen, Fehlerbehebungen und Meilensteine von Lastbrowser im Überblick.">
 <meta property="og:type" content="website">
@@ -111,7 +111,7 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
   <div class="container inner">
     <a href="/" class="logo">
       <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser">
-      <div><strong>Lastbrowser</strong><span>v0.1.35 Beta · AI-Native</span></div>
+      <div><strong>Lastbrowser</strong><span>v0.1.34 Beta · AI-Native</span></div>
     </a>
     <div class="links">
       <a href="/">Home</a>
@@ -137,29 +137,29 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
 
   <div class="timeline">
 
-    <!-- v0.1.35 -->
+    <!-- v0.1.35 release candidate; not publicly released -->
     <div class="release-entry">
       <div class="release-bullet highlight"></div>
       <article class="release-card current">
         <div class="release-header">
           <div style="display:flex;align-items:center;gap:12px">
             <span class="release-tag">v0.1.35</span>
-            <span class="badge-now">Aktueller Beta-Release</span>
+            <span class="badge-now">Release-Kandidat · nicht veröffentlicht</span>
           </div>
-          <span class="release-date">27. September 2026</span>
+          <span class="release-date">Noch nicht veröffentlicht</span>
         </div>
         <p style="color:var(--text);font-size:14px;font-weight:600">
           Meilenstein-Release: Space-Audio-Keepalive, Zen-3-Zustände, Appearance-Engine mit 4 Glass-Stufen &amp; Vision Impaired, NovaDock-Entkopplung, Standalone-Migration &amp; Chat-Layouts.
         </p>
         <ul class="release-list">
-          <li><strong>Space-Audio-Keepalive &amp; RAM-Schutz:</strong> Gepinnte Tabs sind vor RAM-Discardern geschützt. Tabs mit Audiowiedergabe (YouTube Music, Spotify) behalten beim Space-Wechsel ihre Webview im Hintergrund mit <code>backgroundThrottling=no</code> ohne Tonaussetzer.</li>
+          <li><strong>Space-Audio-Keepalive &amp; RAM-Schutz:</strong> Gepinnte Tabs sind vor RAM-Discardern geschützt. Audio-Kontinuität über Space-Wechsel muss vor einer Veröffentlichung noch im echten Browserbetrieb bestätigt werden.</li>
           <li><strong>Zen-Sidebar 3-Zustands-Engine:</strong> Nahtloses Umschalten zwischen Ausgeklappt, 48px Slim-Icon-Dock und Vollbild-Canvas mit Hover-Sensor am linken Rand.</li>
           <li><strong>Appearance-Engine &amp; Barrierefreiheit:</strong> 4 Glassmorphism-Stufen (Solid, Subtle, Modern, Deep), repariertes helles Farbschema, neues kontrastmaximiertes Theme <em>Vision Impaired</em> (Schwarz/Weiß/Gelb/Cyan, 16px Schrift, 2px Rahmen), Skins &amp; Zoom-Skalierung.</li>
           <li><strong>NovaDock-Entkopplung:</strong> Positionierung oben, unten, rechts oder als frei verschiebbares schwebendes Overlay mit Ausrichtungswechsel und Anti-Clipping.</li>
           <li><strong>Window Controls &amp; Detached IPC:</strong> Zuverlässiges Schließen abgedockter Splitscreen-Tabs ohne Schließen des Hauptbrowser-Fensters.</li>
           <li><strong>Sidekick Standalone Migration:</strong> Import-Assistent im First-Run Wizard übernimmt bestehende lokale Sidekick-Datenbanken (<code>supermemory.db</code>, Profile) mit Symlink-Härtung.</li>
           <li><strong>Chat &amp; Copilot Layouts:</strong> Umschaltung zwischen Bubbles, Compact Stream und Expanded Document Canvas ohne horizontalen Code-Overflow.</li>
-          <li><strong>Qualität &amp; Signierung:</strong> 846/846 Tests grün (98 Suiten), 27/27 Microsoft Store Preflight Checks bestanden, Castlabs Widevine VMP signiert.</li>
+          <li><strong>Release-Freigabe offen:</strong> Dieser Kandidat ist nicht öffentlich verfügbar. Signierung, Artefakt-Metadaten und die vollständige Laufzeitabnahme müssen vor Veröffentlichung bestanden sein.</li>
         </ul>
       </article>
     </div>
@@ -175,10 +175,9 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
           <span class="release-date">25. September 2026</span>
         </div>
         <p style="color:var(--text);font-size:14px;font-weight:600">
-          Feature- &amp; Stabilitätsupdate: Google OAuth Safe Login, Teamwork &amp; Smart Track Multi-Agenten Orchestrierung, Zen-Hover, Space-Assistent und Dock-Animationen.
+          Feature- &amp; Stabilitätsupdate: Teamwork- und Smart-Track-Konfiguration, Zen-Hover, Space-Assistent und Dock-Animationen.
         </p>
         <ul class="release-list">
-          <li><strong>Google OAuth Härtung:</strong> Zuverlässige Google-Anmeldung ohne Fehlermeldung (<em>„Browser ist unter Umständen nicht sicher“</em>) durch Chrome-134-Emulation, Client Hints und Bereinigung von <code>X-Requested-With</code>.</li>
           <li><strong>Teamwork &amp; Smart Track Orchestrator:</strong> Multi-Agenten-Zusammenarbeit (Lead, Researcher, Analyst, Critic) sowie tokenoptimierter Smart Track Modus mit dynamischer Modellauswahl (Low, Medium, High).</li>
           <li><strong>Zen-Modus Hover Reveal:</strong> 8px-Randsensor am linken Bildschirmrand blendet die Seitenleiste im Zen-Modus flüssig als schwebendes Overlay ein, ohne Webseiten zu verschieben.</li>
           <li><strong>Dock Fisheye &amp; Hover-Titel:</strong> macOS-inspirierte Dock-Animation im eingeklappten Zustand mit Skalierung und Ausblenden benachbarter Icons.</li>
@@ -198,15 +197,13 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
           <span class="release-date">25. September 2026</span>
         </div>
         <p style="color:var(--text);font-size:14px;font-weight:600">
-          Meilenstein-Release: 100% Space-Session-Isolation, Space-Hub Startseite, Castlabs Widevine VMP Signing &amp; EV Authenticode.
+          Meilenstein-Release: Space-Session-Isolation, Space-Hub Startseite und Castlabs-Widevine-Integration.
         </p>
         <ul class="release-list">
-          <li><strong>100% Space-Session-Isolation:</strong> Jeder Space erhält einen vollkommen eigenständigen Partitions-Schlüssel (<code>persist:profile:space</code>). Logins in Google, Disney+ oder GitHub sind zwischen Spaces strikt getrennt – kein Session-Spillover.</li>
+          <li><strong>Space-Session-Isolation:</strong> Spaces verwenden eigene persistente Partitionen (<code>persist:profile:space</code>) für getrennte Browser-Sitzungen.</li>
           <li><strong>Space-Hub Dashboard:</strong> Neuer Space-Bereich auf der Startseite mit Anzeige aller Spaces, Schnellwechsel, Live-Tab-Zählern und "+ Neuer Space"-Modal.</li>
-          <li><strong>Castlabs Widevine DRM:</strong> Vollständige Integration von Castlabs Electron mit VMP-Signierung (Video Multi-Part Protection). Netflix, Disney+, Spotify und Amazon Prime laufen stabil in voller Hardware-Beschleunigung.</li>
+          <li><strong>Castlabs Widevine DRM:</strong> Integration des Castlabs-Electron-Builds für Widevine-geschützte Medien. Die Wiedergabe hängt weiterhin von den Anforderungen des jeweiligen Streaming-Dienstes ab.</li>
           <li><strong>Split-View Korrekturen:</strong> Nahtloses Umschalten zwischen Dual-Tab Split-View und regulären Tabs ohne hängende Rendering-States.</li>
-          <li><strong>Extended Validation (EV) Code-Signing:</strong> Alle Binaries (NSIS Setup &amp; Portable) sind offiziell digital auf Dominik Rainer (Certum CA) signiert und zeitgestempelt.</li>
-          <li><strong>Vollständige Test-Abdeckung:</strong> 71 Vitest-Suites mit 625 Tests erfolgreich bestanden; 27/27 Microsoft Store Preflight Checks grün.</li>
         </ul>
       </article>
     </div>

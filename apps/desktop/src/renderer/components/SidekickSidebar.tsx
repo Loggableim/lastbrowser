@@ -34,7 +34,7 @@ import { brandAssets } from '../brand.js';
 import { PinnedAppGrid, type PinnedApp } from './PinnedAppGrid.js';
 import { NovaDock } from './NovaDock.js';
 import { type SidebarDrawerTab, type SidebarMode, type ZenExitDefaultMode, usePanelStore } from '../stores/usePanelStore.js';
-import type { DesktopSessionSummary } from '../sidekick-client.js';
+import type { DesktopSessionSummary } from '../shell-state.js';
 import { useDesktopI18n } from '../i18n.js';
 
 export interface DrawerItem {
@@ -219,7 +219,7 @@ export function SidekickSidebar({
     return (
       <div
         className="sidekick-sidebar-revealer"
-        title={`Show Sidebar (Ctrl+B) • Opens in ${zenExitDefaultMode} mode`}
+        title={`${t('sidebar.drawer.expandSidebar')} (Ctrl+B)`}
         onClick={() => {
           if (onRevealZen) onRevealZen();
           else onSetMode(zenExitDefaultMode);
@@ -234,7 +234,7 @@ export function SidekickSidebar({
   }
 
   const activeSpace = spaces.find((s) => s.path === activeSpacePath);
-  const spaceLabel = activeSpace ? spaceDisplayName(activeSpace) : 'Workspace';
+  const spaceLabel = activeSpace ? spaceDisplayName(activeSpace) : t('sidebar.space.workspace');
   const effectiveDockPos = isFloatingOverlay ? 'left' : dockSettings.position;
   // The sidebar renders the inline dock only when it actually hosts it (left
   // position or the zen floating overlay). For right/top/bottom/floating the
@@ -275,7 +275,7 @@ export function SidekickSidebar({
               tabIndex={0}
               aria-haspopup="true"
               aria-expanded={spacePickerOpen}
-              title="Space wechseln"
+              title={t('sidebar.space.switch')}
               onClick={() => setSpacePickerOpen((prev) => !prev)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -294,7 +294,7 @@ export function SidekickSidebar({
             {spacePickerOpen && (
               <div className="workspace-picker-flyout" role="menu">
                 <div className="workspace-picker-header">
-                  <span>Spaces</span>
+                  <span>{t('sidebar.space.spaces')}</span>
                 </div>
                 <div className="workspace-picker-list">
                   {spaces.map((s) => {
@@ -328,7 +328,7 @@ export function SidekickSidebar({
                     }}
                   >
                     <Plus size={13} />
-                    <span>Neuer Space</span>
+                    <span>{t('sidebar.space.new')}</span>
                   </button>
                 </div>
               </div>
@@ -338,7 +338,7 @@ export function SidekickSidebar({
               <button
                 type="button"
                 className="sidebar-dock-pin-btn"
-                title="Sidebar fest andocken (Zen-Modus beenden)"
+                title={t('sidebar.zen.dock')}
                 onClick={onDock}
               >
                 <Pin size={14} />
@@ -348,7 +348,7 @@ export function SidekickSidebar({
             <button
               type="button"
               className="sidebar-collapse-icon-btn"
-              title={isFloatingOverlay ? "Collapse to Slim (Ctrl+B)" : "Collapse to Slim Dock (Ctrl+B)"}
+              title={`${t('sidebar.drawer.toggleSidebar')} (Ctrl+B)`}
               onClick={() => onSetMode('slim')}
             >
               <PanelLeftClose size={16} />
@@ -356,7 +356,7 @@ export function SidekickSidebar({
           </div>
 
           {/* Variante B: Segmented Multi-Tier Drawer Tabs */}
-          <div className="sidebar-drawer-tabs" role="tablist" aria-label="Seitenleisten-Bereiche">
+          <div className="sidebar-drawer-tabs" role="tablist" aria-label={t('sidebar.drawer.sections')}>
             <button
               type="button"
               role="tab"
@@ -422,25 +422,25 @@ export function SidekickSidebar({
               {/* Vertical Tabs List */}
               <div className="expanded-tabs-section">
                 <div className="expanded-section-header">
-                  <span className="section-title">TABS</span>
+                  <span className="section-title">{t('sidebar.tabs.header')}</span>
                   <div className="expanded-section-actions">
                     {onOpenDownloads && (
                       <button
                         type="button"
                         className="sidebar-header-icon-btn"
                         onClick={onOpenDownloads}
-                        title="Downloads (Ctrl+J)"
-                        aria-label="Downloads"
+                        title={`${t('sidebar.downloads')} (Ctrl+J)`}
+                        aria-label={t('sidebar.downloads')}
                       >
                         <Download size={12} />
                       </button>
                     )}
-                    <span className="tab-count-badge">{tabs.filter((t) => !t.pinned).length}</span>
+                    <span className="tab-count-badge">{tabs.length}</span>
                   </div>
                 </div>
 
                 <div className="vertical-tab-list" role="tablist">
-                  {tabs.filter((t) => !t.pinned).map((tab) => {
+                  {tabs.map((tab) => {
                     const isActive = tab.id === activeTabId && activePanel === 'browser';
                     const isDragTarget = dragOverInfo?.id === tab.id;
                     const dragMode = isDragTarget ? dragOverInfo.mode : null;
@@ -521,10 +521,10 @@ export function SidekickSidebar({
                             <Globe2 size={13} className="vtab-fallback-icon" />
                           )}
                           {tab.incognito && (
-                            <EyeOff size={10} className="vtab-incognito-badge" title="Private tab" />
+                            <EyeOff size={10} className="vtab-incognito-badge" aria-label={t('sidebar.tabs.private')} />
                           )}
                           {tab.isDiscarded && (
-                            <Moon size={10} className="vtab-discarded-badge" title="Tab sleeping – click to wake" />
+                            <Moon size={10} className="vtab-discarded-badge" aria-label={t('sidebar.tabs.sleeping')} />
                           )}
                         </div>
 
@@ -534,7 +534,7 @@ export function SidekickSidebar({
                         <button
                           type="button"
                           className={`vertical-tab-pin-btn ${tab.pinned ? 'pinned' : ''}`}
-                          title={tab.pinned ? 'Unpin tab' : 'Pin tab'}
+                          title={t(tab.pinned ? 'sidebar.tabs.unpin' : 'sidebar.tabs.pin')}
                           onClick={(e) => {
                             e.stopPropagation();
                             onPinTab?.(tab.id);
@@ -544,7 +544,7 @@ export function SidekickSidebar({
                         </button>
 
                         {splitTabIds.includes(tab.id) && (
-                          <span className="vtab-snap-badge" title="Im aktiven Multiview-Layout">
+                          <span className="vtab-snap-badge" title={t('sidebar.tabs.snap')}>
                             Snap
                           </span>
                         )}
@@ -552,7 +552,7 @@ export function SidekickSidebar({
                         {dragMode === 'split' && (
                           <div className="vtab-split-drop-badge">
                             <Columns2 size={11} />
-                            <span>Splitscreen</span>
+                            <span>{t('sidebar.tabs.split')}</span>
                           </div>
                         )}
 
@@ -561,7 +561,7 @@ export function SidekickSidebar({
                           <button
                             type="button"
                             className={`vtab-audio-btn ${tab.isMuted ? 'is-muted' : 'is-playing'}`}
-                            title={tab.isMuted ? `Unmute ${tab.title}` : `Mute ${tab.title}`}
+                          title={t(tab.isMuted ? 'sidebar.tabs.unmute' : 'sidebar.tabs.mute', { title: tab.title })}
                             onClick={(event) => {
                               event.stopPropagation();
                               onToggleTabMute?.(tab.id);
@@ -576,7 +576,7 @@ export function SidekickSidebar({
                           <button
                             type="button"
                             className={`vtab-split-btn ${splitTabIds.includes(tab.id) ? 'active' : ''}`}
-                            title={splitTabIds.includes(tab.id) ? "Splitscreen für diesen Tab beenden" : "In Splitscreen öffnen (bis zu 4 Tabs)"}
+                            title={t(splitTabIds.includes(tab.id) ? 'sidebar.tabs.endSplit' : 'sidebar.tabs.openSplit')}
                             onClick={(event) => {
                               event.stopPropagation();
                               if (splitTabIds.includes(tab.id)) {
@@ -594,7 +594,7 @@ export function SidekickSidebar({
                         <button
                           type="button"
                           className="vtab-close-btn"
-                          title="Close tab (Ctrl+W)"
+                          title={t('sidebar.tabs.close')}
                           onClick={(event) => {
                             event.stopPropagation();
                             onCloseTab(tab.id);
@@ -613,10 +613,10 @@ export function SidekickSidebar({
                     type="button"
                     className="vertical-new-tab-btn"
                     onClick={() => onNewTab()}
-                    title="New Tab (Ctrl+T)"
+                    title={`${t('sidebar.tabs.new')} (Ctrl+T)`}
                   >
                     <Plus size={14} />
-                    <span>New Tab</span>
+                    <span>{t('sidebar.tabs.new')}</span>
                     <kbd className="shortcut-hint">Ctrl+T</kbd>
                   </button>
                   {onOpenDownloads && (
@@ -624,10 +624,10 @@ export function SidekickSidebar({
                       type="button"
                       className="vertical-downloads-btn"
                       onClick={onOpenDownloads}
-                      title="Downloads (Ctrl+J)"
+                      title={`${t('sidebar.downloads')} (Ctrl+J)`}
                     >
                       <Download size={13} />
-                      <span>Downloads</span>
+                      <span>{t('sidebar.downloads')}</span>
                     </button>
                   )}
                 </div>
@@ -637,7 +637,7 @@ export function SidekickSidebar({
 
           {/* AI Drawer Items */}
           {currentDrawerTab === 'ai' && (
-            <div className="sidebar-drawer-content" role="region" aria-label="AI & Agents">
+            <div className="sidebar-drawer-content" role="region" aria-label={t('sidebar.drawer.aiRegion')}>
               {/* Prominent + New Chat button */}
               <div className="sidebar-ai-actions">
                 <button
@@ -664,7 +664,7 @@ export function SidekickSidebar({
                           type="button"
                           className={`sidebar-session-item ${isActive ? 'is-active' : ''}`}
                           onClick={() => onSelectSession?.(session.session_id)}
-                          title={session.title || 'Chat'}
+                          title={session.title || t('sidebar.drawer.newChat')}
                         >
                           <Sparkles size={12} className="session-item-icon" />
                           <span className="session-item-title">{session.title || t('sidebar.drawer.newChat')}</span>
@@ -675,7 +675,7 @@ export function SidekickSidebar({
                 </div>
               )}
 
-              <div className="drawer-section-title" style={{ marginTop: 12 }}>NOVA AI & AGENTS</div>
+              <div className="drawer-section-title" style={{ marginTop: 12 }}>{t('sidebar.drawer.aiHeading')}</div>
               <div className="drawer-cards-list">
                 {aiDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;
@@ -704,8 +704,8 @@ export function SidekickSidebar({
 
           {/* Workflows Drawer Items */}
           {currentDrawerTab === 'workflows' && (
-            <div className="sidebar-drawer-content" role="region" aria-label="Workflows & Spaces">
-              <div className="drawer-section-title">WORKFLOWS & PRODUCTIVITY</div>
+            <div className="sidebar-drawer-content" role="region" aria-label={t('sidebar.drawer.workflowRegion')}>
+              <div className="drawer-section-title">{t('sidebar.drawer.workflowHeading')}</div>
               <div className="drawer-cards-list">
                 {workflowDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;
@@ -734,8 +734,8 @@ export function SidekickSidebar({
 
           {/* Tools Drawer Items */}
           {currentDrawerTab === 'tools' && (
-            <div className="sidebar-drawer-content" role="region" aria-label="Tools & System">
-              <div className="drawer-section-title">DEVELOPER & SYSTEM TOOLS</div>
+            <div className="sidebar-drawer-content" role="region" aria-label={t('sidebar.drawer.toolsRegion')}>
+              <div className="drawer-section-title">{t('sidebar.drawer.toolsHeading')}</div>
               <div className="drawer-cards-list">
                 {toolsDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;

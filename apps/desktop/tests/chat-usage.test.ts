@@ -32,4 +32,13 @@ describe('native chat turn usage', () => {
     expect(shouldShowNativeTurnUsage({ isLatestAssistant: false, showTokenUsage: true, showTps: true, usage, persistedTps: 18 })).toBe(false);
     expect(shouldShowNativeTurnUsage({ isLatestAssistant: true, showTokenUsage: true, showTps: true, usage: null })).toBe(false);
   });
+
+  it('guarantees BrowserMain in App.tsx declares and receives lastChatTurnUsage to prevent ReferenceError', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf-8');
+    expect(appTsx).toContain('lastChatTurnUsage = null');
+    expect(appTsx).toContain('lastChatTurnUsage?: { sessionId: string; usage: NativeChatTurnUsage } | null;');
+    expect(appTsx).toMatch(/<BrowserMain[\s\S]*?lastChatTurnUsage=\{lastChatTurnUsage\}/);
+  });
 });

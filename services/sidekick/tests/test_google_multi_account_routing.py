@@ -41,10 +41,19 @@ def test_google_cli_catalog_does_not_advertise_unavailable_subscription_models()
     assert curated_models_for_provider("google-gemini-cli") == []
 
 
-def test_static_model_detection_does_not_route_to_unavailable_google_cli():
+def test_static_model_detection_does_not_route_to_unavailable_google_cli(monkeypatch):
     from cli.models import detect_provider_for_model
 
-    assert detect_provider_for_model("gemini-3-flash-preview", "openrouter") is None
+    # Keep this contract independent of OpenRouter's mutable public model
+    # catalog: the assertion is about not selecting the disabled Google CLI.
+    # Since the Antigravity provider shipped, gemini-3-flash-preview IS a
+    # valid catalog model again — auto-detection routes it to the Antigravity
+    # consumer tier (multi-account round-robin), never to the retired CLI.
+    monkeypatch.setattr("cli.models._find_openrouter_slug", lambda _model: None)
+    detected = detect_provider_for_model("gemini-3-flash-preview", "openrouter")
+    assert detected is not None
+    assert detected[0] == "antigravity"
+    assert detected[1] == "gemini-3-flash-preview"
 
 
 def test_google_cli_auth_add_rejects_before_pool_or_browser_flow(monkeypatch):

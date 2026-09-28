@@ -1006,8 +1006,12 @@ def _pool_may_recover_from_rate_limit(
         return False
     # CloudCode / Gemini CLI quotas are account-wide — all pool entries share
     # the same throttle window, so rotation can't recover.  Prefer fallback.
-    if provider == "google-gemini-cli" or str(base_url or "").startswith("cloudcode-pa://"):
+    # Antigravity is the exception: its consumer-tier quota is per Google
+    # account, so rotating to another connected account CAN recover.
+    if provider == "google-gemini-cli" or str(base_url or "").startswith("cloudcode-pa://google"):
         return False
+    if provider == "antigravity" or str(base_url or "").startswith("cloudcode-pa://antigravity"):
+        return len(pool.entries()) > 1
     return len(pool.entries()) > 1
 
 
@@ -1022,6 +1026,23 @@ def _qwen_portal_headers() -> dict:
         "X-DashScope-UserAgent": _ua,
         "X-DashScope-AuthType": "qwen-oauth",
     }
+
+
+def _unsupported_sampling_parameter(error: Exception, api_kwargs: dict) -> str | None:
+    """Return an optional sampling field rejected by an OpenAI-compatible API.
+
+    Provider catalogs cannot reliably describe every model's request contract.
+    Some OpenRouter routes (including Liquid Free) reject ``top_p`` instead of
+    ignoring it. Retrying a pre-stream 400 without the unsupported optional
+    setting lets the provider apply its own default without repeating a billable
+    generation.
+    """
+    from runtime.auxiliary_client import _is_unsupported_parameter_error
+
+    for parameter in ("top_p", "temperature"):
+        if parameter in api_kwargs and _is_unsupported_parameter_error(error, parameter):
+            return parameter
+    return None
 
 
 class AIAgent:
@@ -1718,6 +1739,8 @@ class AIAgent:
                         )
             
             if self.provider == "google-gemini-cli" and google_account_email:
+                client_kwargs["account_email"] = str(google_account_email).strip()
+            if self.provider == "antigravity" and google_account_email:
                 client_kwargs["account_email"] = str(google_account_email).strip()
             self._client_kwargs = client_kwargs  # stored for rebuilding after interrupt
 
@@ -6419,10 +6442,27 @@ class AIAgent:
         client_kwargs = dict(client_kwargs)
         if self.provider in {"google-gemini-cli", "gemini-cli", "gemini-oauth"} or str(
             client_kwargs.get("base_url", "")
-        ).strip().lower().startswith("cloudcode-pa://"):
+        ).strip().lower().startswith("cloudcode-pa://google"):
             from cli.auth import _google_gemini_cli_unavailable
 
             raise _google_gemini_cli_unavailable()
+        if self.provider == "antigravity" or str(
+            client_kwargs.get("base_url", "")
+        ).strip().lower().startswith("cloudcode-pa://antigravity"):
+            from runtime.antigravity_cloudcode_adapter import AntigravityCloudCodeClient
+
+            safe_kwargs = {
+                k: v for k, v in client_kwargs.items()
+                if k in {"api_key", "base_url", "default_headers", "timeout", "account_email", "project_id"}
+            }
+            client = AntigravityCloudCodeClient(**safe_kwargs)
+            logger.info(
+                "Antigravity Cloud Code client created (%s, shared=%s) %s",
+                reason,
+                shared,
+                self._client_log_context(),
+            )
+            return client
         _validate_proxy_env_urls()
         _validate_base_url(client_kwargs.get("base_url"))
         if self.provider == "copilot-acp" or str(client_kwargs.get("base_url", "")).startswith("acp://copilot"):
@@ -7212,12 +7252,16 @@ class AIAgent:
             return False
         if (
             self.provider == "google-gemini-cli"
-            or str(getattr(self, "base_url", "")).startswith("cloudcode-pa://")
+            or str(getattr(self, "base_url", "")).startswith("cloudcode-pa://google")
         ):
             # CloudCode/Gemini quota windows are usually account-level throttles.
             # Prefer the configured fallback immediately instead of waiting out
             # Retry-After while a pooled OAuth credential may still appear usable.
             return False
+        if self.provider == "antigravity" or str(getattr(self, "base_url", "")).startswith("cloudcode-pa://antigravity"):
+            # Antigravity consumer-tier quota is per Google account — with more
+            # than one connected account, rotating can actually recover.
+            return len(pool.entries()) > 1
         return pool.has_available()
 
     def _anthropic_messages_create(self, api_kwargs: dict):
@@ -8090,6 +8134,31 @@ class AIAgent:
                         _is_conn_err = isinstance(
                             e, (_httpx.ConnectError, _httpx.RemoteProtocolError, ConnectionError)
                         )
+
+                        # Some OpenAI-compatible model routes reject optional
+                        # sampling controls rather than ignoring them. A 400
+                        # returned while opening the stream means no response
+                        # has been delivered; remove only the named optional
+                        # field and retry with the provider's default.
+                        _unsupported_sampling = (
+                            _unsupported_sampling_parameter(e, api_kwargs)
+                            if not deltas_were_sent["yes"]
+                            and _stream_attempt < _max_stream_retries
+                            else None
+                        )
+                        if _unsupported_sampling:
+                            api_kwargs.pop(_unsupported_sampling, None)
+                            logger.info(
+                                "Provider rejected optional %s; retrying without it",
+                                _unsupported_sampling,
+                            )
+                            stale = request_client_holder.get("client")
+                            if stale is not None:
+                                self._close_request_openai_client(
+                                    stale, reason="unsupported_sampling_parameter_retry"
+                                )
+                                request_client_holder["client"] = None
+                            continue
 
                         # If the stream died AFTER some tokens were delivered:
                         # normally we don't retry (the user already saw text,

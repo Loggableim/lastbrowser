@@ -788,6 +788,7 @@ _PROVIDER_DISPLAY = {
     "anthropic": "Anthropic",
     "openai-codex": "OpenAI Codex",
     "google-gemini-cli": "Gemini CLI",
+    "antigravity": "Antigravity",
     "zai": "Z.AI / GLM",
     "minimax": "MiniMax",
     "minimax-oauth": "MiniMax (OAuth)",
@@ -1066,6 +1067,14 @@ _PROVIDER_MODELS = {
         {"id": "gpt-5.3-codex-spark", "label": "GPT-5.3 Codex Spark"},
     ],
     "google-gemini-cli": [],
+    "antigravity": [
+        {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
+        {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
+        {"id": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash Lite"},
+        {"id": "gemini-3-flash-preview", "label": "Gemini 3 Flash Preview"},
+        {"id": "gemini-3-pro-preview", "label": "Gemini 3 Pro Preview"},
+        {"id": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro Preview"},
+    ],
     "google": [],
     "gemini-router": [
         {"id": "gemini-router", "label": "Gemini Router (Free Tier)"},
@@ -3002,11 +3011,23 @@ def _configured_model_probe_api_key(
             return str(ollama_cfg.get("api_key") or "").strip()
         return ""
     if provider_id == "ollama-cloud":
-        from shared.utils import base_url_host_matches
+        from shared.utils import is_official_ollama_cloud_url
 
-        if not base_url_host_matches(base_url, "ollama.com"):
+        if not is_official_ollama_cloud_url(base_url):
             return ""
-        return str(env_values.get("OLLAMA_API_KEY") or os.getenv("OLLAMA_API_KEY") or "").strip()
+        # Model discovery must use the same provider-scoped config source as
+        # runtime resolution. Never borrow local Ollama or generic provider
+        # keys, and only send the cloud credential over HTTPS to ollama.com.
+        env_key = str(env_values.get("OLLAMA_API_KEY") or os.getenv("OLLAMA_API_KEY") or "").strip()
+        if env_key:
+            return env_key
+        providers_cfg = config.get("providers", {})
+        ollama_cloud_cfg = providers_cfg.get("ollama-cloud", {}) if isinstance(providers_cfg, dict) else {}
+        if isinstance(ollama_cloud_cfg, dict):
+            configured_key = str(ollama_cloud_cfg.get("api_key") or "").strip()
+            if configured_key:
+                return configured_key
+        return ""
 
     configured_provider = ""
     if isinstance(model_config, dict):
@@ -3049,6 +3070,17 @@ def _configured_model_probe_api_key(
         if value:
             return value
     return ""
+
+
+def _openai_api_key_provider_ids(env_values: dict) -> set[str]:
+    """Return API-key providers implied by OpenAI credentials only.
+
+    Codex is a separate OAuth/subscription integration and must be discovered
+    from its OAuth status, never inferred from OPENAI_API_KEY.
+    """
+    if str(env_values.get("OPENAI_API_KEY") or "").strip():
+        return {"openai"}
+    return set()
 
 
 def get_available_models() -> dict:
@@ -3398,12 +3430,7 @@ def get_available_models() -> dict:
             if all_env.get("ANTHROPIC_API_KEY"):
                 detected_providers.add("anthropic")
             if all_env.get("OPENAI_API_KEY"):
-                detected_providers.add("openai")
-                # openai-codex uses ChatGPT OAuth (not OPENAI_API_KEY) for its default endpoint.
-                # Detecting it here lets users who have both credentials configured find it in the
-                # picker without a manual config.yaml edit. Users without Codex OAuth will see
-                # picker entries but hit auth errors at inference time (#1189 known limitation).
-                detected_providers.add("openai-codex")
+                detected_providers.update(_openai_api_key_provider_ids(all_env))
             if all_env.get("OPENROUTER_API_KEY"):
                 detected_providers.add("openrouter")
             if all_env.get("GOOGLE_API_KEY"):
@@ -4213,7 +4240,11 @@ def get_available_models() -> dict:
                         )
 
                     if not raw_models:
-                        raw_models = copy.deepcopy(_PROVIDER_MODELS.get(pid, []))
+                        # OpenAI availability is account-dependent. Empty live
+                        # discovery must remain empty instead of resurrecting
+                        # a stale static catalog from an older release.
+                        if pid != "openai":
+                            raw_models = copy.deepcopy(_PROVIDER_MODELS.get(pid, []))
 
                     detected_models = auto_detected_models_by_provider.get(pid, [])
                     if detected_models and not raw_models:

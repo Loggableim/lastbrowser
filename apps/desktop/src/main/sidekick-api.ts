@@ -32,9 +32,14 @@ export type OnboardingOAuthResponse = {
   flow_id?: string;
   status?: 'pending' | 'success' | 'expired' | 'cancelled' | 'error' | string;
   verification_uri?: string;
+  /** Antigravity browser flow publishes the sign-in URL here. */
+  auth_url?: string;
   user_code?: string;
+  action_required?: string;
   expires_at?: number;
   poll_interval_seconds?: number;
+  /** Antigravity flow reports the connected account email on success. */
+  email?: string;
   error?: string;
 };
 
@@ -79,6 +84,11 @@ export type DesktopChatMessage = {
   content?: string;
   timestamp?: string | number;
   tool_calls?: unknown[];
+  tool_call_id?: string;
+  /** Assistant reasoning/thinking trace — persisted per message and rendered
+   *  as a collapsible card by the desktop transcript (ChatComponents.tsx). */
+  reasoning?: string;
+  _turnTps?: number;
   pending?: boolean;
   teamwork?: unknown;
   smartTrack?: unknown;

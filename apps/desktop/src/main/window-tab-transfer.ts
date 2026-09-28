@@ -17,6 +17,86 @@ export type NavigationHistorySnapshot = {
   index: number;
 };
 
+/** Verify both the history sequence and active entry, including duplicate URLs. */
+export function matchesNavigationHistorySnapshot(
+  expected: NavigationHistorySnapshot,
+  actualEntries: Array<{ url: string }>,
+  actualIndex: number
+): boolean {
+  return Number.isInteger(actualIndex)
+    && actualIndex === expected.index
+    && actualEntries.length === expected.entries.length
+    && actualEntries.every((entry, index) => entry.url === expected.entries[index]?.url);
+}
+
+type NavigationHistoryNormalizer = {
+  getAllEntries: () => Array<{ url: string }>;
+  getActiveIndex: () => number;
+  getEntryAtIndex: (index: number) => { url: string } | null;
+  removeEntryAtIndex: (index: number) => boolean;
+};
+
+/**
+ * Electron may append the webview's initial src navigation while restore() is
+ * running. Return to the snapshot's active entry and remove only trailing
+ * synthetic blank or duplicate-active entries before acknowledging the move.
+ */
+export async function normalizeRestoredNavigationHistory(
+  snapshot: NavigationHistorySnapshot,
+  history: NavigationHistoryNormalizer,
+  navigateToIndex: (index: number) => Promise<void>
+): Promise<boolean> {
+  if (!Array.isArray(snapshot.entries) || snapshot.entries.length === 0
+    || !Number.isInteger(snapshot.index) || snapshot.index < 0 || snapshot.index >= snapshot.entries.length) {
+    return false;
+  }
+
+  const expectedUrls = snapshot.entries.map((entry) => entry.url);
+  const activeUrl = expectedUrls[snapshot.index];
+  const hasExpectedPrefix = (entries: Array<{ url: string }>) =>
+    entries.length >= expectedUrls.length
+    && expectedUrls.every((url, index) => entries[index]?.url === url);
+
+  let entries = history.getAllEntries();
+  if (!hasExpectedPrefix(entries)) return false;
+
+  if (history.getActiveIndex() !== snapshot.index || history.getEntryAtIndex(snapshot.index)?.url !== activeUrl) {
+    try {
+      await navigateToIndex(snapshot.index);
+    } catch {
+      return false;
+    }
+  }
+
+  if (history.getActiveIndex() !== snapshot.index || history.getEntryAtIndex(snapshot.index)?.url !== activeUrl) {
+    return false;
+  }
+
+  entries = history.getAllEntries();
+  if (!hasExpectedPrefix(entries)) return false;
+  for (let index = entries.length - 1; index >= expectedUrls.length; index -= 1) {
+    const url = entries[index]?.url;
+    if (index === history.getActiveIndex() || (url !== 'about:blank' && url !== activeUrl)) return false;
+    if (!history.removeEntryAtIndex(index)) return false;
+  }
+
+  return matchesNavigationHistorySnapshot(snapshot, history.getAllEntries(), history.getActiveIndex());
+}
+
+/** A tab transfer may complete after restore or after successfully loading its fallback URL. */
+export async function ensureDetachedPageReady(
+  historyRestored: boolean,
+  loadFallback: () => Promise<unknown>
+): Promise<boolean> {
+  if (historyRestored) return true;
+  try {
+    await loadFallback();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 type NavigationHistoryReader = {
   getAllEntries: () => Array<{ pageState?: string; title: string; url: string }>;
   getActiveIndex: () => number;

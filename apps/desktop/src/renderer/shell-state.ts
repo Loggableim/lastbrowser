@@ -1,3 +1,5 @@
+import type { DesktopTranslationKey } from './i18n/keys.js';
+
 export type LastbrowserPanelId =
   | 'chat'
   | 'tasks'
@@ -149,6 +151,77 @@ export const lastbrowserPanels: LastbrowserPanel[] = [
   { id: 'settings', label: 'Settings', tooltip: 'Settings' },
   { id: 'terminal', label: 'Terminal', tooltip: 'Terminal' },
 ];
+
+/** Translation key used by shell navigation and active-panel headings. */
+export const panelLabelTranslationKeys: Record<LastbrowserPanelId, DesktopTranslationKey> = {
+  chat: 'panel.chat',
+  tasks: 'panel.tasks',
+  kanban: 'panel.kanban',
+  skills: 'panel.skills',
+  agents: 'panel.agents',
+  memory: 'panel.memory',
+  workspaces: 'panel.spaces',
+  profiles: 'panel.profiles',
+  todos: 'panel.todos',
+  insights: 'panel.insights',
+  logs: 'panel.logs',
+  gmail: 'panel.gmail',
+  browser: 'sidebar.items.browser.title',
+  discord: 'panel.discord',
+  appstore: 'panel.appstore',
+  settings: 'panel.settings',
+  terminal: 'sidebar.items.terminal.title'
+};
+
+export type DoctorCheck = {
+  type: 'ok' | 'warn' | 'fail' | 'info';
+  text: string;
+  detail?: string;
+};
+
+export type DoctorCategory = {
+  name: string;
+  checks: DoctorCheck[];
+  status: 'ok' | 'warn' | 'fail';
+};
+
+export type DoctorReport = {
+  timestamp: number;
+  exitCode: number;
+  rawOutput: string;
+  categories: DoctorCategory[];
+  issues: string[];
+  summary: { passed: number; warnings: number; failures: number };
+};
+
+export type ExtractedTabContent = {
+  tabId?: string;
+  url: string;
+  title: string;
+  metaDescription?: string;
+  markdown: string;
+  headings: string[];
+  tables: string[];
+  charCount: number;
+  estimatedTokens: number;
+  hasInjectionAttempt: boolean;
+  sanitizedPatterns: string[];
+  truncated: boolean;
+};
+
+export type TabSynthesisResult = {
+  tabCount: number;
+  totalChars: number;
+  totalEstimatedTokens: number;
+  markdown: string;
+  tabs: ExtractedTabContent[];
+  hasAnyInjectionAttempt: boolean;
+  timestamp: number;
+};
+
+export function panelLabelTranslationKey(panelId: LastbrowserPanelId): DesktopTranslationKey {
+  return panelLabelTranslationKeys[panelId];
+}
 
 const panelIds = new Set(lastbrowserPanels.map((panel) => panel.id));
 const appPanels = new Set<LastbrowserPanelId>(['gmail', 'discord']);

@@ -1,7 +1,7 @@
 import type { DesktopLocaleId } from './keys.js';
 
 type ProviderDescriptionId =
-  | 'openai-codex' | 'anthropic' | 'google-gemini-cli' | 'openai' | 'openrouter' | 'ollama-cloud'
+  | 'openai-codex' | 'anthropic' | 'google-gemini-cli' | 'antigravity' | 'openai' | 'openrouter' | 'ollama-cloud'
   | 'gemini' | 'deepseek' | 'mistralai' | 'nvidia' | 'xiaomi' | 'zai' | 'x-ai'
   | 'ollama' | 'lmstudio' | 'custom';
 
@@ -20,6 +20,11 @@ const descriptions: Record<ProviderDescriptionId, Record<DesktopLocaleId, string
     en: 'Consumer Gemini CLI subscription access changed on June 18, 2026. See the official Antigravity CLI migration guide; Gemini API keys are separate.', de: 'Der Gemini-CLI-Abozugriff für Privatkonten wurde am 18. Juni 2026 geändert. Hinweise stehen in der offiziellen Migrationsanleitung für Antigravity CLI; Gemini-API-Schlüssel sind davon getrennt.',
     es: 'El acceso de suscripción de Gemini CLI para consumidores cambió el 18 de junio de 2026. Consulta la guía oficial de migración a Antigravity CLI; las claves API de Gemini son independientes.', fr: 'L’accès par abonnement à Gemini CLI pour les particuliers a changé le 18 juin 2026. Consultez le guide officiel de migration vers Antigravity CLI ; les clés API Gemini sont distinctes.',
     it: 'L’accesso agli abbonamenti consumer di Gemini CLI è cambiato il 18 giugno 2026. Consulta la guida ufficiale alla migrazione di Antigravity CLI; le chiavi API Gemini sono separate.', 'pt-BR': 'O acesso por assinatura à Gemini CLI para consumidores mudou em 18 de junho de 2026. Consulte o guia oficial de migração para Antigravity CLI; as chaves de API Gemini são separadas.', ru: 'Доступ к Gemini CLI по потребительской подписке изменился 18 июня 2026 года. См. официальное руководство по переходу на Antigravity CLI; ключи API Gemini — отдельный способ доступа.'
+  },
+  antigravity: {
+    en: 'Connect one or more Google accounts. Chat requests rotate round-robin across all connected accounts.', de: 'Verbinde ein oder mehrere Google-Konten. Chat-Anfragen rotieren im Round-Robin über alle verbundenen Konten.',
+    es: 'Conecta una o más cuentas de Google. Las solicitudes de chat rotan en round-robin entre todas las cuentas conectadas.', fr: 'Connectez un ou plusieurs comptes Google. Les requêtes de chat tournent en round-robin entre tous les comptes connectés.',
+    it: 'Collega uno o più account Google. Le richieste di chat ruotano in round-robin tra tutti gli account collegati.', 'pt-BR': 'Conecte uma ou mais contas do Google. As solicitações de chat alternam em round-robin entre todas as contas conectadas.', ru: 'Подключите один или несколько аккаунтов Google. Запросы чата распределяются по кругу между всеми подключёнными аккаунтами.'
   },
   openai: {
     en: 'OpenAI API key for GPT models.', de: 'OpenAI-API-Schlüssel für GPT-Modelle.', es: 'Clave de API de OpenAI para modelos GPT.', fr: 'Clé API OpenAI pour les modèles GPT.',

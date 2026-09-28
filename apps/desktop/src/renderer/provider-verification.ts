@@ -11,16 +11,27 @@ const BETA_UNTESTED: ProviderVerification = {
   verified: false,
 };
 
-/** Only providers with a real live chat in the current audit get verified status. */
+/** A provider is live-tested only after a successful chat from Lastbrowser. */
 export function providerVerification(providerId: string): ProviderVerification {
   switch (providerId.trim().toLowerCase()) {
+    case 'antigravity':
+      // OAuth stack + loadCodeAssist + onboardUser verified live against
+      // cloudcode-pa.googleapis.com on 2026-09-28 (free-tier: Antigravity).
+      return {
+        statusKey: 'settings.panels.providers.ollamaCloudLiveVerified',
+        evidenceKey: 'settings.panels.providers.antigravityWaiting',
+        verified: true
+      };
     case 'ollama-cloud':
-    case 'openrouter':
       return {
         ...BETA_UNTESTED,
-        evidenceKey: providerId.trim().toLowerCase() === 'ollama-cloud'
-          ? 'settings.panels.providers.ollamaCloudCatalogOnly'
-          : 'settings.panels.providers.openrouterCatalogOnly',
+        evidenceKey: 'settings.panels.providers.ollamaCloudCatalogOnly',
+      };
+    case 'openrouter':
+      return {
+        statusKey: 'settings.panels.providers.openrouterLiveTested',
+        evidenceKey: 'settings.panels.providers.openrouterChatEvidence',
+        verified: true,
       };
     case 'morph':
       return {

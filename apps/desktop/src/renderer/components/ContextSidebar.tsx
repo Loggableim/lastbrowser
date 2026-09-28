@@ -14,14 +14,16 @@ import {
   Star,
   Trash2
 } from 'lucide-react';
-import { brandAssets } from '../brand.js';
+import { brandAssets, sidebarIconForPanel } from '../brand.js';
 import {
   type DesktopSessionSummary,
   type LastbrowserPanelId,
   type ProjectSummary,
   lastbrowserPanels,
+  panelLabelTranslationKey,
   sessionTitle
 } from '../shell-state.js';
+import { useDesktopI18n } from '../i18n.js';
 
 export type SidekickActionId = 'summarize-page' | 'explain-selection' | 'research-page';
 
@@ -130,7 +132,9 @@ export function ContextSidebar({
   onProjectFilter,
   onTagFilter
 }: ContextSidebarProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const panel = lastbrowserPanels.find((item) => item.id === activePanel) || lastbrowserPanels[0];
+  const panelLabel = t(panelLabelTranslationKey(panel.id));
 
   // Extract all tags from sessions
   const allTags = useMemo(() => {
@@ -243,8 +247,8 @@ export function ContextSidebar({
     <aside className={`context-sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="context-header">
         <div>
-          <span className="context-kicker">{panel.id === 'browser' ? 'BROWSER' : panel.label.toUpperCase()}</span>
-          <h2>{panel.label}</h2>
+          <span className="context-kicker">{panelLabel.toLocaleUpperCase()}</span>
+          <h2>{panelLabel}</h2>
         </div>
         <button type="button" aria-label="Collapse sidebar" onClick={onToggleCollapse}>
           <PanelLeftClose size={17} />
@@ -381,9 +385,9 @@ export function ContextSidebar({
         <div className="context-native-panel">
           <div className="panel-mini panel-hand-off">
             <div className="panel-mini-icon">
-              <img src={brandAssets.sidebarIcons[activePanel]} alt="" />
+              <img src={sidebarIconForPanel(activePanel)} alt="" />
             </div>
-            <strong>{panel.label}</strong>
+            <strong>{panelLabel}</strong>
             {activePanel === 'workspaces' && (
               <button type="button" className="new-session-button" onClick={onNewSession}>
                 <Plus size={15} />
@@ -400,7 +404,7 @@ export function ContextSidebar({
                 aria-pressed={item === activeContextItem}
                 onClick={() => handleContextItem(item)}
               >
-                <img src={brandAssets.sidebarIcons[activePanel]} alt="" />
+                <img src={sidebarIconForPanel(activePanel)} alt="" />
                 <span>{item}</span>
               </button>
             ))}

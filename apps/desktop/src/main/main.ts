@@ -1,9 +1,9 @@
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { app, BrowserWindow, clipboard, ipcMain, Menu, Notification, screen, shell, session, webContents, type Session } from 'electron';
-import { CHAT_COMPLETION_NOTIFICATION, shouldNotifyChatCompletion } from './chat-notifications.js';
-import { detachRequestKey, isGuestOwnedByRenderer, parseDetachTabPayload, PendingTabDetachRegistry, serializeNavigationHistory } from './window-tab-transfer.js';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, screen, shell, session, webContents, type MessageBoxOptions, type Session } from 'electron';
+import { getChatCompletionNotification, shouldNotifyChatCompletion } from './chat-notifications.js';
+import { detachRequestKey, ensureDetachedPageReady, isGuestOwnedByRenderer, normalizeRestoredNavigationHistory, parseDetachTabPayload, PendingTabDetachRegistry, serializeNavigationHistory } from './window-tab-transfer.js';
 import { clearDeletedProfilePartitions } from './profile-partition-cleanup.js';
 import { broadcastDownloadSnapshot, createDownloadTracker } from './downloads.js';
 import { ExtensionManager } from './extensions.js';
@@ -157,10 +157,13 @@ import { registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
 import { createAdblockController } from './adblock.js';
 import { createSidekickUpdater } from './sidekick-updater.js';
 import { subscribeChatStream, type ChatStreamHandle } from './chat-stream.js';
-import { createPermissionController, loadTrustedOrigins, saveTrustedOrigins, trustedOriginsFileName } from './permissions.js';
+import { createPermissionController, loadTrustedOrigins, resolvePermissionRequest, saveTrustedOrigins, trustedNotificationOriginsFileName, trustedOriginsFileName } from './permissions.js';
 import { configureDrmWidevine, initializeCastlabsWidevine } from './drm.js';
 import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
 import { registerWindowControlIpc } from './window-controls.js';
+import { hardenWebViewAttachment } from './webview-security.js';
+import { capturePageDataUrl, normalizeCapturePageRect } from './capture-page.js';
+import { createOpenUrlLifecycle } from './open-url-lifecycle.js';
 import { registerDefaultSidekickMigrationIpc } from './sidekick-migration.js';
 import { withSidekickWebuiReady } from './sidekick-readiness.js';
 import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTerminalIds, closeAllTerminals } from './terminal-process.js';
@@ -186,40 +189,131 @@ app.on('child-process-gone', (_event, details) => {
 
 const mainDir = moduleDirname(import.meta.url);
 let mainWindow: BrowserWindow | null = null;
+let appReady = false;
 const secondaryWindows = new Set<BrowserWindow>();
 type DetachedTabTransfer = {
   transferId: string;
   payload: { tab: any; spacePath?: string; navigationHistory?: ReturnType<typeof serializeNavigationHistory> };
   resolve: (acknowledged: boolean) => void;
   timeout: NodeJS.Timeout;
-  restorePromise?: Promise<boolean>;
+  historyRestorePromise?: Promise<boolean>;
+  acknowledgePromise?: Promise<boolean>;
 };
 const detachedWindowWebContents = new Set<number>();
 const detachedTabTransfers = new Map<number, DetachedTabTransfer>();
 const pendingTabDetaches = new PendingTabDetachRegistry<unknown>();
+
+async function restoreDetachedNavigationHistory(
+  guest: Electron.WebContents,
+  history: NonNullable<DetachedTabTransfer['payload']['navigationHistory']>
+): Promise<boolean> {
+  try {
+    await guest.navigationHistory.restore(history);
+  } catch (error) {
+    console.warn('[lastbrowser] Could not restore detached tab navigation history:', error);
+    return false;
+  }
+
+  const activeEntry = history.entries[history.index];
+  if (!activeEntry) return false;
+  const matchesSource = await normalizeRestoredNavigationHistory(
+    history,
+    guest.navigationHistory,
+    (index) => new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        clearTimeout(timeout);
+        guest.removeListener('did-finish-load', onFinished);
+        guest.removeListener('did-fail-load', onFailed);
+      };
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (error) reject(error);
+        else resolve();
+      };
+      const onFinished = () => {
+        if (guest.navigationHistory.getActiveIndex() === index
+          && guest.getURL() === activeEntry.url) finish();
+      };
+      const onFailed = (_event: Electron.Event, errorCode: number, errorDescription: string, validatedURL: string, isMainFrame: boolean) => {
+        if (isMainFrame && validatedURL === activeEntry.url) {
+          finish(new Error(`Could not load restored history entry (${errorCode}): ${errorDescription}`));
+        }
+      };
+      const timeout = setTimeout(() => finish(new Error('Timed out loading the restored history entry.')), 15_000);
+      guest.on('did-finish-load', onFinished);
+      guest.on('did-fail-load', onFailed);
+      guest.navigationHistory.goToIndex(index);
+      onFinished();
+    })
+  );
+  if (matchesSource && guest.getURL() === activeEntry.url) return true;
+  console.warn('[lastbrowser] Could not verify detached tab navigation history after restore.');
+  return false;
+}
+
 let services: SidecarServices | null = null;
 let appTray: TrayController | null = null;
 let isQuitting = false;
 const adblock = createAdblockController();
-const sidekickUpdater = createSidekickUpdater({
-  // After a successful Sidekick update, restart the sidecar so the new code
-  // is loaded. The layout is re-resolved so the runtime copy is picked up.
-  onInstalled: async () => {
-    if (!services) return;
-    services.stop();
-    services = new SidecarServices(resolveServiceLayout(appResourcesDir()));
-    await services.start();
-  }
-});
+const sidekickUpdater = createSidekickUpdater();
 const agentWorkspaceStreams = new Map<string, AbortController>();
 const chatStreams = new Map<string, ChatStreamHandle>();
 const downloads = createDownloadTracker();
 // Trusted origins live next to the app's other settings so a video-call site the
 // user allowed once does not have to be allowed again after a restart.
 const trustedOriginsPath = path.join(app.getPath('userData'), trustedOriginsFileName);
+const trustedNotificationOriginsPath = path.join(app.getPath('userData'), trustedNotificationOriginsFileName);
 const trustedOriginsFs = { existsSync, readFileSync, writeFileSync };
-const permissions = createPermissionController(loadTrustedOrigins(trustedOriginsPath, trustedOriginsFs));
+const permissions = createPermissionController(
+  loadTrustedOrigins(trustedOriginsPath, trustedOriginsFs),
+  loadTrustedOrigins(trustedNotificationOriginsPath, trustedOriginsFs)
+);
 permissions.onTrustedChange((origins) => saveTrustedOrigins(trustedOriginsPath, origins, trustedOriginsFs));
+permissions.onNotificationTrustedChange((origins) => saveTrustedOrigins(trustedNotificationOriginsPath, origins, trustedOriginsFs));
+const pendingNotificationPrompts = new Map<string, Promise<boolean>>();
+
+async function promptForWebsiteNotifications(contents: Electron.WebContents, requestingUrl: string): Promise<boolean> {
+  let origin: string;
+  try {
+    origin = new URL(requestingUrl).origin;
+  } catch {
+    return false;
+  }
+  const pending = pendingNotificationPrompts.get(origin);
+  if (pending) return pending;
+
+  const prompt = (async () => {
+    const hostContents = contents.hostWebContents ?? contents;
+    const owner = BrowserWindow.fromWebContents(hostContents);
+    const hostname = new URL(origin).host;
+    const options: MessageBoxOptions = {
+      type: 'question',
+      title: 'Website notifications',
+      message: `Allow ${hostname} to send desktop notifications?`,
+      detail: 'An allow choice is remembered for this website. Blocking keeps notifications disabled.',
+      buttons: ['Allow', 'Block'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true
+    };
+    const result = owner && !owner.isDestroyed()
+      ? await dialog.showMessageBox(owner, options)
+      : await dialog.showMessageBox(options);
+    if (result.response !== 0) return false;
+    permissions.trustNotificationOrigin(origin);
+    return true;
+  })();
+
+  pendingNotificationPrompts.set(origin, prompt);
+  try {
+    return await prompt;
+  } finally {
+    if (pendingNotificationPrompts.get(origin) === prompt) pendingNotificationPrompts.delete(origin);
+  }
+}
 let currentAssistantName = 'Nova';
 let currentLocale = 'en';
 const activeSessions = new Set<Session>();
@@ -229,74 +323,103 @@ import { extractUrlFromArgs } from './url-dispatch.js';
 export { extractUrlFromArgs };
 
 export function dispatchOpenUrl(targetUrl: string): void {
-  if (!targetUrl || !mainWindow || mainWindow.isDestroyed()) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  if (!mainWindow.isVisible()) mainWindow.show();
-  mainWindow.focus();
-
-  if (mainWindow.webContents.isLoading()) {
-    mainWindow.webContents.once('did-finish-load', () => {
-      mainWindow?.webContents.send('lastbrowser:browser:openTab', targetUrl);
-    });
-  } else {
-    mainWindow.webContents.send('lastbrowser:browser:openTab', targetUrl);
-  }
+  openUrlLifecycle.dispatchOpenUrl(targetUrl);
 }
 
-function createWindow(): void {
-  mainWindow = new BrowserWindow(createMainWindowOptions(mainDir));
+function createWindow(): BrowserWindow {
+  const window = new BrowserWindow(createMainWindowOptions(mainDir));
+  mainWindow = window;
 
-  mainWindow.on('maximize', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('lastbrowser:window:maximizeChanged', true);
+  window.webContents.on('did-start-loading', () => openUrlLifecycle.onWindowLoading(window));
+  window.webContents.on('did-finish-load', () => {
+    // Let preload, React, and the browser tab event subscription mount first.
+    setTimeout(() => openUrlLifecycle.onWindowReady(window), 350);
+  });
+  window.on('closed', () => {
+    if (mainWindow === window) mainWindow = null;
+  });
+
+  window.on('maximize', () => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('lastbrowser:window:maximizeChanged', true);
     }
   });
 
-  mainWindow.on('unmaximize', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('lastbrowser:window:maximizeChanged', false);
+  window.on('unmaximize', () => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('lastbrowser:window:maximizeChanged', false);
     }
   });
 
-  mainWindow.on('enter-full-screen', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('lastbrowser:window:fullScreenChanged', true);
+  window.on('enter-full-screen', () => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('lastbrowser:window:fullScreenChanged', true);
     }
   });
 
-  mainWindow.on('leave-full-screen', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('lastbrowser:window:fullScreenChanged', false);
+  window.on('leave-full-screen', () => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('lastbrowser:window:fullScreenChanged', false);
     }
   });
 
-  setupMinimizeToTray(mainWindow, () => {
+  setupMinimizeToTray(window, () => {
     if (isQuitting || process.platform === 'darwin') return false;
     return true;
   });
 
   const rendererUrl = process.env.LASTBROWSER_RENDERER_URL;
   if (rendererUrl) {
-    void mainWindow.loadURL(rendererUrl);
+    void window.loadURL(rendererUrl);
   } else {
     // app:// (not file://) so localStorage persists — see app-protocol.ts.
-    void mainWindow.loadURL(appRendererUrl());
+    void window.loadURL(appRendererUrl());
   }
 
   // Handle cold-start URL (e.g. launched by clicking link in an external app)
   const initialUrl = extractUrlFromArgs(process.argv);
   if (initialUrl) {
-    mainWindow.webContents.once('did-finish-load', () => {
-      setTimeout(() => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('lastbrowser:browser:openTab', initialUrl);
-        }
-      }, 350);
-    });
+    dispatchOpenUrl(initialUrl);
   }
+  return window;
 }
 
+const openUrlLifecycle = createOpenUrlLifecycle({
+  getMainWindow: () => mainWindow,
+  createMainWindow: createWindow,
+  isAppReady: () => appReady
+});
+
 function registerIpc(): void {
+  ipcMain.handle('lastbrowser:system:getCursorPosition', (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window || window.isDestroyed()) return null;
+    const cursor = screen.getCursorScreenPoint();
+    const content = window.getContentBounds();
+    return { x: cursor.x - content.x, y: cursor.y - content.y, visible: window.isVisible() };
+  });
+  ipcMain.handle('lastbrowser:system:captureWindowRect', async (event, value: unknown) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window || window.isDestroyed() || !value || typeof value !== 'object') return null;
+    const rect = value as Record<string, unknown>;
+    const numbers = [rect.x, rect.y, rect.width, rect.height].map(Number);
+    if (!numbers.every(Number.isFinite) || numbers[2] <= 0 || numbers[3] <= 0) return null;
+    const [contentWidth, contentHeight] = window.getContentSize();
+    const width = Math.min(256, Math.round(numbers[2]), contentWidth);
+    const height = Math.min(256, Math.round(numbers[3]), contentHeight);
+    const x = Math.max(0, Math.min(contentWidth - width, Math.round(numbers[0])));
+    const y = Math.max(0, Math.min(contentHeight - height, Math.round(numbers[1])));
+    if (width <= 0 || height <= 0) return null;
+    return capturePageDataUrl(() => window.webContents.capturePage({ x, y, width, height }));
+  });
+  ipcMain.handle('lastbrowser:system:captureGuestRect', async (event, guestWebContentsId: unknown, value: unknown) => {
+    const guestId = Number(guestWebContentsId);
+    if (!Number.isInteger(guestId) || guestId <= 0) return null;
+    const guest = webContents.fromId(guestId);
+    const rect = normalizeCapturePageRect(value);
+    if (!guest || guest.isDestroyed() || !rect || !isGuestOwnedByRenderer(guest, event.sender.id)) return null;
+    return capturePageDataUrl(() => guest.capturePage(rect));
+  });
   ipcMain.handle('lastbrowser:system:isDefaultBrowser', () => {
     if (typeof app?.isDefaultProtocolClient !== 'function') return false;
     return app.isDefaultProtocolClient('http') && app.isDefaultProtocolClient('https');
@@ -318,7 +441,7 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:notifications:chatCompleted', (event, enabled: unknown) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window || !shouldNotifyChatCompletion(enabled, window.isFocused()) || !Notification.isSupported()) return false;
-    new Notification(CHAT_COMPLETION_NOTIFICATION).show();
+    new Notification(getChatCompletionNotification(currentLocale)).show();
     return true;
   });
   ipcMain.handle('lastbrowser:i18n:setLocale', (_event, locale: unknown) => {
@@ -682,16 +805,23 @@ function registerIpc(): void {
       ? webContents.fromId(guestWebContentsId)
       : undefined;
     if (!destinationGuest || !isGuestOwnedByRenderer(destinationGuest, event.sender.id)) return false;
-    if (transfer.restorePromise) return transfer.restorePromise;
-    const restorePromise = (async () => {
+    const acknowledgePromise = transfer.acknowledgePromise ?? (async () => {
+      let restored = false;
       try {
         if (transfer.payload.navigationHistory) {
-          await destinationGuest.navigationHistory.restore(transfer.payload.navigationHistory);
+          restored = await (transfer.historyRestorePromise
+            ?? restoreDetachedNavigationHistory(destinationGuest, transfer.payload.navigationHistory));
         }
       } catch (error) {
-        // The webview has already loaded the transferred URL. Keep that live
-        // page and complete the handoff if Electron rejects history restore.
-        console.warn('[lastbrowser] Could not restore detached tab navigation history; preserving the loaded page:', error);
+        console.warn('[lastbrowser] Could not restore detached tab navigation history:', error);
+      }
+      const pageReady = await ensureDetachedPageReady(restored, async () => {
+        if (!transfer.payload.tab?.url) throw new Error('Detached tab has no fallback URL.');
+        await destinationGuest.loadURL(transfer.payload.tab.url);
+      });
+      if (!pageReady) {
+        console.warn('[lastbrowser] Could not load detached tab after history restoration failed.');
+        return false;
       }
       // The window may have closed while Chromium was restoring the page.
       if (detachedTabTransfers.get(event.sender.id) !== transfer) return false;
@@ -700,10 +830,10 @@ function registerIpc(): void {
       transfer.resolve(true);
       return true;
     })();
-    transfer.restorePromise = restorePromise;
-    const restored = await restorePromise;
+    transfer.acknowledgePromise = acknowledgePromise;
+    const restored = await acknowledgePromise;
     if (!restored && detachedTabTransfers.get(event.sender.id) === transfer) {
-      transfer.restorePromise = undefined;
+      transfer.acknowledgePromise = undefined;
     }
     return restored;
   });
@@ -753,6 +883,24 @@ function registerIpc(): void {
           payload: { tab: payload.tab, spacePath: payload.spacePath, navigationHistory },
           resolve: resolveTransfer,
           timeout
+        });
+        detachedWindow.webContents.on('will-attach-webview', (_event, _webPreferences, params) => {
+          const transfer = detachedTabTransfers.get(contentsId);
+          if (transfer?.payload.navigationHistory && params.src === transfer.payload.tab.url) {
+            // Give the guest a valid attachment without committing its first
+            // navigation. did-attach-webview restores the snapshot before the
+            // transferred page creates its first history entry.
+            params.src = 'about:blank';
+          }
+        });
+        detachedWindow.webContents.on('did-attach-webview', (_event, guest) => {
+          const transfer = detachedTabTransfers.get(contentsId);
+          if (!transfer?.payload.navigationHistory || transfer.historyRestorePromise
+            || !isGuestOwnedByRenderer(guest, contentsId)) return;
+          transfer.historyRestorePromise = restoreDetachedNavigationHistory(guest, transfer.payload.navigationHistory).catch((error) => {
+            console.warn('[lastbrowser] Could not restore detached tab navigation history:', error);
+            return false;
+          });
         });
         detachedWindow.on('closed', () => {
           secondaryWindows.delete(detachedWindow);
@@ -836,7 +984,13 @@ function registerIpc(): void {
   });
   ipcMain.handle('lastbrowser:permissions:revoke', (_event, origin: unknown) => {
     permissions.revokeOrigin(String(origin || ''));
+    permissions.revokeNotificationOrigin(String(origin || ''));
     return permissions.trustedOrigins();
+  });
+  ipcMain.handle('lastbrowser:permissions:notificationOrigins', () => permissions.notificationOrigins());
+  ipcMain.handle('lastbrowser:permissions:revokeNotifications', (_event, origin: unknown) => {
+    permissions.revokeNotificationOrigin(String(origin || ''));
+    return permissions.notificationOrigins();
   });
   ipcMain.handle('lastbrowser:permissions:decide', (_event, request: unknown) => {
     const payload = (request || {}) as { permission?: string; origin?: string };
@@ -999,17 +1153,11 @@ if (!gotSingleInstanceLock) {
   app.quit();
 } else {
   if (typeof app?.on === 'function') {
+    app.on('open-url', (event, url) => {
+      openUrlLifecycle.handleOpenUrl(event, url);
+    });
     app.on('second-instance', (_event, commandLine) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        if (!mainWindow.isVisible()) mainWindow.show();
-        mainWindow.focus();
-
-        const targetUrl = extractUrlFromArgs(commandLine);
-        if (targetUrl) {
-          dispatchOpenUrl(targetUrl);
-        }
-      }
+      openUrlLifecycle.handleSecondInstance(commandLine);
     });
   }
 }
@@ -1061,6 +1209,7 @@ app.whenReady().then(async () => {
   services = new SidecarServices(resolveServiceLayout(appResourcesDir()));
   void services.start().then(() => ensureSidecarAuth());
   registerIpc();
+  appReady = true;
   createWindow();
   startAutoUpdateChecks();
   attachSessionHandlers(session.defaultSession);
@@ -1138,8 +1287,19 @@ function attachSessionHandlers(targetSession: Session): void {
   // Deny-by-default with whitelist (permissions.ts): Electron grants every permission silently
   // otherwise, which would hand any website the camera, microphone, and location.
   targetSession.setPermissionRequestHandler((_contents, permission, callback, details) => {
-    const origin = String((details as { requestingUrl?: string })?.requestingUrl || '');
-    callback(permissions.decide(String(permission), origin) === 'allow');
+    const requestingUrl = String((details as { requestingUrl?: string })?.requestingUrl || '');
+    if (permission === 'notifications') {
+      const isMainFrame = (details as { isMainFrame?: boolean })?.isMainFrame === true;
+      void resolvePermissionRequest(permissions, permission, isMainFrame, requestingUrl,
+        (origin) => promptForWebsiteNotifications(_contents, origin))
+        .then(callback)
+        .catch((error) => {
+          console.warn('[permissions] Website notification prompt failed:', error);
+          callback(false);
+        });
+      return;
+    }
+    callback(permissions.decide(String(permission), requestingUrl) === 'allow');
   });
   targetSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) => {
     return permissions.decide(String(permission), String(requestingOrigin || '')) === 'allow';
@@ -1148,6 +1308,18 @@ function attachSessionHandlers(targetSession: Session): void {
 
 // Ensure every webContents (including guest webviews) uses clean User-Agent without Electron tokens
 app.on('web-contents-created', (_event, contents) => {
+  // Shell windows are privileged renderers and host remote browser WebViews.
+  // Harden guest preferences before any renderer-controlled attachment. This
+  // policy intentionally leaves src/partition/plugins alone; the detached-tab
+  // handler below may still set src to about:blank during history restoration.
+  if (contents.getType() === 'window') {
+    contents.on('will-attach-webview', (_attachEvent, webPreferences, params) => {
+      hardenWebViewAttachment(
+        webPreferences as unknown as Record<string, unknown>,
+        params as Record<string, unknown>
+      );
+    });
+  }
   try {
     const ua = contents.getUserAgent?.();
     if (ua) {

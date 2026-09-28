@@ -1736,7 +1736,10 @@ def probe_ollama_connection(provider_id: str, base_url: str, api_key: str = "") 
                 payload = json.loads(response.read().decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError):
                 return {"ok": False, "error": "invalid_provider_response"}
-            model_list = payload.get("models", []) if isinstance(payload, dict) else []
+            # Local /api/tags uses `models`; the Cloud /v1/models endpoint
+            # speaks the OpenAI-compatible `data` shape.
+            model_field = "data" if provider == "ollama-cloud" else "models"
+            model_list = payload.get(model_field, []) if isinstance(payload, dict) else []
             return {"ok": True, "provider": provider, "model_count": len(model_list) if isinstance(model_list, list) else 0}
     except urllib.error.HTTPError as exc:
         return {"ok": False, "error": "provider_http_error", "status": exc.code}

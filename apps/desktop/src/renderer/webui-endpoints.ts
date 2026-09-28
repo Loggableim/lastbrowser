@@ -1,6 +1,6 @@
 import type { LastbrowserPanelId } from './shell-state.js';
 
-export type WebuiEndpointMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+export type WebuiEndpointMethod = 'GET' | 'HEAD' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
 export type WebuiEndpointAction = {
   id: string;

@@ -1,20 +1,22 @@
-const RELEASE_TAG = 'v0.1.35';
+const RELEASE_TAG = 'v0.1.34';
 const ASSETS = {
   'setup.exe': {
-    upstream: `https://github.com/Loggableim/lastbrowser/releases/download/${RELEASE_TAG}/Lastbrowser-0.1.35-x64-setup.exe`,
-    filename: 'Lastbrowser-0.1.35-x64-setup.exe',
+    upstream: `https://github.com/Loggableim/lastbrowser/releases/download/${RELEASE_TAG}/Lastbrowser-0.1.34-x64-setup.exe`,
+    filename: 'Lastbrowser-0.1.34-x64-setup.exe',
     contentType: 'application/octet-stream',
-    disposition: 'attachment; filename="Lastbrowser-0.1.35-x64-setup.exe"',
+    disposition: 'attachment; filename="Lastbrowser-0.1.34-x64-setup.exe"',
   },
   'portable.exe': {
-    upstream: `https://github.com/Loggableim/lastbrowser/releases/download/${RELEASE_TAG}/Lastbrowser-0.1.35-x64-portable.exe`,
-    filename: 'Lastbrowser-0.1.35-x64-portable.exe',
+    upstream: `https://github.com/Loggableim/lastbrowser/releases/download/${RELEASE_TAG}/Lastbrowser-0.1.34-x64-portable.exe`,
+    filename: 'Lastbrowser-0.1.34-x64-portable.exe',
     contentType: 'application/octet-stream',
-    disposition: 'attachment; filename="Lastbrowser-0.1.35-x64-portable.exe"',
+    disposition: 'attachment; filename="Lastbrowser-0.1.34-x64-portable.exe"',
   },
   'latest.yml': {
+    upstream: `https://github.com/Loggableim/lastbrowser/releases/download/${RELEASE_TAG}/latest.yml`,
+    filename: 'latest.yml',
     contentType: 'text/yaml; charset=utf-8',
-    body: `version: 0.1.35\nfiles:\n  - url: setup.exe\npath: setup.exe\nreleaseDate: '2026-09-27T02:25:00.000Z'\n`,
+    disposition: 'attachment; filename="latest.yml"',
   },
 };
 

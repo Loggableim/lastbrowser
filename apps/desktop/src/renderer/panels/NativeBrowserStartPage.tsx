@@ -23,6 +23,8 @@ import type { BrowserVisit } from '../history.js';
 import { normalizeNavigationInput } from '../tabs.js';
 import { spaceDisplayName, type SpaceSummary } from '../shell-state.js';
 import { getSpaceTabCount } from '../tab-sessions.js';
+import { useDesktopI18n } from '../i18n.js';
+import type { DesktopTranslationKey } from '../i18n/keys.js';
 
 export interface SpeedDialItem {
   id: string;
@@ -46,22 +48,22 @@ export const DEFAULT_SPEED_DIAL_ITEMS: SpeedDialItem[] = [
 ];
 
 export interface DashboardGreeting {
-  greeting: string;
-  subline: string;
+  greetingKey: DesktopTranslationKey;
+  sublineKey: DesktopTranslationKey;
 }
 
-export function getDashboardGreeting(date: Date = new Date(), botName = 'Nova'): DashboardGreeting {
+export function getDashboardGreeting(date: Date = new Date()): DashboardGreeting {
   const hours = date.getHours();
   if (hours >= 5 && hours < 12) {
-    return { greeting: 'Guten Morgen', subline: `Bereit für den Tag? Womit kann ${botName} helfen?` };
+    return { greetingKey: 'browser.startPage.greeting.morning', sublineKey: 'browser.startPage.greeting.morningSubline' };
   }
   if (hours >= 12 && hours < 18) {
-    return { greeting: 'Guten Tag', subline: 'Was recherchieren wir als Nächstes?' };
+    return { greetingKey: 'browser.startPage.greeting.afternoon', sublineKey: 'browser.startPage.greeting.afternoonSubline' };
   }
   if (hours >= 18 && hours < 23) {
-    return { greeting: 'Guten Abend', subline: 'Den Tag abschließen oder noch ein Thema vertiefen?' };
+    return { greetingKey: 'browser.startPage.greeting.evening', sublineKey: 'browser.startPage.greeting.eveningSubline' };
   }
-  return { greeting: 'Gute Nacht', subline: `Nachtsession aktiv. ${botName} steht bereit.` };
+  return { greetingKey: 'browser.startPage.greeting.night', sublineKey: 'browser.startPage.greeting.nightSubline' };
 }
 
 export function formatDashboardTime(date: Date = new Date()): string {
@@ -85,18 +87,18 @@ export function formatDashboardDate(date: Date = new Date(), locale: string = 'd
 
 export interface DashboardQuickAction {
   id: string;
-  label: string;
+  labelKey: DesktopTranslationKey;
   prompt: string;
   icon: string;
   type: 'prompt' | 'command' | 'action';
 }
 
 export const DASHBOARD_QUICK_ACTIONS: DashboardQuickAction[] = [
-  { id: 'research', label: 'Recherche starten', prompt: 'Recherchiere die wichtigsten Fakten zu: ', icon: '✨', type: 'prompt' },
-  { id: 'tabs-summary', label: 'Tabs zusammenfassen', prompt: '@tabs Fasse alle offenen Tabs in einer strukturierten Tabelle zusammen', icon: '⚡', type: 'prompt' },
-  { id: 'sort-tabs', label: 'Tabs sortieren', prompt: 'sortiere tabs nach domain', icon: '🧹', type: 'command' },
-  { id: 'doctor', label: 'System-Diagnose', prompt: 'sidekick doctor', icon: '🛡️', type: 'command' },
-  { id: 'palette', label: 'Befehlspalette', prompt: 'palette', icon: '⌘K', type: 'action' }
+  { id: 'research', labelKey: 'browser.startPage.actions.research', prompt: 'Recherchiere die wichtigsten Fakten zu: ', icon: '✨', type: 'prompt' },
+  { id: 'tabs-summary', labelKey: 'browser.startPage.actions.tabsSummary', prompt: '@tabs Fasse alle offenen Tabs in einer strukturierten Tabelle zusammen', icon: '⚡', type: 'prompt' },
+  { id: 'sort-tabs', labelKey: 'browser.startPage.actions.sortTabs', prompt: 'sortiere tabs nach domain', icon: '🧹', type: 'command' },
+  { id: 'doctor', labelKey: 'browser.startPage.actions.diagnostics', prompt: 'sidekick doctor', icon: '🛡️', type: 'command' },
+  { id: 'palette', labelKey: 'browser.startPage.actions.commandPalette', prompt: 'palette', icon: '⌘K', type: 'action' }
 ];
 
 export interface NativeBrowserStartPageProps {
@@ -126,6 +128,7 @@ export function NativeBrowserStartPage({
   onSelectSpace,
   onAddSpace
 }: NativeBrowserStartPageProps): JSX.Element {
+  const { locale, t } = useDesktopI18n();
   const [query, setQuery] = useState('');
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
@@ -167,9 +170,10 @@ export function NativeBrowserStartPage({
   }, []);
 
   const effectiveBotName = botName.trim() || 'Nova';
-  const greeting = useMemo(() => getDashboardGreeting(currentTime, effectiveBotName), [currentTime, effectiveBotName]);
+  const greeting = useMemo(() => getDashboardGreeting(currentTime), [currentTime]);
   const timeString = useMemo(() => formatDashboardTime(currentTime), [currentTime]);
-  const dateString = useMemo(() => formatDashboardDate(currentTime), [currentTime]);
+  const dateLocale = locale === 'en' ? 'en-US' : locale === 'pt-BR' ? 'pt-BR' : `${locale}-${({ de: 'DE', es: 'ES', fr: 'FR', it: 'IT', ru: 'RU' } as const)[locale]}`;
+  const dateString = useMemo(() => formatDashboardDate(currentTime, dateLocale), [currentTime, dateLocale]);
 
   const favorites = useMemo(() => bookmarks.slice(0, 8), [bookmarks]);
   const mostVisited = useMemo(() => visits.slice(0, 8), [visits]);
@@ -216,15 +220,15 @@ export function NativeBrowserStartPage({
           <img src={brandAssets.logo} alt="lastbrowser" className="startpage-logo" />
           <div className="startpage-welcome-text">
             <div className="startpage-time-row">
-              <span className="startpage-clock" aria-label="Uhrzeit">
+              <span className="startpage-clock" aria-label={t('browser.startPage.clockLabel')}>
                 {timeString}
               </span>
               <span className="startpage-date">
                 {dateString}
               </span>
             </div>
-            <h1 className="startpage-greeting">{greeting.greeting}</h1>
-            <p className="startpage-subline">{greeting.subline}</p>
+            <h1 className="startpage-greeting">{t(greeting.greetingKey)}</h1>
+            <p className="startpage-subline">{t(greeting.sublineKey, { botName: effectiveBotName })}</p>
           </div>
         </div>
 
@@ -237,10 +241,10 @@ export function NativeBrowserStartPage({
             type="button"
             className="startpage-palette-trigger"
             onClick={() => handleQuickAction(DASHBOARD_QUICK_ACTIONS[4])}
-            title="Befehlspalette öffnen (Strg+K)"
+            title={t('browser.startPage.openCommandPalette')}
           >
             <Command size={13} />
-            <span>Strg+K Palette</span>
+            <span>{t('browser.startPage.commandPalette')}</span>
           </button>
         </div>
       </div>
@@ -250,7 +254,7 @@ export function NativeBrowserStartPage({
         <Search size={18} />
         <input
           value={query}
-          placeholder="Web-Adresse eingeben oder Frage an Nova richten..."
+          placeholder={t('browser.startPage.searchPlaceholder', { botName: effectiveBotName })}
           onChange={(event) => setQuery(event.target.value)}
           data-testid="dashboard-search-input"
         />
@@ -260,23 +264,23 @@ export function NativeBrowserStartPage({
             className="secondary-action compact startpage-ask-ai-btn"
             disabled={!query.trim()}
             onClick={handleAskAi}
-            title="Frage an Nova AI senden"
+            title={t('browser.startPage.askNovaTitle')}
           >
             <Bot size={15} />
-            <span>Frag Nova</span>
+            <span>{t('browser.startPage.askNova', { botName: effectiveBotName })}</span>
           </button>
           <button type="submit" className="primary-action compact" disabled={!query.trim()}>
             <Globe2 size={15} />
-            <span>Öffnen</span>
+            <span>{t('browser.startPage.open')}</span>
           </button>
         </div>
       </form>
 
       {/* Quick Action Chips */}
-      <div className="startpage-quick-chips" aria-label="Nova Schnellaktionen">
+      <div className="startpage-quick-chips" aria-label={t('browser.startPage.quickActions')}>
         <span className="quick-chips-label">
           <Wand2 size={13} />
-          <span>Schnellaktionen:</span>
+          <span>{t('browser.startPage.quickActions')}:</span>
         </span>
         {DASHBOARD_QUICK_ACTIONS.map((action) => (
           <button
@@ -287,7 +291,7 @@ export function NativeBrowserStartPage({
             title={action.prompt}
           >
             <span className="chip-icon">{action.icon}</span>
-            <span className="chip-label">{action.label}</span>
+            <span className="chip-label">{t(action.labelKey)}</span>
           </button>
         ))}
       </div>
@@ -300,23 +304,23 @@ export function NativeBrowserStartPage({
               <Layers size={16} />
             </div>
             <div>
-              <span className="eyebrow">Isolierte Arbeitsbereiche</span>
-              <h2 className="startpage-section-title">Spaces & Sessions</h2>
+              <span className="eyebrow">{t('browser.startPage.isolatedWorkspaces')}</span>
+              <h2 className="startpage-section-title">{t('browser.startPage.spacesSessions')}</h2>
             </div>
           </div>
           <div className="startpage-section-actions">
-            <span className="startpage-spaces-isolation-hint" title="Jeder Space speichert separate Cookies, Logins und Tabs">
+            <span className="startpage-spaces-isolation-hint" title={t('browser.startPage.spaceIsolationTooltip')}>
               <ShieldCheck size={13} />
-              <span>Getrennte Logins pro Space</span>
+              <span>{t('browser.startPage.separateLogins')}</span>
             </span>
             <button
               type="button"
               className="startpage-add-space-btn"
               onClick={() => setIsCreatingSpace(true)}
-              title="Neuen Space mit eigener Session erstellen"
+              title={t('browser.startPage.createSpaceTitle')}
             >
               <Plus size={14} />
-              <span>Neuer Space</span>
+              <span>{t('browser.startPage.newSpace')}</span>
             </button>
           </div>
         </div>
@@ -458,8 +462,8 @@ export function NativeBrowserStartPage({
         <div className="speed-dial-head">
           <div className="speed-dial-head-title">
             <Compass size={15} />
-            <span className="eyebrow">Speed Dial</span>
-            <h2>Quick Launch</h2>
+            <span className="eyebrow">{t('browser.startPage.speedDial')}</span>
+            <h2>{t('browser.startPage.quickLaunch')}</h2>
           </div>
         </div>
         <div className="speed-dial-grid">

@@ -41,7 +41,8 @@ import {
   Upload,
   Volume2,
   VolumeX,
-  X
+  X,
+  ZoomIn
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import type { BrowserBookmark } from '../bookmarks.js';
@@ -51,6 +52,7 @@ import type { BrowserProfile } from '../profiles.js';
 import { type SpaceSummary, spaceDisplayName } from '../shell-state.js';
 import type { BrowserTab } from '../tabs.js';
 import { prepareSnapTabDrag } from '../types/snap-layouts.js';
+import { useDesktopI18n } from '../i18n.js';
 
 export type UpdateStatus = Awaited<ReturnType<typeof window.lastbrowser.updates.status>>;
 
@@ -696,7 +698,7 @@ export function WindowTitlebar({
                   <Star size={11} fill={tab.pinned ? 'currentColor' : 'none'} />
                 </button>
                 {tab.incognito && (
-                  <EyeOff size={11} className="tab-incognito-icon" title="Private tab" />
+                  <EyeOff size={11} className="tab-incognito-icon" aria-label="Private tab" />
                 )}
                 {tab.isLoading ? (
                   <Loader2 size={12} className="tab-spinner" />
@@ -795,6 +797,10 @@ export type ModernTitlebarProps = {
   zenRevealed?: boolean;
   /** Callback when Zen titlebar visibility changes. */
   onZenRevealChange?: (revealed: boolean) => void;
+  /** Vision-Impaired 2.0 (§4.4): whether the cursor companion loupe is on. */
+  loupeActive?: boolean;
+  /** Vision-Impaired 2.0 (§4.4): toggle the cursor companion loupe (Ctrl+Shift+L). */
+  onToggleLoupe?: () => void;
 };
 
 export function ModernTitlebar({
@@ -828,8 +834,11 @@ export function ModernTitlebar({
   botName = 'Nova',
   zenMode,
   zenRevealed,
-  onZenRevealChange
+  onZenRevealChange,
+  loupeActive,
+  onToggleLoupe
 }: ModernTitlebarProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const { isMaximized, handleDoubleClick, handleMouseDown } = useWindowDrag();
   const isZen = zenMode ?? sidebarMode === 'hidden';
   const [internalZenHover, setInternalZenHover] = useState(false);
@@ -932,12 +941,12 @@ export function ModernTitlebar({
           <button
             type="button"
             className="titlebar-summarize-btn"
-            title="Seite mit KI zusammenfassen"
-            aria-label="Seite mit KI zusammenfassen"
+            title={t('browser.actions.summarize')}
+            aria-label={t('browser.actions.summarize')}
             onClick={onTriggerSummarize}
           >
             <Sparkles size={13} className="summarize-btn-sparkles" />
-            <span className="summarize-btn-label">Summarize</span>
+            <span className="summarize-btn-label">{t('browser.actions.summarize')}</span>
           </button>
         )}
 
@@ -995,13 +1004,26 @@ export function ModernTitlebar({
 
         <button
           type="button"
-          className="titlebar-tool-btn find-btn"
+          className={`titlebar-tool-btn find-btn ${loupeActive ? 'loupe-active' : ''}`}
           title="Find in page (Ctrl+F)"
           aria-label="Find in page"
           onClick={onToggleFind}
         >
           <Search size={15} />
         </button>
+
+        {onToggleLoupe && (
+          <button
+            type="button"
+            className={`titlebar-tool-btn loupe-toggle-btn ${loupeActive ? 'active' : ''}`}
+            title="Bildschirmlupe / Maus-Begleitlupe (Ctrl+Shift+L)"
+            aria-label="Toggle cursor loupe"
+            aria-pressed={Boolean(loupeActive)}
+            onClick={onToggleLoupe}
+          >
+            <ZoomIn size={15} />
+          </button>
+        )}
 
         <button
           type="button"

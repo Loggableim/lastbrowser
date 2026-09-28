@@ -329,6 +329,83 @@ describe('extensions engine', () => {
       expect(incognitoAllowed.allowInIncognito).toBe(true);
     });
 
+    it('does not load newly installed or re-enabled extensions into incognito sessions without opt-in', async () => {
+      const extDir = path.join(tempDir, 'incognito-gate-test');
+      mkdirSync(extDir, { recursive: true });
+      writeFileSync(
+        path.join(extDir, 'manifest.json'),
+        JSON.stringify({ name: 'Incognito Gate Tool', version: '1.0.0', manifest_version: 3 })
+      );
+
+      const persistentSession = {
+        ...fakeSession,
+        isInMemory: vi.fn(() => false)
+      };
+      const incognitoSession = {
+        ...fakeSession,
+        loadExtension: vi.fn(async () => ({ id: 'incognito-extension', name: 'Incognito Extension' })),
+        removeExtension: vi.fn(),
+        isInMemory: vi.fn(() => true)
+      };
+      const manager = new ExtensionManager(tempDir, () => [persistentSession, incognitoSession] as never);
+      await manager.init();
+
+      const record = await manager.installFromDirectory(extDir);
+      expect(persistentSession.loadExtension).toHaveBeenCalledTimes(1);
+      expect(incognitoSession.loadExtension).not.toHaveBeenCalled();
+
+      await manager.toggle(record.id, false);
+      persistentSession.loadExtension.mockClear();
+      persistentSession.removeExtension.mockClear();
+      incognitoSession.loadExtension.mockClear();
+      incognitoSession.removeExtension.mockClear();
+      await manager.toggle(record.id, true);
+      expect(persistentSession.loadExtension).toHaveBeenCalledTimes(1);
+      expect(incognitoSession.loadExtension).not.toHaveBeenCalled();
+
+      await manager.toggleIncognito(record.id, true);
+      expect(incognitoSession.loadExtension).toHaveBeenCalledTimes(1);
+      expect(persistentSession.loadExtension).toHaveBeenCalledTimes(1);
+
+      await manager.toggleIncognito(record.id, false);
+      expect(incognitoSession.removeExtension).toHaveBeenCalledWith(record.id);
+      expect(persistentSession.removeExtension).not.toHaveBeenCalledWith(record.id);
+    });
+
+    it('applies the same incognito opt-in gate to Chrome Web Store installs', async () => {
+      const persistentSession = {
+        ...fakeSession,
+        isInMemory: vi.fn(() => false)
+      };
+      const incognitoSession = {
+        ...fakeSession,
+        loadExtension: vi.fn(async () => ({ id: 'incognito-extension', name: 'Incognito Extension' })),
+        isInMemory: vi.fn(() => true)
+      };
+      const manager = new ExtensionManager(tempDir, () => [persistentSession, incognitoSession] as never);
+      await manager.init();
+
+      const zip = createTestZip({
+        'manifest.json': JSON.stringify({ name: 'CWS Incognito Gate', version: '1.0.0', manifest_version: 3 })
+      });
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        arrayBuffer: async () => zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength)
+      }));
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const record = await manager.installFromCws('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+        expect(record.allowInIncognito).toBe(false);
+        expect(persistentSession.loadExtension).toHaveBeenCalledTimes(1);
+        expect(incognitoSession.loadExtension).not.toHaveBeenCalled();
+
+        await manager.toggleIncognito(record.id, true);
+        expect(incognitoSession.loadExtension).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('removes extension from sessions, deletes files, and clears registry', async () => {
       const extDir = path.join(tempDir, 'remove-test');
       mkdirSync(extDir, { recursive: true });

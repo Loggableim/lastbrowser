@@ -37,7 +37,7 @@ import {
 import { GeminiAccountsPanel } from './GeminiAccountsPanel.js';
 import { TeamworkSettingsPanel } from './TeamworkSettingsPanel.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
-import { cloudProviderOptions, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
+import { cloudProviderOptions, openProviderOAuthUrl, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
 import { providerPresentation } from '../provider-presentation.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
@@ -45,6 +45,7 @@ import { searchEngines } from '../tabs.js';
 import { computeAccentTokens } from '../App.js';
 import { type ExtensionRecord, type ExtensionPreset } from '../bridge.js';
 import { useDesktopI18n } from '../i18n.js';
+import type { DoctorReport } from '../shell-state.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
 import {
   usePanelStore,
@@ -57,6 +58,8 @@ import {
   type NovaDockAnimation,
   type NovaDockPreset
 } from '../stores/usePanelStore.js';
+import { DEFAULT_VISION_IMPAIRED_CONFIG } from '../stores/a11y-config.js';
+import { AccessibilityTestCard } from '../components/AccessibilityTestCard.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -114,7 +117,30 @@ function normalizeOpenRouterModels(value: unknown): OpenRouterModelOption[] {
   });
 }
 
-export function normalizeAppstoreRecord(app: AnyRecord): AnyRecord {
+type NormalizedAppstoreRecord = {
+  id: string;
+  key: string;
+  name: string;
+  category: string;
+  developer: string;
+  description: string;
+  fullDescription: string;
+  version: string;
+  size: string;
+  icon: string;
+  tags: string[];
+  screenshots: string[];
+  installed: boolean;
+  updateAvailable: boolean;
+  settingsUrl: string;
+  featured: boolean;
+  pinned: boolean;
+  recommended: boolean;
+  status: AnyRecord | null;
+  [field: string]: unknown;
+};
+
+export function normalizeAppstoreRecord(app: AnyRecord): NormalizedAppstoreRecord {
   const installed = isRecord(app.status) ? app.status : {};
   return {
     ...app,
@@ -133,6 +159,9 @@ export function normalizeAppstoreRecord(app: AnyRecord): AnyRecord {
     installed: Boolean(installed.installed),
     updateAvailable: Boolean(app.update_available),
     settingsUrl: text(app.settings_url || ''),
+    featured: Boolean(app.featured),
+    pinned: Boolean(app.pinned),
+    recommended: Boolean(app.recommended),
     status: isRecord(app.status) ? app.status : null
   };
 }
@@ -364,8 +393,7 @@ export function applyDesktopAppearancePreview(
   fontSizeValue: string = 'default',
   messageLayoutValue: string = 'bubbles',
   syntaxThemeValue: string = '',
-  accentColorValue: string = '',
-  defaultZoomValue: number = 100
+  accentColorValue: string = ''
 ): void {
   if (typeof document === 'undefined') return;
   const theme = normalizeAppearanceTheme(themeValue);
@@ -392,11 +420,6 @@ export function applyDesktopAppearancePreview(
   root.classList.toggle('theme-vision-impaired', resolvedTheme === 'vision-impaired');
   root.classList.toggle('theme-system', theme === 'system');
   root.style.colorScheme = resolvedTheme === 'light' ? 'light' : 'dark';
-
-  // UI page zoom scales the whole browser chrome proportionally (80%–150%).
-  // Webview content zoom stays governed by the separate zoomFactor logic in App.tsx.
-  const zoomPercent = Math.min(150, Math.max(80, Math.round(Number(defaultZoomValue) || 100)));
-  root.style.zoom = String(zoomPercent / 100);
 
   if ((skin === 'custom' || accentColor) && accentColor.startsWith('#')) {
     const tokens = computeAccentTokens(accentColor);
@@ -709,7 +732,7 @@ export function NativeAppstoreMain({
   const appsState = useApiState(() => window.lastbrowser.sidekick.listAppstore({}), [ready], ready);
   const updates = useApiState(() => window.lastbrowser.sidekick.getAppstoreUpdates(), [ready], ready);
   const sdk = useApiState(() => window.lastbrowser.sidekick.getAppstoreSdk(), [ready], ready);
-  const apps = useMemo(() => arrayFrom(appsState.data, ['apps', 'items', 'packages']).map(normalizeAppstoreRecord), [appsState.data]);
+  const apps = useMemo<NormalizedAppstoreRecord[]>(() => arrayFrom(appsState.data, ['apps', 'items', 'packages']).map(normalizeAppstoreRecord), [appsState.data]);
 
   const categories = useMemo(() => {
     const buckets = new Map<string, { key: string; label: string; count: number }>();
@@ -1812,7 +1835,222 @@ export function ExtensionsSettingsSection(): JSX.Element {
   );
 }
 
-export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void }): JSX.Element {
+/**
+ * Vision-Impaired Mode 2.0 settings card (docs/visionimpaired.md §11 Phase 1).
+ * Every control subscribes live to the store (no getState() bindings — the
+ * phase13 contract test forbids them for a11y* fields).
+ */
+function VisionImpairedSettingsCard(): JSX.Element {
+  const { t } = useDesktopI18n();
+  const vi = usePanelStore((s) => s.visionImpaired);
+  const setVisionImpaired = usePanelStore((s) => s.setVisionImpaired);
+
+  return (
+    <SettingsCard
+      title={t('settings.panels.appearance.viModeTitle')}
+      description={t('settings.panels.appearance.viModeDescription')}
+      action={
+        <button
+          type="button"
+          className="secondary-action compact"
+          onClick={() => setVisionImpaired({ ...DEFAULT_VISION_IMPAIRED_CONFIG })}
+        >
+          {t('settings.panels.appearance.viReset')}
+        </button>
+      }
+    >
+      <div className="settings-field-grid">
+        <SettingsToggle
+          label={t('settings.panels.appearance.viEnable')}
+          description={t('settings.panels.appearance.viEnableDescription')}
+          checked={vi.enabled}
+          onChange={(val) => setVisionImpaired({ enabled: val })}
+        />
+        <SettingsField label={t('settings.panels.appearance.viFont')} description={t('settings.panels.appearance.viFontDescription')}>
+          <select
+            value={vi.fontFamily}
+            onChange={(e) => setVisionImpaired({ fontFamily: e.target.value as typeof vi.fontFamily })}
+            aria-label={t('settings.panels.appearance.viFont')}
+          >
+            <option value="system">{t('settings.panels.appearance.viFontSystem')}</option>
+            <option value="atkinson">{t('settings.panels.appearance.viFontAtkinson')}</option>
+            <option value="lexend">{t('settings.panels.appearance.viFontLexend')}</option>
+          </select>
+        </SettingsField>
+        <SettingsToggle
+          label={t('settings.panels.appearance.viEnhancedSpacing')}
+          description={t('settings.panels.appearance.viEnhancedSpacingDescription')}
+          checked={vi.enhancedSpacing}
+          onChange={(val) => setVisionImpaired({ enhancedSpacing: val })}
+        />
+        <SettingsToggle
+          label={t('settings.panels.appearance.viBoldWeight')}
+          description={t('settings.panels.appearance.viBoldWeightDescription')}
+          checked={vi.boldWeight}
+          onChange={(val) => setVisionImpaired({ boldWeight: val })}
+        />
+        <SettingsToggle
+          label={t('settings.panels.appearance.viNoEllipsis')}
+          description={t('settings.panels.appearance.viNoEllipsisDescription')}
+          checked={vi.noEllipsisWrap}
+          onChange={(val) => setVisionImpaired({ noEllipsisWrap: val })}
+        />
+        <SettingsToggle
+          label={t('settings.panels.appearance.viBionicReading')}
+          description={t('settings.panels.appearance.viBionicReadingDescription')}
+          checked={vi.bionicReading}
+          onChange={(val) => setVisionImpaired({ bionicReading: val })}
+        />
+        <SettingsToggle
+          label={t('settings.panels.appearance.viSmartInvert')}
+          description={t('settings.panels.appearance.viSmartInvertDescription')}
+          checked={vi.smartInvertWebview}
+          onChange={(val) => setVisionImpaired({ smartInvertWebview: val })}
+        />
+        <SettingsToggle
+          label={t('settings.panels.appearance.viAntiHalation')}
+          description={t('settings.panels.appearance.viAntiHalationDescription')}
+          checked={vi.antiHalation}
+          onChange={(val) => setVisionImpaired({ antiHalation: val })}
+        />
+        <SettingsToggle
+          label={t('settings.panels.appearance.viSoftContrast')}
+          description={t('settings.panels.appearance.viSoftContrastDescription')}
+          checked={vi.softContrastText}
+          onChange={(val) => setVisionImpaired({ softContrastText: val })}
+        />
+        <SettingsToggle
+          label={t('settings.panels.appearance.viReduceMotion')}
+          description={t('settings.panels.appearance.viReduceMotionDescription')}
+          checked={vi.reduceMotionStrict}
+          onChange={(val) => setVisionImpaired({ reduceMotionStrict: val })}
+        />
+        <SettingsField label={t('settings.panels.appearance.viMinTarget')} description={t('settings.panels.appearance.viMinTargetDescription')}>
+          <select
+            value={String(vi.minClickTargetSize)}
+            onChange={(e) => setVisionImpaired({ minClickTargetSize: Number(e.target.value) as 48 | 56 | 64 })}
+            aria-label={t('settings.panels.appearance.viMinTarget')}
+          >
+            <option value="48">48px</option>
+            <option value="56">56px</option>
+            <option value="64">64px</option>
+          </select>
+        </SettingsField>
+        <SettingsField label={t('settings.panels.appearance.viPalette')}>
+          <select
+            value={vi.palette}
+            onChange={(e) => setVisionImpaired({ palette: e.target.value as typeof vi.palette })}
+            aria-label={t('settings.panels.appearance.viPalette')}
+          >
+            <option value="ambra-matte">{t('settings.panels.appearance.viPaletteAmbra')}</option>
+            <option value="onyx-cyan">{t('settings.panels.appearance.viPaletteOnyx')}</option>
+            <option value="ivory-navy">{t('settings.panels.appearance.viPaletteIvory')}</option>
+            <option value="monochrom-high">{t('settings.panels.appearance.viPaletteMonochrom')}</option>
+          </select>
+        </SettingsField>
+        <SettingsField label={t('settings.panels.appearance.viCvdFilter')}>
+          <select
+            value={vi.colorVisionFilter}
+            onChange={(e) => setVisionImpaired({ colorVisionFilter: e.target.value as typeof vi.colorVisionFilter })}
+            aria-label={t('settings.panels.appearance.viCvdFilter')}
+          >
+            <option value="none">{t('settings.panels.appearance.viCvdNone')}</option>
+            <option value="protanopia">{t('settings.panels.appearance.viCvdProtanopia')}</option>
+            <option value="deuteranopia">{t('settings.panels.appearance.viCvdDeuteranopia')}</option>
+            <option value="tritanopia">{t('settings.panels.appearance.viCvdTritanopia')}</option>
+            <option value="achromatopsia">{t('settings.panels.appearance.viCvdAchromatopsia')}</option>
+          </select>
+        </SettingsField>
+        <SettingsField label={t('settings.panels.appearance.viCursorSize')}>
+          <select
+            value={vi.cursorSize}
+            onChange={(e) => setVisionImpaired({ cursorSize: e.target.value as typeof vi.cursorSize })}
+            aria-label={t('settings.panels.appearance.viCursorSize')}
+          >
+            <option value="normal">{t('settings.panels.appearance.viCursorNormal')}</option>
+            <option value="large">{t('settings.panels.appearance.viCursorLarge')}</option>
+            <option value="huge">{t('settings.panels.appearance.viCursorHuge')}</option>
+            <option value="mega">{t('settings.panels.appearance.viCursorMega')}</option>
+          </select>
+        </SettingsField>
+        <SettingsToggle
+          label={t('settings.panels.appearance.viShakeToLocate')}
+          description={t('settings.panels.appearance.viShakeToLocateDescription')}
+          checked={vi.shakeToLocate}
+          onChange={(val) => setVisionImpaired({ shakeToLocate: val })}
+        />
+        <SettingsToggle
+          label={t('settings.panels.appearance.viLoupe')}
+          description={t('settings.panels.appearance.viLoupeDescription')}
+          checked={vi.cursorLoupeEnabled}
+          onChange={(val) => setVisionImpaired({ cursorLoupeEnabled: val })}
+        />
+        <SettingsField label={t('settings.panels.appearance.viLoupePosition')}>
+          <select
+            value={vi.cursorLoupePosition}
+            onChange={(e) => setVisionImpaired({ cursorLoupePosition: e.target.value as typeof vi.cursorLoupePosition })}
+            aria-label={t('settings.panels.appearance.viLoupePosition')}
+          >
+            <option value="top">{t('settings.panels.appearance.viLoupePosTop')}</option>
+            <option value="bottom">{t('settings.panels.appearance.viLoupePosBottom')}</option>
+            <option value="left">{t('settings.panels.appearance.viLoupePosLeft')}</option>
+            <option value="right">{t('settings.panels.appearance.viLoupePosRight')}</option>
+          </select>
+        </SettingsField>
+        <SettingsField label={t('settings.panels.appearance.viLoupeSize')}>
+          <select
+            value={String(vi.cursorLoupeSize)}
+            onChange={(e) => setVisionImpaired({ cursorLoupeSize: Number(e.target.value) as 120 | 180 | 240 })}
+            aria-label={t('settings.panels.appearance.viLoupeSize')}
+          >
+            <option value="120">120px</option>
+            <option value="180">180px</option>
+            <option value="240">240px</option>
+          </select>
+        </SettingsField>
+        <SettingsField label={t('settings.panels.appearance.viLoupeFactor')}>
+          <select
+            value={String(vi.cursorLoupeFactor)}
+            onChange={(e) => setVisionImpaired({ cursorLoupeFactor: Number(e.target.value) as 1.5 | 2.0 | 3.0 | 4.0 })}
+            aria-label={t('settings.panels.appearance.viLoupeFactor')}
+          >
+            <option value="1.5">1.5×</option>
+            <option value="2">2.0×</option>
+            <option value="3">3.0×</option>
+            <option value="4">4.0×</option>
+          </select>
+        </SettingsField>
+        <SettingsToggle
+          label={t('settings.panels.appearance.viSuperTabs')}
+          description={t('settings.panels.appearance.viSuperTabsDescription')}
+          checked={vi.superSizedVerticalTabs}
+          onChange={(val) => setVisionImpaired({ superSizedVerticalTabs: val })}
+        />
+        <SettingsToggle
+          label={t('settings.panels.appearance.viEnlargedTopBar')}
+          description={t('settings.panels.appearance.viEnlargedTopBarDescription')}
+          checked={vi.enlargedTopBar}
+          onChange={(val) => setVisionImpaired({ enlargedTopBar: val })}
+        />
+        <SettingsToggle
+          label={t('settings.panels.appearance.viSplitMagnifier')}
+          description={t('settings.panels.appearance.viSplitMagnifierDescription')}
+          checked={vi.splitScreenMagnifier}
+          onChange={(val) => setVisionImpaired({ splitScreenMagnifier: val })}
+        />
+        <SettingsToggle
+          label={t('settings.panels.appearance.viAudioChime')}
+          description={t('settings.panels.appearance.viAudioChimeDescription')}
+          checked={vi.copilotAudioChime}
+          onChange={(val) => setVisionImpaired({ copilotAudioChime: val })}
+        />
+      </div>
+      <AccessibilityTestCard />
+    </SettingsCard>
+  );
+}
+
+export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
@@ -1820,8 +2058,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const authState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/auth/status' }), [ready], ready);
   const pluginsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/plugins' }), [ready], ready);
   const updatesState = useApiState(() => window.lastbrowser.updates.status(), [], true);
-  const sidekickUpdateState = useApiState(() => window.lastbrowser.sidekickUpdate.status(), [], true);
-  const [sidekickUpdateBusy, setSidekickUpdateBusy] = useState(false);
   const [section, setSection] = useState<SettingsSectionId>('conversation');
   const [draft, setDraft] = useState<AnyRecord>({});
   const [passwordDraft, setPasswordDraft] = useState('');
@@ -1842,6 +2078,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const [openRouterLoading, setOpenRouterLoading] = useState(false);
   const [openRouterSaving, setOpenRouterSaving] = useState(false);
   const [openRouterError, setOpenRouterError] = useState('');
+  const [codexConnect, setCodexConnect] = useState<{
+    status: 'starting' | 'pending' | 'success' | 'error' | 'expired' | 'cancelled';
+    flowId?: string;
+    userCode?: string;
+    message: string;
+    pollIntervalSeconds?: number;
+    expiresAt?: number;
+  } | null>(null);
 
 
   const [zenExitMode, setZenExitModeState] = useState<ZenExitDefaultMode>(() => {
@@ -1896,7 +2140,16 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     }
   };
 
-  const settings = isRecord(settingsState.data?.settings) ? settingsState.data.settings : (settingsState.data || {});
+  const settings = isRecord(settingsState.data?.settings)
+    ? settingsState.data.settings
+    : (settingsState.data || desktopSettings || {});
+
+  useEffect(() => {
+    if (!desktopSettings || !settingsState.error) return;
+    void settingsState.refresh();
+  }, [desktopSettings, settingsState.error, settingsState.refresh]);
+
+  const autoUpdateChecksEnabled = settingsBoolean(draft.check_for_updates ?? settings.check_for_updates, true);
   const authEnabled = settingsBoolean(authState.data?.auth_enabled, false);
   const loggedIn = settingsBoolean(authState.data?.logged_in, false);
   const passwordEnvLocked = settingsBoolean(settings.password_env_var, false);
@@ -1909,15 +2162,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const updateCurrentVersion = settingsText(updatesState.data?.currentVersion, '');
   const updateAvailableVersion = settingsText(updatesState.data?.availableVersion, '');
   const updateMessage = settingsText(updatesState.data?.message, '');
-  const sidekickUpdateVersion = settingsText(sidekickUpdateState.data?.currentVersion, '');
-  const sidekickUpdateSource = settingsText(sidekickUpdateState.data?.source, 'bundled');
-  const sidekickUpdateMessage = settingsText(sidekickUpdateState.data?.message, '');
-  const sidekickUpdateStatus = settingsText(sidekickUpdateState.data?.state, 'idle');
-  const sidekickUpdateAvailable = sidekickUpdateStatus === 'available';
   const pluginList = arrayFrom(pluginsState.data, ['plugins', 'items']);
   const providerOptions = useMemo(() => cloudProviderOptions(onboardingStatus), [onboardingStatus]);
   const fallbackState = useApiState(() => window.lastbrowser.sidekick.getFallbackModel(), [ready], ready);
-  const fallbackModel = settingsText(fallbackState.data?.fallback_model?.model, '');
+  const fallbackModelConfig = isRecord(fallbackState.data?.fallback_model) ? fallbackState.data.fallback_model : {};
+  const fallbackModel = settingsText(fallbackModelConfig.model, '');
 
   useEffect(() => {
     const normalized = activeContextItem.trim().toLowerCase();
@@ -1930,7 +2179,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     setDraft(cleanSettingsPayload(settings));
     setPasswordDraft('');
     setDirty(false);
-  }, [settingsState.data, settingsState.loading]);
+  }, [settingsState.data, settingsState.loading, desktopSettings]);
 
   useEffect(() => {
     applyDesktopAppearancePreview(
@@ -1939,12 +2188,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       settingsText(draft.font_size ?? settings.font_size, 'default'),
       settingsText(draft.message_layout ?? settings.message_layout, 'bubbles'),
       settingsText(draft.syntax_theme ?? settings.syntax_theme, ''),
-      settingsText(draft.accent_color ?? settings.accent_color, ''),
-      Number(draft.default_zoom ?? settings.default_zoom) || 100
+      settingsText(draft.accent_color ?? settings.accent_color, '')
     );
   }, [
-    draft.skin, draft.theme, draft.font_size, draft.message_layout, draft.syntax_theme, draft.accent_color, draft.default_zoom,
-    settings.skin, settings.theme, settings.font_size, settings.message_layout, settings.syntax_theme, settings.accent_color, settings.default_zoom
+    draft.skin, draft.theme, draft.font_size, draft.message_layout, draft.syntax_theme, draft.accent_color,
+    settings.skin, settings.theme, settings.font_size, settings.message_layout, settings.syntax_theme, settings.accent_color
   ]);
 
   const autoSaveTimerRef = useRef<number | null>(null);
@@ -1994,6 +2242,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   }, [settings, ready]);
 
   function updateDraftField(key: string, value: unknown, autoPersist = true): void {
+    window.dispatchEvent(new Event('lastbrowser:settings-draft-changed'));
     setDraft((current) => {
       const next ={ ...current, [key]: value };
       if (autoPersist) {
@@ -2113,35 +2362,53 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     }
   }
 
-  async function checkSidekickUpdate(): Promise<void> {
-    setSidekickUpdateBusy(true);
-    try {
-      await window.lastbrowser.sidekickUpdate.check();
-      await sidekickUpdateState.refresh();
-    } catch (error) {
-      showToast(`Sidekick check failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setSidekickUpdateBusy(false);
-    }
-  }
-
-  async function applySidekickUpdate(): Promise<void> {
-    setSidekickUpdateBusy(true);
-    try {
-      const result = await window.lastbrowser.sidekickUpdate.apply();
-      await sidekickUpdateState.refresh();
-      const state = settingsText((result as AnyRecord)?.state, '');
-      if (state === 'updated') {
-        showToast('Sidekick updated — the runtime restarted with the new version.');
-      } else {
-        showToast(settingsText((result as AnyRecord)?.message, 'Sidekick update finished.'));
+  useEffect(() => {
+    if (codexConnect?.status !== 'pending' || !codexConnect.flowId) return;
+    let cancelled = false;
+    let timer: number;
+    let transientFailures = 0;
+    const flowId = codexConnect.flowId;
+    const expiresAt = codexConnect.expiresAt;
+    const poll = async (): Promise<void> => {
+      if (expiresAt && Date.now() >= expiresAt * 1000) {
+        setCodexConnect((current) => current?.flowId === flowId
+          ? { ...current, status: 'expired', message: t('settings.panels.providers.codexExpired') }
+          : current);
+        return;
       }
-    } catch (error) {
-      showToast(`Sidekick update failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setSidekickUpdateBusy(false);
-    }
-  }
+      try {
+        const response = await window.lastbrowser.sidekick.pollOAuth(flowId);
+        if (cancelled) return;
+        if (response.status === 'success') {
+          setCodexConnect((current) => current?.flowId === flowId
+            ? { ...current, status: 'success', message: t('firstRun.oauthSuccess', { provider: 'ChatGPT Codex' }) }
+            : current);
+          await Promise.allSettled([modelsState.refresh(), settingsState.refresh()]);
+          return;
+        }
+        if (response.status !== 'pending') {
+          setCodexConnect((current) => current?.flowId === flowId
+            ? { ...current, status: response.status === 'expired' || response.status === 'cancelled' ? response.status : 'error', message: response.error || t('settings.panels.providers.codexIncomplete') }
+            : current);
+          return;
+        }
+        transientFailures = 0;
+        timer = window.setTimeout(() => void poll(), Math.max(1200, (codexConnect.pollIntervalSeconds || 5) * 1000));
+      } catch (error) {
+        if (cancelled) return;
+        transientFailures += 1;
+        setCodexConnect((current) => current?.flowId === flowId
+          ? { ...current, message: t('settings.panels.providers.codexRetrying', { error: error instanceof Error ? error.message : String(error) }) }
+          : current);
+        timer = window.setTimeout(() => void poll(), Math.min(15000, 1000 * 2 ** Math.min(transientFailures, 4)));
+      }
+    };
+    timer = window.setTimeout(() => void poll(), Math.max(1200, (codexConnect.pollIntervalSeconds || 5) * 1000));
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [codexConnect?.status, codexConnect?.flowId, codexConnect?.pollIntervalSeconds, codexConnect?.expiresAt]);
 
   async function startProviderConnect(option: ProviderOption): Promise<void> {
     if (['google-gemini-cli', 'gemini-cli-acp'].includes(option.id)) {
@@ -2149,20 +2416,55 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       return;
     }
     if (!option.oauthProvider) return;
+    const isCodex = option.oauthProvider === 'openai-codex';
+    let startedFlowId = '';
+    if (isCodex) setCodexConnect({ status: 'starting', message: t('firstRun.startingLogin', { provider: 'ChatGPT Codex' }) });
     try {
       const response = await window.lastbrowser.sidekick.startOAuth({ provider: option.oauthProvider });
+      startedFlowId = String(response.flow_id || '');
       if (response.error) throw new Error(String(response.error));
       const url = String(response.verification_uri || response.auth_url || '');
       if (response.status === 'success') {
+        if (isCodex) setCodexConnect({ status: 'success', message: t('firstRun.oauthSuccess', { provider: 'ChatGPT Codex' }) });
         showToast(`${option.label} credentials found and connected.`);
         await modelsState.refresh();
         return;
       }
       if (!url) throw new Error('Sidekick returned no sign-in URL.');
-      window.open(url, '_blank', 'noopener,noreferrer');
-      showToast(`Sign in with ${option.label} in the opened browser tab.`);
+      if (isCodex) {
+        if (!response.flow_id) throw new Error('Sidekick returned no OAuth flow ID.');
+        setCodexConnect({
+          status: 'pending',
+          flowId: response.flow_id,
+          userCode: response.user_code,
+          pollIntervalSeconds: response.poll_interval_seconds,
+          expiresAt: response.expires_at,
+          message: response.user_code
+            ? t('firstRun.oauthPromptCode', { provider: 'ChatGPT Codex' })
+            : t('firstRun.oauthPromptWindow', { provider: 'ChatGPT Codex' })
+        });
+      }
+      const opened = await openProviderOAuthUrl(option.oauthProvider, url, {
+        openExternal: window.lastbrowser.system?.openExternal,
+        openConnectWindow: window.lastbrowser.auth?.openConnectWindow
+      });
+      if (!opened) throw new Error('Lastbrowser could not open the sign-in page.');
+      showToast(t('firstRun.oauthPromptCode', { provider: option.label }));
     } catch (error) {
-      showToast(`Connect failed: ${error instanceof Error ? error.message : String(error)}`);
+      if (isCodex && startedFlowId) {
+        await window.lastbrowser.sidekick.cancelOAuth({ flowId: startedFlowId, provider: 'openai-codex' }).catch(() => null);
+      }
+      const message = `${t('settings.panels.providers.connectionError')}: ${error instanceof Error ? error.message : String(error)}`;
+      if (isCodex) setCodexConnect({ status: 'error', message });
+      showToast(message);
+    }
+  }
+
+  async function cancelCodexConnect(): Promise<void> {
+    const flowId = codexConnect?.flowId;
+    setCodexConnect({ status: 'cancelled', message: t('settings.panels.providers.codexCancelled') });
+    if (flowId) {
+      await window.lastbrowser.sidekick.cancelOAuth({ flowId, provider: 'openai-codex' }).catch(() => null);
     }
   }
 
@@ -2189,7 +2491,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
       const response = await window.lastbrowser.sidekick.requestWebui({
         method: 'GET',
-        path: '/api/models/live?provider=openrouter'
+        path: '/api/models/live?provider=openrouter&catalog=configuration'
       });
       const models = normalizeOpenRouterModels(response.models);
       if (!models.length) {
@@ -2199,9 +2501,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       setOpenRouterModels(models);
       const priorSelection = savedSelection?.ids ?? openRouterSelectedModels;
       const hasSelection = savedSelection?.configured ?? openRouterHasSavedSelection;
-      const nextSelection = priorSelection.length || hasSelection
-        ? priorSelection
-        : models.map((model) => model.id);
+      // A discovered catalog can contain paid models. Require an explicit
+      // selection instead of enabling every paid route on the first scan.
+      const nextSelection = priorSelection.length || hasSelection ? priorSelection : [];
       const preferredDefault = savedSelection?.defaultModel || openRouterDefaultModel;
       const availableDefault = nextSelection.find((id) => models.some((model) => model.id === id)) || '';
       setOpenRouterSelectedModels(nextSelection);
@@ -3273,7 +3575,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     <SettingsToggle
                       label={t('settings.panels.notifications.updates')}
                       description={t('settings.panels.notifications.updatesDescription')}
-                      checked={settingsBoolean(draft.check_for_updates ?? settings.check_for_updates, true)}
+                      checked={autoUpdateChecksEnabled}
                       onChange={(value) => updateDraftToggle('check_for_updates', value)}
                     />
                   </div>
@@ -3336,6 +3638,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     />
                   </div>
                 </SettingsCard>
+                {/* === Vision-Impaired Mode 2.0 Card === */}
+                <VisionImpairedSettingsCard />
               </>
             )}
 
@@ -3374,11 +3678,26 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 type="button"
                                 className="secondary-action compact"
                                 onClick={() => void startProviderConnect(option)}
-                                disabled={!ready}
+                                disabled={!ready || (option.id === 'openai-codex' && ['starting', 'pending'].includes(codexConnect?.status || ''))}
                               >
                                 <LogIn size={14} />
                                 <span>{t('settings.panels.providers.connect')}</span>
                               </button>
+                            )}
+                            {option.id === 'openai-codex' && codexConnect && (
+                              <div className="provider-connect-status" role="status" aria-live="polite">
+                                <span>{codexConnect.message}</span>
+                                {codexConnect.status === 'pending' && codexConnect.userCode && (
+                                  <button type="button" className="secondary-action compact" onClick={() => void navigator.clipboard?.writeText(codexConnect.userCode || '')}>
+                                    <Copy size={14} /> {codexConnect.userCode}
+                                  </button>
+                                )}
+                                {codexConnect.status === 'pending' && (
+                                  <button type="button" className="secondary-action compact" onClick={() => void cancelCodexConnect()}>
+                                    {t('settings.panels.providers.cancel')}
+                                  </button>
+                                )}
+                              </div>
                             )}
                             {option.id === 'openrouter' ? (
                               <button
@@ -3396,9 +3715,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 className="secondary-action compact"
                                 onClick={() => {
                                   const defaultUrl = option.id === 'ollama-cloud' ? 'https://ollama.com/v1' : 'http://localhost:11434';
-                                  const providerConfig = isRecord(settings.providers) && isRecord(settings.providers[option.id])
-                                    ? settings.providers[option.id]
-                                    : {};
+                                  const providerConfigs = isRecord(settings.providers) ? settings.providers : {};
+                                  const configuredProvider = providerConfigs[option.id];
+                                  const providerConfig: AnyRecord = isRecord(configuredProvider) ? configuredProvider : {};
                                   const currentProviderSettings = activeProvider === option.id ? settings : providerConfig;
                                   setOllamaModalProviderId(option.id);
                                   setOllamaModalLabel(option.label || option.id);
@@ -3519,7 +3838,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                         <button
                           type="button"
                           className="primary-action compact"
-                          disabled={openRouterSaving || openRouterLoading || openRouterModels.length === 0}
+                          disabled={openRouterSaving || openRouterLoading || openRouterModels.length === 0 || openRouterSelectedModels.length === 0}
                           onClick={() => void saveOpenRouterSettings()}
                         >
                           {openRouterSaving ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
@@ -3814,37 +4133,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 >
                   <div className="settings-system-status">
                     <span className="settings-badge">
-                      {t('settings.panels.system.version', { version: sidekickUpdateVersion || 'unknown' })}
+                      {t('settings.panels.system.version', { version: agentVersion })}
                     </span>
-                    <span className="settings-badge">
-                      {t('settings.panels.system.source', { source: sidekickUpdateSource === 'runtime' ? t('settings.panels.system.updatedCopy') : t('settings.panels.system.bundled') })}
-                    </span>
-                    {sidekickUpdateStatus !== 'idle' && (
-                      <span className={`settings-badge ${sidekickUpdateStatus === 'error' ? 'warning' : ''}`}>
-                        {sidekickUpdateStatus}
-                      </span>
-                    )}
-                    {sidekickUpdateMessage && <span className="settings-badge">{sidekickUpdateMessage}</span>}
-                  </div>
-                  <div className="settings-system-actions">
-                    <button
-                      type="button"
-                      className="secondary-action compact"
-                      onClick={() => void checkSidekickUpdate()}
-                      disabled={sidekickUpdateBusy}
-                    >
-                      {sidekickUpdateBusy ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
-                      <span>{t('settings.panels.system.checkSidekick')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-action compact"
-                      onClick={() => void applySidekickUpdate()}
-                      disabled={sidekickUpdateBusy || !sidekickUpdateAvailable}
-                    >
-                      <Download size={15} />
-                      <span>{t('settings.panels.system.updateSidekick')}</span>
-                    </button>
+                    <span className="settings-badge">{t('settings.panels.system.updatedWithLastbrowser')}</span>
                   </div>
                 </SettingsCard>
 

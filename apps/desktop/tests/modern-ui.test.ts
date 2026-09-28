@@ -147,7 +147,8 @@ describe('Phase 9: Modern UI Redesign (Sidekick + Zen Browser Synthese)', () => 
     const css = readRendererFile('styles.css');
 
     expect(rail).toContain('createPortal');
-    expect(rail).toContain('showHoverLabel(event, panel.label)');
+    expect(rail).toContain('getShellRailLabels(t, panel.id)');
+    expect(rail).toContain('showHoverLabel(event, labels.hoverLabel)');
     expect(rail).toContain('className="rail-floating-hover-label"');
     expect(css).toContain('.rail-floating-hover-label');
     expect(css).toContain('@keyframes rail-label-float-in');

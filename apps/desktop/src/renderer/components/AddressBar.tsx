@@ -16,6 +16,7 @@ import {
   searchEngineById,
   searchUrlFor
 } from '../tabs.js';
+import { useDesktopI18n } from '../i18n.js';
 
 export type OmniboxSuggestion = {
   id: string;
@@ -35,7 +36,7 @@ export interface AddressBarProps {
   activeBookmarkable: boolean;
   activeBookmarked: boolean;
   onToggleBookmark: () => void;
-  inputRef?: React.RefObject<HTMLInputElement>;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 export function AddressBar({
@@ -50,6 +51,7 @@ export function AddressBar({
   onToggleBookmark,
   inputRef
 }: AddressBarProps): JSX.Element {
+  const { t } = useDesktopI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -72,7 +74,7 @@ export function AddressBar({
     items.push({
       id: `search-${rawQuery}`,
       type: 'search',
-      title: `Search ${engine.label} for "${rawQuery}"`,
+      title: t('browser.omnibox.searchSuggestion', { engine: engine.label, query: rawQuery }),
       url: searchUrl,
       badge: engine.label
     });
@@ -93,7 +95,7 @@ export function AddressBar({
           type: 'url',
           title: directUrl,
           url: directUrl,
-          badge: 'Open URL'
+          badge: t('browser.omnibox.openUrl')
         });
       }
     }
@@ -115,7 +117,7 @@ export function AddressBar({
           type: 'bookmark',
           title: bm.title,
           url: bm.url,
-          badge: 'Bookmark'
+          badge: t('browser.omnibox.bookmarkBadge')
         });
       }
     }
@@ -136,13 +138,13 @@ export function AddressBar({
           type: 'history',
           title: v.title,
           url: v.url,
-          badge: 'History'
+          badge: t('browser.omnibox.historyBadge')
         });
       }
     }
 
     return items.slice(0, 7);
-  }, [rawQuery, searchEngineId, bookmarks, visits]);
+  }, [rawQuery, searchEngineId, bookmarks, visits, t]);
 
   // Reset selectedIndex whenever query changes
   useEffect(() => {
@@ -234,8 +236,8 @@ export function AddressBar({
           }}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
-          aria-label="Address or search"
-          placeholder="Search the web or enter address"
+          aria-label={t('browser.omnibox.addressLabel')}
+          placeholder={t('browser.chrome.searchPlaceholder')}
           autoComplete="off"
           spellCheck={false}
         />
@@ -243,14 +245,14 @@ export function AddressBar({
         <button
           type="button"
           className={`bookmark-star ${activeBookmarked ? 'active' : ''}`}
-          aria-label={activeBookmarked ? 'Remove bookmark' : 'Add bookmark'}
+          aria-label={activeBookmarked ? t('browser.omnibox.removeBookmark') : t('browser.omnibox.addBookmark')}
           aria-pressed={activeBookmarked}
           disabled={!activeBookmarkable}
           onClick={onToggleBookmark}
         >
           <Star size={15} fill={activeBookmarked ? 'currentColor' : 'none'} />
         </button>
-        <button type="submit" aria-label="Navigate">
+        <button type="submit" aria-label={t('browser.omnibox.navigate')}>
           <Search size={16} />
         </button>
       </form>

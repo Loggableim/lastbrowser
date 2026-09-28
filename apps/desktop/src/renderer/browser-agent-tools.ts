@@ -202,7 +202,7 @@ export async function executeBrowserAction(command: BrowserActionCommand): Promi
     case 'close_tabs_to_right': {
       const initialCount = tabStore.tabs.length;
       if (tabStore.activeTabId) {
-        tabStore.closeTabsToRight(tabStore.activeTabId);
+        tabStore.closeTabsToTheRight(tabStore.activeTabId);
       }
       const nextCount = useTabStore.getState().tabs.length;
       const closedCount = Math.max(0, initialCount - nextCount);

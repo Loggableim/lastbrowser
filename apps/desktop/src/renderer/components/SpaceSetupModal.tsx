@@ -40,7 +40,6 @@ interface SpacePreset {
   description: string;
   color: string;
   icon: React.ReactNode;
-  defaultModel: string;
   startUrl: string;
   pinnedApps: { name: string; url: string; color: string }[];
 }
@@ -52,7 +51,6 @@ const PRESETS: SpacePreset[] = [
     description: 'Optimiert für Software-Entwicklung, Git-Workflows und Dokumentation.',
     color: '#00d9ff',
     icon: <Code2 size={20} />,
-    defaultModel: 'smart-track',
     startUrl: 'https://github.com',
     pinnedApps: [
       { name: 'GitHub', url: 'https://github.com', color: '#24292f' },
@@ -67,7 +65,6 @@ const PRESETS: SpacePreset[] = [
     description: 'Ideal für Recherche, Paper, Notizen und Deep Thinking.',
     color: '#a855f7',
     icon: <BookOpen size={20} />,
-    defaultModel: 'gemini-2.5-pro',
     startUrl: 'https://www.notion.so',
     pinnedApps: [
       { name: 'Notion', url: 'https://notion.so', color: '#000000' },
@@ -82,7 +79,6 @@ const PRESETS: SpacePreset[] = [
     description: 'Für Inspiration, UI/UX-Design, Video und Content Creation.',
     color: '#f43f5e',
     icon: <Palette size={20} />,
-    defaultModel: 'gemini-2.5-flash',
     startUrl: 'https://www.figma.com',
     pinnedApps: [
       { name: 'Figma', url: 'https://figma.com', color: '#0acf83' },
@@ -97,11 +93,26 @@ const PRESETS: SpacePreset[] = [
     description: 'Vollkommen leerer Arbeitsbereich für deine eigenen Routinen.',
     color: '#10b981',
     icon: <Layers size={20} />,
-    defaultModel: 'smart-track',
     startUrl: 'app://browser-home',
     pinnedApps: []
   }
 ];
+
+export function createSpaceSetupDefaults(defaultName: string) {
+  return {
+    step: 1 as const,
+    preset: PRESETS[0],
+    name: defaultName,
+    color: PRESETS[0].color,
+    customPath: '',
+    model: 'smart-track',
+    startUrl: PRESETS[0].startUrl,
+    selectedApps: PRESETS[0].pinnedApps.map((app) => ({ ...app })),
+    customAppName: '',
+    customAppUrl: '',
+    createError: ''
+  };
+}
 
 const COLOR_SWATCHES = [
   '#00d9ff',
@@ -155,9 +166,8 @@ export function normalizePinnedApp(name: string, url: string): { name: string; u
   }
 }
 
-export function resolvePresetModel(defaultModel: string, currentModel: string, availableModelIds: string[]): string {
+export function resolvePresetModel(currentModel: string, availableModelIds: string[]): string {
   const isAvailable = (modelId: string) => BUILT_IN_MODEL_IDS.has(modelId) || availableModelIds.includes(modelId);
-  if (isAvailable(defaultModel)) return defaultModel;
   if (isAvailable(currentModel)) return currentModel;
   return 'smart-track';
 }
@@ -187,16 +197,15 @@ export function SpaceSetupModal({
   existingSpaceNames = []
 }: SpaceSetupModalProps): React.JSX.Element | null {
   const { t } = useDesktopI18n();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [selectedPreset, setSelectedPreset] = useState<SpacePreset>(PRESETS[0]);
-  const [name, setName] = useState(() => t('spaceSetup.preset.coding'));
-  const [color, setColor] = useState(PRESETS[0].color);
-  const [customPath, setCustomPath] = useState('');
-  const [model, setModel] = useState(PRESETS[0].defaultModel);
-  const [startUrl, setStartUrl] = useState(PRESETS[0].startUrl);
-  const [selectedApps, setSelectedApps] = useState<{ name: string; url: string; color: string }[]>(
-    PRESETS[0].pinnedApps
-  );
+  const initialDefaults = createSpaceSetupDefaults(t('spaceSetup.preset.coding'));
+  const [step, setStep] = useState<1 | 2 | 3>(initialDefaults.step);
+  const [selectedPreset, setSelectedPreset] = useState<SpacePreset>(initialDefaults.preset);
+  const [name, setName] = useState(initialDefaults.name);
+  const [color, setColor] = useState(initialDefaults.color);
+  const [customPath, setCustomPath] = useState(initialDefaults.customPath);
+  const [model, setModel] = useState(initialDefaults.model);
+  const [startUrl, setStartUrl] = useState(initialDefaults.startUrl);
+  const [selectedApps, setSelectedApps] = useState(initialDefaults.selectedApps);
   const [customAppName, setCustomAppName] = useState('');
   const [customAppUrl, setCustomAppUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -205,6 +214,20 @@ export function SpaceSetupModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    const defaults = createSpaceSetupDefaults(t('spaceSetup.preset.coding'));
+    setStep(defaults.step);
+    setSelectedPreset(defaults.preset);
+    setName(defaults.name);
+    setColor(defaults.color);
+    setCustomPath(defaults.customPath);
+    setModel(defaults.model);
+    setStartUrl(defaults.startUrl);
+    setSelectedApps(defaults.selectedApps);
+    setCustomAppName(defaults.customAppName);
+    setCustomAppUrl(defaults.customAppUrl);
+    setCreateError(defaults.createError);
+    setIsSubmitting(false);
+
     let active = true;
     void window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/status' })
       .then((data: any) => {
@@ -230,7 +253,6 @@ export function SpaceSetupModal({
     setName(t(presetNameKeys[preset.id]));
     setColor(preset.color);
     setModel((current) => resolvePresetModel(
-      preset.defaultModel,
       current,
       availableModels.map((availableModel) => availableModel.id)
     ));
@@ -423,17 +445,20 @@ export function SpaceSetupModal({
               </p>
 
               <div className="space-models-list">
-                {[...MODE_OPTIONS.map((mode) => ({
-                  ...mode,
-                  nameKey: `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrack' : mode.id === 'teamwork' ? 'teamwork' : 'ollama'}` as DesktopTranslationKey,
-                  descKey: `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrackDescription' : mode.id === 'teamwork' ? 'teamworkDescription' : 'ollamaDescription'}` as DesktopTranslationKey,
-                  badgeKey: `spaceSetup.model.${mode.id === 'smart-track' ? 'adaptive' : mode.id === 'teamwork' ? 'multiAgent' : 'local'}` as DesktopTranslationKey
-                })), ...availableModels.map((m) => ({
-                  id: m.id,
-                  name: m.name || m.id,
-                  desc: t('spaceSetup.model.availableVia', { provider: m.provider_label || m.provider || 'Provider' }),
-                  badge: m.provider_label || m.provider || 'Live'
-                }))].map((m) => (
+                {[
+                  ...MODE_OPTIONS.map((mode) => {
+                    const nameKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrack' : mode.id === 'teamwork' ? 'teamwork' : 'ollama'}` as DesktopTranslationKey;
+                    const descKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrackDescription' : mode.id === 'teamwork' ? 'teamworkDescription' : 'ollamaDescription'}` as DesktopTranslationKey;
+                    const badgeKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'adaptive' : mode.id === 'teamwork' ? 'multiAgent' : 'local'}` as DesktopTranslationKey;
+                    return { id: mode.id, name: t(nameKey), desc: t(descKey), badge: t(badgeKey) };
+                  }),
+                  ...availableModels.map((entry) => ({
+                    id: entry.id,
+                    name: entry.name || entry.id,
+                    desc: t('spaceSetup.model.availableVia', { provider: entry.provider_label || entry.provider || 'Provider' }),
+                    badge: entry.provider_label || entry.provider || 'Live'
+                  }))
+                ].map((m) => (
                   <div
                     key={m.id}
                     className={`space-model-item ${model === m.id ? 'active' : ''}`}
@@ -448,10 +473,10 @@ export function SpaceSetupModal({
                     </div>
                     <div className="model-item-details">
                       <div className="model-item-title-row">
-                        <strong>{'nameKey' in m ? t(m.nameKey) : m.name}</strong>
-                        <span className="model-badge">{'badgeKey' in m ? t(m.badgeKey) : m.badge}</span>
+                        <strong>{m.name}</strong>
+                        <span className="model-badge">{m.badge}</span>
                       </div>
-                      <p>{'descKey' in m ? t(m.descKey) : m.desc}</p>
+                      <p>{m.desc}</p>
                     </div>
                   </div>
                 ))}

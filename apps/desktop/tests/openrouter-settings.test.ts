@@ -15,12 +15,13 @@ describe('OpenRouter provider settings flow', () => {
   it('saves provider-scoped key and loads the live OpenRouter catalog', () => {
     expect(source).toContain("path: '/api/providers'");
     expect(source).toContain("body: { provider: 'openrouter', api_key: nextKey }");
-    expect(source).toContain("path: '/api/models/live?provider=openrouter'");
+    expect(source).toContain("path: '/api/models/live?provider=openrouter&catalog=configuration'");
     expect(source).toContain('openrouterNoModels');
   });
 
   it('lets users choose an allowlist and activates the selected default model', () => {
     expect(source).toContain('openRouterSelectedModels');
+    expect(source).toContain('const nextSelection = priorSelection.length || hasSelection ? priorSelection : [];');
     expect(source).toContain('provider: \'openrouter\', models: selectedModels');
     expect(source).toContain("provider: 'openrouter',\n          base_url: 'https://openrouter.ai/api/v1'");
     expect(source).toContain('setDefaultModel({ model: selectedDefault })');

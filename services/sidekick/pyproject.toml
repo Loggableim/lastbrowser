@@ -16,6 +16,7 @@ dependencies = [
     "fire>=0.5",
     "wcwidth>=0.2",
     "tzdata>=2024.1",
+    "anthropic>=0.39.0",
     "openai>=1.0,<3",
 ]
 

@@ -377,10 +377,10 @@ export function NativeGatewayMain({
         detail="Multi-Platform Chat Gateway Daemon mit Windows System Tray für 24/7 Hintergrundempfang."
         loading={loading}
         ready={ready}
-        onRefresh={() => void refreshStatus()}
+        onRefresh={refreshStatus}
       />
 
-      <ErrorLine error={actionError || gatewayStatus.lastError} />
+      <ErrorLine error={actionError || gatewayStatus.lastError || ''} />
 
       <div className="native-work-card" style={{ marginBottom: '16px' }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

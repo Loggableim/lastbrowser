@@ -542,10 +542,10 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
             <header className="profile-card-header">
               <div className="profile-title-area">
                 <strong className="profile-display-name">{current ? titleOf(current) : 'Kein Profil ausgewählt'}</strong>
-                {current && (idOf(current) === text(state.data?.active) || current.is_active) && (
+                {current && (idOf(current) === text(state.data?.active) || Boolean(current.is_active)) && (
                   <span className="profile-active-tag"><CheckCircle2 size={12} /> Aktiv</span>
                 )}
-                {current?.is_default && (
+                {Boolean(current?.is_default) && (
                   <span className="profile-default-tag">Standard</span>
                 )}
               </div>
@@ -563,7 +563,7 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
                   type="button"
                   className="danger"
                   onClick={() => void remove()}
-                  disabled={!ready || !selected || current?.is_default}
+                  disabled={!ready || !selected || Boolean(current?.is_default)}
                   title="Profil löschen"
                 >
                   <Trash2 size={13} />

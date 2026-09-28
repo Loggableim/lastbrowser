@@ -64,7 +64,9 @@ export function getDefaultSnapLayoutRatios(layout: SnapLayoutType): SnapLayoutRa
   if (layout === 'trio-columns') return { x: [33.33, 66.67], y: [] };
   if (layout === 'trio-stacked-right' || layout === 'trio-stacked-left') return { x: [50], y: [50] };
   if (layout === 'trio-main-right') return { x: [33.33], y: [50] };
-  if (layout === 'quad-grid') return { x: [50], y: [50] };
+  // Each column has its own horizontal divider. Moving the left stack must
+  // leave the right stack's height untouched (and vice versa).
+  if (layout === 'quad-grid') return { x: [50], y: [50, 50] };
   return { x: [50], y: [] };
 }
 
@@ -93,7 +95,8 @@ export function getSnapSlotBounds(layout: SnapLayoutType, slotIndex: number, rat
     return { top: 0, left: x, width: 100 - x, height: 100 };
   }
   if (layout === 'quad-grid') {
-    const x = ratios.x[0], y = ratios.y[0];
+    const x = ratios.x[0];
+    const y = ratios.y[slotIndex % 2] ?? ratios.y[0] ?? 50;
     return {
       top: slotIndex < 2 ? 0 : y,
       left: slotIndex % 2 === 0 ? 0 : x,

@@ -32,24 +32,15 @@ export type ServiceStatus = {
 export type PortResolver = (preferredPort: number) => Promise<number>;
 export type WebuiHealthChecker = (webuiUrl: string) => Promise<{ ok: boolean; error?: string }>;
 
-/**
- * Where an updated Sidekick copy lives after a runtime update. The updater
- * downloads the live monorepo here; if present it takes precedence over the
- * bundled copy so Sidekick can be updated without a Lastbrowser release.
- */
-export function runtimeSidekickDir(runtimeRoot = defaultRuntimeRoot()): string {
-  return path.join(runtimeRoot, 'runtime', 'sidekick');
-}
-
 export type SidecarLaunch = {
   args: string[];
   cwd: string;
 };
 
 /**
- * Read the Sidekick version from a bundled/updated copy. The live monorepo
- * writes `web/api/_version.py` (baked at sync time); older copies have no
- * version file, so fall back to the sync manifest or null.
+ * Read the Sidekick version from the bundled in-tree monorepo. The checked-in
+ * source writes `web/api/_version.py`; the integration manifest is a fallback
+ * for older packaged copies.
  */
 export function readSidekickVersion(sidekickDir: string): string | null {
   const versionFile = path.join(sidekickDir, 'web', 'api', '_version.py');
@@ -102,13 +93,12 @@ export function resolveServiceLayout(
       ? workspacePythonExe
       : resourcesPythonExe;
 
-  // Prefer a runtime-updated Sidekick copy over the bundled in-tree monorepo.
-  const updatedDir = runtimeSidekickDir(runtimeRoot);
-  const updatedEntry = path.join(updatedDir, 'cli', 'web_server.py');
   const bundledEntry = path.join(bundledSidekickDir, 'cli', 'web_server.py');
-  const useUpdated = existsSync(updatedEntry);
-  const sidekickDir = useUpdated ? updatedDir : bundledSidekickDir;
-  const sidekickEntry = useUpdated ? updatedEntry : bundledEntry;
+  // `services/sidekick` is the tracked source of truth. Ignore any legacy
+  // runtime/sidekick directory left by older builds; runtime code must never
+  // be sourced from an external checkout or downloaded overlay.
+  const sidekickDir = bundledSidekickDir;
+  const sidekickEntry = bundledEntry;
 
   return {
     resourcesDir: normalizedResources,

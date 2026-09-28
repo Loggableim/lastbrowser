@@ -63,7 +63,9 @@ import {
   getEffectiveZoomForUrl,
   saveDomainZoom,
   applyDesktopAppearance,
-  watchSystemThemeChanges
+  watchSystemThemeChanges,
+  mergeDesktopSettings,
+  fetchDesktopSettingsWithRetry
 } from '../src/renderer/App.js';
 import { applyDesktopAppearancePreview } from '../src/renderer/panels/SystemPanels.js';
 
@@ -73,11 +75,48 @@ describe('Appearance Relaunch & Design-System Engine', () => {
     _classes.clear();
     Object.keys(_styles).forEach((k) => delete _styles[k]);
     Object.keys(_datasets).forEach((k) => delete _datasets[k]);
+    documentMock.documentElement.style.zoom = '1';
     systemThemeIsLight = false;
     systemThemeListeners.clear();
   });
 
   describe('1. Theme Normalization & OLED Support', () => {
+    it('prefers persisted server appearance over a stale renderer cache after relaunch', () => {
+      const merged = mergeDesktopSettings(
+        { settings: { theme: 'light', skin: 'custom', accent_color: '#ff00aa' } },
+        { theme: 'dark', skin: 'matrix', accent_color: '' },
+        null
+      );
+
+      expect(merged).toMatchObject({ theme: 'light', skin: 'custom', accent_color: '#ff00aa' });
+    });
+
+    it('retries the settings read after a transient startup fetch failure', async () => {
+      let attempts = 0;
+      const settings = await fetchDesktopSettingsWithRetry(async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('service is still starting');
+        return { theme: 'light', skin: 'custom' };
+      }, 3, 0);
+
+      expect(attempts).toBe(2);
+      expect(settings).toEqual({ theme: 'light', skin: 'custom' });
+    });
+
+    it('stops retry delays when the settings load is cancelled', async () => {
+      const controller = new AbortController();
+      let attempts = 0;
+      const pending = fetchDesktopSettingsWithRetry(async () => {
+        attempts += 1;
+        throw new Error('service is still starting');
+      }, 4, 1000, controller.signal);
+
+      await Promise.resolve();
+      controller.abort();
+      await expect(pending).rejects.toThrow();
+      expect(attempts).toBe(1);
+    });
+
     it('normalizes light, dark, system, and oled correctly', () => {
       expect(normalizeAppearanceTheme('dark')).toBe('dark');
       expect(normalizeAppearanceTheme('light')).toBe('light');
@@ -254,18 +293,12 @@ describe('Appearance Relaunch & Design-System Engine', () => {
       expect(root.classList.contains('theme-dark')).toBe(true);
     });
 
-    it('applies the UI page zoom to the browser chrome root', () => {
-      applyDesktopAppearancePreview('dark', 'default', 'default', 'bubbles', '', '', 125);
-      expect(documentMock.documentElement.style.zoom).toBe('1.25');
-
-      applyDesktopAppearancePreview('dark', 'default', 'default', 'bubbles', '', '', 80);
-      expect(documentMock.documentElement.style.zoom).toBe('0.8');
-
-      applyDesktopAppearancePreview('dark', 'default', 'default', 'bubbles', '', '', 200);
-      expect(documentMock.documentElement.style.zoom).toBe('1.5');
-
-      applyDesktopAppearancePreview('dark', 'default', 'default', 'bubbles', '', '', NaN);
-      expect(documentMock.documentElement.style.zoom).toBe('1');
+    it('keeps page zoom separate from the independently controlled browser UI zoom', () => {
+      // The accessibility UI zoom owns documentElement.style.zoom. Appearance's
+      // default page zoom is applied to WebContents by BrowserMain instead.
+      documentMock.documentElement.style.zoom = '1.3';
+      applyDesktopAppearancePreview('dark', 'default', 'default', 'bubbles', '', '');
+      expect(documentMock.documentElement.style.zoom).toBe('1.3');
     });
   });
 

@@ -3,6 +3,7 @@ import { ExternalLink, Maximize2, X } from 'lucide-react';
 import type { BrowserTab } from '../tabs.js';
 import { useTabStore } from '../stores/useTabStore.js';
 import { prepareSnapTabDrag, SNAP_LAYOUT_DEFINITIONS, getSnapSlotBounds, type SnapLayoutRatios, type SnapLayoutType } from '../types/snap-layouts.js';
+import { useDesktopI18n } from '../i18n.js';
 
 export interface ScreenBounds {
   left: number;
@@ -50,12 +51,26 @@ function snapRatio(value: number): number {
   return Math.abs(nearest - value) <= 2.5 ? nearest : value;
 }
 
+export function getHorizontalDividerBounds(layout: SnapLayoutType, ratios: SnapLayoutRatios): Array<{ top: number; left: number; width: number }> {
+  const splitX = ratios.x[0] ?? 50;
+  const heights = layout === 'quad-grid'
+    ? [ratios.y[0] ?? 50, ratios.y[1] ?? ratios.y[0] ?? 50]
+    : ratios.y;
+  return heights.map((top, index) => {
+    if (layout === 'quad-grid') return { top, left: index === 0 ? 0 : splitX, width: index === 0 ? splitX : 100 - splitX };
+    if (layout === 'trio-stacked-right') return { top, left: splitX, width: 100 - splitX };
+    if (layout === 'trio-stacked-left' || layout === 'trio-main-right') return { top, left: 0, width: splitX };
+    return { top, left: 0, width: 100 };
+  });
+}
+
 /** Pane chrome only. Each browser guest remains mounted once in BrowserMain. */
 export function MultiviewGridContainer({
   layout, tabIds, slotIndexes, tabs, activeTabId, ratios,
   onSetRatio, onActivateTab, onRemoveSplitTab, onDetachTab,
   onMaximizeTab, onDropToSlot
 }: MultiviewGridContainerProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const definition = SNAP_LAYOUT_DEFINITIONS[layout];
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => resizeCleanupRef.current?.(), []);
@@ -90,7 +105,7 @@ export function MultiviewGridContainer({
   }, [layout, onSetRatio, ratios]);
 
   return (
-    <div className={`multiview-grid-container layout-${layout}`} aria-label="Multiview controls">
+    <div className={`multiview-grid-container layout-${layout}`} aria-label={t('snap.title')}>
       {definition.slots.map((slot, index) => {
         const tabIndex = slotIndexes.indexOf(index);
         const tab = tabIndex >= 0 ? tabs.find((item) => item.id === tabIds[tabIndex]) : undefined;
@@ -114,7 +129,7 @@ export function MultiviewGridContainer({
               <div className="multiview-pane-header">
                 <span
                   className="multiview-pane-title"
-                  title={`${tab.title || tab.url} · Ziehen zum Verschieben oder aus dem Fenster lösen`}
+                  title={`${tab.title || tab.url} · ${t('snap.dragToMoveOrDetach')}`}
                   draggable
                   onDragStart={(event) => {
                     prepareSnapTabDrag(event.dataTransfer, tab.id);
@@ -132,21 +147,18 @@ export function MultiviewGridContainer({
                   }}
                 >{tab.title || tab.url}</span>
                 <div className="multiview-pane-controls" onClick={(event) => event.stopPropagation()}>
-                  {onDetachTab && <button type="button" className="multiview-pane-btn" title="In eigenem Fenster öffnen" onClick={(event) => onDetachTab(tab, event.screenX, event.screenY)}><ExternalLink size={12} /></button>}
-                  {onMaximizeTab && <button type="button" className="multiview-pane-btn" title="Diesen Tab maximieren" onClick={() => onMaximizeTab(tab.id)}><Maximize2 size={12} /></button>}
-                  <button type="button" className="multiview-pane-btn close-pane" title="Aus dem Multiview lösen" onClick={() => onRemoveSplitTab?.(tab.id)}><X size={12} /></button>
+                  {onDetachTab && <button type="button" className="multiview-pane-btn" aria-label={t('snap.detachTab')} title={t('snap.detachTab')} onClick={(event) => onDetachTab(tab, event.screenX, event.screenY)}><ExternalLink size={12} /></button>}
+                  {onMaximizeTab && <button type="button" className="multiview-pane-btn" aria-label={t('snap.maximizePane')} title={t('snap.maximizePane')} onClick={() => onMaximizeTab(tab.id)}><Maximize2 size={12} /></button>}
+                  <button type="button" className="multiview-pane-btn close-pane" aria-label={t('snap.removePane')} title={t('snap.removePane')} onClick={() => onRemoveSplitTab?.(tab.id)}><X size={12} /></button>
                 </div>
               </div>
-            ) : <span className="multiview-empty-label">Tab hier ablegen</span>}
+            ) : <span className="multiview-empty-label">{t('snap.tabHere')}</span>}
           </div>
         );
       })}
-      {ratios.x.map((ratio, index) => <div key={`x-${index}`} className="multiview-divider-vertical" style={{ left: `calc(${ratio}% - 4px)` }} onMouseDown={(event) => beginResize('x', index, event)} role="separator" aria-orientation="vertical" aria-label="Bereichsgröße ändern"><div className="multiview-divider-grip" /></div>)}
-      {ratios.y.map((ratio, index) => {
-        const stackedRight = layout === 'trio-stacked-right';
-        const stackedLeft = layout === 'trio-stacked-left' || layout === 'trio-main-right';
-        const splitX = ratios.x[0] ?? 50;
-        return <div key={`y-${index}`} className="multiview-divider-horizontal" style={{ top: `calc(${ratio}% - 4px)`, left: stackedRight ? `${splitX}%` : 0, width: stackedRight ? `${100 - splitX}%` : stackedLeft ? `${splitX}%` : '100%' }} onMouseDown={(event) => beginResize('y', index, event)} role="separator" aria-orientation="horizontal" aria-label="Bereichsgröße ändern"><div className="multiview-divider-grip" /></div>;
+      {ratios.x.map((ratio, index) => <div key={`x-${index}`} className="multiview-divider-vertical" style={{ left: `calc(${ratio}% - 4px)` }} onMouseDown={(event) => beginResize('x', index, event)} role="separator" aria-orientation="vertical" aria-label={t('snap.resizePane')}><div className="multiview-divider-grip" /></div>)}
+      {getHorizontalDividerBounds(layout, ratios).map((divider, index) => {
+        return <div key={`y-${index}`} className="multiview-divider-horizontal" style={{ top: `calc(${divider.top}% - 4px)`, left: `${divider.left}%`, width: `${divider.width}%` }} onMouseDown={(event) => beginResize('y', index, event)} role="separator" aria-orientation="horizontal" aria-label={t('snap.resizePane')}><div className="multiview-divider-grip" /></div>;
       })}
     </div>
   );

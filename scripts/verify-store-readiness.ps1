@@ -293,7 +293,7 @@ Write-Host ""
 
 if ($failCount -eq 0) {
     Write-Host ">>> ALL MICROSOFT STORE CERTIFICATION PREFLIGHT CHECKS PASSED <<<" -ForegroundColor Green
-    Write-Host "The application package, assets, and web properties are ready for Partner Center submission!" -ForegroundColor Green
+    Write-Host "Source, assets, and release workflow checks passed. A signed package still requires build-time signature and checksum verification before submission." -ForegroundColor Yellow
     exit 0
 } else {
     Write-Host ">>> STORE CERTIFICATION CHECKS FAILED WITH $failCount ISSUES <<<" -ForegroundColor Red

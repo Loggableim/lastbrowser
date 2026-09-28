@@ -3350,7 +3350,7 @@ def _run_agent_streaming(
                 provider=resolved_provider,
                 base_url=resolved_base_url,
                 api_key=resolved_api_key,
-                google_account_email=(google_account_email if resolved_provider == "google-gemini-cli" else ""),
+                google_account_email=(google_account_email if resolved_provider in {"google-gemini-cli", "antigravity"} else ""),
                 # Identify browser-originated sessions as WebUI so Nova
                 # does not inject CLI-specific terminal/output guidance.
                 platform='webui',

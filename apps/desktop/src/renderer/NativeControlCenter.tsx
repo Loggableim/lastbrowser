@@ -39,7 +39,7 @@ export function ControlCenter({
         method: 'GET', path: '/api/session/export',
         query: { session_id: activeSessionId, format: 'markdown' }
       });
-      if (payload?.content) {
+      if (typeof payload?.content === 'string') {
         const blob = new Blob([payload.content], { type: 'text/markdown' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url;
@@ -83,10 +83,10 @@ export function ControlCenter({
         method: 'POST', path: '/api/session/import',
         body: { payload }
       });
-      if (result?.session_id) {
+      if (typeof result?.session_id === 'string') {
         setStatusMsg(`Imported! Session: ${result.session_id.slice(0, 8)}`);
         importInputRef.current.value = '';
-      } else setStatusMsg(result?.error || 'Import completed');
+      } else setStatusMsg(typeof result?.error === 'string' ? result.error : 'Import completed');
     } catch (err) { setStatusMsg(`Import failed: ${err instanceof Error ? err.message : String(err)}`); }
     finally { setImporting(false); }
   }, [ready]);

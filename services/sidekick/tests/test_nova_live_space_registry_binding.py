@@ -7,6 +7,7 @@ enrollment root merely because its slug matches an active Space.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -75,6 +76,11 @@ def test_live_three_space_snapshot_keeps_nova_management_aquarium_only(
     used for the real Nova/Aquarium setup. It is skipped on fresh installations
     where those roots do not exist yet; temporary-root API tests cover that path.
     """
+    if os.environ.get("LASTBROWSER_TEST_LIVE_SPACE_ROOTS") != "1":
+        pytest.skip(
+            "set LASTBROWSER_TEST_LIVE_SPACE_ROOTS=1 to inspect personal portable Space roots"
+        )
+
     import hashlib
     import re
 

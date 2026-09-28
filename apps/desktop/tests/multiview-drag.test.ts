@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { detachPaneIfDraggedOutside, isPointOutsideWindow } from '../src/renderer/components/MultiviewGridContainer.js';
-import { buildSnapGroupAfterDrop } from '../src/renderer/snap-drop.js';
+import { detachPaneIfDraggedOutside, getHorizontalDividerBounds, isPointOutsideWindow } from '../src/renderer/components/MultiviewGridContainer.js';
+import { buildSnapGroupAfterDrop, isPointInsideSnapFlyout } from '../src/renderer/snap-drop.js';
 
 describe('Multiview pane drag-out detection', () => {
   const windowBounds = { left: 100, top: 80, width: 1200, height: 800 };
@@ -29,7 +29,34 @@ describe('Multiview pane drag-out detection', () => {
   });
 });
 
+describe('independent quad column resizing', () => {
+  it('limits each horizontal divider to its own column', () => {
+    expect(getHorizontalDividerBounds('quad-grid', { x: [40], y: [70, 35] })).toEqual([
+      { top: 70, left: 0, width: 40 },
+      { top: 35, left: 40, width: 60 }
+    ]);
+  });
+
+  it('renders both column dividers for saved legacy one-row ratios', () => {
+    expect(getHorizontalDividerBounds('quad-grid', { x: [40], y: [60] })).toEqual([
+      { top: 60, left: 0, width: 40 },
+      { top: 60, left: 40, width: 60 }
+    ]);
+    expect(getHorizontalDividerBounds('quad-grid', { x: [40], y: [] })).toEqual([
+      { top: 50, left: 0, width: 40 },
+      { top: 50, left: 40, width: 60 }
+    ]);
+  });
+});
+
 describe('Snap drop slot assignment', () => {
+  it('keeps the drag preview active across the complete snap flyout bounds', () => {
+    const rect = { left: 280, top: 54, right: 1040, bottom: 180 };
+    expect(isPointInsideSnapFlyout(977, 112, rect)).toBe(true);
+    expect(isPointInsideSnapFlyout(279, 112, rect)).toBe(false);
+    expect(isPointInsideSnapFlyout(977, 181, rect)).toBe(false);
+  });
+
   it('creates a two-tab split from the active tab and a dragged tab', () => {
     expect(buildSnapGroupAfterDrop('dual-50-50', 0, 'b', {
       tabIds: [], slotIndexes: [], activeTabId: 'a', availableTabIds: ['a', 'b', 'c']

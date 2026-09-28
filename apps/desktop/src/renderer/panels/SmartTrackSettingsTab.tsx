@@ -12,6 +12,7 @@ import {
   Layers,
   ArrowRight
 } from 'lucide-react';
+import { useDesktopI18n } from '../i18n.js';
 
 interface ModelInfo {
   id: string;
@@ -49,6 +50,7 @@ interface SmartTrackConfig {
 }
 
 export const SmartTrackSettingsTab: React.FC = () => {
+  const { t } = useDesktopI18n();
   const [config, setConfig] = useState<SmartTrackConfig | null>(null);
   const savedConfigRef = useRef<SmartTrackConfig | null>(null);
   const [wall, setWall] = useState<SmartTrackWall | null>(null);
@@ -159,7 +161,7 @@ export const SmartTrackSettingsTab: React.FC = () => {
     return (
       <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
         <RefreshCw size={24} className="spin-animation" style={{ marginBottom: '0.5rem' }} />
-        <div>Lade Modellwand und Smart-Track-Konfiguration...</div>
+        <div>{t('smartTrack.loading')}</div>
       </div>
     );
   }
@@ -223,20 +225,20 @@ export const SmartTrackSettingsTab: React.FC = () => {
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--text-muted)' }}>Standard-Modell:</span>
+            <span style={{ color: 'var(--text-muted)' }}>{t('smartTrack.model.default')}</span>
             <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-              {tierData?.default || 'Kein Modell'}
+              {tierData?.default || t('smartTrack.model.none')}
             </span>
           </div>
           {tierData?.coding && tierData.coding !== tierData.default && (
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Code-Spezialist:</span>
+              <span style={{ color: 'var(--text-muted)' }}>{t('smartTrack.model.coding')}</span>
               <span style={{ color: 'var(--text-secondary)' }}>{tierData.coding}</span>
             </div>
           )}
           {tierData?.reasoning && tierData.reasoning !== tierData.default && (
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Reasoning-Spezialist:</span>
+              <span style={{ color: 'var(--text-muted)' }}>{t('smartTrack.model.reasoning')}</span>
               <span style={{ color: 'var(--text-secondary)' }}>{tierData.reasoning}</span>
             </div>
           )}
@@ -244,7 +246,7 @@ export const SmartTrackSettingsTab: React.FC = () => {
 
         {/* Manual Override Dropdown */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-          <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Manuelle Zuweisung:</label>
+          <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{t('smartTrack.assignment')}</label>
           <select
             value={currentOverride}
             disabled={saving || !config}
@@ -265,7 +267,7 @@ export const SmartTrackSettingsTab: React.FC = () => {
               maxWidth: '220px',
             }}
           >
-            <option value="auto">✨ Automatisch (Kuriert)</option>
+            <option value="auto">✨ {t('smartTrack.model.auto')}</option>
             {allAvailableModels.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name || m.id} ({m.provider})
@@ -296,10 +298,10 @@ export const SmartTrackSettingsTab: React.FC = () => {
         <div style={{ maxWidth: '520px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
             <Target size={18} style={{ color: '#3b82f6' }} />
-            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Smart Track (Single Track Orchestrator)</h3>
+            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>{t('smartTrack.title')}</h3>
           </div>
           <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-            Sparsames Intent-Routing: Schickt pro Anfrage eine kuratierte Modellspur los, statt mehrere Entwürfe parallel zu erzeugen.
+            {t('smartTrack.description')}
           </p>
         </div>
 
@@ -323,7 +325,7 @@ export const SmartTrackSettingsTab: React.FC = () => {
           }}
         >
           <RefreshCw size={14} className={scanning ? 'spin-animation' : ''} />
-          {scanning ? 'Scanne Modelle...' : 'Modellwand neu scannen'}
+          {scanning ? t('smartTrack.scanning') : t('smartTrack.scan')}
         </button>
       </div>
 
@@ -341,7 +343,7 @@ export const SmartTrackSettingsTab: React.FC = () => {
             gap: '6px',
           }}
         >
-          <Check size={14} /> Einstellungen erfolgreich gespeichert.
+          <Check size={14} /> {t('smartTrack.saved')}
         </div>
       )}
 
@@ -354,12 +356,12 @@ export const SmartTrackSettingsTab: React.FC = () => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', padding: '0.85rem 1rem', border: '1px solid var(--border-color, rgba(255,255,255,0.1))', borderRadius: '8px' }}>
         <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', fontSize: '0.82rem' }}>
           <span>
-            <strong style={{ display: 'block' }}>Smart Track aktivieren</strong>
-            <span style={{ color: 'var(--text-secondary)' }}>Steuert, ob Smart Track in der Copilot-Modellauswahl angeboten wird.</span>
+              <strong style={{ display: 'block' }}>{t('smartTrack.enabled')}</strong>
+            <span style={{ color: 'var(--text-secondary)' }}>{t('smartTrack.enabledDescription')}</span>
           </span>
           <input
             type="checkbox"
-            aria-label="Smart Track aktivieren"
+            aria-label={t('smartTrack.enabled')}
             checked={config?.enabled ?? true}
             disabled={saving || !config}
             onChange={(e) => void handleSave({ enabled: e.target.checked })}
@@ -367,49 +369,49 @@ export const SmartTrackSettingsTab: React.FC = () => {
         </label>
         <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', fontSize: '0.82rem' }}>
           <span>
-            <strong style={{ display: 'block' }}>Auto-Scan-Einstellung</strong>
-            <span style={{ color: 'var(--text-secondary)' }}>Gespeicherte Vorgabe für automatische Modell-Scans.</span>
+              <strong style={{ display: 'block' }}>{t('smartTrack.autoScan')}</strong>
+            <span style={{ color: 'var(--text-secondary)' }}>{t('smartTrack.autoScanDescription')}</span>
           </span>
           <input
             type="checkbox"
-            aria-label="Smart Track Auto-Scan"
+            aria-label={t('smartTrack.autoScan')}
             checked={config?.auto_scan ?? true}
             disabled={saving || !config}
             onChange={(e) => void handleSave({ auto_scan: e.target.checked })}
           />
         </label>
         <small style={{ color: 'var(--text-secondary)' }}>
-          Bei aktiviertem Auto-Scan wird die Modellwand beim Start und nach Änderungen an Provider-Schlüsseln oder Modellfreigaben in den Provider-Einstellungen im Hintergrund aktualisiert. „Modellwand neu scannen“ aktualisiert sie jederzeit manuell.
+          {t('smartTrack.autoScanNote')}
         </small>
       </div>
 
       {/* 3-Tier Model Wall */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
         <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Layers size={16} /> Kuratierte Modellwand (3 Tiers)
+          <Layers size={16} /> {t('smartTrack.modelWall')}
         </h4>
 
         {renderTierCard(
           'low',
-          'Tier 1: Low (Eco & High-Speed)',
+          t('smartTrack.tier.low'),
           '#10b981',
-          'Schnell & extrem token-sparend. Ideal für kurze Fragen, Zusammenfassungen und Übersetzungen.',
+          t('smartTrack.tier.lowDescription'),
           wall?.low
         )}
 
         {renderTierCard(
           'medium',
-          'Tier 2: Medium (Balanced & Coding)',
+          t('smartTrack.tier.medium'),
           '#3b82f6',
-          'Ausgewogene Präzision für Alltag, Coding und Web-Analysen. Zuverlässiger Standard.',
+          t('smartTrack.tier.mediumDescription'),
           wall?.medium
         )}
 
         {renderTierCard(
           'high',
-          'Tier 3: High (Deep Reasoning & Flagship)',
+          t('smartTrack.tier.high'),
           '#a855f7',
-          'Maximale analytische Tiefe für komplexe Architektur, Logik und anspruchsvolle Refactorings.',
+          t('smartTrack.tier.highDescription'),
           wall?.high
         )}
       </div>
@@ -427,7 +429,7 @@ export const SmartTrackSettingsTab: React.FC = () => {
         }}
       >
         <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Settings2 size={16} /> Zusätzliche Optionen
+          <Settings2 size={16} /> {t('smartTrack.advanced')}
         </h4>
 
         <label
@@ -441,10 +443,10 @@ export const SmartTrackSettingsTab: React.FC = () => {
         >
           <div>
             <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>
-              Strukturierte Vorplanung bei Stufe High
+              {t('smartTrack.preplan')}
             </div>
             <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-              Schaltet bei High Effort einen kurzen, token-armen Strukturierungsschritt vor, bevor das Flaggschiff-Modell antwortet.
+              {t('smartTrack.preplanDescription')}
             </div>
           </div>
           <input

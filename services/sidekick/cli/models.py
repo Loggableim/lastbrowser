@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, NamedTuple, Optional
 
 from cli import __version__ as _SIDEKICK_VERSION
+from shared.utils import is_official_ollama_cloud_url
 
 # Identify ourselves so endpoints fronted by Cloudflare's Browser Integrity
 # Check (error 1010) don't reject the default ``Python-urllib/*`` signature.
@@ -139,11 +140,8 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
     # Native OpenAI Chat Completions (api.openai.com). Used by /model counts and
     # provider_model_ids fallback when /v1/models is unavailable.
     "openai": [
-        "gpt-4o",
-        "gpt-4o-mini",
-        "o3-mini",
-        "o1",
-        "gpt-4.5-preview",
+        # OpenAI's available model set is account-dependent; never present an
+        # old hard-coded catalog when live discovery is unavailable.
     ],
     "openai-codex": _codex_curated_models(),
     "copilot-acp": [
@@ -162,6 +160,14 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
     "google-gemini-cli": [
         "gemini-3.1-pro-preview",
         "gemini-3-flash-preview",
+    ],
+    "antigravity": [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash-lite",
+        "gemini-3-flash-preview",
+        "gemini-3-pro-preview",
+        "gemini-3.1-pro-preview",
     ],
     "ollama-cloud": [
         "deepseek-v4-flash",
@@ -323,6 +329,7 @@ CANONICAL_PROVIDERS: list[ProviderEntry] = [
     ProviderEntry("opencode-go",    "OpenCode Go",              "OpenCode Go (open models, $10/month subscription)"),
     ProviderEntry("azure-foundry",  "Azure Foundry",            "Azure Foundry (OpenAI-style or Anthropic-style endpoint — your Azure AI deployment)"),
     ProviderEntry("qwen-oauth",     "Qwen OAuth (Portal)",      "Qwen OAuth (reuses local Qwen CLI login)"),
+    ProviderEntry("antigravity",    "Antigravity",              "Antigravity (Google consumer tier — multi-account round-robin)"),
 ]
 
 # Auto-extend CANONICAL_PROVIDERS with any provider registered in providers/
@@ -388,6 +395,9 @@ _PROVIDER_ALIASES = {
     "aigateway": "ai-gateway",
     "vercel": "ai-gateway",
     "vercel-ai-gateway": "ai-gateway",
+    "antigravity-cli": "antigravity",
+    "antigravity-cloud": "antigravity",
+    "agy": "antigravity",
     "kilo": "kilocode",
     "kilo-code": "kilocode",
     "kilo-gateway": "kilocode",
@@ -1469,16 +1479,32 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
             return live
         return list(_PROVIDER_MODELS.get("ollama-cloud", []))
     if normalized == "openai":
-        api_key = os.getenv("OPENAI_API_KEY", "").strip()
-        if api_key:
-            base_raw = os.getenv("OPENAI_BASE_URL", "").strip().rstrip("/")
-            base = base_raw or "https://api.openai.com/v1"
-            try:
-                live = fetch_api_models(api_key, base)
-                if live:
-                    return live
-            except Exception:
-                pass
+        # Use the same provider-scoped credential resolver as inference. This
+        # covers env/.env and provider-scoped config keys without borrowing an
+        # OpenRouter credential, and honors the selected model endpoint.
+        try:
+            from cli.auth import resolve_api_key_provider_credentials
+            from cli.config import load_config
+
+            credentials = resolve_api_key_provider_credentials("openai")
+            api_key = str(credentials.get("api_key") or "").strip()
+            base = str(credentials.get("base_url") or "").strip().rstrip("/")
+            config = load_config()
+            model_cfg = config.get("model", {}) if isinstance(config, dict) else {}
+            if isinstance(model_cfg, dict) and str(model_cfg.get("provider") or "").strip().lower() == "openai":
+                base = (
+                    os.getenv("OPENAI_BASE_URL", "").strip().rstrip("/")
+                    or str(model_cfg.get("base_url") or "").strip().rstrip("/")
+                    or base
+                )
+            if not api_key or not base:
+                return []
+            # Do not forward an OpenAI credential through an HTTP redirect to
+            # a different host, even when the configured endpoint redirects.
+            live = fetch_api_models(api_key, base, allow_redirects=False)
+            return live or []
+        except Exception:
+            return []
     if normalized == "gmi":
         try:
             from cli.auth import resolve_api_key_provider_credentials
@@ -2346,6 +2372,8 @@ def probe_api_models(
     base_url: Optional[str],
     timeout: float = 5.0,
     api_mode: Optional[str] = None,
+    *,
+    allow_redirects: bool = True,
 ) -> dict[str, Any]:
     """Probe a ``/models`` endpoint with light URL heuristics.
 
@@ -2398,7 +2426,17 @@ def probe_api_models(
         tried.append(url)
         req = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if allow_redirects:
+                response_context = urllib.request.urlopen(req, timeout=timeout)
+            else:
+                class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+                    def redirect_request(self, *_args, **_kwargs):
+                        return None
+
+                response_context = urllib.request.build_opener(_NoRedirectHandler).open(
+                    req, timeout=timeout
+                )
+            with response_context as resp:
                 data = json.loads(resp.read().decode())
                 return {
                     "models": [m.get("id", "") for m in data.get("data", [])],
@@ -2454,13 +2492,21 @@ def fetch_api_models(
     base_url: Optional[str],
     timeout: float = 5.0,
     api_mode: Optional[str] = None,
+    *,
+    allow_redirects: bool = True,
 ) -> Optional[list[str]]:
     """Fetch the list of available model IDs from the provider's ``/models`` endpoint.
 
     Returns a list of model ID strings, or ``None`` if the endpoint could not
     be reached (network error, timeout, auth failure, etc.).
     """
-    return probe_api_models(api_key, base_url, timeout=timeout, api_mode=api_mode).get("models")
+    return probe_api_models(
+        api_key,
+        base_url,
+        timeout=timeout,
+        api_mode=api_mode,
+        allow_redirects=allow_redirects,
+    ).get("models")
 
 
 # ---------------------------------------------------------------------------
@@ -2607,8 +2653,8 @@ def fetch_ollama_cloud_models(
         base_url = "https://ollama.com/v1"
 
     live_models: list[str] = []
-    if api_key:
-        result = fetch_api_models(api_key, base_url, timeout=8.0)
+    if api_key and is_official_ollama_cloud_url(base_url):
+        result = fetch_api_models(api_key, base_url, timeout=8.0, allow_redirects=False)
         if result:
             live_models = result
 

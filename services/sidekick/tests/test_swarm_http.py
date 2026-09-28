@@ -713,7 +713,9 @@ def test_http_read_on_missing_project_is_pure_and_returns_not_found(
     project = tmp_path / "project"
     project.mkdir()
     monkeypatch.setattr(
-        swarm_api, "resolve_trusted_workspace", lambda _value: project.resolve()
+        swarm_api,
+        "resolve_trusted_workspace_read_only",
+        lambda _value: project.resolve(),
     )
     handler = _Handler()
 
@@ -964,7 +966,9 @@ def test_http_packs_reads_initialized_config_without_creating_runtime_database(
     project.mkdir()
     initialize_project(project)
     monkeypatch.setattr(
-        swarm_api, "resolve_trusted_workspace", lambda _value: project.resolve()
+        swarm_api,
+        "resolve_trusted_workspace_read_only",
+        lambda _value: project.resolve(),
     )
 
     class FakeService:
@@ -1391,7 +1395,9 @@ def test_sse_reads_ordered_cursor_tail_without_mutating_a_run(
     first = store.append_event(run.run_id, "run.started", {"goal": "inspect"})
     second = store.append_event(run.run_id, "run.paused", {"reason": "catalog"})
     monkeypatch.setattr(
-        swarm_api, "resolve_trusted_workspace", lambda _value: project.resolve()
+        swarm_api,
+        "resolve_trusted_workspace_read_only",
+        lambda _value: project.resolve(),
     )
     writer = _DisconnectAfterEvents()
     handler = _Handler(headers={"Last-Event-ID": str(first.sequence)}, writer=writer)

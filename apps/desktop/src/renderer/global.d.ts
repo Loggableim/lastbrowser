@@ -1,43 +1,30 @@
 export {};
 
-type LastbrowserSetupState = {
-  cloudSetupComplete: boolean;
-  provider: string;
-  model: string;
-};
+import type {
+  DesktopChatMessage as ShellDesktopChatMessage,
+  DesktopSessionDetail as ShellDesktopSessionDetail,
+  DesktopSessionSummary as ShellDesktopSessionSummary,
+  DoctorCategory as ShellDoctorCategory,
+  DoctorCheck as ShellDoctorCheck,
+  DoctorReport as ShellDoctorReport,
+  ExtractedTabContent as ShellExtractedTabContent,
+  TabSynthesisResult as ShellTabSynthesisResult
+} from './shell-state.js';
+import type { OnboardingStatus, SetupState } from './setup-state.js';
+import type * as ReactTypes from 'react';
 
-type DesktopSessionSummary = {
-  session_id: string;
-  title?: string;
-  workspace?: string;
-  updated_at?: string | number;
-  last_message_at?: string | number;
-  message_count?: number;
-  source_label?: string;
-  profile?: string;
-};
+type LastbrowserSetupState = SetupState;
 
-type DesktopChatMessage = {
-  role?: string;
-  content?: string;
-  timestamp?: string | number;
-  tool_calls?: unknown[];
-  pending?: boolean;
-};
+type DesktopSessionSummary = ShellDesktopSessionSummary;
+
+type DesktopChatMessage = ShellDesktopChatMessage;
 
 type ComposerDraft = {
   text?: string;
   files?: unknown[];
 };
 
-type DesktopSessionDetail = DesktopSessionSummary & {
-  model?: string;
-  model_provider?: string | null;
-  active_stream_id?: string | null;
-  pending_user_message?: string | null;
-  messages?: DesktopChatMessage[];
-  composer_draft?: ComposerDraft;
-};
+type DesktopSessionDetail = ShellDesktopSessionDetail;
 
 type WorkspaceTreeEntry = {
   name: string;
@@ -120,59 +107,18 @@ type LastbrowserUpdateStatus = {
 };
 
 type WebuiBridgeRequest = {
-  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'HEAD' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   path: string;
   query?: Record<string, string | number | boolean | null | undefined>;
   body?: unknown;
   headers?: Record<string, string>;
 };
 
-type DoctorCheck = {
-  type: 'ok' | 'warn' | 'fail' | 'info';
-  text: string;
-  detail?: string;
-};
-
-type DoctorCategory = {
-  name: string;
-  checks: DoctorCheck[];
-  status: 'ok' | 'warn' | 'fail';
-};
-
-type DoctorReport = {
-  timestamp: number;
-  exitCode: number;
-  rawOutput: string;
-  categories: DoctorCategory[];
-  issues: string[];
-  summary: {
-    passed: number;
-    warnings: number;
-    failures: number;
-  };
-};
-
-type ExtractedTabContent = {
-  tabId?: string;
-  url: string;
-  title: string;
-  metaDescription?: string;
-  markdown: string;
-  headings: string[];
-  tables: string[];
-  charCount: number;
-  estimatedTokens: number;
-  hasInjectionAttempt: boolean;
-  sanitizedPatterns: string[];
-  truncated: boolean;
-};
-
-type TabSynthesisResult = {
-  activeTab?: ExtractedTabContent | null;
-  tabs: ExtractedTabContent[];
-  totalTabs: number;
-  promptBlock: string;
-};
+type DoctorCheck = ShellDoctorCheck;
+type DoctorCategory = ShellDoctorCategory;
+type DoctorReport = ShellDoctorReport;
+type ExtractedTabContent = ShellExtractedTabContent;
+type TabSynthesisResult = ShellTabSynthesisResult;
 
 type ExtensionSource = 'store' | 'unpacked' | 'preset';
 
@@ -204,6 +150,25 @@ type ExtensionPreset = {
   homepageUrl?: string;
 };
 
+type BrowserDownloadState = 'progressing' | 'completed' | 'cancelled' | 'interrupted';
+
+type BrowserDownloadEntry = {
+  id: string;
+  filename: string;
+  url: string;
+  received: number;
+  total: number;
+  state: BrowserDownloadState;
+  savePath: string;
+  startedAt: number;
+};
+
+declare global {
+  namespace JSX {
+    type Element = ReactTypes.JSX.Element;
+  }
+}
+
 declare global {
   interface Window {
     lastbrowser: {
@@ -232,7 +197,7 @@ declare global {
         clearDeletedProfileData?: (request: { profileId: string; spacePaths: string[] }) => Promise<{ ok: boolean; cleared: number; error?: string }>;
       };
       sidekick: {
-        onboardingStatus: () => Promise<Record<string, unknown>>;
+        onboardingStatus: () => Promise<OnboardingStatus>;
         detectExistingInstall: () => Promise<{
           found: boolean;
           homeDir?: string;
@@ -254,6 +219,7 @@ declare global {
           /** Gemini CLI OAuth flow uses auth_url instead of verification_uri. */
           auth_url?: string;
           user_code?: string;
+          action_required?: string;
           expires_at?: number;
           poll_interval_seconds?: number;
           error?: string;
@@ -263,6 +229,8 @@ declare global {
           provider?: string;
           flow_id?: string;
           status?: string;
+          /** Antigravity flow reports the connected account email on success. */
+          email?: string;
           error?: string;
         }>;
         cancelOAuth: (request: { flowId: string; provider?: string }) => Promise<{
@@ -300,7 +268,10 @@ declare global {
           sandboxDisabled?: boolean;
           groundingContext?: { url?: string; title?: string; snippet?: string } | null;
         }) => Promise<{ sessionId: string; streamId: string }>;
-        getStreamStatus: (streamId: string) => Promise<Record<string, unknown>>;
+        getStreamStatus: (streamId: string) => Promise<{ active?: boolean; [key: string]: unknown }>;
+        subscribeChatStream: (request: { streamId: string }) => Promise<Record<string, unknown>>;
+        unsubscribeChatStream: (request: { streamId: string }) => Promise<Record<string, unknown>>;
+        onChatStreamEvent: (callback: (payload: unknown) => void) => () => void;
         cancelStream: (streamId: string) => Promise<Record<string, unknown>>;
         listWorkspace: (request: { sessionId: string; path?: string }) => Promise<{ entries: WorkspaceTreeEntry[]; path: string }>;
         readWorkspaceFile: (request: { sessionId: string; path?: string }) => Promise<WorkspaceFilePreview>;
@@ -414,6 +385,8 @@ declare global {
         updateAllAppstore: () => Promise<Record<string, unknown>>;
         submitAppstoreApp: (request: { manifest: Record<string, unknown> }) => Promise<Record<string, unknown>>;
         getSettings: () => Promise<Record<string, unknown>>;
+        getFallbackModel: () => Promise<Record<string, unknown>>;
+        setFallbackModel: (request: { model: string; provider?: string; baseUrl?: string }) => Promise<Record<string, unknown>>;
         saveSettings: (request: { settings: Record<string, unknown> }) => Promise<Record<string, unknown>>;
         notifyChatCompleted: (enabled: boolean) => Promise<boolean>;
         listGmailAccounts: () => Promise<Record<string, unknown>>;
@@ -465,6 +438,7 @@ declare global {
         check: () => Promise<LastbrowserUpdateStatus>;
         download: () => Promise<LastbrowserUpdateStatus>;
         install: () => Promise<LastbrowserUpdateStatus>;
+        setAutoCheckEnabled: (enabled: boolean) => Promise<{ enabled: boolean }>;
         onStatus: (callback: (status: LastbrowserUpdateStatus) => void) => () => void;
       };
       terminal: {
@@ -549,6 +523,17 @@ declare global {
         remove: (id: string) => Promise<boolean>;
         chooseDir: () => Promise<string | null>;
       };
+      downloads: {
+        list: () => Promise<BrowserDownloadEntry[]>;
+        clear: (id?: string) => Promise<BrowserDownloadEntry[]>;
+        onChanged: (callback: (entries: BrowserDownloadEntry[]) => void) => () => void;
+      };
+      permissions: {
+        trustedOrigins: () => Promise<string[]>;
+        trust: (origin: string) => Promise<string[]>;
+        revoke: (origin: string) => Promise<string[]>;
+        decide: (request: { permission: string; origin: string }) => Promise<boolean>;
+      };
       window: {
         minimize: () => Promise<void>;
         toggleMaximize: () => Promise<boolean>;
@@ -583,10 +568,13 @@ declare global {
           error?: string;
         }>;
       };
-      system?: {
+      system: {
         isDefaultBrowser: () => Promise<boolean>;
         setDefaultBrowser: () => Promise<boolean>;
         openExternal: (url: string) => Promise<boolean>;
+        getCursorPosition: () => Promise<{ x: number; y: number; visible: boolean } | null>;
+        captureWindowRect: (rect: { x: number; y: number; width: number; height: number }) => Promise<string | null>;
+        captureGuestRect: (guestWebContentsId: number, rect: { x: number; y: number; width: number; height: number }) => Promise<string | null>;
       };
       i18n?: {
         setLocale: (locale: string) => Promise<boolean>;

@@ -436,7 +436,7 @@ export function NovaDock({
                   </div>
                   {isRunning && <span className="pinned-running-dot" />}
                 </button>
-                <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(pinnedIndexes[index])}>
+                <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(index)}>
                   <span className="label-text">{app.name}</span>
                   {isRunning && <span className="label-status">Aktiv</span>}
                 </div>

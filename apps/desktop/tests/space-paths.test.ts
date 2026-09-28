@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { resolveCanonicalSpacePath } from '../src/renderer/space-paths.js';
+import {
+  isCurrentSpaceDirectorySnapshot,
+  resolveCanonicalSpacePath,
+  resolveRefreshedActiveSpacePath
+} from '../src/renderer/space-paths.js';
 
 describe('resolveCanonicalSpacePath', () => {
   it('maps a submitted relative path to its canonical absolute backend path', () => {
@@ -26,10 +30,37 @@ describe('resolveCanonicalSpacePath', () => {
     ])).toBeNull();
   });
 
+  it('discards a Space list response that started before a directory mutation', () => {
+    expect(isCurrentSpaceDirectorySnapshot(4, 4)).toBe(true);
+    expect(isCurrentSpaceDirectorySnapshot(4, 5)).toBe(false);
+  });
+
+  it('preserves a Space selected while an older listSpaces request was in flight', () => {
+    expect(resolveRefreshedActiveSpacePath({
+      currentPath: 'C:/Spaces/new-space',
+      availablePaths: ['C:/Spaces/default'],
+      lastPath: 'C:/Spaces/default',
+      selectionRevisionAtRequest: 7,
+      currentSelectionRevision: 8
+    })).toBe('C:/Spaces/new-space');
+  });
+
+  it('uses the backend last Space when the current path is missing and no newer selection exists', () => {
+    expect(resolveRefreshedActiveSpacePath({
+      currentPath: 'C:/Spaces/removed',
+      availablePaths: ['C:/Spaces/default', 'C:/Spaces/research'],
+      lastPath: 'C:/Spaces/research',
+      selectionRevisionAtRequest: 2,
+      currentSelectionRevision: 2
+    })).toBe('C:/Spaces/research');
+  });
+
   it('uses the canonical path consistently for activation, model preference, and pinned apps', () => {
     const app = readFileSync(resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
     expect(app).toContain('handleSpaceSelect(canonicalPath)');
     expect(app).toContain('saveSpaceModel(createdSpacePath, data.model');
     expect(app).toContain('spacePath: createdSpacePath');
+    expect(app).toContain('isCurrentSpaceDirectorySnapshot(directoryRevisionAtRequest, spaceDirectoryRevisionRef.current)');
+    expect(app).toContain('selectionRevisionAtRequest,\n        currentSelectionRevision: activeSpaceSelectionRevisionRef.current');
   });
 });

@@ -23,10 +23,12 @@ export function createMainWindowOptions(mainDir: string): BrowserWindowConstruct
     // the window falls back to the generic Electron icon.
     icon: path.join(mainDir, '..', 'renderer', 'Lastbrowser.ico'),
     webPreferences: {
-      preload: path.join(mainDir, 'preload.js'),
+      // Electron's sandboxed preload loader expects CommonJS. The main process
+      // is ESM, so build the bridge separately as preload.cjs.
+      preload: path.join(mainDir, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
       webviewTag: true
     }
   };

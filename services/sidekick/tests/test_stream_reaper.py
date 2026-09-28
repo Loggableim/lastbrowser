@@ -80,8 +80,14 @@ def test_streaming_worker_stamps_channel_thread(monkeypatch, tmp_path):
 
     stream_id = "stamp-probe"
     channel = config.StreamChannel()
-    with config.STREAMS_LOCK:
-        config.STREAMS[stream_id] = channel
+    stream_registry = {stream_id: channel}
+    stream_lock = _t.RLock()
+    # The worker and config module share these globals in production. Bind
+    # both explicitly because earlier tests may have reloaded either module.
+    monkeypatch.setattr(config, "STREAMS", stream_registry)
+    monkeypatch.setattr(config, "STREAMS_LOCK", stream_lock)
+    monkeypatch.setattr(streaming, "STREAMS", stream_registry)
+    monkeypatch.setattr(streaming, "STREAMS_LOCK", stream_lock)
 
     captured = {}
 
@@ -113,5 +119,5 @@ def test_streaming_worker_stamps_channel_thread(monkeypatch, tmp_path):
         assert stamped is not None, "the worker must stamp the channel"
         assert not stamped.is_alive() or stamped is thr
     finally:
-        with config.STREAMS_LOCK:
-            config.STREAMS.pop(stream_id, None)
+        with stream_lock:
+            stream_registry.pop(stream_id, None)

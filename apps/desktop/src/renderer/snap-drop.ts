@@ -12,6 +12,18 @@ export interface SnapDropGroup {
   slotIndexes: number[];
 }
 
+export interface SnapFlyoutRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** Keep the layout chooser open while a dragged tab moves across its cards. */
+export function isPointInsideSnapFlyout(x: number, y: number, rect: SnapFlyoutRect): boolean {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
 /** Pure slot assignment used by pointer drops and the Snap flyout. */
 export function buildSnapGroupAfterDrop(
   layout: SnapLayoutType,

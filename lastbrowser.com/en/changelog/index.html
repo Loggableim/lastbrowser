@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Changelog &amp; Roadmap – Lastbrowser</title>
-<meta name="description" content="Release history and roadmap of Lastbrowser: All updates from v0.1.35 Public Beta to previous milestones and upcoming features.">
+<meta name="description" content="Release history and roadmap of Lastbrowser: Public versions and upcoming release candidates.">
 <meta property="og:title" content="Changelog &amp; Roadmap – Lastbrowser">
 <meta property="og:description" content="Explore release notes, bug fixes, and development roadmap for Lastbrowser.">
 <meta property="og:type" content="website">
@@ -111,7 +111,7 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
   <div class="container inner">
     <a href="/en/" class="logo">
       <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser">
-      <div><strong>Lastbrowser</strong><span>v0.1.35 Beta · AI-Native</span></div>
+      <div><strong>Lastbrowser</strong><span>v0.1.34 Beta · AI-Native</span></div>
     </a>
     <div class="links">
       <a href="/en/">Home</a>
@@ -137,29 +137,29 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
 
   <div class="timeline">
 
-    <!-- v0.1.35 -->
+    <!-- v0.1.35 release candidate; not publicly released -->
     <div class="release-entry">
       <div class="release-bullet highlight"></div>
       <article class="release-card current">
         <div class="release-header">
           <div style="display:flex;align-items:center;gap:12px">
             <span class="release-tag">v0.1.35</span>
-            <span class="badge-now">Current Beta Release</span>
+            <span class="badge-now">Release Candidate · Not Published</span>
           </div>
-          <span class="release-date">September 27, 2026</span>
+          <span class="release-date">Not yet published</span>
         </div>
         <p style="color:var(--text);font-size:14px;font-weight:600">
           Milestone Release: Space Audio Keepalive, Zen 3-State Engine, Appearance Engine with 4 Glassmorphism levels &amp; Vision Impaired theme, NovaDock Shell Decoupling, Standalone Migration &amp; Chat Layouts.
         </p>
         <ul class="release-list">
-          <li><strong>Space Audio Keepalive &amp; RAM Protection:</strong> Pinned tabs are permanently protected from memory discarders. Tabs playing audio (YouTube Music, Spotify, podcasts) retain an unthrottled hidden webview (<code>backgroundThrottling=no</code>) when switching Spaces, preventing audio interruptions.</li>
+          <li><strong>Space Audio Keepalive &amp; RAM Protection:</strong> Pinned tabs are protected from memory discarders. Audio continuity across Space switches still needs confirmation in a real browser session before release.</li>
           <li><strong>Zen Sidebar 3-State Engine:</strong> Seamless switching between Expanded, 48px Slim Icon Dock, and Full-Canvas modes with a responsive left-edge hover sensor.</li>
           <li><strong>Appearance Engine &amp; Accessibility:</strong> 4-tier Glassmorphism (Solid, Subtle, Modern, Deep), overhauled light theme contrast, new maximal-contrast <em>Vision Impaired</em> theme (black/white/yellow/cyan, 16px minimum font, 2px borders), custom skins, and global UI zoom/font scaling.</li>
           <li><strong>NovaDock Shell Decoupling:</strong> Modular dock positioning (Top, Bottom, Right, or Floating Draggable overlay with orientation flip and anti-clipping margins).</li>
           <li><strong>Window Controls &amp; Detached Tab IPC:</strong> Reliable closing of undocked or detached splitscreen tabs without closing the main browser window.</li>
           <li><strong>Sidekick Standalone Migration:</strong> First-Run Setup Wizard automatically discovers and imports standalone Sidekick configurations and Supermemory databases (<code>supermemory.db</code>, profiles) with directory-traversal and symlink guards.</li>
           <li><strong>Chat &amp; Copilot Layouts:</strong> Clean rendering in Bubbles, Compact Stream, and Expanded Document Canvas modes with horizontal overflow protection.</li>
-          <li><strong>Quality &amp; Code Signing:</strong> 846/846 Vitest tests green (98 suites), 27/27 Microsoft Store Preflight Checks passed, Castlabs Widevine VMP DRM signed.</li>
+          <li><strong>Release gate still open:</strong> This candidate is not publicly available. Signing, artifact metadata, and full runtime acceptance must pass before publication.</li>
         </ul>
       </article>
     </div>
@@ -175,10 +175,9 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
           <span class="release-date">September 25, 2026</span>
         </div>
         <p style="color:var(--text);font-size:14px;font-weight:600">
-          Feature &amp; Stability Update: Google OAuth Safe Login, Teamwork &amp; Smart Track Multi-Agent Orchestration, Zen Hover Reveal, Space Setup Assistant, and Dock Fisheye Animation.
+          Feature &amp; Stability Update: Teamwork and Smart Track configuration, Zen Hover Reveal, Space Setup Assistant, and Dock Fisheye Animation.
         </p>
         <ul class="release-list">
-          <li><strong>Google OAuth Hardening:</strong> Seamless, secure Google authentication preventing the <em>"Browser or app may not be secure"</em> block via native Chrome 134 emulation, Client Hints, and <code>X-Requested-With</code> stripping.</li>
           <li><strong>Teamwork &amp; Smart Track Orchestrator:</strong> Multi-model collaborative agent team (Lead, Researcher, Analyst, Critic) and single-lane token-efficient Smart Track mode with adaptive effort tiers (Low, Medium, High).</li>
           <li><strong>Zen Mode Hover Reveal:</strong> 8px left edge hover zone smoothly slides the sidebar into view as a floating overlay without displacing web page layout.</li>
           <li><strong>Dock Fisheye &amp; Hover Titles:</strong> Fluid macOS-inspired dock fisheye effect with dynamic scaling and progressive dimming of adjacent icons in slim dock mode.</li>
@@ -198,15 +197,13 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
           <span class="release-date">September 25, 2026</span>
         </div>
         <p style="color:var(--text);font-size:14px;font-weight:600">
-          Major Milestone: 100% Space Session Isolation, Space Hub Start Page, Castlabs Widevine VMP Signing &amp; EV Authenticode.
+          Major Milestone: Space Session Isolation, Space Hub Start Page, and Castlabs Widevine integration.
         </p>
         <ul class="release-list">
-          <li><strong>100% Space Session Isolation:</strong> Each Space now maintains an independent partition key (<code>persist:profile:space</code>). Logins for Google, Disney+, or GitHub are strictly isolated between Spaces with zero session spillover.</li>
+          <li><strong>Space Session Isolation:</strong> Spaces use separate persistent partitions (<code>persist:profile:space</code>) for browser session data.</li>
           <li><strong>Space Hub Dashboard:</strong> New Space section on the start page displaying active Spaces, live tab counters, quick switching, and an inline "+ New Space" creation modal.</li>
-          <li><strong>Castlabs Widevine DRM:</strong> Complete integration with Castlabs Electron and Video Multi-Part Protection (VMP) code signing. Netflix, Disney+, Spotify, and Prime Video stream reliably with full hardware acceleration.</li>
+          <li><strong>Castlabs Widevine DRM:</strong> Integration of the Castlabs Electron build for Widevine-protected media. Playback still depends on the requirements of each streaming service.</li>
           <li><strong>Split-View Rendering Fixes:</strong> Smooth tab switching between dual-tab split-view and standard tabs without stuck rendering states.</li>
-          <li><strong>Extended Validation (EV) Code Signing:</strong> All release binaries (NSIS Setup &amp; Portable) are officially signed and timestamped under Dominik Rainer (Certum CA).</li>
-          <li><strong>Complete Test Verification:</strong> 71 Vitest suites with 625 tests passing; 27/27 Microsoft Store preflight checks green.</li>
         </ul>
       </article>
     </div>

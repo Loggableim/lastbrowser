@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   clearSessionSnapshot,
@@ -181,6 +183,44 @@ describe('per-profile tab persistence', () => {
     expect(loadSessionSnapshot('default', storage)).toBeNull();
   });
 
+  it('scopes recovery snapshots to their Space', () => {
+    const storage = memoryStorage();
+    const state = { tabs: [tab('space-a-tab')], activeTabId: 'space-a-tab' };
+
+    saveSessionSnapshot('default', state, storage, 'space-a');
+
+    expect(loadSessionSnapshot('default', storage, 'space-a')?.spacePath).toBe('space-a');
+    expect(loadSessionSnapshot('default', storage, 'space-b')).toBeNull();
+  });
+
+  it('clears an old recovery snapshot when no normal tabs remain', () => {
+    const storage = memoryStorage();
+    saveSessionSnapshot('default', { tabs: [tab('normal')], activeTabId: 'normal' }, storage, 'space-a');
+    const incognito: BrowserTab = {
+      id: 'incognito-only',
+      url: 'https://private.example.com',
+      title: 'Private Page',
+      pinned: false,
+      incognito: true
+    };
+
+    saveSessionSnapshot('default', { tabs: [incognito], activeTabId: incognito.id }, storage, 'space-a');
+    expect(loadSessionSnapshot('default', storage, 'space-a')).toBeNull();
+    expect(storage.getItem(sessionSnapshotStorageKey)).toBeNull();
+
+    saveSessionSnapshot('default', { tabs: [tab('normal-again')], activeTabId: 'normal-again' }, storage, 'space-a');
+    saveSessionSnapshot('default', { tabs: [], activeTabId: null }, storage, 'space-a');
+    expect(loadSessionSnapshot('default', storage, 'space-a')).toBeNull();
+    expect(storage.getItem(sessionSnapshotStorageKey)).toBeNull();
+  });
+
+  it('saves and restores Ctrl+Shift+T snapshots using the active Space', () => {
+    const appSource = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
+
+    expect(appSource).toContain('saveSessionSnapshot(activeProfileId, { tabs, activeTabId }, window.localStorage, activeSpacePath)');
+    expect(appSource).toContain('loadSessionSnapshot(activeProfileId, window.localStorage, activeSpacePath)');
+  });
+
   it('detects recoverable session when current tabs differ from snapshot', () => {
     const storage = memoryStorage();
     const state = { tabs: [tab('1', 'https://example.com'), tab('2', 'https://github.com')], activeTabId: '2' };
@@ -228,7 +268,7 @@ describe('per-Space Snap group persistence', () => {
     saveSpaceSnapGroup('work', 'space-one', { ...group, layout: 'dual-50-50', slotIndexes: [0, 1] }, ['a', 'c'], storage);
 
     expect(loadSpaceSnapGroup('default', 'space-one', ['a', 'b', 'c'], storage)).toEqual({
-      ...group, ratios: { x: [50], y: [50] }
+      ...group, ratios: { x: [50], y: [50, 50] }
     });
     expect(loadSpaceSnapGroup('default', 'space-two', ['a', 'c'], storage)).toBeNull();
     expect(loadSpaceSnapGroup('work', 'space-one', ['a', 'c'], storage)?.layout).toBe('dual-50-50');
@@ -246,7 +286,7 @@ describe('per-Space Snap group persistence', () => {
       })
     });
     expect(loadSpaceSnapGroup('default', null, ['a', 'b', 'c', 'd'], storage)).toEqual({
-      layout: 'quad-grid', tabIds: ['a'], slotIndexes: [0], ratios: { x: [50], y: [50] }
+      layout: 'quad-grid', tabIds: ['a'], slotIndexes: [0], ratios: { x: [50], y: [50, 50] }
     });
   });
 
@@ -256,7 +296,13 @@ describe('per-Space Snap group persistence', () => {
       layout: 'quad-grid', tabIds: ['a', 'b'], slotIndexes: [0, 3],
       ratios: { x: [120], y: [-20] }
     }, ['a', 'b'], storage);
-    expect(loadSpaceSnapGroup('default', null, ['a', 'b'], storage)?.ratios).toEqual({ x: [95], y: [5] });
+    expect(loadSpaceSnapGroup('default', null, ['a', 'b'], storage)?.ratios).toEqual({ x: [95], y: [5, 5] });
+
+    saveSpaceSnapGroup('default', null, {
+      layout: 'quad-grid', tabIds: ['a', 'b'], slotIndexes: [0, 3],
+      ratios: { x: [40], y: [70, 35] }
+    }, ['a', 'b'], storage);
+    expect(loadSpaceSnapGroup('default', null, ['a', 'b'], storage)?.ratios).toEqual({ x: [40], y: [70, 35] });
 
     saveSpaceSnapGroup('work', null, {
       layout: 'trio-columns', tabIds: ['a', 'b', 'c'], slotIndexes: [0, 1, 2],

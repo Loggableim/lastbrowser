@@ -32,12 +32,40 @@ const REQUESTED_CDP_PORT = process.env.LASTBROWSER_SMOKE_CDP_PORT
   : 0;
 let CDP_PORT = REQUESTED_CDP_PORT;
 let smokeChild = null;
+const rendererDiagnostics = [];
+const addressEntryTrace = [];
 const TEST_URL = process.env.LASTBROWSER_SMOKE_URL || 'example.com';
+const INTERACTIVE_PAUSE_MS = Number(process.env.LASTBROWSER_SMOKE_INTERACTIVE_MS || 0);
 const OUT_DIR = path.resolve(process.cwd(), 'smoke-output');
 const SMOKE_PROFILE_DIR = path.join(os.tmpdir(), `lastbrowser-browser-smoke-${process.pid}`);
 const LOCAL_MAIN_ENTRY = path.resolve(import.meta.dirname, '..', 'dist', 'main', 'main.js');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function createSmokeAudioDataUrl() {
+  const sampleRate = 8000;
+  const sampleCount = sampleRate * 4;
+  const dataSize = sampleCount * 2;
+  const wave = Buffer.alloc(44 + dataSize);
+  wave.write('RIFF', 0);
+  wave.writeUInt32LE(36 + dataSize, 4);
+  wave.write('WAVE', 8);
+  wave.write('fmt ', 12);
+  wave.writeUInt32LE(16, 16);
+  wave.writeUInt16LE(1, 20);
+  wave.writeUInt16LE(1, 22);
+  wave.writeUInt32LE(sampleRate, 24);
+  wave.writeUInt32LE(sampleRate * 2, 28);
+  wave.writeUInt16LE(2, 32);
+  wave.writeUInt16LE(16, 34);
+  wave.write('data', 36);
+  wave.writeUInt32LE(dataSize, 40);
+  for (let index = 0; index < sampleCount; index++) {
+    const sample = Math.sin((2 * Math.PI * 440 * index) / sampleRate) * 900;
+    wave.writeInt16LE(sample, 44 + index * 2);
+  }
+  return `data:audio/wav;base64,${wave.toString('base64')}`;
+}
 
 async function cdpList() {
   const res = await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`);
@@ -84,6 +112,16 @@ class CDP {
     });
     this.ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
+      if (msg.method === 'Runtime.exceptionThrown') {
+        const message = msg.params.exceptionDetails?.exception?.description || msg.params.exceptionDetails?.text || 'unknown';
+        rendererDiagnostics.push(String(message));
+        console.error(`[renderer exception] ${message}`);
+      } else if (msg.method === 'Runtime.consoleAPICalled'
+        && ['error', 'warning'].includes(msg.params.type)) {
+        const args = (msg.params.args || []).map((arg) => arg.value ?? arg.description ?? '').join(' ');
+        rendererDiagnostics.push(String(args));
+        console.error(`[renderer ${msg.params.type}] ${args}`);
+      }
       if (msg.id && this.pending.has(msg.id)) {
         const { resolve, reject } = this.pending.get(msg.id);
         this.pending.delete(msg.id);
@@ -111,10 +149,94 @@ class CDP {
   }
 }
 
+async function enterAddressThroughKeyboard(cdp, url) {
+  const rectResponse = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const input = [...document.querySelectorAll('input[aria-label]')].find((el) => { const r = el.getBoundingClientRect(); return r.y < 90 && r.x > 100 && r.width > 120; });
+      if (!input) return null;
+      const rect = input.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`,
+    returnByValue: true
+  });
+  const point = rectResponse.result.value;
+  if (!point) {
+    const inputs = await cdp.send('Runtime.evaluate', {
+      expression: `JSON.stringify([...document.querySelectorAll('input')].map((input) => ({ aria: input.getAttribute('aria-label'), value: input.value, rect: (() => { const r = input.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; })() })))`,
+      returnByValue: true
+    });
+    addressEntryTrace.push({ requested: url, error: 'address field not found', inputs: JSON.parse(inputs.result.value) });
+    return false;
+  }
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17, modifiers: 2 });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17 });
+  await cdp.send('Input.insertText', { text: url });
+  await sleep(250);
+  const typedStateResponse = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const input = [...document.querySelectorAll('input[aria-label]')].find((el) => { const r = el.getBoundingClientRect(); return r.y < 90 && r.x > 100 && r.width > 120; });
+      const badge = document.querySelector('.omnibox-badge.url');
+      const option = badge?.closest('.omnibox-item');
+      const rect = option?.getBoundingClientRect();
+      return { value: input?.value || '', optionText: option?.innerText || '', point: rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null };
+    })()`,
+    returnByValue: true
+  });
+  const typedState = typedStateResponse.result.value;
+  addressEntryTrace.push({ requested: url, typedValue: typedState?.value || '', selectedSuggestion: typedState?.optionText || '' });
+  const suggestion = typedState?.point;
+  if (suggestion) {
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...suggestion });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...suggestion });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...suggestion });
+  } else {
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+  }
+  return { submitted: true, typedValue: typedState?.value || '', selectedSuggestion: typedState?.optionText || '' };
+}
+
+async function pressMouse(cdp, point) {
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: point.x, y: point.y });
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed', x: point.x, y: point.y, button: 'left', buttons: 1, clickCount: 1
+  });
+}
+
+async function moveHeldMouse(cdp, from, to, steps = 12) {
+  for (let index = 1; index <= steps; index++) {
+    const progress = index / steps;
+    await cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: from.x + (to.x - from.x) * progress,
+      y: from.y + (to.y - from.y) * progress,
+      button: 'left',
+      buttons: 1
+    });
+    await sleep(16);
+  }
+  return to;
+}
+
+async function releaseMouse(cdp, point) {
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased', x: point.x, y: point.y, button: 'left', buttons: 0, clickCount: 1
+  });
+}
+
 const results = [];
 function check(name, ok, detail = '') {
   results.push({ name, ok, detail });
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
+}
+function skip(name, detail = '') {
+  results.push({ name, ok: true, skipped: true, detail });
+  console.log(`  SKIP  ${name}${detail ? ` — ${detail}` : ''}`);
 }
 
 async function main() {
@@ -148,13 +270,18 @@ async function main() {
   smokeChild = child;
   child.unref();
   console.log(`[1] launched (pid ${child.pid})`);
+  if (Number.isFinite(INTERACTIVE_PAUSE_MS) && INTERACTIVE_PAUSE_MS > 0) {
+    console.log(`[Computer Use] isolated test window is ready; waiting ${INTERACTIVE_PAUSE_MS} ms before smoke actions`);
+    await sleep(INTERACTIVE_PAUSE_MS);
+  }
 
   let targets = null;
   let shell = null;
   for (let i = 0; i < 60; i++) {
     try {
       targets = await cdpList();
-      shell = targets.find((t) => t.type === 'page' && t.url.includes('index.html'));
+      shell = targets.find((t) => t.type === 'page'
+        && (t.url.includes('index.html') || t.url.startsWith('http://127.0.0.1:5173/')));
       if (shell) break;
     } catch {
       // CDP can begin accepting connections before Electron publishes targets.
@@ -172,6 +299,7 @@ async function main() {
   if (!shell) finish(child);
 
   const cdp = new CDP(shell.webSocketDebuggerUrl);
+  await cdp.send('Runtime.enable');
 
   // Electron can expose the CDP target before React has mounted. Wait for
   // either browser chrome or the first-run wizard before interacting.
@@ -210,7 +338,7 @@ async function main() {
         return JSON.stringify({
           hasSidebar: (/chat/i.test(text) && /settings/i.test(text)) || Boolean(document.querySelector('.sidekick-sidebar, .shell-rail')),
           hasAddressBar: [...document.querySelectorAll('input')]
-            .some(el => el.getBoundingClientRect().y < 90 && el.getBoundingClientRect().width > 200),
+            .some(el => { const r = el.getBoundingClientRect(); return el.hasAttribute('aria-label') && r.y < 90 && r.x > 100 && r.width > 120; }),
           textLength: text.length
         });
       })()`,
@@ -223,6 +351,15 @@ async function main() {
 
   check('shell ui rendered', shellInfo.hasSidebar && shellInfo.hasAddressBar,
     `sidebar=${shellInfo.hasSidebar} addressbar=${shellInfo.hasAddressBar}`);
+
+  const cursorPosition = await cdp.send('Runtime.evaluate', {
+    expression: 'window.lastbrowser?.system?.getCursorPosition?.()',
+    awaitPromise: true,
+    returnByValue: true
+  });
+  const cursorPoint = cursorPosition.result.value;
+  check('cursor loupe system bridge reports renderer-local coordinates',
+    Number.isFinite(cursorPoint?.x) && Number.isFinite(cursorPoint?.y) && typeof cursorPoint?.visible === 'boolean', JSON.stringify(cursorPoint));
 
   const dockObservation = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
@@ -276,19 +413,30 @@ async function main() {
     if (visibleItem) {
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: visibleItem.x, y: visibleItem.y });
     }
-    // Allow Chromium's transform/opacity transitions to finish before
-    // asserting the animated styles in an isolated, potentially occluded window.
-    await sleep(450);
-    const wave = await cdp.send('Runtime.evaluate', {
-      expression: `(() => {
-        const items = [...document.querySelectorAll('.nova-dock-item-wrapper')];
-        const labels = [...document.querySelectorAll('.nova-dock-label-pill')];
-        const scale = (element) => Number((getComputedStyle(element).transform.match(/^matrix\\(([^,]+)/) || [])[1] || 1);
-        return { hoveredScale: scale(items[0]), neighborScale: scale(items[1]), hoveredLabel: Number(labels[0] ? getComputedStyle(labels[0]).opacity : 0), neighborLabel: Number(labels[1] ? getComputedStyle(labels[1]).opacity : 0), dockClass: document.querySelector('.nova-dock')?.className };
-      })()`,
-      returnByValue: true
-    });
-    const waveState = wave.result.value;
+    // The dock moves while revealing. Re-aim at the current item rectangle
+    // until the actual hover state appears, rather than sampling stale bounds.
+    let waveState = null;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const currentItem = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const item = document.querySelector('.nova-dock-item-wrapper'); if (!item) return null; const rect = item.getBoundingClientRect(); return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; })()`,
+        returnByValue: true
+      });
+      if (currentItem.result.value) {
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...currentItem.result.value });
+      }
+      await sleep(250);
+      const wave = await cdp.send('Runtime.evaluate', {
+        expression: `(() => {
+          const items = [...document.querySelectorAll('.nova-dock-item-wrapper')];
+          const labels = [...document.querySelectorAll('.nova-dock-label-pill')];
+          const scale = (element) => Number((getComputedStyle(element).transform.match(/^matrix\\(([^,]+)/) || [])[1] || 1);
+          return { hoveredScale: scale(items[0]), neighborScale: scale(items[1]), hoveredLabel: Number(labels[0] ? getComputedStyle(labels[0]).opacity : 0), neighborLabel: Number(labels[1] ? getComputedStyle(labels[1]).opacity : 0), dockClass: document.querySelector('.nova-dock')?.className };
+        })()`,
+        returnByValue: true
+      });
+      waveState = wave.result.value;
+      if (waveState.hoveredScale > 1.05 && waveState.hoveredLabel > 0.9 && waveState.neighborLabel > 0) break;
+    }
     dockVerified = dockProbe.slim && dockProbe.overflow === 'visible' && waveState.hoveredScale > 1.05 && waveState.hoveredLabel > 0.9 && waveState.neighborLabel > 0;
     dockDetail = `mode=${dockProbe.slim ? 'slim' : 'not-slim'}, overflow=${dockProbe.overflow}, wave=${JSON.stringify(waveState)}`;
   }
@@ -343,16 +491,16 @@ async function main() {
 
   let dockChecksPassed = panelInitiallyOpened;
   const dockCases = [
-    ['floating', 'In frei verschiebbares Fenster ausdocken'],
-    ['dock-tabs', 'Unter Tab-Leiste docken'],
-    ['dock-sidekick', 'Neben Sidekick docken'],
-    ['dock-topbar-left', 'Links in der oberen Leiste andocken'],
-    ['dock-topbar-right', 'Rechts in der oberen Leiste andocken'],
-    ['dropdown', 'Wieder als Menüleisten-Dropdown andocken']
+    'floating',
+    'dock-tabs',
+    'dock-sidekick',
+    'dock-topbar-left',
+    'dock-topbar-right',
+    'dropdown'
   ];
-  for (const [mode, title] of dockCases) {
+  for (const mode of dockCases) {
     const selected = await cdp.send('Runtime.evaluate', {
-      expression: `(() => { const button = [...document.querySelectorAll('.downloads-panel button')].find(el => el.title === ${JSON.stringify(title)}); if (!button) return false; button.click(); return true; })()`,
+      expression: `(() => { const button = document.querySelector('.downloads-panel button[data-dock-mode="${mode}"]'); if (!button) return false; button.click(); return true; })()`,
       returnByValue: true
     });
     const modeApplied = await cdp.send('Runtime.evaluate', {
@@ -362,16 +510,16 @@ async function main() {
     dockChecksPassed &&= selected.result.value && modeApplied.result.value;
   }
   check('Downloads switches through floating and all dock positions', dockChecksPassed,
-    dockCases.map(([mode]) => mode).join(', '));
+    dockCases.join(', '));
 
   // Use floating mode to expose the minimize control, then verify the pill can
   // restore the panel and close it; reopening a closed panel must be expanded.
   const floatForMinimize = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = [...document.querySelectorAll('.downloads-panel button')].find(el => ['Frei schwebend (Floating)', 'In frei verschiebbares Fenster ausdocken'].includes(el.title)); if (!button) return false; button.click(); return true; })()`,
+    expression: `(() => { const button = document.querySelector('.downloads-panel button[data-dock-mode="floating"]'); if (!button) return false; button.click(); return true; })()`,
     returnByValue: true
   });
   const minimizeDownloads = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = document.querySelector('.downloads-panel button[aria-label="Downloads minimieren"]'); if (!button) return false; button.click(); return true; })()`,
+    expression: `(() => { const button = document.querySelector('.downloads-panel button[data-download-action="minimize"]'); if (!button) return false; button.click(); return true; })()`,
     returnByValue: true
   });
   const minimizedPillShown = await waitForDownloads('.downloads-minimized-pill', true);
@@ -384,8 +532,50 @@ async function main() {
   check('Downloads minimizes to a pill and restores on click', minimizedRestored,
     `minimizeClick=${minimizeDownloads.result.value}, pill=${minimizedPillShown}, restoreClick=${restoreDownloads.result.value}, panel=${restoredPanelShown}`);
 
+  const minimizeForDrag = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.downloads-panel button[data-download-action="minimize"]'); if (!button) return false; button.click(); return true; })()`,
+    returnByValue: true
+  });
+  let pillBounds = null;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const bounds = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { const pill = document.querySelector('.downloads-minimized-pill'); if (!pill) return null; const rect = pill.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, left: rect.left, top: rect.top }; })()`,
+      returnByValue: true
+    });
+    pillBounds = bounds.result.value;
+    if (pillBounds) break;
+    await sleep(100);
+  }
+  if (pillBounds) {
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pillBounds.x, y: pillBounds.y });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: pillBounds.x, y: pillBounds.y, button: 'left', clickCount: 1 });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pillBounds.x + 52, y: pillBounds.y + 28, button: 'left' });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pillBounds.x + 52, y: pillBounds.y + 28, button: 'left', clickCount: 1 });
+  }
+  await sleep(180);
+  const draggedPill = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const pill = document.querySelector('.downloads-minimized-pill'); if (!pill) return null; const rect = pill.getBoundingClientRect(); return { left: rect.left, top: rect.top }; })()`,
+    returnByValue: true
+  });
+  const draggedPillPosition = draggedPill.result.value;
+  const pillDragOk = minimizeForDrag.result.value && pillBounds && draggedPillPosition
+    && (Math.abs(draggedPillPosition.left - pillBounds.left) >= 4 || Math.abs(draggedPillPosition.top - pillBounds.top) >= 4);
+  check('dragging the minimized Downloads pill moves it without reopening', Boolean(pillDragOk),
+    `minimized=${Boolean(draggedPillPosition)}, before=${JSON.stringify(pillBounds)}, after=${JSON.stringify(draggedPillPosition)}`);
+
+  if (draggedPillPosition) {
+    const clickX = draggedPillPosition.left + 40;
+    const clickY = draggedPillPosition.top + 18;
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: clickX, y: clickY });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: clickX, y: clickY, button: 'left', clickCount: 1 });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: clickX, y: clickY, button: 'left', clickCount: 1 });
+  }
+  const dragPillRestored = await waitForDownloads('.downloads-panel.mode-floating', true);
+  check('clicking the moved Downloads pill restores the panel', Boolean(pillDragOk) && Boolean(draggedPillPosition) && dragPillRestored,
+    `dragged=${Boolean(pillDragOk)}, restored=${dragPillRestored}`);
+
   const closeExpanded = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = document.querySelector('.downloads-panel button[aria-label="Schließen"]'); if (!button) return false; button.click(); return true; })()`,
+    expression: `(() => { const button = document.querySelector('.downloads-panel button[data-download-action="close"]'); if (!button) return false; button.click(); return true; })()`,
     returnByValue: true
   });
   const closedDownloads = await waitForDownloads('.downloads-panel, .downloads-minimized-pill', false);
@@ -405,7 +595,7 @@ async function main() {
   check('Downloads close and reopen expanded with saved dock mode', downloadsLifecycleOk,
     `closeClick=${closeExpanded.result.value}, closed=${closedDownloads}, reopenClick=${reopenedDownloads.result.value}, reopened=${reopenedInfo.mode}/${reopenedInfo.minimized ? 'minimized' : 'expanded'}`);
   await cdp.send('Runtime.evaluate', {
-    expression: `document.querySelector('.downloads-panel button[aria-label="Schließen"]')?.click()`,
+    expression: `document.querySelector('.downloads-panel button[data-download-action="close"]')?.click()`,
     returnByValue: true
   });
 
@@ -431,8 +621,8 @@ async function main() {
   check('returning from settings restores the browser panel', returnToWeb.result.value === 'CLICKED' && browserPanelRestored,
     `${returnToWeb.result.value}, visible=${browserPanelRestored}`);
 
-  // Open the Space setup wizard from the workspace picker, then close it
-  // without creating a directory or changing the isolated profile.
+  // Exercise the full Space setup flow in the isolated profile. The audio
+  // continuity check below needs a second real Space to switch to and back.
   const expandSidebar = await cdp.send('Runtime.evaluate', {
     expression: `(() => { if (document.querySelector('.expanded-workspace-pill')) return 'ALREADY_EXPANDED'; const button = document.querySelector('button[aria-label="Toggle Sidebar"]'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
     returnByValue: true
@@ -450,31 +640,71 @@ async function main() {
   const spaceSetupVisible = await waitForLaidOutUi('.space-setup-modal[role="dialog"]', true);
   check('Space setup opens from the workspace picker', workspacePickerReady && openWorkspacePicker.result.value === 'CLICKED' && workspaceFlyoutReady && openSpaceSetup.result.value === 'CLICKED' && spaceSetupVisible,
     `expand=${expandSidebar.result.value}, picker=${workspaceFlyoutReady}, button=${openSpaceSetup.result.value}, wizard=${spaceSetupVisible}`);
-  const closeSpaceSetup = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = document.querySelector('.space-setup-close-btn'); if (!button) return false; button.click(); return true; })()`,
+  const testSpaceName = `Smoke Audio ${process.pid}`;
+  const setSpaceName = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const modal = document.querySelector('.space-setup-modal'); const input = modal?.querySelector('.space-setup-input'); if (!input) return 'NO_NAME_INPUT'; const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, ${JSON.stringify(testSpaceName)}); input.dispatchEvent(new Event('input', { bubbles: true })); return input.value; })()`,
     returnByValue: true
   });
-  const spaceSetupClosed = await waitForUi('.space-setup-modal[role="dialog"]', false);
-  check('Space setup closes without creating a Space', closeSpaceSetup.result.value && spaceSetupClosed,
-    `close=${closeSpaceSetup.result.value}, closed=${spaceSetupClosed}`);
+  const nextSpaceSetupStep = async () => {
+    const result = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { const button = document.querySelector('.space-setup-modal .space-btn.primary:not(.finish)'); if (!button || button.disabled) return false; button.click(); return true; })()`,
+      returnByValue: true
+    });
+    await sleep(100);
+    return result.result.value;
+  };
+  const movedToModelStep = await nextSpaceSetupStep();
+  const modelStepVisible = await waitForUi('.space-setup-modal .space-models-list', true);
+  const movedToAppsStep = await nextSpaceSetupStep();
+  const appsStepVisible = await waitForUi('.space-setup-modal .space-apps-selector-grid', true);
+  const setSpaceStartPage = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const inputs = [...document.querySelectorAll('.space-setup-modal .space-setup-input')]; const input = inputs.at(-1); if (!input) return 'NO_START_PAGE_INPUT'; const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, 'app://browser-home'); input.dispatchEvent(new Event('input', { bubbles: true })); return input.value; })()`,
+    returnByValue: true
+  });
+  const createSpace = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.space-setup-modal .space-btn.primary.finish'); if (!button || button.disabled) return false; button.click(); return true; })()`,
+    returnByValue: true
+  });
+  let createdSpaceIsActive = false;
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const current = await cdp.send('Runtime.evaluate', {
+      expression: `localStorage.getItem('lastbrowser.activeSpacePath.v1') || ''`,
+      returnByValue: true
+    });
+    const modalClosed = await waitForUi('.space-setup-modal[role="dialog"]', false);
+    if (modalClosed && String(current.result.value).replace(/\\/g, '/').toLowerCase().endsWith(`/smoke-audio-${process.pid}`)) {
+      createdSpaceIsActive = true;
+      break;
+    }
+    await sleep(250);
+  }
+  const pickerHasSecondSpace = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.expanded-workspace-pill'); button?.click(); return Boolean(button); })()`,
+    returnByValue: true
+  });
+  const secondSpaceAvailable = pickerHasSecondSpace.result.value && await waitForUi('.workspace-picker-item:not(.active)', true);
+  const pinnedAppsForTestSpace = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const activePath = localStorage.getItem('lastbrowser.activeSpacePath.v1'); return JSON.stringify({ activePath, spaces: JSON.parse(localStorage.getItem('lastbrowser.spaces.v1') || '[]'), pinnedApps: JSON.parse(localStorage.getItem('lastbrowser.pinnedApps.v2') || '[]').filter(app => app.spacePath === activePath), pickerActiveName: document.querySelector('.workspace-picker-item.active .workspace-item-name')?.textContent?.trim() || '', modalOpen: Boolean(document.querySelector('.space-setup-modal[role="dialog"]')), createError: document.querySelector('.space-setup-modal [role="alert"]')?.textContent?.trim() || '' }); })()`,
+    returnByValue: true
+  });
+  await cdp.send('Runtime.evaluate', {
+    expression: `document.querySelector('.expanded-workspace-pill')?.click()`,
+    returnByValue: true
+  });
+  const spaceRuntimeState = JSON.parse(pinnedAppsForTestSpace.result.value || '{}');
+  const pinnedAppsCreated = spaceRuntimeState.pinnedApps || [];
+  createdSpaceIsActive = !spaceRuntimeState.modalOpen
+    && String(spaceRuntimeState.activePath || '').replace(/\\/g, '/').toLowerCase().endsWith(`/smoke-audio-${process.pid}`)
+    && spaceRuntimeState.pickerActiveName === testSpaceName;
+  check('Space setup creates and selects a second Space with its pinned apps',
+    setSpaceName.result.value === testSpaceName && movedToModelStep && modelStepVisible && movedToAppsStep && appsStepVisible
+      && setSpaceStartPage.result.value === 'app://browser-home' && createSpace.result.value && createdSpaceIsActive && secondSpaceAvailable && pinnedAppsCreated.length > 0,
+    `name=${setSpaceName.result.value}, createClicked=${createSpace.result.value}, modelStep=${modelStepVisible}, appsStep=${appsStepVisible}, startPage=${setSpaceStartPage.result.value}, active=${createdSpaceIsActive}, activePath=${spaceRuntimeState.activePath}, picker=${spaceRuntimeState.pickerActiveName}, modal=${spaceRuntimeState.modalOpen}, createError=${spaceRuntimeState.createError}, alternate=${secondSpaceAvailable}, pinnedApps=${pinnedAppsCreated.length}`);
 
   // 3. Navigate via address bar form submit
-  const nav = await cdp.send('Runtime.evaluate', {
-    expression: `(() => {
-      const addr = [...document.querySelectorAll('input')]
-        .find(el => el.getBoundingClientRect().y < 90 && el.getBoundingClientRect().width > 200);
-      if (!addr) return 'NO_ADDRESS_BAR';
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-      setter.call(addr, ${JSON.stringify(TEST_URL)});
-      addr.dispatchEvent(new Event('input', { bubbles: true }));
-      const form = addr.closest('form');
-      if (!form) return 'NO_FORM';
-      form.requestSubmit();
-      return 'SUBMITTED';
-    })()`,
-    returnByValue: true
-  });
-  check('address bar navigation submitted', nav.result.value === 'SUBMITTED', nav.result.value);
+  const navSubmission = await enterAddressThroughKeyboard(cdp, TEST_URL);
+  check('address bar navigation submitted', Boolean(navSubmission?.submitted),
+    navSubmission ? `typed=${navSubmission.typedValue}, suggestion=${navSubmission.selectedSuggestion}` : 'address field not found');
 
   // 4. Webview spawns + renders
   await sleep(8000);
@@ -484,6 +714,7 @@ async function main() {
 
   if (webview) {
     const wvCdp = new CDP(webview.webSocketDebuggerUrl);
+    let webviewSmokePhase = 'reading rendered page state';
     try {
       const render = await wvCdp.send('Runtime.evaluate', {
         expression: `JSON.stringify({
@@ -498,11 +729,50 @@ async function main() {
       check('webview renders page', info.readyState === 'complete' && info.bodyLength > 0,
         `${info.title || 'no title'} (${info.readyState})`);
 
-      const addBookmark = await cdp.send('Runtime.evaluate', {
-        expression: `(() => { const button = document.querySelector('button[aria-label="Add bookmark"]'); if (!button || !button.getClientRects().length) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+      // Capture only after the guest page has rendered; an early capture can
+      // legitimately be empty while Electron is still replacing the blank tab.
+      webviewSmokePhase = 'bounded guest page capture';
+      const webviewCapture = await cdp.send('Runtime.evaluate', {
+        expression: `(async () => {
+          const guest = document.querySelector('.browser-tab-pane.active-tab-pane webview');
+          const capture = window.lastbrowser?.system?.captureGuestRect;
+          if (!guest || typeof capture !== 'function') return { available: false };
+          const bounds = guest.getBoundingClientRect();
+          const rect = { x: Math.max(0, bounds.width / 2 - 32), y: Math.max(0, bounds.height / 2 - 32), width: 64, height: 64 };
+          const dataUrl = await capture(guest.getWebContentsId(), rect);
+          if (typeof dataUrl !== 'string') return { available: true, dataUrl: false, length: 0, size: null, centerPixel: null };
+          const preview = new Image();
+          preview.src = dataUrl;
+          await preview.decode();
+          const canvas = document.createElement('canvas');
+          canvas.width = preview.naturalWidth;
+          canvas.height = preview.naturalHeight;
+          const context = canvas.getContext('2d');
+          if (!context) return { available: true, size: { width: preview.naturalWidth, height: preview.naturalHeight }, dataUrl: dataUrl.startsWith('data:image/'), length: dataUrl.length, centerPixel: null };
+          context.drawImage(preview, 0, 0);
+          const centerPixel = [...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data];
+          return { available: true, size: { width: preview.naturalWidth, height: preview.naturalHeight }, dataUrl: dataUrl.startsWith('data:image/'), length: dataUrl.length, centerPixel };
+        })()` ,
+        awaitPromise: true,
         returnByValue: true
       });
-      const bookmarkAdded = await waitForUi('button[aria-label="Remove bookmark"][aria-pressed="true"]', true);
+      const captureInfo = webviewCapture.result.value;
+      if (cursorPoint?.visible) {
+        check('guest WebView capture returns pixels or a bounded fallback result',
+          captureInfo?.available && (!captureInfo.dataUrl || (captureInfo.length > 100
+            && captureInfo.size?.width > 0 && captureInfo.size?.height > 0
+            && captureInfo.centerPixel?.[3] > 0)),
+          JSON.stringify(captureInfo));
+      } else {
+        skip('cursor loupe page capture requires a visible window', `window visible=${cursorPoint?.visible}`);
+      }
+
+      webviewSmokePhase = 'bookmark interactions';
+      const addBookmark = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const button = document.querySelector('button.bookmark-star[aria-pressed="false"]'); if (!button || !button.getClientRects().length || button.disabled) return 'NOT_AVAILABLE'; button.click(); return 'CLICKED'; })()`,
+        returnByValue: true
+      });
+      const bookmarkAdded = await waitForUi('button.bookmark-star[aria-pressed="true"]', true);
       const storedBookmark = await cdp.send('Runtime.evaluate', {
         expression: `JSON.stringify(JSON.parse(localStorage.getItem('lastbrowser.bookmarks.v1') || '[]').map(bookmark => bookmark.url))`,
         returnByValue: true
@@ -512,10 +782,10 @@ async function main() {
       check('bookmark toolbar adds and persists the active page', addBookmark.result.value === 'CLICKED' && bookmarkAdded && bookmarkStored,
         `${addBookmark.result.value}, marked=${bookmarkAdded}, stored=${bookmarkStored}`);
       const removeBookmark = await cdp.send('Runtime.evaluate', {
-        expression: `(() => { const button = document.querySelector('button[aria-label="Remove bookmark"]'); if (!button) return false; button.click(); return true; })()`,
+        expression: `(() => { const button = document.querySelector('button.bookmark-star[aria-pressed="true"]'); if (!button || button.disabled) return false; button.click(); return true; })()`,
         returnByValue: true
       });
-      const bookmarkRemoved = await waitForUi('button[aria-label="Add bookmark"][aria-pressed="false"]', true);
+      const bookmarkRemoved = await waitForUi('button.bookmark-star[aria-pressed="false"]', true);
       const storedAfterRemoval = await cdp.send('Runtime.evaluate', {
         expression: `JSON.stringify(JSON.parse(localStorage.getItem('lastbrowser.bookmarks.v1') || '[]').map(bookmark => bookmark.url))`,
         returnByValue: true
@@ -524,29 +794,164 @@ async function main() {
       check('bookmark toolbar removes the active page cleanly', removeBookmark.result.value && bookmarkRemoved && bookmarkAbsent,
         `remove=${removeBookmark.result.value}, marked=${bookmarkRemoved}, absent=${bookmarkAbsent}`);
 
-      const setAddress = async (url) => cdp.send('Runtime.evaluate', {
+      // Start real WebAudio from a trusted page click, pin the tab, switch
+      // Spaces away and back, then verify the same Electron guest stays alive
+      // and unmuted. The isolated smoke profile is removed after the run.
+      webviewSmokePhase = 'pinned audio continuity across Spaces';
+      const audioButton = await wvCdp.send('Runtime.evaluate', {
         expression: `(() => {
-          const addr = [...document.querySelectorAll('input')]
-            .find(el => el.getBoundingClientRect().y < 90 && el.getBoundingClientRect().width > 200);
-          if (!addr) return false;
-          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-          setter.call(addr, ${JSON.stringify(url)});
-          addr.dispatchEvent(new Event('input', { bubbles: true }));
-          addr.closest('form')?.requestSubmit();
-          return true;
-        })()`
+          const button = document.createElement('button');
+          button.id = 'lastbrowser-smoke-audio-start';
+          button.textContent = 'Start local audio';
+          Object.assign(button.style, { position: 'fixed', zIndex: '2147483647', top: '12px', right: '12px', padding: '16px', background: '#fff', color: '#000' });
+          button.onclick = async () => {
+            const player = new Audio(${JSON.stringify(createSmokeAudioDataUrl())});
+            player.loop = true;
+            player.volume = 0.05;
+            await player.play();
+            window.__lastbrowserSmokeAudio = { player, startedAt: performance.now() };
+          };
+          document.body.appendChild(button);
+          const rect = button.getBoundingClientRect();
+          return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        })()`,
+        returnByValue: true
       });
+      const audioButtonPoint = audioButton.result.value;
+      if (audioButtonPoint) {
+        await wvCdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...audioButtonPoint });
+        await wvCdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...audioButtonPoint });
+        await wvCdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...audioButtonPoint });
+      }
+      let audioPlaying = false;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const playing = await wvCdp.send('Runtime.evaluate', {
+          expression: `Boolean(window.__lastbrowserSmokeAudio?.player.paused === false && window.__lastbrowserSmokeAudio.player.currentTime > 0.2)`,
+          returnByValue: true
+        });
+        if (playing.result.value) { audioPlaying = true; break; }
+        await sleep(100);
+      }
+      const audioStateDetected = await waitForUi('.vertical-tab-item.active .vtab-audio-btn', true);
+      const pinAudioTab = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const active = document.querySelector('.vertical-tab-item.active'); const pin = active?.querySelector('.vertical-tab-pin-btn'); const view = document.querySelector('webview.browser-view'); if (!active || !pin || !view) return null; const space = document.querySelector('.workspace-badge-name')?.textContent?.trim() || ''; pin.click(); return { tabId: view.getAttribute('data-tab-id'), guestId: view.getWebContentsId(), space }; })()`,
+        returnByValue: true
+      });
+      const pinnedState = await waitForUi('.vertical-tab-item.active.pinned', true);
+      let switchedAway = false;
+      let spaceSwitchDetail = 'audio tab was not ready for Space switching';
+      if (pinAudioTab.result.value && audioPlaying && audioStateDetected && pinnedState) {
+        const openPicker = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const button = document.querySelector('.expanded-workspace-pill'); if (!button) return false; button.click(); return true; })()`,
+          returnByValue: true
+        });
+        const pickerReady = openPicker.result.value && await waitForUi('.workspace-picker-flyout', true);
+        if (pickerReady) {
+          const selectOther = await cdp.send('Runtime.evaluate', {
+            expression: `(() => { const other = document.querySelector('.workspace-picker-item:not(.active)'); if (!other) return { clicked: false, available: document.querySelectorAll('.workspace-picker-item').length }; const name = other.querySelector('.workspace-item-name')?.textContent?.trim() || other.textContent.trim(); other.click(); return { clicked: true, name }; })()`,
+            returnByValue: true
+          });
+          const selectResult = selectOther.result.value || {};
+          spaceSwitchDetail = `picker=${pickerReady}, ${JSON.stringify(selectResult)}`;
+          for (let attempt = 0; attempt < 30; attempt++) {
+            const currentSpace = await cdp.send('Runtime.evaluate', {
+              expression: `document.querySelector('.expanded-workspace-pill .workspace-badge-name')?.textContent?.trim() || ''`,
+              returnByValue: true
+            });
+            if (currentSpace.result.value && currentSpace.result.value !== pinAudioTab.result.value.space) {
+              switchedAway = true;
+              break;
+            }
+            await sleep(100);
+          }
+        } else {
+          spaceSwitchDetail = 'space selector button/dropdown unavailable';
+        }
+      }
+      if (switchedAway) await sleep(1250);
+      if (!switchedAway) {
+        await cdp.send('Runtime.evaluate', {
+          expression: `(() => { if (document.querySelector('.workspace-picker-flyout')) document.querySelector('.expanded-workspace-pill')?.click(); })()`,
+          returnByValue: true
+        });
+      }
+      const awayState = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const view = [...document.querySelectorAll('webview.browser-view')].find(item => item.getAttribute('data-tab-id') === ${JSON.stringify(pinAudioTab.result.value?.tabId || '')}); if (!view) return null; return { guestId: view.getWebContentsId(), muted: view.isAudioMuted(), audioButton: Boolean(document.querySelector('.vtab-audio-btn')) }; })()`,
+        returnByValue: true
+      });
+      const sameGuestAway = awayState.result.value?.guestId === pinAudioTab.result.value?.guestId;
+      const audioContinuesAway = await wvCdp.send('Runtime.evaluate', {
+        expression: `(() => { const player = window.__lastbrowserSmokeAudio?.player; return { playing: Boolean(player && !player.paused && player.currentTime > 1), paused: player?.paused ?? true, currentTime: player?.currentTime || 0 }; })()`,
+        returnByValue: true
+      });
+      let switchedBack = false;
+      if (switchedAway) {
+        const openPicker = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const button = document.querySelector('.expanded-workspace-pill'); if (!button) return false; button.click(); return true; })()`,
+          returnByValue: true
+        });
+        const pickerReady = openPicker.result.value && await waitForUi('.workspace-picker-flyout', true);
+        if (pickerReady) {
+          const selectOriginal = await cdp.send('Runtime.evaluate', {
+            expression: `(() => { const original = ${JSON.stringify(pinAudioTab.result.value.space)}; const item = [...document.querySelectorAll('.workspace-picker-item')].find(entry => entry.querySelector('.workspace-item-name')?.textContent?.trim() === original); if (!item) return false; item.click(); return true; })()`,
+            returnByValue: true
+          });
+          const originalSelected = selectOriginal.result.value;
+          if (originalSelected) {
+            for (let attempt = 0; attempt < 30; attempt++) {
+              const currentSpace = await cdp.send('Runtime.evaluate', {
+                expression: `document.querySelector('.expanded-workspace-pill .workspace-badge-name')?.textContent?.trim() || ''`,
+                returnByValue: true
+              });
+              if (currentSpace.result.value === pinAudioTab.result.value.space) {
+                switchedBack = true;
+                break;
+              }
+              await sleep(100);
+            }
+          }
+        }
+      }
+      const backState = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const view = [...document.querySelectorAll('webview.browser-view')].find(item => item.getAttribute('data-tab-id') === ${JSON.stringify(pinAudioTab.result.value?.tabId || '')}); return view ? { guestId: view.getWebContentsId(), muted: view.isAudioMuted() } : null; })()`,
+        returnByValue: true
+      });
+      const currentSpaceAfterReturn = await cdp.send('Runtime.evaluate', {
+        expression: `document.querySelector('.expanded-workspace-pill .workspace-badge-name')?.textContent?.trim() || ''`,
+        returnByValue: true
+      });
+      const audioContinuesAfterReturn = await wvCdp.send('Runtime.evaluate', {
+        expression: `(() => { const player = window.__lastbrowserSmokeAudio?.player; return { playing: Boolean(player && !player.paused && player.currentTime > 1), paused: player?.paused ?? true, currentTime: player?.currentTime || 0 }; })()`,
+        returnByValue: true
+      });
+      const audioContinuityOk = Boolean(audioPlaying && audioStateDetected && pinnedState && switchedAway && sameGuestAway && awayState.result.value?.muted === false && audioContinuesAway.result.value?.playing && switchedBack && currentSpaceAfterReturn.result.value === pinAudioTab.result.value?.space && backState.result.value?.guestId === pinAudioTab.result.value?.guestId && backState.result.value?.muted === false && audioContinuesAfterReturn.result.value?.playing);
+      check('pinned audio keeps the same unmuted WebView guest across Space switches', audioContinuityOk,
+        `playing=${audioPlaying}, sidebarDetected=${audioStateDetected}, pinned=${pinnedState}, away=${switchedAway}, ${spaceSwitchDetail}, sameGuest=${sameGuestAway}, mutedAway=${awayState.result.value?.muted}, stillPlaying=${JSON.stringify(audioContinuesAway.result.value)}, back=${switchedBack}, selectedSpace=${currentSpaceAfterReturn.result.value}, sameGuestBack=${backState.result.value?.guestId === pinAudioTab.result.value?.guestId}, mutedBack=${backState.result.value?.muted}, playingBack=${JSON.stringify(audioContinuesAfterReturn.result.value)}`);
+      await wvCdp.send('Runtime.evaluate', {
+        expression: `window.__lastbrowserSmokeAudio?.player?.pause()`,
+        returnByValue: true
+      });
+      await cdp.send('Runtime.evaluate', {
+        expression: `document.querySelector('.vertical-tab-item.pinned .vertical-tab-pin-btn')?.click()`,
+        returnByValue: true
+      });
+      webviewSmokePhase = 'browser history and back/forward interactions';
       const navigateTestPage = async (url, expectedHost) => {
-        const submitted = await setAddress(url);
-        if (!submitted.result.value) return false;
+        const submitted = await enterAddressThroughKeyboard(cdp, url);
+        if (!submitted?.submitted) return false;
         for (let attempt = 0; attempt < 40; attempt++) {
           const currentTargets = await cdpList();
           const current = currentTargets.find((target) => (target.type === 'webview' || target.type === 'page') && target.url.includes(expectedHost));
           if (current) {
             const tab = new CDP(current.webSocketDebuggerUrl);
             try {
-              const state = await tab.send('Runtime.evaluate', { expression: 'location.hostname', returnByValue: true });
-              if (String(state.result.value || '').replace(/^www\./, '') === expectedHost.replace(/^www\./, '')) return true;
+              const state = await tab.send('Runtime.evaluate', {
+                expression: 'JSON.stringify({ host: location.hostname, readyState: document.readyState })',
+                returnByValue: true
+              });
+              const page = JSON.parse(state.result.value || '{}');
+              if (String(page.host || '').replace(/^www\./, '') === expectedHost.replace(/^www\./, '')
+                && page.readyState === 'complete') return true;
             } finally { tab.close(); }
           }
           await sleep(250);
@@ -558,19 +963,33 @@ async function main() {
         check('history navigation fixture skipped', true, 'set LASTBROWSER_SMOKE_URL=example.com for the full history flow');
       } else {
         const navigated = await navigateTestPage('https://iana.org/domains/reserved', 'iana.org');
-        check('second navigation creates history entry', navigated, 'iana.org');
+        const afterSecondNavigation = await cdp.send('Runtime.evaluate', {
+          expression: `JSON.stringify((() => {
+            const address = [...document.querySelectorAll('input[aria-label]')].find(el => { const r = el.getBoundingClientRect(); return r.y < 90 && r.x > 100 && r.width > 120; });
+            const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view');
+            return { address: address?.value || '', guestUrl: view?.getURL?.() || '', canGoBack: view?.canGoBack?.() || false, isLoading: view?.isLoading?.() || false };
+          })())`,
+          returnByValue: true
+        });
+        const secondNavigationState = JSON.parse(afterSecondNavigation.result.value);
+        check('second navigation creates history entry', navigated,
+          `entry=${JSON.stringify(addressEntryTrace.at(-1))}, target=${secondNavigationState.guestUrl}, address=${secondNavigationState.address}, canGoBack=${secondNavigationState.canGoBack}, loading=${secondNavigationState.isLoading}`);
         const clickBack = await cdp.send('Runtime.evaluate', {
           expression: `(() => { const button = document.querySelector('button[aria-label="Back"]'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
           returnByValue: true
         });
-        let backTarget = null;
+        let backState = null;
         for (let attempt = 0; attempt < 40; attempt++) {
-          const afterBack = await cdpList();
-          backTarget = afterBack.find((target) => target.type === 'webview' && target.url.includes('example.com'));
-          if (backTarget) break;
+          const afterBack = await cdp.send('Runtime.evaluate', {
+            expression: `(() => { const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view'); return { url: view?.getURL?.() || '', loading: view?.isLoading?.() || false }; })()`,
+            returnByValue: true
+          });
+          backState = afterBack.result.value;
+          if (backState?.url.includes('example.com') && !backState.loading) break;
           await sleep(250);
         }
-        check('back button restores previous page', Boolean(backTarget), clickBack.result.value);
+        check('back button restores previous page', Boolean(backState?.url.includes('example.com') && !backState.loading),
+          `${clickBack.result.value}, url=${backState?.url}, loading=${backState?.loading}`);
 
         const forward = await cdp.send('Runtime.evaluate', {
           expression: `(() => { const button = document.querySelector('button[aria-label="Forward"]'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
@@ -579,16 +998,26 @@ async function main() {
         let forwardRestored = false;
         for (let attempt = 0; attempt < 40; attempt++) {
           const activeUrl = await cdp.send('Runtime.evaluate', {
-            expression: `(() => { const input = [...document.querySelectorAll('input')].find(el => el.getBoundingClientRect().y < 90 && el.getBoundingClientRect().width > 200); return input?.value || ''; })()`,
+            expression: `(() => { const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view'); return { url: view?.getURL?.() || '', loading: view?.isLoading?.() || false }; })()`,
             returnByValue: true
           });
-          if (String(activeUrl.result.value || '').includes('iana.org')) {
+          if (String(activeUrl.result.value?.url || '').includes('iana.org') && !activeUrl.result.value?.loading) {
             forwardRestored = true;
             break;
           }
           await sleep(250);
         }
-        check('forward button restores next page', forwardRestored, `${String(forward.result.value)}, active=${forwardRestored}`);
+        const afterForward = await cdp.send('Runtime.evaluate', {
+          expression: `JSON.stringify((() => {
+            const address = [...document.querySelectorAll('input[aria-label]')].find(el => { const r = el.getBoundingClientRect(); return r.y < 90 && r.x > 100 && r.width > 120; });
+            const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view');
+            return { address: address?.value || '', guestUrl: view?.getURL?.() || '', canGoForward: view?.canGoForward?.() || false, isLoading: view?.isLoading?.() || false };
+          })())`,
+          returnByValue: true
+        });
+        const forwardState = JSON.parse(afterForward.result.value);
+        check('forward button restores next page', forwardRestored,
+          `${String(forward.result.value)}, address=${forwardState.address}, guest=${forwardState.guestUrl}, canGoForward=${forwardState.canGoForward}, loading=${forwardState.isLoading}`);
 
         await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17, modifiers: 2 });
         await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'h', code: 'KeyH', windowsVirtualKeyCode: 72, modifiers: 2 });
@@ -660,7 +1089,7 @@ async function main() {
         // Guest webview screenshot is best-effort
       }
     } catch (e) {
-      check('webview renders page', false, e.message);
+      check(`WebView smoke phase: ${webviewSmokePhase}`, false, e.message);
     }
     wvCdp.close();
   }
@@ -713,144 +1142,285 @@ async function main() {
   check('closing the active tab restores the prior tab count', createTemporaryTab.result.value && temporaryTabAdded && closeTemporaryTab.result.value && temporaryTabClosed,
     `created=${temporaryTabAdded}, closed=${temporaryTabClosed}, count=${tabCountBeforeClose.result.value}`);
 
-  const snapDrag = await cdp.send('Runtime.evaluate', {
+  await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const traceKey = '__lastbrowserSmokeDragTrace';
+      if (window[traceKey]) return;
+      const trace = [];
+      Object.defineProperty(window, traceKey, { value: trace, configurable: true });
+      for (const type of ['dragstart', 'dragenter', 'dragover', 'drop', 'dragend']) {
+        document.addEventListener(type, (event) => {
+          const target = event.target instanceof Element ? event.target : null;
+          trace.push({
+            type,
+            trusted: event.isTrusted,
+            x: event.clientX,
+            y: event.clientY,
+            target: target?.tagName.toLowerCase() + (target?.className && typeof target.className === 'string' ? '.' + target.className.trim().replace(/\\s+/g, '.') : ''),
+            transferTypes: [...(event.dataTransfer?.types || [])],
+            dragSurface: Boolean(document.querySelector('.snap-drag-surface'))
+          });
+          if (trace.length > 40) trace.shift();
+        }, true);
+      }
+    })()`,
+    returnByValue: true
+  });
+  const snapGeometryResult = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
       const tabs = [...document.querySelectorAll('.vertical-tab-item')];
-      const source = tabs.at(-1);
-      if (!source) return 'MISSING_SOURCE';
-      const dataTransfer = new DataTransfer();
-      source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer }));
-      return 'DRAG_STARTED';
-    })()`,
-    returnByValue: true
-  });
-  await sleep(150);
-  const snapHover = await cdp.send('Runtime.evaluate', {
-    expression: `(() => {
-      const surface = document.querySelector('.snap-drag-surface');
+      const hitPointFor = (tab) => {
+        const rect = tab.getBoundingClientRect();
+        const y = rect.top + rect.height / 2;
+        for (const offset of [24, 8, Math.min(rect.width * 0.5, 110), Math.max(8, rect.width - 18)]) {
+          const point = { x: rect.left + offset, y };
+          const hit = document.elementFromPoint(point.x, point.y);
+          if (hit && (hit === tab || tab.contains(hit))) return point;
+        }
+        return null;
+      };
+      const isVisibleAndHit = (tab) => {
+        const rect = tab.getBoundingClientRect();
+        const style = getComputedStyle(tab);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0
+          || rect.width <= 0 || rect.height <= 0 || rect.right <= 0 || rect.left >= innerWidth || rect.bottom <= 0 || rect.top >= innerHeight) return false;
+        return Boolean(hitPointFor(tab));
+      };
+      let source = tabs.find((tab) => !tab.classList.contains('active') && isVisibleAndHit(tab)) || tabs.find(isVisibleAndHit);
+      if (!source) {
+        for (const tab of tabs) {
+          tab.scrollIntoView({ block: 'nearest' });
+          if (isVisibleAndHit(tab)) { source = tab; break; }
+        }
+      }
       const frame = document.querySelector('.browser-webview-frame');
-      if (!surface || !frame) return 'MISSING_SURFACE_OR_FRAME';
-      const rect = frame.getBoundingClientRect();
-      const dataTransfer = new DataTransfer();
-      const x = rect.left + rect.width * 0.10;
-      const y = rect.top + rect.height * 0.5;
-      surface.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer, clientX: x, clientY: y }));
-      return 'DRAGOVER_DISPATCHED';
+      if (!source || !frame) return { from: null, to: null, candidates: tabs.map((tab) => {
+        const rect = tab.getBoundingClientRect(), y = rect.top + rect.height / 2;
+        const hits = [24, 8, Math.min(rect.width * 0.5, 110), Math.max(8, rect.width - 18)].map((offset) => { const point = { x: rect.left + offset, y }, hit = document.elementFromPoint(point.x, point.y); return { point, hit: hit?.tagName.toLowerCase() + (hit?.className && typeof hit.className === 'string' ? '.' + hit.className.trim().replace(/\\s+/g, '.') : '') }; });
+        return { className: tab.className, active: tab.classList.contains('active'), bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, hits };
+      }) };
+      const tab = source.getBoundingClientRect();
+      const target = frame.getBoundingClientRect();
+      const from = hitPointFor(source);
+      const sourceHit = document.elementFromPoint(from.x, from.y);
+      const to = { x: target.left + target.width * 0.05, y: target.top + target.height * 0.5 };
+      const targetHit = document.elementFromPoint(to.x, to.y);
+      return {
+        from, to,
+        source: { classes: source.className, draggable: source.draggable, bounds: { x: tab.x, y: tab.y, width: tab.width, height: tab.height }, hit: sourceHit?.tagName.toLowerCase() + (sourceHit?.className && typeof sourceHit.className === 'string' ? '.' + sourceHit.className.trim().replace(/\\s+/g, '.') : '') },
+        target: { bounds: { x: target.x, y: target.y, width: target.width, height: target.height }, hit: targetHit?.tagName.toLowerCase() + (targetHit?.className && typeof targetHit.className === 'string' ? '.' + targetHit.className.trim().replace(/\\s+/g, '.') : '') }
+      };
     })()`,
     returnByValue: true
   });
+  const snapGeometry = snapGeometryResult.result.value;
+  const hasSnapGeometry = Boolean(snapGeometry?.from && snapGeometry?.to);
+  if (hasSnapGeometry) {
+    await pressMouse(cdp, snapGeometry.from);
+    await moveHeldMouse(cdp, snapGeometry.from, snapGeometry.to);
+  }
   await sleep(150);
   const ghostStateResult = await cdp.send('Runtime.evaluate', {
-    expression: `JSON.stringify({ visible: Boolean(document.querySelector('.snap-ghost-overlay')), label: document.querySelector('.snap-ghost-label')?.textContent || '' })`,
+    expression: `JSON.stringify({ visible: Boolean(document.querySelector('.snap-ghost-overlay')), label: document.querySelector('.snap-ghost-label')?.textContent || '', sourceDragging: [...document.querySelectorAll('.vertical-tab-item')].some(tab => tab.classList.contains('dragging')), surface: Boolean(document.querySelector('.snap-drag-surface')), events: window.__lastbrowserSmokeDragTrace || [] })`,
     returnByValue: true
   });
   const ghostState = JSON.parse(ghostStateResult.result.value);
-  const snapDrop = await cdp.send('Runtime.evaluate', {
-    expression: `(() => {
-      const surface = document.querySelector('.snap-drag-surface');
-      const frame = document.querySelector('.browser-webview-frame');
-      if (!surface || !frame) return 'MISSING_SURFACE_OR_FRAME';
-      const rect = frame.getBoundingClientRect();
-      const dataTransfer = new DataTransfer();
-      surface.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer, clientX: rect.left + rect.width * 0.10, clientY: rect.top + rect.height * 0.5 }));
-      return 'DROP_DISPATCHED';
-    })()`,
-    returnByValue: true
-  });
+  if (!ghostState.visible || !ghostState.events.some((event) => event.type === 'dragstart')) {
+    console.log(`  snap trace: ${JSON.stringify({ geometry: snapGeometry, state: ghostState })}`);
+  }
+  if (hasSnapGeometry) await releaseMouse(cdp, snapGeometry.to);
   await sleep(500);
   const snapResult = await cdp.send('Runtime.evaluate', {
     expression: `JSON.stringify({ layout: document.querySelector('.multiview-grid-container')?.className || '', panes: [...document.querySelectorAll('.multiview-pane-chrome')].map(p => p.classList.contains('occupied')), tabIds: [...document.querySelectorAll('.multiview-pane-title')].map(p => p.textContent) })`,
     returnByValue: true
   });
   const snapState = JSON.parse(snapResult.result.value);
-  check('drag and drop creates dual multiview without duplicate panes',
-    snapDrag.result.value === 'DRAG_STARTED' && snapHover.result.value === 'DRAGOVER_DISPATCHED' && snapDrop.result.value === 'DROP_DISPATCHED'
+  check('real mouse drag and drop creates dual multiview without duplicate panes',
+    hasSnapGeometry
       && snapState.layout.includes('layout-dual-25-75')
       && snapState.panes.filter(Boolean).length === 2
       && new Set(snapState.tabIds).size === 2,
-    `${snapDrag.result.value}/${snapHover.result.value}/${snapDrop.result.value}, ${snapState.layout}, occupied=${snapState.panes.filter(Boolean).length}`);
+    `${hasSnapGeometry ? 'native mouse drag' : 'missing hittable source/target'}, ${snapState.layout}, occupied=${snapState.panes.filter(Boolean).length}; geometry=${JSON.stringify(snapGeometry)}, drag=${JSON.stringify({ started: ghostState.sourceDragging, surface: ghostState.surface, events: ghostState.events })}`);
   check('snap drag displays a target ghost before drop', ghostState.visible && /25%|75%|Dual/i.test(ghostState.label), ghostState.label || 'ghost not visible');
 
-  const flyoutProbe = await cdp.send('Runtime.evaluate', {
+  const flyoutGeometryResult = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
-      const source = document.querySelector('.vertical-tab-item');
-      const surface = document.querySelector('.snap-drag-surface');
+      const candidates = [...document.querySelectorAll('.vertical-tab-item')];
+      const hitPointFor = (tab) => {
+        const rect = tab.getBoundingClientRect(), y = rect.top + rect.height / 2;
+        for (const offset of [24, 8, Math.min(rect.width * 0.5, 110), Math.max(8, rect.width - 18)]) {
+          const point = { x: rect.left + offset, y }, hit = document.elementFromPoint(point.x, point.y);
+          if (hit && (hit === tab || tab.contains(hit))) return point;
+        }
+        return null;
+      };
+      const source = candidates.find((tab) => {
+        if (tab.classList.contains('active')) return false;
+        const rect = tab.getBoundingClientRect(), style = getComputedStyle(tab);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 || rect.width <= 0 || rect.height <= 0 || rect.right <= 0 || rect.left >= innerWidth || rect.bottom <= 0 || rect.top >= innerHeight) return false;
+        return Boolean(hitPointFor(tab));
+      }) || candidates.find((tab) => {
+        const rect = tab.getBoundingClientRect(), style = getComputedStyle(tab);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 || rect.width <= 0 || rect.height <= 0 || rect.right <= 0 || rect.left >= innerWidth || rect.bottom <= 0 || rect.top >= innerHeight) return false;
+        return Boolean(hitPointFor(tab));
+      });
       const frame = document.querySelector('.browser-webview-frame');
-      if (!source || !surface || !frame) return 'MISSING_SOURCE_SURFACE_OR_FRAME';
-      source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() }));
-      const rect = frame.getBoundingClientRect();
-      surface.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer(), clientX: rect.left + rect.width * 0.5, clientY: rect.top + rect.height * 0.05 }));
-      return 'FLYOUT_DRAGOVER_DISPATCHED';
+      if (!source || !frame) return { from: null, to: null };
+      const tab = source.getBoundingClientRect();
+      const target = frame.getBoundingClientRect();
+      return {
+        from: hitPointFor(source),
+        to: { x: target.left + target.width * 0.5, y: target.top + target.height * 0.05 }
+      };
     })()`,
     returnByValue: true
   });
+  const flyoutGeometry = flyoutGeometryResult.result.value;
+  const hasFlyoutGeometry = Boolean(flyoutGeometry?.from && flyoutGeometry?.to);
+  if (hasFlyoutGeometry) {
+    await pressMouse(cdp, flyoutGeometry.from);
+    await moveHeldMouse(cdp, flyoutGeometry.from, flyoutGeometry.to);
+  }
   await sleep(150);
   const flyoutStateResult = await cdp.send('Runtime.evaluate', {
-    expression: `JSON.stringify({ visible: Boolean(document.querySelector('.snap-bar-flyout.is-visible')), cards: document.querySelectorAll('.snap-bar-card').length, quadSlot: Boolean(document.querySelector('.snap-bar-flyout button[aria-label^="Quad 2x2 Grid"]')) })`,
+    expression: `JSON.stringify({ visible: Boolean(document.querySelector('.snap-bar-flyout.is-visible')), cards: document.querySelectorAll('.snap-bar-card').length, quadSlot: Boolean(document.querySelector('.snap-bar-flyout .snap-card-preview.layout-quad-grid button.snap-card-slot')) })`,
     returnByValue: true
   });
   const flyoutState = JSON.parse(flyoutStateResult.result.value);
-  check('snap flyout presents selectable layouts', flyoutProbe.result.value === 'FLYOUT_DRAGOVER_DISPATCHED' && flyoutState.visible && flyoutState.cards >= 8 && flyoutState.quadSlot, `visible=${flyoutState.visible}, cards=${flyoutState.cards}`);
-  const quadSelect = await cdp.send('Runtime.evaluate', {
+  check('real mouse drag opens the snap flyout with selectable layouts', hasFlyoutGeometry && flyoutState.visible && flyoutState.cards >= 8 && flyoutState.quadSlot, `visible=${flyoutState.visible}, cards=${flyoutState.cards}`);
+  const quadSlotGeometry = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
-      const slot = document.querySelector('.snap-bar-flyout button[aria-label^="Quad 2x2 Grid"]');
-      if (!slot) return 'QUAD_SLOT_NOT_FOUND';
-      slot.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
-      return 'QUAD_SLOT_HOVERED';
+      const slot = document.querySelector('.snap-bar-flyout .snap-card-preview.layout-quad-grid button.snap-card-slot');
+      if (!slot) return null;
+      const rect = slot.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     })()`,
     returnByValue: true
   });
-  await sleep(100);
-  const quadDrop = await cdp.send('Runtime.evaluate', {
-    expression: `(() => {
-      const slot = document.querySelector('.snap-bar-flyout button[aria-label^="Quad 2x2 Grid"]');
-      if (!slot) return 'QUAD_SLOT_NOT_FOUND';
-      slot.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
-      return 'QUAD_DROP_DISPATCHED';
-    })()`,
-    returnByValue: true
-  });
+  const quadSlotPoint = quadSlotGeometry.result.value;
+  let slotDragOverObserved = false;
+  if (hasFlyoutGeometry && quadSlotPoint) {
+    await moveHeldMouse(cdp, flyoutGeometry.to, quadSlotPoint, 6);
+    // Chromium throttles trusted dragover events while a drag is stationary.
+    // Keep the pointer on the card until the actual slot receives one.
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const observed = await cdp.send('Runtime.evaluate', {
+        expression: `Boolean((window.__lastbrowserSmokeDragTrace || []).some(event => event.type === 'dragover' && event.target.includes('snap-card-slot')))` ,
+        returnByValue: true
+      });
+      slotDragOverObserved = Boolean(observed.result.value);
+      if (slotDragOverObserved) break;
+      await sleep(100);
+    }
+    await releaseMouse(cdp, quadSlotPoint);
+  } else if (hasFlyoutGeometry) {
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await releaseMouse(cdp, flyoutGeometry.to);
+  }
   await sleep(300);
   const quadResult = await cdp.send('Runtime.evaluate', {
     expression: `JSON.stringify({ layout: document.querySelector('.multiview-grid-container')?.className || '', panes: [...document.querySelectorAll('.multiview-pane-chrome')].map(p => p.classList.contains('occupied')), uniqueTitles: new Set([...document.querySelectorAll('.multiview-pane-title')].map(p => p.textContent)).size })`,
     returnByValue: true
   });
   const quadState = JSON.parse(quadResult.result.value);
-  check('snap flyout drop changes layout to quad and keeps unique tabs', quadSelect.result.value === 'QUAD_SLOT_HOVERED' && quadDrop.result.value === 'QUAD_DROP_DISPATCHED' && quadState.layout.includes('layout-quad-grid') && quadState.panes.length === 4 && quadState.panes.filter(Boolean).length === 2 && quadState.uniqueTitles === 2,
-    `${quadSelect.result.value}/${quadDrop.result.value}, ${quadState.layout}, occupied=${quadState.panes.filter(Boolean).length}`);
+  if (!quadState.layout.includes('layout-quad-grid')) {
+    const quadTrace = await cdp.send('Runtime.evaluate', {
+      expression: `JSON.stringify({ events: (window.__lastbrowserSmokeDragTrace || []).slice(-24), flyout: Boolean(document.querySelector('.snap-bar-flyout.is-visible')), slot: (() => { const element = document.querySelector('.snap-bar-flyout .snap-card-preview.layout-quad-grid button.snap-card-slot'); if (!element) return null; const rect = element.getBoundingClientRect(); const point = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; const hit = document.elementFromPoint(point.x, point.y); return { point, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, hit: hit?.tagName.toLowerCase() + (hit?.className && typeof hit.className === 'string' ? '.' + hit.className.trim().replace(/\\s+/g, '.') : '') }; })() })`,
+      returnByValue: true
+    });
+    console.log(`  snap flyout trace: ${quadTrace.result.value}`);
+  }
+  check('native drop on the snap flyout selects quad and keeps unique tabs', Boolean(hasFlyoutGeometry && quadSlotPoint) && quadState.layout.includes('layout-quad-grid') && quadState.panes.length === 4 && quadState.panes.filter(Boolean).length === 2 && quadState.uniqueTitles === 2,
+    `${hasFlyoutGeometry && quadSlotPoint ? 'native mouse drop' : 'missing flyout slot'}, slotDragOver=${slotDragOverObserved}, ${quadState.layout}, occupied=${quadState.panes.filter(Boolean).length}`);
 
-  const resizeX = await cdp.send('Runtime.evaluate', {
+  const resizeXGeometryResult = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
       const divider = document.querySelector('.multiview-divider-vertical');
-      const frame = document.querySelector('.browser-webview-frame');
-      if (!divider || !frame) return false;
-      const rect = frame.getBoundingClientRect();
-      divider.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: rect.left + rect.width * 0.5, clientY: rect.top + rect.height * 0.5 }));
-      window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: rect.left + rect.width * 0.65, clientY: rect.top + rect.height * 0.5 }));
-      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-      return true;
+      const container = document.querySelector('.multiview-grid-container');
+      if (!divider || !container) return null;
+      const handle = divider.getBoundingClientRect();
+      const rect = container.getBoundingClientRect();
+      // Keep the vertical drag away from the horizontal handle crossing. The
+      // horizontal separator is rendered later and wins hit testing exactly
+      // at the 50% × 50% intersection in quad layouts.
+      const y = rect.top + rect.height * 0.25;
+      const from = { x: handle.left + handle.width / 2, y };
+      const to = { x: rect.left + rect.width * 0.65, y };
+      return {
+        from,
+        to,
+        fromHit: document.elementFromPoint(from.x, from.y)?.className || '',
+        toHit: document.elementFromPoint(to.x, to.y)?.className || ''
+      };
     })()`,
     returnByValue: true
   });
-  const resizeY = await cdp.send('Runtime.evaluate', {
+  const resizeXGeometry = resizeXGeometryResult.result.value;
+  if (resizeXGeometry) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const current = attempt === 0 ? resizeXGeometry : (await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const divider = document.querySelector('.multiview-divider-vertical'); const container = document.querySelector('.multiview-grid-container'); if (!divider || !container) return null; const handle = divider.getBoundingClientRect(), rect = container.getBoundingClientRect(), y = rect.top + rect.height * 0.25; return { from: { x: handle.left + handle.width / 2, y }, to: { x: rect.left + rect.width * 0.65, y } }; })()`,
+        returnByValue: true
+      })).result.value;
+      if (!current) break;
+      await pressMouse(cdp, current.from);
+      await moveHeldMouse(cdp, current.from, current.to);
+      await releaseMouse(cdp, current.to);
+      await sleep(150);
+      const split = await cdp.send('Runtime.evaluate', {
+        expression: `document.querySelector('.multiview-divider-vertical')?.style.left || ''`,
+        returnByValue: true
+      });
+      if (String(split.result.value).includes('66.67%')) break;
+    }
+  }
+  await sleep(150);
+  const resizeYGeometryResult = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
       const divider = document.querySelector('.multiview-divider-horizontal');
-      const frame = document.querySelector('.browser-webview-frame');
-      if (!divider || !frame) return false;
-      const rect = frame.getBoundingClientRect();
-      divider.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: rect.left + rect.width * 0.5, clientY: rect.top + rect.height * 0.5 }));
-      window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: rect.left + rect.width * 0.5, clientY: rect.top + rect.height * 0.65 }));
-      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-      return true;
+      const container = document.querySelector('.multiview-grid-container');
+      if (!divider || !container) return null;
+      const handle = divider.getBoundingClientRect();
+      const rect = container.getBoundingClientRect();
+      // Keep the horizontal drag away from the vertical handle crossing too.
+      const vertical = document.querySelector('.multiview-divider-vertical')?.getBoundingClientRect();
+      const x = vertical ? (rect.left + vertical.left) / 2 : rect.left + rect.width * 0.25;
+      const from = { x, y: handle.top + handle.height / 2 };
+      const to = { x, y: rect.top + rect.height * 0.65 };
+      return {
+        from,
+        to,
+        fromHit: document.elementFromPoint(from.x, from.y)?.className || '',
+        toHit: document.elementFromPoint(to.x, to.y)?.className || ''
+      };
     })()`,
     returnByValue: true
   });
+  const resizeYGeometry = resizeYGeometryResult.result.value;
+  if (resizeYGeometry) {
+    await pressMouse(cdp, resizeYGeometry.from);
+    await moveHeldMouse(cdp, resizeYGeometry.from, resizeYGeometry.to);
+    await releaseMouse(cdp, resizeYGeometry.to);
+  }
   const resized = await cdp.send('Runtime.evaluate', {
     expression: `JSON.stringify({ x: document.querySelector('.browser-tab-pane')?.style.width, y: document.querySelector('.browser-tab-pane')?.style.height, layout: document.querySelector('.multiview-grid-container')?.className || '' })`,
     returnByValue: true
   });
   const resizedState = JSON.parse(resized.result.value);
-  check('multiview resizing snaps at supported ratios', resizeX.result.value && resizeY.result.value && resizedState.layout.includes('layout-quad-grid') && /66\.67%/.test(resizedState.x || '') && /66\.67%/.test(resizedState.y || ''), `pane=${resizedState.x}×${resizedState.y}`);
+  check('real mouse resizing snaps at supported ratios', Boolean(resizeXGeometry && resizeYGeometry) && resizeXGeometry.fromHit.includes('multiview-divider-vertical') && resizeYGeometry.fromHit.includes('multiview-divider-horizontal') && resizedState.layout.includes('layout-quad-grid') && /66\.67%/.test(resizedState.x || '') && /66\.67%/.test(resizedState.y || ''), `pane=${resizedState.x}×${resizedState.y}, x=${JSON.stringify(resizeXGeometry)}, y=${JSON.stringify(resizeYGeometry)}`);
+
+  const independentRows = await cdp.send('Runtime.evaluate', {
+    expression: `JSON.stringify((() => { const panes = [...document.querySelectorAll('.multiview-pane-chrome')]; const dividers = [...document.querySelectorAll('.multiview-divider-horizontal')]; return { leftTop: panes[0]?.style.height, leftBottom: panes[2]?.style.top, rightTop: panes[1]?.style.height, rightBottom: panes[3]?.style.top, dividerCount: dividers.length, dividerLeft: dividers.map(d => d.style.left), dividerWidth: dividers.map(d => d.style.width) }; })())`,
+    returnByValue: true
+  });
+  const independentRowState = JSON.parse(independentRows.result.value);
+  check('resizing the left quad stack leaves the right stack unchanged',
+    /66\.67%/.test(independentRowState.leftTop || '') && independentRowState.leftBottom === independentRowState.leftTop
+      && independentRowState.rightTop === '50%' && independentRowState.rightBottom === '50%'
+      && independentRowState.dividerCount === 2
+      && independentRowState.dividerLeft[0] === '0%' && independentRowState.dividerLeft[1] === independentRowState.dividerWidth[0],
+    JSON.stringify(independentRowState));
 
   const activated = await cdp.send('Runtime.evaluate', {
     expression: `(() => { const pane = document.querySelectorAll('.multiview-pane-chrome.occupied')[1]; if (!pane) return false; pane.click(); return true; })()`,
@@ -864,7 +1434,7 @@ async function main() {
   check('multiview pane activation selects exactly one active tab', activated.result.value && activeCount.result.value === 1, `active panes=${activeCount.result.value}`);
 
   const maximized = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = document.querySelector('.multiview-pane-chrome.active-pane .multiview-pane-btn[title="Diesen Tab maximieren"]'); if (!button) return false; button.click(); return true; })()`,
+    expression: `(() => { const button = document.querySelector('.multiview-pane-chrome.active-pane .multiview-pane-controls .multiview-pane-btn:nth-child(2)'); if (!button) return false; button.click(); return true; })()`,
     returnByValue: true
   });
   await sleep(250);
@@ -875,44 +1445,131 @@ async function main() {
   const maximizedInfo = JSON.parse(maximizedState.result.value);
   check('multiview maximize restores single-pane view without closing tabs', maximized.result.value && !maximizedInfo.multiview && maximizedInfo.tabs === 2, `multiview=${maximizedInfo.multiview}, tabs=${maximizedInfo.tabs}`);
 
-  const closeDragStart = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const source = [...document.querySelectorAll('.vertical-tab-item')].find(tab => !tab.classList.contains('active')); if (!source) return false; source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() })); return true; })()`,
+  const closeGeometryResult = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const hitPointFor = (tab) => {
+        const rect = tab.getBoundingClientRect(), y = rect.top + rect.height / 2;
+        for (const offset of [24, 8, Math.min(rect.width * 0.5, 110), Math.max(8, rect.width - 18)]) {
+          const point = { x: rect.left + offset, y }, hit = document.elementFromPoint(point.x, point.y);
+          if (hit && (hit === tab || tab.contains(hit))) return point;
+        }
+        return null;
+      };
+      const source = [...document.querySelectorAll('.vertical-tab-item')].find(tab => !tab.classList.contains('active') && hitPointFor(tab));
+      const frame = document.querySelector('.browser-webview-frame');
+      if (!source || !frame) return null;
+      const target = frame.getBoundingClientRect();
+      const from = hitPointFor(source);
+      const hit = document.elementFromPoint(from.x, from.y);
+      return {
+        from,
+        to: { x: target.left + target.width * 0.10, y: target.top + target.height * 0.5 },
+        sourceHit: hit?.tagName.toLowerCase() + (hit?.className && typeof hit.className === 'string' ? '.' + hit.className.trim().replace(/\\s+/g, '.') : '')
+      };
+    })()`,
     returnByValue: true
   });
-  await sleep(100);
-  const closeDragDrop = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const surface = document.querySelector('.snap-drag-surface'); const frame = document.querySelector('.browser-webview-frame'); if (!surface || !frame) return false; const rect = frame.getBoundingClientRect(); surface.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer(), clientX: rect.left + rect.width * 0.1, clientY: rect.top + rect.height * 0.5 })); return true; })()`,
+  const closeGeometry = closeGeometryResult.result.value;
+  if (closeGeometry) {
+    await pressMouse(cdp, closeGeometry.from);
+    await moveHeldMouse(cdp, closeGeometry.from, closeGeometry.to);
+    await releaseMouse(cdp, closeGeometry.to);
+  }
+  const closeDragStart = { result: { value: Boolean(closeGeometry?.sourceHit?.includes('vertical-tab-item')) } };
+  const closeDragDrop = { result: { value: Boolean(closeGeometry) && await waitForUi('.multiview-grid-container', true) } };
+  const closeBeforeResult = await cdp.send('Runtime.evaluate', {
+    expression: `JSON.stringify({ multiview: Boolean(document.querySelector('.multiview-grid-container')), occupied: document.querySelectorAll('.multiview-pane-chrome.occupied').length })`,
     returnByValue: true
   });
-  await sleep(100);
-  await cdp.send('Runtime.evaluate', { expression: `(() => { const surface = document.querySelector('.snap-drag-surface'); const frame = document.querySelector('.browser-webview-frame'); if (!surface || !frame) return; const rect = frame.getBoundingClientRect(); surface.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer(), clientX: rect.left + rect.width * 0.1, clientY: rect.top + rect.height * 0.5 })); })()`, returnByValue: true });
-  await sleep(200);
-  const closePane = await cdp.send('Runtime.evaluate', {
+  const closeBeforeState = JSON.parse(closeBeforeResult.result.value);
+  const closePane = closeBeforeState.multiview && closeBeforeState.occupied >= 2 ? await cdp.send('Runtime.evaluate', {
     expression: `(() => { const button = document.querySelector('.multiview-pane-chrome.occupied .multiview-pane-btn.close-pane'); if (!button) return false; button.click(); return true; })()`,
     returnByValue: true
-  });
+  }) : { result: { value: false } };
   await sleep(200);
   const closeState = await cdp.send('Runtime.evaluate', {
     expression: `JSON.stringify({ multiview: Boolean(document.querySelector('.multiview-grid-container')), tabs: document.querySelectorAll('.vertical-tab-item').length })`,
     returnByValue: true
   });
   const closedInfo = JSON.parse(closeState.result.value);
-  check('removing a snapped pane returns to single view and preserves its tab', closeDragStart.result.value && closeDragDrop.result.value && closePane.result.value && !closedInfo.multiview && closedInfo.tabs === 2, `multiview=${closedInfo.multiview}, tabs=${closedInfo.tabs}`);
+  check('removing a pane created by a real mouse drag returns to single view and preserves its tab', closeDragStart.result.value && closeDragDrop.result.value && closeBeforeState.occupied >= 2 && closePane.result.value && !closedInfo.multiview && closedInfo.tabs === 2, `dragSource=${closeGeometry?.sourceHit || 'none'}, splitCreated=${closeDragDrop.result.value}, occupiedBefore=${closeBeforeState.occupied}, multiview=${closedInfo.multiview}, tabs=${closedInfo.tabs}`);
 
-  const detachDragStart = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const source = [...document.querySelectorAll('.vertical-tab-item')].find(tab => !tab.classList.contains('active')); if (!source) return false; source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() })); return true; })()`,
+  const waitForActiveGuestUrl = async (host) => {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const current = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view'); return { url: view?.getURL?.() || '', loading: view?.isLoading?.() || false }; })()`,
+        returnByValue: true
+      });
+      const state = current.result.value;
+      if (state?.url.includes(host) && !state.loading) return true;
+      await sleep(250);
+    }
+    return false;
+  };
+  const openedExample = await enterAddressThroughKeyboard(cdp, 'https://example.com/');
+  const exampleLoaded = Boolean(openedExample) && await waitForActiveGuestUrl('example.com');
+  const openedIana = exampleLoaded && await enterAddressThroughKeyboard(cdp, 'https://www.iana.org/domains/reserved');
+  const ianaLoaded = Boolean(openedIana) && await waitForActiveGuestUrl('iana.org');
+  const detachHistorySeed = await cdp.send('Runtime.evaluate', {
+    expression: `(async () => {
+      const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view');
+      const other = [...document.querySelectorAll('.vertical-tab-item')].find(item => !item.classList.contains('active'));
+      if (!view || !other) return { ready: false, reason: 'active or alternate guest unavailable' };
+      const title = view.getTitle();
+      other.click();
+      await new Promise(resolve => setTimeout(resolve, 150));
+      const row = [...document.querySelectorAll('.vertical-tab-item')].find(item => item.querySelector('.vtab-title')?.textContent?.trim() === title);
+      const pane = [...document.querySelectorAll('.browser-tab-pane')].find(item => item.querySelector('webview.browser-view') === view);
+      return { ready: ${exampleLoaded && ianaLoaded} && view.canGoBack() && view.getURL().includes('iana.org') && Boolean(row && !row.classList.contains('active')) && Boolean(pane && !pane.classList.contains('active-tab-pane')), url: view.getURL(), canGoBack: view.canGoBack(), title, tabId: view.getAttribute('data-tab-id'), inactive: Boolean(row && !row.classList.contains('active')), reason: ${JSON.stringify(`exampleLoaded=${exampleLoaded}, ianaLoaded=${ianaLoaded}`)} };
+    })()`,
+    awaitPromise: true,
     returnByValue: true
   });
-  await sleep(100);
-  await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const surface = document.querySelector('.snap-drag-surface'); const frame = document.querySelector('.browser-webview-frame'); if (!surface || !frame) return; const rect = frame.getBoundingClientRect(); surface.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer(), clientX: rect.left + rect.width * 0.1, clientY: rect.top + rect.height * 0.5 })); surface.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer(), clientX: rect.left + rect.width * 0.1, clientY: rect.top + rect.height * 0.5 })); })()`,
+  const detachHistorySeedState = detachHistorySeed.result.value;
+  check('split detach fixtures have real back-history entries', detachHistorySeedState?.ready,
+    `url=${detachHistorySeedState?.url}, canGoBack=${detachHistorySeedState?.canGoBack}, inactive=${detachHistorySeedState?.inactive}, reason=${detachHistorySeedState?.reason || ''}`);
+
+  const detachGeometryResult = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const title = ${JSON.stringify(detachHistorySeedState?.title || '')};
+      const hitPointFor = (tab) => {
+        const rect = tab.getBoundingClientRect(), y = rect.top + rect.height / 2;
+        for (const offset of [24, 8, Math.min(rect.width * 0.5, 110), Math.max(8, rect.width - 18)]) {
+          const point = { x: rect.left + offset, y }, hit = document.elementFromPoint(point.x, point.y);
+          if (hit && (hit === tab || tab.contains(hit))) return point;
+        }
+        return null;
+      };
+      const source = [...document.querySelectorAll('.vertical-tab-item')].find(tab => !tab.classList.contains('active') && tab.querySelector('.vtab-title')?.textContent?.trim() === title && hitPointFor(tab));
+      const frame = document.querySelector('.browser-webview-frame');
+      if (!source || !frame) return null;
+      const target = frame.getBoundingClientRect();
+      const from = hitPointFor(source);
+      const hit = document.elementFromPoint(from.x, from.y);
+      return {
+        from,
+        to: { x: target.left + target.width * 0.10, y: target.top + target.height * 0.5 },
+        sourceHit: hit?.tagName.toLowerCase() + (hit?.className && typeof hit.className === 'string' ? '.' + hit.className.trim().replace(/\\s+/g, '.') : '')
+      };
+    })()`,
     returnByValue: true
   });
-  await sleep(250);
-  const detachButton = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = document.querySelector('.multiview-pane-chrome.occupied .multiview-pane-btn[title="In eigenem Fenster öffnen"]'); if (!button) return false; button.click(); return true; })()`,
+  const detachGeometry = detachGeometryResult.result.value;
+  if (detachGeometry) {
+    await pressMouse(cdp, detachGeometry.from);
+    await moveHeldMouse(cdp, detachGeometry.from, detachGeometry.to);
+    await releaseMouse(cdp, detachGeometry.to);
+  }
+  const detachDragStart = { result: { value: Boolean(detachGeometry?.sourceHit?.includes('vertical-tab-item')) && await waitForUi('.multiview-grid-container', true) } };
+  const detachPaneStateResult = await cdp.send('Runtime.evaluate', {
+    expression: `JSON.stringify({ multiview: Boolean(document.querySelector('.multiview-grid-container')), occupied: document.querySelectorAll('.multiview-pane-chrome.occupied').length })`,
     returnByValue: true
   });
+  const detachPaneState = JSON.parse(detachPaneStateResult.result.value);
+  const detachButton = detachDragStart.result.value && detachPaneState.occupied >= 2 ? await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.multiview-pane-chrome.occupied .multiview-pane-controls .multiview-pane-btn:first-child'); if (!button) return false; button.click(); return true; })()`,
+    returnByValue: true
+  }) : { result: { value: false } };
   let detachedShell = null;
   for (let i = 0; i < 50; i++) {
     const currentTargets = await cdpList();
@@ -942,6 +1599,9 @@ async function main() {
                 tabId: view.getAttribute('data-tab-id'),
                 guestId,
                 src: view.getAttribute('src'),
+                url: typeof view.getURL === 'function' ? view.getURL() : '',
+                canGoBack: typeof view.canGoBack === 'function' ? view.canGoBack() : false,
+                canGoForward: typeof view.canGoForward === 'function' ? view.canGoForward() : false,
                 className: view.className,
                 attributes: view.getAttributeNames(),
                 width: rect.width,
@@ -982,8 +1642,100 @@ async function main() {
     if (detachedInfo.tabs === 1 && attachedGuest && !detachedInfo.transferPending && sourceInfo.tabs === 1 && !sourceInfo.multiview) break;
     await sleep(200);
   }
-  check('detaching a split pane opens a second window and transfers exactly one tab', detachDragStart.result.value && detachButton.result.value && Boolean(detachedShell) && detachedInfo.tabs === 1 && sourceInfo.tabs === 1 && !sourceInfo.multiview, `newWindow=${Boolean(detachedShell)}, detachedTabs=${detachedInfo.tabs}, detached=${JSON.stringify(detachedInfo)}, sourceTabs=${sourceInfo.tabs}, sourceMultiview=${sourceInfo.multiview}`);
+  const detachedGuest = detachedInfo.webviews?.find((view) => Number.isInteger(view.guestId) && view.guestId > 0);
+  const detachedGuestVisible = Boolean(detachedGuest && detachedGuest.width > 0 && detachedGuest.height > 0);
+  check('detaching a split pane opens a second window and preserves its page', detachDragStart.result.value && detachButton.result.value && Boolean(detachedShell) && detachedInfo.tabs === 1 && detachedInfo.webviews?.length === 1 && detachedGuestVisible && detachedGuest.url && detachedGuest.url !== 'about:blank' && !detachedInfo.transferPending && sourceInfo.tabs === 1 && !sourceInfo.multiview, `newWindow=${Boolean(detachedShell)}, detachedTabs=${detachedInfo.tabs}, detached=${JSON.stringify(detachedInfo)}, sourceTabs=${sourceInfo.tabs}, sourceMultiview=${sourceInfo.multiview}`);
+  check('detached tab restores its active URL and back history', detachHistorySeedState?.ready
+    && detachedGuest?.url?.includes('iana.org')
+    && detachedGuest?.canGoBack
+    && !detachedInfo.transferPending,
+  `expected=${detachHistorySeedState?.url}, actual=${detachedGuest?.url}, canGoBack=${detachedGuest?.canGoBack}`);
+  let detachedHistoryRoundTrip = { backUrl: '', forwardUrl: '', canGoBack: false };
+  if (detachedCdp && detachedGuestVisible) {
+    try {
+      const roundTrip = await detachedCdp.send('Runtime.evaluate', {
+        expression: `(async () => {
+          const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view');
+          if (!view || !view.canGoBack()) return { backUrl: view?.getURL?.() || '', forwardUrl: '', canGoBack: Boolean(view?.canGoBack?.()) };
+          view.goBack();
+          let backUrl = view.getURL();
+          for (let attempt = 0; attempt < 60 && !backUrl.includes('example.com'); attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            backUrl = view.getURL();
+          }
+          const canGoForward = view.canGoForward();
+          if (canGoForward) view.goForward();
+          let forwardUrl = view.getURL();
+          for (let attempt = 0; attempt < 60 && !forwardUrl.includes('iana.org'); attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            forwardUrl = view.getURL();
+          }
+          return { backUrl, forwardUrl, canGoBack: view.canGoBack(), canGoForward: view.canGoForward() };
+        })()`,
+        awaitPromise: true,
+        returnByValue: true
+      }, 10_000);
+      detachedHistoryRoundTrip = roundTrip.result.value || detachedHistoryRoundTrip;
+    } catch (error) {
+      detachedHistoryRoundTrip = { ...detachedHistoryRoundTrip, error: String(error) };
+    }
+  }
+  check('detached tab back and forward return to the original pages',
+    detachedHistoryRoundTrip.backUrl.includes('example.com') && detachedHistoryRoundTrip.forwardUrl.includes('iana.org'),
+    JSON.stringify(detachedHistoryRoundTrip));
   detachedCdp?.close();
+
+  const hookOrderErrors = rendererDiagnostics.filter((message) =>
+    /Rendered fewer hooks than expected|Minified React error #300|Rendered more hooks than during the previous render/i.test(message)
+  );
+  check('panel navigation does not trigger a React hook-order error', hookOrderErrors.length === 0,
+    hookOrderErrors[0] || 'no React hook-order diagnostics');
+
+  const enableLoupe = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const key = 'lastbrowser.a11y.visionImpaired.v2';
+      const current = JSON.parse(localStorage.getItem(key) || '{}');
+      localStorage.setItem(key, JSON.stringify({ ...current, enabled: true, cursorLoupeEnabled: true }));
+      location.reload();
+      return true;
+    })()`,
+    returnByValue: true
+  });
+  let loupeRuntime = null;
+  for (let i = 0; i < 40; i++) {
+    await sleep(200);
+    try {
+      const loupeState = await cdp.send('Runtime.evaluate', {
+        expression: `(() => {
+          const loupe = document.querySelector('.lb-cursor-loupe');
+          const image = loupe?.querySelector('img');
+          return JSON.stringify({
+            setting: JSON.parse(localStorage.getItem('lastbrowser.a11y.visionImpaired.v2') || '{}'),
+            enabled: document.documentElement.dataset.a11yViEnabled,
+            loupe: Boolean(loupe), image: image?.getAttribute('src') || '',
+            imageWidth: image?.naturalWidth || 0, imageHeight: image?.naturalHeight || 0
+          });
+        })()`,
+        returnByValue: true
+      }, 1000);
+      loupeRuntime = JSON.parse(loupeState.result.value);
+      if (loupeRuntime.enabled === 'true' && loupeRuntime.loupe && loupeRuntime.image.startsWith('data:image/') && loupeRuntime.imageWidth > 0) break;
+    } catch {
+      // Wait for the shell renderer to finish reloading, bounded by the loop.
+    }
+  }
+  check('enabled cursor loupe renders a captured image in the running app',
+    enableLoupe.result.value === true && loupeRuntime?.setting?.enabled === true
+    && loupeRuntime?.setting?.cursorLoupeEnabled === true && loupeRuntime?.enabled === 'true'
+      && loupeRuntime?.loupe === true && loupeRuntime?.image.startsWith('data:image/')
+      && loupeRuntime?.imageWidth > 0 && loupeRuntime?.imageHeight > 0,
+    JSON.stringify(loupeRuntime && {
+      enabled: loupeRuntime.enabled,
+      loupe: loupeRuntime.loupe,
+      imageCaptured: loupeRuntime.image.startsWith('data:image/'),
+      imageWidth: loupeRuntime.imageWidth,
+      imageHeight: loupeRuntime.imageHeight
+    }));
 
   const shellShot = await cdp.send('Page.captureScreenshot', { format: 'png' });
   const shellShotPath = path.join(OUT_DIR, 'shell.png');
@@ -997,8 +1749,10 @@ async function main() {
 function finish(child) {
   stopSmokeApp(child);
   const failed = results.filter((r) => !r.ok);
+  const skipped = results.filter((r) => r.skipped).length;
+  const passed = results.length - failed.length - skipped;
   console.log('');
-  console.log(`Result: ${results.length - failed.length}/${results.length} checks passed`);
+  console.log(`Result: ${passed}/${results.length - skipped} checks passed${skipped ? `, ${skipped} skipped` : ''}`);
   process.exit(failed.length === 0 ? 0 : 1);
 }
 

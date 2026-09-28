@@ -192,7 +192,7 @@ export function lastAssistantText(session: unknown): string {
  * active provider.
  */
 export async function resolveConfiguredModel(
-  requestWebui: (request: { method: string; path: string }) => Promise<unknown>
+  requestWebui: (request: { method: 'GET'; path: string }) => Promise<unknown>
 ): Promise<string> {
   try {
     const data = (await requestWebui({ method: 'GET', path: '/api/models' })) as {

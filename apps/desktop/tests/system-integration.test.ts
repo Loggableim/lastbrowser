@@ -94,6 +94,17 @@ describe('Single-Instance URL Dispatcher (extractUrlFromArgs)', () => {
   it('extracts URL when provided as a single standalone argument', () => {
     expect(extractUrlFromArgs(['https://lastbrowser.com'])).toBe('https://lastbrowser.com');
   });
+
+  it('wires macOS open-url and cold-start links through the queued window lifecycle', () => {
+    const main = readFileSync(path.resolve(__dirname, '../src/main/main.ts'), 'utf8');
+    expect(main).toContain("app.on('open-url', (event, url) => {");
+    expect(main).toContain('openUrlLifecycle.handleOpenUrl(event, url)');
+    expect(main).toContain('openUrlLifecycle.handleSecondInstance(commandLine)');
+    expect(main).toContain('dispatchOpenUrl(initialUrl)');
+    expect(main).toContain("window.webContents.on('did-finish-load', () => {");
+    expect(main).toContain('openUrlLifecycle.onWindowReady(window)');
+    expect(main).toContain('if (mainWindow === window) mainWindow = null');
+  });
 });
 
 describe('Microsoft Store & Windows Default Browser Configuration (package.json)', () => {
@@ -185,10 +196,12 @@ describe('Split tab detach transfer handshake', () => {
     expect(startup).toBeGreaterThan(-1);
     expect(app.slice(detach, startup)).toContain('if (result?.success) useTabStore.getState().detachTab(tabToDetach.id)');
     expect(app.slice(startup, startup + 1700)).toContain('setPendingDetachedTransfer');
-    expect(app).toContain('onDomReady={(event) => {');
-    expect(app).toContain('onTransferredWebviewReady(tab.id)');
+    expect(app).toContain("el.addEventListener('dom-ready', handleDomReady)");
+    expect(app).toContain("el.addEventListener('did-fail-load', handleDidFailLoad)");
+    expect(app).toContain('onTransferredWebviewReady(tab.id, guestWebview.getWebContentsId())');
     expect(app).toContain('webview.getWebContentsId()');
-    expect(app).toContain("webview.addEventListener('dom-ready', confirmAttached, { once: true })");
+    expect(app).toContain("webview.addEventListener('dom-ready', confirmAttached)");
+    expect(app).toContain("webview.removeEventListener('dom-ready', confirmAttached)");
     expect(main).toContain('detachedWindow.destroy()');
     expect(app).toContain('webviewReady && webviewStartupReady');
     expect(app).toContain('ackDetachedTab?.(transfer.transferId, tabId, guestWebContentsId)');

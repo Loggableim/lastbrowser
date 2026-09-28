@@ -25,6 +25,10 @@ describe('space audio continuity', () => {
 
     expect(source).toContain('onPinTab?.(');
     expect(source).toContain('vertical-tab-pin-btn');
+    // Pinned tabs must remain reachable from the modern sidebar after pinning.
+    expect(source).toContain('<span className="tab-count-badge">{tabs.length}</span>');
+    expect(source).toContain('{tabs.map((tab) => {');
+    expect(source).not.toContain('tabs.filter((t) => !t.pinned).map((tab) => {');
   });
 
   it('styles the pin button including its pinned state', () => {

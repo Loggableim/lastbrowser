@@ -497,7 +497,7 @@ export function UnifiedExtensionHub({
 
               <div className="hub-preset-grid">
                 {presets.map((preset) => {
-                  const isInstalled = extensions.some((e) => e.cwsId === preset.cwsId || e.name === preset.name);
+                  const isInstalled = extensions.some((e) => e.id === preset.cwsId || e.name === preset.name);
                   const isBusy = installingId === preset.id;
                   return (
                     <div key={preset.id} className="hub-preset-card">
@@ -596,7 +596,7 @@ export function UnifiedExtensionHub({
                           <div className="ext-name-row">
                             <strong>{ext.name}</strong>
                             <span className="ext-version">v{ext.version}</span>
-                            {ext.isUnpacked && <span className="ext-pill unpacked">Entpackt</span>}
+                            {ext.source === 'unpacked' && <span className="ext-pill unpacked">Entpackt</span>}
                           </div>
                           <p className="ext-desc">{ext.description || 'Keine Beschreibung hinterlegt.'}</p>
                           <div className="ext-permissions-pills">

@@ -54,10 +54,18 @@ def test_goal_clear_removes_state_from_space_store(monkeypatch, tmp_path):
     monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
 
     from runtime._compat.shim_state import SessionDB
+    from web.api import goals, space_engine
     from web.api.goals import goal_command_payload, goal_state_for_session
 
     space_root = tmp_path / "home" / "spaces" / "color"
     space_root.mkdir(parents=True)
+    # Pin the registry and its caches to this fixture; other tests may already
+    # have imported SpaceEngine under another SIDEKICK_HOME.
+    monkeypatch.setattr(space_engine, "_spaces_root", lambda: tmp_path / "home" / "spaces")
+    monkeypatch.setattr(space_engine, "_SPACE_CACHE", None)
+    monkeypatch.setattr(space_engine, "_SPACE_CACHE_ROOTS", None)
+    monkeypatch.setattr(space_engine, "_SPACE_CACHE_TS", 0.0)
+    monkeypatch.setattr(goals, "_DB_CACHE", {})
     db = SessionDB(db_path=space_root / "goals.db")
     db.set_meta("goal:smoke-session", json.dumps({"goal": "orphaned", "status": "active", "turns_used": 0, "max_turns": 20, "created_at": 0.0, "last_turn_at": 0.0}))
 

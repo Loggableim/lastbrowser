@@ -42,7 +42,7 @@ import httpx
 
 from cli.config import get_sidekick_home, get_config_path, read_raw_config
 from runtime._compat.shim_constants import OPENROUTER_BASE_URL
-from shared.utils import atomic_replace, atomic_yaml_write, is_truthy_value
+from shared.utils import atomic_replace, atomic_yaml_write, base_url_host_matches, is_truthy_value
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +142,17 @@ class ProviderConfig:
 
 
 PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
+    # Direct OpenAI API-key access is distinct from the subscription-backed
+    # Codex OAuth provider below.  Keep its credentials and endpoint scoped to
+    # the public OpenAI API so OPENAI_API_KEY is never treated as Codex OAuth.
+    "openai": ProviderConfig(
+        id="openai",
+        name="OpenAI",
+        auth_type="api_key",
+        inference_base_url="https://api.openai.com/v1",
+        api_key_env_vars=("OPENAI_API_KEY",),
+        base_url_env_var="OPENAI_BASE_URL",
+    ),
     "openai-codex": ProviderConfig(
         id="openai-codex",
         name="OpenAI Codex",
@@ -159,6 +170,12 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
         name="Gemini CLI",
         auth_type="oauth_external",
         inference_base_url=DEFAULT_GEMINI_CLOUDCODE_BASE_URL,
+    ),
+    "antigravity": ProviderConfig(
+        id="antigravity",
+        name="Antigravity",
+        auth_type="oauth_external",
+        inference_base_url="cloudcode-pa://antigravity",
     ),
     "lmstudio": ProviderConfig(
         id="lmstudio",
@@ -543,6 +560,22 @@ def _resolve_api_key_provider_secret(
         val = (get_env_value(env_var) or "").strip()
         if has_usable_secret(val):
             return val, env_var
+
+    # A provider-scoped key in config.yaml is also an explicit credential
+    # source. Keep the lookup scoped to this provider so local/cloud Ollama
+    # credentials (and other vendors) cannot bleed into each other.
+    try:
+        from cli.config import load_config
+
+        config = load_config()
+        providers = config.get("providers", {}) if isinstance(config, dict) else {}
+        provider_config = providers.get(provider_id, {}) if isinstance(providers, dict) else {}
+        if isinstance(provider_config, dict):
+            configured_key = str(provider_config.get("api_key") or "").strip()
+            if has_usable_secret(configured_key):
+                return configured_key, f"config:providers.{provider_id}"
+    except Exception:
+        logger.debug("Could not read provider-scoped API key for %s", provider_id, exc_info=True)
 
     # Fallback: try credential pool (e.g. zai key stored via auth.json)
     try:
@@ -1344,7 +1377,7 @@ def resolve_provider(
     Priority (when requested="auto" or None):
     1. active_provider in auth.json with valid credentials
     2. Explicit CLI api_key/base_url -> "openrouter"
-    3. OPENAI_API_KEY or OPENROUTER_API_KEY env vars -> "openrouter"
+    3. Provider-specific API keys -> their matching provider
     4. Provider-specific API keys (GLM, Kimi, MiniMax) -> that provider
     5. Fallback: "openrouter"
     """
@@ -1370,7 +1403,7 @@ def resolve_provider(
         "github-copilot-acp": "copilot-acp", "copilot-acp-agent": "copilot-acp",
         "aigateway": "ai-gateway", "vercel": "ai-gateway", "vercel-ai-gateway": "ai-gateway",
         "opencode": "opencode-zen", "zen": "opencode-zen",
-        "qwen-portal": "qwen-oauth", "qwen-cli": "qwen-oauth", "qwen-oauth": "qwen-oauth", "google-gemini-cli": "google-gemini-cli", "gemini-cli": "google-gemini-cli", "gemini-oauth": "google-gemini-cli",
+        "qwen-portal": "qwen-oauth", "qwen-cli": "qwen-oauth", "qwen-oauth": "qwen-oauth", "google-gemini-cli": "google-gemini-cli", "gemini-cli": "google-gemini-cli", "gemini-oauth": "google-gemini-cli", "antigravity-cli": "antigravity", "antigravity-cloud": "antigravity", "agy": "antigravity",
         "hf": "huggingface", "hugging-face": "huggingface", "huggingface-hub": "huggingface",
         "mimo": "xiaomi", "xiaomi-mimo": "xiaomi",
         "tencent": "tencent-tokenhub", "tokenhub": "tencent-tokenhub",
@@ -1399,6 +1432,9 @@ def resolve_provider(
 
     if normalized == "google-gemini-cli":
         raise _google_gemini_cli_unavailable()
+
+    if normalized == "antigravity":
+        return "antigravity"
 
     if normalized == "openrouter":
         return "openrouter"
@@ -1431,8 +1467,13 @@ def resolve_provider(
     except Exception as e:
         logger.debug("Could not detect active auth provider: %s", e)
 
-    if has_usable_secret(os.getenv("OPENAI_API_KEY")) or has_usable_secret(os.getenv("OPENROUTER_API_KEY")):
+    # Keep the provider credential paired with its own API. If both exist,
+    # prefer OpenRouter to preserve the historical multi-provider default;
+    # an OpenAI-only environment must never send its key to OpenRouter.
+    if has_usable_secret(os.getenv("OPENROUTER_API_KEY")):
         return "openrouter"
+    if has_usable_secret(os.getenv("OPENAI_API_KEY")):
+        return "openai"
 
     # Auto-detect API-key providers by checking their env vars
     for pid, pconfig in PROVIDER_REGISTRY.items():
@@ -2926,6 +2967,9 @@ def get_auth_status(provider_id: Optional[str] = None) -> Dict[str, Any]:
         return get_qwen_auth_status()
     if target == "google-gemini-cli":
         return get_gemini_oauth_auth_status()
+    if target == "antigravity":
+        from runtime.antigravity_oauth import get_antigravity_auth_status
+        return get_antigravity_auth_status()
     if target == "minimax-oauth":
         return get_minimax_oauth_auth_status()
     if target == "copilot-acp":
@@ -2977,6 +3021,16 @@ def resolve_api_key_provider_credentials(provider_id: str) -> Dict[str, Any]:
     elif provider_id == "zai":
         base_url = _resolve_zai_base_url(api_key, pconfig.inference_base_url, env_url)
     elif env_url:
+        if provider_id == "ollama-cloud" and (
+            urlparse(env_url).scheme.lower() != "https"
+            or not base_url_host_matches(env_url, "ollama.com")
+        ):
+            raise AuthError(
+                "Ollama Cloud credentials may only be sent to the official HTTPS ollama.com endpoint. "
+                "Remove or correct OLLAMA_BASE_URL.",
+                provider=provider_id,
+                code="invalid_ollama_cloud_base_url",
+            )
         base_url = env_url.rstrip("/")
     else:
         base_url = pconfig.inference_base_url

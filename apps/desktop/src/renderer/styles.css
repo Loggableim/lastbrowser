@@ -7216,6 +7216,7 @@ html.theme-light select optgroup {
 .provider-status-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 11px;
   padding: 9px 11px;
   border: 1px solid var(--lb-border);
@@ -8594,6 +8595,33 @@ html.theme-light select optgroup {
   color: #d4d4d4;
 }
 
+.provider-connect-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1 0 100%;
+  padding-left: 43px;
+  color: var(--lb-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.rich-code-copy {
+  border: 1px solid var(--lb-border);
+  background: rgba(255,255,255,.06);
+  color: var(--lb-muted);
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.rich-code-copy:hover {
+  background: rgba(255,255,255,.14);
+  color: var(--lb-text, #eee);
+}
+
 /* ── CLI Session Badge ─────────────────────────────────────── */
 .session-cli-badge {
   display: inline-block;
@@ -9185,6 +9213,13 @@ html.theme-light select optgroup {
   border-color: rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.015);
   min-height: 118px;
+}
+
+.startpage-add-card-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
 }
 
 .startpage-space-add-card:hover {
@@ -17301,7 +17336,7 @@ body {
 /* Dyslexia-friendly Font */
 [data-a11y-dyslexia="true"] body,
 [data-a11y-dyslexia="true"] * {
-  font-family: 'OpenDyslexic', 'Comic Sans MS', 'Trebuchet MS', system-ui, sans-serif !important;
+  font-family: 'Atkinson Hyperlegible', system-ui, sans-serif !important;
   letter-spacing: 0.05em !important;
   line-height: 1.6 !important;
 }
@@ -18544,4 +18579,506 @@ html.theme-light .download-row.completed .download-icon {
 html.theme-light .download-row.cancelled .download-icon,
 html.theme-light .download-row.interrupted .download-icon {
   color: #c2410c;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VISION-IMPAIRED MODE 2.0 (docs/visionimpaired.md)
+   All rules react to data-* attributes synced by stores/a11y-config.ts.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── §3.1 Local font bundling (Feature 1) ─────────────────────────────────── */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('./assets/fonts/Atkinson-Hyperlegible-Regular.woff2') format('woff2');
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('./assets/fonts/Atkinson-Hyperlegible-Bold.woff2') format('woff2');
+  font-weight: 700 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Lexend';
+  src: url('./assets/fonts/Lexend-SemiBold.woff2') format('woff2');
+  font-weight: 500 650;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Lexend';
+  src: url('./assets/fonts/Lexend-Bold.woff2') format('woff2');
+  font-weight: 700 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+html[data-a11y-font='atkinson'] body,
+html[data-a11y-font='atkinson'] body *:not(webview) {
+  font-family: 'Atkinson Hyperlegible', system-ui, sans-serif !important;
+}
+html[data-a11y-font='lexend'] body,
+html[data-a11y-font='lexend'] body *:not(webview) {
+  font-family: 'Lexend', system-ui, sans-serif !important;
+}
+/* ── §3.2 WCAG 1.4.12 enhanced text spacing (Feature 2) ────────────────────── */
+html[data-a11y-enhanced-spacing='true'] {
+  --lb-line-height: 1.65 !important;
+  --lb-letter-spacing: 0.12em !important;
+  --lb-word-spacing: 0.16em !important;
+}
+html[data-a11y-enhanced-spacing='true'] body p,
+html[data-a11y-enhanced-spacing='true'] body span,
+html[data-a11y-enhanced-spacing='true'] body button,
+html[data-a11y-enhanced-spacing='true'] body input,
+html[data-a11y-enhanced-spacing='true'] body small,
+html[data-a11y-enhanced-spacing='true'] body strong,
+html[data-a11y-enhanced-spacing='true'] body label,
+html[data-a11y-enhanced-spacing='true'] body a {
+  line-height: var(--lb-line-height) !important;
+  letter-spacing: var(--lb-letter-spacing) !important;
+  word-spacing: var(--lb-word-spacing) !important;
+}
+
+/* ── §3.3 Forced semi-bold glyph weight (Feature 3) ───────────────────────── */
+html[data-a11y-bold-weight='true'] body {
+  font-weight: 650 !important;
+}
+html[data-a11y-bold-weight='true'] body strong,
+html[data-a11y-bold-weight='true'] body b,
+html[data-a11y-bold-weight='true'] body h1,
+html[data-a11y-bold-weight='true'] body h2,
+html[data-a11y-bold-weight='true'] body h3 {
+  font-weight: 850 !important;
+}
+
+/* ── §3.4 No-Ellipsis guarantee (Feature 4) ─────────────────────────────────── */
+html[data-a11y-no-ellipsis='true'] body *:not(webview):not(webview *) {
+  text-overflow: clip !important;
+  white-space: normal !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+}
+/* Layout requirement: flex/grid children must grow, not clip. */
+html[data-a11y-no-ellipsis='true'] body .tab-title,
+html[data-a11y-no-ellipsis='true'] body .nav-item,
+html[data-a11y-no-ellipsis='true'] body .settings-field label {
+  min-height: auto;
+  height: auto;
+}
+
+/* ── §3.5 Bionic Reading (Feature 6) — bolded word starts ──────────────────── */
+html[data-a11y-bionic-reading='true'] .bionic-text b {
+  font-weight: 800;
+  color: inherit;
+}
+
+/* ── §4.1 High-contrast scalable cursor (Feature 26) ───────────────────────── */
+html[data-cursor-size='large'] body {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'%3E%3Cpath d='M 3 1.5 L 3 28.5 L 11.1 20.4 L 16.5 31.5 L 21 29.25 L 15.6 18 L 27 18 Z' fill='%23FFC107' stroke='%23000000' stroke-width='2.5' stroke-linejoin='round'/%3E%3C/svg%3E") 2 2, auto !important;
+}
+html[data-cursor-size='huge'] body {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M 4 2 L 4 38 L 14.8 27.2 L 22 42 L 28 39 L 20.8 24 L 36 24 Z' fill='%23FFC107' stroke='%23000000' stroke-width='2.5' stroke-linejoin='round'/%3E%3C/svg%3E") 3 3, auto !important;
+}
+html[data-cursor-size='mega'] body {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cpath d='M 5.3 2.7 L 5.3 51 L 19.7 36.6 L 29.3 56.7 L 37.3 52.7 L 27.7 32 L 48 32 Z' fill='%23FFC107' stroke='%23000000' stroke-width='2.5' stroke-linejoin='round'/%3E%3C/svg%3E") 4 4, auto !important;
+}
+
+/* ── §4.2 Shake-to-Locate radar wave (Feature 26) ──────────────────────────── */
+.lb-locate-radar {
+  position: fixed;
+  z-index: 99999;
+  pointer-events: none;
+  border-radius: 50%;
+  width: 250px;
+  height: 250px;
+  margin: -125px 0 0 -125px;
+  border: 4px solid #FFD700;
+  box-shadow: 0 0 24px rgba(255, 215, 0, 0.55), inset 0 0 18px rgba(255, 215, 0, 0.25);
+  animation: lb-locate-converge 0.9s ease-out forwards;
+}
+@keyframes lb-locate-converge {
+  0% { transform: scale(1.6); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: scale(0.2); opacity: 0; }
+}
+
+/* ── §4.3 Cursor companion loupe HUD (Feature 26) ──────────────────────────── */
+.lb-cursor-loupe {
+  position: fixed;
+  z-index: 99999;
+  pointer-events: none;
+  border-radius: 14px;
+  border: 3px solid #FFD700;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lb-cursor-loupe .lb-loupe-content {
+  transform-origin: center center;
+  color: #F8FAFC;
+  font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  padding: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+.lb-cursor-loupe .lb-loupe-capture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+/* ── §5.1 Super-sized vertical tabs (Feature 9) ─────────────────────────────── */
+html[data-a11y-super-tabs='true'] .lb-supertabs {
+  width: 280px;
+  min-width: 260px;
+  background: #0b0f1a;
+  border-right: 2px solid #FFD700;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 8px;
+  gap: 8px;
+}
+.lb-supertab-tile {
+  min-height: 56px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background: #111827;
+  color: #F3F4F6;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+html[data-a11y-min-target='64'] .lb-supertab-tile {
+  min-height: 68px;
+}
+.lb-supertab-tile.active {
+  border-color: #FFD700;
+  background: #1a2332;
+}
+.lb-supertab-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.lb-supertab-favicon {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: 6px;
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  object-fit: contain;
+  background: #0b0f1a;
+}
+.lb-supertab-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: break-word;
+  flex: 1;
+  min-width: 0;
+}
+.lb-supertab-domain {
+  font-size: 11px;
+  color: #9ca3af;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 1px 8px;
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: visible;
+  white-space: normal;
+}
+.lb-supertab-close {
+  min-width: 48px;
+  min-height: 48px;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  color: #F3F4F6;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.lb-supertab-close:hover {
+  border-color: #FFD700;
+  color: #FFD700;
+}
+.lb-supertab-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.lb-supertab-audio-badge {
+  min-width: 48px;
+  min-height: 48px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  color: #F3F4F6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* ── §5.2 Enlarged chrome without de-cluttering (Feature 11) ────────────────── */
+html[data-a11y-enlarged-topbar='true'] .modern-titlebar {
+  min-height: 54px;
+}
+html[data-a11y-enlarged-topbar='true'][data-a11y-min-target='64'] .modern-titlebar {
+  min-height: 62px;
+}
+html[data-a11y-enlarged-topbar='true'] .titlebar-tool-btn,
+html[data-a11y-enlarged-topbar='true'] .titlebar-summarize-btn,
+html[data-a11y-enlarged-topbar='true'] .adblock-stats-pill {
+  min-height: 48px;
+  min-width: 48px;
+}
+html[data-a11y-enlarged-topbar='true'] .omnibox,
+html[data-a11y-enlarged-topbar='true'] .modern-omnibox {
+  font-size: 16px;
+  min-height: 48px;
+}
+html[data-a11y-enlarged-topbar='true'] .omnibox .host,
+html[data-a11y-enlarged-topbar='true'] .modern-omnibox .host {
+  color: #FFD700;
+  font-weight: 800;
+}
+
+/* ── §5.3 Min click target token (Feature 58) ───────────────────────────────── */
+html[data-a11y-vi-enabled='true'] body button,
+html[data-a11y-vi-enabled='true'] body .titlebar-tool-btn,
+html[data-a11y-vi-enabled='true'] body .settings-section-button,
+html[data-a11y-vi-enabled='true'] body input[type='checkbox'] {
+  min-height: var(--lb-min-target-size, 48px);
+  min-width: var(--lb-min-target-size, 48px);
+}
+html[data-a11y-vi-enabled='true'] body .settings-toggle-track,
+html[data-a11y-vi-enabled='true'] body .lb-supertab-close {
+  min-height: var(--lb-min-target-size, 48px);
+  min-width: var(--lb-min-target-size, 48px);
+}
+
+/* ── §6 Split-Screen Magnifier (Feature 18) ─────────────────────────────────── */
+.lb-split-magnifier {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 35%;
+  min-height: 180px;
+  z-index: 40;
+  border-top: 3px solid #FFD700;
+  background: #000000;
+  color: #F8FAFC;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.lb-split-magnifier-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: #111827;
+  border-bottom: 1px solid rgba(255, 215, 0, 0.35);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #FFD700;
+  flex: 0 0 auto;
+}
+.lb-split-magnifier-body {
+  flex: 1;
+  overflow: hidden auto;
+  padding: 14px 18px;
+  font-size: calc(1em * 2.5);
+  line-height: 1.5;
+  max-width: 70ch;
+  letter-spacing: 0.01em;
+  overflow-wrap: break-word;
+}
+.lb-split-magnifier-body p {
+  margin: 0 0 0.9em;
+}
+
+/* ── §7.1 High-contrast palettes (Feature 19) ───────────────────────────────── */
+html[data-a11y-palette='ambra-matte'] body {
+  --lb-vi-bg: #111827;
+  --lb-vi-text: #F3F4F6;
+  --lb-vi-accent: #F59E0B;
+}
+html[data-a11y-palette='onyx-cyan'] body {
+  --lb-vi-bg: #000000;
+  --lb-vi-text: #FFFFFF;
+  --lb-vi-accent: #00E5FF;
+}
+html[data-a11y-palette='ivory-navy'] body {
+  --lb-vi-bg: #FAF0CA;
+  --lb-vi-text: #0B132B;
+  --lb-vi-accent: #1D4ED8;
+}
+html[data-a11y-palette='monochrom-high'] body {
+  --lb-vi-bg: #000000;
+  --lb-vi-text: #FFFFFF;
+  --lb-vi-accent: #FFD700;
+}
+html[data-a11y-vi-enabled='true'] body {
+  background: var(--lb-vi-bg, #111827);
+  color: var(--lb-vi-text, #F3F4F6);
+}
+html[data-a11y-vi-enabled='true'] body a,
+html[data-a11y-vi-enabled='true'] body .accent-text {
+  color: var(--lb-vi-accent, #F59E0B);
+}
+
+/* ── §7.3 Anti-halation brightness cap (Feature 21) ──────────────────────────── */
+html[data-a11y-anti-halation='true'] webview.browser-view {
+  filter: brightness(0.85) contrast(1.15) !important;
+}
+
+/* ── §7.4 Color-vision-deficiency correction filters (Feature 22) ───────────── */
+html[data-a11y-cvd-filter='protanopia'] body {
+  filter: url('#lb-cvd-protanopia');
+}
+html[data-a11y-cvd-filter='deuteranopia'] body {
+  filter: url('#lb-cvd-deuteranopia');
+}
+html[data-a11y-cvd-filter='tritanopia'] body {
+  filter: url('#lb-cvd-tritanopia');
+}
+html[data-a11y-cvd-filter='achromatopsia'] body {
+  filter: url('#lb-cvd-achromatopsia');
+}
+
+/* ── §7.5 Anti-bloom soft text contrast (Feature 23) ────────────────────────── */
+html[data-a11y-soft-contrast='true'] body {
+  color: #F8FAFC;
+}
+html[data-a11y-soft-contrast='true'] body:not([data-a11y-palette='ivory-navy']) {
+  --lb-vi-text: #F8FAFC;
+}
+
+/* ── §7.6 Strict motion reduction (Feature 24) ──────────────────────────────── */
+html[data-a11y-reduced-motion='true'] body *:not(webview):not(webview *) {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ── §9 Accessibility test card (Feature 57) ────────────────────────────────── */
+.a11y-test-card {
+  border: 2px solid var(--lb-vi-accent, #F59E0B);
+  border-radius: 14px;
+  padding: 16px;
+  margin-top: 12px;
+  background: var(--lb-vi-bg, #111827);
+  color: var(--lb-vi-text, #F3F4F6);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.a11y-test-card .a11y-test-heading {
+  font-size: 20px;
+  font-weight: 800;
+}
+.a11y-test-card .a11y-test-flow {
+  line-height: 1.65;
+  max-width: 60ch;
+}
+.a11y-test-card .a11y-test-code {
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 6px 10px;
+  border-radius: 8px;
+  display: block;
+  white-space: pre;
+  overflow-x: auto;
+}
+.a11y-test-card .a11y-test-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.a11y-test-card input[type='text'] {
+  min-height: 48px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 2px solid var(--lb-vi-accent, #F59E0B);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--lb-vi-text, #F3F4F6);
+}
+.a11y-test-card button {
+  min-height: 48px;
+  min-width: 48px;
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: 2px solid var(--lb-vi-accent, #F59E0B);
+  background: var(--lb-vi-accent, #F59E0B);
+  color: #000;
+  font-weight: 700;
+  cursor: pointer;
+}
+.a11y-test-card .a11y-test-sliders {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+}
+.a11y-test-card .a11y-test-palettes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.a11y-test-card .a11y-test-apply-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--lb-vi-text, #F3F4F6);
+}
+.a11y-test-card .a11y-test-apply-row button {
+  flex: 0 0 auto;
+}
+.a11y-test-palette-btn {
+  min-height: 48px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-weight: 700;
+}
+.a11y-test-palette-btn.active {
+  border-color: #FFD700;
+  box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.4);
 }

@@ -18,6 +18,24 @@ import { pathToFileURL } from 'node:url';
 export const appScheme = 'app';
 export const appOrigin = `${appScheme}://bundle`;
 
+/** Resolve an app asset without allowing encoded paths to escape the renderer root. */
+export function resolveAppAssetPath(rendererDir: string, pathname: string): string | null {
+  let relativePath: string;
+  try {
+    relativePath = decodeURIComponent(pathname).replace(/^[/\\]+/, '');
+  } catch {
+    return null;
+  }
+
+  const root = path.resolve(rendererDir);
+  const target = path.resolve(root, relativePath || 'index.html');
+  const fromRoot = path.relative(root, target);
+  if (fromRoot === '..' || fromRoot.startsWith(`..${path.sep}`) || path.isAbsolute(fromRoot)) {
+    return null;
+  }
+  return target;
+}
+
 /**
  * Must run BEFORE `app.whenReady()` — registering a scheme as privileged after
  * the app is ready has no effect on storage partitioning.
@@ -43,18 +61,32 @@ export function registerAppScheme(): void {
  * `rendererDir` is the directory that contains index.html.
  */
 export function installAppProtocolHandler(rendererDir: string): void {
-  protocol.handle(appScheme, (request) => {
-    const url = new URL(request.url);
-    // app://bundle/<path> -> <rendererDir>/<path>
-    const relative = decodeURIComponent(url.pathname).replace(/^\/+/, '');
-    const target = relative ? path.join(rendererDir, relative) : path.join(rendererDir, 'index.html');
-    // Refuse to escape the renderer directory.
-    const normalizedRoot = path.resolve(rendererDir);
-    const normalizedTarget = path.resolve(target);
-    if (!normalizedTarget.startsWith(normalizedRoot)) {
+  protocol.handle(appScheme, async (request) => {
+    let url: URL;
+    try {
+      url = new URL(request.url);
+    } catch {
       return new Response('Not found', { status: 404 });
     }
-    return net.fetch(pathToFileURL(normalizedTarget).toString());
+    if (url.protocol !== `${appScheme}:` || url.hostname !== 'bundle') {
+      return new Response('Not found', { status: 404 });
+    }
+    const target = resolveAppAssetPath(rendererDir, url.pathname);
+    if (!target) return new Response('Not found', { status: 404 });
+    const response = await net.fetch(pathToFileURL(target).toString());
+
+    // The document URL stays constant across app updates while the hashed
+    // renderer entrypoint changes. Do not let Chromium reuse an older index
+    // that still points at bundles removed by a new installation.
+    if (path.basename(target).toLowerCase() !== 'index.html') return response;
+    const headers = new Headers(response.headers);
+    headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    headers.set('Pragma', 'no-cache');
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers
+    });
   });
 }
 

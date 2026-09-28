@@ -56,7 +56,6 @@ import {
   canSubmitCloudSetup,
   cloudProviderOptions,
   firstRunStatus,
-  modelsForProvider,
   openProviderOAuthUrl,
   type ProviderOption
 } from '../setup-state.js';
@@ -128,23 +127,8 @@ export function FirstRunSetupPane({
 
   const [provider, setProvider] = useState<string>(defaultProviderId);
   const providerModelOptions = useMemo(() => {
-    const liveSelected = liveProviderModels[provider];
-    if (liveSelected?.length) return liveSelected;
-    if (provider === 'openrouter') return [];
-    const configured = modelsForProvider(onboardingStatus, provider);
-    const liveGroups = onboardingStatus?.models?.groups;
-    if (!Array.isArray(liveGroups)) return configured;
-    const live = liveGroups
-      .filter((group) => String(group.provider_id || group.provider || '').toLowerCase() === provider)
-      .flatMap((group) => Array.isArray(group.models) ? group.models : [])
-      .map((entry) => {
-        const model = (entry || {}) as Record<string, unknown>;
-        const id = String(model.id || model.name || '').trim();
-        return id ? { id, label: String(model.label || model.name || id).trim() } : null;
-      })
-      .filter((entry): entry is { id: string; label: string } => Boolean(entry));
-    return live.length ? live : configured;
-  }, [liveProviderModels, onboardingStatus, provider]);
+    return liveProviderModels[provider] ?? [];
+  }, [liveProviderModels, provider]);
   const models = providerModelOptions;
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -1058,18 +1042,18 @@ export function FirstRunSetupPane({
                     </small>
                   )}
                 </label>
-                {(activeProviderOption?.id === 'ollama' || activeProviderOption?.id === 'ollama-cloud' || activeProviderOption?.requires_base_url) && (
+                {(activeProviderOption?.id === 'ollama' || activeProviderOption?.id === 'ollama-cloud' || activeProviderOption?.requiresBaseUrl) && (
                   <label className="input-group" style={{ marginTop: '0.75rem' }}>
                     <span className="input-label">Server-Adresse / Endpoint (Optional)</span>
                     <input
                       type="text"
                       value={baseUrl}
                       onChange={(e) => setBaseUrl(e.target.value)}
-                      placeholder={activeProviderOption?.default_base_url || 'http://localhost:11434/v1'}
+                      placeholder={activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}
                       className="key-input"
                     />
                     <small className="field-hint">
-                      Für Standard ({activeProviderOption?.default_base_url || 'http://localhost:11434/v1'}) leer lassen. Für Ollama Cloud oder Remote-Server hier die URL eintragen.
+                      Für Standard ({activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}) leer lassen. Für Ollama Cloud oder Remote-Server hier die URL eintragen.
                     </small>
                   </label>
                 )}

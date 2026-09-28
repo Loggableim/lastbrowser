@@ -133,10 +133,14 @@ export function CompressButton({
       });
       if (result?.error) {
         onResult(`Compress failed: ${result.error}`);
-      } else if (result?.summary?.reference_message) {
-        onResult(result.summary.reference_message);
       } else {
-        onResult('Context compressed successfully.');
+        const summary = result?.summary;
+        const referenceMessage = typeof summary === 'object' && summary !== null && !Array.isArray(summary) && 'reference_message' in summary
+          ? summary.reference_message
+          : undefined;
+        onResult(typeof referenceMessage === 'string' && referenceMessage.trim()
+          ? referenceMessage
+          : 'Context compressed successfully.');
       }
     } catch (err) {
       onResult(`Compress error: ${err instanceof Error ? err.message : String(err)}`);

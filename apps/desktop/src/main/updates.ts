@@ -7,6 +7,10 @@ import { createUpdateController, type LastbrowserUpdateStatus, type UpdateContro
 const { autoUpdater } = electronUpdater;
 
 let controller: UpdateController | null = null;
+let autoChecksEnabled = true;
+let autoCheckPreferenceReceived = false;
+let autoCheckPreferenceTimer: ReturnType<typeof setTimeout> | null = null;
+let autoCheckTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Electron 37's native `net.request()` with custom in-memory partitions (like
@@ -41,11 +45,41 @@ export function registerUpdateIpc(getMainWindow: () => BrowserWindow | null): vo
   ipcMain.handle('lastbrowser:updates:check', () => controller?.checkForUpdates());
   ipcMain.handle('lastbrowser:updates:download', () => controller?.downloadUpdate());
   ipcMain.handle('lastbrowser:updates:install', () => controller?.quitAndInstall());
+  ipcMain.handle('lastbrowser:updates:set-auto-check-enabled', (_event, enabled: unknown) => {
+    autoCheckPreferenceReceived = true;
+    if (autoCheckPreferenceTimer) {
+      clearTimeout(autoCheckPreferenceTimer);
+      autoCheckPreferenceTimer = null;
+    }
+    autoChecksEnabled = enabled !== false;
+    if (!autoChecksEnabled && autoCheckTimer) {
+      clearTimeout(autoCheckTimer);
+      autoCheckTimer = null;
+    }
+    if (autoChecksEnabled) scheduleAutoUpdateCheck();
+    return { enabled: autoChecksEnabled };
+  });
 }
 
 export function startAutoUpdateChecks(): void {
-  if (!controller) return;
-  windowDelay(() => {
+  if (autoCheckPreferenceReceived || autoCheckPreferenceTimer) return;
+  // Give the renderer time to hydrate local or Sidekick settings. If it
+  // cannot provide a preference, retain the historical enabled-by-default
+  // behavior after the grace period.
+  autoCheckPreferenceTimer = windowDelay(() => {
+    autoCheckPreferenceTimer = null;
+    if (!autoCheckPreferenceReceived) {
+      autoCheckPreferenceReceived = true;
+      scheduleAutoUpdateCheck();
+    }
+  }, 15000);
+}
+
+function scheduleAutoUpdateCheck(): void {
+  if (!controller || !autoCheckPreferenceReceived || !autoChecksEnabled || autoCheckTimer) return;
+  autoCheckTimer = windowDelay(() => {
+    autoCheckTimer = null;
+    if (!autoChecksEnabled) return;
     controller?.checkForUpdates().catch((err) => {
       console.warn('[updates] Auto update check failed:', err);
     });
@@ -62,7 +96,8 @@ function broadcastUpdateStatus(window: BrowserWindow | null, status: Lastbrowser
   }
 }
 
-function windowDelay(callback: () => void, ms: number): void {
-  setTimeout(callback, ms).unref?.();
+function windowDelay(callback: () => void, ms: number): ReturnType<typeof setTimeout> {
+  const timer = setTimeout(callback, ms);
+  timer.unref?.();
+  return timer;
 }
-

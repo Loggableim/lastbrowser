@@ -14,7 +14,7 @@ Lastbrowser Windows releases are published through GitHub Releases from version 
    ```
 
 4. GitHub Actions runs `.github/workflows/release.yml`.
-5. The workflow builds the Windows artifacts without uploading them, signs them, then publishes the final files through `softprops/action-gh-release`.
+5. The workflow builds the Windows artifacts without uploading them, signs the artifacts, verifies Authenticode and the packaged VMP signature, then publishes the final files through `softprops/action-gh-release`.
 
 ## Auto-Update Artifacts
 
@@ -25,12 +25,14 @@ The release workflow uploads these Windows release assets to GitHub Releases aft
 - `Lastbrowser-<version>-x64-portable.exe`
 - `latest.yml`
 
-The installed NSIS build uses `latest.yml` to discover and download updates. The portable EXE is still published for manual download, but the installer build is the supported auto-update path.
+The release gate requires exactly one version-matched setup executable and one portable executable, and verifies the Authenticode signature on both. `latest.yml` records both artifacts with their signed-file SHA-512 checksums and sizes, keeps the setup executable first, and points its auto-update path at the setup executable. The portable EXE remains available for manual download; the installer is the supported auto-update path.
 
 ## Requirements
 
 - The GitHub Release must not remain a draft, because draft releases are invisible to `electron-updater`.
 - The workflow needs `contents: write` permission and `GH_TOKEN` from `${{ secrets.GITHUB_TOKEN }}`.
+- GitHub Actions must have all five Azure Trusted Signing secrets configured: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_TRUSTED_SIGNING_ACCOUNT`, and `AZURE_CERTIFICATE_PROFILE`, plus the Castlabs EVS credentials `EVS_ACCOUNT_NAME` and `EVS_PASSWD`. The workflow stops before building if any are missing, requires exactly the expected setup and portable executables, and publishes only after Authenticode verification succeeds for both and the packaged VMP signature verifies.
+- The workflow runs the Sidekick Python syntax check and full Python tests, desktop tests, and Store preflight before packaging. A local installer build does not establish that either Authenticode or VMP signing succeeded.
 - The `publish` config in `apps/desktop/package.json` points to `Loggableim/lastbrowser`.
 
 ## Manual Build

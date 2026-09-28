@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { brandAssets, sidebarIconForPanel } from '../src/renderer/brand.js';
 
 function readRendererFile(fileName: string): string {
   return readFileSync(path.resolve(process.cwd(), 'src/renderer', fileName), 'utf8');
@@ -73,8 +74,12 @@ describe('browser shell layout', () => {
     expect(source).toContain('className="browser-webview-frame"');
     expect(source).toContain('className="browser-tabs-viewport"');
     expect(source).toContain('className={`browser-tab-pane ${isCurrent ?');
-    expect(source).toContain('onDidStartLoading={() => {');
-    expect(source).toContain('onDidFailLoad={(event) => {');
+    // Electron webview custom events are attached imperatively because React
+    // does not register these non-standard DOM event handler props.
+    expect(source).toContain("el.addEventListener('did-start-loading', handleDidStartLoading)");
+    expect(source).toContain("el.addEventListener('dom-ready', handleDomReady)");
+    expect(source).toContain("el.addEventListener('did-fail-load', handleDidFailLoad)");
+    expect(source).toContain("el.removeEventListener('did-fail-load', handleDidFailLoad)");
   });
 
   it('renders native bookmark controls in the browser chrome', () => {
@@ -145,7 +150,9 @@ describe('browser shell layout', () => {
     expect(source).toContain('onWebviewNavigate(activeTab.id, url)');
     expect(source).toContain('onWebviewTitle(activeTab.id, title)');
     expect(source).not.toContain('onDidNavigate={(event) =>');
-    expect(source).toContain('hideWebviewScrollbars(event.currentTarget)');
+    expect(source).toContain('const guestWebview = el as Electron.WebviewTag');
+    expect(source).toContain("el.addEventListener('dom-ready', handleDomReady)");
+    expect(source).toContain('void hideWebviewScrollbars(guestWebview)');
     expect(source).not.toContain('annotateWebviewViewport');
   });
 
@@ -216,7 +223,7 @@ describe('browser shell layout', () => {
     expect(source).not.toContain('webuiPanelScript');
     expect(source).not.toContain('webui-panel-view');
     const railSource = readRendererFile('components/ShellRail.tsx');
-    expect(railSource).toContain('brandAssets.sidebarIcons[panel.id]');
+    expect(railSource).toContain('sidebarIconForPanel(panel.id)');
     expect(source).not.toContain('<NativeSidekick');
     expect(source).not.toContain('sidekick-stack');
     expect(source).not.toContain('Browser runtime stays available');
@@ -228,6 +235,11 @@ describe('browser shell layout', () => {
     expect(source).toContain('style={{');
     expect(source).toContain('--context-sidebar-width');
     expect(source).toContain('--workspace-panel-width');
+  });
+
+  it('uses an existing icon or a safe fallback for every panel', () => {
+    expect(sidebarIconForPanel('profiles')).toBe(brandAssets.sidebarIcons.profiles);
+    expect(sidebarIconForPanel('terminal')).toBe(brandAssets.sidebarIcons.spark);
   });
 
   it('wires context-sidebar section buttons instead of rendering dead controls', () => {

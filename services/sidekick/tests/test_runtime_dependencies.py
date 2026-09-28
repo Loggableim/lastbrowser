@@ -21,15 +21,35 @@ def test_openai_sdk_is_installed_by_the_base_sidekick_package() -> None:
     assert any(item.startswith("openai>=") for item in dependencies)
 
 
-def test_chat_runtime_can_issue_mocked_openai_compatible_chat_request() -> None:
+def test_anthropic_sdk_is_installed_by_the_base_sidekick_package() -> None:
+    """The Anthropic provider is built in and must work in desktop installs."""
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    with pyproject.open("rb") as stream:
+        project = tomllib.load(stream)["project"]
+
+    dependencies = [item.lower() for item in project["dependencies"]]
+    assert any(item.startswith("anthropic>=") for item in dependencies)
+
+
+def test_chat_runtime_can_issue_mocked_openai_compatible_chat_request(monkeypatch) -> None:
     """Exercise lazy SDK loading and a chat request without remote traffic."""
+    import importlib.util
     import sys
 
     sidekick_root = Path(__file__).resolve().parents[1]
-    if str(sidekick_root) not in sys.path:
-        sys.path.insert(0, str(sidekick_root))
+    monkeypatch.syspath_prepend(str(sidekick_root))
 
-    from run_agent import AIAgent
+    # Other test modules may have cached a different top-level ``run_agent``
+    # compatibility shim. Load the canonical source file explicitly so this
+    # contract always exercises the Sidekick client implementation.
+    module_name = "_lastbrowser_runtime_dependencies_run_agent"
+    module_path = sidekick_root / "run_agent.py"
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    assert spec is not None and spec.loader is not None
+    run_agent_module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, module_name, run_agent_module)
+    spec.loader.exec_module(run_agent_module)
+    AIAgent = run_agent_module.AIAgent
     from httpx import Client, MockTransport, Response
 
     requests = []

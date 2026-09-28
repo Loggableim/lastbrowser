@@ -37,23 +37,24 @@ describe('Teamwork and Smart Track settings contracts', () => {
 
   it('shows model catalog discovery without claiming every model is ready', () => {
     const teamwork = readRendererFile('panels/TeamworkSettingsPanel.tsx');
-    expect(teamwork).toContain('Modelle erkannt');
-    expect(teamwork).toContain('weder aktuelle Erreichbarkeit noch verfügbares Kontingent');
-    expect(teamwork).not.toContain('Modell einsatzbereit');
-    expect(teamwork).not.toContain('Modelle einsatzbereit');
+    expect(teamwork).toContain("t('teamwork.modelPool.recognizedOne')");
+    expect(teamwork).toContain("t('teamwork.modelPool.recognizedMany')");
+    expect(teamwork).toContain("description={t('teamwork.modelPool.description')}");
+    expect(teamwork).toContain("t('teamwork.modelPool.empty')");
+    expect(teamwork).not.toContain('einsatzbereit');
   });
 
   it('exposes persisted Smart Track enabled and auto-scan values and confirms API saves', () => {
     const smartTrack = readRendererFile('panels/SmartTrackSettingsTab.tsx');
-    expect(smartTrack).toContain('aria-label="Smart Track aktivieren"');
+    expect(smartTrack).toContain("aria-label={t('smartTrack.enabled')}");
     expect(smartTrack).toContain('checked={config?.enabled ?? true}');
-    expect(smartTrack).toContain('aria-label="Smart Track Auto-Scan"');
+    expect(smartTrack).toContain("aria-label={t('smartTrack.autoScan')}");
     expect(smartTrack).toContain('checked={config?.auto_scan ?? true}');
     expect(smartTrack).toContain('savedConfigRef.current = saved;');
     expect(smartTrack).toContain('setConfig(saved);');
     expect(smartTrack).toContain('setConfig(savedConfigRef.current || config);');
     expect(smartTrack).not.toContain('Spart bis zu 90 %');
-    expect(smartTrack).toContain('beim Start und nach Änderungen an Provider-Schlüsseln oder Modellfreigaben in den Provider-Einstellungen im Hintergrund aktualisiert');
+    expect(smartTrack).toContain("{t('smartTrack.autoScanNote')}");
     expect(smartTrack).not.toContain('benötigt noch Backend-Unterstützung');
   });
 });

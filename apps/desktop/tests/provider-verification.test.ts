@@ -16,19 +16,25 @@ const ONBOARDING_PROVIDER_IDS = [
 ];
 
 describe('provider verification claims', () => {
-  it('marks only the provider with recorded live catalog and chat evidence as verified', () => {
+  it('marks OpenRouter as live-tested only for the model used in the audit', () => {
     for (const providerId of ONBOARDING_PROVIDER_IDS) {
       const result = providerVerification(providerId);
-      expect(result.verified, providerId).toBe(false);
-      expect(result.statusKey, providerId).toBe('settings.panels.providers.betaUntested');
+      if (providerId === 'openrouter') {
+        expect(result.verified).toBe(true);
+        expect(result.statusKey).toBe('settings.panels.providers.openrouterLiveTested');
+        expect(result.evidenceKey).toBe('settings.panels.providers.openrouterChatEvidence');
+      } else {
+        expect(result.verified, providerId).toBe(false);
+        expect(result.statusKey, providerId).toBe('settings.panels.providers.betaUntested');
+      }
     }
   });
 
-  it('distinguishes OpenRouter catalog evidence from an unverified chat path', () => {
+  it('does not imply that other OpenRouter catalog models were tested', () => {
     const result = providerVerification('OpenRouter');
-    expect(result.verified).toBe(false);
-    expect(result.statusKey).toBe('settings.panels.providers.betaUntested');
-    expect(result.evidenceKey).toBe('settings.panels.providers.openrouterCatalogOnly');
+    expect(result.verified).toBe(true);
+    expect(result.statusKey).toBe('settings.panels.providers.openrouterLiveTested');
+    expect(result.evidenceKey).toBe('settings.panels.providers.openrouterChatEvidence');
   });
 
   it('distinguishes Ollama Cloud catalog evidence from an unverified chat path', () => {
@@ -56,6 +62,8 @@ describe('provider verification claims', () => {
       const i18n = createDesktopI18n(locale);
       expect(i18n.t('settings.panels.providers.betaUntested')).not.toBe('settings.panels.providers.betaUntested');
       expect(i18n.t('settings.panels.providers.ollamaCloudLiveVerified')).not.toBe('settings.panels.providers.ollamaCloudLiveVerified');
+      expect(i18n.t('settings.panels.providers.openrouterLiveTested')).not.toBe('settings.panels.providers.openrouterLiveTested');
+      expect(i18n.t('settings.panels.providers.openrouterChatEvidence')).not.toBe('settings.panels.providers.openrouterChatEvidence');
       expect(i18n.t('settings.panels.providers.betaUntested').toLowerCase()).toContain(locale === 'ru' ? 'бета' : locale === 'fr' ? 'bêta' : 'beta');
     }
   });

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { broadcastDownloadSnapshot, createDownloadTracker } from '../src/main/downloads.js';
-import { resolveDownloadsDockMode, resolveDownloadsMinimizedState } from '../src/renderer/NativeDownloads.js';
+import { resolveDownloadsDockMode, resolveDownloadsMinimizedState, shouldRestoreDownloadsFromPillClick, shouldStartDownloadsHeaderDrag } from '../src/renderer/NativeDownloads.js';
 import { canApplyDownloadSnapshot } from '../src/renderer/download-snapshot.js';
 
 type Listener = (...args: unknown[]) => void;
@@ -103,10 +103,48 @@ describe('download tracker', () => {
     expect(resolveDownloadsDockMode(null)).toBe('dropdown');
   });
 
+  it('exposes stable dock modes and localized labels on downloads controls', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/renderer/NativeDownloads.tsx'), 'utf8');
+
+    expect(source).toContain('data-dock-mode={dockMode}');
+    expect(source).toContain('data-download-action="minimize"');
+    expect(source).toContain('data-download-action="close"');
+    for (const mode of ['dropdown', 'floating', 'dock-tabs', 'dock-topbar-left', 'dock-topbar-right', 'dock-sidekick']) {
+      expect(source).toContain(`data-dock-mode="${mode}"`);
+    }
+    for (const label of ['undock', 'dockTabs', 'dockSidekick', 'dockTopLeft', 'dockTopRight', 'float', 'dockDropdown']) {
+      expect(source).toContain(`aria-label={t('downloads.${label}')}`);
+    }
+    expect(source).toContain('aria-label={t(\'downloads.minimize\')}');
+    expect(source).toContain('aria-label={t(\'downloads.close\')}');
+  });
+
   it('reopens a closed minimized downloads panel in its expanded state', () => {
     expect(resolveDownloadsMinimizedState(false, true)).toBe(false);
     expect(resolveDownloadsMinimizedState(true, false)).toBe(false);
     expect(resolveDownloadsMinimizedState(true, true)).toBe(true);
+  });
+
+  it('restores the minimized pill on click but not after a drag', () => {
+    expect(shouldRestoreDownloadsFromPillClick(false)).toBe(true);
+    expect(shouldRestoreDownloadsFromPillClick(true)).toBe(false);
+
+    const source = readFileSync(path.resolve(process.cwd(), 'src/renderer/NativeDownloads.tsx'), 'utf8');
+    expect(source).toContain('dragPointerStartRef.current');
+    expect(source).toContain('Math.abs(e.clientX - dragPointerStartRef.current.x) >= 4');
+    expect(source).toContain('shouldRestoreDownloadsFromPillClick(didDragRef.current)');
+  });
+
+  it('does not begin dragging a floating downloads panel from header controls', () => {
+    const matchesControl = (selector: string) => selector === 'button, .downloads-dock-controls';
+    const buttonTarget = { closest: (selector: string) => matchesControl(selector) ? {} : null } as unknown as EventTarget;
+    const headerTarget = { closest: () => null } as unknown as EventTarget;
+
+    expect(shouldStartDownloadsHeaderDrag(buttonTarget)).toBe(false);
+    expect(shouldStartDownloadsHeaderDrag(headerTarget)).toBe(true);
+
+    const source = readFileSync(path.resolve(process.cwd(), 'src/renderer/NativeDownloads.tsx'), 'utf8');
+    expect(source).toContain('shouldStartDownloadsHeaderDrag(event.target)');
   });
 
   it('records a download when it starts', () => {
@@ -196,6 +234,27 @@ describe('download tracker', () => {
     const entry = tracker.list()[0];
     expect(entry.state).toBe('completed');
     expect(entry.savePath).toContain('report.pdf');
+  });
+
+  it('bounds finished history while preserving every in-progress download', () => {
+    const tracker = createDownloadTracker();
+    const session = fakeSession();
+    tracker.attach(session);
+    const active = fakeItem({ filename: 'active.pdf' });
+    session.start(active);
+
+    for (let index = 0; index < 501; index += 1) {
+      const item = fakeItem({ filename: `finished-${index}.pdf` });
+      session.start(item);
+      item.fire('done', {}, 'completed');
+    }
+
+    const entries = tracker.list();
+    expect(entries).toHaveLength(501);
+    expect(entries.find((entry) => entry.filename === 'active.pdf')?.state).toBe('progressing');
+    expect(entries.find((entry) => entry.filename === 'finished-0.pdf')).toBeUndefined();
+    expect(entries.find((entry) => entry.filename === 'finished-1.pdf')?.state).toBe('completed');
+    expect(entries[0].filename).toBe('finished-500.pdf');
   });
 
   it('marks a cancelled download as cancelled', () => {

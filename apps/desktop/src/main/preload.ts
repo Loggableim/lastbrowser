@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { isTrustedPreloadDocumentUrl } from './preload-origin.js';
 
-contextBridge.exposeInMainWorld('lastbrowser', {
+if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMainWorld('lastbrowser', {
   services: {
     status: () => ipcRenderer.invoke('lastbrowser:services:status'),
     start: () => ipcRenderer.invoke('lastbrowser:services:start'),
@@ -13,7 +14,12 @@ contextBridge.exposeInMainWorld('lastbrowser', {
   system: {
     isDefaultBrowser: () => ipcRenderer.invoke('lastbrowser:system:isDefaultBrowser'),
     setDefaultBrowser: () => ipcRenderer.invoke('lastbrowser:system:setDefaultBrowser'),
-    openExternal: (url: string) => ipcRenderer.invoke('lastbrowser:system:openExternal', url)
+    openExternal: (url: string) => ipcRenderer.invoke('lastbrowser:system:openExternal', url),
+    getCursorPosition: () => ipcRenderer.invoke('lastbrowser:system:getCursorPosition'),
+    captureWindowRect: (rect: { x: number; y: number; width: number; height: number }) =>
+      ipcRenderer.invoke('lastbrowser:system:captureWindowRect', rect),
+    captureGuestRect: (guestWebContentsId: number, rect: { x: number; y: number; width: number; height: number }) =>
+      ipcRenderer.invoke('lastbrowser:system:captureGuestRect', guestWebContentsId, rect)
   },
   i18n: {
     setLocale: (locale: string) => ipcRenderer.invoke('lastbrowser:i18n:setLocale', locale)
@@ -231,6 +237,7 @@ contextBridge.exposeInMainWorld('lastbrowser', {
     check: () => ipcRenderer.invoke('lastbrowser:updates:check'),
     download: () => ipcRenderer.invoke('lastbrowser:updates:download'),
     install: () => ipcRenderer.invoke('lastbrowser:updates:install'),
+    setAutoCheckEnabled: (enabled: boolean) => ipcRenderer.invoke('lastbrowser:updates:set-auto-check-enabled', enabled),
     onStatus: (callback: (status: unknown) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
       ipcRenderer.on('lastbrowser:updates:status', listener);

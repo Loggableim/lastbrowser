@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Target, ChevronDown, ChevronUp, Cpu, Zap, ShieldCheck, Clock, FileText, CheckCircle2 } from 'lucide-react';
+import { useDesktopI18n } from '../i18n.js';
 
 export interface SmartTrackMetadata {
   effort?: 'low' | 'medium' | 'high' | string;
@@ -19,8 +20,10 @@ interface SmartTrackProcessCardProps {
 }
 
 export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ metadata }) => {
+  const { t } = useDesktopI18n();
   const [expanded, setExpanded] = useState(false);
   const [preplanOpen, setPreplanOpen] = useState(false);
+  const detailsId = useId();
 
   if (!metadata || typeof metadata !== 'object') {
     return null;
@@ -31,9 +34,9 @@ export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ me
   const intent = (meta.intent || 'general').toLowerCase();
 
   const effortColors = {
-    low: { bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.3)', text: '#10b981', label: 'ECO • LOW' },
-    medium: { bg: 'rgba(59, 130, 246, 0.12)', border: 'rgba(59, 130, 246, 0.3)', text: '#3b82f6', label: 'BALANCED • MED' },
-    high: { bg: 'rgba(168, 85, 247, 0.12)', border: 'rgba(168, 85, 247, 0.3)', text: '#a855f7', label: 'DEEP • HIGH' },
+    low: { bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.3)', text: '#10b981', label: t('smartTrack.effort.low') },
+    medium: { bg: 'rgba(59, 130, 246, 0.12)', border: 'rgba(59, 130, 246, 0.3)', text: '#3b82f6', label: t('smartTrack.effort.medium') },
+    high: { bg: 'rgba(168, 85, 247, 0.12)', border: 'rgba(168, 85, 247, 0.3)', text: '#a855f7', label: t('smartTrack.effort.high') },
   }[effort as 'low' | 'medium' | 'high'] || {
     bg: 'rgba(59, 130, 246, 0.12)',
     border: 'rgba(59, 130, 246, 0.3)',
@@ -42,10 +45,10 @@ export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ me
   };
 
   const intentLabels: Record<string, string> = {
-    coding: '💻 Code-Fokus',
-    web: '🌐 Web & Suche',
-    reasoning: '🧠 Deep Reasoning',
-    general: '💬 Standard-Dialog',
+    coding: t('smartTrack.intent.coding'),
+    web: t('smartTrack.intent.web'),
+    reasoning: t('smartTrack.intent.reasoning'),
+    general: t('smartTrack.intent.general'),
   };
 
   const totalTime = meta.total_ms || meta.execution_ms || 0;
@@ -64,8 +67,17 @@ export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ me
       }}
     >
       {/* Header Pill Bar */}
-      <div
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={`${detailsId}-details`}
         style={{
+          width: '100%',
+          border: 0,
+          background: 'transparent',
+          color: 'inherit',
+          font: 'inherit',
+          textAlign: 'left',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -76,7 +88,7 @@ export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ me
         }}
         onClick={() => setExpanded(!expanded)}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
           <span
             style={{
               display: 'inline-flex',
@@ -98,7 +110,7 @@ export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ me
           <span style={{ color: 'var(--text-muted, #888)', fontSize: '0.75rem' }}>→</span>
 
           <span style={{ fontWeight: 600, color: 'var(--text-primary, #eee)' }}>
-            {meta.name || meta.model || 'Smart Track Model'}
+            {meta.name || meta.model || t('smartTrack.model.none')}
           </span>
 
           <span
@@ -112,9 +124,9 @@ export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ me
           >
             {intentLabels[intent] || intent}
           </span>
-        </div>
+        </span>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {totalTime > 0 && (
             <span
               style={{
@@ -139,18 +151,19 @@ export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ me
               fontSize: '0.68rem',
               fontWeight: 500,
             }}
-            title="Smart Track verarbeitet die Anfrage entlang einer einzelnen Modellspur."
+            title={t('smartTrack.singleTrack')}
           >
-            Einzelspur
+            {t('smartTrack.singleTrack')}
           </span>
 
           {expanded ? <ChevronUp size={14} style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />}
-        </div>
-      </div>
+        </span>
+      </button>
 
       {/* Expanded Details */}
       {expanded && (
         <div
+          id={`${detailsId}-details`}
           style={{
             padding: '0.5rem 0.65rem',
             borderTop: '1px solid rgba(255, 255, 255, 0.06)',
@@ -161,8 +174,8 @@ export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ me
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-            <span><strong>Modell-ID:</strong> <code>{meta.model}</code> ({meta.provider})</span>
-            <span><strong>Ausführungszeit:</strong> {meta.execution_ms || totalTime}ms</span>
+            <span><strong>{t('smartTrack.modelId')}</strong> <code>{meta.model}</code> ({meta.provider})</span>
+            <span><strong>{t('smartTrack.executionTime')}</strong> {meta.execution_ms || totalTime}ms</span>
           </div>
 
           {/* High Tier Preplan Accordion */}
@@ -176,8 +189,16 @@ export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ me
                 overflow: 'hidden',
               }}
             >
-              <div
+              <button
+                type="button"
+                aria-expanded={preplanOpen}
+                aria-controls={`${detailsId}-preplan`}
                 style={{
+                  width: '100%',
+                  border: 0,
+                  background: 'transparent',
+                  font: 'inherit',
+                  textAlign: 'left',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -191,14 +212,15 @@ export const SmartTrackProcessCard: React.FC<SmartTrackProcessCardProps> = ({ me
               >
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   <FileText size={12} />
-                  🔍 Strukturierte Vorplanung (High Effort)
+                  🔍 {t('smartTrack.preplan')}
                   {meta.preplan_ms ? ` (${meta.preplan_ms}ms)` : ''}
                 </span>
                 {preplanOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-              </div>
+              </button>
 
               {preplanOpen && (
                 <div
+                  id={`${detailsId}-preplan`}
                   style={{
                     padding: '0.5rem',
                     borderTop: '1px solid rgba(168, 85, 247, 0.15)',

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { SettingsCard, SettingsField, SettingsToggle } from './SystemPanels.js';
 import { SmartTrackSettingsTab } from './SmartTrackSettingsTab.js';
+import { useDesktopI18n } from '../i18n.js';
 
 export interface TeamworkConfig {
   enabled: boolean;
@@ -73,7 +74,8 @@ const DEFAULT_CONFIG: TeamworkConfig = {
   }
 };
 
-export function TeamworkSettingsPanel(): JSX.Element {
+export function TeamworkSettingsPanel(): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const [config, setConfig] = useState<TeamworkConfig>(DEFAULT_CONFIG);
   const [initialConfig, setInitialConfig] = useState<TeamworkConfig>(DEFAULT_CONFIG);
   const [activeTab, setActiveTab] = useState<'teamwork' | 'smart-track'>('teamwork');
@@ -170,7 +172,7 @@ export function TeamworkSettingsPanel(): JSX.Element {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
         <Loader2 className="spin" size={24} style={{ marginRight: '0.75rem' }} />
-        <span>Teamwork-Konfiguration und Modell-Pool werden geladen...</span>
+        <span>{t('teamwork.loading')}</span>
       </div>
     );
   }
@@ -198,7 +200,7 @@ export function TeamworkSettingsPanel(): JSX.Element {
           }}
         >
           <Users size={15} />
-          <span>Teamwork (Multi-Agent)</span>
+          <span>{t('teamwork.tab')}</span>
         </button>
 
         <button
@@ -220,7 +222,7 @@ export function TeamworkSettingsPanel(): JSX.Element {
           }}
         >
           <Target size={15} />
-          <span>Smart Track & Modellwand (Single Track)</span>
+          <span>{t('teamwork.smartTrackTab')}</span>
         </button>
       </div>
 
@@ -234,14 +236,13 @@ export function TeamworkSettingsPanel(): JSX.Element {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
               <Users size={20} style={{ color: 'var(--accent, #6366f1)' }} />
-              <strong style={{ fontSize: '1.1rem' }}>Teamwork & Multi-Agent Orchestrator</strong>
+              <strong style={{ fontSize: '1.1rem' }}>{t('teamwork.header.title')}</strong>
               <span className="native-rest-pill ready" style={{ fontSize: '0.75rem', padding: '2px 8px' }}>
-                Konsens & Debatte
+                {t('teamwork.header.status')}
               </span>
             </div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
-              Kombiniert verbundene LLMs (Google Gemini CLI, Ollama Cloud/Lokal, OpenAI, Anthropic) automatisch über einen koordinierten
-              Konsens- und Debattenprozess für präzisere, schnellere und hallucination-geprüfte Antworten.
+              {t('teamwork.header.description')}
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
@@ -251,10 +252,10 @@ export function TeamworkSettingsPanel(): JSX.Element {
                 className="secondary-action compact"
                 onClick={handleReset}
                 disabled={saving}
-                title="Änderungen verwerfen"
+                title={t('teamwork.reset')}
               >
                 <RefreshCw size={14} />
-                <span>Zurücksetzen</span>
+                <span>{t('teamwork.reset')}</span>
               </button>
             )}
             <button
@@ -267,17 +268,17 @@ export function TeamworkSettingsPanel(): JSX.Element {
               {saving ? (
                 <>
                   <Loader2 size={14} className="spin" />
-                  <span>Speichern...</span>
+                  <span>{t('teamwork.saving')}</span>
                 </>
               ) : savedSuccess ? (
                 <>
                   <CheckCircle2 size={14} style={{ color: '#10b981' }} />
-                  <span>Gespeichert</span>
+                  <span>{t('teamwork.saved')}</span>
                 </>
               ) : (
                 <>
                   <Save size={14} />
-                  <span>Speichern</span>
+                  <span>{t('teamwork.save')}</span>
                 </>
               )}
             </button>
@@ -294,12 +295,12 @@ export function TeamworkSettingsPanel(): JSX.Element {
 
       {/* Global Enable Switch */}
       <SettingsCard
-        title="Modus-Aktivierung"
-        description="Bestimmt, ob der Teamwork-Orchestrator in der Modell-Auswahl des Chats zur Verfügung steht."
+        title={t('teamwork.mode.title')}
+        description={t('teamwork.mode.description')}
       >
         <SettingsToggle
-          label="Teamwork-Orchestrierung aktiv"
-          description="Ermöglicht die Auswahl von 'Teamwork (Multi-Agent)' direkt im Copilot-Modellmenü."
+          label={t('teamwork.mode.enabled')}
+          description={t('teamwork.mode.enabledDescription')}
           checked={config.enabled}
           onChange={(checked) => setConfig((prev) => ({ ...prev, enabled: checked }))}
         />
@@ -307,14 +308,20 @@ export function TeamworkSettingsPanel(): JSX.Element {
 
       {/* Strategy Presets */}
       <SettingsCard
-        title="Orchestrator-Strategie"
-        description="Wähle die globale Ausrichtungsstrategie für die Auswahl und Steuerung der debattierenden Subagenten."
+        title={t('teamwork.strategy.title')}
+        description={t('teamwork.strategy.description')}
       >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginTop: '0.5rem' }}>
           {/* Cost Preset */}
-          <div
+          <button
+            type="button"
+            aria-pressed={config.strategy === 'cost'}
             onClick={() => setConfig((prev) => ({ ...prev, strategy: 'cost' }))}
             style={{
+              width: '100%',
+              textAlign: 'left',
+              font: 'inherit',
+              color: 'inherit',
               padding: '1rem',
               borderRadius: '8px',
               border: config.strategy === 'cost' ? '2px solid var(--accent, #6366f1)' : '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
@@ -323,25 +330,32 @@ export function TeamworkSettingsPanel(): JSX.Element {
               transition: 'all 0.2s ease',
               display: 'flex',
               flexDirection: 'column',
+              alignItems: 'stretch',
               gap: '0.4rem'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.9rem' }}>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.9rem' }}>
                 <Zap size={16} style={{ color: '#eab308' }} />
-                <span>Kosten & Tempo</span>
-              </div>
+                <span>{t('teamwork.strategy.cost')}</span>
+              </span>
               {config.strategy === 'cost' && <CheckCircle2 size={16} style={{ color: 'var(--accent, #6366f1)' }} />}
-            </div>
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
-              Bevorzugt schnelle, schlanke Modelle (Gemini Flash-Lite, kompakte Cloud-Modelle). Minimaler Token-Verbrauch bei maximaler Geschwindigkeit.
-            </p>
-          </div>
+            </span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
+              {t('teamwork.strategy.costDescription')}
+            </span>
+          </button>
 
           {/* Balanced Preset */}
-          <div
+          <button
+            type="button"
+            aria-pressed={config.strategy === 'balanced'}
             onClick={() => setConfig((prev) => ({ ...prev, strategy: 'balanced' }))}
             style={{
+              width: '100%',
+              textAlign: 'left',
+              font: 'inherit',
+              color: 'inherit',
               padding: '1rem',
               borderRadius: '8px',
               border: config.strategy === 'balanced' ? '2px solid var(--accent, #6366f1)' : '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
@@ -350,25 +364,32 @@ export function TeamworkSettingsPanel(): JSX.Element {
               transition: 'all 0.2s ease',
               display: 'flex',
               flexDirection: 'column',
+              alignItems: 'stretch',
               gap: '0.4rem'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.9rem' }}>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.9rem' }}>
                 <Scale size={16} style={{ color: '#38bdf8' }} />
-                <span>Ausgewogen (Empfohlen)</span>
-              </div>
+                <span>{t('teamwork.strategy.balanced')}</span>
+              </span>
               {config.strategy === 'balanced' && <CheckCircle2 size={16} style={{ color: 'var(--accent, #6366f1)' }} />}
-            </div>
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
-              Intelligenter Mix aus Reaktionszeit und logischer Tiefe. Verbindet Coder-, Reasoning- und General-Purpose-Modelle.
-            </p>
-          </div>
+            </span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
+              {t('teamwork.strategy.balancedDescription')}
+            </span>
+          </button>
 
           {/* Quality Preset */}
-          <div
+          <button
+            type="button"
+            aria-pressed={config.strategy === 'quality'}
             onClick={() => setConfig((prev) => ({ ...prev, strategy: 'quality' }))}
             style={{
+              width: '100%',
+              textAlign: 'left',
+              font: 'inherit',
+              color: 'inherit',
               padding: '1rem',
               borderRadius: '8px',
               border: config.strategy === 'quality' ? '2px solid var(--accent, #6366f1)' : '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
@@ -377,34 +398,35 @@ export function TeamworkSettingsPanel(): JSX.Element {
               transition: 'all 0.2s ease',
               display: 'flex',
               flexDirection: 'column',
+              alignItems: 'stretch',
               gap: '0.4rem'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.9rem' }}>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.9rem' }}>
                 <Brain size={16} style={{ color: '#a855f7' }} />
-                <span>Maximale Qualität</span>
-              </div>
+                <span>{t('teamwork.strategy.quality')}</span>
+              </span>
               {config.strategy === 'quality' && <CheckCircle2 size={16} style={{ color: 'var(--accent, #6366f1)' }} />}
-            </div>
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
-              Maximale analytische Tiefe. Bindet Deep-Reasoning und Pro-Modelle (Gemini 2.5 Pro, DeepSeek R1) für anspruchsvolle Architektur ein.
-            </p>
-          </div>
+            </span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
+              {t('teamwork.strategy.qualityDescription')}
+            </span>
+          </button>
         </div>
       </SettingsCard>
 
       {/* Capacity & Auto-Scale */}
       <SettingsCard
-        title="Kapazität & Dynamische Skalierung"
-        description="Steuere die maximale Anzahl parallel arbeitender Subagenten und die automatische Anpassung."
+        title={t('teamwork.capacity.title')}
+        description={t('teamwork.capacity.description')}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-              <span style={{ fontSize: '0.88rem', fontWeight: 500 }}>Maximale Subagenten (Obergrenze):</span>
+              <span style={{ fontSize: '0.88rem', fontWeight: 500 }}>{t('teamwork.capacity.max')}</span>
               <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--accent, #6366f1)' }}>
-                {config.max_subagents} {config.max_subagents === 1 ? 'Subagent' : 'Subagenten'}
+                {config.max_subagents} {config.max_subagents === 1 ? t('teamwork.capacity.agent') : t('teamwork.capacity.agents')}
               </span>
             </div>
             <input
@@ -417,22 +439,22 @@ export function TeamworkSettingsPanel(): JSX.Element {
               style={{ width: '100%', cursor: 'pointer' }}
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-              <span>1 (Minimal)</span>
-              <span>3–4 (Empfohlen für optimale Balance)</span>
-              <span>8 (Maximum)</span>
+              <span>{t('teamwork.capacity.minimum')}</span>
+              <span>{t('teamwork.capacity.recommended')}</span>
+              <span>{t('teamwork.capacity.maximum')}</span>
             </div>
           </div>
 
           <SettingsToggle
-            label="Dynamisches Auto-Scaling"
-            description="Der Orchestrator analysiert die Komplexität der Anfrage und startet nur so viele Subagenten wie nötig (einfache Fragen = 2 Modelle, komplexe Refactorings = bis zum Limit)."
+            label={t('teamwork.autoScale')}
+            description={t('teamwork.autoScaleDescription')}
             checked={config.auto_scale}
             onChange={(checked) => setConfig((prev) => ({ ...prev, auto_scale: checked }))}
           />
 
           <SettingsToggle
-            label="Shared Browser Grounding"
-            description="Nur bei Teamwork-Anfragen: Sendet Tab-Titel, URL ohne Query/Fragment und höchstens 1.800 Zeichen markierten oder sichtbaren Text an die konfigurierten Modelle. Kein vollständiger Seiteninhalt."
+            label={t('teamwork.sharedGrounding')}
+            description={t('teamwork.sharedGroundingDescription')}
             checked={config.shared_grounding}
             onChange={(checked) => setConfig((prev) => ({ ...prev, shared_grounding: checked }))}
           />
@@ -441,14 +463,14 @@ export function TeamworkSettingsPanel(): JSX.Element {
 
       {/* Role Assignment */}
       <SettingsCard
-        title="Rollen-Zuweisung & Modell-Overrides"
-        description="Standardmäßig wählt der Orchestrator Modelle passend zur Strategie ('Auto'). Du kannst hier für jede Schlüsselrolle feste Modelle erzwingen."
+        title={t('teamwork.roles.title')}
+        description={t('teamwork.roles.description')}
       >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
           {/* Planner */}
           <SettingsField
-            label="1. Architekt / Planer"
-            description="Analysiert die Fragestellung und koordiniert die Teilaspekte."
+            label={t('teamwork.roles.planner')}
+            description={t('teamwork.roles.plannerDescription')}
           >
             <select
               id={plannerSelectId}
@@ -459,7 +481,7 @@ export function TeamworkSettingsPanel(): JSX.Element {
               }))}
               style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', background: 'var(--input-bg, rgba(255,255,255,0.05))', color: 'inherit', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))' }}
             >
-              <option value="auto">Auto (Intelligent geroutet gemäß Strategie)</option>
+              <option value="auto">{t('teamwork.roles.autoStrategy')}</option>
               {groupedModels.map(([providerName, modelList]) => (
                 <optgroup key={providerName} label={providerName}>
                   {modelList.map((m) => (
@@ -473,11 +495,11 @@ export function TeamworkSettingsPanel(): JSX.Element {
           </SettingsField>
 
           <SettingsField
-            label="Worker-Pool"
-            description="Lege fest, welche der aktuell erkannten Modelle parallele Entwürfe erzeugen dürfen. Mehrfachauswahl wird durch Strg/Cmd unterstützt."
+            label={t('teamwork.roles.workerPool')}
+            description={t('teamwork.roles.workerPoolDescription')}
           >
             <select
-              aria-label="Worker-Pool Modelle"
+              aria-label={t('teamwork.roles.workerPool')}
               multiple
               value={Array.isArray(config.roles.worker_pool) ? config.roles.worker_pool : config.roles.worker_pool === 'auto' ? ['auto'] : [config.roles.worker_pool]}
               onChange={(e) => {
@@ -490,7 +512,7 @@ export function TeamworkSettingsPanel(): JSX.Element {
               }}
               style={{ width: '100%', minHeight: '7rem', padding: '0.45rem', borderRadius: '6px', background: 'var(--input-bg, rgba(255,255,255,0.05))', color: 'inherit', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))' }}
             >
-              <option value="auto">Auto (live erkannter Pool)</option>
+              <option value="auto">{t('teamwork.roles.autoPool')}</option>
               {groupedModels.map(([providerName, modelList]) => (
                 <optgroup key={providerName} label={providerName}>
                   {modelList.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.id})</option>)}
@@ -501,8 +523,8 @@ export function TeamworkSettingsPanel(): JSX.Element {
 
           {/* Critic */}
           <SettingsField
-            label="2. Critic / Reviewer"
-            description="Vergleicht parallele Entwürfe, deckt Widersprüche auf und empfiehlt die Synthese."
+            label={t('teamwork.roles.critic')}
+            description={t('teamwork.roles.criticDescription')}
           >
             <select
               id={criticSelectId}
@@ -513,7 +535,7 @@ export function TeamworkSettingsPanel(): JSX.Element {
               }))}
               style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', background: 'var(--input-bg, rgba(255,255,255,0.05))', color: 'inherit', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))' }}
             >
-              <option value="auto">Auto (Intelligent geroutet gemäß Strategie)</option>
+              <option value="auto">{t('teamwork.roles.autoStrategy')}</option>
               {groupedModels.map(([providerName, modelList]) => (
                 <optgroup key={providerName} label={providerName}>
                   {modelList.map((m) => (
@@ -528,8 +550,8 @@ export function TeamworkSettingsPanel(): JSX.Element {
 
           {/* Synthesizer */}
           <SettingsField
-            label="3. Synthesizer (Finale Antwort)"
-            description="Schreibt die finale, zusammengeführte Antwort für den Nutzer."
+            label={t('teamwork.roles.synthesizer')}
+            description={t('teamwork.roles.synthesizerDescription')}
           >
             <select
               id={synthSelectId}
@@ -540,7 +562,7 @@ export function TeamworkSettingsPanel(): JSX.Element {
               }))}
               style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', background: 'var(--input-bg, rgba(255,255,255,0.05))', color: 'inherit', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))' }}
             >
-              <option value="auto">Auto (Intelligent geroutet gemäß Strategie)</option>
+              <option value="auto">{t('teamwork.roles.autoStrategy')}</option>
               {groupedModels.map(([providerName, modelList]) => (
                 <optgroup key={providerName} label={providerName}>
                   {modelList.map((m) => (
@@ -557,18 +579,18 @@ export function TeamworkSettingsPanel(): JSX.Element {
 
       {/* Connected Model Pool Overview */}
       <SettingsCard
-        title="Erkannter Modell-Pool"
-        description="Modelle aus den verbundenen Provider-Katalogen. Die Erkennung bestätigt weder aktuelle Erreichbarkeit noch verfügbares Kontingent."
+        title={t('teamwork.modelPool.title')}
+        description={t('teamwork.modelPool.description')}
         action={
           <span className="native-rest-pill">
-            {models.length} {models.length === 1 ? 'Modell erkannt' : 'Modelle erkannt'}
+            {models.length} {models.length === 1 ? t('teamwork.modelPool.recognizedOne') : t('teamwork.modelPool.recognizedMany')}
           </span>
         }
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.25rem' }}>
           {models.length === 0 ? (
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-              Keine Modelle in den verbundenen Provider-Katalogen erkannt. Teamwork kann ohne ein verfügbares Modell nicht ausgeführt werden.
+              {t('teamwork.modelPool.empty')}
             </p>
           ) : (
             models.map((m) => {

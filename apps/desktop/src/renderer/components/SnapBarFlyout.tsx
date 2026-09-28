@@ -4,6 +4,8 @@ import {
   type SnapLayoutType,
   type GhostTarget
 } from '../types/snap-layouts.js';
+import { useDesktopI18n } from '../i18n.js';
+import { snapLayoutDescriptionKey, snapLayoutLabelKey, snapSlotNameKey } from '../snap-i18n.js';
 
 export interface SnapBarFlyoutProps {
   visible: boolean;
@@ -18,9 +20,10 @@ export function SnapBarFlyout({
   onSelectSlot,
   activeSlot
 }: SnapBarFlyoutProps): React.JSX.Element | null {
+  const { t } = useDesktopI18n();
   if (!visible) return null;
 
-  const layoutOrder: SnapLayoutType[] = [
+  const layoutOrder: Array<Exclude<SnapLayoutType, 'single'>> = [
     'dual-50-50',
     'dual-66-33',
     'dual-33-66',
@@ -34,16 +37,17 @@ export function SnapBarFlyout({
   ];
 
   return (
-    <div className={`snap-bar-flyout ${visible ? 'is-visible' : ''}`} role="region" aria-label="Snap Layouts">
+    <div className={`snap-bar-flyout ${visible ? 'is-visible' : ''}`} role="region" aria-label={t('snap.title')}>
       <div className="snap-bar-header">
-        <span className="snap-bar-title">✦ Snap Layouts (Windows 11)</span>
-        <span className="snap-bar-hint">Tab in einen Bereich ziehen zum Andocken</span>
+        <span className="snap-bar-title">✦ {t('snap.title')}</span>
+        <span className="snap-bar-hint">{t('snap.dragInstruction')}</span>
       </div>
       <div className="snap-bar-cards">
         {layoutOrder.map((layoutKey) => {
           const def = SNAP_LAYOUT_DEFINITIONS[layoutKey];
+          const layoutLabel = t(snapLayoutLabelKey(layoutKey));
           return (
-            <div key={layoutKey} className="snap-bar-card" title={def.description}>
+            <div key={layoutKey} className="snap-bar-card" title={t(snapLayoutDescriptionKey(layoutKey))}>
               <div className={`snap-card-preview layout-${layoutKey}`}>
                 {def.slots.map((slot, idx) => {
                   const isHovered =
@@ -53,13 +57,9 @@ export function SnapBarFlyout({
                     onHoverSlot?.({
                       layout: layoutKey,
                       slotIndex: idx,
-                      label: `${def.label} · ${slot.name}`,
+                      label: `${layoutLabel} · ${t(snapSlotNameKey(layoutKey, idx))}`,
                       bounds: slot.bounds
                     });
-                  };
-
-                  const handleMouseUp = () => {
-                    onSelectSlot?.(layoutKey, idx);
                   };
 
                   return (
@@ -75,19 +75,22 @@ export function SnapBarFlyout({
                       }}
                       onMouseEnter={handleMouseEnter}
                       onMouseLeave={() => onHoverSlot?.(null)}
-                      onMouseUp={handleMouseUp}
+                      onFocus={handleMouseEnter}
+                      onBlur={() => onHoverSlot?.(null)}
+                      onClick={() => onSelectSlot?.(layoutKey, idx)}
+                      onDragEnter={(event) => { event.preventDefault(); event.stopPropagation(); handleMouseEnter(); }}
                       onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); handleMouseEnter(); }}
                       onDrop={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
                         onSelectSlot?.(layoutKey, idx);
                       }}
-                      aria-label={`${def.label} ${slot.name}`}
+                      aria-label={`${layoutLabel} ${t(snapSlotNameKey(layoutKey, idx))}`}
                     />
                   );
                 })}
               </div>
-              <span className="snap-card-label">{def.label}</span>
+              <span className="snap-card-label">{layoutLabel}</span>
             </div>
           );
         })}

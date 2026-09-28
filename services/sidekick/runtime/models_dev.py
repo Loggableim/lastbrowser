@@ -165,6 +165,8 @@ PROVIDER_TO_MODELS_DEV: Dict[str, str] = {
     "huggingface": "huggingface",
     "gemini": "google",
     "google": "google",
+    "google-gemini-cli": "google",
+    "antigravity": "google",
     "xai": "xai",
     "xiaomi": "xiaomi",
     "nvidia": "nvidia",

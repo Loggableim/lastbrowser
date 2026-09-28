@@ -9,7 +9,7 @@
 import type { LastbrowserPanelId } from './shell-state.js';
 
 export type CatalogEndpoint = {
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | '*';
+  method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | '*';
   path: string;
   panel: LastbrowserPanelId;
   label: string;
@@ -321,6 +321,8 @@ export const webuiEndpointCatalog: CatalogEndpoint[] = [
   { method: "POST", path: "/api/onboarding/oauth/cancel", panel: "settings", label: "POST onboarding · oauth · cancel", dangerous: false },
   { method: "GET", path: "/api/onboarding/oauth/poll", panel: "settings", label: "GET onboarding · oauth · poll", dangerous: false },
   { method: "POST", path: "/api/onboarding/oauth/start", panel: "settings", label: "POST onboarding · oauth · start", dangerous: false },
+  { method: "GET", path: "/api/antigravity/accounts", panel: "settings", label: "GET antigravity · accounts", dangerous: false },
+  { method: "POST", path: "/api/antigravity/accounts", panel: "settings", label: "POST antigravity · accounts", dangerous: false },
   { method: "*", path: "/api/onboarding/probe", panel: "settings", label: "onboarding \\\\\\\\u00b7 probe", dangerous: false },
   { method: "POST", path: "/api/onboarding/probe", panel: "settings", label: "POST onboarding · probe", dangerous: false },
   { method: "*", path: "/api/onboarding/setup", panel: "settings", label: "onboarding \\\\\\\\u00b7 setup", dangerous: false },

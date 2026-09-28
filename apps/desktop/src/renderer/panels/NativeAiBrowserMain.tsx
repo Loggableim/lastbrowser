@@ -65,7 +65,7 @@ export function NativeAiBrowserMain({
     <section className="browser-main ai-browser-main">
       <div className="ai-browser-hero">
         <div className="ai-browser-title">
-          <img src={brandAssets.icon} alt="" />
+          <img src={brandAssets.logo} alt="" />
           <div>
             <span className="eyebrow">AI Search</span>
             <h1>Search briefing</h1>

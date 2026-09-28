@@ -13,6 +13,10 @@ import path from 'node:path';
 
 export type DownloadState = 'progressing' | 'completed' | 'cancelled' | 'interrupted';
 
+// Keep a useful recent history without retaining every completed transfer for
+// the lifetime of the browser process. In-progress downloads are never pruned.
+const MAX_FINISHED_DOWNLOADS = 500;
+
 export type DownloadEntry = {
   id: string;
   filename: string;
@@ -113,6 +117,16 @@ export function createDownloadTracker(): DownloadTracker {
   let sequence = 0;
   const order = new Map<string, number>();
 
+  const pruneFinished = (): void => {
+    const finished = Array.from(entries.values())
+      .filter((entry) => entry.state !== 'progressing')
+      .sort((a, b) => (order.get(b.id) ?? 0) - (order.get(a.id) ?? 0));
+    for (const entry of finished.slice(MAX_FINISHED_DOWNLOADS)) {
+      entries.delete(entry.id);
+      order.delete(entry.id);
+    }
+  };
+
   const snapshot = (): DownloadEntry[] =>
     Array.from(entries.values()).sort(
       (a, b) => (order.get(b.id) ?? 0) - (order.get(a.id) ?? 0)
@@ -133,6 +147,7 @@ export function createDownloadTracker(): DownloadTracker {
     const current = entries.get(id);
     if (!current) return;
     entries.set(id, { ...current, ...patch });
+    if (patch.state && patch.state !== 'progressing') pruneFinished();
     emit();
   };
 
@@ -203,12 +218,16 @@ export function createDownloadTracker(): DownloadTracker {
 
     clear(id: string): void {
       entries.delete(id);
+      order.delete(id);
       emit();
     },
 
     clearFinished(): void {
       for (const [id, entry] of entries) {
-        if (entry.state !== 'progressing') entries.delete(id);
+        if (entry.state !== 'progressing') {
+          entries.delete(id);
+          order.delete(id);
+        }
       }
       emit();
     },

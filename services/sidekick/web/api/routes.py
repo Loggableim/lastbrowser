@@ -5758,6 +5758,12 @@ def handle_get(handler, parsed) -> bool:
         except KeyError as e:
             return bad(handler, str(e), 404)
 
+    # ── Antigravity multi-account management (GET) ─────────────────────────
+    # GET /api/antigravity/accounts → list connected accounts (no secrets)
+    if parsed.path == "/api/antigravity/accounts":
+        from runtime import antigravity_oauth as _ag_oauth
+        return j(handler, _ag_oauth.get_antigravity_auth_status())
+
     # ── Cron API (GET) ──
     # All cron handlers touch cron.jobs which resolves SIDEKICK_HOME from
     # os.environ (process-global) at call time. Wrap in cron_profile_context
@@ -8705,6 +8711,19 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, "name is required")
         return _handle_mcp_server_update(handler, name, body or {})
 
+    # ── Antigravity multi-account management (POST) ────────────────────────
+    # POST /api/antigravity/accounts → {"action": "remove", "email": "..."}
+    if parsed.path == "/api/antigravity/accounts":
+        from runtime import antigravity_oauth as _ag_oauth
+        action = str((body or {}).get("action") or "").strip().lower()
+        if action == "remove":
+            email = str((body or {}).get("email") or "").strip()
+            if not email:
+                return bad(handler, "email is required")
+            removed = _ag_oauth.remove_account(email)
+            return j(handler, {"ok": bool(removed), "email": email})
+        return bad(handler, "action must be 'remove'")
+
     # â”€â”€ Discord Bot API (POST) â”€â”€
     if parsed.path.startswith("/api/discord/"):
         from web.api.discord_bot import handle_post
@@ -10590,6 +10609,38 @@ def _handle_model_probe(handler, body):
         return j(handler, {"error": "Could not load models. Check the key and try again.", "models": []}, status=502)
 
 
+def _fetch_openrouter_config_model_ids(timeout: float = 8.0) -> list[str]:
+    """List live OpenRouter chat models for the provider configuration dialog.
+
+    The general agent picker uses a small curated catalog. The provider
+    configuration dialog must also offer paid models, while excluding models
+    that explicitly cannot accept the agent's tool calls.
+    """
+    import urllib.request
+
+    from cli.models import _openrouter_model_supports_tools
+
+    request = urllib.request.Request(
+        "https://openrouter.ai/api/v1/models",
+        headers={"Accept": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    entries = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(entries, list):
+        return []
+    seen: set[str] = set()
+    ids: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict) or not _openrouter_model_supports_tools(entry):
+            continue
+        model_id = str(entry.get("id") or "").strip()
+        if model_id and model_id not in seen:
+            seen.add(model_id)
+            ids.append(model_id)
+    return ids
+
+
 def _handle_live_models(handler, parsed):
     """Return the live model list for a provider.
 
@@ -10608,6 +10659,9 @@ def _handle_live_models(handler, parsed):
 
     Query params:
         provider  (optional) â€” provider ID; defaults to active profile provider
+        catalog=configuration â€” for OpenRouter, include every live model that
+            advertises tool support, including paid models; other callers keep
+            the curated picker catalog.
     """
     qs = parse_qs(parsed.query)
     provider = (qs.get("provider", [""])[0] or "").lower().strip()
@@ -10633,7 +10687,8 @@ def _handle_live_models(handler, parsed):
         from web.api.config import _resolve_provider_alias
         provider = _resolve_provider_alias(provider)
 
-        cache_key = _live_models_cache_key(provider)
+        configuration_catalog = provider == "openrouter" and qs.get("catalog", [""])[0] == "configuration"
+        cache_key = _live_models_cache_key(f"{provider}:configuration" if configuration_catalog else provider)
         cached = _get_cached_live_models(cache_key)
         if cached is not None:
             return j(handler, cached)
@@ -10646,15 +10701,20 @@ def _handle_live_models(handler, parsed):
         # provider_model_ids() tries live endpoints first and falls back to
         # the static _PROVIDER_MODELS list â€” it never raises.
         try:
-            import sys as _sys
-            import os as _os
-            _agent_dir = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-                                       "..", "..", ".sidekick", "sidekick-agent")
-            _agent_dir = _os.path.normpath(_agent_dir)
-            if _agent_dir not in _sys.path:
-                _sys.path.insert(0, _agent_dir)
+            # The in-tree Sidekick package is the source of truth. Do not
+            # prepend a legacy external clone path here: it can shadow the
+            # packaged runtime and return a stale provider catalog.
             from cli.models import provider_model_ids as _pmi
-            ids = _pmi(provider)
+            if configuration_catalog:
+                try:
+                    ids = _fetch_openrouter_config_model_ids()
+                except Exception:
+                    logger.debug("OpenRouter full live catalog unavailable; using curated fallback", exc_info=True)
+                    ids = []
+                if not ids:
+                    ids = _pmi(provider)
+            else:
+                ids = _pmi(provider)
         except Exception as _import_err:
             logger.debug("provider_model_ids import failed for %s: %s", provider, _import_err)
             ids = []
@@ -10730,7 +10790,7 @@ def _handle_live_models(handler, parsed):
         #  (a) the server uses threading (not async), so other requests continue;
         #  (b) the frontend shows the static list immediately and enriches in
         #      the background via _fetchLiveModels(), so the user never waits.
-        if not ids:
+        if not ids and provider != "openai":
             _ep = _OPENAI_COMPAT_ENDPOINTS.get(provider)
             if _ep:
                 try:
@@ -10756,7 +10816,7 @@ def _handle_live_models(handler, parsed):
                     # Fall through to static list below
 
         # Static fallback â€” only reached when live fetch also failed.
-        if not ids:
+        if not ids and provider != "openai":
             from web.api.config import _PROVIDER_MODELS as _pm
             ids = [m["id"] for m in _pm.get(provider, [])]
         if not ids:
@@ -12151,6 +12211,7 @@ def _handle_chat_start(handler, body, diag=None):
                 "error_code": "provider_unavailable",
                 "provider": "google-gemini-cli",
             }, status=503)
+        is_antigravity_provider = str(model_provider or "").strip().lower() == "antigravity"
         mode = str(body.get("mode", "") or "").strip().lower()
         sandbox_disabled = body.get("sandbox_disabled", False)
         grounding_context = ""
@@ -12166,8 +12227,8 @@ def _handle_chat_start(handler, body, diag=None):
         if selected_google_account:
             if "@" not in selected_google_account or any(ch.isspace() for ch in selected_google_account):
                 return bad(handler, "provider_account_email must be a valid account email")
-            if not is_google_cli_provider:
-                return bad(handler, "provider_account_email is only supported for the Gemini CLI provider")
+            if not is_google_cli_provider and not is_antigravity_provider:
+                return bad(handler, "provider_account_email is only supported for the Gemini CLI and Antigravity providers")
         elif is_google_cli_provider:
             # Account-scoped credentials are stored in the pool. Automatically
             # rotate chat requests when the UI has not pinned a specific account.
@@ -12177,6 +12238,14 @@ def _handle_chat_start(handler, body, diag=None):
                 selected_google_account = select_next_account_email() or ""
             except Exception:
                 logger.debug("Gemini account round-robin selection failed; using legacy credentials", exc_info=True)
+        elif is_antigravity_provider:
+            # Antigravity multi-account round-robin: rotate across every
+            # connected account unless the request pinned one explicitly.
+            try:
+                from runtime.antigravity_oauth import select_next_account_email as _ag_next
+                selected_google_account = _ag_next() or ""
+            except Exception:
+                logger.debug("Antigravity account round-robin selection failed", exc_info=True)
         response = _start_chat_stream_for_session(
             s,
             msg=msg,

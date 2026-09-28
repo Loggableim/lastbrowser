@@ -66,9 +66,25 @@ export async function openProviderOAuthUrl(
   if (isGeminiCliProvider(providerId)) {
     return false;
   }
+  // Google blocks OAuth inside embedded Electron/WebView windows — the
+  // Antigravity flow must always open in the OS browser, like Codex.
+  if (providerId === 'antigravity' && integrations.openExternal) {
+    try {
+      if (await integrations.openExternal(url)) return true;
+    } catch {
+      // fall through to the connect window
+    }
+  }
+  if (providerId === 'openai-codex' && integrations.openExternal) {
+    try {
+      if (await integrations.openExternal(url)) return true;
+    } catch {
+      // The dedicated Connect window remains available as a fallback.
+    }
+  }
   if (integrations.openConnectWindow) {
-    await integrations.openConnectWindow(url);
-    return true;
+    const opened = await integrations.openConnectWindow(url);
+    return opened !== false;
   }
   integrations.openWindow?.(url);
   return Boolean(integrations.openWindow);
@@ -76,6 +92,7 @@ export async function openProviderOAuthUrl(
 
 const fallbackCloudProviders = [
   { id: 'openai-codex', label: 'OpenAI Codex (ChatGPT)', oauth_provider: 'openai-codex', oauth_label: 'ChatGPT Account' },
+  { id: 'antigravity', label: 'Antigravity (Google)', oauth_provider: 'antigravity', oauth_label: 'Google Account' },
   { id: 'ollama', label: 'Ollama (Lokal)', requires_base_url: false, key_optional: true, default_base_url: 'http://127.0.0.1:11434/v1' },
   { id: 'ollama-cloud', label: 'Ollama Cloud', requires_base_url: false, key_optional: false, default_base_url: 'https://ollama.com/v1' },
   { id: 'openrouter', label: 'OpenRouter', key_optional: false },
@@ -99,6 +116,12 @@ const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string
     { id: 'kimi-k3', label: 'Kimi K3' },
     { id: 'glm-5.3', label: 'GLM 5.3' },
     { id: 'nemotron-3-nano:30b', label: 'Nemotron 3 Nano (30B)' }
+  ],
+  antigravity: [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
+    { id: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' }
   ],
   deepseek: [
     { id: 'deepseek-chat', label: 'DeepSeek V3 (Chat)' },

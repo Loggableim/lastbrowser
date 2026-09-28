@@ -61,7 +61,7 @@ import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './c
 import { playChatCompletionSound } from './notification-sound.js';
 import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
-import { parseNaturalLanguageBrowserCommand } from './browser-agent-tools.js';
+import { executeBrowserAction, parseNaturalLanguageBrowserCommand } from './browser-agent-tools.js';
 import {
   bookmarkFromTab,
   isBookmarkableUrl,
@@ -96,7 +96,7 @@ import {
   getSavedMemoryEstimateMb,
   type ClosedTab
 } from './tabs.js';
-import { brandAssets } from './brand.js';
+import { brandAssets, sidebarIconForPanel } from './brand.js';
 import { categoryLabels, modelNote, providerPresentation, tierLabels } from './provider-presentation.js';
 import {
   addProfile,
@@ -166,6 +166,7 @@ import {
   WorkspaceFilePreview,
   WorkspaceTreeEntry,
   lastbrowserPanels,
+  panelLabelTranslationKey,
   isInstalledSidebarApp,
   leftSidebarCollapsedStorageKey,
   loadInstalledSidebarApps,
@@ -227,6 +228,12 @@ import { InPageActionBar } from './components/InPageActionBar.js';
 import { PinnedAppModal } from './components/PinnedAppModal.js';
 import { SpaceSetupModal, type SpaceSetupData } from './components/SpaceSetupModal.js';
 import { UnifiedExtensionHub } from './components/UnifiedExtensionHub.js';
+import { CursorLoupeHUD } from './components/CursorLoupeHUD.js';
+import { SplitScreenMagnifier } from './components/SplitScreenMagnifier.js';
+import { SuperSizedTabStrip } from './components/SuperSizedTabStrip.js';
+import { applySmartInvertToWebview, refreshSmartInvertForWebview, removeSmartInvertFromWebview } from './utils/smart-invert.js';
+import { CVD_FILTER_MATRIXES } from './utils/cvd-filters.js';
+import { playCopilotSuccessChime } from './utils/audio-chimes.js';
 
 import { usePinnedAppStore } from './stores/usePinnedAppStore.js';
 import type { PinnedApp } from './components/PinnedAppGrid.js';
@@ -238,8 +245,8 @@ import { ContextSidebar, panelContextItems, type SidekickMessage } from './compo
 import { AddressBar } from './components/AddressBar.js';
 import { useTabStore, type SplitLayoutMode } from './stores/useTabStore.js';
 import { mergeSpaceAudioTabs, subscribeToWebviewMediaState, type SpaceAudioKeepaliveEntry } from './space-audio-keepalive.js';
-import { resolveCanonicalSpacePath } from './space-paths.js';
-import { usePanelStore } from './stores/usePanelStore.js';
+import { isCurrentSpaceDirectorySnapshot, resolveCanonicalSpacePath, resolveRefreshedActiveSpacePath } from './space-paths.js';
+import { usePanelStore, type SidebarMode } from './stores/usePanelStore.js';
 import { useChatStore } from './stores/useChatStore.js';
 import { loadSpaceModel, removeSpaceModel, saveSpaceModel } from './space-models.js';
 import { CommandPalette } from './components/CommandPalette.js';
@@ -248,7 +255,9 @@ import { detectPageCategory, getQuickActionChips, executeQuickAction, type Quick
 import { SnapGhostOverlay } from './components/SnapGhostOverlay.js';
 import { SnapBarFlyout } from './components/SnapBarFlyout.js';
 import { MultiviewGridContainer } from './components/MultiviewGridContainer.js';
-import { buildSnapGroupAfterDrop } from './snap-drop.js';
+import { buildSnapGroupAfterDrop, isPointInsideSnapFlyout } from './snap-drop.js';
+import { snapLayoutLabelKey, snapSlotNameKey } from './snap-i18n.js';
+import { resolveAutoUpdateCheckPreference } from './update-preference.js';
 import {
   SNAP_LAYOUT_DEFINITIONS,
   type SnapLayoutType,
@@ -334,6 +343,51 @@ function extractDesktopSettings(payload: unknown): DesktopSettingsRecord {
   if (!isRecord(payload)) return {};
   if (isRecord(payload.settings)) return payload.settings;
   return payload;
+}
+
+export function mergeDesktopSettings(
+  serverSettings: unknown,
+  storedSettings: unknown,
+  currentSettings: unknown
+): DesktopSettingsRecord {
+  const cachedSettings = isRecord(storedSettings)
+    ? storedSettings
+    : isRecord(currentSettings) ? currentSettings : {};
+  return {
+    ...cachedSettings,
+    ...extractDesktopSettings(serverSettings)
+  };
+}
+
+export async function fetchDesktopSettingsWithRetry(
+  fetchSettings: () => Promise<unknown>,
+  maxAttempts = 8,
+  retryDelayMs = 750,
+  signal?: AbortSignal
+): Promise<unknown> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (signal?.aborted) throw signal.reason ?? new Error('Settings load cancelled');
+    try {
+      return await fetchSettings();
+    } catch (error) {
+      lastError = error;
+      if (signal?.aborted) throw signal.reason ?? error;
+      if (attempt === maxAttempts) break;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          signal?.removeEventListener('abort', cancelWait);
+          resolve();
+        }, retryDelayMs);
+        const cancelWait = () => {
+          clearTimeout(timer);
+          reject(signal?.reason ?? new Error('Settings load cancelled'));
+        };
+        signal?.addEventListener('abort', cancelWait, { once: true });
+      });
+    }
+  }
+  throw lastError;
 }
 
 function loadDesktopSettingsFromStorage(): DesktopSettingsRecord | null {
@@ -611,6 +665,15 @@ const panelIcons: Record<LastbrowserPanelId, React.ComponentType<{ size?: number
 };
 
 export function App(): JSX.Element {
+  return (
+    <DesktopI18nProvider>
+      <AppContent />
+    </DesktopI18nProvider>
+  );
+}
+
+function AppContent(): JSX.Element {
+  const { t } = useDesktopI18n();
   const {
     tabs,
     setTabs,
@@ -669,7 +732,8 @@ export function App(): JSX.Element {
     setSidebarDrawerTab,
     actionBarDock,
     setActionBarDock,
-    dockSettings
+    dockSettings,
+    visionImpaired
   } = usePanelStore();
 
   const [layoutMode, setLayoutMode] = useState<'modern' | 'classic'>(() => {
@@ -712,6 +776,18 @@ export function App(): JSX.Element {
         event.preventDefault();
         toggleCopilot();
       }
+      // Vision-Impaired 2.0: Ctrl+Shift+L toggles the cursor companion loupe.
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'l') {
+        event.preventDefault();
+        const store = usePanelStore.getState();
+        store.setVisionImpaired({ cursorLoupeEnabled: !store.visionImpaired.cursorLoupeEnabled });
+      }
+      // Vision-Impaired 2.0: Alt+M toggles the split-screen magnifier.
+      if (event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'm') {
+        event.preventDefault();
+        const store = usePanelStore.getState();
+        store.setVisionImpaired({ splitScreenMagnifier: !store.visionImpaired.splitScreenMagnifier });
+      }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         usePanelStore.getState().toggleCommandPalette();
@@ -746,6 +822,8 @@ export function App(): JSX.Element {
   const [activeProfileId, setActiveProfileId] = useState<string>(() => loadActiveProfileId(window.localStorage));
   const [visitedSites, setVisitedSites] = useState<BrowserVisit[]>(() => loadVisitedSites(window.localStorage));
   const [desktopSettings, setDesktopSettings] = useState<Record<string, unknown> | null>(() => loadDesktopSettingsFromStorage());
+  const [desktopSettingsHydrated, setDesktopSettingsHydrated] = useState(() => loadDesktopSettingsFromStorage() !== null);
+  const desktopSettingsRevisionRef = useRef(0);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
@@ -804,6 +882,8 @@ export function App(): JSX.Element {
   const [composerText, setComposerText] = useState('');
   const [composerMode, setComposerMode] = useState<ComposerMode>('action');
   const [spaces, setSpaces] = useState<SpaceSummary[]>([]);
+  const spaceDirectoryRevisionRef = useRef(0);
+  const activeSpaceSelectionRevisionRef = useRef(0);
   const [activeSpacePath, setActiveSpacePath] = useState<string>(() => {
     try {
       return window.localStorage.getItem('lastbrowser.activeSpacePath.v1') || '';
@@ -887,7 +967,7 @@ export function App(): JSX.Element {
     saveProfileTabs(activeProfileId, { tabs, activeTabId }, window.localStorage);
     saveSpaceTabs(activeProfileId, activeSpacePath, { tabs, activeTabId }, window.localStorage, knownSpacePaths);
     savePersistedSnapGroup(activeProfileId, activeSpacePath, tabs, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, knownSpacePaths);
-    saveSessionSnapshot(activeProfileId, { tabs, activeTabId }, window.localStorage);
+    saveSessionSnapshot(activeProfileId, { tabs, activeTabId }, window.localStorage, activeSpacePath);
   }, [activeProfileId, activeSpacePath, tabs, activeTabId, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, isDetachedWindow, windowStartupReady, knownSpacePaths]);
 
   // Detached BrowserWindows have their own sessionStorage, so their tab state
@@ -927,30 +1007,38 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (!sidekickApiReady) return undefined;
     let alive = true;
-    void window.lastbrowser.sidekick.getSettings()
+    const controller = new AbortController();
+    const revisionAtStart = desktopSettingsRevisionRef.current;
+    void fetchDesktopSettingsWithRetry(() => window.lastbrowser.sidekick.getSettings(), 8, 750, controller.signal)
       .then((payload) => {
-        if (!alive) return;
+        if (!alive || desktopSettingsRevisionRef.current !== revisionAtStart) return;
         setDesktopSettings((current) => {
-          const serverSettings = extractDesktopSettings(payload);
+          if (desktopSettingsRevisionRef.current !== revisionAtStart) {
+            return current || loadDesktopSettingsFromStorage();
+          }
           const storedSettings = loadDesktopSettingsFromStorage();
-          const nextSettings = {
-            ...serverSettings,
-            ...(storedSettings || current || {})
-          };
+          const nextSettings = mergeDesktopSettings(payload, storedSettings, current);
           saveDesktopSettingsToStorage(nextSettings);
           return nextSettings;
         });
+        setDesktopSettingsHydrated(true);
       })
       .catch(() => {
-        if (!alive) return;
+        if (!alive || controller.signal.aborted || desktopSettingsRevisionRef.current !== revisionAtStart) return;
         setDesktopSettings((current) => current || loadDesktopSettingsFromStorage());
+        setDesktopSettingsHydrated(true);
       });
+    const handleSettingsDraftChanged = () => {
+      desktopSettingsRevisionRef.current += 1;
+    };
     const handleSettingsChanged = (event: Event) => {
+      desktopSettingsRevisionRef.current += 1;
       const custom = event as CustomEvent<{ settings?: Record<string, unknown> } | Record<string, unknown>>;
       const nextSettings = isRecord(custom.detail) && isRecord((custom.detail as Record<string, unknown>).settings)
         ? (custom.detail as Record<string, unknown>).settings
         : isRecord(custom.detail) ? custom.detail as Record<string, unknown> : null;
       if (nextSettings && Object.keys(nextSettings).some((key) => !key.startsWith('_'))) {
+        setDesktopSettingsHydrated(true);
         setDesktopSettings((current) => {
           const merged = {
             ...(current || {}),
@@ -961,9 +1049,12 @@ export function App(): JSX.Element {
         });
       }
     };
+    window.addEventListener('lastbrowser:settings-draft-changed', handleSettingsDraftChanged);
     window.addEventListener('lastbrowser:settings-changed', handleSettingsChanged);
     return () => {
       alive = false;
+      controller.abort();
+      window.removeEventListener('lastbrowser:settings-draft-changed', handleSettingsDraftChanged);
       window.removeEventListener('lastbrowser:settings-changed', handleSettingsChanged);
     };
   }, [sidekickApiReady]);
@@ -971,6 +1062,14 @@ export function App(): JSX.Element {
   useEffect(() => {
     applyDesktopAppearance(desktopSettings);
   }, [desktopSettings]);
+
+  useEffect(() => {
+    const enabled = resolveAutoUpdateCheckPreference(desktopSettings, desktopSettingsHydrated);
+    if (enabled === null) return;
+    void window.lastbrowser.updates.setAutoCheckEnabled(enabled).catch((error) => {
+      console.warn('[App] Could not apply automatic update-check preference:', error);
+    });
+  }, [desktopSettingsHydrated, desktopSettings !== null, desktopSettings?.check_for_updates]);
 
   useEffect(() => watchSystemThemeChanges(desktopSettings), [desktopSettings]);
 
@@ -1049,7 +1148,7 @@ export function App(): JSX.Element {
           if (view.isDevToolsOpened()) {
             view.closeDevTools();
           } else {
-            view.openDevTools({ mode: 'right' });
+            view.openDevTools();
           }
         }
       } catch {
@@ -1206,7 +1305,7 @@ export function App(): JSX.Element {
               if (view.isDevToolsOpened()) {
                 view.closeDevTools();
               } else {
-                view.openDevTools({ mode: 'right' });
+                view.openDevTools();
               }
             }
           } catch {
@@ -1216,18 +1315,14 @@ export function App(): JSX.Element {
         case 'zoom-in': {
           const view = webviewRef.current;
           if (view && typeof view.getZoomFactor === 'function' && typeof view.setZoomFactor === 'function') {
-            view.getZoomFactor((factor: number) => {
-              view.setZoomFactor(Math.min(3, factor + 0.1));
-            });
+            view.setZoomFactor(Math.min(3, view.getZoomFactor() + 0.1));
           }
           break;
         }
         case 'zoom-out': {
           const view = webviewRef.current;
           if (view && typeof view.getZoomFactor === 'function' && typeof view.setZoomFactor === 'function') {
-            view.getZoomFactor((factor: number) => {
-              view.setZoomFactor(Math.max(0.25, factor - 0.1));
-            });
+            view.setZoomFactor(Math.max(0.25, view.getZoomFactor() - 0.1));
           }
           break;
         }
@@ -1393,16 +1488,21 @@ export function App(): JSX.Element {
 
   const refreshSpaces = useCallback(async (): Promise<void> => {
     if (!sidekickApiReady) return;
+    const directoryRevisionAtRequest = spaceDirectoryRevisionRef.current;
+    const selectionRevisionAtRequest = activeSpaceSelectionRevisionRef.current;
     try {
       const result = await window.lastbrowser.sidekick.listSpaces();
       const nextSpaces = Array.isArray(result.workspaces) ? result.workspaces : [];
+      if (!isCurrentSpaceDirectorySnapshot(directoryRevisionAtRequest, spaceDirectoryRevisionRef.current)) return;
       setSpaces(nextSpaces);
       setSpacesError('');
-      setActiveSpacePath((current) => {
-        if (current && (nextSpaces.some((space) => space.path === current) || current === 'home')) return current;
-        if (!current && nextSpaces.length === 0) return '';
-        return result.last || nextSpaces[0]?.path || '';
-      });
+      setActiveSpacePath((current) => resolveRefreshedActiveSpacePath({
+        currentPath: current,
+        availablePaths: nextSpaces.map((space) => space.path),
+        lastPath: result.last,
+        selectionRevisionAtRequest,
+        currentSelectionRevision: activeSpaceSelectionRevisionRef.current
+      }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setSpacesError(isTransientSidekickFetchError(message) ? '' : message);
@@ -1577,6 +1677,7 @@ export function App(): JSX.Element {
 
   const handleSpaceSelect = useCallback((newSpacePath: string) => {
     if (newSpacePath === activeSpacePath) return;
+    activeSpaceSelectionRevisionRef.current += 1;
 
     // 1. Persist outgoing space tabs
     if (!isDetachedWindow) {
@@ -1866,7 +1967,7 @@ export function App(): JSX.Element {
       setAddressValue(isAiBrowserHomeUrl(restored.url) ? '' : restored.url);
       return;
     }
-    const snapshot = loadSessionSnapshot(activeProfileId, window.localStorage);
+    const snapshot = loadSessionSnapshot(activeProfileId, window.localStorage, activeSpacePath);
     if (snapshot && snapshot.state.tabs.length > tabs.length) {
       setTabs(snapshot.state.tabs);
       if (snapshot.state.activeTabId) {
@@ -2112,9 +2213,10 @@ export function App(): JSX.Element {
         streamFailed = true;
         return;
       }
+      if (typeof event.event !== 'string') return;
       const orchestrationProgress = describeOrchestrationProgress(event.event, event.data);
       if (orchestrationProgress) {
-        const updatePending = (items: DesktopChatMessage[]) => items.map((item) => (
+        const updatePending = <T extends { role?: string; pending?: boolean; content?: string },>(items: T[]): T[] => items.map((item) => (
           item.role === 'assistant' && item.pending
             ? { ...item, content: orchestrationProgress.message }
             : item
@@ -2125,7 +2227,18 @@ export function App(): JSX.Element {
       }
       // Any content-bearing event means the turn is progressing; refresh the
       // transcript so the user sees the text without waiting for completion.
-      if (event.event === 'delta' || event.event === 'message' || event.event === 'tool') {
+      // 'token' is the primary content-delta event the backend emits during
+      // streaming (see streaming.py on_token → put('token', …)); 'delta' is
+      // kept for older sidecars. The standalone WebUI renders both live —
+      // parity requires the desktop transcript to refresh on them too.
+      if (
+        event.event === 'token' ||
+        event.event === 'delta' ||
+        event.event === 'message' ||
+        event.event === 'tool' ||
+        event.event === 'tool_complete' ||
+        event.event === 'interim_assistant'
+      ) {
         void loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
       }
     });
@@ -2293,7 +2406,13 @@ export function App(): JSX.Element {
     } finally {
       setSidekickBusy(false);
       setActiveStreamId(null);
-      setChatRunState((current) => (current === 'error' ? 'error' : 'idle'));
+      setChatRunState((current) => {
+        // Vision-Impaired Feature 36: soft audio gong when Nova finishes.
+        if (current !== 'error' && usePanelStore.getState().visionImpaired.copilotAudioChime) {
+          playCopilotSuccessChime();
+        }
+        return current === 'error' ? 'error' : 'idle';
+      });
     }
   }
 
@@ -2514,8 +2633,13 @@ export function App(): JSX.Element {
   }
 
   async function addSpaceNative(path: string, name: string): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+    // Invalidate listSpaces requests that started before this create. They can
+    // resolve after the new Space is selected and otherwise restore an older
+    // backend `last` value over the user's fresh selection.
+    spaceDirectoryRevisionRef.current += 1;
     try {
       const result = await window.lastbrowser.sidekick.addSpace({ path, name, create: true });
+      spaceDirectoryRevisionRef.current += 1;
       const nextSpaces = Array.isArray(result.workspaces) ? result.workspaces : spaces;
       const canonicalPath = resolveCanonicalSpacePath(path, nextSpaces);
       if (!canonicalPath) {
@@ -2553,6 +2677,7 @@ export function App(): JSX.Element {
             name: app.name,
             url: app.url,
             color: app.color || data.color,
+            bg: '#1c1c1c',
             spacePath: createdSpacePath
           });
         });
@@ -2571,8 +2696,10 @@ export function App(): JSX.Element {
   async function renameSpaceNative(space: SpaceSummary): Promise<void> {
     const nextName = window.prompt('Rename space', spaceDisplayName(space));
     if (!nextName?.trim()) return;
+    spaceDirectoryRevisionRef.current += 1;
     try {
       const result = await window.lastbrowser.sidekick.renameSpace({ path: space.path, name: nextName.trim() });
+      spaceDirectoryRevisionRef.current += 1;
       if (Array.isArray(result.workspaces)) setSpaces(result.workspaces);
       setSpacesError('');
     } catch (error) {
@@ -2582,8 +2709,10 @@ export function App(): JSX.Element {
 
   async function removeSpaceNative(space: SpaceSummary): Promise<void> {
     if (!window.confirm(`Remove "${spaceDisplayName(space)}" from spaces?`)) return;
+    spaceDirectoryRevisionRef.current += 1;
     try {
       const result = await window.lastbrowser.sidekick.removeSpace({ path: space.path });
+      spaceDirectoryRevisionRef.current += 1;
       removeSpaceModel(space.path, window.localStorage);
       // Audio keepalive entries of a deleted space must not keep orphan
       // webviews (and their audio) alive (goal.md Paket 3).
@@ -2601,12 +2730,14 @@ export function App(): JSX.Element {
     const index = spaces.findIndex((item) => item.path === space.path);
     const target = index + direction;
     if (index < 0 || target < 0 || target >= spaces.length) return;
+    spaceDirectoryRevisionRef.current += 1;
     const next = [...spaces];
     const [item] = next.splice(index, 1);
     next.splice(target, 0, item);
     setSpaces(next);
     try {
       const result = await window.lastbrowser.sidekick.reorderSpaces({ paths: next.map((entry) => entry.path) });
+      spaceDirectoryRevisionRef.current += 1;
       if (Array.isArray(result.workspaces)) setSpaces(result.workspaces);
       setSpacesError('');
     } catch (error) {
@@ -2716,8 +2847,19 @@ export function App(): JSX.Element {
   const isModernBrowser = layoutMode === 'modern';
 
   return (
-    <DesktopI18nProvider>
     <div className={`app-shell panel-${activePanel} ${isModernBrowser ? 'modern-mode' : ''} ${windowMaximized ? 'is-maximized' : ''} ${sidebarMode === 'hidden' ? 'zen-mode' : ''}`}>
+      {/* Vision-Impaired 2.0: hidden SVG filter defs for color-vision correction (§7.4). */}
+      <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
+        <defs>
+          {(Object.keys(CVD_FILTER_MATRIXES) as Array<keyof typeof CVD_FILTER_MATRIXES>).map((filterId) => (
+            <filter key={filterId} id={filterId}>
+              <feColorMatrix type="matrix" values={CVD_FILTER_MATRIXES[filterId]} />
+            </filter>
+          ))}
+        </defs>
+      </svg>
+      {/* Vision-Impaired 2.0: cursor companion loupe + shake-to-locate radar (§4). */}
+      <CursorLoupeHUD />
       {isModernBrowser ? (
         <>
           <ModernTitlebar
@@ -2752,6 +2894,11 @@ export function App(): JSX.Element {
             }}
             copilotOpen={copilotOpen}
             onToggleCopilot={toggleCopilot}
+            loupeActive={visionImpaired.enabled && visionImpaired.cursorLoupeEnabled}
+            onToggleLoupe={() => {
+              const store = usePanelStore.getState();
+              store.setVisionImpaired({ cursorLoupeEnabled: !store.visionImpaired.cursorLoupeEnabled });
+            }}
             onOpenGithub={() => addTab('https://github.com/Loggableim/lastbrowser/issues')}
             quickActions={quickActions}
             onExecuteQuickAction={handleExecuteQuickAction}
@@ -2822,7 +2969,7 @@ export function App(): JSX.Element {
                 <div className="modern-tool-active-badge">
                   <span className="modern-tool-dot" />
                   <span className="modern-tool-title">
-                    {lastbrowserPanels.find((p) => p.id === activePanel)?.label || activePanel}
+                    {t(panelLabelTranslationKey(activePanel))}
                   </span>
                 </div>
               </div>
@@ -2869,7 +3016,7 @@ export function App(): JSX.Element {
                   onDragEndTab={() => setDraggedTabId(null)}
                   onMoveTab={moveTab}
                   onCycleMode={() => {
-                    setZenFloatingMode((prev) => (prev === 'expanded' ? 'slim' : 'expanded'));
+                    setZenFloatingMode(zenFloatingMode === 'expanded' ? 'slim' : 'expanded');
                   }}
                   onSetMode={(m) => {
                     if (m === 'hidden') {
@@ -3523,10 +3670,9 @@ export function App(): JSX.Element {
           existingSpaceNames={spaces.map(spaceDisplayName)}
         />
         <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />
-        <CommandPalette />
+        <CommandPalette onToggleTabPinned={toggleTabPinned} onToggleTabMute={toggleTabMute} />
 
     </div>
-    </DesktopI18nProvider>
   );
 }
 
@@ -3677,6 +3823,7 @@ function BrowserMain({
   desktopSettings?: DesktopSettingsRecord | null;
   lastChatTurnUsage?: { sessionId: string; usage: NativeChatTurnUsage } | null;
 }): JSX.Element {
+  const { t } = useDesktopI18n();
   const browserWebviewStyle = {
     width: '100%',
     height: '100%',
@@ -3705,9 +3852,22 @@ function BrowserMain({
   const [webviewReady, setWebviewReady] = useState(false);
   const [webviewMountKey, setWebviewMountKey] = useState(0);
   const allWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
+  const webviewNavigationCleanupRefs = useRef<Record<string, () => void>>({});
+  const smartInvertActive = usePanelStore((s) => s.visionImpaired.enabled && s.visionImpaired.smartInvertWebview);
+  const transferredTabBootstrapIds = useRef(new Set<string>());
   const webviewMediaCleanupRefs = useRef<Record<string, () => void>>({});
   const onWebviewMediaPlayingRef = useRef(onWebviewMediaPlaying);
   onWebviewMediaPlayingRef.current = onWebviewMediaPlaying;
+  useEffect(() => {
+    Object.values(allWebviewRefs.current).forEach((webview) => {
+      if (smartInvertActive) void applySmartInvertToWebview(webview);
+      else void removeSmartInvertFromWebview(webview);
+    });
+  }, [smartInvertActive]);
+  // Keep hooks above the panel-specific returns below. BrowserMain is reused
+  // while switching panels, so hooks after those returns change hook count.
+  const superTabsActive = usePanelStore((s) => s.visionImpaired.enabled && s.visionImpaired.superSizedVerticalTabs);
+  const splitMagnifierActive = usePanelStore((s) => s.visionImpaired.enabled && s.visionImpaired.splitScreenMagnifier);
   useEffect(() => () => {
     Object.values(webviewMediaCleanupRefs.current).forEach((cleanup) => cleanup());
     webviewMediaCleanupRefs.current = {};
@@ -3738,6 +3898,12 @@ function BrowserMain({
     const rect = browserFrameRef.current.getBoundingClientRect();
     const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(rect.width, 1)));
     const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / Math.max(rect.height, 1)));
+    const flyout = browserFrameRef.current.querySelector('.snap-bar-flyout.is-visible');
+    const flyoutRect = flyout?.getBoundingClientRect();
+    if (snapFlyoutVisible && flyoutRect && isPointInsideSnapFlyout(event.clientX, event.clientY, flyoutRect)) {
+      setSnapDropTarget(null);
+      return;
+    }
     // Windows 11 style: flyout triggers only at top-center; corners trigger quad-grid snapping
     if (y < 0.16 && x >= 0.25 && x <= 0.75) {
       setSnapFlyoutVisible(true);
@@ -3753,12 +3919,18 @@ function BrowserMain({
           && y >= bounds.top / 100 && y <= (bounds.top + bounds.height) / 100;
       });
       if (targetSlot >= 0) {
-        const slot = definition.slots[targetSlot];
-        setSnapDropTarget({ layout: normalizedSnapLayout, slotIndex: targetSlot, label: slot.name, bounds: getSnapSlotBounds(normalizedSnapLayout, targetSlot, snapRatios) });
+        setSnapDropTarget({
+          layout: normalizedSnapLayout,
+          slotIndex: targetSlot,
+          label: `${t(snapLayoutLabelKey(normalizedSnapLayout as Exclude<SnapLayoutType, 'single'>))} · ${t(snapSlotNameKey(normalizedSnapLayout as Exclude<SnapLayoutType, 'single'>, targetSlot))}`,
+          bounds: getSnapSlotBounds(normalizedSnapLayout, targetSlot, snapRatios)
+        });
         return;
       }
     }
-    setSnapDropTarget(getSnapTargetForPointer(x, y));
+    const target = getSnapTargetForPointer(x, y);
+    target.label = `${t(snapLayoutLabelKey(target.layout as Exclude<SnapLayoutType, 'single'>))} · ${t(snapSlotNameKey(target.layout as Exclude<SnapLayoutType, 'single'>, target.slotIndex))}`;
+    setSnapDropTarget(target);
   }
   useLayoutEffect(() => {
     const activeEl = allWebviewRefs.current[activeTab.id];
@@ -3784,6 +3956,7 @@ function BrowserMain({
         // its navigation, even while the first document is still loading.
         const guestId = webview.getWebContentsId();
         if (!cancelled && Number.isInteger(guestId) && guestId > 0) {
+          transferredTabBootstrapIds.current.add(tabId);
           onTransferredWebviewReady(tabId, guestId);
         }
       } catch {
@@ -3792,8 +3965,8 @@ function BrowserMain({
         checking = false;
       }
     };
-    webview.addEventListener('dom-ready', confirmAttached, { once: true });
-    webview.addEventListener('did-stop-loading', confirmAttached, { once: true });
+    webview.addEventListener('dom-ready', confirmAttached);
+    webview.addEventListener('did-stop-loading', confirmAttached);
     const interval = window.setInterval(() => { void confirmAttached(); }, 250);
     void confirmAttached();
     return () => {
@@ -4090,7 +4263,7 @@ function BrowserMain({
       } else {
         // 'right' keeps the page visible — a bottom dock eats the viewport on
         // a laptop screen.
-        view.openDevTools({ mode: 'right' });
+        view.openDevTools();
         setDevToolsOpen(true);
       }
     } catch {
@@ -4373,7 +4546,7 @@ function BrowserMain({
           </PanelErrorBoundary>
         );
       case 'settings':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} /></PanelErrorBoundary>;
       case 'terminal':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:
@@ -4382,10 +4555,19 @@ function BrowserMain({
   }
 
   const isHomeOrSearch = browserMode === 'search' || browserMode === 'home' || isAiBrowserHomeUrl(activeTab.url);
-
   return (
     <PanelErrorBoundary panel="browser" key="browser-page">
     <section className="browser-main browser-page-main">
+      {/* Vision-Impaired 2.0 §5.1: super-sized vertical tab rail (Feature 9). */}
+      {superTabsActive && (
+        <SuperSizedTabStrip
+          tabs={tabs || []}
+          activeTabId={activeTab.id}
+          onActivateTab={(tabId) => onActivateTab?.(tabId)}
+          onCloseTab={(tabId) => useTabStore.getState().closeTab(tabId)}
+          onNewTab={() => onNavigate('lastbrowser://start')}
+        />
+      )}
       {!isHomeOrSearch && (
         <InPageActionBar
           busy={busy}
@@ -4395,9 +4577,9 @@ function BrowserMain({
           onFindOpen={() => setFindOpen(true)}
           downloadsOpen={downloadsOpen}
           hasActiveDownloads={hasActiveDownloads}
-          onToggleDownloads={() => setDownloadsOpen((current) => !current)}
+          onToggleDownloads={() => usePanelStore.getState().setDownloadsOpen(!usePanelStore.getState().downloadsOpen)}
           historyOpen={historyOpen}
-          onToggleHistory={() => setHistoryOpen((current) => !current)}
+          onToggleHistory={() => usePanelStore.getState().setHistoryOpen(!usePanelStore.getState().historyOpen)}
           muted={muted}
           onToggleMute={toggleMute}
           dockMode={usePanelStore.getState().actionBarDock}
@@ -4421,7 +4603,7 @@ function BrowserMain({
             type="button"
             className="permissions-trigger"
             title="Site permissions"
-            onClick={() => setPermissionsOpen((current) => !current)}
+            onClick={() => usePanelStore.getState().setPermissionsOpen(!usePanelStore.getState().permissionsOpen)}
           >
             <ShieldCheck size={14} />
           </button>
@@ -4527,7 +4709,7 @@ function BrowserMain({
               activeSlot={snapDropTarget ? { layout: snapDropTarget.layout, slotIndex: snapDropTarget.slotIndex } : null}
             />
             <SnapGhostOverlay target={snapDropTarget} active={Boolean(snapDropTarget)} />
-            {!snapFlyoutVisible && !snapDropTarget && <div className="snap-drop-hint">Am Rand ablegen oder oben ein Layout wählen</div>}
+            {!snapFlyoutVisible && !snapDropTarget && <div className="snap-drop-hint">{t('snap.dragHint')}</div>}
           </div>
         )}
         {webviewReady && splitGroupActive && (
@@ -4613,23 +4795,60 @@ function BrowserMain({
                     )}:${tab.id}:${webviewMountKey}`}
                     ref={(el) => {
                       if (el) {
-                        allWebviewRefs.current[tab.id] = el;
+                        const guestWebview = el as Electron.WebviewTag;
+                        allWebviewRefs.current[tab.id] = guestWebview;
+                        webviewNavigationCleanupRefs.current[tab.id]?.();
+                        const handleDidStartLoading = () => {
+                          if (tab.id === activeTab.id) onClearBrowserError();
+                        };
+                        const handleDomReady = () => {
+                          void hideWebviewScrollbars(guestWebview);
+                          // Reconcile this document after every navigation and live toggle.
+                          const config = usePanelStore.getState().visionImpaired;
+                          void refreshSmartInvertForWebview(guestWebview, config.enabled && config.smartInvertWebview);
+                          if (tab.id === activeTab.id) onTransferredWebviewReady(tab.id, guestWebview.getWebContentsId());
+                        };
+                        const handleDidFailLoad = (rawEvent: Event) => {
+                          const event = rawEvent as Event & {
+                            isMainFrame?: boolean;
+                            errorCode?: number;
+                            errorDescription?: string;
+                          };
+                          if (!event.isMainFrame || event.errorCode === -3) return;
+                          if (tab.id !== activeTab.id) return;
+                          if ((event.errorCode ?? 0) < -100) {
+                            onSetBrowserError(`Connection failed (${event.errorDescription || 'unknown error'}). Returning to start page.`);
+                            setTimeout(() => onNavigate(browserStartUrl), 1500);
+                          } else {
+                            onSetBrowserError(`${event.errorCode}: ${event.errorDescription || 'Navigation failed'}`);
+                          }
+                        };
+                        el.addEventListener('did-start-loading', handleDidStartLoading);
+                        el.addEventListener('dom-ready', handleDomReady);
+                        el.addEventListener('did-fail-load', handleDidFailLoad);
+                        webviewNavigationCleanupRefs.current[tab.id] = () => {
+                          el.removeEventListener('did-start-loading', handleDidStartLoading);
+                          el.removeEventListener('dom-ready', handleDomReady);
+                          el.removeEventListener('did-fail-load', handleDidFailLoad);
+                        };
                         webviewMediaCleanupRefs.current[tab.id]?.();
                         webviewMediaCleanupRefs.current[tab.id] = subscribeToWebviewMediaState(
-                          el,
+                          guestWebview,
                           tab.id,
                           (tabId, isPlaying) => onWebviewMediaPlayingRef.current?.(tabId, isPlaying)
                         );
                         if (tab.id === activeTab.id) {
-                          webviewRef.current = el;
+                          webviewRef.current = guestWebview;
                         }
                       } else {
+                        webviewNavigationCleanupRefs.current[tab.id]?.();
+                        delete webviewNavigationCleanupRefs.current[tab.id];
                         webviewMediaCleanupRefs.current[tab.id]?.();
                         delete webviewMediaCleanupRefs.current[tab.id];
                         delete allWebviewRefs.current[tab.id];
                       }
                     }}
-                    src={tab.url}
+                    src={pendingTransferredTabId === tab.id || transferredTabBootstrapIds.current.has(tab.id) ? 'about:blank' : tab.url}
                     data-tab-id={tab.id}
                     className="browser-view"
                     style={isAudioKeepalive
@@ -4643,35 +4862,21 @@ function BrowserMain({
                       tab.incognito,
                       knownSpacePaths
                     )}
-                    allowpopups="true"
-                    plugins="true"
+                    allowpopups
+                    plugins
                     webpreferences={tab.pinned ? 'contextIsolation=yes, plugins=yes, backgroundThrottling=no' : 'contextIsolation=yes, plugins=yes'}
-                    onDidStartLoading={() => {
-                      if (tab.id === activeTab.id) onClearBrowserError();
-                    }}
-                    onDomReady={(event) => {
-                      void hideWebviewScrollbars(event.currentTarget);
-                      if (tab.id === activeTab.id) onTransferredWebviewReady(tab.id);
-                    }}
-                    onDidFailLoad={(event) => {
-                      if (!event.isMainFrame || event.errorCode === -3) return;
-                      if (tab.id === activeTab.id) {
-                        if (event.errorCode < -100) {
-                          onSetBrowserError(`Connection failed (${event.errorDescription}). Returning to start page.`);
-                          setTimeout(() => {
-                            onNavigate(browserStartUrl);
-                          }, 1500);
-                        } else {
-                          onSetBrowserError(`${event.errorCode}: ${event.errorDescription}`);
-                        }
-                      }
-                    }}
                   />
                 )}
                 </div>
               );
             })}
             </div>
+            {/* Vision-Impaired 2.0 §6: split-screen magnifier pane (Feature 18).
+                Rendered inside the webview frame so it overlays the bottom 35%
+                while the original page stays fully visible above. */}
+            {splitMagnifierActive && !isHomeOrSearch && (
+              <SplitScreenMagnifier webview={webviewRef.current} syncKey={activeTab.url} />
+            )}
       </div>
     </section>
     </PanelErrorBoundary>
@@ -4826,14 +5031,16 @@ function NativePanelMain({
   serviceStatus: ServiceStatus | null;
   spaces: SpaceSummary[];
 }): JSX.Element {
+  const { t } = useDesktopI18n();
   const panel = lastbrowserPanels.find((item) => item.id === activePanel) || lastbrowserPanels[0];
+  const panelLabel = t(panelLabelTranslationKey(panel.id));
   return (
     <section className="browser-main native-panel-main">
       <div className="native-panel-card">
-        <img src={brandAssets.sidebarIcons[activePanel]} alt="" />
-        <span className="eyebrow">{panel.label}</span>
-        <h1>{panel.label}</h1>
-        <p>{panel.label} is available in the native Lastbrowser shell.</p>
+        <img src={sidebarIconForPanel(activePanel)} alt="" />
+        <span className="eyebrow">{panelLabel}</span>
+        <h1>{panelLabel}</h1>
+        <p>{panelLabel} is available in the native Lastbrowser shell.</p>
         {!spaces.length && serviceStatus?.sidekick !== 'ready' && <small>Sidekick runtime is starting.</small>}
       </div>
     </section>

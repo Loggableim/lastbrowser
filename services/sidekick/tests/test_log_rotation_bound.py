@@ -15,6 +15,20 @@ import logging
 import pytest
 
 
+def _emit(handler, logger_name: str, message: str) -> None:
+    """Exercise the handler directly, independent of process logger filters."""
+    record = logging.LogRecord(
+        name=logger_name,
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg=message,
+        args=(),
+        exc_info=None,
+    )
+    handler.handle(record)
+
+
 def test_do_rollover_truncates_when_rename_is_blocked(tmp_path, monkeypatch):
     """When the rename fails permanently, the handler must truncate the
     current file instead of letting it grow unbounded."""
@@ -33,16 +47,13 @@ def test_do_rollover_truncates_when_rename_is_blocked(tmp_path, monkeypatch):
     handler = SidekickRotatingFileHandler(
         log_file, maxBytes=1024, backupCount=2, encoding="utf-8"
     )
-    logger = logging.getLogger("rollover-test")
-    logger.setLevel(logging.INFO)
-    logger.addHandler(handler)
     try:
         # Fill the file far beyond maxBytes with a single huge record - with
         # the rename blocked, the old code kept appending forever (the
         # 138.8 MB agent.log). A single oversized record avoids the
         # fill/rollover/truncate oscillation the fix produces on normal
         # records.
-        logger.info("x" * 4096)
+        _emit(handler, "rollover-test", "x" * 4096)
         handler.flush()
         assert log_file.stat().st_size > 1024, "test setup: file should exceed the limit"
 
@@ -53,11 +64,10 @@ def test_do_rollover_truncates_when_rename_is_blocked(tmp_path, monkeypatch):
             f"log file must be truncated when rollover fails (got {size} bytes)"
         )
         # The handler must remain usable after the fallback.
-        logger.info("after-rollover")
+        _emit(handler, "rollover-test", "after-rollover")
         handler.flush()
         assert log_file.stat().st_size > 0
     finally:
-        logger.removeHandler(handler)
         handler.close()
 
 
@@ -69,17 +79,13 @@ def test_do_rollover_normal_path_still_rotates(tmp_path):
     handler = SidekickRotatingFileHandler(
         log_file, maxBytes=1024, backupCount=2, encoding="utf-8"
     )
-    logger = logging.getLogger("rollover-test-normal")
-    logger.setLevel(logging.INFO)
-    logger.addHandler(handler)
     try:
         blob = "y" * 512
         for _ in range(10):
-            logger.info(blob)
+            _emit(handler, "rollover-test-normal", blob)
         handler.flush()
         rotated = tmp_path / "agent.log.1"
         assert rotated.exists(), "normal rollover must rename to .1"
         assert log_file.stat().st_size <= 1024
     finally:
-        logger.removeHandler(handler)
         handler.close()

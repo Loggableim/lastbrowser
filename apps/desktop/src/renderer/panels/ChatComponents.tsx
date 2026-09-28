@@ -37,6 +37,8 @@ import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import type { DesktopChatMessage, DesktopSessionDetail, ChatRunState } from '../shell-state.js';
 import { shouldShowNativeTurnUsage, type NativeChatTurnUsage } from '../chat-usage.js';
 import { useDesktopI18n } from '../i18n.js';
+import { toBionicSegments } from '../utils/bionic-reading.js';
+import { usePanelStore } from '../stores/usePanelStore.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -234,12 +236,15 @@ function ToolCallDetails({ call, detailed }: { call: ToolCallView; detailed: boo
 
 export function ChatMessageBody({ content }: { content: string }): React.JSX.Element {
   const view = useMemo(() => describeChatContent(content), [content]);
+  const bionicReading = usePanelStore((state) => state.visionImpaired.enabled && state.visionImpaired.bionicReading);
 
   switch (view.kind) {
     case 'empty':
       return <p>...</p>;
     case 'text':
-      return <RichTextRenderer content={view.text} />;
+      return bionicReading
+        ? <BionicText text={view.text} />
+        : <RichTextRenderer content={view.text} />;
     case 'html':
       return (
         <div className="chat-structured chat-html-structured">
@@ -261,12 +266,12 @@ export function ChatMessageBody({ content }: { content: string }): React.JSX.Ele
       return (
         <div className="chat-structured chat-research-structured">
           <div className="chat-structured-header">
-            <strong>{view.summary}</strong>
+            <strong>{bionicReading ? <BionicText text={view.summary} as="span" /> : view.summary}</strong>
             <span>{view.results.length} results</span>
           </div>
           {view.keyPoints.length > 0 && (
             <div className="chat-chip-row">
-              {view.keyPoints.map((point, index) => <span key={`${point}-${index}`}>{point}</span>)}
+              {view.keyPoints.map((point, index) => <span key={`${point}-${index}`}>{bionicReading ? <BionicText text={point} as="span" /> : point}</span>)}
             </div>
           )}
           {view.results.length > 0 && (
@@ -274,7 +279,7 @@ export function ChatMessageBody({ content }: { content: string }): React.JSX.Ele
               {view.results.map((result, index) => (
                 <article key={`${result.title}-${index}`} className="chat-result-card">
                   <div className="chat-result-card-head">
-                    <strong>{result.title}</strong>
+                    <strong>{bionicReading ? <BionicText text={result.title} as="span" /> : result.title}</strong>
                     {result.source && <span>{result.source}</span>}
                   </div>
                   {result.url && (
@@ -282,7 +287,7 @@ export function ChatMessageBody({ content }: { content: string }): React.JSX.Ele
                       {result.url}
                     </a>
                   )}
-                  {result.snippet && <p>{result.snippet}</p>}
+                  {result.snippet && (bionicReading ? <BionicText text={result.snippet} /> : <p>{result.snippet}</p>)}
                 </article>
               ))}
             </div>
@@ -291,7 +296,7 @@ export function ChatMessageBody({ content }: { content: string }): React.JSX.Ele
             <div className="chat-next-steps">
               <strong>Next steps</strong>
               <ul>
-                {view.nextSteps.map((step, index) => <li key={`${step}-${index}`}>{step}</li>)}
+                {view.nextSteps.map((step, index) => <li key={`${step}-${index}`}>{bionicReading ? <BionicText text={step} as="span" /> : step}</li>)}
               </ul>
             </div>
           )}
@@ -312,7 +317,7 @@ export function ChatMessageBody({ content }: { content: string }): React.JSX.Ele
             {view.entries.map((entry) => (
               <React.Fragment key={entry.key}>
                 <dt>{entry.key}</dt>
-                <dd>{entry.value || '-'}</dd>
+                <dd>{bionicReading ? <BionicText text={entry.value || '-'} as="span" /> : entry.value || '-'}</dd>
               </React.Fragment>
             ))}
           </dl>
@@ -325,6 +330,19 @@ export function ChatMessageBody({ content }: { content: string }): React.JSX.Ele
     default:
       return <p>{content.trim()}</p>;
   }
+}
+
+/** Render app-owned chat text as React text nodes, never as generated HTML. */
+export function BionicText({ text, enabled = true, as = 'p' }: { text: string; enabled?: boolean; as?: 'p' | 'span' }): React.JSX.Element {
+  const Tag = as;
+  if (!enabled) return <Tag>{text}</Tag>;
+  return (
+    <Tag>
+      {toBionicSegments(text).map((segment, index) => segment.bold
+        ? <strong key={index}>{segment.text}</strong>
+        : <React.Fragment key={index}>{segment.text}</React.Fragment>)}
+    </Tag>
+  );
 }
 
 // ─── ChatComposer ─────────────────────────────────────────────────────────────
@@ -387,6 +405,7 @@ export function ChatComposer({
   onStop,
   onText
 }: ChatComposerProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const canSend = ready && text.trim().length > 0 && !busy;
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
 
@@ -545,7 +564,7 @@ export function ChatComposer({
         )}
         <textarea
           value={text}
-          placeholder={ready ? 'Message Sidekick... (type @tabs or / for commands)' : 'Sidekick runtime is starting...'}
+          placeholder={ready ? t('chat.composerPlaceholder') : t('chat.runtimeStarting')}
           rows={3}
           disabled={!ready}
           onChange={(event) => handleComposerChange(event.target.value)}

@@ -41,6 +41,10 @@ describe('Snap layout targets', () => {
     expect(getSnapSlotBounds('dual-50-50', 0, { x: [66], y: [] })).toEqual({ top: 0, left: 0, width: 66, height: 100 });
     expect(getSnapSlotBounds('dual-50-50', 1, { x: [66], y: [] })).toEqual({ top: 0, left: 66, width: 34, height: 100 });
     expect(getSnapSlotBounds('quad-grid', 3, { x: [40], y: [60] })).toEqual({ top: 60, left: 40, width: 60, height: 40 });
+    expect(getSnapSlotBounds('quad-grid', 0, { x: [40], y: [70, 35] })).toEqual({ top: 0, left: 0, width: 40, height: 70 });
+    expect(getSnapSlotBounds('quad-grid', 1, { x: [40], y: [70, 35] })).toEqual({ top: 0, left: 40, width: 60, height: 35 });
+    expect(getSnapSlotBounds('quad-grid', 2, { x: [40], y: [70, 35] })).toEqual({ top: 70, left: 0, width: 40, height: 30 });
+    expect(getSnapSlotBounds('quad-grid', 3, { x: [40], y: [70, 35] })).toEqual({ top: 35, left: 40, width: 60, height: 65 });
     expect(getSnapSlotBounds('trio-columns', 1, { x: [30, 70], y: [] })).toEqual({ top: 0, left: 30, width: 40, height: 100 });
     expect(getSnapSlotBounds('trio-stacked-right', 2, { x: [55], y: [42] })).toEqual({ top: 42, left: 55, width: 45, height: 58 });
   });

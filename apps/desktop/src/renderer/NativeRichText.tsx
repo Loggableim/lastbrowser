@@ -7,6 +7,7 @@ import { switchTabByIndex } from './tab-intelligence.js';
 declare global {
   interface Window {
     mermaid?: {
+      initialize: (options: { startOnLoad: boolean; theme: 'dark' | 'default' }) => void;
       run: (opts: { nodes: HTMLElement[] }) => Promise<void>;
     };
     katex?: {
@@ -138,7 +139,7 @@ export function processRichText(text?: string | null): { html: string } {
       /```(\w*)\n([\s\S]*?)```/g,
       (_, lang: string, code: string) => {
         const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : '';
-        return `<div class="rich-code-block"><div class="rich-code-header"><span>${escapeHtml(lang || 'code')}</span></div><pre><code${langAttr}>${escapeHtml((code || '').trimEnd())}</code></pre></div>`;
+        return `<div class="rich-code-block"><div class="rich-code-header"><span>${escapeHtml(lang || 'code')}</span><button type="button" class="rich-code-copy" title="Copy code" aria-label="Copy code">Copy</button></div><pre><code${langAttr}>${escapeHtml((code || '').trimEnd())}</code></pre></div>`;
       }
     );
 
@@ -168,6 +169,22 @@ function escapeHtml(str?: string | null): string {
     .replace(/"/g, '&quot;');
 }
 
+/** Legacy execCommand fallback for environments without the async Clipboard API. */
+function fallbackCopy(text: string): void {
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  } catch {
+    /* clipboard unavailable — the button label still flashes, no throw */
+  }
+}
+
 // ── React Component ──────────────────────────────────────────
 
 export function RichTextRenderer({ content, text }: { content?: string; text?: string }): JSX.Element {
@@ -190,6 +207,31 @@ export function RichTextRenderer({ content, text }: { content?: string; text?: s
         const snippet = btn.dataset.snippet || '';
         if (!isNaN(tabNum)) {
           switchTabByIndex(tabNum, snippet);
+        }
+        return;
+      }
+      // Copy button on code blocks: copy the raw code text to the clipboard
+      // and flash the button label as confirmation. Clipboard writes can be
+      // blocked by webview permission policies — degrade to a selection
+      // fallback instead of throwing inside the React event handler.
+      const copyBtn = (e.target as HTMLElement).closest('.rich-code-copy') as HTMLElement | null;
+      if (copyBtn) {
+        const block = copyBtn.closest('.rich-code-block');
+        const codeEl = block?.querySelector('code');
+        if (!codeEl) return;
+        const text = codeEl.textContent || '';
+        const done = () => {
+          copyBtn.textContent = 'Copied!';
+          window.setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1600);
+        };
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(() => {
+            fallbackCopy(text);
+            done();
+          });
+        } else {
+          fallbackCopy(text);
+          done();
         }
       }
     };

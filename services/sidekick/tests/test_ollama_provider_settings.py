@@ -51,7 +51,7 @@ def test_ollama_connection_probe_runs_in_backend_and_does_not_persist_key(monkey
             return False
 
         def read(self):
-            return b'{"models":[{"id":"test-model"}]}'
+            return b'{"data":[{"id":"test-model"}]}'
 
     class Opener:
         def open(self, request, timeout):
@@ -89,6 +89,33 @@ def test_ollama_connection_probe_rejects_non_loopback_local_endpoint(monkeypatch
     assert providers.probe_ollama_connection(
         "ollama-cloud", "https://ollama.com.attacker.test/v1", "test-cloud-key"
     ) == {"ok": False, "error": "invalid_ollama_cloud_base_url"}
+
+
+def test_local_ollama_probe_counts_api_tags_models(monkeypatch):
+    from web.api import providers
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"models":[{"name":"local-a"},{"name":"local-b"}]}'
+
+    class Opener:
+        def open(self, request, timeout):
+            assert request.full_url == "http://127.0.0.1:11434/api/tags"
+            return Response()
+
+    monkeypatch.setattr(providers.urllib.request, "build_opener", lambda _handler: Opener())
+
+    assert providers.probe_ollama_connection(
+        "ollama", "http://127.0.0.1:11434"
+    ) == {"ok": True, "provider": "ollama", "model_count": 2}
 
 
 def test_model_discovery_uses_provider_scoped_ollama_credentials(monkeypatch):

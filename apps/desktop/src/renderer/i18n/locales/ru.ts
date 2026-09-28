@@ -1,6 +1,6 @@
 import type { DesktopCatalog, DesktopTranslationKey } from '../keys.js';
 
-const translations: Record<DesktopTranslationKey, string> = {
+const translations: DesktopCatalog = {
   'app.title': 'Lastbrowser',
   'common.add': 'Добавить',
   'common.added': 'Добавлено',
@@ -118,6 +118,7 @@ const translations: Record<DesktopTranslationKey, string> = {
 
   'chat.action': 'Действие',
   'chat.composerPlaceholder': 'Сообщение Sidekick…',
+  'chat.runtimeStarting': 'Sidekick запускается...',
   'chat.detail': 'Общайтесь, создавайте сообщения и управляйте сеансами в приложении.',
   'chat.emptyHint': 'Начните новый чат или выберите существующий.',
   'chat.emptyTranscript': 'Пока нет сообщений.',
@@ -136,6 +137,8 @@ const translations: Record<DesktopTranslationKey, string> = {
   'chat.send': 'Отправить',
   'chat.title': 'Чат',
   'chat.workspace': 'Рабочая область',
+  'copilot.emptyTitle': 'Спросите {botName} об этой странице',
+  'copilot.emptyDescription': 'Получайте краткие обзоры, переводы и анализ кода или запускайте автоматизированных исследовательских агентов.',
 
   'discord.ban': 'Заблокировать',
   'discord.channels': 'Каналы',
@@ -347,9 +350,14 @@ const translations: Record<DesktopTranslationKey, string> = {
   'sidebar.drawer.zenMode': 'Режим Zen',
   'sidebar.drawer.zenModeTitle': 'Скрыть боковую панель (режим Zen)',
   'sidebar.drawer.settings': 'Настройки',
+  'sidebar.drawer.navigation': 'Навигация Lastbrowser',
+  'sidebar.drawer.toggleSidebar': 'Переключить боковую панель',
   'sidebar.drawer.expandSidebar': 'Развернуть боковую панель (Ctrl+B)',
   'sidebar.drawer.help': 'Справка и документация',
   'sidebar.items.chat.title': 'Чат Nova',
+  'sidebar.space.workspace': 'Рабочее пространство',
+  'sidebar.space.switch': 'Сменить пространство',
+  'sidebar.space.spaces': 'Пространства',
   'sidebar.items.chat.desc': 'Общение с ИИ и запросы',
   'sidebar.items.agents.title': 'Субагенты',
   'sidebar.items.agents.desc': 'Команда специализированных агентов',

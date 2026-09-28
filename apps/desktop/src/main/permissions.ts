@@ -26,17 +26,11 @@ export type PermissionDecision = 'allow' | 'deny';
 const ALLOWED_PERMISSIONS = new Set([
   'fullscreen',
   'pointerLock',
-  'keyboardLock',
   'clipboard-sanitized-write',
-  'notifications',
-  'protected-media-identifier',
-  'protectedMediaIdentifier',
-  'mediaKeySystem',
-  'storage-access',
-  'top-level-storage-access',
-  'window-management',
-  'window-placement',
-  'local-fonts'
+  // Required for normal DRM media playback. Persistent protected-media
+  // identifiers remain denied because they can be used for cross-session
+  // tracking and should require a separate user consent flow.
+  'mediaKeySystem'
 ]);
 
 /**
@@ -54,6 +48,21 @@ const ALWAYS_DENIED = new Set([
   'idle-detection'
 ]);
 
+/** Only top-level web pages may trigger a browser notification permission prompt. */
+export function shouldPromptForNotificationPermission(
+  permission: string,
+  isMainFrame: boolean,
+  requestingUrl: string
+): boolean {
+  if (permission !== 'notifications' || !isMainFrame) return false;
+  try {
+    const url = new URL(requestingUrl);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.origin !== 'null';
+  } catch {
+    return false;
+  }
+}
+
 export type PermissionController = {
   /** Decide a permission request. */
   decide(permission: string, origin: string): PermissionDecision;
@@ -65,12 +74,44 @@ export type PermissionController = {
   revokeOrigin(origin: string): void;
   /** Load previously trusted origins. */
   setTrustedOrigins(origins: string[]): void;
+  /** Origins the user explicitly allowed to show desktop notifications. */
+  notificationOrigins(): string[];
+  trustNotificationOrigin(origin: string): void;
+  revokeNotificationOrigin(origin: string): void;
+  setNotificationOrigins(origins: string[]): void;
   /** Subscribe to trust-list changes (for persistence). */
   onTrustedChange(listener: (origins: string[]) => void): () => void;
+  onNotificationTrustedChange(listener: (origins: string[]) => void): () => void;
 };
 
+/** Resolve a web permission request, prompting only when notification access is not already decided. */
+export async function resolvePermissionRequest(
+  controller: PermissionController,
+  permission: string,
+  isMainFrame: boolean,
+  requestingUrl: string,
+  promptForNotifications: (origin: string) => Promise<boolean>
+): Promise<boolean> {
+  if (permission !== 'notifications') {
+    return controller.decide(permission, requestingUrl) === 'allow';
+  }
+  if (controller.decide(permission, requestingUrl) === 'allow') return true;
+  if (!shouldPromptForNotificationPermission(permission, isMainFrame, requestingUrl)) return false;
+
+  let origin: string;
+  try {
+    origin = new URL(requestingUrl).origin;
+  } catch {
+    return false;
+  }
+  if (!await promptForNotifications(origin)) return false;
+  controller.trustNotificationOrigin(origin);
+  return controller.decide(permission, origin) === 'allow';
+}
+
 export function createPermissionController(
-  initialTrusted: string[] = []
+  initialTrusted: string[] = [],
+  initialNotificationOrigins: string[] = []
 ): PermissionController {
   const originOf = (raw: string): string => {
     try {
@@ -91,11 +132,24 @@ export function createPermissionController(
   // decisions. setTrustedOrigins already did this, but startup data previously
   // bypassed that normalization and could silently fail to match real origins.
   const trusted = new Set(initialTrusted.map(originOf).filter(Boolean));
+  const trustedNotifications = new Set(initialNotificationOrigins.map(originOf).filter(Boolean));
   const listeners = new Set<(origins: string[]) => void>();
+  const notificationListeners = new Set<(origins: string[]) => void>();
 
   const emit = (): void => {
     const list = Array.from(trusted);
     for (const listener of listeners) {
+      try {
+        listener(list);
+      } catch {
+        // A broken listener must not stop the others.
+      }
+    }
+  };
+
+  const emitNotificationTrusted = (): void => {
+    const list = Array.from(trustedNotifications);
+    for (const listener of notificationListeners) {
       try {
         listener(list);
       } catch {
@@ -113,6 +167,10 @@ export function createPermissionController(
       if (name === 'media') {
         const normalized = originOf(origin);
         return normalized && trusted.has(normalized) ? 'allow' : 'deny';
+      }
+      if (name === 'notifications') {
+        const normalized = originOf(origin);
+        return normalized && trustedNotifications.has(normalized) ? 'allow' : 'deny';
       }
       // Everything else (geolocation, sensors, unknown names) is denied.
       return 'deny';
@@ -144,9 +202,40 @@ export function createPermissionController(
       emit();
     },
 
+    notificationOrigins(): string[] {
+      return Array.from(trustedNotifications);
+    },
+
+    trustNotificationOrigin(origin: string): void {
+      const normalized = originOf(origin);
+      if (normalized && !trustedNotifications.has(normalized)) {
+        trustedNotifications.add(normalized);
+        emitNotificationTrusted();
+      }
+    },
+
+    revokeNotificationOrigin(origin: string): void {
+      const normalized = originOf(origin);
+      if (normalized && trustedNotifications.delete(normalized)) emitNotificationTrusted();
+    },
+
+    setNotificationOrigins(origins: string[]): void {
+      trustedNotifications.clear();
+      for (const origin of origins) {
+        const normalized = originOf(origin);
+        if (normalized) trustedNotifications.add(normalized);
+      }
+      emitNotificationTrusted();
+    },
+
     onTrustedChange(listener: (origins: string[]) => void): () => void {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+
+    onNotificationTrustedChange(listener: (origins: string[]) => void): () => void {
+      notificationListeners.add(listener);
+      return () => notificationListeners.delete(listener);
     }
   };
 }
@@ -156,6 +245,7 @@ export function createPermissionController(
  * site the user allowed once does not have to be allowed again after a restart.
  */
 export const trustedOriginsFileName = 'trusted-origins.json';
+export const trustedNotificationOriginsFileName = 'trusted-notification-origins.json';
 
 export function loadTrustedOrigins(filePath: string, fs: {
   existsSync: (p: string) => boolean;

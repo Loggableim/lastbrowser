@@ -59,10 +59,11 @@ describe('Phase 2 Browser Fixes: Sidebar, Spaces, Multiscreen & Summarize Bar', 
       expect(appSource).toContain('addTab(app.url, { pinned: true });');
     });
 
-    it('filters out pinned tabs in SidekickSidebar vertical tab list', () => {
+    it('keeps pinned tabs reachable in the SidekickSidebar vertical tab list', () => {
       const source = readRendererFile('components/SidekickSidebar.tsx');
-      expect(source).toContain('tabs.filter((t) => !t.pinned).map((tab) =>');
-      expect(source).toContain('tabs.filter((t) => !t.pinned).length');
+      expect(source).toContain('{tabs.map((tab) => {');
+      expect(source).toContain('<span className="tab-count-badge">{tabs.length}</span>');
+      expect(source).not.toContain('tabs.filter((t) => !t.pinned).map((tab) => {');
     });
 
     it('createInitialTab preserves pinned flag when passed in options', () => {
@@ -127,7 +128,8 @@ describe('Phase 2 Browser Fixes: Sidebar, Spaces, Multiscreen & Summarize Bar', 
     it('provides Summarize button in ModernTitlebar', () => {
       const source = readRendererFile('components/HeaderComponents.tsx');
       expect(source).toContain('titlebar-summarize-btn');
-      expect(source).toContain('title="Seite mit KI zusammenfassen"');
+      expect(source).toContain("title={t('browser.actions.summarize')}");
+      expect(source).toContain("aria-label={t('browser.actions.summarize')}");
       expect(source).toContain('onTriggerSummarize');
 
       const appSource = readRendererFile('App.tsx');

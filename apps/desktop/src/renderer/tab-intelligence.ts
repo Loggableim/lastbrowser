@@ -5,6 +5,7 @@
  */
 
 import { useTabStore } from './stores/useTabStore.js';
+import type { TabSynthesisResult } from './shell-state.js';
 
 export function hasTabsMention(text: string): boolean {
   return /@tabs\b/i.test(text) || /@tab:\d+\b/i.test(text);

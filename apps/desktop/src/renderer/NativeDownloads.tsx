@@ -27,6 +27,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { canApplyDownloadSnapshot } from './download-snapshot.js';
+import { useDesktopI18n } from './i18n.js';
 
 export type DownloadEntry = {
   id: string;
@@ -60,6 +61,16 @@ export function resolveDownloadsMinimizedState(open: boolean, minimized: boolean
   return open && minimized;
 }
 
+export function shouldRestoreDownloadsFromPillClick(didDrag: boolean): boolean {
+  return !didDrag;
+}
+
+export function shouldStartDownloadsHeaderDrag(target: EventTarget | null): boolean {
+  const element = target as Element | null;
+  if (!element || typeof element.closest !== 'function') return true;
+  return !element.closest('button, .downloads-dock-controls');
+}
+
 function formatBytes(bytes: number): string {
   if (!bytes || bytes < 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -84,7 +95,8 @@ export function DownloadItemRow({
 }: {
   entry: DownloadEntry;
   onClear: (id: string) => void;
-}): JSX.Element {
+}): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const progress = progressOf(entry);
   const done = entry.state === 'completed';
 
@@ -103,9 +115,9 @@ export function DownloadItemRow({
               ? `${formatBytes(entry.received)}`
               : `${formatBytes(entry.received)} / ${formatBytes(entry.total)}`
           )}
-          {done && `Saved to ${entry.savePath}`}
-          {entry.state === 'cancelled' && 'Cancelled'}
-          {entry.state === 'interrupted' && 'Interrupted'}
+          {done && t('downloads.savedTo', { path: entry.savePath })}
+          {entry.state === 'cancelled' && t('downloads.cancelled')}
+          {entry.state === 'interrupted' && t('downloads.interrupted')}
         </small>
         {entry.state === 'progressing' && (
           <span className="download-progress">
@@ -113,7 +125,7 @@ export function DownloadItemRow({
           </span>
         )}
       </span>
-      <button type="button" aria-label="Remove from list" title="Remove from list" onClick={() => onClear(entry.id)}>
+      <button type="button" aria-label={t('downloads.remove')} title={t('downloads.remove')} onClick={() => onClear(entry.id)}>
         <X size={13} />
       </button>
     </div>
@@ -126,7 +138,8 @@ export function DownloadsPanel({
 }: {
   open: boolean;
   onClose: () => void;
-}): JSX.Element | null {
+}): React.JSX.Element | null {
+  const { t } = useDesktopI18n();
   const [entries, setEntries] = useState<DownloadEntry[]>([]);
   const [dockMode, setDockMode] = useState<DownloadsDockMode>(() => {
     try {
@@ -147,6 +160,8 @@ export function DownloadsPanel({
 
   const [isDragging, setIsDragging] = useState(false);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragPointerStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const didDragRef = useRef(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   // Ignore an initial IPC snapshot if a newer push update arrived while the
@@ -191,6 +206,8 @@ export function DownloadsPanel({
   const handleDragStart = (e: React.MouseEvent) => {
     if (dockMode !== 'floating' && !minimized) return;
     setIsDragging(true);
+    didDragRef.current = false;
+    dragPointerStartRef.current = { x: e.clientX, y: e.clientY };
     const rect = panelRef.current?.getBoundingClientRect();
     if (rect) {
       dragOffsetRef.current = {
@@ -204,6 +221,12 @@ export function DownloadsPanel({
     if (!isDragging) return;
 
     const handleMouseMove = (e: MouseEvent) => {
+      if (
+        Math.abs(e.clientX - dragPointerStartRef.current.x) >= 4 ||
+        Math.abs(e.clientY - dragPointerStartRef.current.y) >= 4
+      ) {
+        didDragRef.current = true;
+      }
       const maxX = Math.max(0, window.innerWidth - (panelRef.current?.offsetWidth || 300));
       const maxY = Math.max(0, window.innerHeight - (panelRef.current?.offsetHeight || 100));
       const nextX = Math.min(maxX, Math.max(0, e.clientX - dragOffsetRef.current.x));
@@ -241,12 +264,18 @@ export function DownloadsPanel({
         className="downloads-minimized-pill"
         style={{ left: `${floatingPos.x}px`, top: `${floatingPos.y}px` }}
         onMouseDown={handleDragStart}
-        onClick={() => setMinimized(false)}
-        title="Klicken zum Wiederherstellen • Ziehen zum Verschieben"
+        onClick={() => {
+          if (!shouldRestoreDownloadsFromPillClick(didDragRef.current)) {
+            didDragRef.current = false;
+            return;
+          }
+          setMinimized(false);
+        }}
+        title={t('downloads.restoreHint')}
       >
         <Download size={14} className={active > 0 ? 'spin' : ''} />
         <span className="pill-text">
-          Downloads {active > 0 ? `(${active} aktiv)` : `(${completed})`}
+          {active > 0 ? t('downloads.pillActive', { count: active }) : t('downloads.pillCompleted', { count: completed })}
         </span>
         <button
           type="button"
@@ -255,8 +284,8 @@ export function DownloadsPanel({
             e.stopPropagation();
             onClose();
           }}
-          title="Schließen"
-          aria-label="Downloads schließen"
+          title={t('downloads.close')}
+          aria-label={t('downloads.close')}
         >
           <X size={12} />
         </button>
@@ -318,20 +347,23 @@ export function DownloadsPanel({
     <div
       ref={panelRef}
       className={`downloads-panel mode-${dockMode} ${isDragging ? 'is-dragging' : ''}`}
+      data-dock-mode={dockMode}
       style={getContainerStyle()}
       role="dialog"
-      aria-label="Downloads"
+      aria-label={t('downloads.title')}
     >
-      <header onMouseDown={dockMode === 'floating' ? handleDragStart : undefined}>
+      <header onMouseDown={dockMode === 'floating' ? (event) => {
+        if (shouldStartDownloadsHeaderDrag(event.target)) handleDragStart(event);
+      } : undefined}>
         {dockMode === 'floating' && (
-          <div className="downloads-drag-grip" title="Verschieben">
+          <div className="downloads-drag-grip" title={t('downloads.drag')}>
             <GripHorizontal size={14} />
           </div>
         )}
 
         <Download size={15} />
-        <strong>Downloads</strong>
-        {active > 0 && <span className="downloads-badge">{active} active</span>}
+        <strong>{t('downloads.title')}</strong>
+        {active > 0 && <span className="downloads-badge">{t('downloads.active', { count: active })}</span>}
 
         {/* Dock Zone Quick Selector Buttons */}
         <div className="downloads-dock-controls">
@@ -339,7 +371,9 @@ export function DownloadsPanel({
             <button
               type="button"
               className="downloads-tool-btn"
-              title="In frei verschiebbares Fenster ausdocken"
+              data-dock-mode="floating"
+              aria-label={t('downloads.undock')}
+              title={t('downloads.undock')}
               onClick={() => handleSetDockMode('floating')}
             >
               <ExternalLink size={13} />
@@ -349,7 +383,9 @@ export function DownloadsPanel({
               <button
                 type="button"
                 className={`downloads-tool-btn ${dockMode === 'dock-tabs' ? 'active' : ''}`}
-                title="Unter Tab-Leiste docken"
+                data-dock-mode="dock-tabs"
+                aria-label={t('downloads.dockTabs')}
+                title={t('downloads.dockTabs')}
                 onClick={() => handleSetDockMode('dock-tabs')}
               >
                 <Rows3 size={13} />
@@ -357,7 +393,9 @@ export function DownloadsPanel({
               <button
                 type="button"
                 className={`downloads-tool-btn ${dockMode === 'dock-sidekick' ? 'active' : ''}`}
-                title="Neben Sidekick docken"
+                data-dock-mode="dock-sidekick"
+                aria-label={t('downloads.dockSidekick')}
+                title={t('downloads.dockSidekick')}
                 onClick={() => handleSetDockMode('dock-sidekick')}
               >
                 <PanelLeft size={13} />
@@ -365,7 +403,9 @@ export function DownloadsPanel({
               <button
                 type="button"
                 className={`downloads-tool-btn ${dockMode === 'dock-topbar-left' ? 'active' : ''}`}
-                title="Links in der oberen Leiste andocken"
+                data-dock-mode="dock-topbar-left"
+                aria-label={t('downloads.dockTopLeft')}
+                title={t('downloads.dockTopLeft')}
                 onClick={() => handleSetDockMode('dock-topbar-left')}
               >
                 <MoveLeft size={13} />
@@ -373,7 +413,9 @@ export function DownloadsPanel({
               <button
                 type="button"
                 className={`downloads-tool-btn ${dockMode === 'dock-topbar-right' ? 'active' : ''}`}
-                title="Rechts in der oberen Leiste andocken"
+                data-dock-mode="dock-topbar-right"
+                aria-label={t('downloads.dockTopRight')}
+                title={t('downloads.dockTopRight')}
                 onClick={() => handleSetDockMode('dock-topbar-right')}
               >
                 <MoveRight size={13} />
@@ -381,7 +423,9 @@ export function DownloadsPanel({
               <button
                 type="button"
                 className={`downloads-tool-btn ${dockMode === 'floating' ? 'active' : ''}`}
-                title="Frei schwebend (Floating)"
+                data-dock-mode="floating"
+                aria-label={t('downloads.float')}
+                title={t('downloads.float')}
                 onClick={() => handleSetDockMode('floating')}
               >
                 <Move size={13} />
@@ -389,7 +433,9 @@ export function DownloadsPanel({
               <button
                 type="button"
                 className="downloads-tool-btn"
-                title="Wieder als Menüleisten-Dropdown andocken"
+                data-dock-mode="dropdown"
+                aria-label={t('downloads.dockDropdown')}
+                title={t('downloads.dockDropdown')}
                 onClick={() => handleSetDockMode('dropdown')}
               >
                 <Minimize2 size={13} />
@@ -401,8 +447,9 @@ export function DownloadsPanel({
             <button
               type="button"
               className="downloads-tool-btn"
-              title="Minimieren"
-              aria-label="Downloads minimieren"
+              data-download-action="minimize"
+              aria-label={t('downloads.minimize')}
+              title={t('downloads.minimize')}
               onClick={() => setMinimized(true)}
             >
               <Minus size={13} />
@@ -411,21 +458,22 @@ export function DownloadsPanel({
 
           <button
             type="button"
+            aria-label={t('downloads.clearCompleted')}
             className="downloads-clear"
-            title="Abgeschlossene leeren"
+            title={t('downloads.clearCompleted')}
             onClick={() => void window.lastbrowser.downloads.clear().then(setEntries)}
           >
             <Trash2 size={13} />
           </button>
 
-          <button type="button" aria-label="Schließen" onClick={onClose}>
+          <button type="button" data-download-action="close" aria-label={t('downloads.close')} title={t('downloads.close')} onClick={onClose}>
             <X size={14} />
           </button>
         </div>
       </header>
 
       <div className="downloads-list">
-        {entries.length === 0 && <p className="downloads-empty">Keine Downloads vorhanden.</p>}
+        {entries.length === 0 && <p className="downloads-empty">{t('downloads.empty')}</p>}
         {entries.map((entry) => (
           <DownloadItemRow
             key={entry.id}

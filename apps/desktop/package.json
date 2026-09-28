@@ -1,6 +1,6 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.36",
+  "version": "0.1.37",
   "private": true,
   "type": "module",
   "description": "Lastbrowser Electron desktop shell.",
@@ -60,6 +60,7 @@
     },
     "files": [
       "dist/**/*",
+      "!dist/*smoke*.png",
       "package.json",
       "node_modules/node-pty/**/*"
     ],
@@ -73,7 +74,12 @@
         "filter": [
           "**/*",
           "!**/__pycache__/**",
-          "!**/.pytest_cache/**"
+          "!**/.pytest_cache/**",
+          "!**/.test-tmp/**",
+          "!**/.ruff_cache/**",
+          "!**/*.egg-info/**",
+          "!sidekick/build/**",
+          "!**/build/lib/**"
         ]
       },
       {

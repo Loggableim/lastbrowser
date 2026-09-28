@@ -135,6 +135,18 @@ describe('doctor diagnosis service & parser', () => {
     expect(report.categories.every((c) => c.status === 'ok')).toBe(true);
   });
 
+  it('keeps a warnings-only doctor exit distinct from failures', () => {
+    const report = parseDoctorOutput(`
+◆ Optional integrations
+  ⚠ docker not found (optional)
+`, 1);
+
+    expect(report.exitCode).toBe(1);
+    expect(report.summary.failures).toBe(0);
+    expect(report.summary.warnings).toBe(1);
+    expect(report.categories[0].status).toBe('warn');
+  });
+
   it('strips ANSI color codes properly', () => {
     const ansiOutput = `
 \u001b[32m◆\u001b[0m \u001b[1mPython Environment\u001b[0m

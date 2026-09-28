@@ -118,10 +118,8 @@ const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string
     { id: 'nemotron-3-nano:30b', label: 'Nemotron 3 Nano (30B)' }
   ],
   antigravity: [
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
-    { id: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' }
+    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
+    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
   ],
   deepseek: [
     { id: 'deepseek-chat', label: 'DeepSeek V3 (Chat)' },
@@ -267,6 +265,8 @@ export function cloudProviderOptions(status: OnboardingStatus | null | undefined
   const mergedProviders: OnboardingProvider[] = providers
     ? [
       ...(providers.some((provider) => provider.id === codexFallback.id) ? [] : [codexFallback]),
+      ...fallbackCloudProviders
+        .filter((fallback) => fallback.id === 'antigravity' && !providers.some((provider) => provider.id === fallback.id)),
       ...providers
     ]
     : fallbackCloudProviders;

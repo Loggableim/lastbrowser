@@ -221,6 +221,28 @@ describe('download tracker', () => {
     expect(tracker.list()[0].state).toBe('interrupted');
   });
 
+  it('keeps paused active downloads through finished-history pruning and clear-finished', () => {
+    const tracker = createDownloadTracker();
+    const session = fakeSession();
+    tracker.attach(session);
+    const paused = fakeItem({ filename: 'paused.pdf' });
+    session.start(paused);
+    paused.state.paused = true;
+    paused.fire('updated');
+
+    for (let index = 0; index < 501; index += 1) {
+      const finished = fakeItem({ filename: `finished-${index}.pdf` });
+      session.start(finished);
+      finished.fire('done', {}, 'completed');
+    }
+
+    expect(tracker.list().find((entry) => entry.filename === 'paused.pdf')?.state).toBe('interrupted');
+    tracker.clearFinished();
+    expect(tracker.list()).toEqual([
+      expect.objectContaining({ filename: 'paused.pdf', state: 'interrupted' })
+    ]);
+  });
+
   it('marks a finished download as completed with its save path', () => {
     const tracker = createDownloadTracker();
     const session = fakeSession();

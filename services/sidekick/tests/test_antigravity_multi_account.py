@@ -6,7 +6,11 @@ requests rotate across them.
 """
 
 import json
+import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -126,6 +130,57 @@ def test_scopes_match_antigravity_ide_contract():
         "cclog", "experimentsandconfigs",
     ):
         assert scope in ag.OAUTH_SCOPES
+
+
+def _start_antigravity_callback_server(expected_state):
+    server, _ = ag._bind_callback_server(0)
+    callback_state = ag._OAuthCallbackState(
+        expected_state=expected_state,
+        ready=threading.Event(),
+    )
+    server.oauth_callback_state = callback_state
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, callback_state, thread
+
+
+def _stop_antigravity_callback_server(server, thread):
+    server.shutdown()
+    server.server_close()
+    thread.join(timeout=2)
+
+
+def test_antigravity_callback_accepts_code_and_sets_state():
+    server, callback_state, thread = _start_antigravity_callback_server("expected")
+    try:
+        query = urllib.parse.urlencode({"state": "expected", "code": "synthetic-code"})
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{server.server_address[1]}{ag.CALLBACK_PATH}?{query}",
+            timeout=3,
+        ) as response:
+            assert response.status == 200
+        assert callback_state.ready.is_set()
+        assert callback_state.code == "synthetic-code"
+        assert callback_state.error is None
+    finally:
+        _stop_antigravity_callback_server(server, thread)
+
+
+def test_antigravity_callback_rejects_wrong_state():
+    server, callback_state, thread = _start_antigravity_callback_server("expected")
+    try:
+        query = urllib.parse.urlencode({"state": "wrong", "code": "synthetic-code"})
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            urllib.request.urlopen(
+                f"http://127.0.0.1:{server.server_address[1]}{ag.CALLBACK_PATH}?{query}",
+                timeout=3,
+            )
+        assert excinfo.value.code == 400
+        assert callback_state.ready.is_set()
+        assert callback_state.error == "state_mismatch"
+        assert callback_state.code is None
+    finally:
+        _stop_antigravity_callback_server(server, thread)
 
 
 def test_runtime_resolver_requires_connected_account(pool_env, monkeypatch):

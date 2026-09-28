@@ -691,7 +691,7 @@ export function CommandPalette({
         keywords: ['google', 'account', 'oauth', 'round-robin', 'gemini', 'gravity', 'antigravity', 'token', 'verbrauch'],
         action: () => {
           setActivePanel('settings');
-          usePanelStore.getState().setActiveContextItem('google-accounts');
+          usePanelStore.getState().setActiveContextItem('providers');
         }
       },
       {
@@ -714,7 +714,7 @@ export function CommandPalette({
         keywords: ['gemini', 'google', 'cli', 'antigravity', 'gravity', 'modell', 'konto'],
         action: () => {
           setActivePanel('settings');
-          usePanelStore.getState().setActiveContextItem('google-accounts');
+          usePanelStore.getState().setActiveContextItem('providers');
         }
       },
       {

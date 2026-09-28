@@ -9,7 +9,10 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist/renderer',
-    emptyOutDir: false
+    // Clear only dist/renderer. dist/main is a sibling and is preserved.
+    // Keeping this false accumulated every historical hashed JS bundle and
+    // ballooned the packaged renderer to hundreds of megabytes.
+    emptyOutDir: true
   },
   resolve: {
     alias: {

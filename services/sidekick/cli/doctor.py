@@ -45,6 +45,8 @@ _PROVIDER_CHECK_URLS = {
 }
 
 _PROVIDER_ENV_HINTS = (
+    "OLLAMA_API_KEY",
+    "OLLAMA_CLOUD_API_KEY",
     "OPENROUTER_API_KEY",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
@@ -130,8 +132,93 @@ def _termux_install_all_fallback_notes() -> list[str]:
 
 
 def _has_provider_env_config(content: str) -> bool:
-    """Return True when ~/.sidekick/.env contains provider auth/base URL settings."""
-    return any(key in content for key in _PROVIDER_ENV_HINTS)
+    """Return True when the user env file contains a non-empty provider credential/endpoint."""
+    for line in content.splitlines():
+        candidate = line.strip()
+        if not candidate or candidate.startswith("#") or "=" not in candidate:
+            continue
+        key, value = candidate.split("=", 1)
+        if key.strip() in _PROVIDER_ENV_HINTS and value.strip().strip("\"'"):
+            return True
+    return False
+
+
+def _active_provider_has_credentials(provider: str, context: dict | None = None) -> bool:
+    """Check that the selected provider has credentials in Sidekick's sources.
+
+    Lastbrowser stores provider tokens in auth.json's credential pool, while
+    standalone Sidekick may use .env or config.yaml. The shared provider
+    context resolves the former; ``_provider_has_key`` covers the latter.
+    Local Ollama is keyless by design.
+    """
+    provider_id = str(provider or "").strip().lower()
+    if not provider_id:
+        return False
+    if provider_id == "ollama":
+        return True
+    if isinstance(context, dict) and str(context.get("api_key") or "").strip():
+        return True
+    try:
+        from web.api.providers import _provider_has_key
+
+        return bool(_provider_has_key(provider_id))
+    except Exception:
+        return False
+
+
+def _resolve_doctor_provider_context() -> dict:
+    """Resolve provider context using the same profile and credential sources as Lastbrowser."""
+    try:
+        from web.api.profiles import init_profile_state
+
+        init_profile_state()
+    except Exception:
+        # Standalone CLI installations may not include the WebUI profile layer.
+        pass
+
+    try:
+        from web.api.config import resolve_active_provider_context
+
+        context = resolve_active_provider_context()
+        if isinstance(context, dict) and context.get("provider"):
+            return context
+    except Exception:
+        pass
+
+    try:
+        config = load_config()
+        model = config.get("model", {})
+        return {"provider": str(model.get("provider", "") if isinstance(model, dict) else "").strip().lower()}
+    except Exception:
+        return {}
+
+
+def _integrated_provider(provider: str) -> bool:
+    """Whether provider credentials are managed by Lastbrowser's settings UI."""
+    return provider in {
+        "ollama", "ollama-cloud", "openrouter", "openai", "anthropic",
+        "antigravity", "openai-codex",
+    }
+
+
+def _provider_env_file_is_optional(provider: str) -> bool:
+    """Lastbrowser-managed credentials do not require a Sidekick .env file."""
+    return provider == "auto" or _integrated_provider(provider)
+
+
+def _doctor_provider_is_configured(
+    provider: str,
+    active_provider: str,
+    active_context: dict | None,
+) -> bool | None:
+    """Use Lastbrowser's credential source for app-managed providers.
+
+    ``None`` means the provider should use Sidekick's legacy auth-status path.
+    """
+    if not _integrated_provider(provider):
+        return None
+    context = active_context if provider == active_provider else None
+    return _active_provider_has_credentials(provider, context)
 
 
 def _honcho_is_configured_for_doctor() -> bool:
@@ -443,7 +530,7 @@ def _check_providers_connectivity() -> None:
 
 def run_doctor(args):
     """Run diagnostic checks."""
-    global _warning_count, _fail_count
+    global _warning_count, _fail_count, SIDEKICK_HOME, _DHH
     _warning_count = 0
     _fail_count = 0
     should_fix = getattr(args, 'fix', False)
@@ -520,6 +607,38 @@ def run_doctor(args):
             check_ok(name, "(optional)")
         except ImportError:
             check_warn(name, "(optional, not installed)")
+
+    # Provider credentials supplied in Lastbrowser's local key vault are
+    # injected into the sidecar environment rather than written to .env.
+    _provider_context = _resolve_doctor_provider_context()
+    _active_provider = str(_provider_context.get("provider") or "").strip().lower()
+    _is_integrated_provider = _integrated_provider(_active_provider)
+    # init_profile_state() may have switched SIDEKICK_HOME to a named profile.
+    # Refresh these import-time snapshots before checking its files or printing paths.
+    SIDEKICK_HOME = get_sidekick_home()
+    _DHH = display_sidekick_home()
+    _active_provider_configured = (
+        _active_provider_has_credentials(_active_provider, _provider_context)
+        if _is_integrated_provider else bool(_active_provider)
+    )
+    _primary_env_path = SIDEKICK_HOME / '.env'
+    try:
+        _env_configured = _has_provider_env_config(
+            _primary_env_path.read_text(encoding="utf-8") if _primary_env_path.exists() else ""
+        )
+    except (OSError, UnicodeError):
+        _env_configured = False
+    if _is_integrated_provider and _active_provider_configured:
+        check_ok(f"Active provider selected ({_active_provider})", "(credentials configured)")
+    elif _is_integrated_provider:
+        check_fail(f"Active provider selected ({_active_provider}) but credentials are missing")
+        issues.append(f"Configure credentials for '{_active_provider}' in Lastbrowser provider settings")
+    elif _active_provider == "auto":
+        check_ok("Automatic provider routing configured", "(provider credentials managed by Lastbrowser when applicable)")
+    elif _env_configured:
+        check_ok("Provider credentials detected in .env", "(may be for a provider other than the active one)")
+    else:
+        check_warn(f"No API key found in {_DHH}/.env", "(credentials may be managed by Lastbrowser)")
     
     # =========================================================================
     # Check: Configuration files
@@ -538,15 +657,19 @@ def run_doctor(args):
         # locales (e.g. GBK) as soon as the file contains any non-ASCII byte.
         content = env_path.read_text(encoding="utf-8")
         if _has_provider_env_config(content):
-            check_ok("API key or custom endpoint configured")
-        else:
-            check_warn(f"No API key found in {_DHH}/.env")
-            issues.append("Run 'sidekick setup' to configure API keys")
+            check_ok("Provider credentials detected in .env", "(may be for a provider other than the active one)")
+        elif _active_provider != "auto" and not _is_integrated_provider:
+            check_warn(f"No API key found in {_DHH}/.env", "(credentials may be managed by Lastbrowser)")
     else:
         # Also check project root as fallback
         fallback_env = PROJECT_ROOT / '.env'
         if fallback_env.exists():
             check_ok(".env file exists (in project directory)")
+        elif _provider_env_file_is_optional(_active_provider):
+            # The desktop app manages provider credentials in its auth vault.
+            # Its .env file is optional even when the selected provider is missing
+            # credentials; the provider-specific diagnostic above owns that failure.
+            check_info("Provider credentials are managed by Lastbrowser; .env is optional")
         else:
             check_fail(f"{_DHH}/.env file missing")
             if should_fix:
@@ -697,22 +820,40 @@ def run_doctor(args):
                     from cli.auth import PROVIDER_REGISTRY, get_auth_status
                     pconfig = PROVIDER_REGISTRY.get(runtime_provider)
                     if pconfig and getattr(pconfig, "auth_type", "") == "api_key":
-                        status = get_auth_status(runtime_provider) or {}
-                        configured = bool(
-                            status.get("configured")
-                            or status.get("logged_in")
-                            or status.get("api_key")
+                        configured = _doctor_provider_is_configured(
+                            runtime_provider,
+                            _active_provider,
+                            _provider_context,
                         )
-                        if not configured:
-                            check_fail(
-                                f"model.provider '{runtime_provider}' is set but no API key is configured",
-                                "(check ~/.sidekick/.env or run 'sidekick setup')",
+                        if configured is None:
+                            status = get_auth_status(runtime_provider) or {}
+                            configured = bool(
+                                status.get("configured")
+                                or status.get("logged_in")
+                                or status.get("api_key")
                             )
-                            issues.append(
-                                f"No credentials found for provider '{runtime_provider}'. "
-                                f"Run 'sidekick setup' or set the provider's API key in {_DHH}/.env, "
-                                f"or switch providers with 'sidekick config set model.provider <name>'"
-                            )
+                        # The active provider was already checked against the
+                        # desktop credential pool above. Avoid repeating the
+                        # same failure here under the config.yaml section.
+                        if not configured and runtime_provider != _active_provider:
+                            if _integrated_provider(runtime_provider):
+                                check_fail(
+                                    f"model.provider '{runtime_provider}' is set but Lastbrowser credentials are missing",
+                                    "(configure this provider in Lastbrowser settings)",
+                                )
+                                issues.append(
+                                    f"Configure credentials for '{runtime_provider}' in Lastbrowser provider settings"
+                                )
+                            else:
+                                check_fail(
+                                    f"model.provider '{runtime_provider}' is set but no API key is configured",
+                                    "(check ~/.sidekick/.env or run 'sidekick setup')",
+                                )
+                                issues.append(
+                                    f"No credentials found for provider '{runtime_provider}'. "
+                                    f"Run 'sidekick setup' or set the provider's API key in {_DHH}/.env, "
+                                    f"or switch providers with 'sidekick config set model.provider <name>'"
+                                )
                 except Exception:
                     pass
 
@@ -824,7 +965,7 @@ def run_doctor(args):
         if codex_status.get("logged_in"):
             check_ok("OpenAI Codex auth", "(logged in)")
         else:
-            check_warn("OpenAI Codex auth", "(not logged in)")
+            check_info("OpenAI Codex auth not connected (optional unless selected as the active provider)")
             if codex_status.get("error"):
                 check_info(codex_status["error"])
 
@@ -840,14 +981,14 @@ def run_doctor(args):
             suffix = f" ({', '.join(pieces)})" if pieces else ""
             check_ok("Google Gemini OAuth", f"(logged in{suffix})")
         else:
-            check_warn("Google Gemini OAuth", "(not logged in)")
+            check_info("Google Gemini OAuth not connected (optional unless Antigravity is the active provider)")
 
         minimax_status = get_minimax_oauth_auth_status()
         if minimax_status.get("logged_in"):
             region = minimax_status.get("region", "global")
             check_ok("MiniMax OAuth", f"(logged in, region={region})")
         else:
-            check_warn("MiniMax OAuth", "(not logged in)")
+            check_info("MiniMax OAuth not connected (optional unless selected as the active provider)")
     except Exception as e:
         check_warn("Auth provider status", f"(could not check: {e})")
 
@@ -1722,7 +1863,8 @@ def run_doctor(args):
         # Count disabled tools with API key requirements
         api_disabled = [u for u in unavailable if (u.get("missing_vars") or u.get("env_vars"))]
         if api_disabled:
-            issues.append("Run 'sidekick setup' to configure missing API keys for full tool access")
+            if not (_is_integrated_provider and _active_provider_configured) and _active_provider != "auto":
+                issues.append("Run 'sidekick setup' to configure missing API keys for full tool access")
     except Exception as e:
         check_warn("Could not check tool availability", f"({e})")
     
@@ -1924,6 +2066,9 @@ def run_doctor(args):
         print()
         if not should_fix:
             print(color("  Tip: run 'sidekick doctor --fix' to auto-fix what's possible.", Colors.DIM))
+    elif _warning_count > 0:
+        print(color("─" * 60, Colors.YELLOW))
+        print(color(f"  Completed with {_warning_count} warning(s); no blocking errors.", Colors.YELLOW, Colors.BOLD))
     else:
         print(color("─" * 60, Colors.GREEN))
         print(color("  All checks passed! 🎉", Colors.GREEN, Colors.BOLD))

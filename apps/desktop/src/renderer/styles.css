@@ -10512,12 +10512,12 @@ html.theme-light select optgroup {
 }
 
 .nova-dock.anim-slide.pos-right.is-hidden {
-  transform: translateX(calc(100% + 20px));
+  transform: translateX(calc(100% + 20px)) translateY(-50%);
   opacity: 0;
   pointer-events: none;
 }
 .nova-dock.anim-slide.pos-right.is-revealed {
-  transform: translateX(0);
+  transform: translateX(0) translateY(-50%);
   opacity: 1;
   transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1), opacity var(--dock-anim-duration, 250ms) ease;
 }
@@ -17351,6 +17351,25 @@ body {
 /* Minimum Font Size Enforcement */
 body, p, span, div, button, input {
   font-size: max(var(--min-font-size, 0px), 1em);
+}
+
+/* Keep fixed edge docks anchored while the fade animation scales them. */
+.nova-dock.anim-fade.pos-bottom.is-hidden,
+.nova-dock.anim-fade.pos-bottom.is-revealed,
+.nova-dock.anim-fade.pos-top.is-hidden,
+.nova-dock.anim-fade.pos-top.is-revealed {
+  transform: translateX(-50%) scale(var(--dock-fade-scale, 1));
+}
+.nova-dock.anim-fade.pos-bottom.is-hidden,
+.nova-dock.anim-fade.pos-top.is-hidden {
+  --dock-fade-scale: 0.96;
+}
+.nova-dock.anim-fade.pos-right.is-hidden,
+.nova-dock.anim-fade.pos-right.is-revealed {
+  transform: translateY(-50%) scale(var(--dock-fade-scale, 1));
+}
+.nova-dock.anim-fade.pos-right.is-hidden {
+  --dock-fade-scale: 0.96;
 }
 
 /* Ollama Configuration Modal */

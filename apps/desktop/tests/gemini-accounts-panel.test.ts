@@ -12,7 +12,7 @@ describe('Antigravity multi-account panel', () => {
     expect(source).toContain('/api/antigravity/accounts');
     expect(source).toContain('action: \'remove\'');
     // The migration guide link is retained for reference.
-    expect(source).toContain('https://antigravity.google/docs/cli/gcli-migration');
+    expect(source).toContain('https://antigravity.google/docs/');
   });
 
   it('keeps the migration notice localized for the retired consumer tier', () => {

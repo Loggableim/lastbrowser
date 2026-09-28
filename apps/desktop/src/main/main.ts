@@ -161,6 +161,7 @@ import { createPermissionController, loadTrustedOrigins, resolvePermissionReques
 import { configureDrmWidevine, initializeCastlabsWidevine } from './drm.js';
 import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
 import { registerWindowControlIpc } from './window-controls.js';
+import { startPrimaryInstanceStartup } from './app-startup.js';
 import { hardenWebViewAttachment } from './webview-security.js';
 import { capturePageDataUrl, normalizeCapturePageRect } from './capture-page.js';
 import { createOpenUrlLifecycle } from './open-url-lifecycle.js';
@@ -1149,17 +1150,13 @@ app.setName('Lastbrowser');
 
 // Enforce single instance lock: prevent port collisions and handle incoming external URLs
 const gotSingleInstanceLock = typeof app?.requestSingleInstanceLock === 'function' ? app.requestSingleInstanceLock() : true;
-if (!gotSingleInstanceLock) {
-  app.quit();
-} else {
-  if (typeof app?.on === 'function') {
-    app.on('open-url', (event, url) => {
-      openUrlLifecycle.handleOpenUrl(event, url);
-    });
-    app.on('second-instance', (_event, commandLine) => {
-      openUrlLifecycle.handleSecondInstance(commandLine);
-    });
-  }
+if (gotSingleInstanceLock && typeof app?.on === 'function') {
+  app.on('open-url', (event, url) => {
+    openUrlLifecycle.handleOpenUrl(event, url);
+  });
+  app.on('second-instance', (_event, commandLine) => {
+    openUrlLifecycle.handleSecondInstance(commandLine);
+  });
 }
 
 // Auto-detect and register system Widevine CDM before app is ready (Ansatz 3)
@@ -1171,10 +1168,9 @@ if (app.userAgentFallback) {
   app.userAgentFallback = cleanOAuthUserAgent(app.userAgentFallback);
 }
 
-// Must run before whenReady: registering a scheme as privileged afterwards has
-// no effect on storage partitioning, and localStorage would stay ephemeral.
-registerAppScheme();
-app.whenReady().then(async () => {
+// A secondary process must not continue into service/window initialization even
+// if Electron resolves whenReady after the initial quit request.
+startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.whenReady(), async () => {
   // Initialize native Widevine CDM if running under Castlabs Electron
   await initializeCastlabsWidevine();
 
@@ -1228,7 +1224,7 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-});
+}, () => app.quit());
 
 function attachSessionHandlers(targetSession: Session): void {
   activeSessions.add(targetSession);

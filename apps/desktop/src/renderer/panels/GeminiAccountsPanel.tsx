@@ -23,7 +23,7 @@ type AntigravityStatus = {
   round_robin?: boolean;
 };
 
-const ANTIGRAVITY_MIGRATION_URL = 'https://antigravity.google/docs/cli/gcli-migration';
+const ANTIGRAVITY_MIGRATION_URL = 'https://antigravity.google/docs/';
 
 export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Element {
   const { t } = useDesktopI18n();
@@ -117,7 +117,7 @@ export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Eleme
       <div className="gemini-accounts-header">
         <div className="gemini-accounts-title-row">
           <span className="gemini-accounts-icon">✦</span>
-          <div><h3 className="gemini-accounts-title">{t('settings.panels.providers.geminiSubscriptionTitle')}</h3></div>
+          <div><h3 className="gemini-accounts-title">{t('settings.panels.providers.googleAccounts')}</h3></div>
         </div>
         <button
           type="button"

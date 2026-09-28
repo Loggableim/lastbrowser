@@ -5,6 +5,16 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.37] - 2026-09-28 (local installer build)
+
+### Fixes
+- Fixed Antigravity OAuth callback state construction and added local callback regression coverage.
+- Kept Antigravity visible in provider settings when runtime catalogs omit it, moved Google account round-robin management into Providers, and removed the separate Google accounts settings tab.
+- Corrected Doctor's provider credential checks so Lastbrowser vault credentials are accepted and optional `.env` files do not create duplicate blocking errors.
+- Prevented renderer bundles from accumulating across builds, cutting generated renderer assets from hundreds of stale files to the current six files.
+
+This is a local install build, not a published release.
+
 ## [0.1.36] - 2026-09-28 (local installer build)
 
 ### Fixes

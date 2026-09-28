@@ -41,6 +41,7 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -633,6 +634,7 @@ def onboard_account(access_token: str, *, tier_id: str = "free-tier") -> str:
 # Localhost OAuth callback listener
 # =============================================================================
 
+@dataclass
 class _OAuthCallbackState:
     expected_state: str
     ready: threading.Event

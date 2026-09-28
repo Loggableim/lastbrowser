@@ -93,7 +93,8 @@ export function NovaDock({
   // Schedule auto-hide on mouse leave if enabled
   const handleMouseLeave = useCallback(() => {
     setHoveredIndex(null);
-    if (dockSettings.autoHide) {
+    // A floating dock has no edge trigger zone to reveal it after hiding.
+    if (dockSettings.autoHide && effectivePosition !== 'floating') {
       if (hideTimerRef.current) {
         clearTimeout(hideTimerRef.current);
       }
@@ -101,7 +102,7 @@ export function NovaDock({
         setIsRevealed(false);
       }, 350);
     }
-  }, [dockSettings.autoHide]);
+  }, [dockSettings.autoHide, effectivePosition]);
 
   useEffect(() => {
     return () => {

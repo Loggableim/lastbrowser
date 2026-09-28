@@ -166,7 +166,7 @@ export function normalizeAppstoreRecord(app: AnyRecord): NormalizedAppstoreRecor
   };
 }
 
-export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'teamwork' | 'google-accounts' | 'extensions' | 'plugins' | 'system';
+export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'teamwork' | 'extensions' | 'plugins' | 'system';
 
 export type SettingsSectionMeta ={
   title: string;
@@ -223,11 +223,6 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
     description: 'Multi-Agent Teamwork, Smart Track (Single Track) & kuratierte Modellwand.',
     icon: <Users size={16} />
   },
-  'google-accounts': {
-    title: 'Gemini subscription information',
-    description: 'Current Gemini CLI subscription availability and official migration information.',
-    icon: <Users size={16} />
-  },
   extensions: {
     title: 'Extensions',
     description: 'Chrome extensions, Manifest V3 add-ons, and content scripts.',
@@ -251,7 +246,6 @@ const SETTINGS_SECTION_COPY: Record<SettingsSectionId, { title: DesktopTranslati
   preferences: { title: 'settings.sections.preferences', description: 'settings.sectionDescriptions.preferences' },
   providers: { title: 'settings.sections.providers', description: 'settings.sectionDescriptions.providers' },
   teamwork: { title: 'settings.sections.teamwork', description: 'settings.sectionDescriptions.teamwork' },
-  'google-accounts': { title: 'settings.sections.googleAccounts', description: 'settings.sectionDescriptions.googleAccounts' },
   extensions: { title: 'settings.sections.extensions', description: 'settings.sectionDescriptions.extensions' },
   plugins: { title: 'settings.sections.plugins', description: 'settings.sectionDescriptions.plugins' },
   system: { title: 'settings.sections.system', description: 'settings.sectionDescriptions.system' }
@@ -1165,8 +1159,10 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const hasFailures = (report?.summary?.failures ?? 0) > 0 || (report?.exitCode ?? 0) !== 0;
-  const hasWarnings = (report?.summary?.warnings ?? 0) > 0;
+  // sidekick doctor uses exit 1 for warnings and 2 for failures. Treating all
+  // non-zero codes as failures made optional integrations appear critical.
+  const hasFailures = (report?.summary?.failures ?? 0) > 0 || Boolean(report && report.exitCode !== 0 && report.exitCode !== 1);
+  const hasWarnings = (report?.summary?.warnings ?? 0) > 0 || report?.exitCode === 1;
 
   return (
     <SettingsCard
@@ -1285,9 +1281,9 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
                   display: 'block'
                 }}>
                   {hasFailures
-                    ? 'Kritische Probleme / Fehler erkannt'
+                    ? 'Fehler erkannt'
                     : hasWarnings
-                    ? 'Warnungen erkannt – Optimierung empfohlen'
+                    ? 'Warnungen oder optionale Komponenten – keine blockierenden Fehler'
                     : 'System bereit – Alle Kernprüfungen bestanden'}
                 </strong>
                 <span style={{ fontSize: '11px', color: 'rgba(232, 242, 255, 0.5)' }}>
@@ -1336,8 +1332,8 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
           {/* Issues Box */}
           {report.issues.length > 0 && (
             <div style={{
-              background: 'rgba(245, 158, 11, 0.06)',
-              border: '1px solid rgba(245, 158, 11, 0.25)',
+              background: hasFailures ? 'rgba(239, 68, 68, 0.06)' : 'rgba(245, 158, 11, 0.06)',
+              border: `1px solid ${hasFailures ? 'rgba(239, 68, 68, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
               borderRadius: '8px',
               padding: '12px 16px',
               display: 'flex',
@@ -1345,8 +1341,8 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
               gap: '10px'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <strong style={{ color: '#fbbf24', fontSize: '13px' }}>
-                  Empfohlene Maßnahmen ({report.issues.length}):
+                <strong style={{ color: hasFailures ? '#f87171' : '#fbbf24', fontSize: '13px' }}>
+                  {hasFailures ? 'Erforderliche Maßnahmen' : 'Empfohlene Maßnahmen'} ({report.issues.length}):
                 </strong>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
@@ -1374,7 +1370,7 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
               </div>
               <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {report.issues.map((issue, idx) => (
-                  <li key={idx} style={{ color: 'rgba(232, 242, 255, 0.85)', fontSize: '12px' }}>
+                  <li key={idx} style={{ color: hasFailures ? '#fecaca' : 'rgba(232, 242, 255, 0.85)', fontSize: '12px' }}>
                     <code>{issue}</code>
                   </li>
                 ))}
@@ -2694,7 +2690,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         ready={ready}
         onRefresh={settingsState.refresh}
       />
-      <ErrorLine error={settingsState.error || modelsState.error || authState.error || pluginsState.error} />
+      <ErrorLine error={settingsState.error || authState.error || pluginsState.error} />
 
       <div className="settings-native-grid">
         <nav className="settings-section-nav native-work-card">
@@ -3653,7 +3649,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 >
                   {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loading')} />}
                   {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
-                  {!modelsState.loading && !modelsState.error && (
+                  {!modelsState.loading && (
                     <div className="provider-status-list">
                       {providerOptions.map((option) => {
                         const meta = providerPresentation(option.id);
@@ -3999,15 +3995,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
             {section === 'teamwork' && (
               <TeamworkSettingsPanel />
-            )}
-
-            {section === 'google-accounts' && (
-              <SettingsCard
-                title={t('settings.panels.providers.googleAccounts')}
-                description={t('settings.panels.providers.googleAccountsRoundRobinDescription')}
-              >
-                <GeminiAccountsPanel sidekickReady={ready} />
-              </SettingsCard>
             )}
 
             {(section === 'extensions' || section === 'plugins') && (

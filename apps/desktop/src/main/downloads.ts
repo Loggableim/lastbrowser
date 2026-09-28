@@ -109,6 +109,9 @@ export function createDownloadTracker(): DownloadTracker {
   const entries = new Map<string, DownloadEntry>();
   const listeners = new Set<(entries: DownloadEntry[]) => void>();
   const attached = new Set<SessionLike>();
+  // Paused items report a non-progressing UI state but are still live Electron
+  // DownloadItems. Keep them out of finished-history pruning until `done`.
+  const activeDownloads = new Set<string>();
   const reservedPaths = new Set<string>();
   const reservationById = new Map<string, string>();
   let counter = 0;
@@ -119,7 +122,7 @@ export function createDownloadTracker(): DownloadTracker {
 
   const pruneFinished = (): void => {
     const finished = Array.from(entries.values())
-      .filter((entry) => entry.state !== 'progressing')
+      .filter((entry) => entry.state !== 'progressing' && !activeDownloads.has(entry.id))
       .sort((a, b) => (order.get(b.id) ?? 0) - (order.get(a.id) ?? 0));
     for (const entry of finished.slice(MAX_FINISHED_DOWNLOADS)) {
       entries.delete(entry.id);
@@ -157,6 +160,7 @@ export function createDownloadTracker(): DownloadTracker {
       attached.add(session);
       session.on('will-download', (_event, item) => {
         const id = `dl-${++counter}-${Date.now()}`;
+        activeDownloads.add(id);
         order.set(id, ++sequence);
 
         // Without an explicit path Electron falls back to its save dialog.
@@ -193,6 +197,7 @@ export function createDownloadTracker(): DownloadTracker {
           });
         });
         item.on('done', (_e, state) => {
+          activeDownloads.delete(id);
           const finalState = String(state);
           update(id, {
             received: item.getReceivedBytes(),
@@ -219,12 +224,13 @@ export function createDownloadTracker(): DownloadTracker {
     clear(id: string): void {
       entries.delete(id);
       order.delete(id);
+      activeDownloads.delete(id);
       emit();
     },
 
     clearFinished(): void {
       for (const [id, entry] of entries) {
-        if (entry.state !== 'progressing') {
+        if (entry.state !== 'progressing' && !activeDownloads.has(id)) {
           entries.delete(id);
           order.delete(id);
         }

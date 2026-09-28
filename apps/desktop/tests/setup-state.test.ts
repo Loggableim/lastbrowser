@@ -117,6 +117,7 @@ describe('cloud first-run setup state', () => {
     // wizard must offer Ollama and LM Studio alongside the cloud providers.
     expect(options.map((option) => option.id)).toEqual([
       'openai-codex',
+      'antigravity',
       'openrouter',
       'anthropic',
       'lmstudio',
@@ -160,6 +161,18 @@ describe('cloud first-run setup state', () => {
     ]);
   });
 
+  it('keeps Antigravity in provider settings even when the runtime catalog omits it', () => {
+    const options = cloudProviderOptions({ setup: { providers: [
+      { id: 'openrouter', label: 'OpenRouter' },
+      { id: 'ollama-cloud', label: 'Ollama Cloud' }
+    ] } });
+    expect(options.map((option) => option.id)).toEqual(['openai-codex', 'antigravity', 'openrouter', 'ollama-cloud']);
+    expect(modelsForProvider(null, 'antigravity').map((model) => model.id)).toEqual([
+      'gemini-3.1-pro-preview',
+      'gemini-3-flash-preview'
+    ]);
+  });
+
   it('keeps OpenAI Codex available even when the WebUI catalog omits it', () => {
     expect(cloudProviderOptions({
       setup: {
@@ -170,6 +183,7 @@ describe('cloud first-run setup state', () => {
       }
     }).map((option) => option.id)).toEqual([
       'openai-codex',
+      'antigravity',
       'openrouter',
       'openai'
     ]);

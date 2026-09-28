@@ -1277,7 +1277,7 @@ function attachSessionHandlers(targetSession: Session): void {
   });
 
   void adblock.attach(targetSession);
-    downloads.attach(targetSession, app.getPath('downloads'));
+  downloads.attach(targetSession, process.env.LASTBROWSER_DOWNLOADS_DIR || app.getPath('downloads'));
   const isIncognito = (targetSession as unknown as { isInMemory?: () => boolean }).isInMemory?.() ?? false;
   void extensionManager.attachToSession(targetSession, isIncognito);
   // Deny-by-default with whitelist (permissions.ts): Electron grants every permission silently

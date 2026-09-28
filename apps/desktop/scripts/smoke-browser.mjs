@@ -15,10 +15,11 @@
  * Exits 0 on success, 1 on failure. Screenshots land in ./smoke-output/.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import net from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
 
 const DEFAULT_EXE = path.join(
   process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
@@ -32,6 +33,8 @@ const REQUESTED_CDP_PORT = process.env.LASTBROWSER_SMOKE_CDP_PORT
   : 0;
 let CDP_PORT = REQUESTED_CDP_PORT;
 let smokeChild = null;
+let smokeDownloadServer = null;
+let smokeDownloadRequestCount = 0;
 const rendererDiagnostics = [];
 const addressEntryTrace = [];
 const TEST_URL = process.env.LASTBROWSER_SMOKE_URL || 'example.com';
@@ -39,6 +42,9 @@ const INTERACTIVE_PAUSE_MS = Number(process.env.LASTBROWSER_SMOKE_INTERACTIVE_MS
 const OUT_DIR = path.resolve(process.cwd(), 'smoke-output');
 const SMOKE_PROFILE_DIR = mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-browser-smoke-'));
 const SMOKE_EXTENSION_DIR = path.join(SMOKE_PROFILE_DIR, 'fixture-extension');
+const SMOKE_DOWNLOAD_DIR = path.join(SMOKE_PROFILE_DIR, 'downloads');
+const SMOKE_DOWNLOAD_NAME = 'lastbrowser-smoke-download.txt';
+const SMOKE_DOWNLOAD_CONTENT = Buffer.from('Lastbrowser isolated download fixture\n', 'utf8');
 const LOCAL_MAIN_ENTRY = path.resolve(import.meta.dirname, '..', 'dist', 'main', 'main.js');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -150,6 +156,31 @@ class CDP {
   }
 }
 
+async function startSmokeDownloadFixture() {
+  const server = createHttpServer((request, response) => {
+    smokeDownloadRequestCount += 1;
+    if (request.url !== '/download') {
+      response.writeHead(404).end();
+      return;
+    }
+    response.writeHead(200, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${SMOKE_DOWNLOAD_NAME}"`,
+      'Content-Length': String(SMOKE_DOWNLOAD_CONTENT.length),
+      'Cache-Control': 'no-store'
+    });
+    response.end(SMOKE_DOWNLOAD_CONTENT);
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  smokeDownloadServer = server;
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Could not start local download fixture server');
+  return `http://127.0.0.1:${address.port}/download`;
+}
+
 async function enterAddressThroughKeyboard(cdp, url) {
   const rectResponse = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
@@ -255,6 +286,8 @@ async function main() {
   }
 
   mkdirSync(OUT_DIR, { recursive: true });
+  mkdirSync(SMOKE_DOWNLOAD_DIR, { recursive: true });
+  const downloadFixtureUrl = await startSmokeDownloadFixture();
 
   // 1. Launch
   const isElectronBinary = path.basename(EXE).toLowerCase() === 'electron.exe';
@@ -274,7 +307,8 @@ async function main() {
   writeFileSync(path.join(SMOKE_EXTENSION_DIR, 'smoke.js'), `document.documentElement.dataset.lastbrowserSmokeExtension = 'loaded';`);
   const child = spawn(EXE, launchArgs, {
     detached: true,
-    stdio: process.env.LASTBROWSER_SMOKE_LOG === '1' ? 'inherit' : 'ignore'
+    stdio: process.env.LASTBROWSER_SMOKE_LOG === '1' ? 'inherit' : 'ignore',
+    env: { ...process.env, LASTBROWSER_DOWNLOADS_DIR: SMOKE_DOWNLOAD_DIR }
   });
   smokeChild = child;
   child.unref();
@@ -657,7 +691,8 @@ async function main() {
   let savedAppearance = null;
   for (let attempt = 0; attempt < 30; attempt++) {
     const saved = await cdp.send('Runtime.evaluate', {
-      expression: `(() => { try { return JSON.stringify(JSON.parse(localStorage.getItem('lastbrowser.desktopSettings.v1') || '{}')); } catch { return '{}'; } })()`,
+      expression: `(async () => { try { const response = await window.lastbrowser.sidekick.getSettings(); return JSON.stringify(response?.settings || response || {}); } catch { return '{}'; } })()`,
+      awaitPromise: true,
       returnByValue: true
     });
     savedAppearance = JSON.parse(saved.result.value || '{}');
@@ -670,7 +705,7 @@ async function main() {
     && liveAppearance.colorScheme === 'light' && ['CLICKED', 'AUTO_SAVE'].includes(appearanceSaved.result.value)
     && savedAppearance.theme === 'light' && savedAppearance.font_size === 'large' && savedAppearance.message_layout === 'compact';
   check('Appearance controls update the live theme, skin, font and message layout and persist', appearancePassed,
-    `section=${openAppearance.result.value}/${appearanceReady}, preview=${JSON.stringify(liveAppearance)}, saved=${JSON.stringify({ theme: savedAppearance.theme, skin: savedAppearance.skin, font_size: savedAppearance.font_size, message_layout: savedAppearance.message_layout })}`);
+    `section=${openAppearance.result.value}/${appearanceReady}, save=${appearanceSaved.result.value}, preview=${JSON.stringify(liveAppearance)}, saved=${JSON.stringify({ theme: savedAppearance.theme, skin: savedAppearance.skin, font_size: savedAppearance.font_size, message_layout: savedAppearance.message_layout })}`);
 
   const returnToWeb = await cdp.send('Runtime.evaluate', {
     expression: `(() => { const button = document.querySelector('.modern-back-to-web-btn'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
@@ -864,6 +899,62 @@ async function main() {
         skip('cursor loupe page capture requires a visible window', `window visible=${cursorPoint?.visible}`);
       }
 
+      // Download a tiny local fixture through the real webview/session path.
+      // The smoke launch overrides the download directory to this isolated
+      // profile so no file can land in the user's Downloads folder.
+      webviewSmokePhase = 'local file download and UI completion';
+      const downloadNavigation = await enterAddressThroughKeyboard(cdp, downloadFixtureUrl);
+      let completedDownload = null;
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `JSON.stringify(await window.lastbrowser.downloads.list())`,
+          awaitPromise: true,
+          returnByValue: true
+        }, 2000);
+        const entries = JSON.parse(state.result.value || '[]');
+        completedDownload = entries.find((entry) => entry.filename === SMOKE_DOWNLOAD_NAME && entry.state === 'completed') || null;
+        if (completedDownload) break;
+        await sleep(100);
+      }
+      const openDownloadsPanel = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { if (document.querySelector('.downloads-panel[role="dialog"]')) return 'ALREADY_OPEN'; const trigger = [...document.querySelectorAll('.downloads-trigger')].find(button => button.getClientRects().length); if (!trigger) return 'NOT_AVAILABLE'; trigger.click(); return 'CLICKED'; })()`,
+        returnByValue: true
+      });
+      const downloadsPanelReady = await waitForUi('.downloads-panel[role="dialog"]', true);
+      const downloadRow = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const row = [...document.querySelectorAll('.download-row.completed')].find(item => item.querySelector('strong')?.textContent?.trim() === ${JSON.stringify(SMOKE_DOWNLOAD_NAME)}); return row ? { name: row.querySelector('strong')?.textContent?.trim(), savedTo: row.querySelector('small')?.textContent?.trim() || '' } : null; })()`,
+        returnByValue: true
+      });
+      const downloadUiRow = downloadRow.result.value;
+      const uiPathMatch = String(downloadUiRow?.savedTo || '').match(/[A-Za-z]:\\.+$/);
+      const savedPath = uiPathMatch ? path.resolve(uiPathMatch[0]) : '';
+      const relativeSavedPath = savedPath ? path.relative(path.resolve(SMOKE_DOWNLOAD_DIR), savedPath) : '';
+      const savedInsideSmokeProfile = Boolean(relativeSavedPath)
+        && !relativeSavedPath.startsWith(`..${path.sep}`)
+        && !path.isAbsolute(relativeSavedPath);
+      const savedContentMatches = savedInsideSmokeProfile && existsSync(savedPath)
+        && readFileSync(savedPath).equals(SMOKE_DOWNLOAD_CONTENT);
+      const clearDownload = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const row = [...document.querySelectorAll('.download-row.completed')].find(item => item.querySelector('strong')?.textContent?.trim() === ${JSON.stringify(SMOKE_DOWNLOAD_NAME)}); const clear = row?.querySelector('button[aria-label]'); if (!clear) return false; clear.click(); return true; })()`,
+        returnByValue: true
+      });
+      let downloadCleared = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `Boolean([...document.querySelectorAll('.download-row.completed')].some(item => item.querySelector('strong')?.textContent?.trim() === ${JSON.stringify(SMOKE_DOWNLOAD_NAME)}))`,
+          returnByValue: true
+        });
+        if (!state.result.value) { downloadCleared = true; break; }
+        await sleep(100);
+      }
+      check('local browser download completes, saves the expected file and clears from the panel',
+        Boolean(downloadNavigation?.submitted) && downloadUiRow?.name === SMOKE_DOWNLOAD_NAME
+          && savedContentMatches
+          && ['CLICKED', 'ALREADY_OPEN'].includes(openDownloadsPanel.result.value) && downloadsPanelReady
+          && downloadUiRow.savedTo.includes(path.basename(savedPath))
+          && clearDownload.result.value === true && downloadCleared,
+        `navigation=${Boolean(downloadNavigation?.submitted)}, fixtureRequests=${smokeDownloadRequestCount}, entry=${JSON.stringify(completedDownload && { filename: completedDownload.filename, state: completedDownload.state, received: completedDownload.received, total: completedDownload.total })}, isolatedPath=${savedInsideSmokeProfile}, content=${savedContentMatches}, panel=${openDownloadsPanel.result.value}/${downloadsPanelReady}, row=${JSON.stringify(downloadUiRow)}, cleared=${downloadCleared}`);
+
       webviewSmokePhase = 'bookmark interactions';
       const addBookmark = await cdp.send('Runtime.evaluate', {
         expression: `(() => { const button = document.querySelector('button.bookmark-star[aria-pressed="false"]'); if (!button || !button.getClientRects().length || button.disabled) return 'NOT_AVAILABLE'; button.click(); return 'CLICKED'; })()`,
@@ -875,7 +966,7 @@ async function main() {
         returnByValue: true
       });
       const bookmarkUrls = JSON.parse(storedBookmark.result.value);
-      const bookmarkStored = bookmarkUrls.some((url) => String(url).includes(new URL(info.url).hostname));
+      const bookmarkStored = bookmarkUrls.some((url) => String(url).includes(new URL(downloadFixtureUrl).hostname));
       check('bookmark toolbar adds and persists the active page', addBookmark.result.value === 'CLICKED' && bookmarkAdded && bookmarkStored,
         `${addBookmark.result.value}, marked=${bookmarkAdded}, stored=${bookmarkStored}`);
       const removeBookmark = await cdp.send('Runtime.evaluate', {
@@ -887,7 +978,7 @@ async function main() {
         expression: `JSON.stringify(JSON.parse(localStorage.getItem('lastbrowser.bookmarks.v1') || '[]').map(bookmark => bookmark.url))`,
         returnByValue: true
       });
-      const bookmarkAbsent = !JSON.parse(storedAfterRemoval.result.value).some((url) => String(url).includes(new URL(info.url).hostname));
+      const bookmarkAbsent = !JSON.parse(storedAfterRemoval.result.value).some((url) => String(url).includes(new URL(downloadFixtureUrl).hostname));
       check('bookmark toolbar removes the active page cleanly', removeBookmark.result.value && bookmarkRemoved && bookmarkAbsent,
         `remove=${removeBookmark.result.value}, marked=${bookmarkRemoved}, absent=${bookmarkAbsent}`);
 
@@ -895,7 +986,7 @@ async function main() {
       // the real https guest. The isolated profile keeps this trust entry out
       // of the user's browser data.
       webviewSmokePhase = 'site permission trust and revoke';
-      const permissionOrigin = new URL(info.url).origin;
+      const permissionOrigin = new URL(downloadFixtureUrl).origin;
       const trustSite = await cdp.send('Runtime.evaluate', {
         expression: `(() => { const button = document.querySelector('.site-permission-trigger'); if (!button || !button.getClientRects().length) return 'NOT_AVAILABLE'; button.click(); return 'CLICKED'; })()`,
         returnByValue: true
@@ -2003,6 +2094,10 @@ function finish(child) {
 }
 
 function stopSmokeApp(child) {
+  if (smokeDownloadServer) {
+    try { smokeDownloadServer.close(); } catch { /* already closed */ }
+    smokeDownloadServer = null;
+  }
   if (child?.pid) {
     if (process.platform === 'win32') {
       // Electron runs renderer/GPU/utility processes beside its main process;

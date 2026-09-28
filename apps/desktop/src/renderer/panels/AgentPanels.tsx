@@ -16,6 +16,7 @@ import {
   Users
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
+import { useDesktopI18n } from '../i18n.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import {
   type ServiceStatus,
@@ -35,6 +36,7 @@ import {
 } from './RestPanelShared.js';
 
 export function NativeSkillsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
+  const { t } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const skillsState = useApiState(() => window.lastbrowser.sidekick.listSkills(), [ready], ready);
   const skills = arrayFrom(skillsState.data, ['skills', 'items', 'files']);
@@ -72,6 +74,13 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
     : section === 'Linked files' && selectedSkill
       ? [selectedSkill]
       : filtered;
+  const sectionTitle = section === 'Create skill'
+    ? t('skills.createSkill')
+    : section === 'Linked files'
+      ? t('agentPanels.linkedFiles')
+      : section === 'Editor'
+        ? t('agentPanels.editor')
+        : t('skills.title');
 
   useEffect(() => {
     if (!filtered.length) return;
@@ -104,16 +113,16 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
   }
 
   async function createSkill(): Promise<void> {
-    const name = window.prompt('Skill name', 'custom-skill');
+    const name = window.prompt(t('agentPanels.skillNamePrompt'), 'custom-skill');
     if (!name?.trim()) return;
     setSelectedName(name.trim());
     setSelectedFile('');
     setSkillCategoryDraft('');
-    setContent('# New Skill\n\nDescribe when Sidekick should use this skill.\n');
+    setContent(t('agentPanels.newSkillTemplate'));
   }
 
   async function removeSkill(): Promise<void> {
-    if (!selectedName || !window.confirm(`Delete ${selectedName}?`)) return;
+    if (!selectedName || !window.confirm(t('agentPanels.deleteSkillConfirm', { name: selectedName }))) return;
     await window.lastbrowser.sidekick.deleteSkill({ name: selectedName, path: text(selectedSkill?.path) || undefined });
     setSelectedName('');
     setSelectedFile('');
@@ -123,17 +132,22 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
 
   return (
     <section className="browser-main native-rest-main skills-main">
-      <NativeHeader icon={<Sparkles size={21} />} title="Skills" kicker="Native Skills" detail="Skill library, linked files and SKILL.md editing through the local Sidekick API." loading={skillsState.loading} ready={ready} onRefresh={skillsState.refresh} />
+      <NativeHeader icon={<Sparkles size={21} />} title={t('skills.title')} kicker={t('skills.kicker')} detail={t('skills.detail')} loading={skillsState.loading} ready={ready} onRefresh={skillsState.refresh} />
       <AdvancedWebUiTools panel="skills" serviceStatus={serviceStatus} compact />
-      {bundledCatalog && <section className="native-work-card detail-json-card"><header><strong>Bundled catalog</strong></header><pre>{'Showing the built-in skill catalog from the bundled Lastbrowser resources.\nEdits and new skills will be saved to the active profile skills directory.'}</pre></section>}
+      {bundledCatalog && <section className="native-work-card detail-json-card"><header><strong>{t('agentPanels.bundledCatalog')}</strong></header><pre>{t('agentPanels.bundledCatalogDescription')}</pre></section>}
       <div className="native-card-actions insights-tabs">
-        {['Library', 'Editor', 'Linked files', 'Create skill'].map((item) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        {[
+          ['Library', t('skills.title')],
+          ['Editor', t('agentPanels.editor')],
+          ['Linked files', t('agentPanels.linkedFiles')],
+          ['Create skill', t('skills.createSkill')]
+        ].map(([item, label]) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{label}</button>
         ))}
       </div>
       {skillCategories.length > 0 && (
         <div className="native-card-actions insights-tabs skill-category-tabs">
-          <button type="button" className={!selectedCategory ? 'active' : ''} onClick={() => setSelectedCategory('')}>All</button>
+          <button type="button" className={!selectedCategory ? 'active' : ''} onClick={() => setSelectedCategory('')}>{t('agentPanels.all')}</button>
           {skillCategories.map((category) => (
             <button key={category} type="button" className={selectedCategory === category ? 'active' : ''} onClick={() => setSelectedCategory((current) => current === category ? '' : category)}>
               {category}
@@ -143,8 +157,8 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
       )}
       <div className="native-rest-split">
         <aside className="integration-list">
-          <div className="native-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search skills..." /></div>
-          <button type="button" className="new-session-button" onClick={() => void createSkill()} disabled={!ready}><Plus size={15} />New skill</button>
+          <div className="native-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('skills.searchPlaceholder')} /></div>
+          <button type="button" className="new-session-button" onClick={() => void createSkill()} disabled={!ready}><Plus size={15} />{t('skills.new')}</button>
           {visibleSkills.map((skill) => (
             <button key={idOf(skill)} type="button" className={`integration-row ${idOf(skill) === selectedName ? 'active' : ''}`} onClick={() => { setSelectedName(text(skill.name || idOf(skill))); setSelectedFile(''); }}>
               <img src={brandAssets.sidebarIcons.skills} alt="" />
@@ -152,21 +166,21 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
               <small>{text(skill.path || skill.category || skill.source)}</small>
             </button>
           ))}
-          {!visibleSkills.length && <EmptyState icon={<Sparkles size={22} />} label={ready ? 'No skills found.' : 'Sidekick is starting.'} />}
+          {!visibleSkills.length && <EmptyState icon={<Sparkles size={22} />} label={ready ? t('skills.empty') : t('agentPanels.noSkillsStarting')} />}
         </aside>
         <main className="native-rest-editor">
           <ErrorLine error={skillsState.error || editorError} />
           <div className="native-rest-editor-head">
-            <strong>{section}: {selectedFile || selectedName || 'Select a skill'}</strong>
+            <strong>{sectionTitle}: {selectedFile || selectedName || t('agentPanels.noSkillSelected')}</strong>
             <div className="native-card-actions">
-              <button type="button" onClick={() => void save()} disabled={!ready || !selectedName || Boolean(selectedFile)}><Save size={13} /><span>Save SKILL.md</span></button>
-              <button type="button" className="danger" onClick={() => void removeSkill()} disabled={!ready || !selectedName || text(selectedSkill?.source) === 'bundled'}><Trash2 size={13} /><span>Delete</span></button>
+              <button type="button" onClick={() => void save()} disabled={!ready || !selectedName || Boolean(selectedFile)}><Save size={13} /><span>{t('agentPanels.saveSkill')}</span></button>
+              <button type="button" className="danger" onClick={() => void removeSkill()} disabled={!ready || !selectedName || text(selectedSkill?.source) === 'bundled'}><Trash2 size={13} /><span>{t('skills.delete')}</span></button>
             </div>
           </div>
           <div className="settings-field-grid">
             <label className="settings-field">
-              <span>Category</span>
-              <input value={skillCategoryDraft} onChange={(event) => setSkillCategoryDraft(event.target.value)} placeholder="general" />
+              <span>{t('agentPanels.category')}</span>
+              <input value={skillCategoryDraft} onChange={(event) => setSkillCategoryDraft(event.target.value)} placeholder={t('agentPanels.category')} />
             </label>
           </div>
           <div className="skill-linked-files">
@@ -178,7 +192,7 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
               </button>
             ))}
           </div>
-          <textarea className="code-editor" value={content} onChange={(event) => setContent(event.target.value)} placeholder="Select or create a SKILL.md file." />
+          <textarea className="code-editor" value={content} onChange={(event) => setContent(event.target.value)} placeholder={t('agentPanels.selectSkillFilePlaceholder')} />
         </main>
       </div>
     </section>
@@ -186,6 +200,7 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
 }
 
 export function NativeAgentsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
+  const { t } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const agentsState = useApiState(() => window.lastbrowser.sidekick.listAgents(), [ready], ready);
   const currentState = useApiState(() => window.lastbrowser.sidekick.getCurrentAgent(), [ready], ready);
@@ -208,13 +223,13 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
   const [section, setSection] = useState(activeContextItem || 'Dashboard');
   const selectedAgent = agents.find((agent) => idOf(agent) === selectedSlug) || agents[0] || null;
   const currentAgentId = currentState.data ? idOf(currentState.data) : '';
-  const currentAgentTitle = currentState.data ? titleOf(currentState.data) : 'No active agent';
+  const currentAgentTitle = currentState.data ? titleOf(currentState.data) : t('agentPanels.noAgentSelected');
   const selectedSession = sessions.find((session) => idOf(session) === selectedSessionId) || null;
   const dashboardCards = [
-    { label: 'Agents', value: formatCompactNumber(agents.length) },
-    { label: 'Sessions', value: formatCompactNumber(sessions.length) },
-    { label: 'Current', value: currentAgentTitle },
-    { label: 'Splash', value: text(splashState.data?.status || splashState.data?.state || 'setup') }
+    { label: t('agentPanels.agents'), value: formatCompactNumber(agents.length) },
+    { label: t('agentPanels.sessions'), value: formatCompactNumber(sessions.length) },
+    { label: t('agentPanels.current'), value: currentAgentTitle },
+    { label: t('agentPanels.splash'), value: text(splashState.data?.status || splashState.data?.state || t('agentPanels.setup')) }
   ];
   const profileItems = arrayFrom(profilesState.data, ['profiles', 'items']);
   const workspaceItems = arrayFrom(workspacesState.data, ['workspaces', 'items']);
@@ -266,9 +281,9 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
   }, []);
 
   async function createAgentRecord(): Promise<void> {
-    const slug = window.prompt('Agent slug', 'researcher');
+    const slug = window.prompt(t('agentPanels.agentSlugPrompt'), 'researcher');
     if (!slug?.trim()) return;
-    const name = window.prompt('Agent name', slug.trim()) || slug.trim();
+    const name = window.prompt(t('agentPanels.agentNamePrompt'), slug.trim()) || slug.trim();
     await window.lastbrowser.sidekick.createAgent({ slug: slug.trim(), name });
     setSelectedSlug(slug.trim());
     await agentsState.refresh();
@@ -276,14 +291,14 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
 
   async function renameAgent(): Promise<void> {
     if (!selectedSlug) return;
-    const name = window.prompt('Agent name', titleOf(selectedAgent || {}, selectedSlug));
+    const name = window.prompt(t('agentPanels.agentNamePrompt'), titleOf(selectedAgent || {}, selectedSlug));
     if (!name?.trim()) return;
     await window.lastbrowser.sidekick.updateAgent({ slug: selectedSlug, patch: { name: name.trim() } });
     await agentsState.refresh();
   }
 
   async function removeAgent(): Promise<void> {
-    if (!selectedSlug || !window.confirm(`Delete agent ${selectedSlug}?`)) return;
+    if (!selectedSlug || !window.confirm(t('agentPanels.deleteAgentConfirm', { name: selectedSlug }))) return;
     await window.lastbrowser.sidekick.deleteAgent({ slug: selectedSlug });
     setSelectedSlug('');
     await agentsState.refresh();
@@ -322,7 +337,7 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
     if (!selectedSlug || !selectedSessionId) return;
     await window.lastbrowser.sidekick.startAgentWorkspaceProcess({ slug: selectedSlug, sessionId: selectedSessionId });
     const result = await window.lastbrowser.sidekick.startAgentWorkspaceStream({ sessionId: selectedSessionId });
-    setEvents((current) => [...current, `stream ${result.streamId} started`]);
+    setEvents((current) => [...current, t('agentPanels.streamStarted', { id: result.streamId })]);
   }
 
   async function sendCommand(event: FormEvent): Promise<void> {
@@ -334,19 +349,25 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
 
   return (
     <section className="browser-main native-rest-main agents-main">
-      <NativeHeader icon={<Bot size={21} />} title="Agents" kicker="Native Agents" detail="Dashboard, CRUD, sessions, agent chat and workspace terminal without a WebUI embed." loading={agentsState.loading} ready={ready} onRefresh={agentsState.refresh} />
+      <NativeHeader icon={<Bot size={21} />} title={t('agentPanels.agents')} kicker={t('agentPanels.agents')} detail={t('agentPanels.agentDetail')} loading={agentsState.loading} ready={ready} onRefresh={agentsState.refresh} />
       <AdvancedWebUiTools panel="agents" serviceStatus={serviceStatus} compact />
       <div className="native-card-actions insights-tabs">
-        {['Dashboard', 'Agents', 'Chat sessions', 'Workspace terminal', 'Create agent'].map((item) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        {[
+          ['Dashboard', t('agentPanels.dashboard')],
+          ['Agents', t('agentPanels.agents')],
+          ['Chat sessions', t('agentPanels.sessions')],
+          ['Workspace terminal', t('agentPanels.workspaceTerminal')],
+          ['Create agent', t('agentPanels.createAgent')]
+        ].map(([item, label]) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{label}</button>
         ))}
       </div>
       <section className="native-work-card detail-json-card">
         <header>
-          <strong>{section}</strong>
+          <strong>{section === 'Chat sessions' ? t('agentPanels.sessions') : section === 'Workspace terminal' ? t('agentPanels.workspaceTerminal') : section === 'Create agent' ? t('agentPanels.createAgent') : section === 'Dashboard' ? t('agentPanels.dashboard') : t('agentPanels.agents')}</strong>
           <div className="native-card-actions">
-            <button type="button" onClick={() => void refreshAgentSessions()} disabled={!ready}><RefreshCw size={13} /><span>Sessions</span></button>
-            <button type="button" onClick={() => void agentsState.refresh()} disabled={!ready}><RefreshCw size={13} /><span>Agents</span></button>
+            <button type="button" onClick={() => void refreshAgentSessions()} disabled={!ready}><RefreshCw size={13} /><span>{t('agentPanels.sessions')}</span></button>
+            <button type="button" onClick={() => void agentsState.refresh()} disabled={!ready}><RefreshCw size={13} /><span>{t('agentPanels.refreshAgents')}</span></button>
           </div>
         </header>
         <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
@@ -361,41 +382,41 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
       <div className="agent-dashboard">
         <aside className="integration-list">
           <div className="native-card-actions">
-            <button type="button" onClick={() => void createAgentRecord()} disabled={!ready}><Plus size={13} /><span>Create</span></button>
-            <button type="button" onClick={() => void renameAgent()} disabled={!ready || !selectedSlug}><Edit3 size={13} /><span>Edit</span></button>
-            <button type="button" onClick={() => void activateSelectedAgent()} disabled={!ready || !selectedSlug}><CheckCircle2 size={13} /><span>Activate</span></button>
-            <button type="button" className="danger" onClick={() => void removeAgent()} disabled={!ready || !selectedSlug}><Trash2 size={13} /><span>Delete</span></button>
+            <button type="button" onClick={() => void createAgentRecord()} disabled={!ready}><Plus size={13} /><span>{t('common.create')}</span></button>
+            <button type="button" onClick={() => void renameAgent()} disabled={!ready || !selectedSlug}><Edit3 size={13} /><span>{t('agentPanels.edit')}</span></button>
+            <button type="button" onClick={() => void activateSelectedAgent()} disabled={!ready || !selectedSlug}><CheckCircle2 size={13} /><span>{t('common.enable')}</span></button>
+            <button type="button" className="danger" onClick={() => void removeAgent()} disabled={!ready || !selectedSlug}><Trash2 size={13} /><span>{t('common.delete')}</span></button>
           </div>
           <section className="agent-splash-status">
-            <strong>Splash</strong>
-            <span>{text(splashState.data?.status || splashState.data?.state || 'setup')}</span>
+            <strong>{t('agentPanels.splash')}</strong>
+            <span>{text(splashState.data?.status || splashState.data?.state || t('agentPanels.setup'))}</span>
           </section>
           {agents.map((agent) => (
             <button key={idOf(agent)} type="button" className={`integration-row ${idOf(agent) === selectedSlug ? 'active' : ''}`} onClick={() => setSelectedSlug(idOf(agent))}>
               <img src={brandAssets.sidebarIcons.agents} alt="" />
               <span>{titleOf(agent)}</span>
-              <small>{idOf(agent)} {currentAgentId === idOf(agent) ? 'active' : ''}</small>
+              <small>{idOf(agent)} {currentAgentId === idOf(agent) ? t('agentPanels.active') : ''}</small>
             </button>
           ))}
-          {!agents.length && <EmptyState icon={<Bot size={22} />} label={ready ? 'No agents configured.' : 'Sidekick is starting.'} />}
+          {!agents.length && <EmptyState icon={<Bot size={22} />} label={ready ? t('agentPanels.emptyAgents') : t('agentPanels.noSkillsStarting')} />}
         </aside>
         <main className={`agent-main-grid ${section.toLowerCase().replace(/\s+/g, '-')}`}>
           <ErrorLine error={agentsState.error || statsState.error || activitiesState.error || profilesState.error || workspacesState.error || error} />
           {(section === 'Dashboard' || section === 'Agents' || section === 'Create agent') && (
             <section className="native-work-card agent-detail-card">
             <header>
-              <h2>{selectedAgent ? titleOf(selectedAgent) : 'Select an agent'}</h2>
-              <button type="button" onClick={() => void saveSelectedProfile()} disabled={!ready || !selectedSlug}><Save size={13} />Profile</button>
+              <h2>{selectedAgent ? titleOf(selectedAgent) : t('agentPanels.noAgentSelected')}</h2>
+              <button type="button" onClick={() => void saveSelectedProfile()} disabled={!ready || !selectedSlug}><Save size={13} />{t('agentPanels.profile')}</button>
             </header>
             <div className="agent-stat-strip">
               {Object.entries(statsState.data || {}).slice(0, 4).map(([key, value]) => <span key={key}><strong>{String(value)}</strong>{key}</span>)}
             </div>
             <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
               {[
-                { label: 'Selected agent', value: selectedAgent ? titleOf(selectedAgent) : 'None' },
-                { label: 'Selected session', value: selectedSession ? titleOf(selectedSession, selectedSessionId) : 'No session' },
-                { label: 'Memory', value: text(agentMemory.status || agentMemory.summary || 'available') },
-                { label: 'Soul', value: text(agentSoul.status || agentSoul.summary || 'available') }
+                { label: t('agentPanels.selectedAgent'), value: selectedAgent ? titleOf(selectedAgent) : t('agentPanels.none') },
+                { label: t('agentPanels.selectedSession'), value: selectedSession ? titleOf(selectedSession, selectedSessionId) : t('agentPanels.noSession') },
+                { label: t('memory.title'), value: text(agentMemory.status || agentMemory.summary || t('agentPanels.available')) },
+                { label: t('agentPanels.soul'), value: text(agentSoul.status || agentSoul.summary || t('agentPanels.available')) }
               ].map((card) => (
                 <article key={card.label} className="metric-card">
                   <span>{card.label}</span>
@@ -404,18 +425,18 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
               ))}
             </div>
             <div className="compact-list">
-              {activityItems.slice(0, 5).map((activity) => <article key={idOf(activity)}><strong>{titleOf(activity, 'Activity')}</strong><span>{text(activity.message || activity.detail || activity.type)}</span></article>)}
+              {activityItems.slice(0, 5).map((activity) => <article key={idOf(activity)}><strong>{titleOf(activity, t('agentPanels.activity'))}</strong><span>{text(activity.message || activity.detail || activity.type)}</span></article>)}
             </div>
             </section>
           )}
           {(section === 'Dashboard' || section === 'Chat sessions') && (
             <section className="native-work-card agent-chat-card">
-            <header><strong>Agent Chat</strong><button type="button" onClick={() => void refreshAgentSessions()} disabled={!ready}><RefreshCw size={13} /></button></header>
+            <header><strong>{t('agentPanels.agentChat')}</strong><button type="button" onClick={() => void refreshAgentSessions()} disabled={!ready}><RefreshCw size={13} /></button></header>
             <select value={selectedSessionId} onChange={(event) => setSelectedSessionId(event.target.value)}>
               {sessions.map((session) => <option key={idOf(session)} value={idOf(session)}>{titleOf(session, idOf(session))}</option>)}
             </select>
             <form onSubmit={(event) => void sendAgentChat(event)} className="inline-form">
-              <input value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder="Message agent..." />
+              <input value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder={t('agentPanels.messageAgentPlaceholder')} />
               <button type="submit" disabled={!ready || !selectedSlug || !chatText.trim()}><Send size={14} /></button>
             </form>
             <div className="agent-session-list">
@@ -423,9 +444,9 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
             </div>
             <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
               {[
-                { label: 'Profiles', value: formatCompactNumber(profileItems.length) },
-                { label: 'Workspaces', value: formatCompactNumber(workspaceItems.length) },
-                { label: 'Selected session', value: selectedSession ? titleOf(selectedSession, selectedSessionId) : 'No session' }
+                { label: t('agentPanels.profiles'), value: formatCompactNumber(profileItems.length) },
+                { label: t('agentPanels.workspaces'), value: formatCompactNumber(workspaceItems.length) },
+                { label: t('agentPanels.selectedSession'), value: selectedSession ? titleOf(selectedSession, selectedSessionId) : t('agentPanels.noSession') }
               ].map((card) => (
                 <article key={card.label} className="metric-card">
                   <span>{card.label}</span>
@@ -438,17 +459,17 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
           {(section === 'Dashboard' || section === 'Workspace terminal') && (
             <section className="native-work-card agent-terminal">
             <header>
-              <strong>Workspace Terminal</strong>
+              <strong>{t('agentPanels.terminalTitle')}</strong>
               <div className="native-card-actions">
-                <button type="button" onClick={() => void startWorkspace()} disabled={!ready || !selectedSessionId}><Terminal size={13} /><span>Start</span></button>
-                <button type="button" onClick={() => selectedSessionId && window.lastbrowser.sidekick.stopAgentWorkspace({ sessionId: selectedSessionId })} disabled={!ready || !selectedSessionId}><Trash2 size={13} /><span>Stop</span></button>
+                <button type="button" onClick={() => void startWorkspace()} disabled={!ready || !selectedSessionId}><Terminal size={13} /><span>{t('agentPanels.startTerminal')}</span></button>
+                <button type="button" onClick={() => selectedSessionId && window.lastbrowser.sidekick.stopAgentWorkspace({ sessionId: selectedSessionId })} disabled={!ready || !selectedSessionId}><Trash2 size={13} /><span>{t('agentPanels.stopTerminal')}</span></button>
               </div>
             </header>
             <form onSubmit={(event) => void sendCommand(event)} className="inline-form">
-              <input value={command} onChange={(event) => setCommand(event.target.value)} placeholder="Command..." />
+              <input value={command} onChange={(event) => setCommand(event.target.value)} placeholder={t('agentPanels.commandPlaceholder')} />
               <button type="submit" disabled={!ready || !selectedSessionId || !command.trim()}><Send size={14} /></button>
             </form>
-            <pre>{events.length ? events.join('\n') : 'Terminal events will appear here.'}</pre>
+            <pre>{events.length ? events.join('\n') : t('agentPanels.terminalEventsPlaceholder')}</pre>
           </section>
           )}
         </main>
@@ -458,6 +479,7 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
 }
 
 export function NativeProfilesMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
+  const { t } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const state = useApiState(() => window.lastbrowser.sidekick.listProfiles(), [ready], ready);
   const profiles = arrayFrom(state.data, ['profiles', 'items']);
@@ -475,9 +497,9 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
   }, [activeContextItem]);
 
   async function create(): Promise<void> {
-    const name = window.prompt('Profile name', 'default');
+    const name = window.prompt(t('agentPanels.profileNamePrompt'), 'default');
     if (!name?.trim()) return;
-    const model = window.prompt('Model', 'gpt-5.5') || '';
+    const model = window.prompt(t('agentPanels.profileDefaultModelPrompt'), 'gpt-5.5') || '';
     await window.lastbrowser.sidekick.createProfile({ name: name.trim(), model });
     setSelected(name.trim());
     await state.refresh();
@@ -490,7 +512,7 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
   }
 
   async function remove(): Promise<void> {
-    if (!selected || !window.confirm(`Delete profile ${selected}?`)) return;
+    if (!selected || !window.confirm(t('agentPanels.deleteProfileConfirm', { name: selected }))) return;
     await window.lastbrowser.sidekick.deleteProfile({ name: selected });
     setSelected('');
     await state.refresh();
@@ -498,36 +520,41 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
 
   return (
     <section className="browser-main native-rest-main profiles-main">
-      <NativeHeader icon={<Users size={21} />} title="Agent Profiles" kicker="Profiles" detail="Profile selection, defaults, gateway/model/workspace display and basic profile management." loading={state.loading} ready={ready} onRefresh={state.refresh} />
+      <NativeHeader icon={<Users size={21} />} title={t('sidebar.items.profiles.title')} kicker={t('agentPanels.profiles')} detail={t('agentPanels.profileDetail')} loading={state.loading} ready={ready} onRefresh={state.refresh} />
       <AdvancedWebUiTools panel="profiles" serviceStatus={serviceStatus} compact />
       <div className="native-card-actions insights-tabs">
-        {['Profiles', 'Active profile', 'Gateway', 'Model defaults'].map((item) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        {[
+          ['Profiles', t('agentPanels.profiles')],
+          ['Active profile', t('agentPanels.activeProfile')],
+          ['Gateway', t('agentPanels.gateway')],
+          ['Model defaults', t('agentPanels.modelDefaults')]
+        ].map(([item, label]) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{label}</button>
         ))}
       </div>
       <div className="profile-overview-strip">
         <div className="profile-stat-box">
-          <span className="profile-stat-label">ACTIVE PROFILE</span>
+          <span className="profile-stat-label">{t('agentPanels.activeProfileLabel').toLocaleUpperCase()}</span>
           <strong className="profile-stat-value profile-active-name">{text(state.data?.active || (profiles.find((p) => p.is_active) ? idOf(profiles.find((p) => p.is_active)!) : 'default'))}</strong>
         </div>
         <div className="profile-stat-box">
-          <span className="profile-stat-label">TOTAL PROFILES</span>
+          <span className="profile-stat-label">{t('agentPanels.totalProfilesLabel').toLocaleUpperCase()}</span>
           <strong className="profile-stat-value">{profiles.length}</strong>
         </div>
         <div className="profile-stat-box">
-          <span className="profile-stat-label">GATEWAY STATUS</span>
-          <strong className="profile-stat-value">{current?.gateway_running ? 'Online' : 'Standby'}</strong>
+          <span className="profile-stat-label">{t('agentPanels.gatewayStatus').toLocaleUpperCase()}</span>
+          <strong className="profile-stat-value">{current?.gateway_running ? t('agentPanels.gatewayOnline') : t('agentPanels.gatewayOffline')}</strong>
         </div>
         <div className="profile-stat-box" style={{ marginLeft: 'auto' }}>
           <button type="button" className="profile-create-quick-btn" onClick={() => void create()} disabled={!ready}>
             <Plus size={14} />
-            <span>Neues Profil</span>
+            <span>{t('agentPanels.createProfile')}</span>
           </button>
         </div>
       </div>
       <div className="native-rest-split">
         <aside className="integration-list">
-          <button type="button" className="new-session-button" onClick={() => void create()} disabled={!ready}><Plus size={15} />New profile</button>
+          <button type="button" className="new-session-button" onClick={() => void create()} disabled={!ready}><Plus size={15} />{t('agentPanels.createProfile')}</button>
           {profiles.map((profile) => (
             <button key={idOf(profile)} type="button" className={`integration-row ${idOf(profile) === selected ? 'active' : ''}`} onClick={() => setSelected(idOf(profile))}>
               <img src={brandAssets.sidebarIcons.profiles} alt="" />
@@ -541,12 +568,12 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
           <section className="native-work-card profile-detail-card">
             <header className="profile-card-header">
               <div className="profile-title-area">
-                <strong className="profile-display-name">{current ? titleOf(current) : 'Kein Profil ausgewählt'}</strong>
+                <strong className="profile-display-name">{current ? titleOf(current) : t('agentPanels.profileNotSelected')}</strong>
                 {current && (idOf(current) === text(state.data?.active) || Boolean(current.is_active)) && (
-                  <span className="profile-active-tag"><CheckCircle2 size={12} /> Aktiv</span>
+                  <span className="profile-active-tag"><CheckCircle2 size={12} /> {t('agentPanels.activeTag')}</span>
                 )}
                 {Boolean(current?.is_default) && (
-                  <span className="profile-default-tag">Standard</span>
+                  <span className="profile-default-tag">{t('agentPanels.defaultTag')}</span>
                 )}
               </div>
               <div className="native-card-actions">
@@ -554,20 +581,20 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
                   type="button"
                   onClick={() => void activate()}
                   disabled={!ready || !selected || idOf(current) === text(state.data?.active)}
-                  title="Dieses Profil aktivieren"
+                  title={t('agentPanels.activate')}
                 >
                   <CheckCircle2 size={13} />
-                  <span>Aktivieren</span>
+                  <span>{t('agentPanels.activate')}</span>
                 </button>
                 <button
                   type="button"
                   className="danger"
                   onClick={() => void remove()}
                   disabled={!ready || !selected || Boolean(current?.is_default)}
-                  title="Profil löschen"
+                  title={t('common.delete')}
                 >
                   <Trash2 size={13} />
-                  <span>Löschen</span>
+                  <span>{t('common.delete')}</span>
                 </button>
               </div>
             </header>
@@ -575,23 +602,23 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
             {section === 'Profiles' && current && (
               <div className="profile-specs-grid">
                 <div className="profile-spec-item">
-                  <span className="spec-label">Modell</span>
-                  <strong className="spec-value">{text(current.model) || 'gpt-5.5 (Standard)'}</strong>
+                  <span className="spec-label">{t('agentPanels.model')}</span>
+                  <strong className="spec-value">{text(current.model) || `gpt-5.5 (${t('agentPanels.defaultTag')})`}</strong>
                 </div>
                 <div className="profile-spec-item">
-                  <span className="spec-label">Provider</span>
-                  <strong className="spec-value">{text(current.provider) || 'Automatischer Fallback'}</strong>
+                  <span className="spec-label">{t('agentPanels.provider')}</span>
+                  <strong className="spec-value">{text(current.provider) || t('agentPanels.fallbackModel')}</strong>
                 </div>
                 <div className="profile-spec-item">
-                  <span className="spec-label">Aktive Skills</span>
-                  <strong className="spec-value">{current.skill_count !== undefined ? `${current.skill_count} Skills geladen` : 'Standard'}</strong>
+                  <span className="spec-label">{t('agentPanels.skillsCountLabel')}</span>
+                  <strong className="spec-value">{current.skill_count !== undefined ? t('agentPanels.skillsLoaded', { count: current.skill_count }) : t('agentPanels.skillsDefault')}</strong>
                 </div>
                 <div className="profile-spec-item">
-                  <span className="spec-label">Umgebungsvariablen</span>
-                  <strong className="spec-value">{current.has_env ? 'Eigenes .env konfiguriert' : 'Global geerbt'}</strong>
+                  <span className="spec-label">{t('agentPanels.environment')}</span>
+                  <strong className="spec-value">{current.has_env ? t('agentPanels.environmentOwn') : t('agentPanels.environmentInherited')}</strong>
                 </div>
                 <div className="profile-spec-item full-width">
-                  <span className="spec-label">Speicherpfad</span>
+                  <span className="spec-label">{t('agentPanels.profilePath')}</span>
                   <code className="spec-code-path">{text(current.path) || `~/.lastbrowser/profiles/${idOf(current)}`}</code>
                 </div>
               </div>
@@ -600,16 +627,16 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
             {section === 'Active profile' && (
               <div className="profile-specs-grid">
                 <div className="profile-spec-item">
-                  <span className="spec-label">Aktives System-Profil</span>
+                  <span className="spec-label">{t('agentPanels.activeSystemProfile')}</span>
                   <strong className="spec-value highlight-cyan">{text(state.data?.active || idOf(activeProfile) || 'default')}</strong>
                 </div>
                 <div className="profile-spec-item">
-                  <span className="spec-label">Status</span>
-                  <strong className="spec-value">Bereit für Agenten-Sessions</strong>
+                  <span className="spec-label">{t('agentPanels.profileStatus')}</span>
+                  <strong className="spec-value">{t('agentPanels.profileReadyStatus')}</strong>
                 </div>
                 <div className="profile-spec-item full-width">
-                  <span className="spec-label">Hinweis</span>
-                  <p className="spec-desc">Das aktive Profil bestimmt, welches Home-Verzeichnis, welche MCP-Skills, welches Langzeitgedächtnis und welche API-Keys von Sidekick-Sessions verwendet werden.</p>
+                  <span className="spec-label">{t('agentPanels.hint')}</span>
+                  <p className="spec-desc">{t('agentPanels.profilePurposeHint')}</p>
                 </div>
               </div>
             )}
@@ -617,16 +644,16 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
             {section === 'Gateway' && (
               <div className="profile-specs-grid">
                 <div className="profile-spec-item">
-                  <span className="spec-label">Gateway Status</span>
-                  <strong className="spec-value">{current?.gateway_running ? 'Online & Verbunden' : 'Standby / Aus'}</strong>
+                  <span className="spec-label">{t('agentPanels.gatewayLabel')}</span>
+                  <strong className="spec-value">{current?.gateway_running ? t('agentPanels.gatewayConnected') : t('agentPanels.gatewayOffline')}</strong>
                 </div>
                 <div className="profile-spec-item">
-                  <span className="spec-label">Gateway Bindung</span>
-                  <strong className="spec-value">{text(current?.gateway || current?.provider) || 'Lokaler HTTP Bridge'}</strong>
+                  <span className="spec-label">{t('agentPanels.gatewayBinding')}</span>
+                  <strong className="spec-value">{text(current?.gateway || current?.provider) || t('agentPanels.gatewayLocalBridge')}</strong>
                 </div>
                 <div className="profile-spec-item full-width">
-                  <span className="spec-label">Gateway Architektur</span>
-                  <p className="spec-desc">Der Gateway-Dienst ermöglicht es externen Plattformen (Telegram, Discord, Webhooks), direkt mit der Sidekick-Instanz dieses Profils zu interagieren.</p>
+                  <span className="spec-label">{t('agentPanels.gatewayArchitectureTitle')}</span>
+                  <p className="spec-desc">{t('agentPanels.gatewayArchitecture')}</p>
                 </div>
               </div>
             )}
@@ -634,16 +661,16 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
             {section === 'Model defaults' && (
               <div className="profile-specs-grid">
                 <div className="profile-spec-item">
-                  <span className="spec-label">Primäres Modell</span>
+                  <span className="spec-label">{t('agentPanels.primaryModel')}</span>
                   <strong className="spec-value">{text(current?.model) || 'gpt-5.5'}</strong>
                 </div>
                 <div className="profile-spec-item">
-                  <span className="spec-label">Fallback-Modell</span>
+                  <span className="spec-label">{t('agentPanels.fallbackModel')}</span>
                   <strong className="spec-value">gemini-2.5-flash</strong>
                 </div>
                 <div className="profile-spec-item full-width">
-                  <span className="spec-label">Auflösung</span>
-                  <p className="spec-desc">Anfragen ohne explizite Modellangabe nutzen das hier hinterlegte Modell. Bei Ratelimits oder Ausfällen greift automatisch der Fallback-Kanal.</p>
+                  <span className="spec-label">{t('agentPanels.hint')}</span>
+                  <p className="spec-desc">{t('agentPanels.resolveDescription')}</p>
                 </div>
               </div>
             )}
@@ -655,6 +682,7 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
 }
 
 export function NativeMemoryMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
+  const { t } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const memoryState = useApiState(() => window.lastbrowser.sidekick.getMemory(), [ready], ready);
   const superState = useApiState(() => window.lastbrowser.sidekick.getSupermemoryStatus(), [ready], ready);
@@ -692,9 +720,9 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
   }
 
   async function addDocument(): Promise<void> {
-    const title = window.prompt('Document title', 'Memory note');
+    const title = window.prompt(t('agentPanels.documentTitlePrompt'), t('memory.title'));
     if (!title?.trim()) return;
-    const content = window.prompt('Document content', '') || '';
+    const content = window.prompt(t('agentPanels.documentContentPrompt'), '') || '';
     await window.lastbrowser.sidekick.addSupermemoryDocument({ title: title.trim(), content });
     await docsState.refresh();
   }
@@ -706,7 +734,7 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
   }
 
   async function forgetDocument(): Promise<void> {
-    if (!selectedDocument || !window.confirm(`Forget ${titleOf(selectedDocument)}?`)) return;
+    if (!selectedDocument || !window.confirm(t('agentPanels.forgetDocumentConfirm', { name: titleOf(selectedDocument) }))) return;
     await window.lastbrowser.sidekick.forgetSupermemoryDocument({ id: idOf(selectedDocument) });
     setSelectedDocument(null);
     setDocumentDetail(null);
@@ -715,7 +743,7 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
 
   return (
     <section className="browser-main native-rest-main memory-main">
-      <NativeHeader icon={<Brain size={21} />} title="Memory" kicker="Memory" detail="Core memory sections, Supermemory status/list/search and hybrid search in native UI." loading={memoryState.loading} ready={ready} onRefresh={memoryState.refresh} />
+      <NativeHeader icon={<Brain size={21} />} title={t('memory.title')} kicker={t('memory.kicker')} detail={t('memory.detail')} loading={memoryState.loading} ready={ready} onRefresh={memoryState.refresh} />
       <AdvancedWebUiTools panel="memory" serviceStatus={serviceStatus} compact />
       <ErrorLine
         error={[memoryState.error, superState.error, docsState.error]
@@ -723,7 +751,12 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
           .join(' | ')}
       />
       <div className="native-card-actions insights-tabs">
-        {['Core memory', 'User facts', 'Supermemory', 'Hybrid search'].map((item) => (
+        {[
+          ['Core memory', t('memory.coreMemory')],
+          ['User facts', t('memory.userFacts')],
+          ['Supermemory', t('memory.supermemory')],
+          ['Hybrid search', t('memory.hybridSearch')]
+        ].map(([item, label]) => (
           <button
             key={item}
             type="button"
@@ -733,7 +766,7 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
               setSection(item === 'User facts' ? 'user' : 'memory');
             }}
           >
-            {item}
+            {label}
           </button>
         ))}
       </div>
@@ -741,66 +774,69 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
         {(focus === 'Supermemory' || focus === 'Hybrid search') && (
           <section className="native-work-card memory-super">
             <header>
-              <strong>{focus}</strong>
+              <strong>{focus === 'Supermemory' ? t('memory.supermemory') : t('memory.hybridSearch')}</strong>
               <div className="native-card-actions">
-                <button type="button" onClick={() => void addDocument()} disabled={!ready}><Plus size={13} />Add</button>
-                <button type="button" className="danger" onClick={() => void forgetDocument()} disabled={!ready || !selectedDocument}><Trash2 size={13} />Forget</button>
+                <button type="button" onClick={() => void addDocument()} disabled={!ready}><Plus size={13} />{t('memory.add')}</button>
+                <button type="button" className="danger" onClick={() => void forgetDocument()} disabled={!ready || !selectedDocument}><Trash2 size={13} />{t('memory.forget')}</button>
               </div>
             </header>
             {superState.data?.configured === false ? (
               <div className="memory-unconfigured-note">
                 <Brain size={16} />
-                <span>Supermemory ist noch nicht konfiguriert. Du kannst Standard-Notizen speichern oder einen API-Schlüssel in den Einstellungen hinterlegen.</span>
+                <span>{t('agentPanels.supermemoryNotConfigured')}</span>
               </div>
             ) : (
               <div className="memory-status-badge">
                 <span className="online-dot" />
-                <span>Supermemory verbunden ({arrayFrom(docsState.data, ['results', 'documents', 'items']).length} Dokumente)</span>
+                <span>{t('agentPanels.supermemoryConnected', { count: arrayFrom(docsState.data, ['results', 'documents', 'items']).length })}</span>
               </div>
             )}
-            <div className="native-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search memory..." /></div>
+            <div className="native-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('agentPanels.memorySearchPlaceholder')} /></div>
             <div className="native-card-actions">
-              <button type="button" onClick={() => void runSearch('super')} disabled={!ready || !search.trim()}><Search size={13} /><span>Super Search</span></button>
-              <button type="button" onClick={() => void runSearch('hybrid')} disabled={!ready || !search.trim()}><Sparkles size={13} /><span>Hybrid Search</span></button>
+              <button type="button" onClick={() => void runSearch('super')} disabled={!ready || !search.trim()}><Search size={13} /><span>{t('memory.supermemory')} {t('memory.search')}</span></button>
+              <button type="button" onClick={() => void runSearch('hybrid')} disabled={!ready || !search.trim()}><Sparkles size={13} /><span>{t('memory.hybridSearch')}</span></button>
             </div>
             <div className="compact-list">
               {[...results, ...arrayFrom(docsState.data, ['results', 'documents', 'items']).slice(0, results.length ? 0 : 8)].map((item) => (
                 <article key={idOf(item)} className={idOf(item) === idOf(selectedDocument || {}) ? 'active' : ''} onClick={() => void openDocument(item)}><strong>{titleOf(item)}</strong><span>{text(item.content || item.text || item.id)}</span></article>
               ))}
             </div>
-            <pre>{documentDetail ? jsonPreview(documentDetail) : 'Select a Supermemory document to inspect the full payload.'}</pre>
+            <pre>{documentDetail ? jsonPreview(documentDetail) : t('agentPanels.supermemorySelectDocument')}</pre>
           </section>
         )}
         <section className="native-work-card memory-editor">
           <header>
             <div className="settings-section-nav">
-              {['memory', 'user'].map((item) => <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>)}
+              {[
+                ['memory', t('memory.coreMemory')],
+                ['user', t('memory.userFacts')]
+              ].map(([item, label]) => <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{label}</button>)}
             </div>
-            <button type="button" onClick={() => void save()} disabled={!ready}><Save size={13} />Save</button>
+            <button type="button" onClick={() => void save()} disabled={!ready}><Save size={13} />{t('common.save')}</button>
           </header>
           <textarea value={draft} onChange={(event) => setDraft(event.target.value)} />
         </section>
         {!(focus === 'Supermemory' || focus === 'Hybrid search') && (
           <section className="native-work-card memory-super">
             <header>
-              <strong>Supermemory</strong>
+              <strong>{t('memory.supermemory')}</strong>
               <div className="native-card-actions">
-                <button type="button" onClick={() => void addDocument()} disabled={!ready}><Plus size={13} />Add</button>
-                <button type="button" className="danger" onClick={() => void forgetDocument()} disabled={!ready || !selectedDocument}><Trash2 size={13} />Forget</button>
+                <button type="button" onClick={() => void addDocument()} disabled={!ready}><Plus size={13} />{t('memory.add')}</button>
+                <button type="button" className="danger" onClick={() => void forgetDocument()} disabled={!ready || !selectedDocument}><Trash2 size={13} />{t('memory.forget')}</button>
               </div>
             </header>
             <pre>{jsonPreview(superState.data || {})}</pre>
-            <div className="native-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search memory..." /></div>
+            <div className="native-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('agentPanels.memorySearchPlaceholder')} /></div>
             <div className="native-card-actions">
-              <button type="button" onClick={() => void runSearch('super')} disabled={!ready || !search.trim()}><Search size={13} /><span>Super Search</span></button>
-              <button type="button" onClick={() => void runSearch('hybrid')} disabled={!ready || !search.trim()}><Sparkles size={13} /><span>Hybrid Search</span></button>
+              <button type="button" onClick={() => void runSearch('super')} disabled={!ready || !search.trim()}><Search size={13} /><span>{t('memory.supermemory')} {t('memory.search')}</span></button>
+              <button type="button" onClick={() => void runSearch('hybrid')} disabled={!ready || !search.trim()}><Sparkles size={13} /><span>{t('memory.hybridSearch')}</span></button>
             </div>
             <div className="compact-list">
               {[...results, ...arrayFrom(docsState.data, ['results', 'documents', 'items']).slice(0, results.length ? 0 : 8)].map((item) => (
                 <article key={idOf(item)} className={idOf(item) === idOf(selectedDocument || {}) ? 'active' : ''} onClick={() => void openDocument(item)}><strong>{titleOf(item)}</strong><span>{text(item.content || item.text || item.id)}</span></article>
               ))}
             </div>
-            <pre>{documentDetail ? jsonPreview(documentDetail) : 'Select a Supermemory document to inspect the full payload.'}</pre>
+            <pre>{documentDetail ? jsonPreview(documentDetail) : t('agentPanels.supermemorySelectDocument')}</pre>
           </section>
         )}
       </div>

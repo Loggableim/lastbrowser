@@ -12,7 +12,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -672,15 +674,135 @@ def test_provider_alias_resolution():
     assert auth_mod.resolve_provider("agy") == "antigravity"
 
 
-def test_chat_start_route_rotates_antigravity_accounts(pool_env):
-    """The /api/chat/start handler picks the next account when none is pinned."""
+def _chat_start_session(model_provider="antigravity"):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        session_id="antigravity-chat-session",
+        profile="default",
+        workspace="C:/workspace",
+        model="gemini-3-flash-preview",
+        model_provider=model_provider,
+        active_stream_id=None,
+        messages=[],
+        context_messages=[],
+        pending_user_message=None,
+    )
+
+
+def _stub_chat_start(monkeypatch, session, forwarded):
+    from types import SimpleNamespace
+    from web.api import routes
+
+    monkeypatch.setattr(routes, "get_session", lambda _sid: session)
+    monkeypatch.setattr(routes, "resolve_trusted_workspace", lambda value: value)
+    monkeypatch.setattr(
+        routes,
+        "_resolve_compatible_session_model_state",
+        lambda model, provider: (model, provider, False),
+    )
+    monkeypatch.setattr(
+        routes,
+        "resolve_active_provider_context",
+        lambda: {"provider": "antigravity", "model": session.model},
+    )
+    monkeypatch.setattr(routes, "_game_mode_guard_payload_for_model", lambda *a, **k: None)
+    monkeypatch.setattr("web.api.goals.has_active_goal", lambda *a, **k: False)
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: None)
+    monkeypatch.setattr(
+        routes,
+        "_start_chat_stream_for_session",
+        lambda *args, **kwargs: forwarded.append(kwargs) or {"stream_id": "stream-1"},
+    )
+    monkeypatch.setattr(routes, "j", lambda _handler, payload, **_kwargs: payload)
+    return routes._handle_chat_start
+
+
+def test_chat_start_route_rotates_accounts_across_sequential_unpinned_requests(pool_env, monkeypatch):
+    """The actual /api/chat/start route selects and forwards one account per request."""
     _add_account("alpha@example.com")
     _add_account("beta@example.com")
-    # Simulate what the route does for an unpinned request:
-    first = ag.select_next_account_email()
-    second = ag.select_next_account_email()
-    assert first != second
-    assert {first, second} == {"alpha@example.com", "beta@example.com"}
+    session = _chat_start_session()
+    forwarded = []
+    handle_chat_start = _stub_chat_start(monkeypatch, session, forwarded)
+
+    first = handle_chat_start(
+        SimpleNamespace(headers={}),
+        {"session_id": session.session_id, "message": "first", "workspace": session.workspace},
+    )
+    second = handle_chat_start(
+        SimpleNamespace(headers={}),
+        {"session_id": session.session_id, "message": "second", "workspace": session.workspace},
+    )
+
+    assert first["stream_id"] == second["stream_id"] == "stream-1"
+    choices = [call["google_account_email"] for call in forwarded]
+    assert choices == ["alpha@example.com", "beta@example.com"]
+    assert all(call["model_provider"] == "antigravity" for call in forwarded)
+
+
+def test_chat_start_route_pinned_account_bypasses_round_robin(pool_env, monkeypatch):
+    _add_account("alpha@example.com")
+    _add_account("beta@example.com")
+    from web.api import routes
+
+    def unexpected_rotation():
+        pytest.fail("a pinned account must not advance round-robin")
+
+    monkeypatch.setattr(ag, "select_next_account_email", unexpected_rotation)
+    session = _chat_start_session()
+    forwarded = []
+    handle_chat_start = _stub_chat_start(monkeypatch, session, forwarded)
+
+    response = handle_chat_start(
+        SimpleNamespace(headers={}),
+        {
+            "session_id": session.session_id,
+            "message": "pinned request",
+            "workspace": session.workspace,
+            "provider_account_email": "BETA@example.com",
+        },
+    )
+
+    assert response["stream_id"] == "stream-1"
+    assert len(forwarded) == 1
+    assert forwarded[0]["google_account_email"] == "beta@example.com"
+    assert forwarded[0]["model_provider"] == "antigravity"
+
+
+def test_chat_start_account_choice_reaches_runtime_worker_once(pool_env, monkeypatch):
+    """The selected route account is forwarded unchanged to one runtime worker."""
+    from web.api import routes
+
+    session = _chat_start_session()
+    session.pending_started_at = 0.0
+    session.save = lambda: None
+    runtime_calls = []
+    monkeypatch.setattr(routes, "_get_session_agent_lock", lambda _sid: nullcontext())
+    monkeypatch.setattr(routes, "activate_kanban_orchestration", lambda *a, **k: None)
+    monkeypatch.setattr(routes, "_prepare_chat_start_session_for_stream", lambda *a, **k: None)
+    monkeypatch.setattr(routes, "create_stream_channel", object)
+    monkeypatch.setattr(routes, "set_last_workspace", lambda _workspace: None)
+    monkeypatch.setattr(
+        routes,
+        "_run_agent_streaming",
+        lambda *args, **kwargs: runtime_calls.append(kwargs["google_account_email"]),
+    )
+
+    response = routes._start_chat_stream_for_session(
+        session,
+        msg="test runtime handoff",
+        attachments=[],
+        workspace=session.workspace,
+        model=session.model,
+        model_provider="antigravity",
+        google_account_email="beta@example.com",
+    )
+
+    assert response["stream_id"]
+    assert runtime_calls == ["beta@example.com"]
+    with routes.STREAMS_LOCK:
+        routes.STREAMS.pop(response["stream_id"], None)
 
 
 def test_client_uses_pool_tokens_and_project(pool_env):

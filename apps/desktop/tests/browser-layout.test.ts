@@ -67,6 +67,19 @@ describe('browser shell layout', () => {
     expect(browserView).toContain('height: 100%');
   });
 
+  it('keeps start page dashboard text readable in the light theme', () => {
+    const css = readRendererFile('styles.css');
+
+    expect(cssBlock(css, 'html.theme-light .browser-start-page')).toContain('color: var(--lb-text)');
+    expect(cssBlock(css, 'html.theme-light .startpage-clock')).toContain('#0f172a');
+    expect(cssBlock(css, 'html.theme-light .startpage-date,\nhtml.theme-light .startpage-subline')).toContain('#475569');
+    expect(cssBlock(css, 'html.theme-light .startpage-greeting')).toContain('color: #0c1624');
+    expect(cssBlock(css, 'html.theme-light .startpage-palette-trigger')).toContain('color: #334155');
+    expect(cssBlock(css, 'html.theme-light .startpage-quick-chips .quick-chips-label')).toContain('color: #475569');
+    expect(cssBlock(css, 'html.theme-light .startpage-chip-btn')).toContain('color: #334155');
+    expect(cssBlock(css, 'html.theme-light .browser-start-search input')).toContain('color: var(--lb-text)');
+  });
+
   it('renders visited websites inside a full-height browser webview frame', () => {
     const source = readRendererFile('App.tsx');
 

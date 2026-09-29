@@ -5160,6 +5160,47 @@ html.theme-light select optgroup {
   padding: 2px 4px;
 }
 
+/* The start page uses dark-theme colors in its dashboard widgets by default.
+   Override them explicitly in light mode so text remains readable on the
+   light page and hero surfaces. */
+html.theme-light .browser-start-page {
+  color: var(--lb-text);
+}
+
+html.theme-light .startpage-clock {
+  background-image: linear-gradient(135deg, #0f172a 40%, #0369a1 100%);
+  -webkit-text-fill-color: transparent;
+}
+
+html.theme-light .startpage-date,
+html.theme-light .startpage-subline {
+  color: #475569;
+}
+
+html.theme-light .startpage-greeting {
+  color: #0c1624;
+}
+
+html.theme-light .startpage-palette-trigger {
+  border-color: rgba(12, 22, 36, 0.14);
+  background: rgba(12, 22, 36, 0.04);
+  color: #334155;
+}
+
+html.theme-light .startpage-quick-chips .quick-chips-label {
+  color: #475569;
+}
+
+html.theme-light .startpage-chip-btn {
+  border-color: rgba(12, 22, 36, 0.12);
+  background: rgba(12, 22, 36, 0.04);
+  color: #334155;
+}
+
+html.theme-light .browser-start-search input {
+  color: var(--lb-text);
+}
+
 .quick-chips-label {
   display: inline-flex;
   align-items: center;

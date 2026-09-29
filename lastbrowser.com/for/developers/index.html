@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lastbrowser für Entwickler – ConPTY Terminal, MCP &amp; Local LLMs</title>
+<meta name="description" content="Der Browser für Software-Entwickler: Integriertes ConPTY PowerShell-Terminal, Terminal Doctor Diagnose, Model Context Protocol (MCP) und lokale Ollama-Modelle.">
+<meta property="og:title" content="Lastbrowser für Entwickler – Der AI-Native Browser">
+<meta property="og:description" content="Kommandozeile direkt in der Seitenleiste, OpenAPI Extraktor, MCP Server und 100% Offline-Unterstützung.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/for/developers/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/for/developers/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/for/developers/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/for/developers/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/for/developers/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<script src="/assets/js/theme.js"></script>
+</head>
+<body>
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>für Entwickler</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/for/developers/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/for/developers/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/for/developers/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/for/developers/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/for/developers/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/for/developers/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/for/developers/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main">
+  <section class="hero">
+    <div class="container">
+      <div class="pill-badge">Built for Software Engineers &amp; DevOps</div>
+      <h1>Der Browser, der <span class="grad">wie eine IDE</span> denkt</h1>
+      <p class="lead">Schluss mit dem ständigen Alt-Tab zwischen Dokumentation, Web-App und Terminal. Lastbrowser integriert ein echtes ConPTY Windows-Terminal, OpenAPI-Extraktoren und Model Context Protocol (MCP) direkt in den Browser.</p>
+      
+      <div class="cta-group">
+        <a href="/download/" class="btn btn-primary btn-lg">Lastbrowser für Entwickler herunterladen</a>
+        <a href="/docs/terminal/" class="btn btn-ghost btn-lg">Terminal-Dokumentation lesen</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="container" style="padding: 20px 0 60px;">
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="fc-icon blue">💻</div>
+        <h3>Echtes ConPTY Terminal</h3>
+        <p>Ein vollwertiges Windows Pseudo-Terminal in der Seitenleiste. Führen Sie <code>git</code>, <code>npm</code>, <code>cargo</code> oder <code>docker</code> direkt neben laufenden Localhost-Apps aus (<code>Ctrl+\`</code>).</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon purple">🩺</div>
+        <h3>Terminal Doctor</h3>
+        <p>Automatische Fehlerdiagnose bei fehlgeschlagenen Builds oder Stacktraces. Der integrierte Doctor analysiert Fehlermeldungen und schlägt Reparatur-Befehle vor.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon green">🔌</div>
+        <h3>Model Context Protocol (MCP)</h3>
+        <p>Verbinden Sie lokale und externe MCP-Server (PostgreSQL, Filesystem, GitHub) mit einem Klick. Geben Sie der KI direkten Zugriff auf Ihre Entwickler-Werkzeuge.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon yellow">🦙</div>
+        <h3>100% Offline via Ollama</h3>
+        <p>Arbeiten Sie offline im Flugzeug oder in Hochsicherheitsnetzen. Binden Sie lokale Ollama-Modelle (Llama 3, DeepSeek Coder, Qwen) latency-frei ein.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon pink">📄</div>
+        <h3>OpenAPI &amp; GraphQL Extraktor</h3>
+        <p>Nova AI erkennt API-Dokumentationen auf Webseiten automatisch und exportiert saubere TypeScript-Typen, curl-Befehle oder Postman-Collections.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon blue">🪐</div>
+        <h3>Isolierte Localhost-Spaces</h3>
+        <p>Testen Sie Frontend und Backend unter verschiedenen Authentifizierungsrollen gleichzeitig auf <code>localhost:3000</code>, ohne Cookies manuell löschen zu müssen.</p>
+      </div>
+    </div>
+
+    <!-- Code Block Demo -->
+    <div class="feature-card" style="margin-top:50px;">
+      <h3>1-Klick MCP Server Anbindung</h3>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:16px;">Konfigurieren Sie MCP-Server in Ihrer <code>mcp_servers.json</code> direkt unter <code>%APPDATA%\Lastbrowser</code>:</p>
+      <div class="code-block" style="margin:0;">
+        <div class="code-header">
+          <span>mcp_servers.json</span>
+          <button class="copy-btn" data-copy='{ "mcpServers": { "postgres": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"] } } }'>Kopieren</button>
+        </div>
+        <pre><code>{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Projekte"]
+    }
+  }
+}</code></pre>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

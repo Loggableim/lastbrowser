@@ -1,65 +1,303 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lastbrowser — Navigateur AI-natif pour Windows</title>
-<meta name="description" content="Lastbrowser v0.1.34 est disponible pour Windows. 100% Local-First avec Nova AI.">
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: #0a0e17;
-    color: #e2e8f0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 24px;
-    text-align: center;
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lastbrowser – Le Navigateur IA-Natif pour Windows avec Nova AI &amp; 48 Workflows</title>
+<meta name="description" content="Lastbrowser : Navigateur Chromium ultra-rapide et privé pour Windows avec Nova AI, 48 workflows d'agents, terminal ConPTY PowerShell intégré, Widevine DRM L3 et Espaces isolés. 100% Local-First.">
+<meta property="og:title" content="Lastbrowser – Le Navigateur IA-Natif pour Windows avec Nova AI">
+<meta property="og:description" content="Navigateur Chromium rapide et privé pour Windows avec Nova AI, 48 flux d'agents, terminal ConPTY et Espaces isolés. 100% Local-First.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/fr/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/fr/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/">
+<link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/">
+<link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/">
+<link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/">
+<link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/">
+<link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<script src="/assets/js/theme.js"></script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Lastbrowser",
+  "operatingSystem": "Windows 10, Windows 11 (x64)",
+  "applicationCategory": "BrowserApplication",
+  "softwareVersion": "0.1.34 Beta",
+  "description": "Navigateur Chromium IA-natif pour Windows avec Nova AI, terminal ConPTY, Widevine DRM L3 et Espaces multi-comptes isolés.",
+  "downloadUrl": "https://lastbrowser.com/fr/download/",
+  "offers": {
+    "@type": "Offer",
+    "price": "0.00",
+    "priceCurrency": "EUR"
   }
-  .container { max-width: 600px; }
-  .logo { font-size: 28px; font-weight: 800; letter-spacing: -.03em; margin-bottom: 8px; }
-  .logo span { background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .tagline { font-size: 15px; color: #94a3b8; margin-bottom: 30px; }
-  h1 { font-size: clamp(32px, 6vw, 48px); font-weight: 700; letter-spacing: -.04em; line-height: 1.15; margin-bottom: 16px; }
-  h1 span { background: linear-gradient(135deg, #00E5FF, #2563eb); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  p { font-size: 16px; line-height: 1.7; color: #94a3b8; margin-bottom: 32px; max-width: 520px; }
-  .btn-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px; }
-  .btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 12px 24px; border-radius: 12px;
-    background: linear-gradient(135deg, #2563eb, #7c3aed);
-    color: #fff; font-size: 15px; font-weight: 600;
-    text-decoration: none; transition: transform .15s, box-shadow .15s;
-  }
-  .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(37,99,235,.3); }
-  .btn-ghost { background: rgba(30,41,59,.7); border: 1px solid #334155; }
-  .footer { margin-top: 36px; font-size: 13px; color: #475569; }
-  .footer a { color: #64748b; text-decoration: none; margin: 0 8px; }
-  .footer a:hover { color: #94a3b8; }
-</style>
+}
+</script>
 </head>
 <body>
-  <div class="container">
-    <div class="logo"><span>lastbrowser</span></div>
-    <div class="tagline">Navigateur AI-Natif · Windows 10 &amp; 11</div>
-    <h1>Disponible dès <span>maintenant</span>.</h1>
-    <p>Lastbrowser v0.1.34 est disponible : un navigateur Chromium rapide et privé pour Windows avec Nova AI intégrée et 100% Local-First.</p>
-    <div class="btn-group">
-      <a class="btn" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.34/Lastbrowser-0.1.34-x64-setup.exe">
-        Télécharger v0.1.34 (.exe)
-      </a>
-      <a class="btn btn-ghost" href="/en/">
-        English Version
-      </a>
+<a href="#main" class="skip-link">Aller au contenu principal</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/fr/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>v0.1.34 Beta · IA-Natif</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/fr/features/">Fonctionnalités</a>
+      <a href="/spaces/">Espaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">Hub MCP</a>
+      <a href="/docs/">Documentation</a>
+      <a href="/fr/enterprise/">Entreprise</a>
+      <a href="/fr/download/">Télécharger</a>
     </div>
-    <div class="footer">
-      <a href="https://github.com/Loggableim/lastbrowser" target="_blank" rel="noopener">GitHub</a> ·
-      <a href="/en/privacy/">Confidentialité</a> ·
-      <a href="/en/support/">Support</a>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Choisir la langue">🇫🇷 FR ▾</button>
+        <div class="lang-menu">
+          <a href="/" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/" class="active" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Changer de thème">☀️</button>
+      <a href="/fr/download/" class="btn btn-primary btn-sm">Télécharger (.exe)</a>
+      <button class="mobile-toggle" aria-label="Ouvrir le menu">☰</button>
     </div>
   </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/fr/features/">Fonctionnalités</a>
+  <a href="/spaces/">Espaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">Hub MCP</a>
+  <a href="/docs/">Documentation</a>
+  <a href="/fr/enterprise/">Entreprise</a>
+  <a href="/fr/download/">Télécharger</a>
+  <a href="/fr/imprint/">Mentions Légales</a>
+</div>
+
+<main id="main">
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="pill-badge">🚀 v0.1.34 Beta Disponible · Terminal ConPTY &amp; Espaces</div>
+      <h1>Le Navigateur IA-Natif pour Windows. <span class="grad">100% Local-First.</span></h1>
+      <p class="lead">
+        Bien plus qu'un simple habillage web. Lastbrowser unit la vitesse brute de Chromium au copilote Nova AI, 48 workflows d'agents préconfigurés, un terminal Windows ConPTY PowerShell intégré, le DRM Castlabs Widevine L3 et une isolation rigoureuse des sessions dans des Espaces.
+      </p>
+
+      <div class="cta-group">
+        <a href="/fr/download/" class="btn btn-primary btn-lg">
+          ⬇️ Télécharger pour Windows (v0.1.34 Beta)
+        </a>
+        <a href="/fr/features/" class="btn btn-ghost btn-lg">Découvrir les Fonctionnalités</a>
+      </div>
+      <p class="sub-cta-note">
+        Gratuit et Open Source pour un usage personnel · Aucun compte requis · Windows 10 &amp; 11 (64-Bit)
+      </p>
+    </div>
+
+    <!-- Screenshot Showcase -->
+    <div class="container showcase-container">
+      <div class="showcase-nav">
+        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-zen-sidebar.png" data-title="Barre Latérale Zen &amp; Espaces" data-desc="Barre d'onglets verticale avec cloisonnement visuel des espaces, épinglage d'applications web et indicateurs audio.">
+          🪐 Barre Zen &amp; Espaces
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-2-copilot-splitview.png" data-title="Copilote Nova AI en Vue Divisée" data-desc="Travaillez en écran partagé 70/30 : Nova extrait des données web, écrit du code et résume des articles scientifiques.">
+          🤖 Nova AI Split-View
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-4-conpty-terminal.png" data-title="Terminal ConPTY PowerShell Intégré" data-desc="Pseudo-console native Windows dans la barre latérale : exécutez Git, SSH, Python, npm et Terminal Doctor.">
+          💻 Terminal ConPTY
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-3-tab-intelligence.png" data-title="Intelligence des Onglets &amp; Économie RAM" data-desc="Mise en veille automatique des onglets inactifs économisant jusqu'à 60% de RAM sans couper l'audio d'arrière-plan.">
+          ⚡ Gestion de la Mémoire
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-5-webextensions.png" data-title="Extensions Chrome MV3 &amp; Hub MCP" data-desc="Extensions Chrome combinées à 48 flux de travail d'agents basés sur le protocole Model Context Protocol (MCP).">
+          🧩 Extensions &amp; Hub MCP
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-6-privacy-shield.png" data-title="Bouclier de Confidentialité Local-First" data-desc="Zéro télémétrie involontaire. Mots de passe, cookies et clés d'API chiffrés avec Windows DPAPI dans %APPDATA%\Lastbrowser.">
+          🛡️ Bouclier Privé
+        </button>
+      </div>
+
+      <div class="showcase-window">
+        <div class="window-titlebar">
+          <div class="window-dots">
+            <span class="dot-red"></span>
+            <span class="dot-yellow"></span>
+            <span class="dot-green"></span>
+          </div>
+          <div class="omnibox-mock">
+            <span>https://lastbrowser.com/workspace/spaces/active</span>
+            <span class="omnibox-shield">🔒 100% Local-First · Chiffré DPAPI</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);">Lastbrowser Win32 Shell</div>
+        </div>
+        <div class="showcase-view">
+          <img id="showcase-image" src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Interface Lastbrowser" width="1920" height="1080">
+        </div>
+        <div class="showcase-footer">
+          <div>
+            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Barre Latérale Zen &amp; Espaces</strong>
+            <span id="showcase-desc" style="color:var(--muted);font-size:13px;">Barre d'onglets verticale avec cloisonnement visuel des espaces, épinglage d'applications web et indicateurs audio.</span>
+          </div>
+          <a href="/fr/features/" class="btn btn-ghost btn-sm">En savoir plus ➔</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Grid Section -->
+  <section class="container" style="padding: 80px 0 60px;">
+    <div class="section-header">
+      <h2>Conçu pour les Développeurs, Créateurs &amp; Power Users</h2>
+      <p>Découvrez pourquoi Lastbrowser est bien plus qu'un simple navigateur : une véritable station de travail pour Windows.</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="fc-icon blue">💻</div>
+        <h3>Terminal ConPTY Natif</h3>
+        <p>Une authentique pseudo-console Windows intégrée directement dans le rail du navigateur (<code>Ctrl+\`</code>). Exécutez PowerShell, CMD, Git, npm, Python ou des modèles Ollama sans quitter votre contexte.</p>
+        <span class="badge badge-cyan" style="margin-top:14px;">Natif Windows</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon purple">🪐</div>
+        <h3>Espaces Multi-Comptes</h3>
+        <p>Cloisonnement total des cookies, caches et du stockage local via <code>persist:profile:space</code>. Basculez en un clic entre comptes personnels et professionnels dans la même fenêtre.</p>
+        <span class="badge badge-purple" style="margin-top:14px;">Isolation Réelle</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon pink">🎬</div>
+        <h3>Castlabs Widevine DRM L3</h3>
+        <p>Lecture multimédia en Full HD pour Spotify, Netflix, Disney+ et Prime Video grâce au module officiel Castlabs Electron Widevine CDM.</p>
+        <span class="badge badge-cyan" style="margin-top:14px;">Prêt pour le Streaming HD</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon green">🤖</div>
+        <h3>Nova AI &amp; Modèle BYOK</h3>
+        <p>Apportez vos propres clés (BYOK) : Gemini CLI Multi-Account, Claude, OpenAI ou fonctionnement 100% hors-ligne avec Ollama local. Aucun abonnement cloud obligatoire.</p>
+        <span class="badge badge-green" style="margin-top:14px;">Bring Your Own Key</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon yellow">⚡</div>
+        <h3>48 Workflows d'Agents &amp; MCP</h3>
+        <p>Compétences intégrées pour synthétiser des articles scientifiques, extraire des schémas OpenAPI, déboguer des regex et connecter des serveurs MCP externes en 1 clic.</p>
+        <span class="badge badge-yellow" style="margin-top:14px;">Model Context Protocol</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon blue">🛡️</div>
+        <h3>Zéro Télémétrie Involontaire</h3>
+        <p>Votre historique, vos onglets et vos identifiants ne quittent jamais votre PC. Tout réside en local dans <code>%APPDATA%\Lastbrowser</code> sous la protection de Windows DPAPI.</p>
+        <span class="badge badge-cyan" style="margin-top:14px;">100% RGPD &amp; Local</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Banner -->
+  <section class="cta-banner">
+    <div class="container">
+      <h2>Prêt pour la Prochaine Évolution de la Navigation ?</h2>
+      <p>Téléchargez Lastbrowser dès aujourd'hui pour Windows 10 &amp; 11 et découvrez le futur de la productivité assistée par IA locale.</p>
+      <div class="cta-group">
+        <a href="/fr/download/" class="btn btn-primary btn-lg">Télécharger Gratuitement</a>
+        <a href="/fr/enterprise/" class="btn btn-ghost btn-lg">Licences Entreprise</a>
+      </div>
+      <p class="sub-cta-note" style="margin-top:14px;">Déploiements professionnels &amp; flottes : <strong>rainer@dominik.in</strong></p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>Navigateur IA-Natif</span></div>
+      </div>
+      <p>Le navigateur Chromium moderne pour Windows 10 &amp; 11 avec IA native, 48 workflows et terminal ConPTY. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Licences Commerciales : <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produit</h4>
+      <ul>
+        <li><a href="/fr/features/">Fonctionnalités &amp; Matrice</a></li>
+        <li><a href="/spaces/">Espaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">Terminal ConPTY</a></li>
+        <li><a href="/hub/">Hub Extensions &amp; MCP</a></li>
+        <li><a href="/fr/download/">Télécharger pour Windows</a></li>
+        <li><a href="/roadmap/">Feuille de Route</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Comparatifs (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressources</h4>
+      <ul>
+        <li><a href="/docs/">Documentation</a></li>
+        <li><a href="/shortcuts/">Raccourcis Clavier</a></li>
+        <li><a href="/blog/">Blog d'Ingénierie</a></li>
+        <li><a href="/security/">Livre Blanc Sécurité &amp; DPAPI</a></li>
+        <li><a href="/releases/">Archive des Versions</a></li>
+        <li><a href="/press/">Kit Presse</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Légal &amp; Contact</h4>
+      <ul>
+        <li><a href="/fr/imprint/">Mentions Légales (§ 5 DDG)</a></li>
+        <li><a href="/fr/privacy/">Politique de Confidentialité</a></li>
+        <li><a href="/fr/enterprise/">Licences Entreprise</a></li>
+        <li><a href="/fr/support/">Centre d'Assistance</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Projet Lastbrowser. Tous droits réservés. Zéro Télémétrie Involontaire.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">Flux RSS</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
 </body>
 </html>

@@ -4,407 +4,300 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lastbrowser – The AI-Native Windows Browser with Nova AI &amp; 48 Agentic Workflows</title>
-<meta name="description" content="Lastbrowser: Ultra-fast, private Chromium browser for Windows with Nova AI (choose its name &amp; personality), 48 curated agentic workflows, Unified Extension &amp; Skill Hub (Chrome MV3 + MCP), and a native ConPTY terminal. 100% Local-First.">
+<meta name="description" content="Lastbrowser: Ultra-fast, private Chromium browser for Windows with Nova AI, 48 curated agentic workflows, native ConPTY PowerShell terminal, Widevine DRM L3, and isolated Spaces. 100% Local-First.">
 <meta property="og:title" content="Lastbrowser – The AI-Native Windows Browser with Nova AI">
-<meta property="og:description" content="Fast, private Chromium browser for Windows with Nova AI, 48 curated agentic workflows, and a Unified Extension &amp; Skill Hub (MV3 + MCP). 100% Local-First.">
+<meta property="og:description" content="Fast, private Chromium browser for Windows with Nova AI, 48 curated agentic workflows, ConPTY terminal, and isolated Spaces. 100% Local-First.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lastbrowser.com/en/">
-<meta property="og:image" content="https://lastbrowser.com/assets/sidekick/sidekick-mascot-512.png">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="canonical" href="https://lastbrowser.com/en/">
 <link rel="alternate" hreflang="de" href="https://lastbrowser.com/">
 <link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/">
+<link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/">
+<link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/">
+<link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/">
+<link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/">
+<link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/">
 <link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap');
 
-:root {
-  --nearBlack:#070A12; --midnight:#07111F; --surface:#101827; --panel:#0E1628; --stroke:#2A3550;
-  --text:#F7FAFF; --muted:#AAB4C6; --electricBlue:#2563FF; --cyan:#00E5FF; --magenta:#FF2D8F;
-  --purple:#8A3FFC; --yellow:#FFC800; --green:#7CFF6B;
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<script src="/assets/js/theme.js"></script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Lastbrowser",
+  "operatingSystem": "Windows 10, Windows 11 (x64)",
+  "applicationCategory": "BrowserApplication",
+  "softwareVersion": "0.1.34 Beta",
+  "description": "AI-native Chromium browser for Windows with Nova AI, ConPTY terminal, Widevine DRM L3, and Multi-Account Spaces.",
+  "downloadUrl": "https://lastbrowser.com/en/download/",
+  "offers": {
+    "@type": "Offer",
+    "price": "0.00",
+    "priceCurrency": "USD"
+  }
 }
-*{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-body{
-  background:radial-gradient(circle at 18% 0%,rgba(37,99,255,.2),transparent 30%),
-             radial-gradient(circle at 85% 10%,rgba(255,45,143,.14),transparent 28%),
-             radial-gradient(circle at 50% 60%,rgba(0,229,255,.06),transparent 40%),
-             linear-gradient(180deg,#060913 0%,#070B14 50%,#05070D 100%);
-  color:var(--text);font-family:Inter,"Segoe UI",system-ui,-apple-system,sans-serif;
-  line-height:1.6;overflow-x:hidden;-webkit-font-smoothing:antialiased;
-}
-body:before{
-  content:"";position:fixed;inset:0;pointer-events:none;opacity:.65;
-  background-image:radial-gradient(circle,rgba(0,229,255,.035) 1px,transparent 1px);
-  background-size:24px 24px;z-index:0;
-}
-.container{width:min(1160px,calc(100% - 40px));margin:0 auto;position:relative;z-index:2}
-a{color:var(--cyan);text-decoration:none}
-a:hover{text-decoration:underline}
-h1,h2,h3,h4{font-family:Outfit,Inter,sans-serif;font-weight:700}
-
-/* Nav */
-nav{position:sticky;top:0;z-index:30;backdrop-filter:blur(20px);background:rgba(7,10,18,.82);border-bottom:1px solid rgba(42,53,80,.68)}
-nav .inner{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0}
-.logo{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
-.logo img{width:42px;height:42px;border-radius:11px;border:1px solid rgba(42,53,80,.9);box-shadow:0 0 16px rgba(37,99,255,.25)}
-.logo strong{display:block;font-size:18px;letter-spacing:-.02em}
-.logo span{display:block;color:var(--cyan);font-size:12px;margin-top:2px;font-weight:600}
-.links{display:flex;gap:20px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.links a{color:var(--muted);font-size:14px;font-weight:600;transition:.2s color}
-.links a:hover{color:var(--text);text-decoration:none}
-
-/* Buttons */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:12px 22px;border-radius:14px;text-decoration:none;font-weight:700;font-size:15px;border:1px solid transparent;transition:all .2s ease;cursor:pointer}
-.btn:hover{transform:translateY(-2px);text-decoration:none}
-.btn-primary{color:#fff;background:linear-gradient(135deg,var(--electricBlue),var(--purple));box-shadow:0 12px 28px rgba(37,99,255,.3)}
-.btn-primary:hover{box-shadow:0 16px 36px rgba(37,99,255,.45)}
-.btn-ghost{background:rgba(16,24,39,.85);border-color:var(--stroke);color:var(--text)}
-.btn-ghost:hover{border-color:var(--cyan);color:var(--cyan)}
-.btn-sm{padding:8px 16px;font-size:13px;border-radius:10px}
-
-/* Hero */
-.hero{padding:70px 0 50px;text-align:center}
-.pill-badge{display:inline-flex;gap:8px;align-items:center;margin-bottom:22px;padding:8px 16px;border-radius:999px;border:1px solid rgba(0,229,255,.35);background:rgba(0,229,255,.08);color:var(--cyan);font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:800}
-.hero h1{margin:0 auto 20px;max-width:880px;font-size:clamp(40px,6.2vw,70px);line-height:1.05;letter-spacing:-.045em}
-.grad{background:linear-gradient(90deg,var(--cyan),var(--electricBlue),var(--magenta));-webkit-background-clip:text;background-clip:text;color:transparent}
-.hero p.lead{margin:0 auto 34px;max-width:680px;color:var(--muted);font-size:clamp(16px,2vw,19px);line-height:1.7}
-.cta-group{display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:18px}
-.sub-cta-note{color:var(--muted);font-size:13px}
-
-/* Interactive Screenshot Showcase */
-.showcase-container{margin:40px auto 0;max-width:1100px}
-.showcase-nav{display:flex;justify-content:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
-.sc-btn{padding:10px 18px;border-radius:12px;background:rgba(16,24,39,.8);border:1px solid rgba(42,53,80,.8);color:var(--muted);font-weight:700;font-size:13px;cursor:pointer;transition:all .2s ease;display:inline-flex;align-items:center;gap:8px}
-.sc-btn:hover{color:var(--text);border-color:rgba(0,229,255,.4);transform:translateY(-1px)}
-.sc-btn.active{background:linear-gradient(135deg,rgba(37,99,255,.25),rgba(0,229,255,.15));border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 16px rgba(0,229,255,.2)}
-.showcase-window{border-radius:20px;background:linear-gradient(180deg,rgba(16,24,39,.98),rgba(7,10,18,.98));border:1px solid rgba(42,53,80,.85);overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.7)}
-.window-titlebar{height:42px;background:rgba(7,10,18,.95);display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid rgba(42,53,80,.6)}
-.window-dots{display:flex;gap:8px}
-.window-dots span{width:11px;height:11px;border-radius:50%;display:inline-block}
-.dot-red{background:#ff5f56} .dot-yellow{background:#ffbd2e} .dot-green{background:#27c93f}
-.omnibox-mock{flex:1;max-width:560px;margin:0 16px;background:rgba(16,24,39,.9);border:1px solid rgba(42,53,80,.7);border-radius:8px;padding:5px 14px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
-.omnibox-shield{color:var(--green);font-weight:600;font-size:11px}
-.showcase-view{position:relative;background:#05070d;display:flex;justify-content:center;align-items:center;min-height:360px}
-.showcase-view img{width:100%;height:auto;display:block;opacity:1;transition:opacity .25s ease-in-out}
-.showcase-view img.fade-out{opacity:0}
-.showcase-footer{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:rgba(11,18,32,.95);border-top:1px solid rgba(42,53,80,.7);flex-wrap:wrap;gap:12px}
-
-/* Features Grid */
-.features-section{padding:90px 0 60px}
-.section-header{text-align:center;max-width:720px;margin:0 auto 50px}
-.section-header h2{font-size:clamp(30px,4.5vw,46px);letter-spacing:-.03em;margin-bottom:14px}
-.section-header p{color:var(--muted);font-size:17px}
-.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:20px}
-.feature-card{background:linear-gradient(180deg,rgba(16,24,39,.95),rgba(11,18,32,.9));border:1px solid rgba(42,53,80,.68);border-radius:20px;padding:28px;transition:border-color .25s,transform .2s;position:relative;overflow:hidden}
-.feature-card:hover{border-color:rgba(0,229,255,.45);transform:translateY(-3px)}
-.fc-icon{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:22px;margin-bottom:18px}
-.fc-icon.blue{background:rgba(37,99,255,.15);border:1px solid rgba(37,99,255,.3);color:var(--cyan)}
-.fc-icon.purple{background:rgba(138,63,252,.15);border:1px solid rgba(138,63,252,.3);color:var(--purple)}
-.fc-icon.pink{background:rgba(255,45,143,.15);border:1px solid rgba(255,45,143,.3);color:var(--magenta)}
-.fc-icon.yellow{background:rgba(255,200,0,.15);border:1px solid rgba(255,200,0,.3);color:var(--yellow)}
-.fc-icon.green{background:rgba(124,255,107,.15);border:1px solid rgba(124,255,107,.3);color:var(--green)}
-.feature-card h3{font-size:20px;margin-bottom:10px}
-.feature-card p{color:var(--muted);font-size:14px;line-height:1.65}
-.feature-tag{display:inline-block;margin-top:14px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;text-transform:uppercase;letter-spacing:.05em}
-
-/* Models Section */
-.models-section{padding:50px 0 70px}
-.models-card{background:linear-gradient(180deg,rgba(16,24,39,.9),rgba(11,18,32,.9));border:1px solid rgba(42,53,80,.68);border-radius:24px;padding:36px;display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
-.model-chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
-.model-chip{background:rgba(16,24,39,.9);border:1px solid rgba(42,53,80,.8);padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
-.chip-dot{width:8px;height:8px;border-radius:50%;background:var(--cyan)}
-
-/* Specs Section */
-.specs-section{padding:50px 0 80px}
-.specs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-top:30px}
-.spec-box{background:rgba(16,24,39,.7);border:1px solid rgba(42,53,80,.6);border-radius:16px;padding:22px}
-.spec-box h4{color:var(--cyan);font-size:14px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
-.spec-box p{color:var(--text);font-size:16px;font-weight:600}
-
-/* CTA Bottom */
-.cta-banner{padding:80px 0;text-align:center;background:radial-gradient(circle at 50% 50%,rgba(37,99,255,.15),transparent 65%)}
-.cta-banner h2{font-size:clamp(32px,5vw,50px);letter-spacing:-.035em;margin-bottom:16px}
-.cta-banner p{color:var(--muted);font-size:17px;max-width:540px;margin:0 auto 28px}
-
-/* Footer */
-footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--muted);font-size:14px}
-.footer-row{display:flex;justify-content:space-between;gap:20px;align-items:center;flex-wrap:wrap}
-.footer-links{display:flex;gap:22px;flex-wrap:wrap}
-.footer-links a{color:var(--muted)}
-.footer-links a:hover{color:var(--text)}
-
-@media(max-width:980px){
-  .preview-body{grid-template-columns:1fr;min-height:auto}
-  .preview-sidebar,.preview-copilot{display:none}
-  .models-card{grid-template-columns:1fr}
-}
-</style>
+</script>
 </head>
 <body>
+<a href="#main" class="skip-link">Skip to main content</a>
 
 <nav>
   <div class="container inner">
     <a href="/en/" class="logo">
-      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
       <div><strong>Lastbrowser</strong><span>v0.1.34 Beta · AI-Native</span></div>
     </a>
-    <div class="links">
-      <a href="/en/" class="active">Home</a>
-      <a href="/en/features/">Features &amp; Comparison</a>
+    <div class="nav-links">
+      <a href="/en/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Docs</a>
+      <a href="/en/enterprise/">Enterprise</a>
       <a href="/en/download/">Download</a>
-      <a href="/en/changelog/">Changelog</a>
-      <a href="/en/support/">Support &amp; FAQ</a>
-      <a href="/en/privacy/">Privacy</a>
-      <a href="/">Deutsch (DE)</a>
-      <a class="btn btn-primary btn-sm" href="/en/download/">Download Beta (.exe)</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Choose language">🇬🇧 EN ▾</button>
+        <div class="lang-menu">
+          <a href="/" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/" class="active" data-lang="en">🇬🇧 English</a>
+          <a href="/es/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">☀️</button>
+      <a href="/en/download/" class="btn btn-primary btn-sm">Download (.exe)</a>
+      <button class="mobile-toggle" aria-label="Open menu">☰</button>
     </div>
   </div>
 </nav>
 
-<header class="hero">
-  <div class="container">
-    <div class="pill-badge">✦ Public Beta for Windows · Version 0.1.34</div>
-    <h1>The Windows browser with <span class="grad">Nova AI, Spaces &amp; 48 Workflows</span>.</h1>
-    <p class="lead">Lastbrowser unifies an ultra-fast, resource-efficient Chromium browser with Nova AI, separate Space sessions, and Widevine DRM support. Available now as a direct public beta—zero cloud lock-in, total data sovereignty.</p>
-    
-    <div class="cta-group">
-      <a class="btn btn-primary" href="/en/download/">
-        <span>Download Windows Installer (Beta .exe)</span>
-      </a>
-      <a class="btn btn-ghost" href="/en/features/">
-        <span>Explore Features &amp; Comparison</span>
-      </a>
-      <a class="btn btn-ghost" href="https://github.com/Loggableim/lastbrowser" target="_blank" rel="noopener">GitHub Repo</a>
-    </div>
-    <div class="sub-cta-note">Direct download for Windows 10 &amp; 11 · Public GitHub version 0.1.34</div>
+<div class="mobile-drawer">
+  <a href="/en/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Docs</a>
+  <a href="/en/enterprise/">Enterprise</a>
+  <a href="/en/download/">Download</a>
+  <a href="/en/imprint/">Imprint</a>
+</div>
 
-    <!-- Interactive Screenshot Showcase -->
-    <div class="showcase-container">
+<main id="main">
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="pill-badge">🚀 v0.1.34 Beta Released · ConPTY Terminal &amp; Spaces</div>
+      <h1>The AI-Native Browser for Windows. <span class="grad">100% Local-First.</span></h1>
+      <p class="lead">
+        Not just another web wrapper. Lastbrowser merges Chromium speed with Nova AI Copilot, 48 curated agentic workflows, embedded ConPTY Windows terminal, Castlabs Widevine DRM L3, and true session isolation in Spaces.
+      </p>
+
+      <div class="cta-group">
+        <a href="/en/download/" class="btn btn-primary btn-lg">
+          ⬇️ Download for Windows (v0.1.34 Beta)
+        </a>
+        <a href="/en/features/" class="btn btn-ghost btn-lg">Explore Features</a>
+      </div>
+      <p class="sub-cta-note">
+        Free &amp; Open Source for Personal Use · No Account Required · Windows 10 &amp; 11 (64-Bit)
+      </p>
+    </div>
+
+    <!-- Screenshot Showcase -->
+    <div class="container showcase-container">
       <div class="showcase-nav">
-        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-zen-sidebar.png" data-title="Collapsible Zen Sidebar &amp; Spaces" data-desc="Complete session isolation per Space (Work, Personal, Research) with vertical tabs and 48px slim dock.">🧭 Zen Sidebar &amp; Spaces</button>
-        <button class="sc-btn" data-img="/assets/screenshots/store-screen-2-copilot-splitview.png" data-title="Nova AI Copilot &amp; Split-View" data-desc="70% Web left, 30% Nova AI right. Grounding anchors, cross-referencing, and total model freedom (Gemini CLI, Claude, OpenAI, Ollama).">🤖 Nova AI Split-View</button>
-        <button class="sc-btn" data-img="/assets/screenshots/store-screen-4-conpty-terminal.png" data-title="Native ConPTY PowerShell Terminal" data-desc="Full Windows PowerShell terminal right inside the sidebar (Ctrl+`). Includes 1-click system diagnostics via doctor.">💻 ConPTY Dev-Terminal</button>
-        <button class="sc-btn" data-img="/assets/screenshots/store-screen-5-webextensions.png" data-title="Unified Extension &amp; MCP Skill Hub" data-desc="Chrome MV3 WebExtensions and Model Context Protocol (MCP) servers for external agent tools united under Ctrl+Shift+X.">🧩 Extension &amp; MCP Hub</button>
+        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-zen-sidebar.png" data-title="Zen Sidebar &amp; Spaces" data-desc="Vertical tab rail with clear visual space partitioning, web app pins, and audio indicators.">
+          🪐 Zen Sidebar &amp; Spaces
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-2-copilot-splitview.png" data-title="Nova AI Copilot in Split-View" data-desc="Work in a 70/30 split view: Nova extracts web insights, writes code, and summarizes research papers.">
+          🤖 Nova AI Split-View
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-4-conpty-terminal.png" data-title="Embedded ConPTY PowerShell Terminal" data-desc="Native Windows pseudo-console in the sidebar: run Git, SSH, Python, npm, and Terminal Doctor.">
+          💻 ConPTY Terminal
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-3-tab-intelligence.png" data-title="Tab Intelligence &amp; Discarding" data-desc="Automatic memory discarding for inactive tabs saves up to 60% RAM without interrupting background audio.">
+          ⚡ Tab Intelligence
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-5-webextensions.png" data-title="Unified Extension &amp; MCP Hub" data-desc="Chrome MV3 WebExtensions combined with 48 Model Context Protocol (MCP) agentic workflows.">
+          🧩 Extension &amp; MCP Hub
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-6-privacy-shield.png" data-title="Local-First Privacy Shield" data-desc="Zero involuntary telemetry. Passwords, cookies, and API keys are stored encrypted in %APPDATA%\Lastbrowser.">
+          🛡️ Privacy Shield
+        </button>
       </div>
 
       <div class="showcase-window">
         <div class="window-titlebar">
           <div class="window-dots">
-            <span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span>
+            <span class="dot-red"></span>
+            <span class="dot-yellow"></span>
+            <span class="dot-green"></span>
           </div>
           <div class="omnibox-mock">
-            <span id="scOmnibox">https://lastbrowser.com/en/features/spaces</span>
-            <span class="omnibox-shield">🛡️ Ad blocking · Widevine DRM support</span>
+            <span>https://lastbrowser.com/workspace/spaces/active</span>
+            <span class="omnibox-shield">🔒 100% Local-First · DPAPI Encrypted</span>
           </div>
-          <div style="font-size:12px;color:var(--cyan);font-weight:600">v0.1.34 Beta</div>
+          <div style="font-size:12px;color:var(--muted);">Lastbrowser Win32 Shell</div>
         </div>
         <div class="showcase-view">
-          <img id="scImage" src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Lastbrowser Showcase">
+          <img id="showcase-image" src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Lastbrowser UI" width="1920" height="1080">
         </div>
         <div class="showcase-footer">
           <div>
-            <strong id="scTitle" style="font-size:16px;color:var(--text)">Collapsible Zen Sidebar &amp; Spaces</strong>
-            <p id="scDesc" style="color:var(--muted);font-size:13px;margin-top:4px">Complete session isolation per Space (Work, Personal, Research) with vertical tabs and 48px slim dock.</p>
+            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Zen Sidebar &amp; Spaces</strong>
+            <span id="showcase-desc" style="color:var(--muted);font-size:13px;">Vertical tab rail with clear visual space partitioning, web app pins, and audio indicators.</span>
           </div>
-          <a class="btn btn-ghost btn-sm" href="/en/features/">Explore in Feature Deep-Dives →</a>
+          <a href="/en/features/" class="btn btn-ghost btn-sm">Learn more ➔</a>
         </div>
       </div>
     </div>
+  </section>
 
-  </div>
-</header>
-
-<section id="features" class="features-section">
-  <div class="container">
+  <!-- Features Grid Section -->
+  <section class="container" style="padding: 80px 0 60px;">
     <div class="section-header">
-      <h2>Engineered for <span class="grad">Focus, Speed &amp; Productivity</span></h2>
-      <p>Lastbrowser eliminates horizontal tab clutter, disjointed external chat windows, and fragmented developer tooling.</p>
+      <h2>Engineered for Developers, Creators &amp; Power Users</h2>
+      <p>Discover why Lastbrowser is much more than a standard browser: a multi-tool workstation for Windows.</p>
     </div>
 
-    <div class="features-grid">
-      <article class="feature-card">
-        <div class="fc-icon blue">🧭</div>
-        <h3>Collapsible Zen Sidebar</h3>
-        <p>Reclaim your visual canvas. Three flexible states: 240px Expanded with vertical tabs, 48px Slim Dock for rapid tool switching, or 0px Zen focus mode via Ctrl+B shortcut.</p>
-        <span class="feature-tag" style="background:rgba(37,99,255,.1);color:var(--cyan)">Zen Browser Synthesis</span>
-      </article>
-
-      <article class="feature-card">
-        <div class="fc-icon purple">🤖</div>
-        <h3>Nova AI – Your Assistant, Your Personality</h3>
-        <p>70% web canvas on the left, 30% Nova AI on the right. In the setup wizard you choose its name (Nova, Jarvis, Aria …) and personality – "Pragmatic &amp; Direct", "Inquisitive &amp; Thorough", "Creative &amp; Visionary", or "Technical &amp; Precise" – which flows directly into the system prompt and greeting.</p>
-        <span class="feature-tag" style="background:rgba(138,63,252,.1);color:var(--purple)">Multi-Model · Live-Discovery</span>
-      </article>
-
-      <article class="feature-card">
-        <div class="fc-icon cyan">⚡</div>
-        <h3>48 Agentic Workflows – 4 Categories</h3>
-        <p>Curated specialist skills in a structured mega-menu: <strong>Research &amp; Deep Analysis</strong> (competitor comparison, fact-checking, paper summarizer), <strong>Content &amp; Docs</strong> (executive summary, social threads, expert translation), <strong>Code &amp; Engineering</strong> (security audit, OpenAPI extractor, test generator), and <strong>Data &amp; Automation</strong> (table export, lead extractor, page audit).</p>
-        <span class="feature-tag" style="background:rgba(0,229,255,.1);color:var(--cyan)">12 Skills × 4 Categories</span>
-      </article>
-
-      <article class="feature-card">
-        <div class="fc-icon yellow">💻</div>
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="fc-icon blue">💻</div>
         <h3>Native ConPTY Terminal</h3>
-        <p>Real Windows PowerShell and an interactive agent TUI right inside your browser sidebar. Includes 1-click system diagnostics and auto-fixes with the built-in <code>doctor</code> command.</p>
-        <span class="feature-tag" style="background:rgba(255,200,0,.1);color:var(--yellow)">PowerShell &amp; TUI</span>
-      </article>
-
-      <article class="feature-card">
-        <div class="fc-icon green">🧩</div>
-        <h3>Unified Extension &amp; Skill Hub</h3>
-        <p>Two pillars under one roof (<code>Ctrl+Shift+X</code>): <strong>🌐 Chrome MV3 WebExtensions</strong> – Dark Reader, uBlock Origin Lite, Bitwarden via 1-click or Web Store URL – and <strong>⚡ Nova AI Skills &amp; MCP Tools</strong> – connect any external MCP server (stdio/sse) via <code>mcp_servers.json</code>, compatible with the Claude Desktop ecosystem.</p>
-        <span class="feature-tag" style="background:rgba(124,255,107,.1);color:var(--green)">MV3 + MCP Open Standard</span>
-      </article>
-
-      <article class="feature-card">
-        <div class="fc-icon pink">🛡️</div>
-        <h3>100% Local-First Privacy</h3>
-        <p>Your data belongs to you. History, passwords, cookies, and SQLite databases remain strictly local in <code>%APPDATA%\Lastbrowser</code>. Zero telemetry. Store Policy 10.2 compliant.</p>
-        <span class="feature-tag" style="background:rgba(255,45,143,.1);color:var(--magenta)">Zero Cloud Tracking</span>
-      </article>
-
-      <article class="feature-card">
-        <div class="fc-icon blue">🗂️</div>
-        <h3>Isolated Spaces &amp; Sessions</h3>
-        <p>Complete per-space session partitioning (e.g. Personal, Work, Research). Separate login states, cookies, and local data keep workflows isolated without session spillover.</p>
-        <span class="feature-tag" style="background:rgba(37,99,255,.1);color:var(--cyan)">100% Partition Isolation</span>
-      </article>
-
-      <article class="feature-card">
-        <div class="fc-icon purple">🍿</div>
-        <h3>Castlabs Widevine DRM</h3>
-        <p>Castlabs Electron and Widevine CDM integration for compatible protected media. Playback depends on the requirements of each streaming service.</p>
-        <span class="feature-tag" style="background:rgba(138,63,252,.1);color:var(--purple)">Netflix · Disney+ · DRM L3</span>
-      </article>
-    </div>
-  </div>
-</section>
-
-<section id="models" class="models-section">
-  <div class="container">
-    <div class="models-card">
-      <div>
-        <h2>Bring Your Own Key (BYOK) <span class="grad">Total Model Freedom</span></h2>
-        <p style="color:var(--muted);margin-top:12px;font-size:15px;line-height:1.7">
-          Lastbrowser never forces you into proprietary recurring subscriptions. Use your existing Google Gemini CLI credentials with multi-account round-robin and live model discovery (including quota badges), or provide your personal API keys for Anthropic and OpenAI. For absolute offline privacy, local Ollama models are fully supported.
-        </p>
-        <div class="model-chips">
-          <div class="model-chip"><span class="chip-dot"></span> Google Gemini CLI (Live-Discovery + Quota)</div>
-          <div class="model-chip"><span class="chip-dot"></span> Claude 3.5 Sonnet</div>
-          <div class="model-chip"><span class="chip-dot"></span> OpenAI GPT-4o &amp; o3-mini</div>
-          <div class="model-chip"><span class="chip-dot"></span> Local Offline Models (Ollama)</div>
-        </div>
+        <p>A true Windows pseudo-console directly inside the browser rail (<code>Ctrl+\`</code>). Run PowerShell, CMD, Git, npm, Python, or local Ollama models without leaving your flow.</p>
+        <span class="badge badge-cyan" style="margin-top:14px;">Windows Native</span>
       </div>
-      <div style="background:rgba(7,10,18,.8);border:1px solid rgba(42,53,80,.7);border-radius:18px;padding:24px">
-        <h4 style="color:var(--yellow);margin-bottom:12px">⚡ Multi-Account Load Balancing</h4>
-        <p style="color:var(--muted);font-size:13px;line-height:1.6">
-          Register multiple Google accounts: Lastbrowser balances queries cyclically and automatically fails over to the next account when quota limits (HTTP 429) are reached—keeping your workflows uninterrupted.
-        </p>
+
+      <div class="feature-card">
+        <div class="fc-icon purple">🪐</div>
+        <h3>Multi-Account Spaces</h3>
+        <p>Fully partitioned cookie jars, caches, and storage via <code>persist:profile:space</code>. Seamlessly switch between personal and work accounts inside the same window.</p>
+        <span class="badge badge-purple" style="margin-top:14px;">True Session Isolation</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon pink">🎬</div>
+        <h3>Castlabs Widevine DRM L3</h3>
+        <p>Full HD streaming playback for Spotify, Netflix, Disney+, and Prime Video powered by Castlabs Electron Widevine CDM integration.</p>
+        <span class="badge badge-cyan" style="margin-top:14px;">HD Streaming Ready</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon green">🤖</div>
+        <h3>Nova AI &amp; BYOK</h3>
+        <p>Bring your own key: Gemini CLI Multi-Account, Claude, OpenAI, or 100% offline with local Ollama models. No cloud subscription locks.</p>
+        <span class="badge badge-green" style="margin-top:14px;">Bring Your Own Key</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon yellow">⚡</div>
+        <h3>48 Agentic Workflows &amp; MCP</h3>
+        <p>Curated skills for scientific paper summarization, OpenAPI extraction, regex debugging, and 1-click external MCP servers (PostgreSQL, Filesystem).</p>
+        <span class="badge badge-yellow" style="margin-top:14px;">Model Context Protocol</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon blue">🛡️</div>
+        <h3>Zero Involuntary Telemetry</h3>
+        <p>Your browsing history, tabs, and credentials never leave your PC. Everything stays local in <code>%APPDATA%\Lastbrowser</code>, protected by Windows DPAPI.</p>
+        <span class="badge badge-cyan" style="margin-top:14px;">100% GDPR &amp; Privacy</span>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<section id="specs" class="specs-section">
-  <div class="container">
-    <div class="section-header">
-      <h2>System Requirements &amp; Architecture</h2>
-      <p>Engineered for low resource overhead, high stability, and seamless Windows integration.</p>
+  <!-- CTA Banner -->
+  <section class="cta-banner">
+    <div class="container">
+      <h2>Ready for the Next Evolution of Browsing?</h2>
+      <p>Download Lastbrowser today for Windows 10 &amp; 11 and experience the future of local-first AI productivity.</p>
+      <div class="cta-group">
+        <a href="/en/download/" class="btn btn-primary btn-lg">Download for Free</a>
+        <a href="/en/enterprise/" class="btn btn-ghost btn-lg">Commercial Licensing</a>
+      </div>
+      <p class="sub-cta-note" style="margin-top:14px;">Business inquiries &amp; fleet rollout: <strong>rainer@dominik.in</strong></p>
     </div>
-
-    <div class="specs-grid">
-      <div class="spec-box">
-        <h4>Operating System</h4>
-        <p>Windows 10 (Build 17763+) &amp; Windows 11 (64-bit)</p>
-      </div>
-      <div class="spec-box">
-        <h4>Browser Engine</h4>
-        <p>Chromium (Electron 37) with Multi-Process Sandboxing</p>
-      </div>
-      <div class="spec-box">
-        <h4>System Memory</h4>
-        <p>4 GB RAM (8 GB recommended) · Smart Tab Discarding</p>
-      </div>
-      <div class="spec-box">
-        <h4>Local Runtime</h4>
-        <p>Integrated Python 3.12 Runtime + ConPTY Terminal</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="cta-banner">
-  <div class="container">
-    <h2>Ready for the <span class="grad">Next-Generation Browser</span>?</h2>
-    <p>Download the public Windows Beta (v0.1.34) and take control with native AI assistance, isolated spaces, and hardware DRM media streaming.</p>
-    <div class="cta-group">
-      <a class="btn btn-primary" href="/en/download/">
-        <span>Go to Download Hub (.exe &amp; Portable)</span>
-      </a>
-      <a class="btn btn-ghost" href="/en/features/">
-        <span>View Browser Comparison Matrix</span>
-      </a>
-    </div>
-  </div>
-</section>
+  </section>
+</main>
 
 <footer>
-  <div class="container footer-row">
-    <div>© 2026 Lastbrowser Project · Local-First AI Web Browser</div>
-    <div class="footer-links">
-      <a href="/en/features/">Features &amp; Comparison</a>
-      <a href="/en/download/">Download</a>
-      <a href="/en/changelog/">Changelog</a>
-      <a href="/en/support/">Support &amp; FAQ</a>
-      <a href="/en/privacy/">Privacy Policy</a>
-      <a href="/">German Version</a>
-      <a href="https://github.com/Loggableim/lastbrowser" target="_blank" rel="noopener">GitHub</a>
-      <a href="mailto:support@lastbrowser.com">support@lastbrowser.com</a>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>The modern Chromium browser for Windows 10 &amp; 11 with native AI, 48 workflows, and ConPTY terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="/en/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/en/download/">Download for Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Compare (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Resources</h4>
+      <ul>
+        <li><a href="/docs/">Documentation</a></li>
+        <li><a href="/shortcuts/">Keyboard Shortcuts</a></li>
+        <li><a href="/blog/">Engineering Blog</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release Archive</a></li>
+        <li><a href="/press/">Press Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Legal &amp; Contact</h4>
+      <ul>
+        <li><a href="/en/imprint/">Imprint &amp; Legal (§ 5 DDG)</a></li>
+        <li><a href="/en/privacy/">Privacy Policy</a></li>
+        <li><a href="/en/enterprise/">Enterprise Licensing</a></li>
+        <li><a href="/en/support/">Support Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. All rights reserved. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
     </div>
   </div>
 </footer>
 
-<script>
-  (function() {
-    const buttons = document.querySelectorAll('.sc-btn');
-    const img = document.getElementById('scImage');
-    const title = document.getElementById('scTitle');
-    const desc = document.getElementById('scDesc');
-    const omnibox = document.getElementById('scOmnibox');
-
-    const omniboxMap = {
-      'store-screen-1-zen-sidebar.png': 'https://lastbrowser.com/en/features/spaces',
-      'store-screen-2-copilot-splitview.png': 'https://lastbrowser.com/en/features/nova-ai',
-      'store-screen-4-conpty-terminal.png': 'https://lastbrowser.com/en/features/terminal',
-      'store-screen-5-webextensions.png': 'https://lastbrowser.com/en/features/extensions-mcp'
-    };
-
-    buttons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        buttons.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        const newSrc = btn.getAttribute('data-img');
-        const newTitle = btn.getAttribute('data-title');
-        const newDesc = btn.getAttribute('data-desc');
-
-        img.classList.add('fade-out');
-        setTimeout(() => {
-          img.src = newSrc;
-          title.textContent = newTitle;
-          desc.textContent = newDesc;
-          const key = newSrc.split('/').pop();
-          if (omniboxMap[key]) {
-            omnibox.textContent = omniboxMap[key];
-          }
-          img.classList.remove('fade-out');
-        }, 120);
-      });
-    });
-  })();
-</script>
-
+<script src="/assets/js/app.js"></script>
 </body>
 </html>

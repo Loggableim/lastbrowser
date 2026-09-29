@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>機能一覧 &amp; 他ブラウザ比較マトリックス – Lastbrowser</title>
+<meta name="description" content="Lastbrowserの全機能：Nova AI Copilot、隔離Spaces、統合拡張機能 &amp; MCP Hub、Widevine DRM L3、ConPTYターミナル、およびChrome、Edge、Brave、Arcとの徹底比較。">
+<meta property="og:title" content="機能一覧 &amp; 比較マトリックス – Lastbrowser">
+<meta property="og:description" content="Lastbrowserの5大コアピラーと、Chrome、Edge、Brave、Arcに対するインタラクティブな機能比較マトリックス。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/ja/features/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/ja/features/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/features/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/features/">
+<link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/features/">
+<link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/features/">
+<link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/features/">
+<link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/features/">
+<link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/features/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/features/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<script src="/assets/js/theme.js"></script>
+</head>
+<body>
+<a href="#main" class="skip-link">メインコンテンツへスキップ</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/ja/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>機能 &amp; マトリックス</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/ja/features/" class="active">機能</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">ターミナル</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">ドキュメント</a>
+      <a href="/ja/enterprise/">法人利用</a>
+      <a href="/ja/download/">ダウンロード</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="言語選択">🇯🇵 JA ▾</button>
+        <div class="lang-menu">
+          <a href="/features/" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/features/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/features/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/features/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/features/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/features/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/features/" class="active" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="テーマ切替">☀️</button>
+      <a href="/ja/download/" class="btn btn-primary btn-sm">ダウンロード</a>
+      <button class="mobile-toggle" aria-label="メニューを開く">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/ja/features/">機能</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">ターミナル</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">ドキュメント</a>
+  <a href="/ja/enterprise/">法人利用</a>
+  <a href="/ja/download/">ダウンロード</a>
+  <a href="/ja/imprint/">法的通知</a>
+</div>
+
+<main id="main">
+  <section class="hero">
+    <div class="container">
+      <div class="pill-badge">機能マトリックス &amp; 技術仕様</div>
+      <h1>新たな基準を打ち立てる <span class="grad">エンジニアリング</span></h1>
+      <p class="lead">Lastbrowserに内蔵されたすべての先進機能を詳しく確認し、従来のブラウザとの差異を比較してください。</p>
+    </div>
+  </section>
+
+  <!-- 5 Core Pillars -->
+  <section class="container" style="padding: 20px 0 60px;">
+    <div class="section-header">
+      <h2>Lastbrowserを支える5大コアピラー</h2>
+      <p>従来のブラウザが抱えていた根本的な課題をゼロから解決するために設計されました。</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="fc-icon blue">💻</div>
+        <h3>1. ネイティブConPTYターミナル</h3>
+        <p>サイドバーに完全なWindows擬似コンソールを内蔵（<code>Ctrl+\`</code>）。PowerShell、CMD、Git、Pythonスクリプトの実行やローカルモデルの制御を、画面を切り替えずに行えます。</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon purple">🪐</div>
+        <h3>2. 隔離されたSpaces</h3>
+        <p><code>persist:profile:space</code>により、Spaceごとにクッキー、キャッシュ、ローカルストレージを完全分離。同一サービスの複数アカウントへ同時に安全ログイン。</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon green">🤖</div>
+        <h3>3. Nova AI &amp; BYOKモデル</h3>
+        <p>Gemini CLI Multi-Account、Claude 3.5、OpenAI、またはOllamaによる完全オフライン稼働に対応。不要な月額課金に縛られることなく自由なモデル選択が可能。</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon pink">🎬</div>
+        <h3>4. DRMストリーミング再生</h3>
+        <p>公式認定Castlabs Widevine CDMモジュールを標準搭載。Spotify、Netflix、Disney+、Prime Videoの著作権保護動画をFull HDで途切れなく再生。</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon yellow">⚡</div>
+        <h3>5. 48のエージェント &amp; MCP Hub</h3>
+        <p>膨大なChrome MV3拡張機能のエコシステムに加え、48の組み込みエージェントとModel Context Protocolサーバー（PostgreSQL、Filesystemなど）を融合。</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon blue">🛡️</div>
+        <h3>100% ローカルファーストのプライバシー</h3>
+        <p>パスワード、閲覧履歴、APIトークンが外部サーバーに送信されることはありません。<code>%APPDATA%\Lastbrowser</code>にDPAPIで暗号化保護されます。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Comparison Filter & Table -->
+  <section class="container" style="padding: 20px 0 80px;">
+    <div class="section-header">
+      <h2>インタラクティブ機能比較マトリックス</h2>
+      <p>カテゴリー別に切り替えて、Chrome、Edge、Brave、Arcとの違いを確認できます。</p>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="matrix-filter-tabs">
+      <button class="matrix-tab active" data-category="all">全機能</button>
+      <button class="matrix-tab" data-category="ai">AI &amp; エージェント</button>
+      <button class="matrix-tab" data-category="privacy">プライバシー &amp; セキュリティ</button>
+      <button class="matrix-tab" data-category="developer">開発者向けツール</button>
+      <button class="matrix-tab" data-category="multimedia">マルチメディア &amp; 性能</button>
+    </div>
+
+    <!-- Comparison Table -->
+    <div class="table-responsive">
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>機能・性能項目</th>
+            <th class="highlight">Lastbrowser</th>
+            <th>Google Chrome</th>
+            <th>Microsoft Edge</th>
+            <th>Brave</th>
+            <th>Arc Browser</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- AI Category -->
+          <tr data-category="ai">
+            <td><strong>ローカルAI / BYOKエンジン</strong></td>
+            <td class="highlight"><span class="check">✓</span> Nova AI (Ollama, Claude, Gemini, OpenAI)</td>
+            <td><span class="cross">✗</span> なし (Gemini Webのみ)</td>
+            <td><span class="cross">✗</span> Copilot Cloud強制</td>
+            <td><span class="check">✓</span> Leo AI (制限あり/Cloud)</td>
+            <td><span class="cross">✗</span> Windows開発停止</td>
+          </tr>
+          <tr data-category="ai">
+            <td><strong>統合MCPプロトコル</strong></td>
+            <td class="highlight"><span class="check">✓</span> 48エージェント + MCPサーバー</td>
+            <td><span class="cross">✗</span> なし</td>
+            <td><span class="cross">✗</span> なし</td>
+            <td><span class="cross">✗</span> なし</td>
+            <td><span class="cross">✗</span> なし</td>
+          </tr>
+          <tr data-category="ai">
+            <td><strong>70/30画面分割 AI Copilot</strong></td>
+            <td class="highlight"><span class="check">✓</span> Web文脈を理解する内蔵Copilot</td>
+            <td><span class="cross">✗</span> 個別タブのみ</td>
+            <td><span class="cross">✗</span> 簡易サイドバーのみ</td>
+            <td><span class="cross">✗</span> なし</td>
+            <td><span class="cross">✗</span> macOSのみ</td>
+          </tr>
+
+          <!-- Privacy Category -->
+          <tr data-category="privacy">
+            <td><strong>ローカルファースト構造</strong></td>
+            <td class="highlight"><span class="check">✓</span> 100% %APPDATA%保存・クラウド不要</td>
+            <td><span class="cross">✗</span> Google同期強制</td>
+            <td><span class="cross">✗</span> 広範なMSテレメトリ</td>
+            <td><span class="check">✓</span> プライバシー志向</td>
+            <td><span class="cross">✗</span> クラウド同期依存</td>
+          </tr>
+          <tr data-category="privacy">
+            <td><strong>Windows DPAPI 秘密鍵暗号化</strong></td>
+            <td class="highlight"><span class="check">✓</span> Windowsネイティブ暗号化</td>
+            <td><span class="cross">✗</span> Googleアカウント依存</td>
+            <td><span class="cross">✗</span> クラウド同期</td>
+            <td><span class="check">✓</span> ローカル保存</td>
+            <td><span class="cross">✗</span> Firebase Cloud</td>
+          </tr>
+          <tr data-category="privacy">
+            <td><strong>クッキー完全隔離のSpaces</strong></td>
+            <td class="highlight"><span class="check">✓</span> <code>persist:profile:space</code></td>
+            <td><span class="cross">✗</span> プロファイル切替が必要</td>
+            <td><span class="cross">✗</span> 別ウィンドウが必要</td>
+            <td><span class="cross">✗</span> なし</td>
+            <td><span class="cross">✗</span> 視覚的グループのみ</td>
+          </tr>
+
+          <!-- Developer Category -->
+          <tr data-category="developer">
+            <td><strong>Windows ConPTYターミナル</strong></td>
+            <td class="highlight"><span class="check">✓</span> PowerShell / CMD / WSL (Ctrl+`)</td>
+            <td><span class="cross">✗</span> なし</td>
+            <td><span class="cross">✗</span> なし</td>
+            <td><span class="cross">✗</span> なし</td>
+            <td><span class="cross">✗</span> なし</td>
+          </tr>
+          <tr data-category="developer">
+            <td><strong>Chrome MV3完全互換</strong></td>
+            <td class="highlight"><span class="check">✓</span> Chrome Web Store対応</td>
+            <td><span class="check">✓</span> 対応</td>
+            <td><span class="check">✓</span> 対応</td>
+            <td><span class="check">✓</span> 対応</td>
+            <td><span class="cross">✗</span> Windows版で不安定</td>
+          </tr>
+
+          <!-- Multimedia Category -->
+          <tr data-category="multimedia">
+            <td><strong>Castlabs Widevine DRM L3</strong></td>
+            <td class="highlight"><span class="check">✓</span> Netflix・Spotify Full HD再生</td>
+            <td><span class="check">✓</span> 対応</td>
+            <td><span class="check">✓</span> 対応 (PlayReady)</td>
+            <td><span class="check">✓</span> 対応</td>
+            <td><span class="cross">✗</span> 再生エラー多発</td>
+          </tr>
+          <tr data-category="multimedia">
+            <td><strong>インテリジェント・メモリ解放</strong></td>
+            <td class="highlight"><span class="check">✓</span> 音声を止めずに最大60%節約</td>
+            <td><span class="check">✓</span> 標準Memory Saver</td>
+            <td><span class="check">✓</span> スリープタブ</td>
+            <td><span class="check">✓</span> Memory Saver</td>
+            <td><span class="cross">✗</span> 高メモリ消費</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- CTA Banner -->
+  <section class="cta-banner">
+    <div class="container">
+      <h2>違いを今すぐ体感してみませんか？</h2>
+      <p>Windows 10 &amp; 11向けLastbrowserをダウンロードし、技術的な生産性を向上させましょう。</p>
+      <div class="cta-group">
+        <a href="/ja/download/" class="btn btn-primary btn-lg">v0.1.34 をダウンロード (.exe)</a>
+        <a href="/ja/enterprise/" class="btn btn-ghost btn-lg">法人向けライセンス</a>
+      </div>
+      <p class="sub-cta-note" style="margin-top:14px;">法人契約のお問い合わせ：<strong>rainer@dominik.in</strong></p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AIネイティブブラウザ</span></div>
+      </div>
+      <p>ネイティブAI、48のワークフロー、ConPTYターミナルを備えたWindows 10 &amp; 11向けChromiumブラウザ。100% Local-First。</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">商用ライセンス窓口: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>プロダクト</h4>
+      <ul>
+        <li><a href="/ja/features/">機能 &amp; 比較マトリックス</a></li>
+        <li><a href="/spaces/">Spaces &amp; セッション分離</a></li>
+        <li><a href="/docs/terminal/">ConPTYターミナル</a></li>
+        <li><a href="/hub/">拡張機能 &amp; MCP Hub</a></li>
+        <li><a href="/ja/download/">Windows版ダウンロード</a></li>
+        <li><a href="/roadmap/">ロードマップ</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>他ブラウザとの比較 (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>リソース</h4>
+      <ul>
+        <li><a href="/docs/">ドキュメント</a></li>
+        <li><a href="/shortcuts/">キーボードショートカット</a></li>
+        <li><a href="/blog/">エンジニアリングブログ</a></li>
+        <li><a href="/security/">セキュリティホワイトペーパー</a></li>
+        <li><a href="/releases/">リリースアーカイブ</a></li>
+        <li><a href="/press/">プレスキット</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>法務 &amp; 連絡先</h4>
+      <ul>
+        <li><a href="/ja/imprint/">法的通知 (§ 5 DDG)</a></li>
+        <li><a href="/ja/privacy/">プライバシーポリシー</a></li>
+        <li><a href="/ja/enterprise/">法人エンタープライズライセンス</a></li>
+        <li><a href="/ja/support/">サポートポータル</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. 無断転載を禁じます。不本意なテレメトリゼロ。</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSSフィード</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Öffentliche Roadmap – Lastbrowser</title>
+<meta name="description" content="Entwicklungs-Roadmap von Lastbrowser: Anstehende Meilensteine, Funktionen in Arbeit und fertiggestellte Releases.">
+<meta property="og:title" content="Lastbrowser Roadmap">
+<meta property="og:description" content="Einsicht in geplante Features: MCP GUI Editor, Canvas Mode und erweiterte Windows-Integrationen.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/roadmap/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/roadmap/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/roadmap/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/roadmap/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/roadmap/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<script src="/assets/js/theme.js"></script>
+</head>
+<body>
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>Roadmap</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/roadmap/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/roadmap/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/roadmap/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/roadmap/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/roadmap/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/roadmap/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/roadmap/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main" class="container" style="padding: 60px 0 80px;">
+  <div class="section-header">
+    <div class="pill-badge">Transparente Open-Source Entwicklung</div>
+    <h1>Öffentliche <span class="grad">Produkt-Roadmap</span></h1>
+    <p>Verfolgen Sie anstehende Meilensteine, Features in Entwicklung und bereits veröffentlichte Neuerungen.</p>
+  </div>
+
+  <div class="kanban-board">
+    <!-- Col 1: Geplant -->
+    <div class="kanban-col">
+      <div class="kanban-header">
+        <h3>📋 Geplant</h3>
+        <span class="badge badge-purple">Q4 2026 / Q1 2027</span>
+      </div>
+      <div class="kanban-items">
+        <div class="kanban-card">
+          <h4>Visual Canvas Mode</h4>
+          <p>Endloses Whiteboard für visuelles Mindmapping von Tabs, Notizen und KI-Zusammenfassungen.</p>
+        </div>
+        <div class="kanban-card">
+          <h4>Windows on ARM64 Nativ</h4>
+          <p>Vollständige native ARM64 Binaries für Snapdragon X Elite Geräte mit optimierter Akkulaufzeit.</p>
+        </div>
+        <div class="kanban-card">
+          <h4>Enterprise Central Hub</h4>
+          <p>Zentrales Administrations-Dashboard für Richtlinien-Rollout (GPO) und MCP-Server Flotten-Management.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Col 2: In Arbeit -->
+    <div class="kanban-col">
+      <div class="kanban-header">
+        <h3>⚡ In Arbeit</h3>
+        <span class="badge badge-yellow">v0.1.35</span>
+      </div>
+      <div class="kanban-items">
+        <div class="kanban-card">
+          <h4>Visueller MCP Server GUI Editor</h4>
+          <p>Grafische Oberfläche zum Testen und Konfigurieren von Model Context Protocol Servern ohne manuelles JSON-Editieren.</p>
+        </div>
+        <div class="kanban-card">
+          <h4>Erweiterter Terminal Doctor</h4>
+          <p>Tiefere Integration mit lokalen Python Virtual Environments und Docker Container Status.</p>
+        </div>
+        <div class="kanban-card">
+          <h4>Voice-To-Command</h4>
+          <p>Lokale Whisper-Spracherkennung für Sprachbefehle im Nova AI Chat ohne Cloud-Upload.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Col 3: Fertiggestellt -->
+    <div class="kanban-col">
+      <div class="kanban-header">
+        <h3>✅ Abgeschlossen</h3>
+        <span class="badge badge-green">v0.1.34 Beta</span>
+      </div>
+      <div class="kanban-items">
+        <div class="kanban-card">
+          <h4>Castlabs Widevine DRM L3</h4>
+          <p>Zertifizierter CDM-Support für Spotify, Netflix, Disney+ und Apple Music HD-Streaming.</p>
+        </div>
+        <div class="kanban-card">
+          <h4>ConPTY PowerShell Integration</h4>
+          <p>Natives Windows Pseudo-Terminal in der Seitenleiste mit voller ANSI-Unterstützung.</p>
+        </div>
+        <div class="kanban-card">
+          <h4>Multi-Account Spaces</h4>
+          <p>Vollständige Cookie- und Storage-Isolation via <code>persist:profile:space</code>.</p>
+        </div>
+        <div class="kanban-card">
+          <h4>48 Agentic Workflows</h4>
+          <p>Kuratierte Skills für Recherche, Code, Content und Tabellen in der Sidekick-Engine.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

@@ -1,25 +1,293 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://lastbrowser.com/</loc></url>
-  <url><loc>https://lastbrowser.com/download/</loc></url>
-  <url><loc>https://lastbrowser.com/features/</loc></url>
-  <url><loc>https://lastbrowser.com/changelog/</loc></url>
-  <url><loc>https://lastbrowser.com/support/</loc></url>
-  <url><loc>https://lastbrowser.com/privacy/</loc></url>
-  <url><loc>https://lastbrowser.com/sidekick/</loc></url>
-  <url><loc>https://lastbrowser.com/en/</loc></url>
-  <url><loc>https://lastbrowser.com/en/download/</loc></url>
-  <url><loc>https://lastbrowser.com/en/features/</loc></url>
-  <url><loc>https://lastbrowser.com/en/changelog/</loc></url>
-  <url><loc>https://lastbrowser.com/en/support/</loc></url>
-  <url><loc>https://lastbrowser.com/en/privacy/</loc></url>
-  <url><loc>https://lastbrowser.com/en/sidekick/</loc></url>
-  <url><loc>https://lastbrowser.com/fr/</loc></url>
-  <url><loc>https://lastbrowser.com/fr/sidekick/</loc></url>
-  <url><loc>https://lastbrowser.com/es/</loc></url>
-  <url><loc>https://lastbrowser.com/es/sidekick/</loc></url>
-  <url><loc>https://lastbrowser.com/it/</loc></url>
-  <url><loc>https://lastbrowser.com/it/sidekick/</loc></url>
-  <url><loc>https://lastbrowser.com/pt/</loc></url>
-  <url><loc>https://lastbrowser.com/pt/sidekick/</loc></url>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+
+  <!-- ========================================== -->
+  <!-- 1. HOME / PRODUCT STARTPAGE                -->
+  <!-- ========================================== -->
+  <url>
+    <loc>https://lastbrowser.com/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/"/>
+    <priority>1.0</priority>
+    <changefreq>daily</changefreq>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/en/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/"/>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/es/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/"/>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/fr/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/"/>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/it/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/"/>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/pt/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/"/>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/ja/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/"/>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- ========================================== -->
+  <!-- 2. DOWNLOAD FUNNEL                         -->
+  <!-- ========================================== -->
+  <url>
+    <loc>https://lastbrowser.com/download/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/download/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/download/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/download/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/download/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/download/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/download/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/download/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/download/"/>
+    <priority>0.95</priority>
+  </url>
+  <url><loc>https://lastbrowser.com/en/download/</loc><priority>0.9</priority></url>
+  <url><loc>https://lastbrowser.com/es/download/</loc><priority>0.85</priority></url>
+  <url><loc>https://lastbrowser.com/fr/download/</loc><priority>0.85</priority></url>
+  <url><loc>https://lastbrowser.com/it/download/</loc><priority>0.85</priority></url>
+  <url><loc>https://lastbrowser.com/pt/download/</loc><priority>0.85</priority></url>
+  <url><loc>https://lastbrowser.com/ja/download/</loc><priority>0.85</priority></url>
+
+  <!-- ========================================== -->
+  <!-- 3. FEATURES & COMPARISON MATRIX            -->
+  <!-- ========================================== -->
+  <url>
+    <loc>https://lastbrowser.com/features/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/features/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/features/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/features/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/features/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/features/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/features/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/features/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/features/"/>
+    <priority>0.9</priority>
+  </url>
+  <url><loc>https://lastbrowser.com/en/features/</loc><priority>0.85</priority></url>
+  <url><loc>https://lastbrowser.com/es/features/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/fr/features/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/it/features/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/pt/features/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/ja/features/</loc><priority>0.8</priority></url>
+
+  <!-- ========================================== -->
+  <!-- 4. ENTERPRISE & COMMERCIAL LICENSING       -->
+  <!-- ========================================== -->
+  <url>
+    <loc>https://lastbrowser.com/enterprise/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/enterprise/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/enterprise/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/enterprise/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/enterprise/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/enterprise/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/enterprise/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/enterprise/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/enterprise/"/>
+    <priority>0.9</priority>
+  </url>
+  <url><loc>https://lastbrowser.com/en/enterprise/</loc><priority>0.85</priority></url>
+  <url><loc>https://lastbrowser.com/es/enterprise/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/fr/enterprise/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/it/enterprise/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/pt/enterprise/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/ja/enterprise/</loc><priority>0.8</priority></url>
+
+  <!-- ========================================== -->
+  <!-- 5. SIDEKICK AI BACKEND & LICENSING         -->
+  <!-- ========================================== -->
+  <url>
+    <loc>https://lastbrowser.com/sidekick/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/sidekick/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/sidekick/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/sidekick/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/sidekick/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/sidekick/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/sidekick/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/sidekick/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/sidekick/"/>
+    <priority>0.85</priority>
+  </url>
+  <url><loc>https://lastbrowser.com/en/sidekick/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/es/sidekick/</loc><priority>0.75</priority></url>
+  <url><loc>https://lastbrowser.com/fr/sidekick/</loc><priority>0.75</priority></url>
+  <url><loc>https://lastbrowser.com/it/sidekick/</loc><priority>0.75</priority></url>
+  <url><loc>https://lastbrowser.com/pt/sidekick/</loc><priority>0.75</priority></url>
+  <url><loc>https://lastbrowser.com/ja/sidekick/</loc><priority>0.75</priority></url>
+
+  <!-- ========================================== -->
+  <!-- 6. SUPPORT & FAQ                           -->
+  <!-- ========================================== -->
+  <url>
+    <loc>https://lastbrowser.com/support/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/support/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/support/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/support/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/support/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/support/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/support/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/support/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/support/"/>
+    <priority>0.8</priority>
+  </url>
+  <url><loc>https://lastbrowser.com/en/support/</loc><priority>0.75</priority></url>
+  <url><loc>https://lastbrowser.com/es/support/</loc><priority>0.7</priority></url>
+  <url><loc>https://lastbrowser.com/fr/support/</loc><priority>0.7</priority></url>
+  <url><loc>https://lastbrowser.com/it/support/</loc><priority>0.7</priority></url>
+  <url><loc>https://lastbrowser.com/pt/support/</loc><priority>0.7</priority></url>
+  <url><loc>https://lastbrowser.com/ja/support/</loc><priority>0.7</priority></url>
+
+  <!-- ========================================== -->
+  <!-- 7. PRIVACY & LOCAL-FIRST GUARANTEE         -->
+  <!-- ========================================== -->
+  <url>
+    <loc>https://lastbrowser.com/privacy/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/privacy/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/privacy/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/privacy/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/privacy/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/privacy/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/privacy/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/privacy/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/privacy/"/>
+    <priority>0.8</priority>
+  </url>
+  <url><loc>https://lastbrowser.com/en/privacy/</loc><priority>0.75</priority></url>
+  <url><loc>https://lastbrowser.com/es/privacy/</loc><priority>0.7</priority></url>
+  <url><loc>https://lastbrowser.com/fr/privacy/</loc><priority>0.7</priority></url>
+  <url><loc>https://lastbrowser.com/it/privacy/</loc><priority>0.7</priority></url>
+  <url><loc>https://lastbrowser.com/pt/privacy/</loc><priority>0.7</priority></url>
+  <url><loc>https://lastbrowser.com/ja/privacy/</loc><priority>0.7</priority></url>
+
+  <!-- ========================================== -->
+  <!-- 8. IMPRINT & LEGAL (§ 5 DDG)               -->
+  <!-- ========================================== -->
+  <url>
+    <loc>https://lastbrowser.com/imprint/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/imprint/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/imprint/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/imprint/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/imprint/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/imprint/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/imprint/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/imprint/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/imprint/"/>
+    <priority>0.6</priority>
+  </url>
+  <url><loc>https://lastbrowser.com/en/imprint/</loc><priority>0.6</priority></url>
+  <url><loc>https://lastbrowser.com/es/imprint/</loc><priority>0.6</priority></url>
+  <url><loc>https://lastbrowser.com/fr/imprint/</loc><priority>0.6</priority></url>
+  <url><loc>https://lastbrowser.com/it/imprint/</loc><priority>0.6</priority></url>
+  <url><loc>https://lastbrowser.com/pt/imprint/</loc><priority>0.6</priority></url>
+  <url><loc>https://lastbrowser.com/ja/imprint/</loc><priority>0.6</priority></url>
+
+  <!-- ========================================== -->
+  <!-- 9. DOCUMENTATION PORTAL & GUIDES           -->
+  <!-- ========================================== -->
+  <url><loc>https://lastbrowser.com/docs/</loc><priority>0.85</priority></url>
+  <url><loc>https://lastbrowser.com/docs/getting-started/</loc><priority>0.85</priority></url>
+  <url><loc>https://lastbrowser.com/docs/spaces/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/docs/terminal/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/docs/mcp/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/docs/extensions/</loc><priority>0.8</priority></url>
+
+  <!-- ========================================== -->
+  <!-- 10. PRODUCT HUBS & POWER TOOLS             -->
+  <!-- ========================================== -->
+  <url><loc>https://lastbrowser.com/hub/</loc><priority>0.85</priority></url>
+  <url><loc>https://lastbrowser.com/shortcuts/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/spaces/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/roadmap/</loc><priority>0.75</priority></url>
+  <url><loc>https://lastbrowser.com/releases/</loc><priority>0.75</priority></url>
+  <url><loc>https://lastbrowser.com/security/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/press/</loc><priority>0.6</priority></url>
+  <url><loc>https://lastbrowser.com/changelog/</loc><priority>0.75</priority></url>
+  <url><loc>https://lastbrowser.com/en/changelog/</loc><priority>0.7</priority></url>
+
+  <!-- ========================================== -->
+  <!-- 11. ENGINEERING BLOG                       -->
+  <!-- ========================================== -->
+  <url><loc>https://lastbrowser.com/blog/</loc><priority>0.8</priority><changefreq>weekly</changefreq></url>
+
+  <!-- ========================================== -->
+  <!-- 12. HEAD-TO-HEAD VS COMPARISONS            -->
+  <!-- ========================================== -->
+  <url><loc>https://lastbrowser.com/vs/arc/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/vs/brave/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/vs/chrome/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/vs/edge/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/vs/zen/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/vs/opera-one/</loc><priority>0.8</priority></url>
+
+  <!-- ========================================== -->
+  <!-- 13. AUDIENCE TARGETING LANDING PAGES       -->
+  <!-- ========================================== -->
+  <url><loc>https://lastbrowser.com/for/developers/</loc><priority>0.85</priority></url>
+  <url><loc>https://lastbrowser.com/for/creators/</loc><priority>0.8</priority></url>
+  <url><loc>https://lastbrowser.com/for/multi-account/</loc><priority>0.8</priority></url>
+
 </urlset>

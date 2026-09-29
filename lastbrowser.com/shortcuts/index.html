@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tastaturkürzel Cheat-Sheet – Lastbrowser</title>
+<meta name="description" content="Übersicht aller Tastaturkürzel für Lastbrowser: Zen-Sidebar, ConPTY Terminal, Nova AI Split-View und Spaces. Interaktiv filterbar und als PDF druckbar.">
+<meta property="og:title" content="Tastaturkürzel Cheat-Sheet – Lastbrowser">
+<meta property="og:description" content="Alle Shortcuts für maximale Produktivität: ConPTY, Zen-Sidebar, Nova AI und Tab-Management.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/shortcuts/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/shortcuts/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/shortcuts/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/shortcuts/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/shortcuts/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<script src="/assets/js/theme.js"></script>
+
+<style>
+@media print {
+  nav, footer, .cta-group, .filter-box, .skip-link, .btn { display: none !important; }
+  body { background: #fff !important; color: #000 !important; }
+  .feature-card, .comparison-table-wrapper { border: 1px solid #ccc !important; box-shadow: none !important; }
+  .comparison-table th { background: #f0f0f0 !important; color: #000 !important; }
+  .comparison-table td { color: #000 !important; }
+  .kbd { background: #eee !important; color: #000 !important; border: 1px solid #999 !important; }
+}
+</style>
+</head>
+<body>
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>Shortcuts Cheat-Sheet</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/shortcuts/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/shortcuts/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/shortcuts/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/shortcuts/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/shortcuts/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/shortcuts/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/shortcuts/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main" class="container" style="padding: 60px 0 80px;">
+  <div class="section-header">
+    <div class="pill-badge">Keyboard Productivity Guide</div>
+    <h1>Tastaturkürzel <span class="grad">Cheat-Sheet</span></h1>
+    <p>Steuern Sie Lastbrowser blitzschnell ohne Maus. Alle Hotkeys sind für Windows optimiert.</p>
+    <div class="cta-group" style="margin-top:20px;">
+      <button onclick="window.print()" class="btn btn-ghost btn-sm">🖨️ Als PDF drucken</button>
+    </div>
+  </div>
+
+  <!-- Interactive Search Input -->
+  <div style="max-width: 500px; margin: 0 auto 30px;">
+    <input type="text" id="shortcut-search" placeholder="🔍 Tastenkürzel oder Aktion suchen..." 
+      style="width:100%;padding:12px 18px;border-radius:var(--radius-pill);background:rgba(16,24,39,0.8);border:1px solid var(--stroke);color:var(--text);font-size:14px;outline:none;"
+      onkeyup="filterShortcuts()">
+  </div>
+
+  <div class="comparison-table-wrapper">
+    <table class="comparison-table" id="shortcuts-table">
+      <thead>
+        <tr>
+          <th style="width:280px;">Tastenkombination</th>
+          <th>Aktion / Funktion</th>
+          <th style="width:160px;">Kategorie</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Navigation & Sidebar -->
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">B</span></td>
+          <td>Zen-Sidebar ein- oder ausblenden (Vollbild-Lesemodus)</td>
+          <td><span class="badge badge-cyan">Sidebar</span></td>
+        </tr>
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">`</span></td>
+          <td>ConPTY PowerShell-Terminal ein- oder ausblenden</td>
+          <td><span class="badge badge-purple">Terminal</span></td>
+        </tr>
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">Shift</span> + <span class="kbd">L</span></td>
+          <td>Nova AI Copilot im 70/30 Split-View ein- oder ausblenden</td>
+          <td><span class="badge badge-green">KI / Nova</span></td>
+        </tr>
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">Shift</span> + <span class="kbd">X</span></td>
+          <td>Unified Extension &amp; MCP Hub öffnen</td>
+          <td><span class="badge badge-yellow">Erweiterungen</span></td>
+        </tr>
+
+        <!-- Tabs & Fenster -->
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">T</span></td>
+          <td>Neuen Tab im aktiven Space öffnen</td>
+          <td><span class="badge badge-cyan">Tabs</span></td>
+        </tr>
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">W</span></td>
+          <td>Aktiven Tab schließen</td>
+          <td><span class="badge badge-cyan">Tabs</span></td>
+        </tr>
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">Shift</span> + <span class="kbd">T</span></td>
+          <td>Zuletzt geschlossenen Tab im aktiven Space wiederherstellen</td>
+          <td><span class="badge badge-cyan">Tabs</span></td>
+        </tr>
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">Tab</span></td>
+          <td>Zum nächsten geöffneten Tab wechseln</td>
+          <td><span class="badge badge-cyan">Tabs</span></td>
+        </tr>
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">1</span> ... <span class="kbd">9</span></td>
+          <td>Direkt zu Tab 1 bis 9 im aktiven Space springen</td>
+          <td><span class="badge badge-cyan">Tabs</span></td>
+        </tr>
+
+        <!-- Browsing & Seiten -->
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">L</span></td>
+          <td>Adress- und Suchleiste (Omnibox) fokussieren</td>
+          <td><span class="badge badge-cyan">Navigation</span></td>
+        </tr>
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">R</span></td>
+          <td>Aktuelle Seite neu laden</td>
+          <td><span class="badge badge-cyan">Navigation</span></td>
+        </tr>
+        <tr class="sc-row">
+          <td><span class="kbd">Ctrl</span> + <span class="kbd">F</span></td>
+          <td>Inhalts-Suchleiste auf der aktuellen Seite öffnen</td>
+          <td><span class="badge badge-cyan">Suche</span></td>
+        </tr>
+        <tr class="sc-row">
+          <td><span class="kbd">F12</span></td>
+          <td>Chromium DevTools Inspektor öffnen</td>
+          <td><span class="badge badge-purple">Entwickler</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+function filterShortcuts() {
+  var input = document.getElementById("shortcut-search");
+  var filter = input.value.toLowerCase();
+  var rows = document.querySelectorAll(".sc-row");
+
+  rows.forEach(function(row) {
+    var text = row.textContent.toLowerCase();
+    if (text.indexOf(filter) > -1) {
+      row.style.display = "";
+    } else {
+      row.style.display = "none";
+    }
+  });
+}
+</script>
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

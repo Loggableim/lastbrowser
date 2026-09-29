@@ -1,0 +1,9 @@
+# Canonical redirects & aliases
+/github      https://github.com/Loggableim/lastbrowser 302
+/win         /download/ 301
+/windows     /download/ 301
+/docs/conpty /docs/terminal/ 301
+/terminal    /docs/terminal/ 301
+/skills      /hub/ 301
+/mcp         /hub/ 301
+/rss         /changelog/feed.xml 301

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spaces &amp; Session-Isolation – Lastbrowser</title>
+<meta name="description" content="Tiefer Einblick in die Lastbrowser Spaces: Strikte Cookie- und Speicher-Trennung über persist:profile:space im selben Fenster ohne Profil-Chaos.">
+<meta property="og:title" content="Spaces &amp; Session-Isolation – Lastbrowser">
+<meta property="og:description" content="Schluss mit dem Cookie-Bleed: Spaces isolieren Cookies, IndexedDB und Cache vollständig voneinander.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/spaces/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/spaces/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/spaces/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/spaces/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/spaces/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<script src="/assets/js/theme.js"></script>
+</head>
+<body>
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>Spaces Deep-Dive</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/" class="active">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/spaces/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/spaces/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/spaces/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/spaces/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/spaces/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/spaces/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/spaces/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main">
+  <section class="hero">
+    <div class="container">
+      <div class="pill-badge">Zero Cookie-Bleed Architecture</div>
+      <h1>Spaces: Echte Isolation <span class="grad">ohne Profil-Chaos</span></h1>
+      <p class="lead">Entdecken Sie, wie Lastbrowser Web-Sitzungen radikal trennt: Mehrere Google-, GitHub- oder AWS-Konten im selben Fenster parallel betreiben – ohne Vermischung von Cookies oder Verlauf.</p>
+    </div>
+  </section>
+
+  <section class="container" style="padding: 10px 0 60px;">
+    <!-- Architecture Breakdown -->
+    <div class="vs-grid">
+      <div class="vs-column">
+        <div class="vs-column-header">
+          <h3>Klassische Browser (Chrome / Edge)</h3>
+          <span class="badge badge-yellow">Global Shared State</span>
+        </div>
+        <ul class="vs-feature-list">
+          <li class="vs-feature-item"><span class="icon-cross">✕</span> Alle offenen Tabs teilen sich dieselbe Cookie- und Session-Datenbank.</li>
+          <li class="vs-feature-item"><span class="icon-cross">✕</span> Trennung erfordert das Öffnen völlig separater Betriebssystem-Fenster („Profil-Fenster“).</li>
+          <li class="vs-feature-item"><span class="icon-cross">✕</span> Gefahr von versehentlichem Posten im falschen Social-Media-Account.</li>
+          <li class="vs-feature-item"><span class="icon-cross">✕</span> Stark fragmentierte Taskleiste bei 5+ offenen Profilen.</li>
+        </ul>
+      </div>
+
+      <div class="vs-column winner">
+        <div class="vs-column-header">
+          <h3>Lastbrowser Spaces</h3>
+          <span class="badge badge-cyan">persist:profile:space</span>
+        </div>
+        <ul class="vs-feature-list">
+          <li class="vs-feature-item"><span class="icon-check">✓</span> <strong>100% Partition-Isolation:</strong> Jeder Space besitzt eine eigene isolierte Speicher-Partition.</li>
+          <li class="vs-feature-item"><span class="icon-check">✓</span> <strong>Ein einziges Fenster:</strong> Schneller Wechsel zwischen Spaces in der Zen-Sidebar.</li>
+          <li class="vs-feature-item"><span class="icon-check">✓</span> <strong>Unabhängige Cookie-Jars:</strong> Kein Datenabfluss oder Session-Überschwappen.</li>
+          <li class="vs-feature-item"><span class="icon-check">✓</span> <strong>Memory Discarding:</strong> Inaktive Spaces entlasten automatisch den Arbeitsspeicher.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid-3" style="margin-top:60px;">
+      <div class="feature-card">
+        <div class="fc-icon blue">💼</div>
+        <h3>Arbeit &amp; Beruf</h3>
+        <p>Firmen-Mails, Jira, GitHub Enterprise und interne Cloud-Konsolen bleiben sicher im Arbeits-Space gekapselt.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon purple">🏠</div>
+        <h3>Privat &amp; Shopping</h3>
+        <p>Private Passwörter, YouTube-Abonnements und Streaming-Logins ohne geschäftliche Verknüpfung.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon green">🔬</div>
+        <h3>Forschung &amp; Side-Projects</h3>
+        <p>Eigene Bookmarks, Terminal-Pfade und MCP-Toolsets für Ihr Hobby- oder Forschungsprojekt.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

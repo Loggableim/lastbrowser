@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Extension &amp; MCP Hub – 48 Agentic Skills | Lastbrowser</title>
+<meta name="description" content="Entdecken Sie alle 48 integrierten KI-Workflows und kuratierte externe Model Context Protocol (MCP) Server für Lastbrowser mit 1-Klick JSON-Import.">
+<meta property="og:title" content="Extension &amp; MCP Hub – Lastbrowser">
+<meta property="og:description" content="48 kuratierte Agentic-Skills für Recherche, Code, Daten und Content sowie externe MCP-Server.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/hub/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/hub/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/hub/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/hub/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/hub/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<script src="/assets/js/theme.js"></script>
+</head>
+<body>
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>MCP &amp; Extension Hub</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/" class="active">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/hub/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/hub/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/hub/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/hub/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/hub/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/hub/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/hub/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main">
+  <section class="hero">
+    <div class="container">
+      <div class="pill-badge">Unified Extension &amp; Skill Ecosystem</div>
+      <h1>Katalog der <span class="grad">48 Agentic Workflows</span> &amp; MCP</h1>
+      <p class="lead">Erweitern Sie Nova AI mit spezialisierten Agentic-Skills für Recherche, Coding, Datenanalyse und Content-Erstellung oder binden Sie externe MCP-Server mit einem Klick an.</p>
+    </div>
+  </section>
+
+  <!-- External MCP Servers Showcase -->
+  <section class="container" style="padding: 10px 0 50px;">
+    <div class="section-header">
+      <h2>Kuratierte externe <span class="grad">MCP-Server</span></h2>
+      <p>Kopieren Sie die fertigen JSON-Definitionen direkt in Ihre <code>mcp_servers.json</code>.</p>
+    </div>
+
+    <div class="grid-2">
+      <!-- PostgreSQL MCP -->
+      <div class="feature-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h3>🐘 PostgreSQL Database Server</h3>
+          <span class="badge badge-cyan">Datenbank</span>
+        </div>
+        <p>Ermöglicht Nova AI das schreibgeschützte Abfragen von Tabellenschemata und Ausführen von SQL-Abfragen für Datenanalysen.</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>JSON Konfiguration</span>
+            <button class="copy-btn" data-copy='{ "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:pass@localhost/db"] }'>Kopieren</button>
+          </div>
+          <pre><code>{
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:pass@localhost/db"]
+}</code></pre>
+        </div>
+      </div>
+
+      <!-- Local Filesystem MCP -->
+      <div class="feature-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h3>📂 Windows Filesystem Server</h3>
+          <span class="badge badge-purple">System-Tool</span>
+        </div>
+        <p>Erlaubt Nova AI das Durchsuchen, Lesen und Schreiben von Quellcode-Dateien in freigegebenen Projektverzeichnissen.</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>JSON Konfiguration</span>
+            <button class="copy-btn" data-copy='{ "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Projekte"] }'>Kopieren</button>
+          </div>
+          <pre><code>{
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\Projekte"]
+}</code></pre>
+        </div>
+      </div>
+
+      <!-- GitHub MCP -->
+      <div class="feature-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h3>🐙 GitHub Repository Tool</h3>
+          <span class="badge badge-green">DevOps</span>
+        </div>
+        <p>Pull Requests prüfen, Issues durchsuchen und Branch-Änderungen direkt aus dem Browser analysieren.</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>JSON Konfiguration</span>
+            <button class="copy-btn" data-copy='{ "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "DEIN_TOKEN" } }'>Kopieren</button>
+          </div>
+          <pre><code>{
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-github"],
+  "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "DEIN_TOKEN" }
+}</code></pre>
+        </div>
+      </div>
+
+      <!-- Google Maps MCP -->
+      <div class="feature-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h3>🗺️ Google Maps Geocoding</h3>
+          <span class="badge badge-yellow">Geo-Daten</span>
+        </div>
+        <p>Ermöglicht Adressprüfungen, Entfernungsberechnungen und Geocoding direkt bei der Recherche im Web.</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>JSON Konfiguration</span>
+            <button class="copy-btn" data-copy='{ "command": "npx", "args": ["-y", "@modelcontextprotocol/server-google-maps"], "env": { "GOOGLE_MAPS_API_KEY": "DEIN_KEY" } }'>Kopieren</button>
+          </div>
+          <pre><code>{
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-google-maps"],
+  "env": { "GOOGLE_MAPS_API_KEY": "DEIN_KEY" }
+}</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 48 Built-In Agentic Skills Categories -->
+  <section class="container" style="padding: 30px 0 70px;">
+    <div class="section-header">
+      <h2>Die 48 integrierten <span class="grad">Agentic-Skills</span></h2>
+      <p>Jeder Skill ist ein modularer Prompt- und Tool-Workflow in der in-tree Python Sidekick Engine.</p>
+    </div>
+
+    <!-- Category 1: Recherche -->
+    <h3 style="margin: 40px 0 20px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:24px;">🔬</span> 1. Recherche &amp; Analyse (12 Skills)
+    </h3>
+    <div class="skill-grid">
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>Paper Summarizer</h4><span class="badge badge-cyan">PDF</span></div>
+        <p>Komprimiert komplexe arXiv- und ScienceDirect-PDFs auf Kernaussagen und Hypothesen.</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>Multi-Source Fact Checker</h4><span class="badge badge-cyan">Web</span></div>
+        <p>Vergleicht Behauptungen quer über verschiedene Nachrichtenquellen und meldet Widersprüche.</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>Competitive Intelligence</h4><span class="badge badge-cyan">Markt</span></div>
+        <p>Extrahiert Preismodelle, Feature-Tabellen und Zielgruppen von Konkurrenz-Webseiten.</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>Patent Analyzer</h4><span class="badge badge-cyan">Recht</span></div>
+        <p>Analysiert Schutzansprüche und technische Spezifikationen in Patentdatenbanken.</p>
+      </div>
+    </div>
+
+    <!-- Category 2: Code & Dev -->
+    <h3 style="margin: 40px 0 20px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:24px;">💻</span> 2. Code &amp; Entwickler-Tools (12 Skills)
+    </h3>
+    <div class="skill-grid">
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>OpenAPI / Swagger Extractor</h4><span class="badge badge-purple">API</span></div>
+        <p>Erkennt API-Definitionen im DOM und generiert typisierte TypeScript-Clients oder cURL-Befehle.</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>Regex Visualizer &amp; Debugger</h4><span class="badge badge-purple">Syntax</span></div>
+        <p>Erklärt reguläre Ausdrücke Schritt für Schritt und testet sie interaktiv gegen Webseiteninhalte.</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>Stacktrace Resolver</h4><span class="badge badge-purple">Doctor</span></div>
+        <p>Analysiert Fehlerausgaben im ConPTY-Terminal und schlägt sofortige Code-Korrekturen vor.</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>CSS Glassmorphism Styler</h4><span class="badge badge-purple">Design</span></div>
+        <p>Generiert moderne Tailwind- oder Vanilla-CSS Backdrop-Filter mit exakter Farb-Abstimmung.</p>
+      </div>
+    </div>
+
+    <!-- Category 3: Content & Writing -->
+    <h3 style="margin: 40px 0 20px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:24px;">✍️</span> 3. Content &amp; Redaktion (12 Skills)
+    </h3>
+    <div class="skill-grid">
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>Social Thread Generator</h4><span class="badge badge-green">Social</span></div>
+        <p>Formuliert Blogartikel in informative Twitter/X- und LinkedIn-Beiträge mit hohem Engagement um.</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>Executive Briefing</h4><span class="badge badge-green">Management</span></div>
+        <p>Erstellt 1-seitige Entscheidungsvorlagen aus langen Berichten und PDF-Gutachten.</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>Tone &amp; Style Adapter</h4><span class="badge badge-green">Editor</span></div>
+        <p>Passt Formulierungen an Zielgruppen an (Akademisch, Humorvoll, C-Level, Technisch).</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>SEO Meta-Tag Architect</h4><span class="badge badge-green">SEO</span></div>
+        <p>Prüft Seitentitel, Meta-Descriptions und OpenGraph-Tags auf optimale CTR.</p>
+      </div>
+    </div>
+
+    <!-- Category 4: Data & Automation -->
+    <h3 style="margin: 40px 0 20px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:24px;">📊</span> 4. Daten &amp; Tabellen (12 Skills)
+    </h3>
+    <div class="skill-grid">
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>HTML Table to CSV / JSON</h4><span class="badge badge-yellow">Scraper</span></div>
+        <p>Wandelt Tabellen im Browser mit einem Tastendruck in saubere CSV-, JSON- oder Excel-Daten um.</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>JSON Schema Generator</h4><span class="badge badge-yellow">JSON</span></div>
+        <p>Erstellt validierbare JSON-Schemas und TypeScript-Interfaces aus beliebigen API-Payloads.</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>SQL Query Optimizer</h4><span class="badge badge-yellow">SQL</span></div>
+        <p>Analysiert Ausführungspläne und schlägt Indexe oder optimierte Joins vor.</p>
+      </div>
+      <div class="skill-card">
+        <div class="skill-card-top"><h4>Statistical Outlier Detector</h4><span class="badge badge-yellow">Mathe</span></div>
+        <p>Findet Anomalien und Messfehler in numerischen Datensätzen direkt im Browser-Speicher.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

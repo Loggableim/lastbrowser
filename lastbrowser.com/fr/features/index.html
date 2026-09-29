@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fonctionnalités &amp; Matrice de Comparaison – Lastbrowser</title>
+<meta name="description" content="Toutes les fonctionnalités de Lastbrowser : Copilote Nova AI, Espaces cloisonnés, Hub d'extensions Chrome MV3 et MCP, Widevine DRM L3, Terminal ConPTY et comparaison avec Chrome, Edge, Brave et Arc.">
+<meta property="og:title" content="Fonctionnalités &amp; Matrice de Comparaison – Lastbrowser">
+<meta property="og:description" content="Découvrez les 5 piliers de Lastbrowser et la matrice interactive de comparaison face à Chrome, Edge, Brave et Arc.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/fr/features/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/fr/features/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/features/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/features/">
+<link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/features/">
+<link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/features/">
+<link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/features/">
+<link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/features/">
+<link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/features/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/features/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<script src="/assets/js/theme.js"></script>
+</head>
+<body>
+<a href="#main" class="skip-link">Aller au contenu principal</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/fr/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>Fonctionnalités &amp; Matrice</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/fr/features/" class="active">Fonctionnalités</a>
+      <a href="/spaces/">Espaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">Hub MCP</a>
+      <a href="/docs/">Documentation</a>
+      <a href="/fr/enterprise/">Entreprise</a>
+      <a href="/fr/download/">Télécharger</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Choisir la langue">🇫🇷 FR ▾</button>
+        <div class="lang-menu">
+          <a href="/features/" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/features/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/features/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/features/" class="active" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/features/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/features/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/features/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Changer de thème">☀️</button>
+      <a href="/fr/download/" class="btn btn-primary btn-sm">Télécharger</a>
+      <button class="mobile-toggle" aria-label="Ouvrir le menu">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/fr/features/">Fonctionnalités</a>
+  <a href="/spaces/">Espaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">Hub MCP</a>
+  <a href="/docs/">Documentation</a>
+  <a href="/fr/enterprise/">Entreprise</a>
+  <a href="/fr/download/">Télécharger</a>
+  <a href="/fr/imprint/">Mentions Légales</a>
+</div>
+
+<main id="main">
+  <section class="hero">
+    <div class="container">
+      <div class="pill-badge">Matrice des Fonctionnalités &amp; Capacités Techniques</div>
+      <h1>L'Ingénierie qui Fixe un <span class="grad">Nouveau Standard</span></h1>
+      <p class="lead">Explorez en détail toutes les capacités natives de Lastbrowser et comparez-les face aux navigateurs traditionnels.</p>
+    </div>
+  </section>
+
+  <!-- 5 Core Pillars -->
+  <section class="container" style="padding: 20px 0 60px;">
+    <div class="section-header">
+      <h2>Les 5 Piliers Fondamentaux de Lastbrowser</h2>
+      <p>Conçu pour combler les manques historiques des navigateurs grand public.</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="fc-icon blue">💻</div>
+        <h3>1. Terminal ConPTY Natif</h3>
+        <p>Une authentique console Windows dans la barre latérale (<code>Ctrl+\`</code>). Exécutez PowerShell, CMD, Git, scripts Python ou modèles d'IA locaux sans quitter la page active.</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon purple">🪐</div>
+        <h3>2. Espaces Cloisonnés</h3>
+        <p>Isolation absolue des cookies, caches et du stockage par Espace via <code>persist:profile:space</code>. Connectez-vous à plusieurs comptes d'un même service simultanément.</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon green">🤖</div>
+        <h3>3. Nova AI &amp; Modèle BYOK</h3>
+        <p>IA personnalisable à 100% : Gemini CLI Multi-Account, Claude 3.5, OpenAI ou fonctionnement hors-ligne avec Ollama. Aucun abonnement imposé, contrôle total de vos données.</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon pink">🎬</div>
+        <h3>4. Streaming DRM &amp; Audio</h3>
+        <p>Module certifié Castlabs Widevine CDM intégré. Lecture fluide en Full HD de vos médias protégés sur Spotify, Netflix, Disney+ et Prime Video.</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon yellow">⚡</div>
+        <h3>5. Hub MCP &amp; 48 Agents</h3>
+        <p>Combinez l'immense catalogue d'extensions Chrome MV3 avec 48 compétences d'agents et serveurs Model Context Protocol (PostgreSQL, Filesystem, GitHub).</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon blue">🛡️</div>
+        <h3>Confidentialité 100% Local-First</h3>
+        <p>Vos mots de passe, historique et clés d'API ne transitent jamais par des serveurs tiers. Tout reste stocké en local dans <code>%APPDATA%\Lastbrowser</code> chiffré par DPAPI.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Comparison Filter & Table -->
+  <section class="container" style="padding: 20px 0 80px;">
+    <div class="section-header">
+      <h2>Matrice de Comparaison Interactive</h2>
+      <p>Filtrez par catégorie pour comparer Lastbrowser avec Chrome, Edge, Brave et Arc.</p>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="matrix-filter-tabs">
+      <button class="matrix-tab active" data-category="all">Toutes les Fonctions</button>
+      <button class="matrix-tab" data-category="ai">IA &amp; Agents</button>
+      <button class="matrix-tab" data-category="privacy">Confidentialité &amp; Sécurité</button>
+      <button class="matrix-tab" data-category="developer">Outils Développeur</button>
+      <button class="matrix-tab" data-category="multimedia">Multimédia &amp; Performance</button>
+    </div>
+
+    <!-- Comparison Table -->
+    <div class="table-responsive">
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Capacité</th>
+            <th class="highlight">Lastbrowser</th>
+            <th>Google Chrome</th>
+            <th>Microsoft Edge</th>
+            <th>Brave</th>
+            <th>Arc Browser</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- AI Category -->
+          <tr data-category="ai">
+            <td><strong>Moteur IA Local / BYOK</strong></td>
+            <td class="highlight"><span class="check">✓</span> Nova AI (Ollama, Claude, Gemini, OpenAI)</td>
+            <td><span class="cross">✗</span> Aucun (Gemini Web)</td>
+            <td><span class="cross">✗</span> Copilot Cloud imposé</td>
+            <td><span class="check">✓</span> Leo AI (Limité / Cloud)</td>
+            <td><span class="cross">✗</span> Développement Windows arrêté</td>
+          </tr>
+          <tr data-category="ai">
+            <td><strong>Protocole MCP Intégré</strong></td>
+            <td class="highlight"><span class="check">✓</span> 48 Agents + Serveurs MCP</td>
+            <td><span class="cross">✗</span> Non</td>
+            <td><span class="cross">✗</span> Non</td>
+            <td><span class="cross">✗</span> Non</td>
+            <td><span class="cross">✗</span> Non</td>
+          </tr>
+          <tr data-category="ai">
+            <td><strong>Vue Divisée 70/30 Contextuelle</strong></td>
+            <td class="highlight"><span class="check">✓</span> Copilote intégré avec contexte web</td>
+            <td><span class="cross">✗</span> Onglets séparés</td>
+            <td><span class="cross">✗</span> Volet latéral basique</td>
+            <td><span class="cross">✗</span> Non</td>
+            <td><span class="cross">✗</span> Limité à macOS</td>
+          </tr>
+
+          <!-- Privacy Category -->
+          <tr data-category="privacy">
+            <td><strong>Architecture Local-First</strong></td>
+            <td class="highlight"><span class="check">✓</span> 100% dans %APPDATA%, Zéro Cloud</td>
+            <td><span class="cross">✗</span> Synchronisation Google requise</td>
+            <td><span class="cross">✗</span> Télémétrie étendue Microsoft</td>
+            <td><span class="check">✓</span> Approche privée</td>
+            <td><span class="cross">✗</span> Dépendance Cloud Sync</td>
+          </tr>
+          <tr data-category="privacy">
+            <td><strong>Chiffrement DPAPI des Clés</strong></td>
+            <td class="highlight"><span class="check">✓</span> Chiffrement natif Windows</td>
+            <td><span class="cross">✗</span> Lié au compte Google</td>
+            <td><span class="cross">✗</span> Synchronisé sur le cloud</td>
+            <td><span class="check">✓</span> Local</td>
+            <td><span class="cross">✗</span> Cloud Firebase</td>
+          </tr>
+          <tr data-category="privacy">
+            <td><strong>Espaces aux Cookies Cloisonnés</strong></td>
+            <td class="highlight"><span class="check">✓</span> <code>persist:profile:space</code></td>
+            <td><span class="cross">✗</span> Nécessite de changer de profil</td>
+            <td><span class="cross">✗</span> Nécessite des profils distincts</td>
+            <td><span class="cross">✗</span> Non disponible</td>
+            <td><span class="cross">✗</span> Onglets visuels uniquement</td>
+          </tr>
+
+          <!-- Developer Category -->
+          <tr data-category="developer">
+            <td><strong>Terminal Windows ConPTY</strong></td>
+            <td class="highlight"><span class="check">✓</span> PowerShell / CMD / WSL (Ctrl+`)</td>
+            <td><span class="cross">✗</span> Non disponible</td>
+            <td><span class="cross">✗</span> Non disponible</td>
+            <td><span class="cross">✗</span> Non disponible</td>
+            <td><span class="cross">✗</span> Non disponible</td>
+          </tr>
+          <tr data-category="developer">
+            <td><strong>Compatibilité Chrome MV3</strong></td>
+            <td class="highlight"><span class="check">✓</span> Chrome Web Store complet</td>
+            <td><span class="check">✓</span> Oui</td>
+            <td><span class="check">✓</span> Oui</td>
+            <td><span class="check">✓</span> Oui</td>
+            <td><span class="cross">✗</span> Instable sous Windows</td>
+          </tr>
+
+          <!-- Multimedia Category -->
+          <tr data-category="multimedia">
+            <td><strong>Castlabs Widevine DRM L3</strong></td>
+            <td class="highlight"><span class="check">✓</span> Full HD sur Netflix &amp; Spotify</td>
+            <td><span class="check">✓</span> Oui</td>
+            <td><span class="check">✓</span> Oui (PlayReady)</td>
+            <td><span class="check">✓</span> Oui</td>
+            <td><span class="cross">✗</span> Problèmes de DRM</td>
+          </tr>
+          <tr data-category="multimedia">
+            <td><strong>Mise en Veille Mémoire Intelligente</strong></td>
+            <td class="highlight"><span class="check">✓</span> Économise 60% sans couper l'audio</td>
+            <td><span class="check">✓</span> Memory Saver standard</td>
+            <td><span class="check">✓</span> Sleeping Tabs</td>
+            <td><span class="check">✓</span> Memory Saver</td>
+            <td><span class="cross">✗</span> Consommation RAM élevée</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- CTA Banner -->
+  <section class="cta-banner">
+    <div class="container">
+      <h2>Constatez la Différence Dès Aujourd'hui</h2>
+      <p>Téléchargez Lastbrowser pour Windows 10 &amp; 11 et décuplez votre productivité technique.</p>
+      <div class="cta-group">
+        <a href="/fr/download/" class="btn btn-primary btn-lg">Télécharger v0.1.34 (.exe)</a>
+        <a href="/fr/enterprise/" class="btn btn-ghost btn-lg">Licences Entreprise</a>
+      </div>
+      <p class="sub-cta-note" style="margin-top:14px;">Demandes d'entreprises : <strong>rainer@dominik.in</strong></p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>Navigateur IA-Natif</span></div>
+      </div>
+      <p>Le navigateur Chromium moderne pour Windows 10 &amp; 11 avec IA native, 48 workflows et terminal ConPTY. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Licences Commerciales : <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produit</h4>
+      <ul>
+        <li><a href="/fr/features/">Fonctionnalités &amp; Matrice</a></li>
+        <li><a href="/spaces/">Espaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">Terminal ConPTY</a></li>
+        <li><a href="/hub/">Hub Extensions &amp; MCP</a></li>
+        <li><a href="/fr/download/">Télécharger pour Windows</a></li>
+        <li><a href="/roadmap/">Feuille de Route</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Comparatifs (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressources</h4>
+      <ul>
+        <li><a href="/docs/">Documentation</a></li>
+        <li><a href="/shortcuts/">Raccourcis Clavier</a></li>
+        <li><a href="/blog/">Blog d'Ingénierie</a></li>
+        <li><a href="/security/">Livre Blanc Sécurité &amp; DPAPI</a></li>
+        <li><a href="/releases/">Archive des Versions</a></li>
+        <li><a href="/press/">Kit Presse</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Légal &amp; Contact</h4>
+      <ul>
+        <li><a href="/fr/imprint/">Mentions Légales (§ 5 DDG)</a></li>
+        <li><a href="/fr/privacy/">Politique de Confidentialité</a></li>
+        <li><a href="/fr/enterprise/">Licences Entreprise</a></li>
+        <li><a href="/fr/support/">Centre d'Assistance</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Projet Lastbrowser. Tous droits réservés. Zéro Télémétrie Involontaire.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">Flux RSS</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

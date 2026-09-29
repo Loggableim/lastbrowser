@@ -1,0 +1,22 @@
+# Lastbrowser
+
+> Lastbrowser is the AI-native Windows browser built with Chromium and an in-tree local Python Sidekick engine. It features an integrated AI Copilot (Nova AI), 48 built-in agentic workflows, vertical Zen sidebar, Spaces with complete session partition isolation, a native ConPTY PowerShell terminal, and full Castlabs Electron Widevine DRM L3 support for protected media streaming.
+
+## Core Pillars
+- **Platform:** Windows 10 & 11 (x64) native desktop application.
+- **Privacy & Security:** 100% Local-First. Zero telemetry. All tabs, cookies, and keys stored in `%APPDATA%\Lastbrowser` with Windows DPAPI encryption.
+- **AI Integration:** BYOK (Bring Your Own Key) for Gemini CLI Multi-Account, Claude, OpenAI, and local Ollama models.
+- **Spaces:** Strict session isolation (`persist:profile:space`) separating cookies, cache, and logins per Space.
+- **ConPTY Terminal:** Native Windows pseudo-console embedded in the browser sidebar.
+- **Commercial Licensing:** Free for personal use, research, and open source. Enterprise rollout and commercial fleet deployment contact: `rainer@dominik.in`.
+
+## Quick Links
+- [Official Website](https://lastbrowser.com/)
+- [Download](https://lastbrowser.com/download/)
+- [Documentation](https://lastbrowser.com/docs/)
+- [MCP & Skills Hub](https://lastbrowser.com/hub/)
+- [Keyboard Shortcuts](https://lastbrowser.com/shortcuts/)
+- [Enterprise & Fleet Licensing](https://lastbrowser.com/enterprise/)
+- [Security & Architecture Whitepaper](https://lastbrowser.com/security/)
+- [Privacy Policy](https://lastbrowser.com/privacy/)
+- [Full LLM Architecture Guide](https://lastbrowser.com/llms-full.txt)

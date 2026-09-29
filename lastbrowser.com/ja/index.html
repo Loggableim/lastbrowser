@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lastbrowser – Windows向けAIネイティブブラウザ · Nova AI &amp; 48のエージェントワークフロー</title>
+<meta name="description" content="Lastbrowser: Nova AI、48の厳選されたエージェントワークフロー、内蔵ConPTY PowerShellターミナル、Widevine DRM L3、完全に隔離されたSpacesを備えたWindows用超高速・高プライバシーChromiumブラウザ。100%ローカルファースト。">
+<meta property="og:title" content="Lastbrowser – Windows向けAIネイティブブラウザ · Nova AI">
+<meta property="og:description" content="Nova AI、48のエージェントワークフロー、ConPTYターミナル、隔離Spacesを搭載したWindows用Chromiumブラウザ。100%ローカルファースト。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/ja/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/ja/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/">
+<link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/">
+<link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/">
+<link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/">
+<link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/">
+<link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<script src="/assets/js/theme.js"></script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Lastbrowser",
+  "operatingSystem": "Windows 10, Windows 11 (x64)",
+  "applicationCategory": "BrowserApplication",
+  "softwareVersion": "0.1.34 Beta",
+  "description": "Nova AI、ConPTYターミナル、Widevine DRM L3、隔離Spacesを搭載したWindows用AIネイティブChromiumブラウザ。",
+  "downloadUrl": "https://lastbrowser.com/ja/download/",
+  "offers": {
+    "@type": "Offer",
+    "price": "0.00",
+    "priceCurrency": "JPY"
+  }
+}
+</script>
+</head>
+<body>
+<a href="#main" class="skip-link">メインコンテンツへスキップ</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/ja/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>v0.1.34 Beta · AIネイティブ</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/ja/features/">機能</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">ターミナル</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">ドキュメント</a>
+      <a href="/ja/enterprise/">法人利用</a>
+      <a href="/ja/download/">ダウンロード</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="言語選択">🇯🇵 JA ▾</button>
+        <div class="lang-menu">
+          <a href="/" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/" class="active" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="テーマ切替">☀️</button>
+      <a href="/ja/download/" class="btn btn-primary btn-sm">ダウンロード (.exe)</a>
+      <button class="mobile-toggle" aria-label="メニューを開く">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/ja/features/">機能</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">ターミナル</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">ドキュメント</a>
+  <a href="/ja/enterprise/">法人利用</a>
+  <a href="/ja/download/">ダウンロード</a>
+  <a href="/ja/imprint/">法的通知</a>
+</div>
+
+<main id="main">
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="pill-badge">🚀 v0.1.34 Beta 公開 · ConPTYターミナル &amp; Spaces搭載</div>
+      <h1>WindowsのためのAIネイティブブラウザ。 <span class="grad">100% ローカルファースト。</span></h1>
+      <p class="lead">
+        単なるWebラッパーではありません。Lastbrowserは、Chromiumの圧倒的な表示速度に、Nova AI Copilot、48のエージェントワークフロー、内蔵Windows ConPTY PowerShellターミナル、Castlabs Widevine DRM L3、そしてSpacesによるセッション完全分離を統合しています。
+      </p>
+
+      <div class="cta-group">
+        <a href="/ja/download/" class="btn btn-primary btn-lg">
+          ⬇️ Windows版を無料ダウンロード (v0.1.34 Beta)
+        </a>
+        <a href="/ja/features/" class="btn btn-ghost btn-lg">全機能を見る</a>
+      </div>
+      <p class="sub-cta-note">
+        個人利用は完全無料・オープンソース · アカウント登録不要 · Windows 10 &amp; 11 (64-Bit) 対応
+      </p>
+    </div>
+
+    <!-- Screenshot Showcase -->
+    <div class="container showcase-container">
+      <div class="showcase-nav">
+        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-zen-sidebar.png" data-title="Zenサイドバー &amp; Spaces" data-desc="ワークスペースごとの視覚的分離、Webアプリアイコン固定、オーディオ再生インジケーターを備えた垂直タブ。">
+          🪐 Zenサイドバー &amp; Spaces
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-2-copilot-splitview.png" data-title="Nova AI 分割画面 Copilot" data-desc="70/30の画面分割で作業：NovaがWeb情報から要点を抽出し、コードを生成し、論文を要約します。">
+          🤖 Nova AI スプリットビュー
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-4-conpty-terminal.png" data-title="内蔵ConPTY PowerShellターミナル" data-desc="サイドバー内のネイティブWindows擬似コンソール：Git、SSH、Python、npm、Terminal Doctorを即座に実行。">
+          💻 ConPTYターミナル
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-3-tab-intelligence.png" data-title="タブインテリジェンス &amp; メモリ解放" data-desc="バックグラウンドの音楽再生を中断することなく、非アクティブなタブを自動スリープして最大60%のRAMを節約。">
+          ⚡ タブインテリジェンス
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-5-webextensions.png" data-title="拡張機能 &amp; MCP統合Hub" data-desc="Chrome MV3拡張機能と、Model Context Protocol（MCP）に基づく48のエージェントワークフローを統合。">
+          🧩 拡張機能 &amp; MCP Hub
+        </button>
+        <button class="sc-btn" data-img="/assets/screenshots/store-screen-6-privacy-shield.png" data-title="ローカルファースト プライバシーシールド" data-desc="不本意なテレメトリゼロ。パスワード、クッキー、APIキーはWindows DPAPIによりローカルで暗号化保存。">
+          🛡️ プライバシーシールド
+        </button>
+      </div>
+
+      <div class="showcase-window">
+        <div class="window-titlebar">
+          <div class="window-dots">
+            <span class="dot-red"></span>
+            <span class="dot-yellow"></span>
+            <span class="dot-green"></span>
+          </div>
+          <div class="omnibox-mock">
+            <span>https://lastbrowser.com/workspace/spaces/active</span>
+            <span class="omnibox-shield">🔒 100% Local-First · DPAPI暗号化</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);">Lastbrowser Win32 Shell</div>
+        </div>
+        <div class="showcase-view">
+          <img id="showcase-image" src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Lastbrowser ユーザーインターフェース" width="1920" height="1080">
+        </div>
+        <div class="showcase-footer">
+          <div>
+            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Zenサイドバー &amp; Spaces</strong>
+            <span id="showcase-desc" style="color:var(--muted);font-size:13px;">ワークスペースごとの視覚的分離、Webアプリアイコン固定、オーディオ再生インジケーターを備えた垂直タブ。</span>
+          </div>
+          <a href="/ja/features/" class="btn btn-ghost btn-sm">詳細を見る ➔</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Grid Section -->
+  <section class="container" style="padding: 80px 0 60px;">
+    <div class="section-header">
+      <h2>エンジニア、クリエイター、パワーユーザーのために設計</h2>
+      <p>Lastbrowserが単なるブラウザにとどまらず、Windowsのための万能ワークステーションと呼ばれる理由をご覧ください。</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="fc-icon blue">💻</div>
+        <h3>ネイティブConPTYターミナル</h3>
+        <p>ブラウザ内に直接組み込まれた本物のWindows擬似コンソール（<code>Ctrl+\`</code>）。PowerShell、CMD、Git、npm、Python、ローカルOllamaモデルをブラウザを離れずに操作可能。</p>
+        <span class="badge badge-cyan" style="margin-top:14px;">Windows Native</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon purple">🪐</div>
+        <h3>マルチアカウント Spaces</h3>
+        <p><code>persist:profile:space</code>によるクッキー、キャッシュ、ローカルストレージの完全隔離。同じウィンドウ内で個人用と業務用のアカウントを瞬時に切り替え可能。</p>
+        <span class="badge badge-purple" style="margin-top:14px;">セッション完全分離</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon pink">🎬</div>
+        <h3>Castlabs Widevine DRM L3</h3>
+        <p>公式Castlabs Electron Widevine CDMモジュールを統合。Spotify、Netflix、Disney+、Prime Videoの著作権保護コンテンツをFull HDで安定再生。</p>
+        <span class="badge badge-cyan" style="margin-top:14px;">HDストリーミング対応</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon green">🤖</div>
+        <h3>Nova AI &amp; BYOKモデル</h3>
+        <p>Bring Your Own Key（独自キー利用）：Gemini CLI Multi-Account、Claude、OpenAI、またはローカルOllamaで完全オフライン稼働。強制的なクラウド課金はありません。</p>
+        <span class="badge badge-green" style="margin-top:14px;">Bring Your Own Key</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon yellow">⚡</div>
+        <h3>48のエージェントワークフロー &amp; MCP</h3>
+        <p>学術論文の要約、OpenAPIスキーマ抽出、正規表現デバッグ、外部MCPサーバー（PostgreSQL、Filesystemなど）への1クリック接続を標準装備。</p>
+        <span class="badge badge-yellow" style="margin-top:14px;">Model Context Protocol</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon blue">🛡️</div>
+        <h3>不本意なテレメトリゼロ</h3>
+        <p>閲覧履歴、開いているタブ、認証情報がPCの外部に送信されることはありません。すべてが<code>%APPDATA%\Lastbrowser</code>に保存され、Windows DPAPIで暗号化保護されます。</p>
+        <span class="badge badge-cyan" style="margin-top:14px;">100% GDPR &amp; プライバシー準拠</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Banner -->
+  <section class="cta-banner">
+    <div class="container">
+      <h2>ブラウジングの次なる進化を体験しませんか？</h2>
+      <p>Windows 10 &amp; 11向けLastbrowserを今すぐダウンロードし、ローカルファーストなAI生産性の未来を実感してください。</p>
+      <div class="cta-group">
+        <a href="/ja/download/" class="btn btn-primary btn-lg">無料でダウンロード</a>
+        <a href="/ja/enterprise/" class="btn btn-ghost btn-lg">法人・商用ライセンス</a>
+      </div>
+      <p class="sub-cta-note" style="margin-top:14px;">法人契約およびフリート展開のお問い合わせ：<strong>rainer@dominik.in</strong></p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AIネイティブブラウザ</span></div>
+      </div>
+      <p>ネイティブAI、48のワークフロー、ConPTYターミナルを備えたWindows 10 &amp; 11向けChromiumブラウザ。100% Local-First。</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">商用ライセンス窓口: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>プロダクト</h4>
+      <ul>
+        <li><a href="/ja/features/">機能 &amp; 比較マトリックス</a></li>
+        <li><a href="/spaces/">Spaces &amp; セッション分離</a></li>
+        <li><a href="/docs/terminal/">ConPTYターミナル</a></li>
+        <li><a href="/hub/">拡張機能 &amp; MCP Hub</a></li>
+        <li><a href="/ja/download/">Windows版ダウンロード</a></li>
+        <li><a href="/roadmap/">ロードマップ</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>他ブラウザとの比較 (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>リソース</h4>
+      <ul>
+        <li><a href="/docs/">ドキュメント</a></li>
+        <li><a href="/shortcuts/">キーボードショートカット</a></li>
+        <li><a href="/blog/">エンジニアリングブログ</a></li>
+        <li><a href="/security/">セキュリティホワイトペーパー</a></li>
+        <li><a href="/releases/">リリースアーカイブ</a></li>
+        <li><a href="/press/">プレスキット</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>法務 &amp; 連絡先</h4>
+      <ul>
+        <li><a href="/ja/imprint/">法的通知 (§ 5 DDG)</a></li>
+        <li><a href="/ja/privacy/">プライバシーポリシー</a></li>
+        <li><a href="/ja/enterprise/">法人エンタープライズライセンス</a></li>
+        <li><a href="/ja/support/">サポートポータル</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. 無断転載を禁じます。不本意なテレメトリゼロ。</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSSフィード</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

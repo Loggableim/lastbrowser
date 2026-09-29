@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security &amp; Privacy Whitepaper – Lastbrowser</title>
+<meta name="description" content="Sicherheitsarchitektur von Lastbrowser: Multi-Process Sandboxing, Windows DPAPI Verschlüsselung in %APPDATA%, Zero Telemetry und Microsoft Store Compliance.">
+<meta property="og:title" content="Lastbrowser Security Whitepaper">
+<meta property="og:description" content="Vollständige Offenlegung: Multi-Process Isolation, lokale Verschlüsselung und Datenschutz nach DSGVO.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/security/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/security/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/security/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/security/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/security/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<script src="/assets/js/theme.js"></script>
+</head>
+<body>
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>Security Whitepaper</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/security/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/security/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/security/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/security/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/security/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/security/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/security/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main" class="container-narrow" style="padding: 60px 0 90px;">
+  <div class="pill-badge">Technical Whitepaper &amp; Audits</div>
+  <h1 style="margin-bottom: 20px;">Sicherheits- &amp; <span class="grad">Datenschutz-Architektur</span></h1>
+  <p class="lead" style="margin-bottom: 40px;">
+    Lastbrowser wurde von Grund auf nach dem Prinzip „Local-First by Design“ entwickelt. Alle sensiblen Daten verbleiben auf Ihrem Endgerät und werden durch bewährte Windows-Sicherheitstechnologien geschützt.
+  </p>
+
+  <div class="feature-card" style="margin-bottom: 30px;">
+    <div class="fc-icon blue">🛡️</div>
+    <h3>1. Multi-Process Architecture &amp; Sandboxing</h3>
+    <p>
+      Lastbrowser nutzt die erprobte Chromium Multi-Process Architektur. Jeder geöffnete Web-Tab läuft in einem separaten, isolierten Renderer-Prozess mit striktem Betriebssystem-Sandboxing. Kompromittierte Webseiten können weder auf das Dateisystem noch auf andere Tabs oder das ConPTY-Terminal zugreifen.
+    </p>
+  </div>
+
+  <div class="feature-card" style="margin-bottom: 30px;">
+    <div class="fc-icon purple">🔑</div>
+    <h3>2. Lokale DPAPI-Verschlüsselung</h3>
+    <p>
+      Alle sensiblen Daten (gespeicherte Passwörter, Cookie-Jars und API-Schlüssel für Gemini, Claude oder OpenAI) werden in <code>%APPDATA%\Lastbrowser</code> mit der <strong>Windows Data Protection API (DPAPI)</strong> verschlüsselt. Die Entschlüsselung ist kryptografisch an Ihr Windows-Benutzerkonto gebunden und kann von anderen Windows-Nutzern oder exportierten Dateisystemen nicht gelesen werden.
+    </p>
+  </div>
+
+  <div class="feature-card" style="margin-bottom: 30px;">
+    <div class="fc-icon green">🚫</div>
+    <h3>3. Zero Involuntary Telemetry</h3>
+    <p>
+      Im Gegensatz zu herkömmlichen Browsern enthält Lastbrowser keinerlei Tracking-Bibliotheken, keine Google Analytics-Skripte und keine Werbenetzwerke. Es werden keine Webseitenverläufe, Klicks oder Suchanfragen im Hintergrund übertragen. Die einzige Kommunikation nach außen erfolgt bei expliziter Nutzeraktion (z. B. Prüfen auf neue Updates via GitHub Releases).
+    </p>
+  </div>
+
+  <div class="feature-card" style="margin-bottom: 30px;">
+    <div class="fc-icon yellow">⚖️</div>
+    <h3>4. Microsoft Store Generative AI Policy 10.2 Compliance</h3>
+    <p>
+      Zur Einhaltung der Richtlinien des Microsoft Stores implementiert Lastbrowser integrierte Mechanismen zur Berichterstattung unerwünschter KI-Inhalte. Nutzer können problematische Antworten im Chat jederzeit über ein Melde-Formular kennzeichnen und die Mentalität des Copiloten anpassen.
+    </p>
+  </div>
+
+  <div class="vs-verdict">
+    <h3>Verantwortungsvolle Offenlegung &amp; Security Contact</h3>
+    <p>
+      Sollten Sie Sicherheitslücken oder Schwachstellen in Lastbrowser entdecken, bitten wir um eine verantwortungsvolle Meldung direkt an unser Sicherheitsteam:
+    </p>
+    <a href="mailto:support@lastbrowser.com?subject=Security%20Vulnerability%20Report" class="btn btn-cyan btn-sm">
+      support@lastbrowser.com
+    </a>
+  </div>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

@@ -100,7 +100,6 @@ include = [
     "shared", "shared.*",
     "sidekick_cli", "sidekick_cli.*",
     "swarm_core", "swarm_core.*",
-    "tests", "tests.*",
     "tools", "tools.*", "tools.environments", "tools.environments.*",
     "tools.web_providers", "tools.web_providers.*",
     "tools.computer_use", "tools.computer_use.*",
@@ -108,6 +107,7 @@ include = [
     "web", "web.*", "web.api",
     "sidekick_app",
 ]
+exclude = ["tests", "tests.*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

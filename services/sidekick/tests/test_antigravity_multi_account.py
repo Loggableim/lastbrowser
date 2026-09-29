@@ -820,3 +820,70 @@ def test_client_project_falls_back_to_consumer_default(pool_env):
     # No account connected → discovery fails → consumer default.
     assert client._ensure_project_id("dummy") == ag.DEFAULT_ANTIGRAVITY_PROJECT
     client.close()
+
+
+def test_antigravity_quota_status_is_account_scoped_and_does_not_infer_exhaustion(monkeypatch):
+    from runtime import google_code_assist
+    from web.api import providers
+
+    accounts = [
+        {"email": "first@example.com"},
+        {"email": "second@example.com"},
+    ]
+    monkeypatch.setattr(ag, "list_connected_accounts", lambda: accounts)
+    monkeypatch.setattr(ag, "load_account_credentials", lambda email: SimpleNamespace(project_id=f"project-{email}"))
+    monkeypatch.setattr(ag, "get_valid_access_token", lambda *, account_email: f"token-{account_email}")
+    seen = []
+
+    def quota_lookup(token, *, project_id, user_agent_model):
+        seen.append((token, project_id, user_agent_model))
+        return []
+
+    monkeypatch.setattr(google_code_assist, "retrieve_user_quota", quota_lookup)
+    result = providers.get_provider_quota("antigravity")
+
+    assert seen == [
+        ("token-first@example.com", "project-first@example.com", ""),
+        ("token-second@example.com", "project-second@example.com", ""),
+    ]
+    assert result["status"] == "empty"
+    assert result["ok"] is False
+    assert "do not prove" in result["message"]
+    assert [entry["status"] for entry in result["quota"]] == ["no_buckets", "no_buckets"]
+
+
+def test_antigravity_quota_status_reports_disabled_control_plane_without_claiming_exhaustion(monkeypatch):
+    from runtime import google_code_assist
+    from web.api import providers
+
+    monkeypatch.setattr(ag, "list_connected_accounts", lambda: [{"email": "first@example.com"}])
+    monkeypatch.setattr(ag, "load_account_credentials", lambda _email: SimpleNamespace(project_id="consumer-project"))
+    monkeypatch.setattr(ag, "get_valid_access_token", lambda *, account_email: "access-token")
+    monkeypatch.setattr(
+        google_code_assist,
+        "retrieve_user_quota",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            google_code_assist.CodeAssistError("disabled", code="provider_unavailable")
+        ),
+    )
+
+    result = providers.get_provider_quota("antigravity")
+
+    assert result["status"] == "unsupported"
+    assert result["quota"][0]["status"] == "unsupported"
+    assert "does not confirm daily quota exhaustion" in result["message"]
+
+
+def test_generic_google_resource_exhausted_is_not_mislabeled_as_daily_quota():
+    import httpx
+    from runtime.gemini_cloudcode_adapter import _gemini_http_error
+
+    response = httpx.Response(
+        429,
+        json={"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "Resource exhausted."}},
+    )
+    error = _gemini_http_error(response)
+
+    assert error.code == "code_assist_rate_limited"
+    assert "does not confirm" in str(error)
+    assert "Check /gquota" not in str(error)

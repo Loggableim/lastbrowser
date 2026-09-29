@@ -140,7 +140,7 @@ def test_executor_delivers_the_json_contract_to_the_scout_cloud_call():
         run_id="scout-output-contract",
     )
 
-    assert result.model == "deepseek-v4-flash"
+    assert result.model == "deepseek-v4.1-flash"
     assert result.data == {
         "work": "inspect",
         "evidence": [],
@@ -164,8 +164,8 @@ def test_router_uses_exact_ollama_only_role_chains_without_gpt_oss():
     router = ModelRouter(ModelRegistry())
 
     expected = {
-        "default": ("deepseek-v4-flash", "deepseek-v4-pro"),
-        "scout": ("deepseek-v4-flash", "deepseek-v4-pro"),
+        "default": ("deepseek-v4.1-flash", "deepseek-v4-pro"),
+        "scout": ("deepseek-v4.1-flash", "deepseek-v4-pro"),
         "planner": ("deepseek-v4-pro", "kimi-k2.6"),
         "builder": ("minimax-m3",),
         "critic": ("minimax-m3",),
@@ -190,6 +190,18 @@ def test_router_requires_flash_before_exposing_the_pro_fallback(role: str):
 
     with pytest.raises(NoEligibleModel):
         router.select(role, {"structured-output"})
+
+
+def test_live_ollama_flash_catalog_routes_default_and_scout_to_v41_flash():
+    registry = ModelRegistry(catalog={"deepseek-v4.1-flash", "deepseek-v4-pro"})
+    router = ModelRouter(registry)
+
+    assert registry.is_available("deepseek-v4.1-flash")
+    assert router.select("default", {"structured-output"}).models == (
+        "deepseek-v4.1-flash",
+        "deepseek-v4-pro",
+    )
+    assert router.select("scout", {"structured-output"}).model == "deepseek-v4.1-flash"
 
 
 @pytest.mark.parametrize("role", ("default", "scout"))
@@ -664,7 +676,7 @@ def test_parallel_execution_never_exceeds_three_active_model_calls():
     results = executor.complete_many(calls, run_id="parallel-run")
 
     assert len(results) == 7
-    assert Counter(response.model for response in results) == {"deepseek-v4-flash": 7}
+    assert Counter(response.model for response in results) == {"deepseek-v4.1-flash": 7}
     assert transport.max_active == 3
 
 
@@ -797,7 +809,8 @@ def test_swarm_run_contract_keeps_reviewed_and_yolo_budgets_and_cloud_quorum():
 def test_dated_deepseek_cloud_catalog_tag_proves_stable_route_only():
     registry = ModelRegistry(["deepseek-v4-flash:0731-cloud"])
     assert registry.is_available("deepseek-v4-flash")
-    assert ModelRouter(registry).select("scout", {"structured-output"}).model == "deepseek-v4-flash"
+    with pytest.raises(NoEligibleModel):
+        ModelRouter(registry).select("scout", {"structured-output"})
 
 
 def test_unknown_dated_deepseek_tag_remains_fail_closed():

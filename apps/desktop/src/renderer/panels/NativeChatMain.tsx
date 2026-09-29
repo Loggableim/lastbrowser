@@ -153,6 +153,33 @@ export function NativeChatMain({
 
   // Wrap onSend to synthesize @tabs context and enqueue when busy instead of losing the message
   const handleSend = useCallback(async (text: string) => {
+    if (text.trim().toLowerCase() === '/gquota') {
+      onComposerText('');
+      setStatusMessage('Checking quota for connected Antigravity accounts…');
+      try {
+        const result = await window.lastbrowser.sidekick.requestWebui({
+          method: 'GET',
+          path: '/api/provider/quota?provider=antigravity',
+        });
+        const quotaRows = Array.isArray(result?.quota) ? result.quota : [];
+        const lines = quotaRows.map((entry: unknown) => {
+          const account = entry && typeof entry === 'object' ? entry as Record<string, unknown> : {};
+          const buckets = Array.isArray(account.buckets) ? account.buckets : [];
+          const details = buckets.map((bucket: unknown) => {
+            const row = bucket && typeof bucket === 'object' ? bucket as Record<string, unknown> : {};
+            const remaining = Number(row.remaining_fraction);
+            const percent = Number.isFinite(remaining) ? ` ${Math.round(remaining * 100)}% remaining` : '';
+            return `  ${String(row.model_id || 'Model')}${row.token_type ? ` (${String(row.token_type)})` : ''}:${percent}`;
+          });
+          return [`${String(account.account || 'Google account')}: ${String(account.message || account.status || '')}`, ...details].join('\n');
+        });
+        const summary = String(result?.message || 'Quota status returned.');
+        setStatusMessage([summary, ...lines].join('\n'));
+      } catch (error) {
+        setStatusMessage(`Antigravity quota check failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return;
+    }
     let messageToSend = text;
     if (hasTabsMention(text)) {
       setStatusMessage('Synthesizing open tabs context…');
@@ -174,7 +201,7 @@ export function NativeChatMain({
       return;
     }
     onSend(messageToSend);
-  }, [running, enqueue, model, profile, onSend]);
+  }, [running, enqueue, model, profile, onSend, onComposerText]);
 
   return (
     <section className="browser-main native-chat-main">

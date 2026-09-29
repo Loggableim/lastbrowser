@@ -11,6 +11,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import base64
+import hashlib
+import hmac
+import secrets
+import http.server
 import stat
 import threading
 import time
@@ -36,6 +41,7 @@ CODEX_USER_CODE_URL = f"{CODEX_ISSUER}/api/accounts/deviceauth/usercode"
 CODEX_DEVICE_TOKEN_URL = f"{CODEX_ISSUER}/api/accounts/deviceauth/token"
 CODEX_TOKEN_URL = f"{CODEX_ISSUER}/oauth/token"
 CODEX_REDIRECT_URI = f"{CODEX_ISSUER}/deviceauth/callback"
+CODEX_BROWSER_CALLBACK_PATH = "/auth/callback"
 CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 CODEX_FLOW_MAX_WAIT_SECONDS = 15 * 60
 
@@ -451,6 +457,19 @@ def _run_anthropic_credential_worker(flow_id: str) -> None:
             flow = dict(_OAUTH_FLOWS.get(flow_id) or {})
         if not flow:
             return
+        status = flow.get("status")
+        if status != "pending":
+            return
+        if float(flow.get("expires_at") or 0) <= time.time():
+            _set_flow_status(flow_id, "expired")
+            return
+
+        time.sleep(max(1, int(flow.get("poll_interval_seconds") or 5)))
+
+        with _OAUTH_FLOWS_LOCK:
+            live = dict(_OAUTH_FLOWS.get(flow_id) or {})
+        if live.get("status") != "pending":
+            return
         if flow.get("status") != "pending":
             return
         if float(flow.get("expires_at") or 0) <= time.time():
@@ -563,13 +582,17 @@ def _poll_codex_authorization(device_auth_id: str, user_code: str) -> dict[str, 
         raise
 
 
-def _exchange_codex_authorization(authorization_code: str, code_verifier: str) -> dict[str, Any]:
+def _exchange_codex_authorization(
+    authorization_code: str,
+    code_verifier: str,
+    redirect_uri: str = CODEX_REDIRECT_URI,
+) -> dict[str, Any]:
     return _json_request(
         CODEX_TOKEN_URL,
         {
             "grant_type": "authorization_code",
             "code": authorization_code,
-            "redirect_uri": CODEX_REDIRECT_URI,
+            "redirect_uri": redirect_uri,
             "client_id": CODEX_CLIENT_ID,
             "code_verifier": code_verifier,
         },
@@ -577,17 +600,112 @@ def _exchange_codex_authorization(authorization_code: str, code_verifier: str) -
     )
 
 
+class _CodexBrowserCallbackState:
+    def __init__(self, expected_state: str) -> None:
+        self.expected_state = expected_state
+        self.ready = threading.Event()
+        self.code = ""
+        self.error = ""
+
+
+class _CodexBrowserCallbackHandler(http.server.BaseHTTPRequestHandler):
+    """Receive only the one-time loopback callback; never log its query string."""
+
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002, N802
+        logger.debug("Codex OAuth callback request handled")
+
+    def do_GET(self) -> None:  # noqa: N802
+        from urllib.parse import parse_qs, urlparse
+
+        parsed = urlparse(self.path)
+        if parsed.path != CODEX_BROWSER_CALLBACK_PATH:
+            self.send_error(404)
+            return
+        state = getattr(self.server, "codex_callback_state", None)
+        params = parse_qs(parsed.query)
+        returned_state = (params.get("state") or [""])[0]
+        code = (params.get("code") or [""])[0]
+        error = (params.get("error") or [""])[0]
+        if state is None or not hmac.compare_digest(returned_state, state.expected_state):
+            # Any local process or cross-origin page can probe a loopback port.
+            # A bad state must not be able to abort a legitimate sign-in.
+            self._respond(400, "Sign-in could not be verified. Close this tab and restart Codex sign-in.")
+            return
+        if error:
+            state.error = "authorization_denied"
+            state.ready.set()
+            self._respond(400, "Codex sign-in was cancelled or denied. Return to Lastbrowser and try again.")
+            return
+        if not code:
+            state.error = "missing_authorization_code"
+            state.ready.set()
+            self._respond(400, "OpenAI did not return an authorization code. Restart Codex sign-in.")
+            return
+        if state.ready.is_set():
+            self._respond(400, "This Codex sign-in callback has already been used. Restart sign-in if needed.")
+            return
+        state.code = code
+        state.ready.set()
+        self._respond(200, "Codex sign-in completed. You can close this tab and return to Lastbrowser.")
+
+    def _respond(self, status: int, message: str) -> None:
+        safe = (message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+        body = (
+            "<!doctype html><html><meta charset='utf-8'><title>Lastbrowser Codex sign-in</title>"
+            "<style>body{font:16px system-ui;max-width:36rem;margin:12vh auto;padding:0 1rem;"
+            "background:#10141c;color:#eaf2ff}h1{color:#25d9f8}</style>"
+            f"<h1>Lastbrowser</h1><p>{safe}</p></html>"
+        ).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def _bind_codex_callback_server() -> tuple[http.server.HTTPServer, int]:
+    # Match the loopback callback contract used by the official Codex CLI.
+    try:
+        server = http.server.HTTPServer(("127.0.0.1", 1455), _CodexBrowserCallbackHandler)
+        return server, 1455
+    except OSError:
+        server = http.server.HTTPServer(("127.0.0.1", 0), _CodexBrowserCallbackHandler)
+        return server, int(server.server_address[1])
+
+
+def _build_codex_browser_auth_url(redirect_uri: str, state: str, code_challenge: str) -> str:
+    params = {
+        "response_type": "code",
+        "client_id": CODEX_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "scope": "openid profile email offline_access api.connectors.read api.connectors.invoke",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "state": state,
+        "id_token_add_organizations": "true",
+        "codex_cli_simplified_flow": "true",
+        "originator": "codex_cli_rs",
+    }
+    return f"{CODEX_ISSUER}/oauth/authorize?{urllib.parse.urlencode(params)}"
+
+
 def _codex_public_start_payload(flow_id: str, flow: dict[str, Any]) -> dict[str, Any]:
-    return {
+    payload = {
         "ok": True,
         "provider": "openai-codex",
         "flow_id": flow_id,
         "status": flow.get("status", "pending"),
-        "verification_uri": CODEX_VERIFICATION_URI,
-        "user_code": flow.get("user_code", ""),
         "expires_at": flow.get("expires_at"),
         "poll_interval_seconds": flow.get("poll_interval_seconds", 5),
     }
+    if flow.get("auth_url"):
+        payload["auth_url"] = flow["auth_url"]
+        payload["action_required"] = "Sign in to ChatGPT in your system browser. Lastbrowser will finish connecting automatically."
+    else:
+        payload["verification_uri"] = CODEX_VERIFICATION_URI
+        payload["user_code"] = flow.get("user_code", "")
+    return payload
 
 
 def _codex_public_status_payload(flow_id: str, flow: dict[str, Any]) -> dict[str, Any]:
@@ -676,6 +794,11 @@ def _drop_sensitive_flow_fields(flow: dict[str, Any]) -> None:
         "access_token",
         "refresh_token",
         "token_data",
+        "code_challenge",
+        "callback_state",
+        "callback_server",
+        "callback_thread",
+        "redirect_uri",
     ):
         flow.pop(key, None)
 
@@ -711,50 +834,78 @@ def _set_flow_status(flow_id: str, status: str, **fields: Any) -> None:
 
 
 def _run_codex_oauth_worker(flow_id: str) -> None:
-    while True:
-        with _OAUTH_FLOWS_LOCK:
-            flow = dict(_OAUTH_FLOWS.get(flow_id) or {})
-        if not flow:
-            return
-        status = flow.get("status")
-        if status != "pending":
-            return
-        if float(flow.get("expires_at") or 0) <= time.time():
+    with _OAUTH_FLOWS_LOCK:
+        initial = dict(_OAUTH_FLOWS.get(flow_id) or {})
+    if initial.get("auth_mode") == "browser":
+        _run_codex_browser_oauth_worker(flow_id, initial)
+    # Device-code flows from earlier app versions cannot survive a backend
+    # restart because their state was process-local. New Codex logins always
+    # use the browser PKCE flow above.
+
+
+def _run_codex_browser_oauth_worker(flow_id: str, flow: dict[str, Any]) -> None:
+    callback_state = flow.get("callback_state")
+    callback_server = flow.get("callback_server")
+    callback_thread = flow.get("callback_thread")
+    if not isinstance(callback_state, _CodexBrowserCallbackState) or callback_server is None:
+        _set_flow_status(flow_id, "error", error="Codex OAuth callback listener was not initialized.")
+        return
+    try:
+        deadline = float(flow.get("expires_at") or 0)
+        cancel_event = flow.get("cancel_event")
+        while time.time() < deadline and not callback_state.ready.wait(timeout=0.5):
+            if cancel_event is not None and cancel_event.is_set():
+                _set_flow_status(flow_id, "cancelled")
+                return
+            with _OAUTH_FLOWS_LOCK:
+                if (_OAUTH_FLOWS.get(flow_id) or {}).get("status") != "pending":
+                    return
+        if not callback_state.ready.is_set():
             _set_flow_status(flow_id, "expired")
             return
-
-        time.sleep(max(1, int(flow.get("poll_interval_seconds") or 5)))
-
+        if callback_state.error:
+            raise RuntimeError("Codex sign-in could not be verified. Restart the login flow.")
+        authorization_code = callback_state.code
+        if not authorization_code:
+            raise RuntimeError("OpenAI did not return an authorization code. Restart sign-in.")
+        tokens = _exchange_codex_authorization(
+            authorization_code,
+            str(flow.get("code_verifier") or ""),
+            str(flow.get("redirect_uri") or ""),
+        )
+        if not tokens.get("access_token"):
+            raise RuntimeError("OpenAI token response did not include an access token.")
         with _OAUTH_FLOWS_LOCK:
-            live = dict(_OAUTH_FLOWS.get(flow_id) or {})
-        if live.get("status") != "pending":
-            return
+            current = _OAUTH_FLOWS.get(flow_id)
+            if not current or current.get("status") != "pending":
+                return
+            _persist_codex_credentials(Path(flow["sidekick_home"]), tokens)
+            current["status"] = "success"
+            current["updated_at"] = time.time()
+            _drop_sensitive_flow_fields(current)
+    except Exception as exc:
+        # Never return raw provider response bodies or callback values to the UI.
+        logger.warning("Codex browser OAuth flow failed (%s)", type(exc).__name__)
+        _set_flow_status(flow_id, "error", error=_safe_codex_oauth_error(exc))
+    finally:
         try:
-            code_resp = _poll_codex_authorization(
-                str(live.get("device_auth_id") or ""),
-                str(live.get("user_code") or ""),
-            )
-            if code_resp is None:
-                continue
-            authorization_code = str(code_resp.get("authorization_code") or "").strip()
-            code_verifier = str(code_resp.get("code_verifier") or "").strip()
-            if not authorization_code or not code_verifier:
-                raise RuntimeError("Device auth response missing authorization_code or code_verifier")
-            tokens = _exchange_codex_authorization(authorization_code, code_verifier)
-            # Re-check status under lock before persisting: a cancel/expire that
-            # raced with the device-token + token-exchange network calls must
-            # win, so we don't persist credentials the user explicitly aborted.
-            with _OAUTH_FLOWS_LOCK:
-                current = _OAUTH_FLOWS.get(flow_id)
-                if not current or current.get("status") != "pending":
-                    return
-            _persist_codex_credentials(Path(live["sidekick_home"]), tokens)
-            _set_flow_status(flow_id, "success")
-            return
-        except Exception as exc:
-            logger.warning("Codex OAuth onboarding flow failed: %s", exc)
-            _set_flow_status(flow_id, "error", error=str(exc))
-            return
+            callback_server.shutdown()
+        except Exception:
+            pass
+        try:
+            callback_server.server_close()
+        except Exception:
+            pass
+        if callback_thread and callback_thread is not threading.current_thread():
+            callback_thread.join(timeout=2)
+
+
+def _safe_codex_oauth_error(exc: Exception) -> str:
+    if isinstance(exc, urllib.error.HTTPError):
+        if exc.code == 530:
+            return "OpenAI's Codex sign-in endpoint returned HTTP 530. Retry from the system browser; the service may be blocking this network route."
+        return f"OpenAI Codex sign-in failed with HTTP {exc.code}. Restart sign-in and try again."
+    return str(exc)[:200] or "OpenAI Codex sign-in failed. Restart sign-in and try again."
 
 
 def _start_anthropic_flow(sidekick_home: Path) -> dict[str, Any]:
@@ -922,29 +1073,43 @@ def start_onboarding_oauth_flow(body: dict[str, Any] | None) -> dict[str, Any]:
             "to Antigravity under Google's third-party access terms."
         )
 
-    # Codex flow
+    # Use the same authorization-code + PKCE loopback flow as the official
+    # Codex CLI. The device-code endpoint currently returns Cloudflare 530 for
+    # this install, while the supported browser authorization route avoids that
+    # failing device-auth API entirely.
     sidekick_home = _get_active_profile_home()
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode("ascii")
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+    state = secrets.token_urlsafe(32)
     try:
-        device = _request_codex_user_code()
+        callback_server, port = _bind_codex_callback_server()
     except Exception as exc:
-        raise RuntimeError(f"Failed to start Codex OAuth: {exc}") from exc
-
-    user_code = str(device.get("user_code") or "").strip()
-    device_auth_id = str(device.get("device_auth_id") or "").strip()
-    if not user_code or not device_auth_id:
-        raise RuntimeError("Device code response missing required fields")
-
-    interval = max(3, int(device.get("interval") or 5))
-    expires_in = int(device.get("expires_in") or CODEX_FLOW_MAX_WAIT_SECONDS)
-    expires_at = time.time() + min(max(expires_in, 60), CODEX_FLOW_MAX_WAIT_SECONDS)
+        raise RuntimeError(f"Failed to start Codex OAuth callback listener: {exc}") from exc
+    redirect_uri = f"http://127.0.0.1:{port}{CODEX_BROWSER_CALLBACK_PATH}"
+    callback_state = _CodexBrowserCallbackState(state)
+    callback_server.codex_callback_state = callback_state
+    callback_thread = threading.Thread(
+        target=callback_server.serve_forever,
+        name="sidekick-codex-oauth-callback",
+        daemon=True,
+    )
+    callback_thread.start()
+    auth_url = _build_codex_browser_auth_url(redirect_uri, state, challenge)
     flow_id = uuid.uuid4().hex
     flow = {
         "provider": "openai-codex",
+        "auth_mode": "browser",
         "status": "pending",
-        "device_auth_id": device_auth_id,
-        "user_code": user_code,
-        "expires_at": expires_at,
-        "poll_interval_seconds": interval,
+        "auth_url": auth_url,
+        "code_verifier": verifier,
+        "code_challenge": challenge,
+        "redirect_uri": redirect_uri,
+        "callback_state": callback_state,
+        "callback_server": callback_server,
+        "callback_thread": callback_thread,
+        "cancel_event": threading.Event(),
+        "expires_at": time.time() + CODEX_FLOW_MAX_WAIT_SECONDS,
+        "poll_interval_seconds": 2,
         "sidekick_home": str(sidekick_home),
         "created_at": time.time(),
         "updated_at": time.time(),

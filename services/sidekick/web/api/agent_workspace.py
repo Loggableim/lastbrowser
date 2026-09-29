@@ -107,7 +107,7 @@ def _call_llm(messages: list, timeout: int = 30) -> Optional[str]:
 
             response = call_llm(
                 provider="ollama-cloud",
-                model="deepseek-v4-flash",
+                model="deepseek-v4.1-flash",
                 messages=messages,
                 temperature=0.3,
                 max_tokens=1000,

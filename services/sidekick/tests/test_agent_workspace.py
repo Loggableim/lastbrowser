@@ -161,7 +161,7 @@ def test_agent_workspace_llm_uses_remote_deepseek_in_game_mode(monkeypatch, tmp_
     result = agent_workspace._call_llm([{"role": "user", "content": "find docs"}], timeout=20)
 
     assert captured["provider"] == "ollama-cloud"
-    assert captured["model"] == "deepseek-v4-flash"
+    assert captured["model"] == "deepseek-v4.1-flash"
     assert result == '{"intent":"search","commands":[],"explanation":"ok","needs_confirmation":false}'
 
 

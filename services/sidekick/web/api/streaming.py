@@ -1199,7 +1199,7 @@ def generate_title_raw_via_aux(
 
         if cfg.is_game_mode_enabled():
             provider = "ollama-cloud"
-            model = "deepseek-v4-flash"
+            model = "deepseek-v4.1-flash"
             base_url = ""
     except Exception:
         pass
@@ -1279,7 +1279,7 @@ def generate_title_raw_via_agent(agent, user_text: str, assistant_text: str) -> 
                 user_text,
                 assistant_text,
                 provider="ollama-cloud",
-                model="deepseek-v4-flash",
+                model="deepseek-v4.1-flash",
                 base_url="",
             )
     except Exception:

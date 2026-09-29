@@ -45,7 +45,7 @@ from swarm_core.verifier import (
 
 
 _ROUTED_MODELS = (
-    "deepseek-v4-flash",
+    "deepseek-v4.1-flash",
     "deepseek-v4-pro",
     "kimi-k2.6",
     "minimax-m3",

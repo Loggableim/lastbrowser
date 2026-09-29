@@ -131,7 +131,7 @@ export function ChatTranscript({
               {message.pending && <Loader2 size={13} className="spin" />}
             </div>
             <ChatMessageBody content={String(message.content || '')} />
-            {showThinking && reasoning && !simplifiedToolCalling && (
+            {showThinking && reasoning && (
               <details className="chat-reasoning-details">
                 <summary>{t('chat.reasoning')}</summary>
                 <div className="chat-reasoning-content"><ChatMessageBody content={reasoning} /></div>
@@ -141,9 +141,6 @@ export function ChatTranscript({
               simplifiedToolCalling ? (
                 <details className="chat-activity-details">
                   <summary>{t('settings.panels.notifications.compactActivity')} · {toolCalls.length}</summary>
-                  {showThinking && reasoning && (
-                    <div className="chat-reasoning-content"><strong>{t('chat.reasoning')}</strong><ChatMessageBody content={reasoning} /></div>
-                  )}
                   {toolCalls.map((call, callIndex) => <ToolCallDetails key={call.id || `${call.name}-${callIndex}`} call={call} detailed={false} />)}
                 </details>
               ) : (
@@ -376,6 +373,7 @@ const SLASH_COMMANDS: SlashCmd[] = [
   { name: 'model', help: 'Switch model: /model <name>', action: 'api' },
   { name: 'workspace', help: 'Switch workspace: /workspace <path>', action: 'api' },
   { name: 'usage', help: 'Show token usage', action: 'api' },
+  { name: 'gquota', help: 'Check Antigravity quota for connected Google accounts', action: 'api' },
   { name: 'theme', help: 'Toggle theme: /theme <name>', action: 'local' },
   { name: 'undo', help: 'Undo last exchange', action: 'local' },
 ];

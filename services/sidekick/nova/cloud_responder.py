@@ -13,7 +13,7 @@ _REDACT = re.compile(r"(?i)(secret|token|password|api[_-]?key)\s*[:=]\s*[^\s]+")
 
 class NovaCloudResponder:
     """Host-injected, bounded responder; disabled and credential-free by default."""
-    def __init__(self, transport: ModelTransport, *, model: str = "deepseek-v4-flash", timeout_seconds: float = 5.0, enabled: bool = False):
+    def __init__(self, transport: ModelTransport, *, model: str = "deepseek-v4.1-flash", timeout_seconds: float = 5.0, enabled: bool = False):
         if not hasattr(transport, "complete") or not callable(transport.complete):
             raise TypeError("Nova Cloud responder requires a model transport")
         if not isinstance(model, str) or not model.strip() or "gpt-oss" in model.casefold():

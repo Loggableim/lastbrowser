@@ -58,6 +58,7 @@ import {
 } from 'lucide-react';
 import { hideWebviewScrollbars } from './browser-view.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
+import { applyLiveChatDelta, finishLiveChatMessage } from './chat-live-stream.js';
 import { playChatCompletionSound } from './notification-sound.js';
 import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
@@ -167,7 +168,6 @@ import {
   WorkspaceTreeEntry,
   lastbrowserPanels,
   panelLabelTranslationKey,
-  isInstalledSidebarApp,
   leftSidebarCollapsedStorageKey,
   loadInstalledSidebarApps,
   loadBooleanPreference,
@@ -1356,13 +1356,6 @@ function AppContent(): JSX.Element {
   }, [installedSidebarApps]);
 
   useEffect(() => {
-    if (isInstalledSidebarApp(activePanel, installedSidebarApps)) return;
-    if (activePanel === 'gmail' || activePanel === 'discord') {
-      setActivePanel('browser');
-    }
-  }, [activePanel, installedSidebarApps]);
-
-  useEffect(() => {
     setActiveContextItem(panelContextItems[activePanel]?.[0] || '');
   }, [activePanel]);
 
@@ -2197,6 +2190,7 @@ function AppContent(): JSX.Element {
     const deadline = Date.now() + 120000;
     let sawStreamEnd = false;
     let streamFailed = false;
+    let hasLiveOutput = false;
     const notifyCompletion = createOnceChatCompletionNotifier(
       desktopSettings?.sound_enabled === true,
       desktopSettings?.notifications_enabled === true,
@@ -2210,6 +2204,8 @@ function AppContent(): JSX.Element {
       if (event.event === 'stream_end') {
         notifyCompletion();
         sawStreamEnd = true;
+        setChatMessages((current) => finishLiveChatMessage(current));
+        setMessages((current) => finishLiveChatMessage(current));
         return;
       }
       if (event.event === 'done') {
@@ -2220,6 +2216,8 @@ function AppContent(): JSX.Element {
       }
       if (event.event === 'cancel') {
         sawStreamEnd = true;
+        setChatMessages((current) => finishLiveChatMessage(current));
+        setMessages((current) => finishLiveChatMessage(current));
         return;
       }
       if (event.event === 'error') {
@@ -2227,6 +2225,17 @@ function AppContent(): JSX.Element {
         return;
       }
       if (typeof event.event !== 'string') return;
+      if (event.event === 'token' || event.event === 'delta' || event.event === 'reasoning') {
+        const delta = isRecord(event.data) ? event.data : {};
+        const text = typeof delta.text === 'string' ? delta.text : '';
+        if (text) {
+          hasLiveOutput = true;
+          const kind = event.event === 'reasoning' ? 'reasoning' : 'token';
+          setChatMessages((current) => applyLiveChatDelta(current, kind, text));
+          setMessages((current) => applyLiveChatDelta(current, kind, text));
+        }
+        return;
+      }
       const orchestrationProgress = describeOrchestrationProgress(event.event, event.data);
       if (orchestrationProgress) {
         const updatePending = <T extends { role?: string; pending?: boolean; content?: string },>(items: T[]): T[] => items.map((item) => (
@@ -2238,21 +2247,16 @@ function AppContent(): JSX.Element {
         setMessages(updatePending);
         return;
       }
-      // Any content-bearing event means the turn is progressing; refresh the
-      // transcript so the user sees the text without waiting for completion.
-      // 'token' is the primary content-delta event the backend emits during
-      // streaming (see streaming.py on_token → put('token', …)); 'delta' is
-      // kept for older sidecars. The standalone WebUI renders both live —
-      // parity requires the desktop transcript to refresh on them too.
+      // Events without incremental text still need a session refresh to update
+      // tool/activity state. Token and reasoning deltas are applied directly
+      // above because the persisted session is finalized only after the turn.
       if (
-        event.event === 'token' ||
-        event.event === 'delta' ||
         event.event === 'message' ||
         event.event === 'tool' ||
         event.event === 'tool_complete' ||
         event.event === 'interim_assistant'
       ) {
-        void loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
+        if (!hasLiveOutput) void loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
       }
     });
 
@@ -2269,10 +2273,12 @@ function AppContent(): JSX.Element {
         // the turn: poll occasionally as a safety net.
         if (Date.now() % 6000 < 700) {
           const streamStatus = await window.lastbrowser.sidekick.getStreamStatus(streamId).catch(() => null);
-          const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
-          if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
-            notifyCompletion();
-            return;
+          if (!hasLiveOutput || streamStatus?.active === false) {
+            const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
+            if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
+              notifyCompletion();
+              return;
+            }
           }
         }
       }
@@ -3054,11 +3060,11 @@ function AppContent(): JSX.Element {
                     setZenSidebarRevealed(false);
                   }}
                   onOpenHistory={() => {
-                    usePanelStore.getState().setHistoryOpen(true);
+                    usePanelStore.getState().setHistoryOpen(!usePanelStore.getState().historyOpen);
                     setZenSidebarRevealed(false);
                   }}
                   onOpenDownloads={() => {
-                    usePanelStore.getState().setDownloadsOpen(true);
+                    usePanelStore.getState().setDownloadsOpen(!usePanelStore.getState().downloadsOpen);
                     setZenSidebarRevealed(false);
                   }}
                   onOpenExtensions={() => {
@@ -3154,8 +3160,8 @@ function AppContent(): JSX.Element {
               onSelectSpace={handleSpaceSelect}
               onCreateSpace={() => setSpaceSetupModalOpen(true)}
               onOpenSettings={() => setActivePanel('settings')}
-              onOpenHistory={() => usePanelStore.getState().setHistoryOpen(true)}
-              onOpenDownloads={() => usePanelStore.getState().setDownloadsOpen(true)}
+              onOpenHistory={() => usePanelStore.getState().setHistoryOpen(!usePanelStore.getState().historyOpen)}
+              onOpenDownloads={() => usePanelStore.getState().setDownloadsOpen(!usePanelStore.getState().downloadsOpen)}
               onOpenExtensions={() => {
                 usePanelStore.getState().setExtensionHubOpen(true);
               }}
@@ -3220,6 +3226,12 @@ function AppContent(): JSX.Element {
                   activeSessionId={activeSessionId}
                   activeTab={activeTab}
                   activeProfile={activeProfile}
+                  profiles={profiles}
+                  activeProfileId={activeProfileId}
+                  onSelectProfile={switchProfile}
+                  onCreateProfile={createProfileEntry}
+                  onRenameProfile={renameProfileEntry}
+                  onDeleteProfile={deleteProfileEntry}
                   lastChatTurnUsage={lastChatTurnUsage}
                   webviewStartupReady={windowStartupReady}
                   onTransferredWebviewReady={handleTransferredWebviewReady}
@@ -3296,12 +3308,6 @@ function AppContent(): JSX.Element {
                   searchEngineId={searchEngineId}
                   onSearchEngineChange={setSearchEngineId}
                   desktopSettings={desktopSettings}
-                  profiles={profiles}
-                  activeProfileId={activeProfileId}
-                  onSelectProfile={switchProfile}
-                  onCreateProfile={createProfileEntry}
-                  onRenameProfile={renameProfileEntry}
-                  onDeleteProfile={deleteProfileEntry}
                 />
               </div>
 
@@ -3311,7 +3317,7 @@ function AppContent(): JSX.Element {
                   onClose={() => setCopilotOpen(false)}
                   onMinimize={() => setCopilotOpen(false)}
                   botName={setupState.botName || 'Nova'}
-                  modelName={setupState.model || 'Gemini CLI'}
+                  modelName={setupState.model || 'Google Gemini'}
                   modelProvider={onboardingStatus?.system?.current_provider || setupState.provider}
                   messages={chatMessages}
                   busy={sidekickBusy}
@@ -3393,7 +3399,7 @@ function AppContent(): JSX.Element {
               }}
               onAddPinnedApp={() => { setPinnedEditApp(null); setPinnedModalOpen(true); }}
               onEditPinnedApp={(app) => { setPinnedEditApp(app); setPinnedModalOpen(true); }}
-              onOpenHistory={() => usePanelStore.getState().setHistoryOpen(true)}
+              onOpenHistory={() => usePanelStore.getState().setHistoryOpen(!usePanelStore.getState().historyOpen)}
               onOpenSettings={() => setActivePanel('settings')}
               onNewTab={(url) => addTab(url)}
               onExpandSidebar={() => setSidebarMode('expanded')}
@@ -3545,6 +3551,12 @@ function AppContent(): JSX.Element {
               activeSessionId={activeSessionId}
               activeTab={activeTab}
               activeProfile={activeProfile}
+              profiles={profiles}
+              activeProfileId={activeProfileId}
+              onSelectProfile={switchProfile}
+              onCreateProfile={createProfileEntry}
+              onRenameProfile={renameProfileEntry}
+              onDeleteProfile={deleteProfileEntry}
               lastChatTurnUsage={lastChatTurnUsage}
               webviewStartupReady={windowStartupReady}
               onTransferredWebviewReady={handleTransferredWebviewReady}
@@ -3619,12 +3631,6 @@ function AppContent(): JSX.Element {
               searchEngineId={searchEngineId}
               onSearchEngineChange={setSearchEngineId}
               desktopSettings={desktopSettings}
-              profiles={profiles}
-              activeProfileId={activeProfileId}
-              onSelectProfile={switchProfile}
-              onCreateProfile={createProfileEntry}
-              onRenameProfile={renameProfileEntry}
-              onDeleteProfile={deleteProfileEntry}
             />
             <WorkspacePanel
               activeSessionId={activeSessionId}
@@ -3704,6 +3710,12 @@ function BrowserMain({
   activeSessionId,
   activeTab,
   activeProfile,
+  profiles,
+  activeProfileId,
+  onSelectProfile,
+  onCreateProfile,
+  onRenameProfile,
+  onDeleteProfile,
   webviewStartupReady = true,
   onTransferredWebviewReady = () => undefined,
   pendingTransferredTabId = null,
@@ -3770,12 +3782,6 @@ function BrowserMain({
   onSetSplitLayout,
   botName = 'Nova',
   desktopSettings = null,
-  profiles,
-  activeProfileId,
-  onSelectProfile,
-  onCreateProfile,
-  onRenameProfile,
-  onDeleteProfile,
   lastChatTurnUsage = null
 }: {
   activePanel: LastbrowserPanelId;

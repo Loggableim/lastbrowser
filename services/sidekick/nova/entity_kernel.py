@@ -495,7 +495,7 @@ class EntityKernel:
             "autonomy": {"level": 3 if yolo else runtime.get("autonomy_level", 2), "yolo_enabled": yolo},
             "mind": {
                 "pid": pid, "running": running,
-                "model_route": "ollama-cloud:deepseek-v4-flash" if game_mode else "local-registry",
+                "model_route": "ollama-cloud:deepseek-v4.1-flash" if game_mode else "local-registry",
                 "game_mode": game_mode,
             },
             "reflection_queue": self.reflections.status(),

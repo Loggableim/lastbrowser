@@ -11,7 +11,8 @@
  * Usage:
  *   node scripts/smoke-browser.mjs [path-to-exe]
  *
- * Defaults to the installed build at %LOCALAPPDATA%\Programs\Lastbrowser.
+ * Defaults to the local Electron binary plus the current dist/main/main.js.
+ * Pass LASTBROWSER_SMOKE_ALLOW_INSTALLED=1 to explicitly test an installed EXE.
  * Exits 0 on success, 1 on failure. Screenshots land in ./smoke-output/.
  */
 import { spawn, spawnSync } from 'node:child_process';
@@ -21,11 +22,15 @@ import os from 'node:os';
 import net from 'node:net';
 import { createServer as createHttpServer } from 'node:http';
 
-const DEFAULT_EXE = path.join(
-  process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
-  'Programs',
-  'Lastbrowser',
-  'Lastbrowser.exe'
+const DEFAULT_EXE = path.resolve(
+  import.meta.dirname,
+  '..',
+  '..',
+  '..',
+  'node_modules',
+  'electron',
+  'dist',
+  process.platform === 'win32' ? 'electron.exe' : 'electron'
 );
 const EXE = process.argv[2] || process.env.LASTBROWSER_EXE || DEFAULT_EXE;
 const REQUESTED_CDP_PORT = process.env.LASTBROWSER_SMOKE_CDP_PORT
@@ -287,6 +292,13 @@ function skip(name, detail = '') {
 }
 
 async function main() {
+  const electronExecutableName = process.platform === 'win32' ? 'electron.exe' : 'electron';
+  const isElectronBinary = path.basename(EXE).toLowerCase() === electronExecutableName;
+  if (!isElectronBinary && process.env.LASTBROWSER_SMOKE_ALLOW_INSTALLED !== '1') {
+    console.error('FAIL: installed EXE smoke is disabled because older builds may ignore the isolated downloads path. Set LASTBROWSER_SMOKE_ALLOW_INSTALLED=1 only for an intentional installed-build test.');
+    process.exitCode = 1;
+    return;
+  }
   if (!CDP_PORT) CDP_PORT = await findFreePort();
   await assertPortUnused(CDP_PORT);
   console.log('Lastbrowser smoke test');
@@ -305,7 +317,6 @@ async function main() {
   const downloadFixtureUrl = await startSmokeDownloadFixture();
 
   // 1. Launch
-  const isElectronBinary = path.basename(EXE).toLowerCase() === 'electron.exe';
   const launchArgs = [
     `--user-data-dir=${SMOKE_PROFILE_DIR}`,
     `--remote-debugging-port=${CDP_PORT}`,
@@ -408,6 +419,13 @@ async function main() {
 
   check('shell ui rendered', shellInfo.hasSidebar && shellInfo.hasAddressBar,
     `sidebar=${shellInfo.hasSidebar} addressbar=${shellInfo.hasAddressBar}`);
+
+  const topbarProfileSelector = await cdp.send('Runtime.evaluate', {
+    expression: `document.querySelectorAll('.modern-titlebar .profile-switcher, .browser-titlebar .profile-switcher').length`,
+    returnByValue: true
+  });
+  check('browser profiles are absent from both titlebar layouts', topbarProfileSelector.result.value === 0,
+    `topbar profile switchers=${topbarProfileSelector.result.value}`);
 
   const cursorPosition = await cdp.send('Runtime.evaluate', {
     expression: 'window.lastbrowser?.system?.getCursorPosition?.()',
@@ -776,8 +794,19 @@ async function main() {
     expression: `(() => { const button = document.querySelector('.settings-floating-action-bar .primary-action'); if (!button) return 'AUTO_SAVE'; if (button.disabled) return 'NOT_READY'; button.click(); return 'CLICKED'; })()`,
     returnByValue: true
   });
+  const appearanceSaveWaitStarted = Date.now();
   let savedAppearance = null;
-  for (let attempt = 0; attempt < 30; attempt++) {
+  for (let attempt = 0; attempt < 120; attempt++) {
+    const status = await cdp.send('Runtime.evaluate', {
+      expression: 'Promise.resolve(window.lastbrowser.services.status()).then(value => JSON.stringify(value))',
+      awaitPromise: true,
+      returnByValue: true
+    });
+    const runtimeStatus = JSON.parse(status.result.value || '{}');
+    if (runtimeStatus.sidekick !== 'ready' || runtimeStatus.webuiHealth !== 'ready') {
+      await sleep(500);
+      continue;
+    }
     const saved = await cdp.send('Runtime.evaluate', {
       expression: `(async () => { try { const response = await window.lastbrowser.sidekick.getSettings(); return JSON.stringify(response?.settings || response || {}); } catch { return '{}'; } })()`,
       awaitPromise: true,
@@ -785,8 +814,9 @@ async function main() {
     });
     savedAppearance = JSON.parse(saved.result.value || '{}');
     if (savedAppearance.theme === 'light' && savedAppearance.font_size === 'large' && savedAppearance.message_layout === 'compact') break;
-    await sleep(150);
+    await sleep(500);
   }
+  const appearanceSaveWaitMs = Date.now() - appearanceSaveWaitStarted;
   const appearancePassed = openAppearance.result.value === 'CLICKED' && appearanceReady
     && appearancePreview.result.value?.ready && liveAppearance.theme === 'light'
     && liveAppearance.skin && liveAppearance.font === 'large' && liveAppearance.layout === 'compact'
@@ -798,7 +828,7 @@ async function main() {
   });
   const appearanceSaveErrors = rendererDiagnostics.filter(message => /settings|save/i.test(message)).slice(-5);
   check('Appearance controls update the live theme, skin, font and message layout and persist', appearancePassed,
-    `section=${openAppearance.result.value}/${appearanceReady}, runtime=${appearanceRuntimeProbe.result.value}, save=${appearanceSaved.result.value}, preview=${JSON.stringify(liveAppearance)}, saved=${JSON.stringify({ theme: savedAppearance.theme, skin: savedAppearance.skin, font_size: savedAppearance.font_size, message_layout: savedAppearance.message_layout })}, events=${appearanceSaveEvents.result.value}, saveErrors=${JSON.stringify(appearanceSaveErrors)}`);
+    `section=${openAppearance.result.value}/${appearanceReady}, runtime=${appearanceRuntimeProbe.result.value}, save=${appearanceSaved.result.value}, persistedAfterMs=${appearanceSaveWaitMs}, preview=${JSON.stringify(liveAppearance)}, saved=${JSON.stringify({ theme: savedAppearance.theme, skin: savedAppearance.skin, font_size: savedAppearance.font_size, message_layout: savedAppearance.message_layout })}, events=${appearanceSaveEvents.result.value}, saveErrors=${JSON.stringify(appearanceSaveErrors)}`);
   if (process.env.LASTBROWSER_SMOKE_APPEARANCE_ONLY === '1') {
     cdp.close();
     finish(child);

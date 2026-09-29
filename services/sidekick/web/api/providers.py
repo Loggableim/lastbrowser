@@ -972,6 +972,93 @@ def _provider_response_metadata_status(provider: str, display_name: str) -> dict
     }
 
 
+def _antigravity_quota_status(display_name: str) -> dict[str, Any]:
+    """Inspect quota buckets per connected Antigravity account without hiding failures."""
+    try:
+        from runtime.antigravity_oauth import (
+            get_valid_access_token,
+            list_connected_accounts,
+            load_account_credentials,
+        )
+        from runtime.google_code_assist import retrieve_user_quota
+    except ImportError:
+        return {
+            "ok": False, "provider": "antigravity", "display_name": display_name,
+            "supported": True, "status": "unavailable", "quota": [],
+            "message": "Antigravity quota diagnostics are unavailable in this runtime.",
+        }
+
+    accounts = list_connected_accounts()
+    if not accounts:
+        return {
+            "ok": False, "provider": "antigravity", "display_name": display_name,
+            "supported": True, "status": "no_accounts", "quota": [],
+            "message": "No Antigravity accounts are connected.",
+        }
+
+    results = []
+    quota_probe_disabled = False
+    for account in accounts:
+        email = str(account.get("email") or "")
+        try:
+            credentials = load_account_credentials(email)
+            if not credentials:
+                raise RuntimeError("Account credentials are unavailable.")
+            access_token = get_valid_access_token(account_email=email)
+            buckets = retrieve_user_quota(
+                access_token,
+                project_id=credentials.project_id or "",
+                user_agent_model="",
+            )
+            results.append({
+                "account": email,
+                "status": "available" if buckets else "no_buckets",
+                "buckets": [
+                    {
+                        "model_id": bucket.model_id,
+                        "token_type": bucket.token_type,
+                        "remaining_fraction": max(0.0, min(1.0, float(bucket.remaining_fraction))),
+                        "reset_time": bucket.reset_time_iso,
+                    }
+                    for bucket in buckets
+                ],
+                "message": "Quota buckets returned." if buckets else "Google returned no quota buckets for this account.",
+            })
+        except Exception as exc:
+            error_code = str(getattr(exc, "code", "") or "")
+            quota_probe_disabled = quota_probe_disabled or error_code == "provider_unavailable"
+            logger.info("Antigravity quota lookup failed for one account (%s)", type(exc).__name__)
+            results.append({
+                "account": email,
+                "status": "unsupported" if error_code == "provider_unavailable" else "unavailable",
+                "buckets": [],
+                "message": (
+                    "This build disables the Google quota control-plane endpoint; remaining quota cannot be read."
+                    if error_code == "provider_unavailable"
+                    else f"Quota lookup failed ({type(exc).__name__})."
+                ),
+            })
+
+    has_data = any(entry["status"] == "available" for entry in results)
+    any_success = any(entry["status"] in {"available", "no_buckets"} for entry in results)
+    all_quota_probes_disabled = quota_probe_disabled and all(entry["status"] == "unsupported" for entry in results)
+    return {
+        "ok": has_data,
+        "provider": "antigravity",
+        "display_name": display_name,
+        "supported": True,
+        "status": "available" if has_data else ("empty" if any_success else ("unsupported" if all_quota_probes_disabled else "unavailable")),
+        "quota": results,
+        "message": (
+            "Google Antigravity quota data is account-scoped. Empty buckets do not prove the account is exhausted."
+            if has_data or any_success
+            else "This build disables direct Google quota lookups. A 429 response alone does not confirm daily quota exhaustion."
+            if all_quota_probes_disabled
+            else "Quota could not be retrieved from any connected Antigravity account."
+        ),
+    }
+
+
 def get_provider_quota(provider_id: str | None = None) -> dict[str, Any]:
     """Return sanitized quota/rate-limit status for the active provider.
 
@@ -994,6 +1081,8 @@ def get_provider_quota(provider_id: str | None = None) -> dict[str, Any]:
     display_name = _PROVIDER_DISPLAY.get(provider, provider.replace("-", " ").title())
     if provider == "ollama-cloud":
         return _provider_ollama_cloud_status(display_name)
+    if provider == "antigravity":
+        return _antigravity_quota_status(display_name)
     if provider in _ACCOUNT_USAGE_PROVIDERS:
         return _provider_account_usage_status(provider, display_name)
 

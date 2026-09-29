@@ -1086,7 +1086,7 @@ _PROVIDER_MODELS = {
         {"id": "mistral", "label": "Mistral (7B)"},
     ],
     "ollama-cloud": [
-        {"id": "deepseek-v4-flash", "label": "DeepSeek V4 Flash"},
+        {"id": "deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash"},
         {"id": "qwen3:32b", "label": "Qwen 3 (32B)"},
         {"id": "kimi-k3", "label": "Kimi K3"},
         {"id": "glm-5.3", "label": "GLM 5.3"},

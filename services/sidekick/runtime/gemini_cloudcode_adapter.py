@@ -775,7 +775,7 @@ def _gemini_http_error(response: httpx.Response) -> CodeAssistError:
 
         MODEL_CAPACITY_EXHAUSTED → "Gemini model capacity exhausted for
             <model>. This is a Google-side throttle..."
-        RESOURCE_EXHAUSTED w/o reason → quota-style message
+        RESOURCE_EXHAUSTED w/o reason → an ambiguous provider exhaustion
         404 → "Model <name> not found at cloudcode-pa..."
     """
     status = response.status_code
@@ -876,8 +876,9 @@ def _gemini_http_error(response: httpx.Response) -> CodeAssistError:
             message += f" Google suggests retrying in {retry_delay_seconds:g}s."
     elif status == 429 and err_status == "RESOURCE_EXHAUSTED":
         message = (
-            f"Gemini quota exhausted ({err_message or 'RESOURCE_EXHAUSTED'}). "
-            f"Check /gquota for remaining daily requests."
+            f"Google returned RESOURCE_EXHAUSTED ({err_message or 'no additional detail'}). "
+            "This response alone does not confirm that the account's daily quota is exhausted; "
+            "it can also indicate a per-model limit or temporary provider throttling."
         )
         if retry_delay_seconds is not None:
             message += f" Retry suggested in {retry_delay_seconds:g}s."

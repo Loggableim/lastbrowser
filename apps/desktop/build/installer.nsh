@@ -1,6 +1,6 @@
 !macro customWelcomePage
   !define MUI_WELCOMEPAGE_TITLE "Install Lastbrowser"
-  !define MUI_WELCOMEPAGE_TEXT "Lastbrowser is an AI-native browser runtime for Windows.$\r$\n$\r$\nThe installer bundles the local Sidekick runtime and uses the branded browser-first setup flow. You can start browsing immediately while Sidekick finishes in the background."
+  !define MUI_WELCOMEPAGE_TEXT "Lastbrowser in wenigen Augenblicken installieren.$\r$\n$\r$\nDer Browser ist sofort bereit. Optionale KI-Funktionen kannst du später in den Einstellungen verbinden."
   !insertmacro MUI_PAGE_WELCOME
 !macroend
 
@@ -20,7 +20,7 @@
   !endif
 
   !define MUI_FINISHPAGE_TITLE "Lastbrowser is ready"
-  !define MUI_FINISHPAGE_TEXT "Open Lastbrowser to connect your cloud provider. The browser starts immediately while Sidekick prepares the runtime in the background."
+  !define MUI_FINISHPAGE_TEXT "Lastbrowser ist installiert und startklar. Optionale KI-Anbieter kannst du jederzeit in den Einstellungen verbinden."
   !insertmacro MUI_PAGE_FINISH
 !macroend
 

@@ -63,7 +63,7 @@ def test_generate_title_via_ollama_uses_remote_deepseek_in_game_mode(monkeypatch
     ) == "Game Mode DeepSeek title"
     assert calls, "Game Mode should route title generation through Ollama Cloud"
     assert calls[0]["provider"] == "ollama-cloud"
-    assert calls[0]["model"] == "deepseek-v4-flash"
+    assert calls[0]["model"] == "deepseek-v4.1-flash"
 
 
 def test_streaming_title_aux_forces_remote_deepseek_in_game_mode(monkeypatch, tmp_path):
@@ -93,7 +93,7 @@ def test_streaming_title_aux_forces_remote_deepseek_in_game_mode(monkeypatch, tm
     assert status == "llm_aux"
     assert calls, "Game Mode should route streaming title generation through Ollama Cloud"
     assert calls[0]["kwargs"]["provider"] == "ollama-cloud"
-    assert calls[0]["kwargs"]["model"] == "deepseek-v4-flash"
+    assert calls[0]["kwargs"]["model"] == "deepseek-v4.1-flash"
 
 
 def test_streaming_title_agent_uses_remote_deepseek_in_game_mode(monkeypatch, tmp_path):
@@ -152,4 +152,4 @@ def test_streaming_title_agent_uses_remote_deepseek_in_game_mode(monkeypatch, tm
     assert status == "llm_aux"
     assert remote_calls, "Game Mode should bypass the local agent title path"
     assert remote_calls[0]["provider"] == "ollama-cloud"
-    assert remote_calls[0]["model"] == "deepseek-v4-flash"
+    assert remote_calls[0]["model"] == "deepseek-v4.1-flash"

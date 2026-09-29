@@ -46,7 +46,7 @@ def test_async_extract_facts_uses_remote_deepseek_in_game_mode(monkeypatch, tmp_
 
     assert calls, "Game Mode should route fact extraction through Ollama Cloud"
     assert calls[0]["kwargs"]["provider"] == "ollama-cloud"
-    assert calls[0]["kwargs"]["model"] == "deepseek-v4-flash"
+    assert calls[0]["kwargs"]["model"] == "deepseek-v4.1-flash"
     assert (memory_dir / "MEMORY.md").exists()
     text = (memory_dir / "MEMORY.md").read_text(encoding="utf-8")
     assert "[SESSION: sess_1]" in text
@@ -93,7 +93,7 @@ def test_extract_facts_via_llamacpp_uses_remote_deepseek_in_game_mode(monkeypatc
     assert "Remote-LLM" in result
     assert calls, "Game Mode should route fact extraction through Ollama Cloud"
     assert calls[0]["kwargs"]["provider"] == "ollama-cloud"
-    assert calls[0]["kwargs"]["model"] == "deepseek-v4-flash"
+    assert calls[0]["kwargs"]["model"] == "deepseek-v4.1-flash"
 
 
 def test_extract_facts_via_llamacpp_does_not_fall_back_to_local_in_game_mode(monkeypatch, tmp_path):

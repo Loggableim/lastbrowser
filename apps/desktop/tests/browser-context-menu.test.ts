@@ -13,7 +13,7 @@ import {
 import { openAuthConnectWindow } from '../src/main/auth-window.js';
 
 describe('browser context menu', () => {
-  it('opens only HTTP(S) window.open targets as internal tabs and keeps OAuth in Connect', () => {
+  it('routes Google sign-in popups into a secure same-session window and keeps other OAuth in Connect', () => {
     let openHandler: ((details: { url: string }) => { action: 'deny' | 'allow' }) | undefined;
     const setWindowOpenHandler = vi.fn((handler: typeof openHandler) => { openHandler = handler; });
     const send = vi.fn();
@@ -34,8 +34,43 @@ describe('browser context menu', () => {
     }
     expect(shellOpenExternal).not.toHaveBeenCalled();
 
-    openHandler?.({ url: 'https://accounts.google.com/o/oauth2/v2/auth' });
+    const googlePopup = openHandler?.({ url: 'https://accounts.google.com/o/oauth2/v2/auth' });
+    expect(googlePopup).toMatchObject({ action: 'allow' });
+    expect(googlePopup).toHaveProperty('createWindow');
+    expect(openAuthConnectWindow).not.toHaveBeenCalled();
+
+    openHandler?.({ url: 'https://auth.openai.com/oauth/authorize' });
     expect(openAuthConnectWindow).toHaveBeenCalledOnce();
+  });
+
+  it('creates a sandboxed Google popup in the originating tab session', () => {
+    let openHandler: ((details: { url: string }) => { action: 'deny' | 'allow'; createWindow?: (features: Record<string, unknown>) => unknown }) | undefined;
+    const session = { id: 'profile-session' };
+    const popupContents = { setWindowOpenHandler: vi.fn() };
+    const popup = { webContents: popupContents };
+    const BrowserWindowConstructor = vi.fn().mockReturnValue(popup);
+    const contents = {
+      session,
+      setWindowOpenHandler: (handler: typeof openHandler) => { openHandler = handler; }
+    } as never;
+
+    installWindowOpenBridge(contents, () => null, {} as never, BrowserWindowConstructor as never);
+    const result = openHandler?.({ url: 'https://accounts.google.com/signin/v2/identifier' });
+    const created = result?.createWindow?.({ width: 400, height: 500, webPreferences: { nodeIntegration: true, preload: 'bad.js' } });
+
+    expect(created).toBe(popupContents);
+    expect(BrowserWindowConstructor).toHaveBeenCalledWith(expect.objectContaining({
+      width: 400,
+      height: 500,
+      webPreferences: expect.objectContaining({
+        session,
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        webviewTag: false
+      })
+    }));
+    expect(popupContents.setWindowOpenHandler).toHaveBeenCalledOnce();
   });
 
   it('validates explicit context-menu system launches and permits only HTTP(S)/mailto', async () => {

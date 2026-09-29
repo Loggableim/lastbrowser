@@ -40,17 +40,19 @@ describe('Multi-Tab Splitscreen State & Mechanics', () => {
     expect(nextState.splitLayout).toBe('columns');
   });
 
-  it('supports up to 4 split tabs and automatically chooses grid layout for 4 tabs', () => {
+  it('promotes a dual split to three visible columns and automatically chooses quad-grid for 4 tabs', () => {
     const { tabs, addSplitTab } = useTabStore.getState();
     addSplitTab(tabs[1].id);
     addSplitTab(tabs[2].id);
     expect(useTabStore.getState().splitTabIds).toHaveLength(3);
+    expect(useTabStore.getState().splitSlotIndexes).toEqual([0, 1, 2]);
+    expect(useTabStore.getState().splitLayout).toBe('trio-columns');
 
     addSplitTab(tabs[3].id);
     const state4 = useTabStore.getState();
     expect(state4.splitTabIds).toHaveLength(4);
     expect(state4.splitSlotIndexes).toEqual([0, 1, 2, 3]);
-    expect(state4.splitLayout).toBe('grid');
+    expect(state4.splitLayout).toBe('quad-grid');
 
     // Attempting to add a 5th tab should be ignored
     addSplitTab(tabs[4].id);

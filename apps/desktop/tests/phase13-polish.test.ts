@@ -80,7 +80,7 @@ describe('Phase 13 In-App UI Polish: Top-64 Pinned Apps & Universal Model Picker
       expect(AVAILABLE_MODELS.every((model) => model.category === 'teamwork')).toBe(true);
     });
 
-    it('verifies CopilotSplitView unlocks model picker in Header and shows active Gemini account', () => {
+    it('verifies CopilotSplitView uses live provider models without stale Gemini CLI account state', () => {
       const source = readRendererFile('components/CopilotSplitView.tsx');
 
       // Header model button
@@ -88,13 +88,17 @@ describe('Phase 13 In-App UI Polish: Top-64 Pinned Apps & Universal Model Picker
       expect(source).toContain('copilot-header-model-name');
       expect(source).toContain('renderModelDropdown(\'header\')');
 
-      // Active Gemini account integration
-      expect(source).toContain('useGeminiAccountStore');
-      expect(source).toContain('currentGeminiAccount');
-      expect(source).toContain('gemini-account-badge');
+      // Gemini CLI is retired. Antigravity and AI Studio models are discovered
+      // from the live provider catalog; account identity comes from each model.
+      expect(source).toContain("pid.includes('antigravity')");
+      expect(source).toContain('const account = m.account || gAccount');
+      expect(source).not.toContain('useGeminiAccountStore');
+      expect(source).not.toContain('currentGeminiAccount');
+      expect(source).not.toContain('gemini-account-badge');
 
       // Model categories in dropdown
-      expect(source).toContain('Google Gemini CLI');
+      expect(source).toContain('Google Gemini (AI Studio)');
+      expect(source).not.toContain('Google Gemini CLI');
       expect(source).toContain('Anthropic');
       expect(source).toContain('OpenAI');
       expect(source).toContain('Lokale Modelle');

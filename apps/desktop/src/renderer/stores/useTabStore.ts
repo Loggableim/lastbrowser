@@ -176,7 +176,14 @@ export const useTabStore = create<TabState>((set, get) => {
       }
       if (splitTabIds.length >= 4) return;
       const nextSplit = [...splitTabIds, tabId];
-      const nextLayout = nextSplit.length >= 4 ? 'grid' : get().splitLayout;
+      // A previous dual layout has only two slots. When a third pane is added,
+      // promote the layout as well as the tab list so the new tab gets a real
+      // viewport instead of remaining mounted in an unreachable empty slot.
+      const nextLayout = nextSplit.length >= 4
+        ? 'quad-grid'
+        : nextSplit.length === 3
+          ? 'trio-columns'
+          : get().splitLayout;
       set({ splitTabIds: nextSplit, splitSlotIndexes: nextSplit.map((_, index) => index), splitLayout: nextLayout, activeTabId: tabId });
     },
 

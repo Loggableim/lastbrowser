@@ -48,7 +48,6 @@ import {
 } from 'lucide-react';
 import { usePanelStore } from '../stores/usePanelStore.js';
 import { useTabStore } from '../stores/useTabStore.js';
-import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { executeBrowserAction } from '../browser-agent-tools.js';
 import { browserStartUrl } from '../tabs.js';
 import { discoverActiveForm, triggerLivePagination, abortLiveAutomation } from '../live-automation.js';
@@ -685,70 +684,13 @@ export function CommandPalette({
       {
         id: 'sidekick-google-accounts',
         title: 'Google Accounts & Round-Robin verwalten',
-        description: 'Multi-Account OAuth für Google Gemini CLI (Antigravity) konfigurieren',
+        description: 'Google-Konten für Antigravity-Round-Robin verwalten',
         category: 'Nova AI',
         icon: <Users size={16} />,
         keywords: ['google', 'account', 'oauth', 'round-robin', 'gemini', 'gravity', 'antigravity', 'token', 'verbrauch'],
         action: () => {
           setActivePanel('settings');
           usePanelStore.getState().setActiveContextItem('providers');
-        }
-      },
-      {
-        id: 'sidekick-gemini-cli-flash-38',
-        title: 'Gemini CLI-Modellkatalog öffnen',
-        description: 'Aktuelle, für deine Google-Konten verfügbare Code-Assist-Modelle auswählen',
-        category: 'Nova AI',
-        icon: <Zap size={16} />,
-        keywords: ['gemini', 'google', 'cli', 'antigravity', 'gravity', 'modell', 'katalog'],
-        action: () => {
-          setActivePanel('chat');
-        }
-      },
-      {
-        id: 'sidekick-gemini-cli-flash',
-        title: 'Gemini CLI-Konten & Modellauswahl öffnen',
-        description: 'Live-Modellliste und Google-Konten verwalten',
-        category: 'Nova AI',
-        icon: <Zap size={16} />,
-        keywords: ['gemini', 'google', 'cli', 'antigravity', 'gravity', 'modell', 'konto'],
-        action: () => {
-          setActivePanel('settings');
-          usePanelStore.getState().setActiveContextItem('providers');
-        }
-      },
-      {
-        id: 'sidekick-gemini-cli-pro',
-        title: 'Gemini CLI-Modelle in der Modellauswahl',
-        description: 'Modelle werden dynamisch von Code Assist geladen',
-        category: 'Nova AI',
-        icon: <Bot size={16} />,
-        keywords: ['gemini', 'google', 'cli', 'antigravity', 'gravity', 'reasoning', 'modell'],
-        action: () => {
-          setActivePanel('chat');
-        }
-      },
-      {
-        id: 'sidekick-gemini-round-robin-toggle',
-        title: 'Google Round-Robin: Token-Rotation umschalten',
-        description: 'Gleichmäßigen Tokenverbrauch über alle Google-Konten ein-/ausschalten',
-        category: 'Nova AI',
-        icon: <Shuffle size={16} />,
-        keywords: ['round-robin', 'google', 'rotation', 'token', 'balance', 'wechseln'],
-        action: () => {
-          const s = useGeminiAccountStore.getState();
-          s.setRoundRobinEnabled(!s.roundRobinEnabled);
-        }
-      },
-      {
-        id: 'sidekick-gemini-round-robin-next',
-        title: 'Google Round-Robin: Nächstes Konto aktivieren',
-        description: 'Sofort zum nächsten verbundenen Google-Konto rotieren',
-        category: 'Nova AI',
-        icon: <RefreshCw size={16} />,
-        keywords: ['round-robin', 'nächstes', 'konto', 'account', 'wechseln', 'rotieren'],
-        action: () => {
-          useGeminiAccountStore.getState().getNextAccount();
         }
       },
       {

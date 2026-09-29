@@ -21,7 +21,7 @@ function main() {
     // Bump when the bundled runtime dependency set changes. In particular,
     // older prepared trees can otherwise pass the cache check without the
     // OpenAI-compatible client needed by Ollama providers.
-    runtimeSchema: 5
+    runtimeSchema: 6
   };
 
   if (
@@ -61,6 +61,7 @@ function main() {
     'pip',
     'install',
     '--no-cache-dir',
+    '--no-compile',
     '--upgrade',
     'fastapi>=0.104,<1',
     'uvicorn[standard]>=0.24,<1',

@@ -26,7 +26,7 @@ def test_presence_operational_projection_keeps_space_yolo_boundary_and_paused_ch
         "model_provider": "ollama-cloud",
         "model_chain_state": "paused",
         "model_chains": {
-            "scout": ["deepseek-v4-flash", "deepseek-v4-pro"],
+            "scout": ["deepseek-v4.1-flash", "deepseek-v4-pro"],
             "planner": ["deepseek-v4-pro", "kimi-k2.6"],
             "builder": ["minimax-m3"],
             "critic": ["minimax-m3"],
@@ -177,7 +177,7 @@ def test_presence_model_chain_hint_is_ollama_cloud_only_and_read_only():
     assert "gpt-oss" not in rendered
     assert "openrouter" not in rendered
     assert "localhost" not in rendered
-    assert payload["model_chains"]["scout"] == ["deepseek-v4-flash", "deepseek-v4-pro"]
+    assert payload["model_chains"]["scout"] == ["deepseek-v4.1-flash", "deepseek-v4-pro"]
 
 def test_presence_model_chain_hint_never_claims_catalog_availability_without_blocker():
     from web.api.nova_presence import _operational_projection

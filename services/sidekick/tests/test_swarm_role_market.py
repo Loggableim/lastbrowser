@@ -135,7 +135,7 @@ def test_role_market_transparently_maps_planner_subroles_to_planning_quality(
 @pytest.mark.parametrize(
     ("role", "requirements", "expected"),
     [
-        ("default", set(), ("deepseek-v4-flash", "deepseek-v4-pro")),
+        ("default", set(), ("deepseek-v4.1-flash", "deepseek-v4-pro")),
         ("review_a", {"review", "structured-output"}, ("glm-5.2",)),
         ("review_b", {"review", "structured-output"}, ("kimi-k2.7-code",)),
         ("vision", {"vision"}, ("qwen3.5", "gemma4:31b")),
@@ -150,7 +150,7 @@ def test_role_market_never_changes_safety_locked_router_sequences(
     """Catches reputation ranking replacing the mandatory route/fallback order."""
     registry = ModelRegistry(
         catalog={
-            "deepseek-v4-flash",
+            "deepseek-v4.1-flash",
             "deepseek-v4-pro",
             "kimi-k2.6",
             "glm-5.2",
@@ -182,24 +182,24 @@ def test_role_market_keeps_flash_primary_and_pro_fallback_for_scout_routes(
 ):
     """Catches a fallback route losing its inspectable Flash-first ranking."""
     registry = ModelRegistry(
-        catalog={"deepseek-v4-flash", "deepseek-v4-pro"}
+        catalog={"deepseek-v4.1-flash", "deepseek-v4-pro"}
     )
     market = RoleMarket(registry, ReputationLedger(ProjectSwarmStore(tmp_path)))
 
     assessment = market.assess(role, role, requirements=requirements)
 
     assert assessment.prescribed_models == (
-        "deepseek-v4-flash",
+        "deepseek-v4.1-flash",
         "deepseek-v4-pro",
     )
     assert assessment.recommended_models == (
-        "deepseek-v4-flash",
+        "deepseek-v4.1-flash",
         "deepseek-v4-pro",
     )
     assert [
         (candidate.model, candidate.provider, candidate.role_quality, candidate.eligible)
         for candidate in assessment.candidates
     ] == [
-        ("deepseek-v4-flash", "ollama-cloud", 1.0, True),
+        ("deepseek-v4.1-flash", "ollama-cloud", 1.0, True),
         ("deepseek-v4-pro", "ollama-cloud", 0.9, True),
     ]

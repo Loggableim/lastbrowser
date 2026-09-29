@@ -62,7 +62,7 @@ def test_ollama_cloud_catalog_requests_disable_redirects(monkeypatch, tmp_path):
 
     def fake_fetch_api_models(api_key, base_url, **kwargs):
         calls.append((api_key, base_url, kwargs))
-        return ["deepseek-v4-flash"]
+        return ["deepseek-v4.1-flash"]
 
     monkeypatch.setattr(models, "fetch_api_models", fake_fetch_api_models)
 
@@ -75,7 +75,7 @@ def test_ollama_cloud_catalog_requests_disable_redirects(monkeypatch, tmp_path):
     assert calls == [(
         "test-only", "https://ollama.com/v1", {"timeout": 8.0, "allow_redirects": False}
     )]
-    assert result == ["deepseek-v4-flash"]
+    assert result == ["deepseek-v4.1-flash"]
 
 
 def test_ollama_cloud_model_probe_refuses_http_redirects(monkeypatch):

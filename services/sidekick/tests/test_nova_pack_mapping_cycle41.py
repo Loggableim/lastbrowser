@@ -25,7 +25,7 @@ def test_three_space_pack_overrides_cannot_inject_roles_or_models(tmp_path: Path
 
 def test_role_model_mapping_rejects_unrouted_roles_without_provider_calls() -> None:
     router = ModelRouter(ModelRegistry())
-    assert router.select("scout", {"structured-output"}).model == "deepseek-v4-flash"
+    assert router.select("scout", {"structured-output"}).model == "deepseek-v4.1-flash"
     assert router.select("review_a", {"review", "structured-output"}).model == "glm-5.2"
     assert router.select("review_b", {"review", "structured-output"}).model == "kimi-k2.7-code"
     with pytest.raises(KeyError):

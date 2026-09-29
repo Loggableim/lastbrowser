@@ -169,6 +169,27 @@ def test_anthropic_connect_reports_the_real_local_cli_action(monkeypatch, tmp_pa
     assert "verification_uri" not in payload
 
 
+def test_anthropic_credential_worker_links_claude_credentials_without_codex_polling(monkeypatch, tmp_path):
+    monkeypatch.setattr(oauth, "_get_active_profile_home", lambda: tmp_path)
+    monkeypatch.setattr(oauth, "_spawn_anthropic_credential_worker", lambda *_args: None)
+    monkeypatch.setattr(oauth, "_read_claude_code_credentials", lambda: {"access_token": "local-claude"})
+    monkeypatch.setattr(oauth, "_link_anthropic_credentials", lambda _home: None)
+    monkeypatch.setattr(oauth.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        oauth,
+        "_poll_codex_authorization",
+        lambda *_args: pytest.fail("Anthropic credential polling must never call Codex device auth"),
+    )
+    oauth._OAUTH_FLOWS.clear()
+    try:
+        payload = oauth.start_onboarding_oauth_flow({"provider": "anthropic"})
+        oauth._run_anthropic_credential_worker(payload["flow_id"])
+        status = oauth.poll_onboarding_oauth_flow(payload["flow_id"])
+        assert status["status"] == "success"
+    finally:
+        oauth._OAUTH_FLOWS.clear()
+
+
 def test_codex_oauth_status_payload_does_not_expose_tokens():
     payload = oauth._codex_public_status_payload("flow", {
         "status": "error", "error": "token exchange failed", "access_token": "secret-token"
@@ -176,6 +197,87 @@ def test_codex_oauth_status_payload_does_not_expose_tokens():
     assert payload["error"] == "token exchange failed"
     assert "access_token" not in payload
     assert "secret-token" not in str(payload)
+
+
+def test_codex_start_uses_browser_pkce_flow_without_device_auth(monkeypatch, tmp_path):
+    from urllib.parse import parse_qs, urlparse
+
+    monkeypatch.setattr(oauth, "_get_active_profile_home", lambda: tmp_path)
+    monkeypatch.setattr(oauth, "_request_codex_user_code", lambda: pytest.fail("device-auth route must not be called"))
+    monkeypatch.setattr(oauth, "_spawn_codex_oauth_worker", lambda _flow_id: None)
+    oauth._OAUTH_FLOWS.clear()
+
+    payload = oauth.start_onboarding_oauth_flow({"provider": "openai-codex"})
+    flow = oauth._OAUTH_FLOWS[payload["flow_id"]]
+    callback_server = flow["callback_server"]
+    try:
+        assert payload["status"] == "pending"
+        assert payload["provider"] == "openai-codex"
+        assert payload["auth_url"].startswith("https://auth.openai.com/oauth/authorize?")
+        assert "530" not in str(payload)
+        assert "code_verifier" not in payload
+        query = parse_qs(urlparse(payload["auth_url"]).query)
+        assert query["response_type"] == ["code"]
+        assert query["code_challenge_method"] == ["S256"]
+        assert query["scope"] == ["openid profile email offline_access api.connectors.read api.connectors.invoke"]
+        assert query["redirect_uri"] == [flow["redirect_uri"]]
+        assert flow["auth_mode"] == "browser"
+    finally:
+        callback_server.shutdown()
+        callback_server.server_close()
+        oauth._OAUTH_FLOWS.clear()
+
+
+def test_codex_browser_callback_pkce_exchange_and_persistence(monkeypatch, tmp_path):
+    import urllib.request
+
+    monkeypatch.setattr(oauth, "_get_active_profile_home", lambda: tmp_path)
+    monkeypatch.setattr(oauth, "_spawn_codex_oauth_worker", lambda _flow_id: None)
+    saved = []
+    exchanged = []
+    monkeypatch.setattr(oauth, "_persist_codex_credentials", lambda home, tokens: saved.append((home, tokens)))
+    monkeypatch.setattr(
+        oauth,
+        "_exchange_codex_authorization",
+        lambda code, verifier, redirect_uri: exchanged.append((code, verifier, redirect_uri))
+        or {"access_token": "synthetic-access", "refresh_token": "synthetic-refresh"},
+    )
+    oauth._OAUTH_FLOWS.clear()
+
+    payload = oauth.start_onboarding_oauth_flow({"provider": "openai-codex"})
+    flow = oauth._OAUTH_FLOWS[payload["flow_id"]]
+    callback_server = flow["callback_server"]
+    try:
+        invalid_url = flow["redirect_uri"] + "?" + urllib.parse.urlencode({
+            "state": "attacker-controlled-state",
+            "code": "injected-code",
+        })
+        with pytest.raises(urllib.error.HTTPError) as rejected:
+            urllib.request.urlopen(invalid_url, timeout=3)
+        assert rejected.value.code == 400
+        assert flow["callback_state"].ready.is_set() is False
+
+        callback_url = flow["redirect_uri"] + "?" + urllib.parse.urlencode({
+            "state": flow["callback_state"].expected_state,
+            "code": "synthetic-authorization-code",
+        })
+        with urllib.request.urlopen(callback_url, timeout=3) as response:
+            assert response.status == 200
+
+        expected_exchange = (
+            "synthetic-authorization-code",
+            flow["code_verifier"],
+            flow["redirect_uri"],
+        )
+        oauth._run_codex_oauth_worker(payload["flow_id"])
+        status = oauth.poll_onboarding_oauth_flow(payload["flow_id"])
+        assert status["status"] == "success"
+        assert exchanged == [expected_exchange]
+        assert saved and saved[0][1]["access_token"] == "synthetic-access"
+    finally:
+        callback_server.shutdown()
+        callback_server.server_close()
+        oauth._OAUTH_FLOWS.clear()
 
 
 def test_codex_oauth_onboarding_apply_selects_authenticated_provider(monkeypatch, tmp_path):

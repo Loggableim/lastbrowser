@@ -145,7 +145,7 @@ def test_scout_schema_invalid_flash_response_uses_only_pro_cloud_fallback_and_bu
 
         def complete(self, request: ModelRequest) -> ModelResponse:
             self.requests.append(request)
-            if request.model == "deepseek-v4-flash":
+            if request.model == "deepseek-v4.1-flash":
                 return ModelResponse(
                     model=request.model,
                     content="Scout response missing required structured fields.",
@@ -180,21 +180,21 @@ def test_scout_schema_invalid_flash_response_uses_only_pro_cloud_fallback_and_bu
         on_failure=failures.append,
     )
 
-    assert selection.models == ("deepseek-v4-flash", "deepseek-v4-pro")
+    assert selection.models == ("deepseek-v4.1-flash", "deepseek-v4-pro")
     assert selection.provider == "ollama-cloud"
     assert router.select("default", {"structured-output"}).models == (
-        "deepseek-v4-flash",
+        "deepseek-v4.1-flash",
         "deepseek-v4-pro",
     )
     assert response.model == "deepseek-v4-pro"
     assert [request.model for request in transport.requests] == [
-        "deepseek-v4-flash",
+        "deepseek-v4.1-flash",
         "deepseek-v4-pro",
     ]
     assert all(request.provider == "ollama-cloud" for request in transport.requests)
     assert budget.used == 2
     assert [(failure.model, failure.reason) for failure in failures] == [
-        ("deepseek-v4-flash", "schema_invalid")
+        ("deepseek-v4.1-flash", "schema_invalid")
     ]
 
 
@@ -231,17 +231,17 @@ def test_scout_two_schema_invalid_cloud_responses_pause_after_flash_and_pro_only
     assert raised.value.reason == "model_chain_exhausted"
     assert raised.value.role == "scout"
     assert raised.value.attempted_models == (
-        "deepseek-v4-flash",
+        "deepseek-v4.1-flash",
         "deepseek-v4-pro",
     )
     assert [request.model for request in transport.requests] == [
-        "deepseek-v4-flash",
+        "deepseek-v4.1-flash",
         "deepseek-v4-pro",
     ]
     assert {request.provider for request in transport.requests} == {"ollama-cloud"}
     assert budget.used == 2
     assert [(failure.model, failure.reason) for failure in failures] == [
-        ("deepseek-v4-flash", "schema_invalid"),
+        ("deepseek-v4.1-flash", "schema_invalid"),
         ("deepseek-v4-pro", "schema_invalid"),
     ]
 
@@ -274,7 +274,7 @@ def test_coding_team_runs_exact_stages_with_sharded_blackboard_context(tmp_path:
     ]
     assert "verifier" not in {request.role for request in transport.requests}
 
-    assert _request_by_role(transport.requests, "scout").model == "deepseek-v4-flash"
+    assert _request_by_role(transport.requests, "scout").model == "deepseek-v4.1-flash"
     assert _request_by_role(transport.requests, "planner").model == "deepseek-v4-pro"
     assert _request_by_role(transport.requests, "builder").model == "minimax-m3"
     assert _request_by_role(transport.requests, "critic").model == "minimax-m3"
@@ -2078,7 +2078,7 @@ def test_engine_pauses_and_persists_reason_after_role_chain_exhaustion(
         "role": "planner",
     }
     assert [request.model for request in transport.requests] == [
-        "deepseek-v4-flash",
+        "deepseek-v4.1-flash",
         "deepseek-v4-pro",
         "kimi-k2.6",
     ]

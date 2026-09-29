@@ -11897,7 +11897,7 @@ def _game_mode_nova_remote_model_state(
         resolved_provider or requested_provider,
         resolved_base_url or requested_base_url,
     ):
-        return "deepseek-v4-flash", "ollama-cloud", True
+        return "deepseek-v4.1-flash", "ollama-cloud", True
     return None
 
 
@@ -12685,7 +12685,7 @@ def _async_ollama_title(session_id: str) -> None:
                     user_text,
                     assistant_text,
                     provider="ollama-cloud",
-                    model="deepseek-v4-flash",
+                    model="deepseek-v4.1-flash",
                 )
                 remote_title = _sanitize_generated_title(raw_title or "")
                 if remote_title:
@@ -12764,7 +12764,7 @@ def _game_mode_remote_extract_facts(messages, session_id: str, title: str = "") 
 
         response = call_llm(
             provider="ollama-cloud",
-            model="deepseek-v4-flash",
+            model="deepseek-v4.1-flash",
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": conversation},

@@ -25,7 +25,7 @@ from swarm_core.transport import ModelTransport
 
 
 _NOVA_CLI_MODELS = (
-    "deepseek-v4-flash",
+    "deepseek-v4.1-flash",
     "deepseek-v4-pro",
     "kimi-k2.6",
     "minimax-m3",
@@ -746,7 +746,7 @@ def test_cli_recover_audits_a_stale_lease_then_separate_resume_executes(
     abandoned_attempt = store.append_event(
         run.run_id,
         "model.attempt_started",
-        {"role": "scout", "model": "deepseek-v4-flash"},
+        {"role": "scout", "model": "deepseek-v4.1-flash"},
     )
     assert store.claim_run_execution_lease(run.run_id, "abandoned-owner")
 
@@ -785,7 +785,7 @@ def test_cli_recover_audits_a_stale_lease_then_separate_resume_executes(
             "actor_id": "os:uid:4242",
             "original_attempt_sequence": abandoned_attempt.sequence,
             "role": "scout",
-            "model": "deepseek-v4-flash",
+            "model": "deepseek-v4.1-flash",
         }
     ]
 
@@ -801,7 +801,7 @@ def test_cli_recover_audits_a_stale_lease_then_separate_resume_executes(
         event
         for event in ProjectSwarmStore.open_read_only(project).list_events(run.run_id)
         if event.event_type == "model.attempt_started"
-        and event.payload == {"role": "scout", "model": "deepseek-v4-flash"}
+        and event.payload == {"role": "scout", "model": "deepseek-v4.1-flash"}
     ]
     assert len(scout_attempts) == 2
     assert scout_attempts[0].sequence == abandoned_attempt.sequence

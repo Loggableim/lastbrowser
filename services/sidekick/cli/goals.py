@@ -50,7 +50,7 @@ _JUDGE_RESPONSE_SNIPPET_CHARS = 4000
 # After this many consecutive judge *parse* failures (empty output / non-JSON),
 # the loop auto-pauses and points the user at the goal_judge config. API /
 # transport errors do NOT count toward this — those are transient. This guards
-# against small models (e.g. deepseek-v4-flash) that cannot follow the strict
+# against small models that cannot follow the strict
 # JSON reply contract; without it the loop runs until the turn budget is
 # exhausted with every reply shaped like `judge returned empty response` or
 # `judge reply was not JSON`.
@@ -374,13 +374,16 @@ def judge_goal(
         try:
             resp = call_llm(
                 provider="ollama-cloud",
-                model="deepseek-v4-flash",
+                model="deepseek-v4.1-flash",
                 messages=[
                     {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0,
-                max_tokens=200,
+                # Reasoning models can spend the previous 200-token budget
+                # before producing the required JSON verdict. Keep enough
+                # room for both reasoning and the compact final response.
+                max_tokens=768,
                 timeout=timeout,
             )
         except Exception as exc:
@@ -422,7 +425,7 @@ def judge_goal(
                 {"role": "user", "content": prompt},
             ],
             temperature=0,
-            max_tokens=200,
+            max_tokens=768,
             timeout=timeout,
         )
     except Exception as exc:

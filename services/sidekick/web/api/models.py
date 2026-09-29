@@ -1746,7 +1746,7 @@ def _generate_title_via_ollama(messages) -> str | None:
                 user_msg,
                 asst_msg,
                 provider="ollama-cloud",
-                model="deepseek-v4-flash",
+                model="deepseek-v4.1-flash",
             )
             title = _sanitize_generated_title(raw_title or "")
             return title[:80] if title else None
@@ -1897,7 +1897,7 @@ def _extract_facts_via_llamacpp(messages, session_id: str, title: str = "") -> s
 
                 response = call_llm(
                     provider="ollama-cloud",
-                    model="deepseek-v4-flash",
+                model="deepseek-v4.1-flash",
                     messages=[
                         {"role": "system", "content": prompt},
                         {"role": "user", "content": conversation},

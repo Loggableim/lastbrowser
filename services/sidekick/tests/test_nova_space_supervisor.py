@@ -898,7 +898,7 @@ def test_host_completion_executes_required_supervisor_hook_and_pauses_revocation
         ModelCatalogSnapshot(
             provider="ollama-cloud",
             models=(
-                "deepseek-v4-flash", "deepseek-v4-pro", "kimi-k2.6",
+                "deepseek-v4.1-flash", "deepseek-v4-pro", "kimi-k2.6",
                 "minimax-m3", "glm-5.2", "kimi-k2.7-code", "nemotron-3-super",
             ),
             healthy=True,
@@ -1068,7 +1068,7 @@ def test_host_completion_preserves_trusted_hook_requirement_across_metadata_toct
         ModelCatalogSnapshot(
             provider="ollama-cloud",
             models=(
-                "deepseek-v4-flash", "deepseek-v4-pro", "kimi-k2.6",
+                "deepseek-v4.1-flash", "deepseek-v4-pro", "kimi-k2.6",
                 "minimax-m3", "glm-5.2", "kimi-k2.7-code", "nemotron-3-super",
             ),
             healthy=True,

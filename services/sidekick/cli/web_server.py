@@ -499,7 +499,7 @@ def _build_nova_cloud_feedback_responder() -> Callable[[str], object] | None:
             return call_llm(**kwargs)
         return NovaCloudResponder(
             OllamaCloudTransport(_call_cloud),
-            model=os.environ.get("SIDEKICK_NOVA_CLOUD_MODEL", "deepseek-v4-flash"),
+            model=os.environ.get("SIDEKICK_NOVA_CLOUD_MODEL", "deepseek-v4.1-flash"),
             timeout_seconds=float(os.environ.get("SIDEKICK_NOVA_CLOUD_TIMEOUT", "5")),
             enabled=True,
         )

@@ -31,6 +31,7 @@ export type SidekickMessage = {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  reasoning?: string;
   pending?: boolean;
 };
 

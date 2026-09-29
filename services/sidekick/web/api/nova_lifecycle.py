@@ -1451,7 +1451,7 @@ def _game_mode_remote_dream_reflection() -> dict[str, Any]:
 
         response = call_llm(
             provider="ollama-cloud",
-            model="deepseek-v4-flash",
+            model="deepseek-v4.1-flash",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -1465,20 +1465,20 @@ def _game_mode_remote_dream_reflection() -> dict[str, Any]:
             return {
                 "ok": False,
                 "provider": "ollama-cloud",
-                "model": "deepseek-v4-flash",
+                "model": "deepseek-v4.1-flash",
                 "error": "remote dream returned empty content",
             }
         return {
             "ok": True,
             "provider": "ollama-cloud",
-            "model": "deepseek-v4-flash",
+                "model": "deepseek-v4.1-flash",
             "content": content,
         }
     except Exception as exc:
         return {
             "ok": False,
             "provider": "ollama-cloud",
-            "model": "deepseek-v4-flash",
+                "model": "deepseek-v4.1-flash",
             "error": repr(exc),
         }
 

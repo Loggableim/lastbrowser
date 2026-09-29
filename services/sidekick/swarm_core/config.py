@@ -23,12 +23,13 @@ from typing import Any, Iterator, Mapping
 import yaml
 
 from .types import SwarmConfig
+from .models import DEFAULT_OLLAMA_CLOUD_MODEL
 
 
 _DEFAULT_CONFIG = {
     "version": 1,
     "default_provider": "ollama-cloud",
-    "default_model": "deepseek-v4-flash",
+    "default_model": DEFAULT_OLLAMA_CLOUD_MODEL,
     "default_autonomy": "reviewed_execution",
 }
 
@@ -374,6 +375,12 @@ def _initialize_project_from_pinned_lease(
         raise ValueError(f"Swarm configuration must be a mapping: {config_path}")
     if "default_autonomy" not in raw_config:
         raw_config["default_autonomy"] = _DEFAULT_CONFIG["default_autonomy"]
+        _write_project_config(lease.swarm, raw_config)
+    if (
+        str(raw_config.get("default_provider", "")).strip().lower() == "ollama-cloud"
+        and str(raw_config.get("default_model", "")).strip() == "deepseek-v4-flash"
+    ):
+        raw_config["default_model"] = DEFAULT_OLLAMA_CLOUD_MODEL
         _write_project_config(lease.swarm, raw_config)
     return _to_config(project_root, config_path, raw_config)
 
@@ -1207,12 +1214,19 @@ def _to_config(
         )
         if default_autonomy not in _AUTONOMY_LEVELS:
             raise ValueError(f"Unsupported Swarm autonomy level: {default_autonomy}")
+        default_provider = str(raw_config["default_provider"])
+        default_model = str(raw_config["default_model"])
+        if (
+            default_provider.strip().lower() == "ollama-cloud"
+            and default_model.strip() == "deepseek-v4-flash"
+        ):
+            default_model = DEFAULT_OLLAMA_CLOUD_MODEL
         return SwarmConfig(
             project_root=project_root,
             config_path=config_path,
             version=int(raw_config["version"]),
-            default_provider=str(raw_config["default_provider"]),
-            default_model=str(raw_config["default_model"]),
+            default_provider=default_provider,
+            default_model=default_model,
             default_autonomy=default_autonomy,
         )
     except KeyError as exc:

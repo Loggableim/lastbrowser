@@ -74,12 +74,21 @@ export function MultiviewGridContainer({
   const definition = SNAP_LAYOUT_DEFINITIONS[layout];
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => resizeCleanupRef.current?.(), []);
-  const beginResize = useCallback((axis: 'x' | 'y', index: number, event: React.MouseEvent) => {
+  const beginResize = useCallback((axis: 'x' | 'y', index: number, event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || (event.pointerType === 'mouse' && event.isPrimary === false)) return;
     event.preventDefault();
-    const container = (event.currentTarget as HTMLElement).parentElement;
+    const handle = event.currentTarget;
+    const container = handle.parentElement;
     if (!container) return;
+    try {
+      handle.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture may be unavailable in embedded Electron contexts;
+      // the window listeners below remain as a fallback.
+    }
     const rect = container.getBoundingClientRect();
-    const move = (moveEvent: MouseEvent) => {
+    const move = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== event.pointerId) return;
       const span = axis === 'x' ? rect.width : rect.height;
       if (!span) return;
       const position = axis === 'x' ? moveEvent.clientX - rect.left : moveEvent.clientY - rect.top;
@@ -93,15 +102,27 @@ export function MultiviewGridContainer({
       value = Math.min(max, Math.max(min, value));
       onSetRatio(axis, index, value);
     };
-    const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cleanup);
+      try {
+        if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+      } catch {
+        // The pointer can already be released when the window is torn down.
+      }
       resizeCleanupRef.current = null;
     };
+    const up = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId === event.pointerId) cleanup();
+    };
     resizeCleanupRef.current?.();
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up, { once: true });
-    resizeCleanupRef.current = up;
+    // Captured events bubble to the window. The window listeners also serve as
+    // a fallback for Electron versions that do not preserve capture across a guest view.
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up, { once: true });
+    window.addEventListener('pointercancel', cleanup, { once: true });
+    resizeCleanupRef.current = cleanup;
   }, [layout, onSetRatio, ratios]);
 
   return (
@@ -156,9 +177,9 @@ export function MultiviewGridContainer({
           </div>
         );
       })}
-      {ratios.x.map((ratio, index) => <div key={`x-${index}`} className="multiview-divider-vertical" style={{ left: `calc(${ratio}% - 4px)` }} onMouseDown={(event) => beginResize('x', index, event)} role="separator" aria-orientation="vertical" aria-label={t('snap.resizePane')}><div className="multiview-divider-grip" /></div>)}
+      {ratios.x.map((ratio, index) => <div key={`x-${index}`} className="multiview-divider-vertical" style={{ left: `calc(${ratio}% - 4px)` }} onPointerDown={(event) => beginResize('x', index, event)} role="separator" aria-orientation="vertical" aria-label={t('snap.resizePane')}><div className="multiview-divider-grip" /></div>)}
       {getHorizontalDividerBounds(layout, ratios).map((divider, index) => {
-        return <div key={`y-${index}`} className="multiview-divider-horizontal" style={{ top: `calc(${divider.top}% - 4px)`, left: `${divider.left}%`, width: `${divider.width}%` }} onMouseDown={(event) => beginResize('y', index, event)} role="separator" aria-orientation="horizontal" aria-label={t('snap.resizePane')}><div className="multiview-divider-grip" /></div>;
+        return <div key={`y-${index}`} className="multiview-divider-horizontal" style={{ top: `calc(${divider.top}% - 4px)`, left: `${divider.left}%`, width: `${divider.width}%` }} onPointerDown={(event) => beginResize('y', index, event)} role="separator" aria-orientation="horizontal" aria-label={t('snap.resizePane')}><div className="multiview-divider-grip" /></div>;
       })}
     </div>
   );

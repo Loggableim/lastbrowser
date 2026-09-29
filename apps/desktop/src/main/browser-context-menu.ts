@@ -7,6 +7,7 @@ import type {
   Shell,
   WebContents
 } from 'electron';
+import { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { isOAuthUrl, openAuthConnectWindow, openExternalUrl } from './auth-window.js';
 
 export const browserOpenTabChannel = 'lastbrowser:browser:openTab';
@@ -324,11 +325,40 @@ export function registerBrowserContextMenu({
 export function installWindowOpenBridge(
   contents: WebContents,
   getWindow: () => BrowserWindow | null,
-  shell: Shell
+  shell: Shell,
+  BrowserWindowConstructor: typeof ElectronBrowserWindow = ElectronBrowserWindow
 ): void {
   contents.setWindowOpenHandler(({ url }) => {
-    // OAuth / sign-in pages (e.g. Google Gemini, ChatGPT, Claude) open in a
-    // dedicated Lastbrowser Connect window with clean User-Agent and auto-close.
+    // Google login is a web popup flow (YouTube, Gmail, etc.), not a standalone
+    // OAuth connect flow. Keep Chromium's opener relationship and the source
+    // tab's profile session so the site can complete sign-in and receive its
+    // cookies. A detached Connect window breaks both, and Google's embedded
+    // sign-in can reject that window as an unsafe user agent.
+    if (isGoogleIdentityUrl(url)) {
+      return {
+        action: 'allow',
+        createWindow: (features) => {
+          const popup = new BrowserWindowConstructor({
+            ...features,
+            width: features.width || 520,
+            height: features.height || 700,
+            parent: getWindow() || undefined,
+            autoHideMenuBar: true,
+            title: 'Google sign-in',
+            webPreferences: {
+              session: contents.session,
+              nodeIntegration: false,
+              contextIsolation: true,
+              sandbox: true,
+              webviewTag: false
+            }
+          });
+          installWindowOpenBridge(popup.webContents, getWindow, shell, BrowserWindowConstructor);
+          return popup.webContents;
+        }
+      };
+    }
+    // Other OAuth pages use a dedicated Lastbrowser Connect window.
     if (isOAuthUrl(url)) {
       openAuthConnectWindow({
         url,
@@ -341,6 +371,17 @@ export function installWindowOpenBridge(
     }
     return { action: 'deny' };
   });
+}
+
+function isGoogleIdentityUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'accounts.google.com'
+      || host === 'consent.google.com'
+      || host === 'myaccount.google.com';
+  } catch {
+    return false;
+  }
 }
 
 /** Launch a link from the explicit context-menu action only after protocol validation. */

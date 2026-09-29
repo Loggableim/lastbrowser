@@ -18,7 +18,8 @@ describe('desktop runtime packaging', () => {
       expect.arrayContaining([
         expect.objectContaining({
           from: 'runtime/python',
-          to: 'runtime/python'
+          to: 'runtime/python',
+          filter: expect.arrayContaining(['!**/__pycache__/**', '!**/*.pyc', '!**/site-packages/tests/**'])
         })
       ])
     );
@@ -48,7 +49,23 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).toContain("'openai>=1.0,<3'");
     expect(prepareScript).toContain("'anthropic>=0.39.0'");
     expect(prepareScript).toContain('import anthropic');
-    expect(prepareScript).toContain('runtimeSchema: 5');
+    expect(prepareScript).toContain("'--no-compile'");
+    expect(prepareScript).toContain('runtimeSchema: 6');
+    const sidekickPyproject = readFileSync(path.resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'pyproject.toml'), 'utf8');
+    expect(sidekickPyproject).toContain('exclude = ["tests", "tests.*"]');
+  });
+
+  it('runs browser smoke against the local source Electron and requires an explicit opt-in for installed builds', () => {
+    const smokeScript = readFileSync(path.resolve(process.cwd(), 'scripts/smoke-browser.mjs'), 'utf8');
+    expect(smokeScript).toContain("'node_modules',\n  'electron',\n  'dist'");
+    expect(smokeScript).toContain('LASTBROWSER_SMOKE_ALLOW_INSTALLED');
+    expect(smokeScript).toContain('LASTBROWSER_DOWNLOADS_DIR: SMOKE_DOWNLOAD_DIR');
+    const mainStart = smokeScript.indexOf('async function main()');
+    const installedGuard = smokeScript.indexOf('LASTBROWSER_SMOKE_ALLOW_INSTALLED !==');
+    const profileCreation = smokeScript.indexOf('mkdirSync(SMOKE_PROFILE_DIR, { recursive: true })');
+    expect(installedGuard).toBeGreaterThan(mainStart);
+    expect(installedGuard).toBeLessThan(profileCreation);
+    expect(smokeScript).toContain(".modern-titlebar .profile-switcher, .browser-titlebar .profile-switcher");
   });
 
   it('does not remove the runtime when a Windows process is using its executable tree', () => {

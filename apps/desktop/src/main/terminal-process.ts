@@ -15,6 +15,7 @@
  */
 
 import { spawn as ptySpawn, type IPty } from 'node-pty';
+import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
@@ -224,7 +225,6 @@ function resolveShell(): string {
   // Windows: prefer PowerShell 7 (pwsh), then Windows PowerShell (powershell), then cmd
   if (process.platform === 'win32') {
     // COMSPEC points to cmd.exe — we prefer pwsh if it's available
-    const { execFileSync } = require('node:child_process') as typeof import('node:child_process');
     for (const candidate of ['pwsh.exe', 'powershell.exe']) {
       try {
         execFileSync('where', [candidate], { stdio: 'pipe' });

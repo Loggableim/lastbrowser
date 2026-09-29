@@ -181,6 +181,10 @@ describe('cloud first-run setup state', () => {
       'gemini',
       'deepseek'
     ]);
+    expect(modelsForProvider(null, 'ollama-cloud')).toContainEqual({
+      id: 'deepseek-v4.1-flash',
+      label: 'DeepSeek V4.1 Flash'
+    });
   });
 
   it('keeps Antigravity in provider settings even when the runtime catalog omits it', () => {

@@ -38,7 +38,7 @@ def test_agents_llm_uses_remote_deepseek_in_game_mode(monkeypatch, tmp_path):
     result = agents._call_llm([{"role": "user", "content": "hello"}], timeout=15)
 
     assert captured["provider"] == "ollama-cloud"
-    assert captured["model"] == "deepseek-v4-flash"
+    assert captured["model"] == "deepseek-v4.1-flash"
     assert result == "remote agent reply"
 
 

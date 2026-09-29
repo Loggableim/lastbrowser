@@ -240,7 +240,7 @@ _MODEL_STRATEGY: dict[str, dict[str, Any]] = {
 # reported separately as ``not_checked``/``paused`` rather than by probing a
 # provider from a GET request.
 _PUBLIC_SWARM_MODEL_CHAINS: dict[str, tuple[str, ...]] = {
-    "scout": ("deepseek-v4-flash", "deepseek-v4-pro"),
+    "scout": ("deepseek-v4.1-flash", "deepseek-v4-pro"),
     "planner": ("deepseek-v4-pro", "kimi-k2.6"),
     "builder": ("minimax-m3",),
     "critic": ("minimax-m3",),
@@ -698,7 +698,7 @@ def _entity_runtime_projection(
             "pid": pid,
             "running": None,
             "checked": False,
-            "model_route": "ollama-cloud:deepseek-v4-flash" if game_mode_enabled else "local-registry",
+            "model_route": "ollama-cloud:deepseek-v4.1-flash" if game_mode_enabled else "local-registry",
             "game_mode": game_mode_enabled,
         },
         "reflection_queue": {

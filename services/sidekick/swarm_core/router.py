@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from .models import ModelRegistry, OLLAMA_CLOUD_PROVIDER
+from .models import DEFAULT_OLLAMA_CLOUD_MODEL, ModelRegistry, OLLAMA_CLOUD_PROVIDER
 
 
 _ROLE_CHAINS = {
-    "default": ("deepseek-v4-flash", "deepseek-v4-pro"),
-    "scout": ("deepseek-v4-flash", "deepseek-v4-pro"),
+    "default": (DEFAULT_OLLAMA_CLOUD_MODEL, "deepseek-v4-pro"),
+    "scout": (DEFAULT_OLLAMA_CLOUD_MODEL, "deepseek-v4-pro"),
     "planner": ("deepseek-v4-pro", "kimi-k2.6"),
     # Kimi is an independently dispatched challenger only when the workflow
     # records an explicit conflict.  It is not called on a successful normal

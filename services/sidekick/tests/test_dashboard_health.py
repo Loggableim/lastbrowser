@@ -1782,7 +1782,7 @@ def test_goal_command_kickoff_routes_nova_local_models_to_ollama_cloud_deepseek(
     )
 
     assert payload["stream_id"] == "stream-1"
-    assert captured["model"] == "deepseek-v4-flash"
+    assert captured["model"] == "deepseek-v4.1-flash"
     assert captured["model_provider"] == "ollama-cloud"
     assert captured["normalized_model"] is True
 
@@ -1841,10 +1841,10 @@ def test_plan_handlers_route_nova_local_models_to_ollama_cloud_deepseek(monkeypa
 
     assert accept_payload["stream_id"] == "stream-1"
     assert revise_payload["stream_id"] == "stream-2"
-    assert captured[0]["model"] == "deepseek-v4-flash"
+    assert captured[0]["model"] == "deepseek-v4.1-flash"
     assert captured[0]["model_provider"] == "ollama-cloud"
     assert captured[0]["normalized_model"] is True
-    assert captured[1]["model"] == "deepseek-v4-flash"
+    assert captured[1]["model"] == "deepseek-v4.1-flash"
     assert captured[1]["model_provider"] == "ollama-cloud"
     assert captured[1]["normalized_model"] is True
 
@@ -4176,7 +4176,7 @@ def test_game_mode_chat_start_routes_nova_local_models_to_ollama_cloud_deepseek(
     )
 
     assert payload["stream_id"] == "stream-1"
-    assert captured["model"] == "deepseek-v4-flash"
+    assert captured["model"] == "deepseek-v4.1-flash"
     assert captured["model_provider"] == "ollama-cloud"
     assert captured["normalized_model"] is True
 
@@ -4235,7 +4235,7 @@ def test_game_mode_chat_start_infers_nova_from_workspace_path_without_slug(monke
     )
 
     assert payload["stream_id"] == "stream-1"
-    assert captured["model"] == "deepseek-v4-flash"
+    assert captured["model"] == "deepseek-v4.1-flash"
     assert captured["model_provider"] == "ollama-cloud"
     assert captured["normalized_model"] is True
 
@@ -4298,7 +4298,7 @@ def test_game_mode_chat_start_routes_nova_instance_spaces_to_ollama_cloud_deepse
     )
 
     assert payload["stream_id"] == "stream-1"
-    assert captured["model"] == "deepseek-v4-flash"
+    assert captured["model"] == "deepseek-v4.1-flash"
     assert captured["model_provider"] == "ollama-cloud"
     assert captured["normalized_model"] is True
 
@@ -4430,11 +4430,11 @@ def test_game_mode_chat_sync_routes_nova_local_model_to_ollama_cloud_deepseek(mo
     monkeypatch.setattr(
         "web.api.config.resolve_model_provider",
         lambda model_id: (
-            "deepseek-v4-flash",
+            "deepseek-v4.1-flash",
             "ollama-cloud",
             "https://ollama.example/v1",
         )
-        if "deepseek-v4-flash" in str(model_id) or "ollama-cloud" in str(model_id)
+        if "deepseek-v4.1-flash" in str(model_id) or "ollama-cloud" in str(model_id)
         else ("qwen3:4b", "ollama", "http://127.0.0.1:11434"),
     )
     monkeypatch.setattr(
@@ -4476,9 +4476,9 @@ def test_game_mode_chat_sync_routes_nova_local_model_to_ollama_cloud_deepseek(mo
 
     assert payload["answer"] == "ok"
     assert captured["provider"] == "ollama-cloud"
-    assert captured["model"] == "deepseek-v4-flash"
+    assert captured["model"] == "deepseek-v4.1-flash"
     assert captured["base_url"] == "https://ollama.example/v1"
-    assert session.model == "deepseek-v4-flash"
+    assert session.model == "deepseek-v4.1-flash"
     assert session.model_provider == "ollama-cloud"
 
 
@@ -4537,7 +4537,7 @@ def test_game_mode_session_compress_routes_nova_local_model_to_ollama_cloud_deep
     )
 
     assert payload["ok"] is True
-    assert captured["model"] == "deepseek-v4-flash"
+    assert captured["model"] == "deepseek-v4.1-flash"
     assert captured["provider"] == "ollama-cloud"
     assert payload["session"]["session_id"] == "nova-session"
 
@@ -4627,7 +4627,7 @@ def test_game_mode_handoff_summary_routes_nova_local_model_to_ollama_cloud_deeps
 
     assert payload["ok"] is True
     assert payload["summary"] == "Remote summary"
-    assert captured["model"] == "deepseek-v4-flash"
+    assert captured["model"] == "deepseek-v4.1-flash"
     assert captured["provider"] == "ollama-cloud"
     assert captured["session_id"] == "nova-session"
 

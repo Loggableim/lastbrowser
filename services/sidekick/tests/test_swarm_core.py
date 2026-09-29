@@ -344,12 +344,12 @@ def test_initialize_project_creates_versionable_default_configuration(tmp_path: 
     assert yaml.safe_load(config_path.read_text(encoding="utf-8")) == {
         "version": 1,
         "default_provider": "ollama-cloud",
-        "default_model": "deepseek-v4-flash",
+        "default_model": "deepseek-v4.1-flash",
         "default_autonomy": "reviewed_execution",
     }
     assert config.project_root == tmp_path
     assert config.default_provider == "ollama-cloud"
-    assert config.default_model == "deepseek-v4-flash"
+    assert config.default_model == "deepseek-v4.1-flash"
     assert config.default_autonomy == "reviewed_execution"
 
 
@@ -382,10 +382,10 @@ def test_initialize_project_persists_default_autonomy_into_older_config(
     config = initialize_project(tmp_path)
 
     assert config.default_autonomy == "reviewed_execution"
-    assert (
-        yaml.safe_load(config_path.read_text(encoding="utf-8"))["default_autonomy"]
-        == "reviewed_execution"
-    )
+    persisted = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert persisted["default_autonomy"] == "reviewed_execution"
+    assert persisted["default_model"] == "deepseek-v4.1-flash"
+    assert config.default_model == "deepseek-v4.1-flash"
 
 
 def test_store_constructor_keeps_direct_runtime_state_ignored(tmp_path: Path):

@@ -88,85 +88,43 @@ def make_header() -> Image.Image:
     icon = load_rgba(CD_ROOT / "app-icons" / "lastbrowser-app-icon-512.png")
 
     canvas = gradient_bg(HEADER_SIZE, MIDNIGHT, DEEP)
-    accent = Image.new("RGBA", HEADER_SIZE, (0, 0, 0, 0))
-    accent_draw = ImageDraw.Draw(accent)
-    accent_draw.rounded_rectangle((0, 0, 149, 56), radius=10, outline=(0, 217, 255, 80), width=1)
-    accent_draw.line((0, 41, 149, 41), fill=(53, 123, 255, 40), width=1)
-    accent_draw.line((0, 42, 149, 42), fill=(255, 47, 178, 22), width=1)
-    canvas.alpha_composite(accent)
-
-    add_glow(canvas, (7, 7, 51, 50), CYAN, radius=18, intensity=80)
-    add_glow(canvas, (44, 10, 92, 46), PINK, radius=16, intensity=54)
-
-    icon_small = fit_contain(icon, (28, 28))
-    canvas.alpha_composite(icon_small, (10, 15))
-
-    logo_small = fit_contain(logo, (104, 22))
-    canvas.alpha_composite(logo_small, (39, 11))
-
-    draw = ImageDraw.Draw(canvas)
-    font = load_font(8, bold=True)
-    subfont = load_font(6, bold=False)
-    draw.text((40, 31), "AI-native browser runtime", fill=(159, 183, 214, 255), font=subfont)
-    draw.text((104, 39), "Sidekick ready", fill=(123, 239, 173, 255), font=font)
-
-    pill = Image.new("RGBA", HEADER_SIZE, (0, 0, 0, 0))
-    pdraw = ImageDraw.Draw(pill)
-    pdraw.rounded_rectangle((99, 34, 142, 51), radius=8, fill=(12, 23, 41, 255), outline=(0, 217, 255, 72), width=1)
-    canvas.alpha_composite(pill)
-    draw.text((108, 36), "ready", fill=WHITE, font=font)
-
+    add_glow(canvas, (4, 8, 52, 52), CYAN, radius=20, intensity=52)
+    canvas.alpha_composite(fit_contain(icon, (31, 31)), (10, 13))
+    canvas.alpha_composite(fit_contain(logo, (92, 25)), (47, 14))
     return canvas.convert("RGB")
 
 
 def make_sidebar() -> Image.Image:
     logo = load_rgba(CD_ROOT / "logos" / "lastbrowser-logo-transparent.png")
     icon = load_rgba(CD_ROOT / "app-icons" / "lastbrowser-app-icon-512.png")
-    sidekick = load_rgba(CD_ROOT / "sidebar-icons" / "png-512" / "30-sidekick-modern-popart.png")
 
     canvas = gradient_bg(SIDEBAR_SIZE, MIDNIGHT, DEEP)
-    add_glow(canvas, (0, 0, 96, 102), BLUE, radius=30, intensity=60)
-    add_glow(canvas, (64, 18, 163, 120), PINK, radius=28, intensity=34)
-
+    add_glow(canvas, (0, 12, 164, 194), BLUE, radius=38, intensity=62)
+    add_glow(canvas, (48, 102, 165, 254), CYAN, radius=34, intensity=30)
     draw = ImageDraw.Draw(canvas)
-    draw.rounded_rectangle((8, 8, 155, 304), radius=18, outline=(0, 217, 255, 70), width=1)
-    draw.rounded_rectangle((10, 10, 153, 302), radius=16, fill=(8, 13, 25, 118))
 
-    icon_small = fit_contain(icon, (36, 36))
-    canvas.alpha_composite(icon_small, (15, 18))
+    # One quiet browser illustration reads clearly at the narrow NSIS sidebar size.
+    draw.rounded_rectangle((18, 22, 146, 132), radius=14, fill=(11, 24, 43, 244), outline=(80, 132, 190, 150), width=1)
+    draw.rounded_rectangle((19, 23, 145, 43), radius=13, fill=(20, 37, 60, 255))
+    draw.rectangle((19, 34, 145, 43), fill=(20, 37, 60, 255))
+    for x, color in ((30, CYAN), (39, BLUE), (48, (119, 137, 164))):
+        draw.ellipse((x, 30, x + 5, 35), fill=(*color, 255))
+    draw.rounded_rectangle((27, 53, 137, 62), radius=4, fill=(27, 46, 69, 255))
+    draw.rounded_rectangle((27, 70, 68, 120), radius=6, fill=(16, 31, 51, 255))
+    draw.rounded_rectangle((75, 70, 137, 120), radius=6, fill=(14, 27, 46, 255))
+    draw.rounded_rectangle((34, 81, 61, 85), radius=2, fill=(40, 83, 121, 255))
+    draw.rounded_rectangle((34, 91, 57, 95), radius=2, fill=(35, 62, 91, 255))
+    draw.rounded_rectangle((82, 80, 127, 85), radius=2, fill=(39, 76, 111, 255))
+    draw.rounded_rectangle((82, 91, 119, 96), radius=2, fill=(32, 56, 82, 255))
+    draw.rounded_rectangle((82, 102, 124, 107), radius=2, fill=(32, 56, 82, 255))
 
-    logo_small = fit_contain(logo, (110, 28))
-    canvas.alpha_composite(logo_small, (15, 59))
-
-    sidekick_small = fit_contain(sidekick, (54, 54))
-    canvas.alpha_composite(sidekick_small, (17, 98))
-
-    header_font = load_font(11, bold=True)
-    body_font = load_font(7, bold=False)
-    tiny_font = load_font(6, bold=True)
-
-    draw.text((82, 102), "Installation", fill=WHITE, font=header_font)
-    draw.text((82, 116), "Lastbrowser 0.1.8", fill=(171, 190, 212, 255), font=body_font)
-    draw.text((82, 131), "Browser first.", fill=(0, 217, 255, 255), font=tiny_font)
-    draw.text((82, 143), "Sidekick in the background.", fill=(171, 190, 212, 255), font=body_font)
-
-    features_y = 180
-    bullet_font = load_font(6, bold=True)
-    bullets = [
-        ("Tabs + bookmarks", CYAN),
-        ("Cloud setup later", BLUE),
-        ("Native browser shell", PINK),
-    ]
-    for idx, (label, color) in enumerate(bullets):
-        y = features_y + idx * 24
-        draw.rounded_rectangle((17, y, 147, y + 16), radius=8, fill=(12, 22, 40, 220), outline=(*color, 110), width=1)
-        draw.ellipse((24, y + 4, y + 10, y + 10), fill=(*color, 255))
-        draw.text((34, y + 4), label, fill=WHITE, font=bullet_font)
-
-    draw.rounded_rectangle((17, 270, 147, 290), radius=10, fill=(0, 217, 255, 34), outline=(0, 217, 255, 84), width=1)
-    draw.text((25, 275), "Corporate design", fill=WHITE, font=body_font)
-    draw.text((25, 283), "Ready for the browser UI", fill=(171, 190, 212, 255), font=body_font)
-
+    canvas.alpha_composite(fit_contain(logo, (122, 31)), (21, 163))
+    header_font = load_font(14, bold=True)
+    body_font = load_font(10, bold=False)
+    draw.text((22, 215), "Dein Browser.", fill=WHITE, font=header_font)
+    draw.text((22, 234), "Bereit fuer mehr.", fill=(104, 214, 255, 255), font=header_font)
+    draw.line((22, 263, 142, 263), fill=(77, 105, 142, 180), width=1)
+    draw.text((22, 276), "KI spaeter einrichten.", fill=(190, 203, 221, 255), font=body_font)
     return canvas.convert("RGB")
 
 

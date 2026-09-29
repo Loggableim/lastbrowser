@@ -597,7 +597,7 @@ def test_http_resume_continues_a_real_worker_waiting_at_a_human_pause_boundary(
         catalog_refresher=lambda: ModelCatalogSnapshot(
             provider="ollama-cloud",
             models=(
-                "deepseek-v4-flash",
+                "deepseek-v4.1-flash",
                 "deepseek-v4-pro",
                 "kimi-k2.6",
                 "minimax-m3",

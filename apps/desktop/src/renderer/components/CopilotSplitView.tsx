@@ -39,11 +39,9 @@ import {
   formatWorkflowPrompt,
   type AgenticWorkflowTemplate
 } from '../workflow-templates.js';
-import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
 import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
-import { reconcileGeminiCliModelSelection } from '../setup-state.js';
 import { isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
 
 export interface AvailableModelItem {
@@ -129,7 +127,7 @@ export function CopilotSplitView({
   onClose,
   onMinimize,
   botName = 'Nova',
-  modelName = 'Gemini CLI',
+  modelName = 'Google Gemini',
   modelProvider,
   messages,
   busy,
@@ -159,9 +157,11 @@ export function CopilotSplitView({
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
   const [upvotedIndices, setUpvotedIndices] = useState<Set<number>>(new Set());
 
-  const { activeAccount } = useGeminiAccountStore();
-  const currentGeminiAccount = activeAccount();
   const { selectedModel, selectedModelProvider, setSelectedModel, setSelectedModelProvider } = useChatStore();
+  const selectedModelProviderRef = useRef(selectedModelProvider);
+  selectedModelProviderRef.current = selectedModelProvider;
+  const onSelectModelRef = useRef(onSelectModel);
+  onSelectModelRef.current = onSelectModel;
 
   // Provider models are selectable only after the live backend catalog returns them.
   const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS);
@@ -222,15 +222,18 @@ export function CopilotSplitView({
 
         for (const g of res.groups) {
           const pid = String(g.provider_id || g.provider || '').toLowerCase();
-          const gAccount = g.account || (pid.includes('gemini') || pid.includes('google') ? currentGeminiAccount?.email : undefined);
+          // The retired Gemini CLI / Code Assist provider stays in backend
+          // migration data, but must never appear as a selectable model source.
+          if (['google-gemini-cli', 'gemini-cli', 'gemini-oauth'].includes(pid)) continue;
+          const gAccount = g.account;
 
           let category: 'gemini' | 'claude' | 'openai' | 'local' | 'other' = 'other';
           let providerLabel = g.provider || pid;
           let badgeClass = 'other';
 
-          if (pid.includes('gemini') || pid.includes('google')) {
+          if (pid.includes('antigravity') || pid.includes('gemini') || pid.includes('google')) {
             category = 'gemini';
-            providerLabel = 'Google';
+            providerLabel = pid.includes('antigravity') ? 'Antigravity' : 'Google Gemini (AI Studio)';
             badgeClass = 'gemini';
           } else if (pid.includes('ollama')) {
             category = 'local';
@@ -277,28 +280,21 @@ export function CopilotSplitView({
           }
         }
 
-        const cliGroup = res.groups.find((group) =>
-          String(group.provider_id || group.provider || '').toLowerCase() === 'google-gemini-cli'
-        );
-        const cliModelIds = (cliGroup?.models || []).map((model) => {
-          const id = String(model.id || '');
-          return id.startsWith('@') && id.includes(':') ? id.split(':', 2)[1] : id.replace(/^models\//i, '');
-        }).filter(Boolean);
-        const selectedGeminiModel = selectedModel || modelName;
-        const reconciledGeminiModel = reconcileGeminiCliModelSelection(
-          modelProvider,
-          selectedGeminiModel,
-          cliModelIds,
-        );
-        if (reconciledGeminiModel && reconciledGeminiModel !== selectedGeminiModel) {
-          setSelectedModel(reconciledGeminiModel);
-          onSelectModel?.(reconciledGeminiModel);
-        }
-
-        setModelList([
+        const nextModelList = [
           ...dynamicModels,
           ...AVAILABLE_MODELS.filter((item) => !dynamicModels.some((model) => model.id === item.id && model.providerId === item.providerId))
-        ]);
+        ];
+        const selectedProvider = String(selectedModelProviderRef.current || modelProvider || '').trim().toLowerCase();
+        if (['google-gemini-cli', 'gemini-cli', 'gemini-oauth'].includes(selectedProvider)) {
+          const replacement = dynamicModels.find((item) => item.providerId === 'antigravity')
+            || dynamicModels.find((item) => item.category === 'gemini');
+          if (replacement) {
+            setSelectedModel(replacement.id);
+            setSelectedModelProvider(replacement.providerId || 'gemini');
+            onSelectModelRef.current?.(replacement.id, replacement.providerId);
+          }
+        }
+        setModelList(nextModelList);
       } catch {
         // On discovery failure, retain only built-in orchestrators; cached model IDs
         // must not imply that a provider is configured or currently available.
@@ -309,7 +305,7 @@ export function CopilotSplitView({
     return () => {
       alive = false;
     };
-  }, [currentGeminiAccount, modelProvider]);
+  }, [modelProvider, setSelectedModel, setSelectedModelProvider]);
 
   const visibleModelList = useMemo(() => modelList.filter((model) => {
     if (model.id === 'teamwork') return teamworkEnabled;
@@ -500,20 +496,6 @@ export function CopilotSplitView({
       <div className={`copilot-model-dropdown ${placement}-dropdown`} role="menu">
         <div className="model-dropdown-header">
           <span className="model-dropdown-title">KI-Modell auswählen</span>
-          {currentGeminiAccount ? (
-            <span
-              className="gemini-account-badge online"
-              title={`Verbundenes Google-Konto: ${currentGeminiAccount.email}`}
-            >
-              <span className="gemini-account-dot online" />
-              <span>{currentGeminiAccount.label || currentGeminiAccount.email}</span>
-            </span>
-          ) : (
-            <span className="gemini-account-badge standard">
-              <span className="gemini-account-dot" />
-              <span>Google CLI Ready</span>
-            </span>
-          )}
         </div>
 
         <div className="model-dropdown-list">
@@ -528,17 +510,9 @@ export function CopilotSplitView({
             </>
           )}
 
-          {/* 1. Google Gemini CLI */}
-          <div className="model-group-title">
-            <span>Google Gemini CLI</span>
-            {currentGeminiAccount && (
-              <span className="account-tag">({currentGeminiAccount.email})</span>
-            )}
-          </div>
+          {/* 1. Google AI Studio API key and Antigravity OAuth models */}
+          {visibleModelList.some((m) => m.category === 'gemini') && <div className="model-group-title">Google Gemini / Antigravity</div>}
           {visibleModelList.filter((m) => m.category === 'gemini').map(renderModelItem)}
-          {visibleModelList.filter((m) => m.category === 'gemini').length === 0 && (
-            <div className="model-empty-state">Keine aktuellen Gemini-CLI-Modelle vom Code-Assist-Katalog erhalten.</div>
-          )}
 
           {/* 2. Anthropic */}
           <div className="model-group-title">Anthropic</div>

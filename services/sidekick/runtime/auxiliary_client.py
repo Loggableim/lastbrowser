@@ -277,7 +277,7 @@ _API_KEY_PROVIDER_AUX_MODELS_FALLBACK: Dict[str, str] = {
     "opencode-zen": "gemini-3-flash",
     "opencode-go": "deepseek-v4-flash",
     "kilocode": "google/gemini-3-flash-preview",
-    "ollama-cloud": "nemotron-3-nano:30b",
+    "ollama-cloud": "deepseek-v4.1-flash",
     "tencent-tokenhub": "hy3-preview",
     # Antigravity consumer tier reuses the Cloud Code Assist backend — the
     # cheap flash model is the right aux default for vision/compression.

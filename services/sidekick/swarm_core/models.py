@@ -11,6 +11,7 @@ from typing import Any, Iterable, Mapping
 
 
 OLLAMA_CLOUD_PROVIDER = "ollama-cloud"
+DEFAULT_OLLAMA_CLOUD_MODEL = "deepseek-v4.1-flash"
 # Dated Ollama Cloud tags explicitly prove availability for the stable route.
 # Unknown tags remain fail-closed.
 MODEL_CATALOG_ALIASES = {
@@ -220,6 +221,16 @@ class ModelResponse:
 
 
 _MODEL_SPECS = (
+    ModelSpec(
+        DEFAULT_OLLAMA_CLOUD_MODEL,
+        "deepseek-v4",
+        frozenset({"reasoning", "scouting", "structured-output"}),
+        tools=True,
+        thinking=True,
+        json_capable=True,
+        context_budget=1_000_000,
+        role_quality={"default": 1.0, "scout": 1.0},
+    ),
     ModelSpec(
         "deepseek-v4-flash",
         "deepseek-v4",

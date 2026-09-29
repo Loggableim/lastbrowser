@@ -115,7 +115,7 @@ _SUPPORTED_PROVIDER_SETUPS = {
     "ollama-cloud": {
         "label": "Ollama Cloud",
         "env_var": "OLLAMA_API_KEY",
-        "default_model": "deepseek-v4-flash",
+        "default_model": "deepseek-v4.1-flash",
         "default_base_url": "https://ollama.com/v1",
         "requires_base_url": False,
         "key_optional": False,
@@ -176,7 +176,7 @@ _SUPPORTED_PROVIDER_SETUPS = {
     "deepseek": {
         "label": "DeepSeek",
         "env_var": "DEEPSEEK_API_KEY",
-        "default_model": "deepseek-v4-flash",
+        "default_model": "deepseek-v4.1-flash",
         "default_base_url": "https://api.deepseek.com",
         "requires_base_url": False,
         "models": list(_PROVIDER_MODELS.get("deepseek", [])),

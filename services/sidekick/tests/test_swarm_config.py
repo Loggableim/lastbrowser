@@ -890,7 +890,7 @@ def test_concurrent_process_initializers_publish_only_complete_swarm_yaml(
         assert json.loads(child_stdout) == {
             "version": 1,
             "provider": "ollama-cloud",
-            "model": "deepseek-v4-flash",
+            "model": "deepseek-v4.1-flash",
             "autonomy": "reviewed_execution",
         }
         # Let the writer leave its descriptor/handle publication section
@@ -899,7 +899,7 @@ def test_concurrent_process_initializers_publish_only_complete_swarm_yaml(
         observed = load_project_config(tmp_path)
         assert observed.version == 1
         assert observed.default_provider == "ollama-cloud"
-        assert observed.default_model == "deepseek-v4-flash"
+        assert observed.default_model == "deepseek-v4.1-flash"
         assert observed.default_autonomy == "reviewed_execution"
     finally:
         release_first_publish.set()
@@ -910,7 +910,7 @@ def test_concurrent_process_initializers_publish_only_complete_swarm_yaml(
     initialized = parent_result["config"]
     assert initialized.version == 1
     assert initialized.default_provider == "ollama-cloud"
-    assert initialized.default_model == "deepseek-v4-flash"
+    assert initialized.default_model == "deepseek-v4.1-flash"
     assert initialized.default_autonomy == "reviewed_execution"
     assert load_project_config(tmp_path).version == 1
 

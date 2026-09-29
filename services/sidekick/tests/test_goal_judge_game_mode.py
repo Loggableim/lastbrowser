@@ -39,7 +39,7 @@ def test_goal_judge_uses_remote_deepseek_in_game_mode(monkeypatch):
     assert reason == "goal complete"
     assert parse_failed is False
     assert captured["provider"] == "ollama-cloud"
-    assert captured["model"] == "deepseek-v4-flash"
+    assert captured["model"] == "deepseek-v4.1-flash"
     assert captured["temperature"] == 0
-    assert captured["max_tokens"] == 200
+    assert captured["max_tokens"] == 768
     assert captured["timeout"] == 12

@@ -138,20 +138,23 @@ describe('Castlabs EVS Windows afterSign hook', () => {
     await expect(hook(context)).rejects.toThrow('VMP signing step failed (process launch failed)');
   });
 
-  it('allows a local test build without credentials and clearly warns that it is not release-ready', async () => {
-    const spawnSync = vi.fn(() => ({ status: 0 }));
+  it('tries the cached Castlabs session for local builds without explicit credentials', async () => {
+    const spawnSync = vi.fn().mockReturnValueOnce({ status: 0 }).mockReturnValueOnce({ status: 0 });
     const warn = vi.fn();
+    const log = vi.fn();
     const hook = createEvsSigningHook({
       spawnSync,
       existsSync: vi.fn(() => true),
       env: { EVS_NO_ASK: '1' },
-      log: vi.fn(),
+      log,
       warn
     });
 
     await expect(hook(context)).resolves.toBeUndefined();
-    expect(spawnSync).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('local test build without a verified VMP signature; do not release'));
+    expect(spawnSync).toHaveBeenNthCalledWith(1, 'python', ['-m', 'castlabs_evs.vmp', '-n', 'sign-pkg', appOutDir], { stdio: 'inherit', shell: true });
+    expect(spawnSync).toHaveBeenNthCalledWith(2, 'python', ['-m', 'castlabs_evs.vmp', '-n', 'verify-pkg', appOutDir], { stdio: 'inherit', shell: true });
+    expect(log).toHaveBeenCalledWith('[EVS/VMP] Widevine VMP package signing and verification succeeded.');
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it('allows a local test build when the package executable is missing but warns', async () => {

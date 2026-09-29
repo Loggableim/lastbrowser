@@ -5,6 +5,13 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.38] - 2026-09-29
+
+### Fixes
+- Use a locally cached Castlabs EVS session for VMP signing when explicit CI credentials are absent, then verify the signed package.
+- Keep release-mode EVS signing fail-closed when its required credentials are unavailable.
+
+
 ## [0.1.37] - 2026-09-28 (local installer build)
 
 ### Fixes

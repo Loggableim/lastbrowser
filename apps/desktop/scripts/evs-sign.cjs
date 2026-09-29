@@ -35,9 +35,14 @@ function createEvsSigningHook(overrides = {}) {
 
     deps.log(`\n[EVS/VMP] Executing afterSign hook: Widevine VMP signing for ${appOutDir}`);
 
-    if (!deps.env.EVS_ACCOUNT_NAME?.trim() || !deps.env.EVS_PASSWD?.trim()) {
+    const explicitCredentials = Boolean(deps.env.EVS_ACCOUNT_NAME?.trim() && deps.env.EVS_PASSWD?.trim());
+    if (required && !explicitCredentials) {
       failOrWarn('Required EVS account credentials are missing.');
       return;
+    }
+
+    if (!explicitCredentials) {
+      deps.log('[EVS/VMP] No explicit credentials supplied; trying the locally cached Castlabs account session.');
     }
 
     const targetExe = path.join(appOutDir, 'Lastbrowser.exe');

@@ -153,15 +153,20 @@ describe('Clear Browsing Data (Microsoft Store Policy 10.2)', () => {
     const dtsPath = path.resolve(__dirname, '../src/renderer/global.d.ts');
     const content = readFileSync(dtsPath, 'utf8');
     expect(content).toContain('clearData?:');
-    expect(content).toContain('Promise<{ ok: boolean }>;');
+    expect(content).toContain('failedSessions: number;');
+    expect(content).toContain('error?: string;');
   });
 
-  it('implements lastbrowser:browser:clearData in main.ts with cache and storage cleanup', () => {
+  it('registers lastbrowser:browser:clearData with cache and storage cleanup', () => {
     const mainPath = path.resolve(__dirname, '../src/main/main.ts');
-    const content = readFileSync(mainPath, 'utf8');
-    expect(content).toContain("ipcMain.handle('lastbrowser:browser:clearData'");
-    expect(content).toContain('sess.clearCache()');
-    expect(content).toContain('sess.clearStorageData(');
+    const main = readFileSync(mainPath, 'utf8');
+    const cleanupPath = path.resolve(__dirname, '../src/main/browser-data-cleanup.ts');
+    const cleanup = readFileSync(cleanupPath, 'utf8');
+    expect(main).toContain('registerBrowserDataCleanupIpc(ipcMain');
+    expect(cleanup).toContain("const CHANNEL = 'lastbrowser:browser:clearData'");
+    expect(cleanup).toContain('session.clearCache()');
+    expect(cleanup).toContain('session.clearStorageData({ storages })');
+    expect(cleanup).toContain('failedSessions');
   });
 
   it('exposes targeted deleted-profile cleanup through the preload and main process', () => {

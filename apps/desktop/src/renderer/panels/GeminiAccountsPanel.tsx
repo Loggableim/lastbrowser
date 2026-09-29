@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink, Loader2, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useDesktopI18n } from '../i18n.js';
+import { createAntigravityAuthUrlOpener } from './antigravity-auth-flow.js';
 
 export type GeminiAccountsPanelProps = {
   /** Retained for compatibility with the settings panel; this notice is offline-safe. */
@@ -31,7 +32,7 @@ export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Eleme
   const [loading, setLoading] = useState(false);
   const [flowBusy, setFlowBusy] = useState(false);
   const [flowMessage, setFlowMessage] = useState('');
-  const [pollTimer, setPollTimer] = useState<number | null>(null);
+  const pollTimerRef = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -52,7 +53,7 @@ export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Eleme
   useEffect(() => {
     void refresh();
     return () => {
-      if (pollTimer !== null) window.clearInterval(pollTimer);
+      if (pollTimerRef.current !== null) window.clearInterval(pollTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -63,34 +64,63 @@ export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Eleme
     try {
       const response = await window.lastbrowser.sidekick.startOAuth({ provider: 'antigravity' });
       const flowId = String(response.flow_id || '');
-      const authUrl = String((response as { auth_url?: string }).auth_url || '');
-      if (authUrl) {
-        await window.lastbrowser.system.openExternal(authUrl).catch(() => undefined);
-        setFlowMessage(t('settings.panels.providers.antigravityWaiting'));
-      }
+      let timer: number | null = null;
+      let flowFinished = false;
+      let consecutivePollFailures = 0;
+      const openAuthUrlOnce = createAntigravityAuthUrlOpener(
+        (authUrl) => window.lastbrowser.system.openExternal(authUrl),
+        () => {
+          if (!flowFinished) setFlowMessage(t('settings.panels.providers.antigravityWaiting'));
+        },
+        () => {
+          if (flowFinished) return;
+          // Browser launch failures are often transient (for example, when
+          // Windows is still starting the default browser). Keep polling so
+          // the auth URL opener can retry it on the next pending response.
+          setFlowMessage(`✗ ${t('settings.panels.providers.connectionError')}`);
+        }
+      );
+      // Some backend versions return auth_url immediately; the current
+      // background worker usually publishes it in a later pending poll.
+      openAuthUrlOnce(response.auth_url);
       if (!flowId) throw new Error(String((response as { error?: string }).error || 'OAuth flow failed'));
-      const timer = window.setInterval(async () => {
+      timer = window.setInterval(async () => {
+        if (flowFinished) return;
         try {
           const poll = await window.lastbrowser.sidekick.pollOAuth(flowId);
+          consecutivePollFailures = 0;
+          openAuthUrlOnce((poll as { auth_url?: string }).auth_url);
           const pollStatus = String((poll as { status?: string }).status || '');
           if (pollStatus === 'success') {
-            window.clearInterval(timer);
-            setPollTimer(null);
+            flowFinished = true;
+            if (timer !== null) window.clearInterval(timer);
+            pollTimerRef.current = null;
             setFlowBusy(false);
             const email = String((poll as { email?: string }).email || '');
             setFlowMessage(email ? `✓ ${email}` : '✓');
             void refresh();
           } else if (pollStatus === 'error' || pollStatus === 'cancelled' || pollStatus === 'expired') {
-            window.clearInterval(timer);
-            setPollTimer(null);
+            flowFinished = true;
+            if (timer !== null) window.clearInterval(timer);
+            pollTimerRef.current = null;
             setFlowBusy(false);
             setFlowMessage(`✗ ${String((poll as { error?: string }).error || pollStatus)}`);
           }
         } catch {
-          // transient poll failure — keep waiting
+          // Retry a few transient failures, then make the broken connection
+          // visible instead of leaving the user in an indefinite spinner.
+          consecutivePollFailures += 1;
+          if (consecutivePollFailures >= 5) {
+            flowFinished = true;
+            if (timer !== null) window.clearInterval(timer);
+            pollTimerRef.current = null;
+            setFlowBusy(false);
+            setFlowMessage(`✗ ${t('settings.panels.providers.connectionError')}`);
+            void window.lastbrowser.sidekick.cancelOAuth({ flowId, provider: 'antigravity' }).catch(() => null);
+          }
         }
       }, 3000);
-      setPollTimer(timer);
+      pollTimerRef.current = timer;
     } catch (error) {
       setFlowBusy(false);
       setFlowMessage(`✗ ${error instanceof Error ? error.message : String(error)}`);

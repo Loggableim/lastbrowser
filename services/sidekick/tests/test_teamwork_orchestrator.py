@@ -163,6 +163,49 @@ def test_teamwork_model_discovery_preserves_colon_tagged_model_ids():
     assert [model["tier"] for model in models] == ["fast", "quality"]
 
 
+def test_teamwork_keeps_provider_qualified_duplicate_and_routes_bare_model_to_provider():
+    catalog = {
+        "groups": [
+            {"provider_id": "anthropic", "provider": "Anthropic", "models": [{"id": "shared-model"}]},
+            {"provider_id": "openrouter", "provider": "OpenRouter", "models": [{"id": "@openrouter:shared-model"}]},
+        ]
+    }
+    calls = []
+    def fake_call_llm(*, provider, model, **kwargs):
+        calls.append((provider, model))
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        response.choices[0].message.content = "answer"
+        return response
+
+    session = MagicMock(messages=[])
+    with patch("web.api.config.get_available_models", return_value=catalog), \
+         patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
+         patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="answer"):
+        pool = get_teamwork_model_pool()
+        assert [(m["id"], m["provider"]) for m in pool] == [
+            ("shared-model", "anthropic"),
+            ("@openrouter:shared-model", "openrouter"),
+        ]
+        run_teamwork_turn(
+            session,
+            "Review this change",
+            config={
+                "strategy": "balanced", "auto_scale": False, "max_subagents": 1,
+                "roles": {
+                    "planner": "@openrouter:shared-model",
+                    "worker_pool": ["@openrouter:shared-model"],
+                    "critic": "@openrouter:shared-model",
+                    "synthesizer": "@openrouter:shared-model",
+                },
+                "hot_swap": {"enabled": True, "fallback_quorum_min": 1},
+            },
+        )
+
+    assert calls
+    assert all(call == ("openrouter", "shared-model") for call in calls)
+
+
 def test_teamwork_fails_clearly_when_no_models_are_available():
     with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[]), \
          patch("runtime.auxiliary_client.call_llm") as call_llm:

@@ -64,16 +64,14 @@ describe('Phase 9: Modern UI Redesign (Sidekick + Zen Browser Synthese)', () => 
     expect(source).toContain('toggleCopilot');
   });
 
-  it('exposes the existing profile switcher in the modern browser titlebar when supplied', () => {
+  it('keeps browser profiles out of the titlebar so Spaces remain the only top-level selector', () => {
     const header = readRendererFile('components/HeaderComponents.tsx');
+    const titlebar = header.slice(header.indexOf('export type ModernTitlebarProps'));
 
-    expect(header).toContain('profiles?: BrowserProfile[]');
-    expect(header).toContain('activeProfileId?: string');
-    expect(header).toContain('<ProfileSwitcher');
-    expect(header).toContain('onSelect={onSelectProfile}');
-    expect(header).toContain('onCreate={onCreateProfile}');
-    expect(header).toContain('onRename={onRenameProfile}');
-    expect(header).toContain('onDelete={onDeleteProfile}');
+    expect(titlebar).not.toContain('profiles?: BrowserProfile[]');
+    expect(titlebar).not.toContain('<ProfileSwitcher');
+    expect(readRendererFile('App.tsx')).not.toContain('<ProfileSwitcher');
+    expect(readRendererFile('panels/SystemPanels.tsx')).toContain('<ProfileSwitcher');
   });
 
   it('uses live adblock status in the titlebar and opens the real shield controls', () => {
@@ -125,6 +123,21 @@ describe('Phase 9: Modern UI Redesign (Sidekick + Zen Browser Synthese)', () => 
     expect(css).toContain('width: 30%');
     expect(css).toContain('.copilot-code-block');
     expect(css).toContain('.copilot-input-container');
+  });
+
+  it('reserves usable width for the modern titlebar address field', () => {
+    const css = readRendererFile('styles.css');
+    const centerRule = css.match(/\.modern-titlebar-center\s*\{([^}]+)\}/s)?.[1] || '';
+    const addressRule = css.match(/\.modern-titlebar-center\s+\.addressbar-container\s*\{([^}]+)\}/s)?.[1] || '';
+    const compactRule = css.match(/@media\s*\(max-width:\s*1440px\)\s*\{([^}]+)\}/s)?.[1] || '';
+
+    expect(centerRule).toContain('max-width: 1120px');
+    expect(addressRule).toContain('flex: 1 1 300px');
+    expect(addressRule).toContain('min-width: 300px');
+    expect(addressRule).toContain('max-width: 720px');
+    expect(css).not.toContain('.modern-titlebar-center .address-bar-container');
+    expect(compactRule).toContain('.modern-titlebar-center .adblock-stats-pill .stats-text');
+    expect(compactRule).toContain('display: none');
   });
 
   it('implements SidekickSidebar supporting slim, expanded, and hidden modes', () => {

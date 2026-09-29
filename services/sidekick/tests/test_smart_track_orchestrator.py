@@ -106,6 +106,38 @@ def test_smart_track_model_wall_preserves_ollama_model_size_tags():
     assert wall["high"]["models"][0]["id"] == "deepseek-r1:70b"
 
 
+def test_smart_track_routes_provider_qualified_duplicate_to_the_matching_provider():
+    catalog = {
+        "groups": [
+            {"provider_id": "anthropic", "provider": "Anthropic", "models": [{"id": "shared-model"}]},
+            {"provider_id": "openrouter", "provider": "OpenRouter", "models": [{"id": "@openrouter:shared-model"}]},
+        ]
+    }
+    calls = []
+    response = MagicMock()
+    response.choices = [MagicMock()]
+    response.choices[0].message.content = "answer"
+    session = MagicMock(messages=[])
+
+    with patch("web.api.config.get_available_models", return_value=catalog), \
+         patch("runtime.auxiliary_client.call_llm", side_effect=lambda **kwargs: calls.append((kwargs["provider"], kwargs["model"])) or response), \
+         patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="answer"):
+        wall = build_model_wall()
+        assert {m["id"] for tier in wall.values() for m in tier["models"]} >= {
+            "shared-model", "@openrouter:shared-model"
+        }
+        result = run_smart_track_turn(
+            session=session,
+            prompt="Explain this",
+            effort="medium",
+            config={"overrides": {"medium": "@openrouter:shared-model"}, "preplan_on_high": False},
+        )
+
+    assert result["content"] == "answer"
+    assert calls == [("openrouter", "shared-model")]
+    assert result["metadata"]["model"] == "@openrouter:shared-model"
+
+
 def test_empty_model_catalog_does_not_inject_gemini_fallbacks():
     with patch("web.api.config.get_available_models", return_value={"groups": []}):
         wall = build_model_wall()

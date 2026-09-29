@@ -26,6 +26,8 @@ export type DownloadEntry = {
   /** Total bytes, or 0 when the server did not send a length. */
   total: number;
   state: DownloadState;
+  /** True while Electron still owns an active DownloadItem (including paused). */
+  active: boolean;
   /** Absolute path once the download finished. */
   savePath: string;
   /** Unix ms when the download started. */
@@ -39,6 +41,7 @@ type DownloadItemLike = {
   getTotalBytes(): number;
   getSavePath(): string;
   isPaused?(): boolean;
+  cancel(): void;
   setSavePath?(path: string): void;
   on(event: string, listener: (...args: unknown[]) => void): void;
 };
@@ -54,6 +57,8 @@ export type DownloadTracker = {
   list(): DownloadEntry[];
   /** Remove one entry from the list. */
   clear(id: string): void;
+  /** Cancel a live Electron download without removing its history entry. */
+  cancel(id: string): boolean;
   /** Remove finished entries. */
   clearFinished(): void;
   /** Subscribe to list changes. Returns an unsubscribe function. */
@@ -112,6 +117,7 @@ export function createDownloadTracker(): DownloadTracker {
   // Paused items report a non-progressing UI state but are still live Electron
   // DownloadItems. Keep them out of finished-history pruning until `done`.
   const activeDownloads = new Set<string>();
+  const downloadItems = new Map<string, DownloadItemLike>();
   const reservedPaths = new Set<string>();
   const reservationById = new Map<string, string>();
   let counter = 0;
@@ -161,6 +167,7 @@ export function createDownloadTracker(): DownloadTracker {
       session.on('will-download', (_event, item) => {
         const id = `dl-${++counter}-${Date.now()}`;
         activeDownloads.add(id);
+        downloadItems.set(id, item);
         order.set(id, ++sequence);
 
         // Without an explicit path Electron falls back to its save dialog.
@@ -184,6 +191,7 @@ export function createDownloadTracker(): DownloadTracker {
           received: item.getReceivedBytes(),
           total: item.getTotalBytes(),
           state: 'progressing',
+          active: true,
           savePath: item.getSavePath(),
           startedAt: Date.now()
         });
@@ -198,6 +206,7 @@ export function createDownloadTracker(): DownloadTracker {
         });
         item.on('done', (_e, state) => {
           activeDownloads.delete(id);
+          downloadItems.delete(id);
           const finalState = String(state);
           update(id, {
             received: item.getReceivedBytes(),
@@ -208,7 +217,8 @@ export function createDownloadTracker(): DownloadTracker {
                 ? 'completed'
                 : finalState === 'cancelled'
                   ? 'cancelled'
-                  : 'interrupted'
+                  : 'interrupted',
+            active: false
           });
           const reservation = reservationById.get(id);
           if (reservation) reservedPaths.delete(reservation);
@@ -222,10 +232,23 @@ export function createDownloadTracker(): DownloadTracker {
     },
 
     clear(id: string): void {
+      // An active row can only be removed after Electron confirms completion
+      // or cancellation. This prevents the UI from hiding a live transfer.
+      if (activeDownloads.has(id)) return;
       entries.delete(id);
       order.delete(id);
-      activeDownloads.delete(id);
       emit();
+    },
+
+    cancel(id: string): boolean {
+      const item = downloadItems.get(id);
+      if (!item || !activeDownloads.has(id)) return false;
+      try {
+        item.cancel();
+        return true;
+      } catch {
+        return false;
+      }
     },
 
     clearFinished(): void {

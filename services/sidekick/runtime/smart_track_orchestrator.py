@@ -202,15 +202,17 @@ def build_model_wall() -> Dict[str, Any]:
             # Only @provider:model is a provider-qualified picker ID. A bare
             # colon is part of many real model IDs (for example qwen3:4b,
             # deepseek-r1:70b, or OpenRouter :free variants) and must survive.
-            clean_id = raw_id.split(":", 1)[1] if raw_id.startswith("@") and ":" in raw_id else raw_id
-            if clean_id.lower() in ("teamwork", "smart-track", "smart-track-low", "smart-track-medium", "smart-track-high") or clean_id in seen:
+            qualified_prefix = f"@{provider_id}:"
+            call_model = raw_id[len(qualified_prefix):] if raw_id.startswith(qualified_prefix) else raw_id
+            if call_model.lower() in ("teamwork", "smart-track", "smart-track-low", "smart-track-medium", "smart-track-high") or raw_id in seen:
                 continue
-            seen.add(clean_id)
+            seen.add(raw_id)
 
-            tier, tags = classify_smart_model(clean_id, provider_id)
+            tier, tags = classify_smart_model(call_model, provider_id)
             model_info = {
-                "id": clean_id,
-                "name": m.get("name") or clean_id,
+                "id": raw_id,
+                "call_model": call_model,
+                "name": m.get("name") or call_model,
                 "provider": provider_id,
                 "provider_label": provider_label,
                 "tier": tier,
@@ -324,6 +326,7 @@ def resolve_smart_track_model(
         if chosen:
             return {
                 "model": chosen["id"],
+                "call_model": chosen.get("call_model", chosen["id"]),
                 "provider": chosen["provider"],
                 "name": chosen["name"],
                 "tier": effort_norm,
@@ -349,6 +352,7 @@ def resolve_smart_track_model(
 
     return {
         "model": chosen["id"],
+        "call_model": chosen.get("call_model", chosen["id"]),
         "provider": chosen["provider"],
         "name": chosen["name"],
         "tier": effort_norm,
@@ -421,9 +425,13 @@ def run_smart_track_turn(
         try:
             wall = build_model_wall()
             preplan_model = wall.get("low", {}).get("default") or wall.get("medium", {}).get("default") or routed["model"]
+            preplan_entry = next(
+                (m for tier_data in wall.values() for m in tier_data.get("models", []) if m.get("id") == preplan_model),
+                None,
+            )
             preplan_resp = call_llm(
                 provider=_provider_for_wall_model(wall, preplan_model, routed["provider"]),
-                model=preplan_model,
+                model=(preplan_entry or {}).get("call_model", preplan_model),
                 messages=[
                     {"role": "system", "content": preplan_sys},
                     {"role": "user", "content": prompt},
@@ -469,7 +477,7 @@ def run_smart_track_turn(
     try:
         main_resp = call_llm(
             provider=routed["provider"],
-            model=routed["model"],
+            model=routed.get("call_model", routed["model"]),
             messages=main_messages,
             timeout=120.0,
         )
@@ -480,9 +488,14 @@ def run_smart_track_turn(
         logger.error("Smart track main call to %s failed: %s", routed["model"], e)
         wall = build_model_wall()
         fb_model = wall.get("medium", {}).get("default") or routed["model"]
+        fb_entry = next(
+            (m for tier_data in wall.values() for m in tier_data.get("models", []) if m.get("id") == fb_model),
+            None,
+        )
+        fb_provider = _provider_for_wall_model(wall, fb_model, routed["provider"])
         fb_resp = call_llm(
-            provider=_provider_for_wall_model(wall, fb_model, routed["provider"]),
-            model=fb_model,
+            provider=fb_provider,
+            model=(fb_entry or {}).get("call_model", fb_model),
             messages=main_messages,
             timeout=60.0,
         )
@@ -490,7 +503,8 @@ def run_smart_track_turn(
         if not final_answer:
             final_answer = str(fb_resp.choices[0].message.content or "").strip()
         routed["model"] = fb_model
-        routed["provider"] = _provider_for_wall_model(wall, fb_model, routed["provider"])
+        routed["call_model"] = (fb_entry or {}).get("call_model", fb_model)
+        routed["provider"] = fb_provider
         routed["name"] = f"{fb_model} (Fallback)"
 
     main_ms = int((time.time() - main_t0) * 1000)

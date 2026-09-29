@@ -25,6 +25,7 @@ export interface ChatState {
   composerText: string;
   composerMode: ComposerMode;
   selectedModel: string;
+  selectedModelProvider: string;
 
   setSessions: (
     sessions:
@@ -51,6 +52,7 @@ export interface ChatState {
   setComposerText: (text: string) => void;
   setComposerMode: (mode: ComposerMode) => void;
   setSelectedModel: (model: string) => void;
+  setSelectedModelProvider: (provider: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -69,6 +71,10 @@ export const useChatStore = create<ChatState>((set) => ({
   selectedModel:
     typeof window !== 'undefined' && window.localStorage
       ? window.localStorage.getItem('lastbrowser.selectedModel.v1') || ''
+      : '',
+  selectedModelProvider:
+    typeof window !== 'undefined' && window.localStorage
+      ? window.localStorage.getItem('lastbrowser.selectedModelProvider.v1') || ''
       : '',
 
   setSessions: (sessions) =>
@@ -99,5 +105,13 @@ export const useChatStore = create<ChatState>((set) => ({
       }
     } catch {}
     set({ selectedModel });
+  },
+  setSelectedModelProvider: (selectedModelProvider) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('lastbrowser.selectedModelProvider.v1', selectedModelProvider);
+      }
+    } catch {}
+    set({ selectedModelProvider });
   }
 }));

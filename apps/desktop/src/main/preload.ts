@@ -250,6 +250,7 @@ if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMai
   },
   downloads: {
     list: () => ipcRenderer.invoke('lastbrowser:downloads:list'),
+    cancel: (id: string) => ipcRenderer.invoke('lastbrowser:downloads:cancel', id),
     clear: (id?: string) => ipcRenderer.invoke('lastbrowser:downloads:clear', id),
     onChanged: (listener: (entries: unknown) => void) => {
       const wrapped = (_event: unknown, entries: unknown) => listener(entries);
@@ -318,6 +319,9 @@ if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMai
     }
   },
   cdp: {
+    getPreference: () => ipcRenderer.invoke('lastbrowser:cdp:getPreference') as Promise<{ enabled: boolean; active: boolean }> ,
+    savePreference: (value: { enabled: boolean }) => ipcRenderer.invoke('lastbrowser:cdp:savePreference', value) as Promise<{ ok: boolean; enabled?: boolean; active?: boolean; restartRequired?: boolean; error?: string }>,
+    restart: () => ipcRenderer.invoke('lastbrowser:cdp:restart') as Promise<{ ok: boolean }>,
     status: () => ipcRenderer.invoke('lastbrowser:cdp:status'),
     execute: (request: unknown) => ipcRenderer.invoke('lastbrowser:cdp:execute', request)
   },

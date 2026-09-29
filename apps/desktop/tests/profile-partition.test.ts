@@ -21,8 +21,12 @@ describe('browser profile integration contract', () => {
     expect(appSource).not.toContain('persist:lastbrowser-main');
   });
 
-  it('renders a profile switcher', () => {
-    expect(appSource).toMatch(/<ProfileSwitcher\b/);
+  it('keeps profile switching in Settings instead of browser chrome', () => {
+    expect(appSource).not.toMatch(/<ProfileSwitcher\b/);
+    expect(appSource).toContain('profiles={profiles}');
+    const settingsSource = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/SystemPanels.tsx'), 'utf8');
+    expect(settingsSource).toMatch(/<ProfileSwitcher\b/);
+    expect(settingsSource).toContain("settings.panels.preferences.browserProfiles");
   });
 });
 

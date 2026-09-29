@@ -445,6 +445,10 @@ export class ExtensionManager {
 
     // Copy to persistent extensions storage
     if (existsSync(destDir)) {
+      // Chromium keeps the already-loaded extension alive for the lifetime of
+      // the Session. Remove it before replacing its files so reinstalling an
+      // unpacked extension actually activates the new version immediately.
+      await this.unloadRecordFromSessions(extId);
       rmSync(destDir, { recursive: true, force: true });
     }
     mkdirSync(destDir, { recursive: true });
@@ -493,6 +497,10 @@ export class ExtensionManager {
 
     const destDir = path.join(this.baseDir, cwsId);
     if (existsSync(destDir)) {
+      // The Session cache is keyed by the app-facing extension ID. Clear it
+      // before replacing a CWS package, otherwise loadRecordIntoSession sees
+      // the old mapping and silently leaves the previous code running.
+      await this.unloadRecordFromSessions(cwsId);
       rmSync(destDir, { recursive: true, force: true });
     }
     mkdirSync(destDir, { recursive: true });

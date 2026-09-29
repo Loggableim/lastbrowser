@@ -11,6 +11,43 @@ import pytest
 DASHBOARD_ACTOR = "dashboard:" + "a" * 64
 
 
+def test_desktop_startup_warms_legacy_api_bridge_before_first_ipc_call(monkeypatch):
+    from cli import web_server
+    from web.api import fastapi_bridge
+
+    warmed: list[bool] = []
+    monkeypatch.setenv("LASTBROWSER_HOME", "desktop-profile")
+    monkeypatch.setattr(
+        fastapi_bridge,
+        "_prepare_webui_runtime",
+        lambda: warmed.append(True),
+    )
+
+    assert (
+        web_server._prepare_desktop_api_bridge_runtime_on_startup
+        in web_server.app.router.on_startup
+    )
+    web_server._prepare_desktop_api_bridge_runtime_on_startup()
+
+    assert warmed == [True]
+
+
+def test_standalone_startup_keeps_legacy_api_bridge_lazy(monkeypatch):
+    from cli import web_server
+    from web.api import fastapi_bridge
+
+    monkeypatch.delenv("LASTBROWSER_HOME", raising=False)
+
+    def unexpected_bootstrap():
+        raise AssertionError("standalone startup must keep WebUI bootstrap lazy")
+
+    monkeypatch.setattr(
+        fastapi_bridge, "_prepare_webui_runtime", unexpected_bootstrap
+    )
+
+    web_server._prepare_desktop_api_bridge_runtime_on_startup()
+
+
 def _headers(web_server):
     return {
         web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN,

@@ -166,14 +166,19 @@ def get_teamwork_model_pool() -> List[Dict[str, Any]]:
             # Only @provider:model is a provider-qualified picker ID. A bare
             # colon is part of many real model IDs (for example qwen3:4b,
             # deepseek-r1:70b, or OpenRouter :free variants) and must survive.
-            clean_id = raw_id.split(":", 1)[1] if raw_id.startswith("@") and ":" in raw_id else raw_id
-            if clean_id.lower() == "teamwork" or clean_id in seen_ids:
+            # Keep provider-qualified picker IDs as the orchestration identity.
+            # The catalog deliberately adds @provider:model when providers
+            # expose the same model ID. Strip it only for the provider API call.
+            qualified_prefix = f"@{provider_id}:"
+            call_model = raw_id[len(qualified_prefix):] if raw_id.startswith(qualified_prefix) else raw_id
+            if call_model.lower() == "teamwork" or raw_id in seen_ids:
                 continue
-            seen_ids.add(clean_id)
-            name = m.get("name") or clean_id
-            tier = classify_model_tier(clean_id, provider_id)
+            seen_ids.add(raw_id)
+            name = m.get("name") or call_model
+            tier = classify_model_tier(call_model, provider_id)
             models.append({
-                "id": clean_id,
+                "id": raw_id,
+                "call_model": call_model,
                 "name": name,
                 "provider": provider_id,
                 "provider_label": provider_label,
@@ -322,6 +327,7 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
         persp = perspective_templates[idx % len(perspective_templates)]
         workers_with_perspectives.append({
             "model": w["id"],
+            "call_model": w.get("call_model", w["id"]),
             "provider": w["provider"],
             "name": w["name"],
             "role": persp["role"],
@@ -372,7 +378,7 @@ def _invoke_worker(
         try:
             resp = call_llm(
                 provider=current_worker["provider"],
-                model=current_worker["model"],
+                model=current_worker.get("call_model", current_worker["model"]),
                 messages=messages,
                 timeout=timeout,
             )
@@ -399,6 +405,7 @@ def _invoke_worker(
                 logger.info("Hot-swapping worker %s -> %s", current_worker["model"], swap_candidate["id"])
                 tried_models.add(swap_candidate["id"])
                 current_worker["model"] = swap_candidate["id"]
+                current_worker["call_model"] = swap_candidate.get("call_model", swap_candidate["id"])
                 current_worker["provider"] = swap_candidate["provider"]
                 current_worker["name"] = swap_candidate.get("name", swap_candidate["id"])
                 continue
@@ -481,7 +488,7 @@ def run_teamwork_turn(
         try:
             planner_resp = call_llm(
                 provider=planner_model["provider"],
-                model=planner_model["id"],
+                model=planner_model.get("call_model", planner_model["id"]),
                 messages=[
                     {"role": "system", "content": "Erstelle einen kurzen Arbeitsplan mit Teilfragen, Randbedingungen und Prüfpunkten. Keine Lösung ausformulieren; maximal 120 Wörter."},
                     {"role": "user", "content": prompt},
@@ -584,9 +591,10 @@ def run_teamwork_turn(
     critic_t0 = time.time()
     critic_review = ""
     try:
+        critic_entry = next((m for m in pool if m["id"] == critic_model), None)
         critic_resp = call_llm(
             provider=critic_provider,
-            model=critic_model,
+            model=critic_entry.get("call_model", critic_model) if critic_entry else critic_model,
             messages=[{"role": "user", "content": critic_prompt}],
             timeout=50.0,
         )
@@ -635,9 +643,10 @@ def run_teamwork_turn(
 
     synth_t0 = time.time()
     try:
+        synth_entry = next((m for m in pool if m["id"] == synth_model), None)
         synth_resp = call_llm(
             provider=synth_provider,
-            model=synth_model,
+            model=synth_entry.get("call_model", synth_model) if synth_entry else synth_model,
             messages=[{"role": "user", "content": synthesis_prompt}],
             timeout=65.0,
         )

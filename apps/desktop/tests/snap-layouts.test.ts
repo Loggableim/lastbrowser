@@ -49,6 +49,14 @@ describe('Snap layout targets', () => {
     expect(getSnapSlotBounds('trio-stacked-right', 2, { x: [55], y: [42] })).toEqual({ top: 42, left: 55, width: 45, height: 58 });
   });
 
+  it('maps an independently resized quad to the expected right-pane 33x50 bounds', () => {
+    const ratios = { x: [66.67], y: [66.67, 50] };
+    expect(getSnapSlotBounds('quad-grid', 0, ratios)).toEqual({ top: 0, left: 0, width: 66.67, height: 66.67 });
+    expect(getSnapSlotBounds('quad-grid', 1, ratios)).toEqual({ top: 0, left: 66.67, width: 33.33, height: 50 });
+    expect(getSnapSlotBounds('quad-grid', 2, ratios)).toEqual({ top: 66.67, left: 0, width: 66.67, height: 33.33 });
+    expect(getSnapSlotBounds('quad-grid', 3, ratios)).toEqual({ top: 50, left: 66.67, width: 33.33, height: 50 });
+  });
+
   it('provides layout defaults that match all supported pane counts', () => {
     for (const [layout, definition] of Object.entries(SNAP_LAYOUT_DEFINITIONS)) {
       const ratios = getDefaultSnapLayoutRatios(layout as keyof typeof SNAP_LAYOUT_DEFINITIONS);

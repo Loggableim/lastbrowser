@@ -67,13 +67,14 @@ export async function openProviderOAuthUrl(
     return false;
   }
   // Google blocks OAuth inside embedded Electron/WebView windows — the
-  // Antigravity flow must always open in the OS browser, like Codex.
+  // Antigravity flow must always open in the OS browser.
   if (providerId === 'antigravity' && integrations.openExternal) {
     try {
       if (await integrations.openExternal(url)) return true;
     } catch {
-      // fall through to the connect window
+      return false;
     }
+    return false;
   }
   if (providerId === 'openai-codex' && integrations.openExternal) {
     try {
@@ -278,7 +279,9 @@ export function cloudProviderOptions(status: OnboardingStatus | null | undefined
     .map((provider) => ({
       id: String(provider.id).trim(),
       label: String(provider.label || provider.id).trim(),
-      oauthProvider: provider.oauth_provider ? String(provider.oauth_provider).trim() : undefined,
+      oauthProvider: provider.oauth_provider ? String(provider.oauth_provider).trim() : (
+        String(provider.id || '').trim().toLowerCase() === 'antigravity' ? 'antigravity' : undefined
+      ),
       oauthLabel: provider.oauth_label ? String(provider.oauth_label).trim() : undefined,
       keyOptional: provider.key_optional === true,
       requiresBaseUrl: provider.requires_base_url === true,

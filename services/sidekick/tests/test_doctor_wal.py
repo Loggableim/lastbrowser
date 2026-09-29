@@ -6,7 +6,9 @@ from cli.doctor import (
     _integrated_provider,
     _provider_env_file_is_optional,
     _doctor_provider_is_configured,
+    _missing_provider_runtime_dependencies,
     _resolve_doctor_provider_context,
+    _record_connectivity_severity,
 )
 
 
@@ -61,6 +63,32 @@ def test_doctor_uses_lastbrowser_pool_for_active_api_key_providers(monkeypatch):
     assert not _doctor_provider_is_configured("openai", "openai", {"api_key": ""})
     assert _doctor_provider_is_configured("ollama", "ollama", {})
     assert _doctor_provider_is_configured("deepseek", "deepseek", {"api_key": "token"}) is None
+
+
+def test_active_anthropic_provider_requires_its_runtime_sdk():
+    def missing_anthropic(module):
+        if module == "anthropic":
+            raise ImportError("not installed")
+        return None
+
+    assert _missing_provider_runtime_dependencies("anthropic", missing_anthropic) == [
+        ("Anthropic SDK", "pip install 'anthropic>=0.39.0'")
+    ]
+    assert _missing_provider_runtime_dependencies("ollama-cloud", missing_anthropic) == []
+
+
+def test_connectivity_probe_status_updates_summary_exit_counters():
+    from cli import doctor
+
+    doctor._warning_count = 0
+    doctor._fail_count = 0
+    _record_connectivity_severity(doctor.color("⚠", doctor.Colors.YELLOW))
+    assert doctor._warning_count == 1
+    assert doctor._fail_count == 0
+
+    _record_connectivity_severity(doctor.color("✗", doctor.Colors.RED))
+    assert doctor._warning_count == 1
+    assert doctor._fail_count == 1
 
 
 def test_active_provider_resolution_uses_profile_aware_runtime_context(monkeypatch):

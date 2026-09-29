@@ -21,8 +21,13 @@ import { geminiSubscriptionTranslations } from './i18n/gemini-subscription-trans
 import { spaceSetupTranslations } from './i18n/space-setup-translations.js';
 import { browserChromeTranslations } from './i18n/browser-chrome-translations.js';
 import { visionImpairedTranslations } from './i18n/vision-impaired-translations.js';
+import { splitMagnifierTranslations } from './i18n/split-magnifier-translations.js';
 import { sidekickUxTranslations } from './i18n/sidekick-ux-translations.js';
 import { agentPanelsTranslations } from './i18n/agent-panels-translations.js';
+
+for (const locale of desktopLocaleIds) {
+  Object.assign(visionImpairedTranslations[locale], splitMagnifierTranslations[locale]);
+}
 
 const systemPanelOverrides = {
   de: systemPanelsRomanTranslations.de,

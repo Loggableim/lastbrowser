@@ -41,6 +41,8 @@ import { cloudProviderOptions, openProviderOAuthUrl, type OnboardingStatus, type
 import { providerPresentation } from '../provider-presentation.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
+import { clearBrowserDataWithFeedback } from '../utils/clear-browser-data.js';
+import { copyDoctorOutput, runDoctorExclusively } from '../utils/doctor-dashboard.js';
 import { searchEngines } from '../tabs.js';
 import { computeAccentTokens } from '../App.js';
 import { type ExtensionRecord, type ExtensionPreset } from '../bridge.js';
@@ -60,6 +62,8 @@ import {
 } from '../stores/usePanelStore.js';
 import { DEFAULT_VISION_IMPAIRED_CONFIG } from '../stores/a11y-config.js';
 import { AccessibilityTestCard } from '../components/AccessibilityTestCard.js';
+import { ProfileSwitcher } from '../components/HeaderComponents.js';
+import type { BrowserProfile } from '../profiles.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -455,6 +459,7 @@ export function NativeInsightsMain({
   serviceStatus: ServiceStatus | null;
   activeContextItem: string;
 }): JSX.Element {
+  const { t } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const [days, setDays] = useState(14);
   const [section, setSection] = useState(activeContextItem || 'Usage');
@@ -476,17 +481,24 @@ export function NativeInsightsMain({
   const hourRows = arrayFrom(insightData, ['hours', 'by_hour', 'hourly', 'activity_by_hour']);
   const systemHealth = isRecord(insightData.system) ? insightData.system : isRecord(insightData.health) ? insightData.health : null;
   const overviewCards = [
-    { label: 'Sessions', value: formatCompactNumber(insightData.total_sessions || insightData.sessions)},
-    { label: 'Messages', value: formatCompactNumber(insightData.total_messages || insightData.messages)},
-    { label: 'Tokens', value: formatCompactNumber(insightData.total_tokens || insightData.tokens)},
-    { label: 'Cost', value: formatMoney(insightData.total_cost || insightData.cost)}
+    { label: t('insights.sessions'), value: formatCompactNumber(insightData.total_sessions || insightData.sessions)},
+    { label: t('insights.messages'), value: formatCompactNumber(insightData.total_messages || insightData.messages)},
+    { label: t('insights.tokens'), value: formatCompactNumber(insightData.total_tokens || insightData.tokens)},
+    { label: t('insights.cost'), value: formatMoney(insightData.total_cost || insightData.cost)}
   ];
   const tokenBreakdown = [
-    { label: 'Input', value: formatCompactNumber(insightData.total_input_tokens || insightData.input_tokens)},
-    { label: 'Output', value: formatCompactNumber(insightData.total_output_tokens || insightData.output_tokens)},
-    { label: 'Average / session', value: formatCompactNumber(insightData.average_tokens_per_session || insightData.avg_tokens_per_session)},
-    { label: 'Weekly total', value: formatCompactNumber(insightData.weekly_tokens || insightData.period_tokens)}
+    { label: t('insights.input'), value: formatCompactNumber(insightData.total_input_tokens || insightData.input_tokens)},
+    { label: t('insights.output'), value: formatCompactNumber(insightData.total_output_tokens || insightData.output_tokens)},
+    { label: t('insights.averagePerSession'), value: formatCompactNumber(insightData.average_tokens_per_session || insightData.avg_tokens_per_session)},
+    { label: t('insights.weeklyTotal'), value: formatCompactNumber(insightData.weekly_tokens || insightData.period_tokens)}
   ];
+  const sections = [
+    { id: 'Usage', label: t('insights.usage') },
+    { id: 'Models', label: t('insights.models') },
+    { id: 'Cost', label: t('insights.cost') },
+    { id: 'LLM wiki', label: t('insights.llmWiki') }
+  ];
+  const sectionLabel = sections.find((item) => item.id.toLowerCase() === section.toLowerCase())?.label || section;
 
   useEffect(() => {
     setSection(activeContextItem || 'Usage');
@@ -494,21 +506,21 @@ export function NativeInsightsMain({
 
   return (
     <section className="browser-main native-rest-main insights-main">
-      <NativeHeader icon={<Gauge size={21} />} title="Insights" kicker="Observability" detail="Activity, token/cost/model metrics and LLM wiki status from the existing backend." loading={insights.loading} ready={ready} onRefresh={insights.refresh} />
+      <NativeHeader icon={<Gauge size={21} />} title={t('insights.title')} kicker={t('insights.kicker')} detail={t('insights.detail')} loading={insights.loading} ready={ready} onRefresh={insights.refresh} />
       <AdvancedWebUiTools panel="insights" serviceStatus={serviceStatus} compact />
       <div className="native-card-actions insights-tabs">
-        {['Usage', 'Models', 'Cost', 'LLM wiki'].map((item) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        {sections.map((item) => (
+          <button key={item.id} type="button" className={item.id === section ? 'active' : ''} onClick={() => setSection(item.id)}>{item.label}</button>
         ))}
       </div>
       <div className="native-card-actions">
-        <select value={days} onChange={(event) => setDays(Number(event.target.value))}>{[7, 14, 30, 90].map((value) => <option key={value} value={value}>{value} days</option>)}</select>
+        <select value={days} aria-label={t('insights.daysCount', { count: days })} onChange={(event) => setDays(Number(event.target.value))}>{[7, 14, 30, 90].map((value) => <option key={value} value={value}>{t('insights.daysCount', { count: value })}</option>)}</select>
       </div>
       <ErrorLine error={insights.error || wiki.error} />
       <div className="insights-panel-grid">
         <aside className="insights-panel-column">
           <section className="native-work-card detail-json-card">
-            <header><strong>Overview</strong></header>
+            <header><strong>{t('insights.overview')}</strong></header>
             <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
               {overviewCards.map((card) => (
                 <article key={card.label} className="metric-card">
@@ -519,7 +531,7 @@ export function NativeInsightsMain({
             </div>
           </section>
           <section className="native-work-card detail-json-card">
-            <header><strong>System health</strong></header>
+            <header><strong>{t('insights.systemHealth')}</strong></header>
             {systemHealth ? (
               <div className="compact-list">
                 {Object.entries(systemHealth)
@@ -533,11 +545,11 @@ export function NativeInsightsMain({
                   ))}
               </div>
             ) : (
-              <EmptyState icon={<Gauge size={24} />} label={ready ? 'No system health data.' : 'Sidekick is starting.'} />
+              <EmptyState icon={<Gauge size={24} />} label={ready ? t('insights.noSystemHealth') : t('insights.sidekickStarting')} />
             )}
           </section>
           <section className="native-work-card detail-json-card">
-            <header><strong>LLM Wiki Status</strong></header>
+            <header><strong>{t('insights.llmWikiStatus')}</strong></header>
             <div className="compact-list">
             {Object.entries(wikiData)
                 .filter(([, value]) => typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean')
@@ -553,7 +565,7 @@ export function NativeInsightsMain({
         </aside>
         <main className="insights-panel-column">
           <section className="native-work-card detail-json-card">
-            <header><strong>{section}</strong></header>
+            <header><strong>{sectionLabel}</strong></header>
             <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))' }}>
               {metricEntries.map(([key, value]) => (
                 <article key={key} className="metric-card">
@@ -561,12 +573,12 @@ export function NativeInsightsMain({
                   <strong>{String(value)}</strong>
                 </article>
               ))}
-              {!metricEntries.length && <EmptyState icon={<Gauge size={24} />} label={ready ? 'No metrics yet.' : 'Sidekick is starting.'} />}
+              {!metricEntries.length && <EmptyState icon={<Gauge size={24} />} label={ready ? t('insights.noMetrics') : t('insights.sidekickStarting')} />}
             </div>
           </section>
           <div className="insights-card-row">
             <section className="native-work-card detail-json-card">
-              <header><strong>Daily tokens</strong></header>
+              <header><strong>{t('insights.dailyTokens')}</strong></header>
               {dailyRows.length ? (
                 <div className="insights-bar-list">
                   {dailyRows.slice(0, 8).map((row, index) => {
@@ -575,7 +587,7 @@ export function NativeInsightsMain({
                     const total = Math.max(input + output, toNumber(row.total_tokens || row.tokens || 0));
                     return (
                       <article key={idOf(row) || `${index}`} className="insights-bar-row">
-                        <span className="insights-bar-label">{text(row.date || row.day || row.label || `Day ${index + 1}`)}</span>
+                        <span className="insights-bar-label">{text(row.date || row.day || row.label || t('insights.day', { day: index + 1 }))}</span>
                         <div className="insights-bar-track">
                           <div className="insights-bar-fill insights-bar-output" style={{ width: percentValue(output, total)}} />
                           <div className="insights-bar-fill insights-bar-input" style={{ width: percentValue(input, total)}} />
@@ -586,29 +598,29 @@ export function NativeInsightsMain({
                   })}
                 </div>
               ) : (
-                <EmptyState icon={<Gauge size={24} />} label={ready ? 'No daily usage data.' : 'Sidekick is starting.'} />
+                <EmptyState icon={<Gauge size={24} />} label={ready ? t('insights.noDailyUsage') : t('insights.sidekickStarting')} />
               )}
             </section>
             <section className="native-work-card detail-json-card">
-              <header><strong>Models</strong></header>
+              <header><strong>{t('insights.models')}</strong></header>
               {modelRows.length ? (
                 <div className="insights-model-list">
                   {modelRows.slice(0, 8).map((row) => (
                     <article key={idOf(row)} className="insights-model-row">
-                      <strong>{titleOf(row, 'Model')}</strong>
-                      <span>{formatCompactNumber(row.sessions || row.usage || row.requests)} sessions</span>
-                      <span>{formatCompactNumber(row.total_tokens || row.tokens || row.input_tokens || row.output_tokens)} tokens</span>
+                      <strong>{titleOf(row, t('insights.model'))}</strong>
+                      <span>{t('insights.sessionsCount', { count: formatCompactNumber(row.sessions || row.usage || row.requests) })}</span>
+                      <span>{t('insights.tokensCount', { count: formatCompactNumber(row.total_tokens || row.tokens || row.input_tokens || row.output_tokens) })}</span>
                       <span>{formatMoney(row.cost || row.total_cost || row.usage_cost)}</span>
                     </article>
                   ))}
                 </div>
               ) : (
-                <EmptyState icon={<Gauge size={24} />} label={ready ? 'No model data.' : 'Sidekick is starting.'} />
+                <EmptyState icon={<Gauge size={24} />} label={ready ? t('insights.noModelData') : t('insights.sidekickStarting')} />
               )}
             </section>
           </div>
           <section className="native-work-card detail-json-card">
-            <header><strong>Token breakdown</strong></header>
+            <header><strong>{t('insights.tokenBreakdown')}</strong></header>
             <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))' }}>
               {tokenBreakdown.map((card) => (
                 <article key={card.label} className="metric-card">
@@ -622,7 +634,7 @@ export function NativeInsightsMain({
             ) : null}
           </section>
           <section className="native-work-card detail-json-card">
-            <header><strong>Activity by hour</strong></header>
+            <header><strong>{t('insights.activityByHour')}</strong></header>
             {hourRows.length ? (
               <div className="insights-bar-list">
                 {hourRows.slice(0, 8).map((row, index) => (
@@ -636,7 +648,7 @@ export function NativeInsightsMain({
                 ))}
               </div>
             ) : (
-              <EmptyState icon={<Gauge size={24} />} label={ready ? 'No hourly activity data.' : 'Sidekick is starting.'} />
+              <EmptyState icon={<Gauge size={24} />} label={ready ? t('insights.noHourlyActivity') : t('insights.sidekickStarting')} />
             )}
           </section>
         </main>
@@ -646,6 +658,7 @@ export function NativeInsightsMain({
 }
 
 export function NativeLogsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
+  const { t } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const [file, setFile] = useState('agent');
   const [tail, setTail] = useState(200);
@@ -655,6 +668,12 @@ export function NativeLogsMain({ serviceStatus, activeContextItem }: { serviceSt
   const [section, setSection] = useState(activeContextItem || 'Agent');
   const logs = useApiState(() => window.lastbrowser.sidekick.getLogs({ file, tail }), [ready, file, tail], ready);
   const lines = text(logs.data?.text || logs.data?.logs || logs.data?.content).split(/\r?\n/).filter((line) => !severity || line.toLowerCase().includes(severity.toLowerCase()));
+  const logSections = [
+    { id: 'Agent', label: t('logs.agent') },
+    { id: 'WebUI', label: t('logs.webUi') },
+    { id: 'Errors', label: t('logs.errors') },
+    { id: 'Gateway', label: t('logs.gateway') }
+  ];
 
   useEffect(() => {
     const nextSection = activeContextItem || 'Agent';
@@ -671,22 +690,22 @@ export function NativeLogsMain({ serviceStatus, activeContextItem }: { serviceSt
 
   return (
     <section className="browser-main native-rest-main logs-main">
-      <NativeHeader icon={<FileText size={21} />} title="Logs" kicker="Observability" detail="Log file selection, tail size, severity filter, wrap and auto-refresh." loading={logs.loading} ready={ready} onRefresh={logs.refresh} />
+      <NativeHeader icon={<FileText size={21} />} title={t('logs.title')} kicker={t('logs.kicker')} detail={t('logs.detail')} loading={logs.loading} ready={ready} onRefresh={logs.refresh} />
       <AdvancedWebUiTools panel="logs" serviceStatus={serviceStatus} compact />
       <div className="native-card-actions insights-tabs">
-        {['Agent', 'WebUI', 'Errors', 'Gateway'].map((item) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => { setSection(item); setFile(item === 'WebUI' ? 'webui' : item === 'Errors' ? 'errors' : item === 'Gateway' ? 'gateway' : 'agent'); }}>{item}</button>
+        {logSections.map((item) => (
+          <button key={item.id} type="button" className={item.id === section ? 'active' : ''} onClick={() => { setSection(item.id); setFile(item.id === 'WebUI' ? 'webui' : item.id === 'Errors' ? 'errors' : item.id === 'Gateway' ? 'gateway' : 'agent'); }}>{item.label}</button>
         ))}
       </div>
       <div className="log-toolbar native-work-card">
         <select value={file} onChange={(event) => setFile(event.target.value)}>{['agent', 'webui', 'errors', 'gateway'].map((item) => <option key={item}>{item}</option>)}</select>
         <select value={tail} onChange={(event) => setTail(Number(event.target.value))}>{[100, 200, 500, 1000].map((item) => <option key={item} value={item}>{item}</option>)}</select>
-        <input value={severity} onChange={(event) => setSeverity(event.target.value)} placeholder="Filter severity/text" />
-        <label><input type="checkbox" checked={wrap} onChange={(event) => setWrap(event.target.checked)} />Wrap</label>
-        <label><input type="checkbox" checked={auto} onChange={(event) => setAuto(event.target.checked)} />Auto</label>
+        <input value={severity} onChange={(event) => setSeverity(event.target.value)} placeholder={t('logs.filterPlaceholder')} aria-label={t('logs.severity')} />
+        <label><input type="checkbox" checked={wrap} onChange={(event) => setWrap(event.target.checked)} />{t('logs.wrap')}</label>
+        <label><input type="checkbox" checked={auto} onChange={(event) => setAuto(event.target.checked)} />{t('logs.autoRefresh')}</label>
       </div>
       <ErrorLine error={logs.error} />
-      <pre className={`log-viewer ${wrap ? 'wrap' : ''}`}>{lines.join('\n') || 'No log lines loaded.'}</pre>
+      <pre className={`log-viewer ${wrap ? 'wrap' : ''}`}>{lines.join('\n') || t('logs.noLinesLoaded')}</pre>
     </section>
   );
 }
@@ -1128,35 +1147,44 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
   const [viewMode, setViewMode] = useState<'visual' | 'raw'>('visual');
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const doctorRunInProgress = useRef(false);
 
   const runDoctor = async (fix = false) => {
-    if (loading || fixing) return;
-    if (fix) setFixing(true);
-    else setLoading(true);
-    setError(null);
-    try {
-      if (!window.lastbrowser?.doctor?.run) {
-        throw new Error('Doctor API is not available in desktop shell.');
+    await runDoctorExclusively(doctorRunInProgress, async () => {
+      if (fix) setFixing(true);
+      else setLoading(true);
+      setError(null);
+      try {
+        if (!window.lastbrowser?.doctor?.run) {
+          throw new Error('Doctor API is not available in desktop shell.');
+        }
+        const res = await window.lastbrowser.doctor.run({ fix });
+        setReport(res);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+        setFixing(false);
       }
-      const res = await window.lastbrowser.doctor.run({ fix });
-      setReport(res);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-      setFixing(false);
-    }
+    });
   };
 
   useEffect(() => {
     void runDoctor(false);
   }, []);
 
-  const handleCopyRaw = () => {
+  const handleCopyRaw = async () => {
     if (!report?.rawOutput) return;
-    void navigator.clipboard.writeText(report.rawOutput);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setError(null);
+    try {
+      const didCopy = await copyDoctorOutput(report.rawOutput, navigator.clipboard);
+      if (!didCopy) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      setCopied(false);
+      setError(`Bericht konnte nicht in die Zwischenablage kopiert werden: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   // sidekick doctor uses exit 1 for warnings and 2 for failures. Treating all
@@ -1474,8 +1502,11 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
                               background: 'rgba(255, 255, 255, 0.04)',
                               padding: '1px 6px',
                               borderRadius: '4px',
-                              whiteSpace: 'nowrap',
-                              flexShrink: 0
+                              whiteSpace: 'normal',
+                              overflowWrap: 'anywhere',
+                              textAlign: 'right',
+                              flexShrink: 1,
+                              maxWidth: '55%'
                             }}>
                               {check.detail}
                             </span>
@@ -1871,6 +1902,7 @@ function VisionImpairedSettingsCard(): JSX.Element {
             <option value="system">{t('settings.panels.appearance.viFontSystem')}</option>
             <option value="atkinson">{t('settings.panels.appearance.viFontAtkinson')}</option>
             <option value="lexend">{t('settings.panels.appearance.viFontLexend')}</option>
+            <option value="opendyslexic">{t('settings.panels.appearance.viFontOpenDyslexic')}</option>
           </select>
         </SettingsField>
         <SettingsToggle
@@ -2046,7 +2078,90 @@ function VisionImpairedSettingsCard(): JSX.Element {
   );
 }
 
-export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null }): JSX.Element {
+/**
+ * Serialize settings writes and coalesce queued snapshots. Writes contain the
+ * complete settings object, so once an in-flight write finishes only the
+ * latest pending snapshot is needed. This prevents a burst of appearance edits
+ * from delaying the final selected theme behind stale intermediate payloads.
+ */
+export function createOrderedSettingsWriter<T>(write: (value: T) => Promise<unknown>): (value: T) => Promise<unknown> {
+  type Waiter = { resolve: (result: unknown) => void; reject: (error: unknown) => void };
+  type PendingWrite = { value: T; waiters: Waiter[] };
+  let pending: PendingWrite | null = null;
+  let writing = false;
+
+  const drain = (): void => {
+    if (writing || !pending) return;
+    writing = true;
+    const current = pending;
+    pending = null;
+
+    void Promise.resolve()
+      .then(() => write(current.value))
+      .then((result) => current.waiters.forEach(({ resolve }) => resolve(result)))
+      .catch((error: unknown) => current.waiters.forEach(({ reject }) => reject(error)))
+      .finally(() => {
+        writing = false;
+        drain();
+      });
+  };
+
+  return (value: T) => new Promise<unknown>((resolve, reject) => {
+    if (pending) {
+      pending.value = value;
+      pending.waiters.push({ resolve, reject });
+    } else {
+      pending = { value, waiters: [{ resolve, reject }] };
+    }
+    drain();
+  });
+}
+
+/** Keep the newest full settings snapshot until Sidekick is healthy. */
+export function createReadinessAwareSettingsWriter<T>(write: (value: T) => Promise<unknown>): {
+  setReady: (ready: boolean) => Promise<void>;
+  enqueue: (value: T) => Promise<boolean>;
+} {
+  let ready = false;
+  let writing = false;
+  let hasPending = false;
+  let pending: T | undefined;
+
+  const flush = async (): Promise<void> => {
+    if (!ready || writing || !hasPending) return;
+    writing = true;
+    const value = pending as T;
+    hasPending = false;
+    try {
+      await write(value);
+    } catch (error) {
+      if (!hasPending) {
+        pending = value;
+        hasPending = true;
+      }
+      throw error;
+    } finally {
+      writing = false;
+    }
+    if (hasPending) await flush();
+  };
+
+  return {
+    async setReady(nextReady) {
+      ready = nextReady;
+      await flush();
+    },
+    async enqueue(value) {
+      pending = value;
+      hasPending = true;
+      if (!ready) return false;
+      await flush();
+      return !hasPending;
+    }
+  };
+}
+
+export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
@@ -2056,6 +2171,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const updatesState = useApiState(() => window.lastbrowser.updates.status(), [], true);
   const [section, setSection] = useState<SettingsSectionId>('conversation');
   const [draft, setDraft] = useState<AnyRecord>({});
+  const draftRef = useRef<AnyRecord>({});
   const [passwordDraft, setPasswordDraft] = useState('');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2114,6 +2230,55 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const resetFloatingDockPos = usePanelStore((s) => s.resetFloatingDockPos);
 
   const [defaultBrowserStatus, setDefaultBrowserStatus] = useState<boolean | null>(null);
+  const [cdpPreference, setCdpPreference] = useState<{ enabled: boolean; active: boolean } | null>(null);
+  const [cdpPreferenceSaving, setCdpPreferenceSaving] = useState(false);
+  const [cdpRestartDismissed, setCdpRestartDismissed] = useState(false);
+  const settingsWriterRef = useRef<((value: AnyRecord) => Promise<unknown>) | null>(null);
+  if (!settingsWriterRef.current) {
+    settingsWriterRef.current = createOrderedSettingsWriter((payload) =>
+      window.lastbrowser.sidekick.saveSettings({ settings: payload })
+    );
+  }
+  const readinessWriterRef = useRef<ReturnType<typeof createReadinessAwareSettingsWriter<AnyRecord>> | null>(null);
+  if (!readinessWriterRef.current) {
+    readinessWriterRef.current = createReadinessAwareSettingsWriter(async (payload) => {
+      await settingsWriterRef.current?.(payload);
+      window.dispatchEvent(new CustomEvent('lastbrowser:settings-changed', { detail: payload }));
+      setDirty(false);
+    });
+  }
+
+  useEffect(() => {
+    void readinessWriterRef.current?.setReady(ready).catch((error: unknown) => {
+      console.error('[SystemPanels] Deferred settings save error:', error);
+      setDirty(true);
+    });
+  }, [ready]);
+
+  useEffect(() => {
+    let active = true;
+    void window.lastbrowser?.cdp?.getPreference?.().then((value) => {
+      if (active) setCdpPreference(value);
+    }).catch(() => {
+      if (active) setCdpPreference({ enabled: false, active: false });
+    });
+    return () => { active = false; };
+  }, []);
+
+  const setCdpEnabled = async (enabled: boolean) => {
+    if (!window.lastbrowser?.cdp?.savePreference) return;
+    setCdpPreferenceSaving(true);
+    try {
+      const result = await window.lastbrowser.cdp.savePreference({ enabled });
+      if (!result.ok) throw new Error(result.error || 'Could not save browser automation preference');
+      setCdpPreference({ enabled: result.enabled === true, active: result.active === true });
+      setCdpRestartDismissed(false);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not save browser automation preference');
+    } finally {
+      setCdpPreferenceSaving(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -2172,7 +2337,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   useEffect(() => {
     if (settingsState.loading) return;
-    setDraft(cleanSettingsPayload(settings));
+    const hydratedDraft = cleanSettingsPayload(settings);
+    draftRef.current = hydratedDraft;
+    setDraft(hydratedDraft);
     setPasswordDraft('');
     setDirty(false);
   }, [settingsState.data, settingsState.loading, desktopSettings]);
@@ -2194,7 +2361,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const autoSaveTimerRef = useRef<number | null>(null);
 
   const persistSettings = useCallback(async (updatedDraft: AnyRecord) => {
-    if (!ready) return;
     try {
       const payload = cleanSettingsPayload({
         ...settings,
@@ -2227,11 +2393,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         if (payload.message_layout) window.localStorage.setItem('lastbrowser.message_layout', String(payload.message_layout));
       } catch {}
 
-      if (window.lastbrowser?.sidekick?.saveSettings) {
-        await window.lastbrowser.sidekick.saveSettings({ settings: payload });
-      }
-      window.dispatchEvent(new CustomEvent('lastbrowser:settings-changed', { detail: payload }));
-      setDirty(false);
+      const saved = await readinessWriterRef.current?.enqueue(payload);
+      if (saved) setDirty(false);
+      else setDirty(true);
     } catch (err) {
       console.error('[SystemPanels] Auto-save error:', err);
     }
@@ -2239,18 +2403,17 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   function updateDraftField(key: string, value: unknown, autoPersist = true): void {
     window.dispatchEvent(new Event('lastbrowser:settings-draft-changed'));
-    setDraft((current) => {
-      const next ={ ...current, [key]: value };
-      if (autoPersist) {
-        if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = window.setTimeout(() => {
-          void persistSettings(next);
-        }, 150);
-      } else {
-        setDirty(true);
-      }
-      return next;
-    });
+    const next = { ...draftRef.current, [key]: value };
+    draftRef.current = next;
+    setDraft(next);
+    if (autoPersist) {
+      if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = window.setTimeout(() => {
+        void persistSettings(next);
+      }, 150);
+    } else {
+      setDirty(true);
+    }
   }
 
   function updateDraftToggle(key: string, value: boolean, autoPersist = true): void {
@@ -2258,7 +2421,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   }
 
   function restoreDraft(): void {
-    setDraft(cleanSettingsPayload(settings));
+    const restoredDraft = cleanSettingsPayload(settings);
+    draftRef.current = restoredDraft;
+    setDraft(restoredDraft);
     setPasswordDraft('');
     setDirty(false);
   }
@@ -2269,7 +2434,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     try {
       const payload = cleanSettingsPayload({
         ...settings,
-        ...draft
+        ...draftRef.current
       });
       payload.bot_name = settingsText(payload.bot_name, 'Nova').trim() || 'Nova';
       if (passwordDraft.trim()) {
@@ -2303,7 +2468,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       payload.debug = settingsBoolean(payload.debug, false);
       payload.enabled_plugins = parseSettingsCsv(settingsCsv(payload.enabled_plugins));
       payload.plugins = parseSettingsCsv(settingsCsv(payload.plugins));
-      await window.lastbrowser.sidekick.saveSettings({ settings: payload });
+      await settingsWriterRef.current?.(payload);
       const chosenModel = settingsText(payload.default_model, '').trim();
       if (chosenModel && chosenModel !== settingsText(settings.default_model, '').trim()) {
         await window.lastbrowser.sidekick.setDefaultModel({ model: chosenModel });
@@ -3024,7 +3189,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     {/* Fisheye Magnification Sliders */}
                     <div className="settings-field-row">
                       <div className="settings-field-info">
-                        <strong>Fisheye-Vergrößerung (Fokus: {dockSettings.magnification}x, Nachbarn: {dockSettings.neighborScale}x)</strong>
+                        <strong>{t('settings.panels.appearance.fisheye')} ({t('settings.panels.appearance.focusIcon')}: {dockSettings.magnification}x, {t('settings.panels.appearance.neighborIcons')}: {dockSettings.neighborScale}x)</strong>
                         <small>{t('settings.panels.appearance.fisheyeDescription')}</small>
                       </div>
                       <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
@@ -3359,7 +3524,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   <div className="settings-floating-action-bar" style={{ position: 'sticky', bottom: 12, zIndex: 10, padding: '10px 16px', borderRadius: 10, background: 'var(--lb-surface-strong)', border: '1px solid var(--accent-primary)', boxShadow: '0 8px 24px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span className="status-dot" style={{ background: 'var(--accent-primary)' }} />
-                      <span style={{ fontSize: 12, fontWeight: 500 }}>{t('settings.panels.appearance.livePreview')}</span>
+                      <span style={{ fontSize: 12, fontWeight: 500 }} role={!ready ? 'status' : undefined}>
+                        {ready ? t('settings.panels.appearance.livePreview') : t('insights.sidekickStarting')}
+                      </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <button type="button" className="secondary-action compact" onClick={() => void restoreDraft()} disabled={!ready || !dirty}>
@@ -3399,6 +3566,20 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
             {section === 'preferences' && (
               <>
+                <SettingsCard
+                  title={t('settings.panels.preferences.browserProfiles')}
+                  description={t('settings.panels.preferences.browserProfilesDescription')}
+                >
+                  <ProfileSwitcher
+                    profiles={profiles}
+                    activeProfileId={activeProfileId}
+                    onSelect={onSelectProfile}
+                    onCreate={onCreateProfile}
+                    onRename={onRenameProfile}
+                    onDelete={onDeleteProfile}
+                  />
+                </SettingsCard>
+
                 <SettingsCard
                   title={t('settings.panels.preferences.searchEngine')}
                   description={t('settings.panels.preferences.searchEngineDescription')}
@@ -3461,12 +3642,15 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                         className="button button-secondary"
                         onClick={async () => {
                           if (window.confirm(t('settings.panels.preferences.clearConfirm'))) {
-                            try {
-                              await window.lastbrowser?.browser?.clearData?.({ cache: true, cookies: true, storage: true });
-                              showToast(t('settings.panels.preferences.clearSuccess'));
-                            } catch {
-                              showToast(t('settings.panels.preferences.clearError'));
-                            }
+                            const clearData = window.lastbrowser?.browser?.clearData;
+                            await clearBrowserDataWithFeedback(
+                              clearData
+                                ? () => clearData({ cache: true, cookies: true, storage: true })
+                                : undefined,
+                              (cleared) => showToast(t(cleared
+                                ? 'settings.panels.preferences.clearSuccess'
+                                : 'settings.panels.preferences.clearError'))
+                            );
                           }
                         }}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
@@ -3669,7 +3853,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                               )}
                             </span>
                             {isActive && <span className="provider-badge">{t('settings.panels.providers.active')}</span>}
-                            {option.oauthProvider && (
+                            {option.oauthProvider && option.id !== 'antigravity' && (
                               <button
                                 type="button"
                                 className="secondary-action compact"
@@ -3679,6 +3863,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 <LogIn size={14} />
                                 <span>{t('settings.panels.providers.connect')}</span>
                               </button>
+                            )}
+                            {option.id === 'antigravity' && (
+                              <div className="provider-antigravity-accounts">
+                                <GeminiAccountsPanel sidekickReady={ready} />
+                              </div>
                             )}
                             {option.id === 'openai-codex' && codexConnect && (
                               <div className="provider-connect-status" role="status" aria-live="polite">
@@ -3984,12 +4173,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   </div>
                 </SettingsCard>
 
-                <SettingsCard
-                  title={t('settings.panels.providers.googleAccounts')}
-                  description={t('settings.panels.providers.googleAccountsDescription')}
-                >
-                  <GeminiAccountsPanel sidekickReady={ready} />
-                </SettingsCard>
               </>
             )}
 
@@ -4124,6 +4307,39 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     </span>
                     <span className="settings-badge">{t('settings.panels.system.updatedWithLastbrowser')}</span>
                   </div>
+                </SettingsCard>
+
+                <SettingsCard
+                  title={t('settings.panels.system.browserAutomation')}
+                  description={t('settings.panels.system.browserAutomationDescription')}
+                >
+                  <SettingsToggle
+                    label={t('settings.panels.system.browserAutomationEnabled')}
+                    description={t('settings.panels.system.browserAutomationEnabledDescription')}
+                    checked={cdpPreference?.enabled ?? false}
+                    disabled={cdpPreference === null || cdpPreferenceSaving}
+                    onChange={(enabled) => void setCdpEnabled(enabled)}
+                  />
+                  {cdpPreference && cdpPreference.enabled !== cdpPreference.active && !cdpRestartDismissed && (
+                    <div className="settings-system-actions" role="status">
+                      <span className="settings-hint">{t('settings.panels.system.browserAutomationRestartRequired')}</span>
+                      <button
+                        type="button"
+                        className="primary-action compact"
+                        onClick={() => void window.lastbrowser?.cdp?.restart?.()}
+                      >
+                        <RefreshCw size={14} />
+                        <span>{t('settings.panels.system.browserAutomationRestartNow')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-action compact"
+                        onClick={() => setCdpRestartDismissed(true)}
+                      >
+                        <span>{t('settings.panels.system.browserAutomationRestartLater')}</span>
+                      </button>
+                    </div>
+                  )}
                 </SettingsCard>
 
                 <SettingsCard title={t('settings.panels.system.developerApiTools')} description={t('settings.panels.system.developerApiToolsDescription')}>

@@ -593,7 +593,7 @@ def _provider_api_key_present(
     # var names and can check os.environ for a valid key.
     # Exclude known OAuth/token-flow providers — those are handled separately by
     # _provider_oauth_authenticated() and should not be short-circuited here.
-    _known_oauth = {"openai-codex", "copilot", "copilot-acp", "qwen-oauth", "nous", "anthropic", "google-gemini-cli"}
+    _known_oauth = {"openai-codex", "copilot", "copilot-acp", "qwen-oauth", "nous", "anthropic", "google-gemini-cli", "antigravity"}
     if provider not in _SUPPORTED_PROVIDER_SETUPS and provider not in _known_oauth:
         try:
             from cli.auth import get_auth_status as _gas
@@ -643,6 +643,26 @@ def _provider_oauth_authenticated(provider: str, sidekick_home: "Path") -> bool:
 
     if provider == "google-gemini-cli":
         return False
+
+    if provider == "antigravity":
+        # Its account pool is profile-scoped like the rest of auth.json; using
+        # the passed home avoids false negatives when a non-default profile is
+        # active during onboarding checks.
+        try:
+            auth_path = sidekick_home / "auth.json"
+            store = json.loads(auth_path.read_text(encoding="utf-8"))
+            pool = store.get("credential_pool") if isinstance(store, dict) else None
+            accounts = pool.get("antigravity") if isinstance(pool, dict) else None
+            if not isinstance(accounts, list):
+                return False
+            return any(
+                isinstance(entry, dict)
+                and str(entry.get("refresh_token") or entry.get("access_token") or "").strip()
+                and str(entry.get("last_error_reason") or "") != "invalid_grant"
+                for entry in accounts
+            )
+        except (OSError, ValueError, TypeError):
+            return False
 
     _known_oauth_providers = {"openai-codex", "copilot", "copilot-acp", "qwen-oauth", "nous", "anthropic", "antigravity"}
     if provider not in _known_oauth_providers:
@@ -1152,6 +1172,33 @@ def detect_standalone_install(body: dict) -> dict:
     }
 
 
+def _validated_migration_destination() -> Path:
+    """Resolve the active import destination and keep it inside this install's home.
+
+    Lastbrowser's sidecar sets LASTBROWSER_HOME to its private runtime root.
+    Standalone Sidekick deployments may not set that variable, so use their
+    configured Sidekick base/home (or the normal ~/.sidekick default) instead.
+    Resolve symlinks before comparing so a profile path cannot escape the root.
+    """
+    destination = Path(_get_active_profile_home()).expanduser().resolve()
+    configured_root = (
+        os.getenv("LASTBROWSER_HOME", "").strip()
+        or os.getenv("SIDEKICK_BASE_HOME", "").strip()
+        or os.getenv("SIDEKICK_HOME", "").strip()
+    )
+    root = (
+        Path(configured_root).expanduser().resolve()
+        if configured_root
+        else get_webui_home().expanduser().resolve()
+    )
+    if not destination.is_relative_to(root):
+        raise ValueError(
+            "The active migration destination is outside the configured Sidekick runtime home. "
+            "Refusing to import data there."
+        )
+    return destination
+
+
 def migrate_standalone_install(body: dict) -> dict:
     """Copy selected components from a standalone install into the active home."""
     import shutil
@@ -1159,7 +1206,10 @@ def migrate_standalone_install(body: dict) -> dict:
 
     source = _validate_migration_source(body.get("source_home") or "")
     items = body.get("items") or {}
-    destination = _get_active_profile_home()
+    # Validate before mkdir or any source copy. In Electron, LASTBROWSER_HOME
+    # is the authoritative per-install runtime root; a broken profile resolver
+    # must never cause migration writes in the app's working directory.
+    destination = _validated_migration_destination()
     destination.mkdir(parents=True, exist_ok=True)
 
     copied: list[str] = []

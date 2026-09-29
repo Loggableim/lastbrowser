@@ -4757,6 +4757,14 @@ def handle_get(handler, parsed) -> bool:
     if parsed.path == "/api/providers":
         return j(handler, get_providers())
 
+    if parsed.path == "/api/fallback-model":
+        try:
+            return j(handler, get_sidekick_fallback_model())
+        except ValueError as e:
+            return bad(handler, str(e))
+        except RuntimeError as e:
+            return bad(handler, str(e), 500)
+
     if parsed.path == "/api/teamwork/config":
         from runtime.teamwork_orchestrator import load_teamwork_config
         return j(handler, load_teamwork_config())
@@ -5762,7 +5770,9 @@ def handle_get(handler, parsed) -> bool:
     # GET /api/antigravity/accounts → list connected accounts (no secrets)
     if parsed.path == "/api/antigravity/accounts":
         from runtime import antigravity_oauth as _ag_oauth
-        return j(handler, _ag_oauth.get_antigravity_auth_status())
+        from web.api.profiles import cron_profile_context
+        with cron_profile_context():
+            return j(handler, _ag_oauth.get_antigravity_auth_status())
 
     # ── Cron API (GET) ──
     # All cron handlers touch cron.jobs which resolves SIDEKICK_HOME from
@@ -7112,10 +7122,9 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, str(e), 500)
 
     if parsed.path == "/api/fallback-model":
-        # GET returns the configured fallback; POST sets or clears it.
+        # POST sets or clears the configured fallback. GET is handled by
+        # handle_get(); this dispatcher only receives write requests.
         try:
-            if handler.command == "GET":
-                return j(handler, get_sidekick_fallback_model())
             return j(
                 handler,
                 set_sidekick_fallback_model(
@@ -8715,12 +8724,14 @@ def handle_post(handler, parsed) -> bool:
     # POST /api/antigravity/accounts → {"action": "remove", "email": "..."}
     if parsed.path == "/api/antigravity/accounts":
         from runtime import antigravity_oauth as _ag_oauth
+        from web.api.profiles import cron_profile_context
         action = str((body or {}).get("action") or "").strip().lower()
         if action == "remove":
             email = str((body or {}).get("email") or "").strip()
             if not email:
                 return bad(handler, "email is required")
-            removed = _ag_oauth.remove_account(email)
+            with cron_profile_context():
+                removed = _ag_oauth.remove_account(email)
             return j(handler, {"ok": bool(removed), "email": email})
         return bad(handler, "action must be 'remove'")
 

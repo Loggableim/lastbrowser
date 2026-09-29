@@ -215,7 +215,6 @@ import { NativeChatMain, type ComposerMode } from './panels/NativeChatMain.js';
 import {
   BookmarkBar,
   UpdatePill,
-  ProfileSwitcher,
   SpaceSelector,
   WindowTitlebar,
   ModernTitlebar,
@@ -234,6 +233,7 @@ import { SuperSizedTabStrip } from './components/SuperSizedTabStrip.js';
 import { applySmartInvertToWebview, refreshSmartInvertForWebview, removeSmartInvertFromWebview } from './utils/smart-invert.js';
 import { CVD_FILTER_MATRIXES } from './utils/cvd-filters.js';
 import { playCopilotSuccessChime } from './utils/audio-chimes.js';
+import { toggleVisionImpairedFeature } from './stores/a11y-config.js';
 
 import { usePinnedAppStore } from './stores/usePinnedAppStore.js';
 import type { PinnedApp } from './components/PinnedAppGrid.js';
@@ -248,7 +248,7 @@ import { mergeSpaceAudioTabs, subscribeToWebviewMediaState, type SpaceAudioKeepa
 import { isCurrentSpaceDirectorySnapshot, resolveCanonicalSpacePath, resolveRefreshedActiveSpacePath } from './space-paths.js';
 import { usePanelStore, type SidebarMode } from './stores/usePanelStore.js';
 import { useChatStore } from './stores/useChatStore.js';
-import { loadSpaceModel, removeSpaceModel, saveSpaceModel } from './space-models.js';
+import { loadSpaceModelSelection, removeSpaceModel, saveSpaceModel } from './space-models.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { LiveAutomationBanner } from './components/LiveAutomationBanner.js';
 import { detectPageCategory, getQuickActionChips, executeQuickAction, type QuickActionChip } from './quick-actions.js';
@@ -567,12 +567,22 @@ export function applyDesktopAppearance(settings: DesktopSettingsRecord | null): 
 }
 
 export function watchSystemThemeChanges(settings: DesktopSettingsRecord | null): () => void {
-  if (normalizeAppearanceTheme(String(settings?.theme || 'dark')) !== 'system'
-    || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return () => undefined;
   }
   const preference = window.matchMedia('(prefers-color-scheme: light)');
-  const update = () => applyDesktopAppearance(settings);
+  // Keep this listener active while the user previews themes too. The App
+  // settings snapshot can still say "dark" while the Settings panel has
+  // switched its live draft to "system" and is saving it asynchronously.
+  const update = () => {
+    const root = document.documentElement;
+    if (root.dataset.themeMode !== 'system') return;
+    const resolvedTheme = preference.matches ? 'light' : 'dark';
+    root.dataset.theme = resolvedTheme;
+    root.classList.toggle('theme-light', resolvedTheme === 'light');
+    root.classList.toggle('theme-dark', resolvedTheme === 'dark');
+    root.style.colorScheme = resolvedTheme;
+  };
   preference.addEventListener?.('change', update);
   return () => preference.removeEventListener?.('change', update);
 }
@@ -780,13 +790,13 @@ function AppContent(): JSX.Element {
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'l') {
         event.preventDefault();
         const store = usePanelStore.getState();
-        store.setVisionImpaired({ cursorLoupeEnabled: !store.visionImpaired.cursorLoupeEnabled });
+        store.setVisionImpaired(toggleVisionImpairedFeature(store.visionImpaired, 'cursorLoupeEnabled'));
       }
       // Vision-Impaired 2.0: Alt+M toggles the split-screen magnifier.
       if (event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'm') {
         event.preventDefault();
         const store = usePanelStore.getState();
-        store.setVisionImpaired({ splitScreenMagnifier: !store.visionImpaired.splitScreenMagnifier });
+        store.setVisionImpaired(toggleVisionImpairedFeature(store.visionImpaired, 'splitScreenMagnifier'));
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
@@ -1752,8 +1762,11 @@ function AppContent(): JSX.Element {
       setSnapRatios(getDefaultSnapLayoutRatios('dual-50-50'));
     }
     setActiveSpacePath(newSpacePath);
-    const spaceModel = loadSpaceModel(newSpacePath, window.localStorage);
-    if (spaceModel) useChatStore.getState().setSelectedModel(spaceModel);
+    const spaceModelSelection = loadSpaceModelSelection(newSpacePath, window.localStorage);
+    if (spaceModelSelection) {
+      useChatStore.getState().setSelectedModel(spaceModelSelection.model);
+      useChatStore.getState().setSelectedModelProvider(spaceModelSelection.provider || '');
+    }
     setBrowserMode(isAiBrowserHomeUrl(nextTabs.find((t) => t.id === nextActiveId)?.url || '') ? 'home' : 'web');
     setBrowserLoadError('');
   }, [activeProfileId, activeSpacePath, tabs, audioKeepalive, activeTabId, splitLayout, splitTabIds, splitSlotIndexes, snapRatios, isDetachedWindow, setTabs, setActiveTabId, clearSplitTabs, setSnapGroup, setSplitLayout, setBrowserMode, setBrowserLoadError, knownSpacePaths]);
@@ -2319,7 +2332,12 @@ function AppContent(): JSX.Element {
     setChatError('');
     try {
       const storedModel = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('lastbrowser.selectedModel.v1') : null;
-      const effectiveSelectedModel = loadSpaceModel(activeSpacePath, window.localStorage) || setupState.model || storedModel || undefined;
+      const spaceModelSelection = loadSpaceModelSelection(activeSpacePath, window.localStorage);
+      const effectiveSelectedModel = spaceModelSelection?.model || setupState.model || storedModel || undefined;
+      const chatModelProvider = spaceModelSelection?.provider
+        || (effectiveSelectedModel === useChatStore.getState().selectedModel
+          ? useChatStore.getState().selectedModelProvider || undefined
+          : effectiveSelectedModel === setupState.model ? setupState.provider || undefined : undefined);
       const configuredChatModel = effectiveSelectedModel
         || (await resolveConfiguredModel((request) => window.lastbrowser.sidekick.requestWebui(request)))
         || undefined;
@@ -2347,6 +2365,7 @@ function AppContent(): JSX.Element {
         // pick a stale catalog entry — observed as
         // "Ring-2.6-1T is no longer available as a free model".
         model: configuredChatModel,
+        modelProvider: chatModelProvider,
         groundingContext: teamworkGroundingContext,
         workspace: activeSpacePath,
         mode: composerMode
@@ -2408,7 +2427,8 @@ function AppContent(): JSX.Element {
       setActiveStreamId(null);
       setChatRunState((current) => {
         // Vision-Impaired Feature 36: soft audio gong when Nova finishes.
-        if (current !== 'error' && usePanelStore.getState().visionImpaired.copilotAudioChime) {
+        const vision = usePanelStore.getState().visionImpaired;
+        if (current !== 'error' && vision.enabled && vision.copilotAudioChime) {
           playCopilotSuccessChime();
         }
         return current === 'error' ? 'error' : 'idle';
@@ -2897,19 +2917,13 @@ function AppContent(): JSX.Element {
             loupeActive={visionImpaired.enabled && visionImpaired.cursorLoupeEnabled}
             onToggleLoupe={() => {
               const store = usePanelStore.getState();
-              store.setVisionImpaired({ cursorLoupeEnabled: !store.visionImpaired.cursorLoupeEnabled });
+              store.setVisionImpaired(toggleVisionImpairedFeature(store.visionImpaired, 'cursorLoupeEnabled'));
             }}
             onOpenGithub={() => addTab('https://github.com/Loggableim/lastbrowser/issues')}
             quickActions={quickActions}
             onExecuteQuickAction={handleExecuteQuickAction}
             onTriggerSummarize={() => void runSidekickAction('summarize-page')}
             botName={setupState.botName || 'Nova'}
-            profiles={profiles}
-            activeProfileId={activeProfileId}
-            onSelectProfile={switchProfile}
-            onCreateProfile={createProfileEntry}
-            onRenameProfile={renameProfileEntry}
-            onDeleteProfile={deleteProfileEntry}
             topbarActionStrip={
               activePanel === 'browser' ? (
                 <InPageActionBar
@@ -3282,6 +3296,12 @@ function AppContent(): JSX.Element {
                   searchEngineId={searchEngineId}
                   onSearchEngineChange={setSearchEngineId}
                   desktopSettings={desktopSettings}
+                  profiles={profiles}
+                  activeProfileId={activeProfileId}
+                  onSelectProfile={switchProfile}
+                  onCreateProfile={createProfileEntry}
+                  onRenameProfile={renameProfileEntry}
+                  onDeleteProfile={deleteProfileEntry}
                 />
               </div>
 
@@ -3308,7 +3328,9 @@ function AppContent(): JSX.Element {
                     setActiveSessionId(sid);
                     void loadActiveSession(sid);
                   }}
-                  onSelectModel={(modelId) => {
+                  onSelectModel={(modelId, providerId) => {
+                    useChatStore.getState().setSelectedModelProvider(providerId || '');
+                    saveSpaceModel(activeSpacePath, modelId, window.localStorage, providerId);
                     setSetupState((prev) => {
                       const next = { ...prev, model: modelId };
                       void window.lastbrowser?.setup?.save(next).catch(() => {});
@@ -3317,6 +3339,8 @@ function AppContent(): JSX.Element {
                     try {
                       if (typeof window !== 'undefined' && window.localStorage) {
                         window.localStorage.setItem('lastbrowser.selectedModel.v1', modelId);
+                        if (providerId) window.localStorage.setItem('lastbrowser.selectedModelProvider.v1', providerId);
+                        else window.localStorage.removeItem('lastbrowser.selectedModelProvider.v1');
                       }
                     } catch {}
                   }}
@@ -3443,14 +3467,6 @@ function AppContent(): JSX.Element {
                 spaces={spaces}
                 onOpenSpaces={() => setActivePanel('workspaces')}
                 onSelect={handleSpaceSelect}
-              />
-              <ProfileSwitcher
-                profiles={profiles}
-                activeProfileId={activeProfile.id}
-                onSelect={switchProfile}
-                onCreate={createProfileEntry}
-                onRename={renameProfileEntry}
-                onDelete={deleteProfileEntry}
               />
               <div className={`runtime-pill ${status?.sidekick === 'ready' ? 'ready' : 'starting'}`}>
                 <span className="status-dot" />
@@ -3603,6 +3619,12 @@ function AppContent(): JSX.Element {
               searchEngineId={searchEngineId}
               onSearchEngineChange={setSearchEngineId}
               desktopSettings={desktopSettings}
+              profiles={profiles}
+              activeProfileId={activeProfileId}
+              onSelectProfile={switchProfile}
+              onCreateProfile={createProfileEntry}
+              onRenameProfile={renameProfileEntry}
+              onDeleteProfile={deleteProfileEntry}
             />
             <WorkspacePanel
               activeSessionId={activeSessionId}
@@ -3748,6 +3770,12 @@ function BrowserMain({
   onSetSplitLayout,
   botName = 'Nova',
   desktopSettings = null,
+  profiles,
+  activeProfileId,
+  onSelectProfile,
+  onCreateProfile,
+  onRenameProfile,
+  onDeleteProfile,
   lastChatTurnUsage = null
 }: {
   activePanel: LastbrowserPanelId;
@@ -3755,6 +3783,12 @@ function BrowserMain({
   activeSessionId: string | null;
   activeTab: BrowserTab;
   activeProfile: BrowserProfile;
+  profiles: BrowserProfile[];
+  activeProfileId: string;
+  onSelectProfile: (profileId: string) => void;
+  onCreateProfile: (name: string) => void;
+  onRenameProfile: (profileId: string, name: string) => void;
+  onDeleteProfile: (profileId: string) => void;
   webviewStartupReady?: boolean;
   onTransferredWebviewReady?: (tabId: string, guestWebContentsId: number) => void;
   pendingTransferredTabId?: string | null;
@@ -4546,7 +4580,7 @@ function BrowserMain({
           </PanelErrorBoundary>
         );
       case 'settings':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} profiles={profiles} activeProfileId={activeProfileId} onSelectProfile={onSelectProfile} onCreateProfile={onCreateProfile} onRenameProfile={onRenameProfile} onDeleteProfile={onDeleteProfile} /></PanelErrorBoundary>;
       case 'terminal':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:

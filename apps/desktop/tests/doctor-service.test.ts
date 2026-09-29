@@ -147,6 +147,30 @@ describe('doctor diagnosis service & parser', () => {
     expect(report.categories[0].status).toBe('warn');
   });
 
+  it('keeps expected optional setup notes informational in the dashboard', () => {
+    const report = parseDoctorOutput(`
+◆ Python Environment
+  → Virtual environment not active (optional; Lastbrowser manages its Python runtime)
+◆ Configuration Files
+  → Provider credentials are managed by Lastbrowser; .env is optional
+  → config.yaml not found (using defaults; configuration is optional)
+◆ Auth Providers
+  → OpenAI Codex auth not connected (optional unless selected as the active provider)
+◆ Tool Availability
+  → browser-cdp unavailable (optional integration dependency not met)
+  → web unavailable (optional; missing search provider credentials)
+◆ Skills Hub
+  → Skills Hub not initialized (created when you first use skills)
+────────────────────────────────────────────────────────────
+  All checks passed!
+`, 0);
+
+    expect(report.summary).toEqual({ passed: 0, warnings: 0, failures: 0 });
+    expect(report.categories.every((category) => category.status === 'ok')).toBe(true);
+    expect(report.categories.flatMap((category) => category.checks).every((check) => check.type === 'info')).toBe(true);
+    expect(report.issues).toEqual([]);
+  });
+
   it('strips ANSI color codes properly', () => {
     const ansiOutput = `
 \u001b[32m◆\u001b[0m \u001b[1mPython Environment\u001b[0m

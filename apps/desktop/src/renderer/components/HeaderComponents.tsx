@@ -53,6 +53,7 @@ import { type SpaceSummary, spaceDisplayName } from '../shell-state.js';
 import type { BrowserTab } from '../tabs.js';
 import { prepareSnapTabDrag } from '../types/snap-layouts.js';
 import { useDesktopI18n } from '../i18n.js';
+import type { DesktopTranslationKey } from '../i18n/keys.js';
 
 export type UpdateStatus = Awaited<ReturnType<typeof window.lastbrowser.updates.status>>;
 
@@ -77,6 +78,7 @@ export function BookmarkBar({
   onToggleActive,
   onImport
 }: BookmarkBarProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleExport = () => {
@@ -111,7 +113,7 @@ export function BookmarkBar({
   };
 
   return (
-    <nav className="bookmark-bar" aria-label="Bookmarks">
+    <nav className="bookmark-bar" aria-label={t('browser.chrome.bookmarks')}>
       <div className="bookmark-list">
         {bookmarks.map((bookmark) => (
           <div key={bookmark.id} className="bookmark-item">
@@ -127,14 +129,14 @@ export function BookmarkBar({
             <button
               type="button"
               className="bookmark-remove"
-              aria-label={`Remove ${bookmark.title}`}
+              aria-label={t('browser.chrome.removeBookmarkNamed', { title: bookmark.title })}
               onClick={() => onRemove(bookmark)}
             >
               <X size={12} />
             </button>
           </div>
         ))}
-        {!bookmarks.length && <span className="bookmark-empty">No bookmarks yet</span>}
+        {!bookmarks.length && <span className="bookmark-empty">{t('browser.chrome.noBookmarks')}</span>}
       </div>
       <div className="bookmark-actions">
         {onImport && (
@@ -149,8 +151,8 @@ export function BookmarkBar({
             <button
               type="button"
               className="bookmark-action-btn"
-              title="Import bookmarks (HTML/JSON)"
-              aria-label="Import bookmarks"
+              title={t('browser.chrome.importBookmarks')}
+              aria-label={t('browser.chrome.importBookmarks')}
               onClick={() => fileInputRef.current?.click()}
             >
               <Upload size={13} />
@@ -160,8 +162,8 @@ export function BookmarkBar({
         <button
           type="button"
           className="bookmark-action-btn"
-          title="Export bookmarks (HTML)"
-          aria-label="Export bookmarks"
+          title={t('browser.chrome.exportBookmarks')}
+          aria-label={t('browser.chrome.exportBookmarks')}
           disabled={!bookmarks.length}
           onClick={handleExport}
         >
@@ -171,7 +173,7 @@ export function BookmarkBar({
           type="button"
           className={`bookmark-add ${activeBookmarked ? 'active' : ''}`}
           disabled={!activeBookmarkable}
-          aria-label={activeBookmarked ? 'Remove bookmark' : 'Add bookmark'}
+          aria-label={t(activeBookmarked ? 'browser.omnibox.removeBookmark' : 'browser.omnibox.addBookmark')}
           aria-pressed={activeBookmarked}
           onClick={onToggleActive}
         >
@@ -184,21 +186,29 @@ export function BookmarkBar({
 
 // ─── UpdatePill ─────────────────────────────────────────────────────────────
 
-export function updateLabel(status: UpdateStatus): string {
-  if (status.state === 'checking') return 'checking updates';
-  if (status.state === 'available') return status.availableVersion ? `update ${status.availableVersion}` : 'update available';
-  if (status.state === 'downloading') return `downloading ${status.percent ?? 0}%`;
-  if (status.state === 'downloaded') return 'restart to update';
-  if (status.state === 'error') return 'update retry';
-  return 'updates';
+export function updateLabel(status: UpdateStatus, translate?: (key: DesktopTranslationKey, params?: Record<string, unknown>) => string): string {
+  const t = translate ?? ((key: DesktopTranslationKey, params?: Record<string, unknown>) => {
+    if (key === 'browser.chrome.updateChecking') return 'checking updates';
+    if (key === 'browser.chrome.updateAvailable') return 'update available';
+    if (key === 'browser.chrome.updateDownloading') return `downloading update: ${String(params?.percent ?? 0)}%`;
+    if (key === 'browser.chrome.restartToUpdate') return 'restart to update';
+    return 'updates';
+  });
+  if (status.state === 'checking') return t('browser.chrome.updateChecking');
+  if (status.state === 'available') return status.availableVersion ? `${t('browser.chrome.updateAvailable')} ${status.availableVersion}` : t('browser.chrome.updateAvailable');
+  if (status.state === 'downloading') return t('browser.chrome.updateDownloading', { percent: status.percent ?? 0 });
+  if (status.state === 'downloaded') return t('browser.chrome.restartToUpdate');
+  if (status.state === 'error') return t('browser.chrome.updateRetry');
+  return t('browser.chrome.updates');
 }
 
 export function UpdatePill({ status }: { status: UpdateStatus | null }): React.JSX.Element | null {
+  const { t } = useDesktopI18n();
   if (!status || status.state === 'disabled') return null;
   const visibleStates: UpdateStatus['state'][] = ['checking', 'available', 'downloading', 'downloaded', 'error'];
   if (!visibleStates.includes(status.state)) return null;
 
-  const label = updateLabel(status);
+  const label = updateLabel(status, (key, params) => t(key, params));
   const handleClick = () => {
     if (status.state === 'downloaded') {
       void window.lastbrowser.updates.install();
@@ -250,6 +260,7 @@ export function ProfileSwitcher({
   onRename,
   onDelete
 }: ProfileSwitcherProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const [open, setOpen] = useState(false);
   const [draftName, setDraftName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -297,11 +308,11 @@ export function ProfileSwitcher({
         className="profile-switcher-trigger"
         aria-haspopup="menu"
         aria-expanded={open}
-        title={`Profile: ${activeProfile?.name || 'Default'}`}
+        title={t('browser.chrome.profileTitle', { name: activeProfile?.name || t('browser.chrome.defaultProfile') })}
         onClick={() => setOpen((current) => !current)}
       >
         <span className="profile-dot" style={{ background: activeProfile?.color || '#2563FF' }} />
-        <span>{activeProfile?.icon || '🌐'} {activeProfile?.name || 'Default'}</span>
+        <span>{activeProfile?.icon || '🌐'} {activeProfile?.name || t('browser.chrome.defaultProfile')}</span>
         <ChevronDown size={14} />
       </button>
       {open && (
@@ -334,17 +345,17 @@ export function ProfileSwitcher({
                     onChange={(event) => setRenameDraft(event.target.value)}
                     onClick={(event) => event.stopPropagation()}
                   />
-                  <button type="submit" className="profile-switcher-action">Save</button>
+                  <button type="submit" className="profile-switcher-action">{t('common.save')}</button>
                 </form>
               ) : (
                 <>
                   <span className="profile-switcher-item-name">{profile.icon} {profile.name}</span>
-                  {profile.isDefault && <span className="profile-switcher-item-badge">Default</span>}
+                  {profile.isDefault && <span className="profile-switcher-item-badge">{t('browser.chrome.defaultBadge')}</span>}
                   <button
                     type="button"
                     className="profile-switcher-delete"
-                    aria-label={`Rename ${profile.name}`}
-                    title="Rename"
+                    aria-label={`${t('common.rename')} ${profile.name}`}
+                    title={t('common.rename')}
                     onClick={(event) => {
                       event.stopPropagation();
                       setRenamingId(profile.id);
@@ -357,8 +368,8 @@ export function ProfileSwitcher({
                     <button
                       type="button"
                       className="profile-switcher-delete"
-                      aria-label={`Delete ${profile.name}`}
-                      title="Delete profile"
+                      title={t('common.delete')}
+                      aria-label={`${t('common.delete')} ${profile.name}`}
                       onClick={(event) => {
                         event.stopPropagation();
                         onDelete(profile.id);
@@ -375,16 +386,16 @@ export function ProfileSwitcher({
           <form className="profile-switcher-form" onSubmit={submitCreate}>
             <input
               className="profile-switcher-input"
-              placeholder="New profile name…"
+              placeholder={t('browser.chrome.newProfileName')}
               value={draftName}
               onChange={(event) => setDraftName(event.target.value)}
             />
             <button type="submit" className="profile-switcher-action" disabled={!draftName.trim()}>
-              <Plus size={13} /> Add
+              <Plus size={13} /> {t('common.add')}
             </button>
           </form>
           <div className="profile-switcher-empty">
-            Each profile keeps its own cookies, logins and storage.
+            {t('browser.chrome.profileStorageHint')}
           </div>
         </div>
       )}
@@ -409,16 +420,17 @@ export function SpaceSelector({
   onOpenSpaces,
   onSelect
 }: SpaceSelectorProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const [open, setOpen] = useState(false);
   const activeSpace = spaces.find((space) => space.path === activePath) || spaces[0] || null;
-  const label = activeSpace ? spaceDisplayName(activeSpace) : 'default';
+  const label = activeSpace ? spaceDisplayName(activeSpace) : t('browser.chrome.defaultSpace');
 
   return (
     <div className="titlebar-space">
       <button
         type="button"
         className={`space-button ${open ? 'open' : ''}`}
-        title={error || activeSpace?.path || 'Spaces'}
+        title={error || activeSpace?.path || t('browser.chrome.spaces')}
         onClick={() => setOpen((current) => !current)}
       >
         <img src={brandAssets.sidebarIcons.folder} alt="" />
@@ -428,9 +440,9 @@ export function SpaceSelector({
       {open && (
         <div className="space-dropdown">
           <div className="space-dropdown-head">
-            <strong>Spaces</strong>
+            <strong>{t('browser.chrome.spaces')}</strong>
             <button type="button" onClick={() => { setOpen(false); onOpenSpaces(); }}>
-              Manage
+              {t('browser.chrome.manageSpaces')}
             </button>
           </div>
           <div className="space-list">
@@ -451,7 +463,7 @@ export function SpaceSelector({
             ))}
             {!spaces.length && (
               <div className="space-empty">
-                {error || 'Sidekick loads spaces when the runtime is online.'}
+                {error || t('browser.chrome.spacesLoading')}
               </div>
             )}
           </div>
@@ -557,23 +569,24 @@ export function useWindowDrag() {
 // ─── WindowControls ─────────────────────────────────────────────────────────
 
 export function WindowControls(): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const { isMaximized } = useWindowDrag();
 
   return (
-    <div className="window-controls" aria-label="Window controls">
-      <button type="button" className="window-control" aria-label="Minimize" title="Minimize" onClick={() => void window.lastbrowser?.window?.minimize?.()}>
+    <div className="window-controls" aria-label={t('browser.chrome.windowControls')}>
+      <button type="button" className="window-control" aria-label={t('browser.chrome.minimize')} title={t('browser.chrome.minimize')} onClick={() => void window.lastbrowser?.window?.minimize?.()}>
         <Minus size={15} />
       </button>
       <button
         type="button"
         className="window-control"
-        aria-label={isMaximized ? 'Restore' : 'Maximize'}
-        title={isMaximized ? 'Restore' : 'Maximize'}
+        aria-label={t(isMaximized ? 'browser.chrome.restore' : 'browser.chrome.maximize')}
+        title={t(isMaximized ? 'browser.chrome.restore' : 'browser.chrome.maximize')}
         onClick={() => void window.lastbrowser?.window?.toggleMaximize?.()}
       >
         {isMaximized ? <Copy size={11} style={{ transform: 'rotate(90deg)' }} /> : <Square size={13} />}
       </button>
-      <button type="button" className="window-control close" aria-label="Close" title="Close" onClick={() => void window.lastbrowser?.window?.close?.()}>
+      <button type="button" className="window-control close" aria-label={t('browser.chrome.close')} title={t('browser.chrome.close')} onClick={() => void window.lastbrowser?.window?.close?.()}>
         <X size={15} />
       </button>
     </div>
@@ -611,6 +624,7 @@ export function WindowTitlebar({
   onToggleTabMute,
   onAddSplitTab
 }: WindowTitlebarProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const { isMaximized, handleDoubleClick, handleMouseDown } = useWindowDrag();
   const [dragOverInfo, setDragOverInfo] = useState<{ id: string; mode: 'before' | 'after' | 'split' } | null>(null);
 
@@ -625,7 +639,7 @@ export function WindowTitlebar({
         <span>lastbrowser</span>
       </div>
       {tabs && activeTabId && onActivateTab && onCloseTab && onNewTab ? (
-        <nav className="tabbar" aria-label="Browser tabs">
+        <nav className="tabbar" aria-label={t('browser.chrome.tabs')}>
           {tabs.map((tab) => {
             const isDragTarget = dragOverInfo?.id === tab.id;
             const dragMode = isDragTarget ? dragOverInfo.mode : null;
@@ -698,7 +712,7 @@ export function WindowTitlebar({
                   <Star size={11} fill={tab.pinned ? 'currentColor' : 'none'} />
                 </button>
                 {tab.incognito && (
-                  <EyeOff size={11} className="tab-incognito-icon" aria-label="Private tab" />
+                  <EyeOff size={11} className="tab-incognito-icon" aria-label={t('browser.chrome.privateTab')} />
                 )}
                 {tab.isLoading ? (
                   <Loader2 size={12} className="tab-spinner" />
@@ -718,7 +732,7 @@ export function WindowTitlebar({
                 {dragMode === 'split' && (
                   <div className="vtab-split-drop-badge">
                     <Columns2 size={11} />
-                    <span>Split</span>
+                    <span>{t('browser.chrome.split')}</span>
                   </div>
                 )}
               {(tab.isPlayingAudio || tab.isMuted) && (
@@ -745,7 +759,7 @@ export function WindowTitlebar({
             </div>
             );
           })}
-          <button type="button" className="new-tab" onClick={onNewTab} aria-label="New tab"><Plus size={16} /></button>
+          <button type="button" className="new-tab" onClick={onNewTab} aria-label={t('browser.chrome.newTab')}><Plus size={16} /></button>
           <div className="tabbar-drag-spacer" />
         </nav>
       ) : (
@@ -776,13 +790,6 @@ export type ModernTitlebarProps = {
   onToggleDownloads: () => void;
   hasActiveDownloads?: boolean;
   onToggleExtensions?: () => void;
-  /** Optional browser-profile controls; omitted in contexts without profile management. */
-  profiles?: BrowserProfile[];
-  activeProfileId?: string;
-  onSelectProfile?: (profileId: string) => void;
-  onCreateProfile?: (name: string) => void;
-  onRenameProfile?: (profileId: string, name: string) => void;
-  onDeleteProfile?: (profileId: string) => void;
   copilotOpen: boolean;
   onToggleCopilot: () => void;
   onOpenGithub?: () => void;
@@ -819,12 +826,6 @@ export function ModernTitlebar({
   onToggleDownloads,
   hasActiveDownloads,
   onToggleExtensions,
-  profiles,
-  activeProfileId,
-  onSelectProfile,
-  onCreateProfile,
-  onRenameProfile,
-  onDeleteProfile,
   copilotOpen,
   onToggleCopilot,
   onOpenGithub,
@@ -869,8 +870,8 @@ export function ModernTitlebar({
   const adRamSavedGb = ((blockedAdsCount * 0.35) / 1000).toFixed(1);
   const totalRamSavedLabel =
     savedMemoryMb > 0
-      ? `${adRamSavedGb} GB + ${savedMemoryMb} MB tab sleep`
-      : `${adRamSavedGb} GB`;
+      ? t('browser.chrome.memorySavedWithSleepingTabs', { ram: adRamSavedGb, sleep: savedMemoryMb })
+      : t('browser.chrome.memorySavedGb', { ram: adRamSavedGb });
 
   return (
     <>
@@ -878,7 +879,7 @@ export function ModernTitlebar({
         <div
           className="zen-top-hover-sensor"
           onMouseEnter={handleMouseEnter}
-          title="Kante berühren, um Adressleiste einzublenden"
+          title={t('browser.chrome.revealAddressBar')}
           aria-hidden="true"
         />
       )}
@@ -894,8 +895,8 @@ export function ModernTitlebar({
           <button
             type="button"
           className="titlebar-tool-btn sidebar-toggle"
-          title={`Toggle Sidebar (${sidebarMode === 'hidden' ? 'Show' : 'Collapse'}) - Ctrl+B`}
-          aria-label="Toggle Sidebar"
+          title={`${t('browser.chrome.toggleSidebar')} (${t(sidebarMode === 'hidden' ? 'browser.chrome.showSidebar' : 'browser.chrome.collapseSidebar')}) - Ctrl+B`}
+          aria-label={t('browser.chrome.toggleSidebar')}
           onClick={onToggleSidebar}
         >
           {sidebarMode === 'hidden' ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
@@ -905,8 +906,8 @@ export function ModernTitlebar({
           <button
             type="button"
             className="titlebar-tool-btn nav-back"
-            title="Back (Alt+Left)"
-            aria-label="Back"
+            title={`${t('browser.chrome.back')} (Alt+Left)`}
+            aria-label={t('browser.chrome.back')}
             onClick={onGoBack}
           >
             <ChevronLeft size={16} />
@@ -914,8 +915,8 @@ export function ModernTitlebar({
           <button
             type="button"
             className="titlebar-tool-btn nav-forward"
-            title="Forward (Alt+Right)"
-            aria-label="Forward"
+            title={`${t('browser.chrome.forward')} (Alt+Right)`}
+            aria-label={t('browser.chrome.forward')}
             onClick={onGoForward}
           >
             <ChevronRight size={16} />
@@ -923,8 +924,8 @@ export function ModernTitlebar({
           <button
             type="button"
             className="titlebar-tool-btn nav-reload"
-            title={isLoading ? 'Stop loading (Esc)' : 'Reload (Ctrl+R)'}
-            aria-label={isLoading ? 'Stop loading' : 'Reload'}
+            title={`${t(isLoading ? 'browser.chrome.stopLoading' : 'browser.chrome.reload')} (${isLoading ? 'Esc' : 'Ctrl+R'})`}
+            aria-label={t(isLoading ? 'browser.chrome.stopLoading' : 'browser.chrome.reload')}
             onClick={onReloadOrStop}
           >
             {isLoading ? <X size={15} /> : <RefreshCw size={14} />}
@@ -951,7 +952,7 @@ export function ModernTitlebar({
         )}
 
         {quickActions && quickActions.length > 0 && onExecuteQuickAction && (
-          <div className="titlebar-quick-actions" role="toolbar" aria-label="Contextual Quick Actions">
+          <div className="titlebar-quick-actions" role="toolbar" aria-label={t('browser.chrome.quickActions')}>
             {quickActions.map((chip) => (
               <button
                 key={chip.id}
@@ -974,13 +975,13 @@ export function ModernTitlebar({
               setShieldPopoverOpen((open) => !open);
               onToggleShieldPopover?.();
             }}
-            title={`${blockedAdsCount.toLocaleString()} Werbeanzeigen und Tracker blockiert · Geschätzte ${totalRamSavedLabel} RAM gespart. Klicken für Einstellungen.`}
-            aria-label="Adblock and Privacy Shield Statistics"
+            title={t('browser.chrome.adblockTooltip', { ads: blockedAdsCount.toLocaleString(), memory: totalRamSavedLabel })}
+            aria-label={t('browser.chrome.adblockStats')}
             aria-expanded={shieldPopoverOpen}
           >
             <ShieldCheck size={13} className="stats-shield-icon" />
             <span className="stats-text">
-              <strong>{blockedAdsCount.toLocaleString()}</strong> Ads blocked · <strong>{totalRamSavedLabel}</strong> RAM saved
+              {t('browser.chrome.adsBlockedRamSaved', { ads: blockedAdsCount.toLocaleString(), memory: totalRamSavedLabel })}
             </span>
           </button>
           <AdblockShield open={shieldPopoverOpen} onOpenChange={setShieldPopoverOpen} hideButton />
@@ -989,24 +990,11 @@ export function ModernTitlebar({
 
       {/* Right controls: In-page find, Downloads, GitHub, Copilot toggle, WindowControls */}
       <div className="modern-titlebar-right">
-        {profiles && activeProfileId && onSelectProfile && onCreateProfile && onRenameProfile && onDeleteProfile && (
-          <div className="modern-titlebar-profile-switcher">
-            <ProfileSwitcher
-              profiles={profiles}
-              activeProfileId={activeProfileId}
-              onSelect={onSelectProfile}
-              onCreate={onCreateProfile}
-              onRename={onRenameProfile}
-              onDelete={onDeleteProfile}
-            />
-          </div>
-        )}
-
         <button
           type="button"
           className={`titlebar-tool-btn find-btn ${loupeActive ? 'loupe-active' : ''}`}
-          title="Find in page (Ctrl+F)"
-          aria-label="Find in page"
+          title={`${t('browser.chrome.findInPage')} (Ctrl+F)`}
+          aria-label={t('browser.chrome.findInPage')}
           onClick={onToggleFind}
         >
           <Search size={15} />
@@ -1016,8 +1004,8 @@ export function ModernTitlebar({
           <button
             type="button"
             className={`titlebar-tool-btn loupe-toggle-btn ${loupeActive ? 'active' : ''}`}
-            title="Bildschirmlupe / Maus-Begleitlupe (Ctrl+Shift+L)"
-            aria-label="Toggle cursor loupe"
+            title={`${t('browser.chrome.cursorLoupe')} (Ctrl+Shift+L)`}
+            aria-label={t('browser.chrome.cursorLoupe')}
             aria-pressed={Boolean(loupeActive)}
             onClick={onToggleLoupe}
           >
@@ -1028,8 +1016,8 @@ export function ModernTitlebar({
         <button
           type="button"
           className={`titlebar-tool-btn downloads-trigger ${hasActiveDownloads ? 'has-active' : ''}`}
-          title="Downloads (Ctrl+J)"
-          aria-label="Downloads"
+          title={`${t('browser.chrome.downloads')} (Ctrl+J)`}
+          aria-label={t('browser.chrome.downloads')}
           onClick={onToggleDownloads}
         >
           <Download size={15} />
@@ -1039,8 +1027,8 @@ export function ModernTitlebar({
         <button
           type="button"
           className="titlebar-tool-btn extensions-trigger"
-          title="Extensions & Add-ons (Manifest V3)"
-          aria-label="Extensions & Add-ons"
+          title={`${t('browser.chrome.extensions')} (Manifest V3)`}
+          aria-label={t('browser.chrome.extensions')}
           onClick={onToggleExtensions}
         >
           <Puzzle size={15} />
@@ -1050,8 +1038,8 @@ export function ModernTitlebar({
           <button
             type="button"
             className="titlebar-tool-btn bug-report-btn"
-            title="Problem melden / GitHub Issues"
-            aria-label="Problem melden"
+            title={t('browser.chrome.reportIssue')}
+            aria-label={t('browser.chrome.reportIssue')}
             onClick={onOpenGithub}
           >
             <Bug size={15} />
@@ -1061,8 +1049,8 @@ export function ModernTitlebar({
         <button
           type="button"
           className={`titlebar-tool-btn copilot-toggle-btn ${copilotOpen ? 'active' : ''}`}
-          title={`Toggle ${botName} AI (70/30 Split View)`}
-          aria-label={`Toggle ${botName} AI`}
+          title={t('browser.chrome.toggleAssistant', { botName })}
+          aria-label={t('browser.chrome.toggleAssistant', { botName })}
           onClick={onToggleCopilot}
         >
           <img src={brandAssets.sidekickAvatar} alt="" className="copilot-btn-avatar" draggable={false} />

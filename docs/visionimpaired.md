@@ -1,6 +1,6 @@
 # Vision-Impaired Mode 2.0: Architektur & Spezifikation
 
-> **Status:** Architektur-Blueprint & Umsetzungsleitfaden für Entwickler und Agenten
+> **Status:** Implementierte Spezifikation und Verifikationsmatrix; Laufzeit-Smokes bleiben Teil der Release-Abnahme.
 > **Geltungsbereich:** `apps/desktop/src/renderer/`, `apps/desktop/src/main/`
 > **Konformitätsziel:** WCAG 2.2 Level AAA (Sehbehinderung, Low-Vision, Photophobie, Nystagmus, Farbenfehlsichtigkeit)
 
@@ -80,6 +80,7 @@ export interface VisionImpairedConfig {
 * **Fonts:**
   - `Atkinson-Hyperlegible-Regular.woff2`, `Atkinson-Hyperlegible-Bold.woff2`
   - `Lexend-SemiBold.woff2`, `Lexend-Bold.woff2`
+  - `OpenDyslexic-Regular.woff2`, `OpenDyslexic-Bold.woff2` (SIL Open Font License 1.1; Lizenzdatei liegt bei den Assets)
 * **CSS-Einbindung via `@font-face`:**
   ```css
   @font-face {
@@ -96,6 +97,7 @@ export interface VisionImpairedConfig {
   }
   ```
 * **Auswirkung:** Bei Auswahl überschreibt `body.a11y-font-atkinson` bzw. `.a11y-font-lexend` die globale Schriftart.
+  OpenDyslexic ist ebenfalls lokal gebündelt und über `fontFamily: 'opendyslexic'` auswählbar.
 
 ### 3.2 WCAG 1.4.12 Enhanced Text-Spacing Multiplier (Feature 2)
 Wenn `enhancedSpacing: true` aktiv ist, wendet Lastbrowser global folgende CSS-Variablen an:

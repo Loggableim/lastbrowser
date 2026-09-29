@@ -1,0 +1,8 @@
+OpenDyslexic font source
+
+Upstream: https://github.com/antijingoist/opendyslexic
+Pinned revision: 1824da5c0e41dc3e13ffc7f3a636dcaf695d61b7
+Files: compiled/OpenDyslexic-Regular.woff2, compiled/OpenDyslexic-Bold.woff2
+License: SIL Open Font License 1.1; see OpenDyslexic-OFL.txt.
+
+The font binaries are redistributed unchanged.

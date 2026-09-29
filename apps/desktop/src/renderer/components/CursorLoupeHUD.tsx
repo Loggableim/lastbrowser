@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePanelStore } from '../stores/usePanelStore.js';
 import type { LoupePosition } from '../stores/a11y-config.js';
-import { getLoupeCaptureRect, getWebviewLoupeCaptureRect } from '../utils/cursor-loupe.js';
+import { getLoupeCaptureRect, getLoupePosition, getWebviewLoupeCaptureRect } from '../utils/cursor-loupe.js';
 
 /**
  * Maus-Begleitlupe & Shake-to-Locate Radar (docs/visionimpaired.md §4.2/§4.3).
@@ -63,7 +63,7 @@ async function readWebviewTextUnderPointer(webview: Electron.WebviewTag, x: numb
 
 export function CursorLoupeHUD(): React.JSX.Element | null {
   const enabled = usePanelStore((s) => s.visionImpaired.enabled && s.visionImpaired.cursorLoupeEnabled);
-  const shakeToLocate = usePanelStore((s) => s.visionImpaired.shakeToLocate);
+  const shakeToLocate = usePanelStore((s) => s.visionImpaired.enabled && s.visionImpaired.shakeToLocate);
   const position = usePanelStore((s) => s.visionImpaired.cursorLoupePosition);
   const size = usePanelStore((s) => s.visionImpaired.cursorLoupeSize);
   const factor = usePanelStore((s) => s.visionImpaired.cursorLoupeFactor);
@@ -117,7 +117,9 @@ export function CursorLoupeHUD(): React.JSX.Element | null {
         trackShake(point);
         if (!enabled || !loupeEl) return;
         const { dx, dy } = computeLoupeOffset(position, size);
-        loupeEl.style.transform = `translate3d(${point.x + dx}px, ${point.y + dy}px, 0)`;
+        const loupePosition = getLoupePosition(point.x, point.y, window.innerWidth, window.innerHeight, size, dx, dy);
+        if (!loupePosition) return;
+        loupeEl.style.transform = `translate3d(${loupePosition.x}px, ${loupePosition.y}px, 0)`;
 
         const target = document.elementFromPoint(point.x, point.y) as HTMLElement | null;
         const webview = target?.tagName === 'WEBVIEW' ? target as Electron.WebviewTag : null;

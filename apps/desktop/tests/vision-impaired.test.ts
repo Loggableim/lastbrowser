@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { desktopLocaleCatalogs, desktopLocaleIds } from '../src/renderer/i18n.js';
 
 const stylesPath = resolve(__dirname, '../src/renderer/styles.css');
 // Normalize CRLF so line-ending churn in the working tree cannot break
@@ -172,6 +173,48 @@ describe('Vision-Impaired 2.0 §2: config model & persistence', () => {
     expect(normalized.colorVisionFilter).toBe('deuteranopia');
   });
 
+  it('disables every DOM effect under the master switch and publishes the click target size', async () => {
+    const mod = await import('../src/renderer/stores/a11y-config.js');
+    const root = { dataset: {} as Record<string, string>, style: { setProperty: vi.fn() } };
+    vi.stubGlobal('document', { documentElement: root });
+    const config = { ...mod.DEFAULT_VISION_IMPAIRED_CONFIG, enabled: false, fontFamily: 'lexend' as const,
+      enhancedSpacing: true, superSizedVerticalTabs: true, minClickTargetSize: 64 as const,
+      cursorSize: 'mega' as const, cursorLoupeEnabled: true, shakeToLocate: true, splitScreenMagnifier: true };
+    mod.applyVisionImpairedToDom(config);
+    expect(root.dataset.a11yFont).toBe('system');
+    expect(root.dataset.a11yEnhancedSpacing).toBe('false');
+    expect(root.dataset.a11ySuperTabs).toBe('false');
+    expect(root.dataset.a11yMinTarget).toBe('48');
+    expect(root.dataset.cursorSize).toBe('normal');
+    expect(root.dataset.a11yLoupeEnabled).toBe('false');
+    expect(root.dataset.a11yShakeLocate).toBe('false');
+    expect(root.dataset.a11ySplitMagnifier).toBe('false');
+
+    mod.applyVisionImpairedToDom({ ...config, enabled: true });
+    expect(root.dataset.a11yMinTarget).toBe('64');
+    expect(root.style.setProperty).toHaveBeenCalledWith('--lb-min-target-size', '64px');
+    vi.unstubAllGlobals();
+  });
+
+  it('enables the master mode when a shortcut activates a vision feature', async () => {
+    const mod = await import('../src/renderer/stores/a11y-config.js');
+    const defaults = mod.DEFAULT_VISION_IMPAIRED_CONFIG;
+    expect(mod.toggleVisionImpairedFeature(defaults, 'cursorLoupeEnabled')).toEqual({
+      enabled: true,
+      cursorLoupeEnabled: true
+    });
+    expect(mod.toggleVisionImpairedFeature(defaults, 'splitScreenMagnifier')).toEqual({
+      enabled: true,
+      splitScreenMagnifier: true
+    });
+    expect(mod.toggleVisionImpairedFeature({ ...defaults, enabled: true, cursorLoupeEnabled: true }, 'cursorLoupeEnabled'))
+      .toEqual({ enabled: true, cursorLoupeEnabled: false });
+    // A saved feature flag under a disabled master is inactive; its shortcut
+    // must activate it, rather than merely clear a flag that has no effect.
+    expect(mod.toggleVisionImpairedFeature({ ...defaults, cursorLoupeEnabled: true }, 'cursorLoupeEnabled'))
+      .toEqual({ enabled: true, cursorLoupeEnabled: true });
+  });
+
   it('persists under the spec storage key lastbrowser.a11y.visionImpaired.v2', async () => {
     const mod = await import('../src/renderer/stores/a11y-config.js');
     expect(mod.visionImpairedStorageKey).toBe('lastbrowser.a11y.visionImpaired.v2');
@@ -186,6 +229,9 @@ describe('Vision-Impaired 2.0 §3: typography engine (CSS)', () => {
     expect(css).toContain('Atkinson-Hyperlegible-Bold.woff2');
     expect(css).toContain('Lexend-SemiBold.woff2');
     expect(css).toContain('Lexend-Bold.woff2');
+    expect(css).toContain("font-family: 'OpenDyslexic'");
+    expect(css).toContain('OpenDyslexic-Regular.woff2');
+    expect(css).toContain('OpenDyslexic-Bold.woff2');
   });
 
   it('ships the woff2 font files on disk', () => {
@@ -193,7 +239,10 @@ describe('Vision-Impaired 2.0 §3: typography engine (CSS)', () => {
       'Atkinson-Hyperlegible-Regular.woff2',
       'Atkinson-Hyperlegible-Bold.woff2',
       'Lexend-SemiBold.woff2',
-      'Lexend-Bold.woff2'
+      'Lexend-Bold.woff2',
+      'OpenDyslexic-Regular.woff2',
+      'OpenDyslexic-Bold.woff2',
+      'OpenDyslexic-OFL.txt'
     ]) {
       expect(existsSync(resolve(__dirname, '../src/renderer/assets/fonts', font)), font).toBe(true);
     }
@@ -252,12 +301,13 @@ describe('Vision-Impaired 2.0 §3.5: bionic reading transformer', () => {
 describe('Vision-Impaired 2.0 §4: cursor, loupe & radar (CSS)', () => {
   it('provides high-contrast cursors in 36/48/64px with amber core + black border', () => {
     for (const size of ['large', 'huge', 'mega']) {
-      const cursorBlock = block(`html[data-cursor-size='${size}'] body {`);
+      const cursorBlock = block(`html[data-cursor-size='${size}'] body,`);
       expect(cursorBlock, `missing cursor rule for ${size}`).not.toBe('');
       expect(cursorBlock).toContain('cursor: url("data:image/svg+xml');
       expect(cursorBlock).toContain('%23FFC107');
       expect(cursorBlock).toContain("stroke='%23000000'");
       expect(cursorBlock).toContain('stroke-width=\'2.5\'');
+      expect(css).toContain(`html[data-cursor-size='${size}'] body *:not(webview)`);
     }
   });
 
@@ -360,7 +410,8 @@ describe('Vision-Impaired 2.0 §7: palettes, photophobia & filters (CSS)', () =>
   });
 
   it('uses soft #F8FAFC instead of glaring white for anti-bloom (Feature 23)', () => {
-    expect(block("html[data-a11y-soft-contrast='true'] body {")).toContain('color: #F8FAFC');
+    expect(block("html[data-a11y-soft-contrast='true'] body {")).toContain('color: var(--lb-vi-text, #F8FAFC)');
+    expect(block("html[data-a11y-soft-contrast='true'][data-a11y-palette='ivory-navy'] body {")).toContain('color: #0B132B');
   });
 
   it('reduces all motion to 0.001ms when strict mode is on (Feature 24)', () => {
@@ -416,6 +467,57 @@ describe('Vision-Impaired 2.0 §8: copilot audio chime', () => {
     const { playCopilotSuccessChime } = await import('../src/renderer/utils/audio-chimes.js');
     // Node test env: no AudioContext — the chime must fail silently.
     expect(() => playCopilotSuccessChime()).not.toThrow();
+  });
+
+  it('resumes a suspended context and schedules the complete D5→A5 success chime', async () => {
+    const oscillator = {
+      type: '',
+      frequency: {
+        setValueAtTime: vi.fn(),
+        exponentialRampToValueAtTime: vi.fn()
+      },
+      connect: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn()
+    };
+    const gain = {
+      gain: {
+        setValueAtTime: vi.fn(),
+        exponentialRampToValueAtTime: vi.fn()
+      },
+      connect: vi.fn()
+    };
+    const context = {
+      state: 'suspended',
+      currentTime: 12,
+      destination: {},
+      resume: vi.fn(async () => undefined),
+      createOscillator: vi.fn(() => oscillator),
+      createGain: vi.fn(() => gain)
+    };
+    const AudioContextMock = vi.fn(function AudioContextMock() { return context; });
+
+    vi.resetModules();
+    vi.stubGlobal('window', { AudioContext: AudioContextMock });
+    try {
+      const { playCopilotSuccessChime } = await import('../src/renderer/utils/audio-chimes.js');
+      playCopilotSuccessChime();
+
+      expect(context.resume).toHaveBeenCalledOnce();
+      expect(context.createOscillator).toHaveBeenCalledOnce();
+      expect(context.createGain).toHaveBeenCalledOnce();
+      expect(oscillator.type).toBe('sine');
+      expect(oscillator.frequency.setValueAtTime).toHaveBeenCalledWith(587.33, 12);
+      expect(oscillator.frequency.exponentialRampToValueAtTime).toHaveBeenCalledWith(880, 12.15);
+      expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0.12, 12);
+      expect(gain.gain.exponentialRampToValueAtTime).toHaveBeenCalledWith(0.001, 12.6);
+      expect(oscillator.connect).toHaveBeenCalledWith(gain);
+      expect(gain.connect).toHaveBeenCalledWith(context.destination);
+      expect(oscillator.start).toHaveBeenCalledOnce();
+      expect(oscillator.stop).toHaveBeenCalledWith(12.6);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -483,6 +585,15 @@ describe('Vision-Impaired 2.0 §9: settings UI wiring (source contracts)', () =>
     expect(appSource).toContain('<SplitScreenMagnifier webview={webviewRef.current}');
   });
 
+  it('localizes the running split magnifier labels in all supported locales', () => {
+    for (const locale of desktopLocaleIds) {
+      const catalog = desktopLocaleCatalogs[locale];
+      expect(catalog['visionImpaired.splitMagnifier.region'], locale).toBeTruthy();
+      expect(catalog['visionImpaired.splitMagnifier.position'], locale).toContain('{position}');
+      expect(catalog['visionImpaired.splitMagnifier.empty'], locale).toBeTruthy();
+    }
+  });
+
   it('attaches Electron WebView events through addEventListener and reconciles smart invert on dom-ready', () => {
     expect(appSource).toContain("el.addEventListener('dom-ready', handleDomReady)");
     expect(appSource).toContain('const guestWebview = el as Electron.WebviewTag');
@@ -527,6 +638,12 @@ describe('Vision-Impaired 2.0 §9: settings UI wiring (source contracts)', () =>
 });
 
 describe('Vision-Impaired 2.0 §4.3: cursor loupe capture geometry', () => {
+  it('keeps the complete loupe visible at every window edge', async () => {
+    const { getLoupePosition } = await import('../src/renderer/utils/cursor-loupe.js');
+    expect(getLoupePosition(790, 590, 800, 600, 180, 24, 24)).toEqual({ x: 620, y: 420 });
+    expect(getLoupePosition(2, 4, 800, 600, 180, -204, -204)).toEqual({ x: 0, y: 0 });
+  });
+
   it('centers a source crop sized to the configured magnification', async () => {
     const { getLoupeCaptureRect } = await import('../src/renderer/utils/cursor-loupe.js');
     expect(getLoupeCaptureRect(500, 300, 1200, 800, 180, 2)).toEqual({
@@ -579,16 +696,14 @@ describe('Vision-Impaired 2.0 §9: accessibility test card (CSS)', () => {
 });
 
 describe('Vision-Impaired font availability', () => {
-  it('does not expose or apply an unbundled OpenDyslexic font', async () => {
+  it('bundles and exposes the documented OpenDyslexic font', async () => {
     const { normalizeVisionImpairedConfig } = await import('../src/renderer/stores/a11y-config.js');
     const systemPanels = readFileSync(resolve(__dirname, '../src/renderer/panels/SystemPanels.tsx'), 'utf8');
-    const configSource = readFileSync(resolve(__dirname, '../src/renderer/stores/a11y-config.ts'), 'utf8');
 
-    expect(normalizeVisionImpairedConfig({ fontFamily: 'opendyslexic' }).fontFamily).toBe('system');
-    expect(systemPanels).not.toContain('value="opendyslexic"');
-    expect(configSource).not.toContain("'opendyslexic'");
-    expect(css).not.toContain('OpenDyslexic');
+    expect(normalizeVisionImpairedConfig({ fontFamily: 'opendyslexic' }).fontFamily).toBe('opendyslexic');
+    expect(systemPanels).toContain('value="opendyslexic"');
     expect(css).toContain("font-family: 'Atkinson Hyperlegible', system-ui, sans-serif !important");
+    expect(css).toContain("font-family: 'OpenDyslexic', system-ui, sans-serif !important");
   });
 });
 

@@ -221,6 +221,20 @@ def _doctor_provider_is_configured(
     return _active_provider_has_credentials(provider, context)
 
 
+def _missing_provider_runtime_dependencies(provider: str, importer=__import__) -> list[tuple[str, str]]:
+    """Return missing SDKs required by the selected provider, as (label, install hint)."""
+    requirements = {
+        "anthropic": (("anthropic", "Anthropic SDK", "pip install 'anthropic>=0.39.0'"),),
+    }.get(str(provider or "").strip().lower(), ())
+    missing = []
+    for module, label, install_hint in requirements:
+        try:
+            importer(module)
+        except ImportError:
+            missing.append((label, install_hint))
+    return missing
+
+
 def _honcho_is_configured_for_doctor() -> bool:
     """Return True when Honcho is configured, even if this process has no active session."""
     try:
@@ -283,6 +297,15 @@ def check_fail(text: str, detail: str = ""):
 
 def check_info(text: str):
     print(f"    {color('→', Colors.CYAN)} {text}")
+
+
+def _record_connectivity_severity(glyph: str) -> None:
+    """Keep probe-rendered statuses in sync with Doctor summary and exit code."""
+    global _warning_count, _fail_count
+    if glyph == color("✗", Colors.RED):
+        _fail_count += 1
+    elif glyph == color("⚠", Colors.YELLOW):
+        _warning_count += 1
 
 
 def _check_gateway_service_linger(issues: list[str]) -> None:
@@ -616,6 +639,17 @@ def run_doctor(args):
     _provider_context = _resolve_doctor_provider_context()
     _active_provider = str(_provider_context.get("provider") or "").strip().lower()
     _is_integrated_provider = _integrated_provider(_active_provider)
+    _missing_anthropic_sdk = _missing_provider_runtime_dependencies("anthropic")
+    if _missing_anthropic_sdk:
+        _label, _install_hint = _missing_anthropic_sdk[0]
+        if _active_provider == "anthropic":
+            check_fail(f"{_label} required by active provider ({_active_provider})", "(missing)")
+            issues.append(f"Install the required provider SDK: {_install_hint}")
+        elif _doctor_provider_is_configured("anthropic", _active_provider, _provider_context):
+            check_warn(f"{_label} missing for configured provider", "(Anthropic will fail until installed)")
+            issues.append(f"Install the required provider SDK: {_install_hint}")
+        else:
+            check_info(f"{_label} not installed (optional until Anthropic is configured)")
     # init_profile_state() may have switched SIDEKICK_HOME to a named profile.
     # Refresh these import-time snapshots before checking its files or printing paths.
     SIDEKICK_HOME = get_sidekick_home()
@@ -877,7 +911,7 @@ def run_doctor(args):
                 check_warn("config.yaml not found and no example to copy from")
                 manual_issues.append(f"Create {_DHH}/config.yaml manually")
             else:
-                check_warn("config.yaml not found", "(using defaults)")
+                check_info("config.yaml not found (using defaults; configuration is optional)")
 
     # Check config version and stale keys
     config_path = SIDEKICK_HOME / 'config.yaml'
@@ -969,7 +1003,11 @@ def run_doctor(args):
             check_ok("OpenAI Codex auth", "(logged in)")
         else:
             check_info("OpenAI Codex auth not connected (optional unless selected as the active provider)")
-            if codex_status.get("error"):
+            # The auth helper's missing-credentials detail includes an action
+            # to authenticate. Keep that actionable detail hidden while a
+            # different provider is active; otherwise Doctor looks like it
+            # found another problem even though Codex is optional.
+            if codex_status.get("error") and _active_provider == "openai-codex":
                 check_info(codex_status["error"])
 
         gemini_status = get_gemini_oauth_auth_status()
@@ -1027,7 +1065,7 @@ def run_doctor(args):
         check_ok(f"Created {_DHH} directory")
         fixed_count += 1
     else:
-        check_warn(f"{_DHH} not found", "(will be created on first use)")
+        check_info(f"{_DHH} not found (will be created on first use)")
     
     # Check expected subdirectories
     expected_subdirs = ["cron", "sessions", "logs", "skills", "memories"]
@@ -1040,7 +1078,7 @@ def run_doctor(args):
             check_ok(f"Created {_DHH}/{subdir_name}/")
             fixed_count += 1
         else:
-            check_warn(f"{_DHH}/{subdir_name}/ not found", "(will be created on first use)")
+            check_info(f"{_DHH}/{subdir_name}/ not found (will be created on first use)")
     
     # Check for SOUL.md persona file
     soul_path = sidekick_home / "SOUL.md"
@@ -1053,7 +1091,7 @@ def run_doctor(args):
         else:
             check_info(f"{_DHH}/SOUL.md exists but is empty — edit it to customize personality")
     else:
-        check_warn(f"{_DHH}/SOUL.md not found", "(create it to give Sidekick a custom personality)")
+        check_info(f"{_DHH}/SOUL.md not found (optional custom persona; built-in defaults are active)")
         if should_fix:
             soul_path.parent.mkdir(parents=True, exist_ok=True)
             soul_path.write_text(
@@ -1082,7 +1120,7 @@ def run_doctor(args):
         else:
             check_info("USER.md not created yet (will be created when the agent first writes a memory)")
     else:
-        check_warn(f"{_DHH}/memories/ not found", "(will be created on first use)")
+        check_info(f"{_DHH}/memories/ not found (will be created on first use)")
         if should_fix:
             memories_dir.mkdir(parents=True, exist_ok=True)
             check_ok(f"Created {_DHH}/memories/")
@@ -1499,12 +1537,14 @@ def run_doctor(args):
     )
     _probes: list = []  # list of (label, callable) submitted in display order
 
-    def _probe_openrouter() -> _ConnectivityResult:
-        key = os.getenv("OPENROUTER_API_KEY")
+    _probe_api_key = str(_provider_context.get("api_key") or "").strip()
+
+    def _probe_openrouter(key_override: str = "") -> _ConnectivityResult:
+        key = key_override or os.getenv("OPENROUTER_API_KEY")
         if not key:
             return _ConnectivityResult(
                 "OpenRouter API",
-                [(color("⚠", Colors.YELLOW), "OpenRouter API",
+                [(color("→", Colors.CYAN), "OpenRouter API",
                   color("(not configured)", Colors.DIM))],
                 [],
             )
@@ -1560,9 +1600,9 @@ def run_doctor(args):
                 ["Check network connectivity"],
             )
 
-    def _probe_anthropic() -> _ConnectivityResult:
+    def _probe_anthropic(key_override: str = "") -> _ConnectivityResult:
         from cli.auth import get_anthropic_key
-        key = get_anthropic_key()
+        key = key_override or get_anthropic_key()
         if not key:
             return _ConnectivityResult("Anthropic API", [], [])
         try:
@@ -1630,12 +1670,13 @@ def run_doctor(args):
             )
 
     def _probe_apikey_provider(pname, env_vars, default_url, base_env,
-                               supports_health_check) -> _ConnectivityResult:
-        key = ""
-        for ev in env_vars:
-            key = os.getenv(ev, "")
-            if key:
-                break
+                               supports_health_check, key_override="") -> _ConnectivityResult:
+        key = key_override or ""
+        if not key:
+            for ev in env_vars:
+                key = os.getenv(ev, "")
+                if key:
+                    break
         if not key:
             return _ConnectivityResult(pname, [], [])
         label = pname.ljust(20)
@@ -1757,20 +1798,76 @@ def run_doctor(args):
             )
 
     # Build the probe submission list in display order
-    _probes.append(("OpenRouter API", _probe_openrouter))
-    _probes.append(("Anthropic API", _probe_anthropic))
+    if _active_provider == "openrouter" and _probe_api_key:
+        _probes.append(("OpenRouter API", lambda: _probe_openrouter(_probe_api_key)))
+    else:
+        _probes.append(("OpenRouter API", _probe_openrouter))
+    if _active_provider == "anthropic" and _probe_api_key:
+        _probes.append(("Anthropic API", lambda: _probe_anthropic(_probe_api_key)))
+    else:
+        _probes.append(("Anthropic API", _probe_anthropic))
+
+    # Lastbrowser keeps Ollama Cloud credentials in its credential pool,
+    # not in the Sidekick environment. Probe only the official Ollama Cloud
+    # origin; never forward this key to a user-supplied or unrelated host.
+    if _active_provider == "ollama-cloud" and _probe_api_key:
+        def _probe_ollama_cloud() -> _ConnectivityResult:
+            label = "Ollama Cloud"
+            try:
+                from shared.utils import is_official_ollama_cloud_url
+                base = str(_provider_context.get("base_url") or "https://ollama.com/v1").rstrip("/")
+                if not is_official_ollama_cloud_url(base):
+                    return _ConnectivityResult(label, [(color("✗", Colors.RED), label,
+                        color("(refused unsafe non-official endpoint)", Colors.DIM))],
+                        ["Ollama Cloud credentials may only be checked against the official HTTPS ollama.com endpoint"])
+                import httpx
+                response = httpx.get(base + "/models", headers={
+                    "Authorization": f"Bearer {_probe_api_key}",
+                    "User-Agent": _SIDEKICK_USER_AGENT,
+                }, timeout=10)
+                if response.status_code == 200:
+                    return _ConnectivityResult(label, [(color("✓", Colors.GREEN), label, "")], [])
+                if response.status_code == 401:
+                    return _ConnectivityResult(label, [(color("✗", Colors.RED), label,
+                        color("(invalid API key)", Colors.DIM))], ["Check the Ollama Cloud key in Lastbrowser provider settings"])
+                return _ConnectivityResult(label, [(color("⚠", Colors.YELLOW), label,
+                    color(f"(HTTP {response.status_code})", Colors.DIM))], [])
+            except Exception as error:
+                return _ConnectivityResult(label, [(color("⚠", Colors.YELLOW), label,
+                    color(f"({error})", Colors.DIM))], [])
+        _probes.append(("Ollama Cloud", _probe_ollama_cloud))
+    elif _active_provider == "antigravity" and _probe_api_key:
+        # Do not treat a stored OAuth access token as an API key or send it to
+        # a generic /models endpoint. The chat path owns OAuth refresh.
+        _probes.append(("Antigravity OAuth", lambda: _ConnectivityResult(
+            "Antigravity OAuth",
+            [(color("→", Colors.CYAN), "Antigravity OAuth", color("(account configured; token refresh not performed by Doctor)", Colors.DIM))],
+            [],
+        )))
 
     global _APIKEY_PROVIDERS_CACHE
     if _APIKEY_PROVIDERS_CACHE is None:
         _APIKEY_PROVIDERS_CACHE = _build_apikey_providers_list()
     for _entry in _APIKEY_PROVIDERS_CACHE:
         _pname, _env_vars, _default_url, _base_env, _supports = _entry
+        _pool_key_for_entry = ""
+        if _probe_api_key and _active_provider:
+            try:
+                from cli.auth import PROVIDER_REGISTRY as _provider_registry
+                _active_provider_config = _provider_registry.get(_active_provider)
+                if _active_provider_config and set(_active_provider_config.api_key_env_vars).intersection(_env_vars):
+                    _pool_key_for_entry = _probe_api_key
+            except Exception:
+                pass
+        # Dedicated probes handle these provider protocols and auth formats.
+        if _pool_key_for_entry and _active_provider in {"openrouter", "anthropic", "ollama-cloud"}:
+            continue
         # Capture loop vars by binding default args — without this, all closures
         # would share the final iteration's values and every probe would hit
         # the last provider's URL.
         _probes.append((_pname, lambda p=_pname, e=_env_vars, u=_default_url,
-                                       b=_base_env, s=_supports:
-                                _probe_apikey_provider(p, e, u, b, s)))
+                                       b=_base_env, s=_supports, k=_pool_key_for_entry:
+                                _probe_apikey_provider(p, e, u, b, s, k)))
 
     _probes.append(("AWS Bedrock", _probe_bedrock))
 
@@ -1808,6 +1905,7 @@ def run_doctor(args):
     print("\r" + " " * 70 + "\r", end="")
     for _r in _results:
         for _glyph, _label, _detail in _r.lines:
+            _record_connectivity_severity(_glyph)
             if _detail:
                 print(f"  {_glyph} {_label} {_detail}")
             else:
@@ -1863,11 +1961,10 @@ def run_doctor(args):
             else:
                 check_info(f"{item['name']} unavailable (optional integration dependency not met)")
 
-        # Count disabled tools with API key requirements
-        api_disabled = [u for u in unavailable if (u.get("missing_vars") or u.get("env_vars"))]
-        if api_disabled:
-            if not (_is_integrated_provider and _active_provider_configured) and _active_provider != "auto":
-                issues.append("Run 'sidekick setup' to configure missing API keys for full tool access")
+        # Toolsets are optional capabilities. Missing credentials for them
+        # must not create a generic Doctor issue that contradicts the
+        # informational per-toolset messages above (and is especially
+        # misleading when the selected chat provider is healthy).
     except Exception as e:
         check_warn("Could not check tool availability", f"({e})")
     

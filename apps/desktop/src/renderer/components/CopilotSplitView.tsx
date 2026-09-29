@@ -44,9 +44,11 @@ import { useChatStore } from '../stores/useChatStore.js';
 import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
 import { reconcileGeminiCliModelSelection } from '../setup-state.js';
+import { isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
 
 export interface AvailableModelItem {
   id: string;
+  providerId?: string;
   label: string;
   provider: string;
   category: 'gemini' | 'claude' | 'openai' | 'local' | 'teamwork' | 'other';
@@ -114,7 +116,7 @@ export interface CopilotSplitViewProps {
   activeTitle?: string;
   quickActions?: QuickActionChip[];
   onExecuteQuickAction?: (chip: QuickActionChip) => void;
-  onSelectModel?: (modelId: string) => void;
+  onSelectModel?: (modelId: string, providerId?: string) => void;
   onNewChat?: () => void;
   sessions?: DesktopSessionSummary[];
   activeSessionId?: string | null;
@@ -159,7 +161,7 @@ export function CopilotSplitView({
 
   const { activeAccount } = useGeminiAccountStore();
   const currentGeminiAccount = activeAccount();
-  const { selectedModel, setSelectedModel } = useChatStore();
+  const { selectedModel, selectedModelProvider, setSelectedModel, setSelectedModelProvider } = useChatStore();
 
   // Provider models are selectable only after the live backend catalog returns them.
   const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS);
@@ -219,7 +221,7 @@ export function CopilotSplitView({
         const dynamicModels: AvailableModelItem[] = [];
 
         for (const g of res.groups) {
-          const pid = (g.provider_id || g.provider || '').toLowerCase();
+          const pid = String(g.provider_id || g.provider || '').toLowerCase();
           const gAccount = g.account || (pid.includes('gemini') || pid.includes('google') ? currentGeminiAccount?.email : undefined);
 
           let category: 'gemini' | 'claude' | 'openai' | 'local' | 'other' = 'other';
@@ -250,7 +252,8 @@ export function CopilotSplitView({
 
           for (const m of g.models || []) {
             const rawId = String(m.id || '');
-            const cleanId = rawId.startsWith('@') && rawId.includes(':') ? rawId.split(':')[1] : rawId;
+            const identity = parseProviderModelId(rawId, pid);
+            const cleanId = identity.model;
             const pct = typeof m.remaining_percent === 'number' ? m.remaining_percent : undefined;
             const frac = typeof m.remaining_fraction === 'number' ? m.remaining_fraction : undefined;
             const account = m.account || gAccount;
@@ -260,6 +263,7 @@ export function CopilotSplitView({
 
             dynamicModels.push({
               id: cleanId,
+              providerId: identity.provider,
               label: m.label || cleanId,
               provider: providerLabel,
               category,
@@ -293,7 +297,7 @@ export function CopilotSplitView({
 
         setModelList([
           ...dynamicModels,
-          ...AVAILABLE_MODELS.filter((item) => !dynamicModels.some((model) => model.id === item.id))
+          ...AVAILABLE_MODELS.filter((item) => !dynamicModels.some((model) => model.id === item.id && model.providerId === item.providerId))
         ]);
       } catch {
         // On discovery failure, retain only built-in orchestrators; cached model IDs
@@ -324,9 +328,9 @@ export function CopilotSplitView({
     return (
       visibleModelList.find(
         (m) =>
-          m.id === activeModelId ||
-          m.label.toLowerCase() === activeModelId.toLowerCase() ||
-          activeModelId.toLowerCase().includes(m.id.toLowerCase())
+          isProviderModelSelected(m, activeModelId, selectedModelProvider) ||
+          (m.label.toLowerCase() === activeModelId.toLowerCase() && (!selectedModelProvider || m.providerId === selectedModelProvider)) ||
+          (!selectedModelProvider && activeModelId.toLowerCase().includes(m.id.toLowerCase()))
       ) || {
         id: activeModelId || 'default',
         label: activeModelId || 'Modell wird geladen',
@@ -336,7 +340,7 @@ export function CopilotSplitView({
         badgeClass: 'other'
       }
     );
-  }, [activeModelId, visibleModelList]);
+  }, [activeModelId, selectedModelProvider, visibleModelList]);
 
   useEffect(() => {
     const orchestrationDisabled = (selectedModel === 'teamwork' && !teamworkEnabled)
@@ -345,7 +349,8 @@ export function CopilotSplitView({
     const fallback = visibleModelList.find((model) => model.category !== 'teamwork');
     if (!fallback) return;
     setSelectedModel(fallback.id);
-    onSelectModel?.(fallback.id);
+    setSelectedModelProvider(fallback.providerId || '');
+    onSelectModel?.(fallback.id, fallback.providerId);
   }, [onSelectModel, selectedModel, setSelectedModel, smartTrackEnabled, teamworkEnabled, visibleModelList]);
 
   useEffect(() => {
@@ -422,12 +427,12 @@ export function CopilotSplitView({
   function handlePickModel(model: AvailableModelItem) {
     setModelPickerOpen(false);
     setSelectedModel(model.id);
-    onSelectModel?.(model.id);
+    setSelectedModelProvider(model.providerId || '');
+    onSelectModel?.(model.id, model.providerId);
   }
 
   function renderModelItem(m: AvailableModelItem) {
-    const isSelected = activeModelItem?.id === m.id
-      || modelName.toLowerCase().includes(m.id.toLowerCase());
+    const isSelected = isProviderModelSelected(m, activeModelItem?.id || '', selectedModelProvider);
 
     const quotaBadge =
       m.remainingPercent !== undefined ? (
@@ -438,7 +443,7 @@ export function CopilotSplitView({
 
     return (
       <button
-        key={m.id}
+        key={`${m.providerId || m.provider}:${m.id}`}
         type="button"
         className={`model-option-item ${isSelected ? 'selected' : ''}`}
         role="menuitem"

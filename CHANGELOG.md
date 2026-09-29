@@ -9,6 +9,8 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixes
 - Fixed Antigravity OAuth callback state construction and added local callback regression coverage.
+- Prevented mismatched OAuth callback state from aborting a valid Antigravity login.
+- Preserved provider identity through model selection, per-Space persistence, and chat request routing.
 - Kept Antigravity visible in provider settings when runtime catalogs omit it, moved Google account round-robin management into Providers, and removed the separate Google accounts settings tab.
 - Corrected Doctor's provider credential checks so Lastbrowser vault credentials are accepted and optional `.env` files do not create duplicate blocking errors.
 - Prevented renderer bundles from accumulating across builds, cutting generated renderer assets from hundreds of stale files to the current six files.

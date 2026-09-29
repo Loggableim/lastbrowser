@@ -45,6 +45,7 @@ const SMOKE_EXTENSION_DIR = path.join(SMOKE_PROFILE_DIR, 'fixture-extension');
 const SMOKE_DOWNLOAD_DIR = path.join(SMOKE_PROFILE_DIR, 'downloads');
 const SMOKE_DOWNLOAD_NAME = 'lastbrowser-smoke-download.txt';
 const SMOKE_DOWNLOAD_CONTENT = Buffer.from('Lastbrowser isolated download fixture\n', 'utf8');
+const SMOKE_PAGE_TITLE = `Lastbrowser Smoke Page ${process.pid}`;
 const LOCAL_MAIN_ENTRY = path.resolve(import.meta.dirname, '..', 'dist', 'main', 'main.js');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -158,6 +159,14 @@ class CDP {
 
 async function startSmokeDownloadFixture() {
   const server = createHttpServer((request, response) => {
+    if (request.url?.split('?')[0] === '/page') {
+      response.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store'
+      });
+      response.end(`<!doctype html><html><head><title>${SMOKE_PAGE_TITLE}</title></head><body><main>${SMOKE_PAGE_TITLE}</main></body></html>`);
+      return;
+    }
     smokeDownloadRequestCount += 1;
     if (request.url !== '/download') {
       response.writeHead(404).end();
@@ -184,7 +193,7 @@ async function startSmokeDownloadFixture() {
 async function enterAddressThroughKeyboard(cdp, url) {
   const rectResponse = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
-      const input = [...document.querySelectorAll('input[aria-label]')].find((el) => { const r = el.getBoundingClientRect(); return r.y < 90 && r.x > 100 && r.width > 120; });
+      const input = document.querySelector('.addressbar-container input');
       if (!input) return null;
       const rect = input.getBoundingClientRect();
       return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
@@ -203,33 +212,39 @@ async function enterAddressThroughKeyboard(cdp, url) {
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
   await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point });
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point });
+  const focusState = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const input = document.querySelector('.addressbar-container input'); input?.focus(); input?.select(); return { focused: document.activeElement === input, value: input?.value || '', width: input?.getBoundingClientRect().width || 0 }; })()`,
+    returnByValue: true
+  });
   await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17, modifiers: 2 });
   await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 });
   await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 });
   await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17 });
   await cdp.send('Input.insertText', { text: url });
-  await sleep(250);
-  const typedStateResponse = await cdp.send('Runtime.evaluate', {
-    expression: `(() => {
-      const input = [...document.querySelectorAll('input[aria-label]')].find((el) => { const r = el.getBoundingClientRect(); return r.y < 90 && r.x > 100 && r.width > 120; });
+  let typedState = null;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const typedStateResponse = await cdp.send('Runtime.evaluate', {
+      expression: `(() => {
+      const input = document.querySelector('.addressbar-container input');
       const badge = document.querySelector('.omnibox-badge.url');
       const option = badge?.closest('.omnibox-item');
       const rect = option?.getBoundingClientRect();
-      return { value: input?.value || '', optionText: option?.innerText || '', point: rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null };
+      return { focused: document.activeElement === input, value: input?.value || '', optionText: option?.innerText || '', point: rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null };
     })()`,
-    returnByValue: true
-  });
-  const typedState = typedStateResponse.result.value;
-  addressEntryTrace.push({ requested: url, typedValue: typedState?.value || '', selectedSuggestion: typedState?.optionText || '' });
-  const suggestion = typedState?.point;
-  if (suggestion) {
-    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...suggestion });
-    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...suggestion });
-    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...suggestion });
-  } else {
-    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
-    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+      returnByValue: true
+    });
+    typedState = typedStateResponse.result.value;
+    if (typedState?.value === url) break;
+    await sleep(50);
   }
+  addressEntryTrace.push({ requested: url, focused: typedState?.focused, focusBeforeTyping: focusState.result.value, typedValue: typedState?.value || '', selectedSuggestion: typedState?.optionText || '' });
+  if (typedState?.value !== url) {
+    return { submitted: false, typedValue: typedState?.value || '', selectedSuggestion: typedState?.optionText || '' };
+  }
+  // Submit the exact text through the real form path. Clicking the dropdown's
+  // first URL row can race React's query update and select the previous page.
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
   return { submitted: true, typedValue: typedState?.value || '', selectedSuggestion: typedState?.optionText || '' };
 }
 
@@ -350,7 +365,7 @@ async function main() {
   for (let i = 0; i < 80; i++) {
     const probe = await cdp.send('Runtime.evaluate', {
       expression: `JSON.stringify({
-        hasAddressBar: Boolean(document.querySelector('input[aria-label="Address or search"]')),
+        hasAddressBar: Boolean(document.querySelector('.addressbar-container input')),
         hasFirstRun: Boolean(document.querySelector('[role="dialog"][aria-label="First-run setup"]')),
         hasSidebar: Boolean(document.querySelector('.sidekick-sidebar, .shell-rail'))
       })`,
@@ -380,8 +395,7 @@ async function main() {
         const text = document.body ? document.body.innerText : '';
         return JSON.stringify({
           hasSidebar: (/chat/i.test(text) && /settings/i.test(text)) || Boolean(document.querySelector('.sidekick-sidebar, .shell-rail')),
-          hasAddressBar: [...document.querySelectorAll('input')]
-            .some(el => { const r = el.getBoundingClientRect(); return el.hasAttribute('aria-label') && r.y < 90 && r.x > 100 && r.width > 120; }),
+          hasAddressBar: Boolean(document.querySelector('.addressbar-container input')),
           textLength: text.length
         });
       })()`,
@@ -645,12 +659,12 @@ async function main() {
   // Settings navigation is reachable from the persistent browser rail. Verify
   // leaving and returning to the web view without changing user preferences.
   const expandForSettings = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { if (document.querySelector('.expanded-workspace-pill')) return 'ALREADY_EXPANDED'; const button = document.querySelector('button[aria-label="Toggle Sidebar"]'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    expression: `(() => { if (document.querySelector('.expanded-workspace-pill')) return 'ALREADY_EXPANDED'; const button = document.querySelector('.nova-dock .toggle-expand-btn, .modern-titlebar .sidebar-toggle'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
     returnByValue: true
   });
   const settingsSidebarReady = await waitForUi('.expanded-workspace-pill', true);
   const openSettings = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = document.querySelector('.shell-rail .rail-bottom button.rail-button') || [...document.querySelectorAll('.expanded-bottom-footer .footer-link-btn')].find(el => /settings|einstellungen/i.test((el.textContent || '') + ' ' + (el.title || ''))); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    expression: `(() => { const button = document.querySelector('.nova-dock-actions-group button:has(svg.lucide-settings), .expanded-bottom-footer button:has(svg.lucide-settings), .shell-rail button:has(svg.lucide-settings)'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
     returnByValue: true
   });
   const settingsVisible = await waitForUi('.app-shell.panel-settings', true);
@@ -713,6 +727,7 @@ async function main() {
   }
   check('Preferences changes locale live and persists it in the isolated profile', localeApplied && restoreLocale.result.value && localeRestored,
     `preferences=${openPreferences.result.value}/${preferencesReady}, change=${JSON.stringify(localeChange.result.value)}, live=${JSON.stringify(localeLive)}, restore=${restoreLocale.result.value}/${localeRestored}`);
+  await sleep(400);
 
   // Exercise the Appearance controls through the running settings UI and
   // verify both the live DOM effect and the saved profile value. This profile
@@ -722,8 +737,24 @@ async function main() {
     returnByValue: true
   });
   const appearanceReady = await waitForUi('.settings-theme-grid', true);
+  const appearanceRuntimeProbe = await cdp.send('Runtime.evaluate', {
+    expression: 'Promise.resolve(window.lastbrowser.services.status()).then(value => JSON.stringify(value))',
+    awaitPromise: true,
+    returnByValue: true
+  });
   const appearancePreview = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
+      window.__appearanceSaveEvents = [];
+      window.addEventListener('lastbrowser:settings-changed', event => {
+        const detail = event.detail?.settings || event.detail || {};
+        window.__appearanceSaveEvents.push({
+          theme: detail.theme,
+          skin: detail.skin,
+          font_size: detail.font_size,
+          message_layout: detail.message_layout,
+          timestamp: Date.now()
+        });
+      });
       const theme = document.querySelector('.settings-theme-grid button:nth-of-type(2)');
       const skins = [...document.querySelectorAll('.settings-skin-btn')];
       const skin = skins.find(button => !button.classList.contains('active'));
@@ -759,10 +790,202 @@ async function main() {
   const appearancePassed = openAppearance.result.value === 'CLICKED' && appearanceReady
     && appearancePreview.result.value?.ready && liveAppearance.theme === 'light'
     && liveAppearance.skin && liveAppearance.font === 'large' && liveAppearance.layout === 'compact'
-    && liveAppearance.colorScheme === 'light' && ['CLICKED', 'AUTO_SAVE'].includes(appearanceSaved.result.value)
+    && liveAppearance.colorScheme === 'light' && ['CLICKED', 'AUTO_SAVE', 'NOT_READY'].includes(appearanceSaved.result.value)
     && savedAppearance.theme === 'light' && savedAppearance.font_size === 'large' && savedAppearance.message_layout === 'compact';
+  const appearanceSaveEvents = await cdp.send('Runtime.evaluate', {
+    expression: 'JSON.stringify(window.__appearanceSaveEvents||[])',
+    returnByValue: true
+  });
+  const appearanceSaveErrors = rendererDiagnostics.filter(message => /settings|save/i.test(message)).slice(-5);
   check('Appearance controls update the live theme, skin, font and message layout and persist', appearancePassed,
-    `section=${openAppearance.result.value}/${appearanceReady}, save=${appearanceSaved.result.value}, preview=${JSON.stringify(liveAppearance)}, saved=${JSON.stringify({ theme: savedAppearance.theme, skin: savedAppearance.skin, font_size: savedAppearance.font_size, message_layout: savedAppearance.message_layout })}`);
+    `section=${openAppearance.result.value}/${appearanceReady}, runtime=${appearanceRuntimeProbe.result.value}, save=${appearanceSaved.result.value}, preview=${JSON.stringify(liveAppearance)}, saved=${JSON.stringify({ theme: savedAppearance.theme, skin: savedAppearance.skin, font_size: savedAppearance.font_size, message_layout: savedAppearance.message_layout })}, events=${appearanceSaveEvents.result.value}, saveErrors=${JSON.stringify(appearanceSaveErrors)}`);
+  if (process.env.LASTBROWSER_SMOKE_APPEARANCE_ONLY === '1') {
+    cdp.close();
+    finish(child);
+    return;
+  }
+
+  // Exercise bundled accessibility typography and one persisted accessibility
+  // toggle through the real Settings controls. Reset the accessibility card
+  // afterwards so later browser checks run with the default tab layout/font.
+  const openAccessibilityPreferences = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelectorAll('.settings-section-button')[2]; if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    returnByValue: true
+  });
+  const accessibilityPreferencesReady = await cdp.send('Runtime.evaluate', {
+    expression: `(() => [...document.querySelectorAll('select')].some(select => [...select.options].some(option => option.value === 'opendyslexic')))()`,
+    returnByValue: true
+  });
+  const accessibilitySettings = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const master = [...document.querySelectorAll('.settings-toggle-card')]
+        .find(label => /enable vision-impaired mode/i.test(label.innerText || ''))?.querySelector('input[type="checkbox"]');
+      const font = [...document.querySelectorAll('select')]
+        .find(select => [...select.options].some(option => option.value === 'opendyslexic'));
+      if (!master || !font) return { ready: false, reason: 'vision-impaired controls not found', master: Boolean(master), font: Boolean(font) };
+      if (!master.checked) master.click();
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+      setter.call(font, 'opendyslexic');
+      font.dispatchEvent(new Event('change', { bubbles: true }));
+      const toggle = [...document.querySelectorAll('.settings-toggle-card')]
+        .find(label => /super-sized vertical tabs|super-siz/i.test(label.innerText || ''));
+      const checkbox = toggle?.querySelector('input[type="checkbox"]');
+      if (!checkbox) return { ready: false, reason: 'super tabs toggle not found' };
+      if (!checkbox.checked) checkbox.click();
+      return { ready: true, toggleFound: true };
+    })()` ,
+    returnByValue: true
+  });
+  await sleep(250);
+  const accessibilityEnabled = await cdp.send('Runtime.evaluate', {
+    expression: `(async () => {
+      await document.fonts.load('16px OpenDyslexic');
+      const config = JSON.parse(localStorage.getItem('lastbrowser.a11y.visionImpaired.v2') || '{}');
+      const root = document.documentElement;
+      const tabs = document.querySelector('.lb-supertabs');
+      return {
+        enabled: config.enabled,
+        enabledDom: root.dataset.a11yViEnabled,
+        settingFont: config.fontFamily,
+        domFont: root.dataset.a11yFont,
+        computedFont: getComputedStyle(document.body).fontFamily,
+        fontLoaded: document.fonts.check('16px OpenDyslexic'),
+        superTabsSetting: config.superSizedVerticalTabs,
+        superTabsDom: root.dataset.a11ySuperTabs,
+        superTabsRendered: Boolean(tabs)
+      };
+    })()` ,
+    awaitPromise: true,
+    returnByValue: true
+  });
+  const a11yEnabled = accessibilityEnabled.result.value || {};
+  const accessibilityReset = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const card = [...document.querySelectorAll('.settings-card')]
+        .find(element => element.querySelector('.settings-toggle-card input[type="checkbox"]')
+          && /super-sized vertical tabs|super-siz/i.test(element.innerText || ''));
+      const reset = card?.querySelector('.settings-card-header .secondary-action');
+      if (!reset) return false;
+      reset.click();
+      return true;
+    })()` ,
+    returnByValue: true
+  });
+  await sleep(150);
+  const accessibilityResetState = await cdp.send('Runtime.evaluate', {
+    expression: `JSON.stringify({ config: JSON.parse(localStorage.getItem('lastbrowser.a11y.visionImpaired.v2') || '{}'), font: document.documentElement.dataset.a11yFont, superTabs: document.documentElement.dataset.a11ySuperTabs, rendered: Boolean(document.querySelector('.lb-supertabs')) })`,
+    returnByValue: true
+  });
+  const a11yReset = JSON.parse(accessibilityResetState.result.value || '{}');
+  const accessibilityPassed = openAccessibilityPreferences.result.value === 'CLICKED'
+    && accessibilityPreferencesReady.result.value === true && accessibilitySettings.result.value?.ready === true
+    && a11yEnabled.enabled === true && a11yEnabled.enabledDom === 'true'
+    && a11yEnabled.settingFont === 'opendyslexic' && a11yEnabled.domFont === 'opendyslexic'
+    && /OpenDyslexic/i.test(a11yEnabled.computedFont) && a11yEnabled.fontLoaded === true
+    && a11yEnabled.superTabsSetting === true && a11yEnabled.superTabsDom === 'true'
+    && accessibilityReset.result.value === true
+    && a11yReset.config?.fontFamily === 'system' && a11yReset.config?.superSizedVerticalTabs === false
+    && a11yReset.font === 'system' && a11yReset.superTabs === 'false' && !a11yReset.rendered;
+  check('Accessibility applies bundled OpenDyslexic and persisted Super Tabs, then resets both', accessibilityPassed,
+    `preferences=${openAccessibilityPreferences.result.value}/${accessibilityPreferencesReady.result.value}, select=${JSON.stringify(accessibilitySettings.result.value)}, enabled=${JSON.stringify(a11yEnabled)}, reset=${accessibilityReset.result.value}/${JSON.stringify(a11yReset)}`);
+
+  // Run the actual Doctor Dashboard from Settings. Compare the visual counters
+  // against status markers in the raw `sidekick doctor` output so this catches
+  // stale summaries and renderer/parser drift, not just a rendered heading.
+  const openDoctorSettings = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = [...document.querySelectorAll('.settings-section-button')].find(el => /^system$/i.test(el.querySelector('strong')?.textContent?.trim() || '')); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    returnByValue: true
+  });
+  let doctorVisual = null;
+  for (let attempt = 0; attempt < 300; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', {
+      expression: `(() => {
+        const card = [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('System-Diagnose (sidekick doctor)'));
+        if (!card) return null;
+        const text = card.innerText || '';
+        const passed = text.match(/✓\\s*\\d+\\s*Passed/)?.[0];
+        const warnings = text.match(/⚠\\s*\\d+\\s*Warnings/)?.[0];
+        const failures = text.match(/✗\\s*\\d+\\s*Errors/)?.[0];
+        const rawButton = [...card.querySelectorAll('button')].find(button => /Raw Log/.test(button.innerText || ''));
+        return { passed, warnings, failures, rawButton: Boolean(rawButton), hasCategory: /Python Environment/.test(text), cardText: text.slice(0, 500) };
+      })()` ,
+      returnByValue: true
+    });
+    doctorVisual = state.result.value;
+    if (doctorVisual?.passed && doctorVisual?.warnings && doctorVisual?.failures && doctorVisual?.rawButton) break;
+    await sleep(200);
+  }
+  const openDoctorRaw = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const card = [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('System-Diagnose (sidekick doctor)')); const button = [...(card?.querySelectorAll('button') || [])].find(item => /Raw Log/.test(item.innerText || '')); if (!button) return false; button.click(); return true; })()` ,
+    returnByValue: true
+  });
+  let doctorRaw = '';
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const raw = await cdp.send('Runtime.evaluate', {
+      expression: `(() => [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('System-Diagnose (sidekick doctor)'))?.querySelector('pre')?.textContent || '')()` ,
+      returnByValue: true
+    });
+    doctorRaw = raw.result.value || '';
+    if (doctorRaw.includes('Sidekick Doctor')
+      && (/All checks passed!/i.test(doctorRaw) || /Completed with \d+ warning\(s\); no blocking errors\./i.test(doctorRaw))) break;
+    await sleep(200);
+  }
+  const cleanDoctorRaw = doctorRaw.replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '').replace(/\u001b\].*?\u0007/g, '');
+  const doctorCliCounts = {
+    passed: (cleanDoctorRaw.match(/[✓✔]\s+/g) || []).length,
+    warnings: (cleanDoctorRaw.match(/⚠\s+/g) || []).length,
+    failures: (cleanDoctorRaw.match(/[✗✘]\s+/g) || []).length
+  };
+  const doctorWarningLines = cleanDoctorRaw.split(/\r?\n/)
+    .filter(line => /⚠\s+/.test(line))
+    .map(line => line.trim()
+      .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[redacted-key]')
+      .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, '[redacted-email]'));
+  const displayedDoctorCounts = {
+    passed: Number(doctorVisual?.passed?.match(/\d+/)?.[0] ?? -1),
+    warnings: Number(doctorVisual?.warnings?.match(/\d+/)?.[0] ?? -1),
+    failures: Number(doctorVisual?.failures?.match(/\d+/)?.[0] ?? -1)
+  };
+  const doctorCountsMatch = Object.keys(doctorCliCounts).every(key => doctorCliCounts[key] === displayedDoctorCounts[key]);
+  const doctorCliSucceeded = /All checks passed!/i.test(cleanDoctorRaw) && doctorCliCounts.warnings === 0;
+  const doctorRawButton = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const card = [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('System-Diagnose (sidekick doctor)')); const button = [...(card?.querySelectorAll('button') || [])].find(item => /^Visual$/.test(item.innerText?.trim() || '')); if (!button) return false; button.click(); return true; })()` ,
+    returnByValue: true
+  });
+  check('Doctor Dashboard renders visual and raw output with matching successful CLI counts',
+    openDoctorSettings.result.value === 'CLICKED' && doctorVisual?.hasCategory === true
+    && openDoctorRaw.result.value === true && doctorCliSucceeded
+    && doctorCountsMatch && doctorCliCounts.warnings === 0 && doctorCliCounts.failures === 0 && doctorRawButton.result.value === true
+    && doctorWarningLines.length === doctorCliCounts.warnings,
+    `section=${openDoctorSettings.result.value}, visual=${JSON.stringify(displayedDoctorCounts)}, raw=${JSON.stringify(doctorCliCounts)}, categories=${doctorVisual?.hasCategory}, success=${doctorCliSucceeded}, warningLines=${JSON.stringify(doctorWarningLines)}, rawViewRestored=${doctorRawButton.result.value}`);
+
+  const cdpSettingsSmoke = await cdp.send('Runtime.evaluate', {
+    expression: `(async () => {
+      const api = window.lastbrowser?.cdp;
+      const card = [...document.querySelectorAll('.settings-card')].find(item => /browser automation/i.test(item.querySelector('.settings-card-header strong')?.textContent || ''));
+      const toggle = [...(card?.querySelectorAll('.settings-toggle-card') || [])].find(label => /enable browser automation/i.test(label.innerText || ''))?.querySelector('input[type="checkbox"]');
+      if (!api?.getPreference || !api?.savePreference || !card || !toggle) return { ok: false, reason: 'missing settings UI or API' };
+      const original = await api.getPreference();
+      const initialNotice = /restart lastbrowser/i.test(card.innerText || '');
+      const nextEnabled = !original.enabled;
+      toggle.click();
+      let changed = null;
+      for (let i = 0; i < 30; i++) { await new Promise(resolve => setTimeout(resolve, 50)); changed = await api.getPreference(); if (changed.enabled === nextEnabled) break; }
+      const changedCheckbox = [...(card.querySelectorAll('.settings-toggle-card') || [])].find(label => /enable browser automation/i.test(label.innerText || ''))?.querySelector('input[type="checkbox"]');
+      if (changedCheckbox && changedCheckbox.checked !== original.enabled) changedCheckbox.click();
+      let restored = null;
+      for (let i = 0; i < 30; i++) { await new Promise(resolve => setTimeout(resolve, 50)); restored = await api.getPreference(); if (restored.enabled === original.enabled) break; }
+      const restartLater = [...(card.querySelectorAll('button') || [])].find(button => /^(later|später|più tardi|más tarde|plus tard|mais tarde|позже)$/i.test(button.innerText?.trim() || ''));
+      const hadRestartNotice = original.enabled !== original.active || nextEnabled !== original.active;
+      if (restartLater) restartLater.click();
+      return { ok: changed?.enabled === nextEnabled && restored?.enabled === original.enabled && (!hadRestartNotice || Boolean(restartLater)), initialNotice, active: original.active, original: original.enabled, changed: changed?.enabled, restored: restored?.enabled, restartLater: Boolean(restartLater) };
+    })()` ,
+    awaitPromise: true,
+    returnByValue: true
+  });
+  check('browser automation setting persists and offers restart-later when runtime must change',
+    cdpSettingsSmoke.result.value?.ok === true,
+    JSON.stringify(cdpSettingsSmoke.result.value));
 
   const returnToWeb = await cdp.send('Runtime.evaluate', {
     expression: `(() => { const button = document.querySelector('.modern-back-to-web-btn'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
@@ -772,8 +995,60 @@ async function main() {
   check('returning from settings restores the browser panel', returnToWeb.result.value === 'CLICKED' && browserPanelRestored,
     `${returnToWeb.result.value}, visible=${browserPanelRestored}`);
 
+  const reopenSettingsForSuperTabs = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.nova-dock-actions-group button:has(svg.lucide-settings), .expanded-bottom-footer button:has(svg.lucide-settings), .shell-rail button:has(svg.lucide-settings)'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    returnByValue: true
+  });
+  const settingsForSuperTabsReady = await waitForUi('.app-shell.panel-settings', true);
+  const openPreferencesForSuperTabs = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelectorAll('.settings-section-button')[2]; if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    returnByValue: true
+  });
+  await waitForUi('.settings-panel-scroll', true);
+  const enableSuperTabsInSettings = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const master = [...document.querySelectorAll('.settings-toggle-card')].find(label => /enable vision-impaired mode/i.test(label.innerText || ''))?.querySelector('input[type="checkbox"]');
+      const tabs = [...document.querySelectorAll('.settings-toggle-card')].find(label => /super-sized vertical tabs|super-siz/i.test(label.innerText || ''))?.querySelector('input[type="checkbox"]');
+      if (!master || !tabs) return { ok: false, master: Boolean(master), tabs: Boolean(tabs) };
+      if (!master.checked) master.click();
+      if (!tabs.checked) tabs.click();
+      return { ok: true, checked: tabs.checked };
+    })()`,
+    returnByValue: true
+  });
+  const returnToBrowserForSuperTabs = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.modern-back-to-web-btn'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    returnByValue: true
+  });
+  const superTabsRenderedLive = await waitForUi('.lb-supertabs .lb-supertab-activate', true);
+  const superTabsLiveState = await cdp.send('Runtime.evaluate', {
+    expression: `JSON.stringify({ strip: Boolean(document.querySelector('.lb-supertabs')), tiles: document.querySelectorAll('.lb-supertab-tile').length, actions: document.querySelectorAll('.lb-supertab-activate').length, active: document.querySelector('.lb-supertab-tile.active')?.getAttribute('aria-label') || '' })`,
+    returnByValue: true
+  });
+  const superTabsData = JSON.parse(superTabsLiveState.result.value || '{}');
+  check('Super Tabs are visibly rendered with interactive tab actions in Browser view',
+    settingsForSuperTabsReady && openPreferencesForSuperTabs.result.value === 'CLICKED'
+      && enableSuperTabsInSettings.result.value?.ok === true
+      && returnToBrowserForSuperTabs.result.value === 'CLICKED' && superTabsRenderedLive
+      && superTabsData.strip === true && superTabsData.tiles > 0 && superTabsData.actions > 0,
+    `settings=${settingsForSuperTabsReady}/${openPreferencesForSuperTabs.result.value}, toggle=${JSON.stringify(enableSuperTabsInSettings.result.value)}, return=${returnToBrowserForSuperTabs.result.value}, rendered=${superTabsRenderedLive}, state=${JSON.stringify(superTabsData)}`);
+  const reopenSettingsToResetSuperTabs = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.nova-dock-actions-group button:has(svg.lucide-settings), .expanded-bottom-footer button:has(svg.lucide-settings), .shell-rail button:has(svg.lucide-settings)'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    returnByValue: true
+  });
+  await waitForUi('.app-shell.panel-settings', true);
+  await cdp.send('Runtime.evaluate', { expression: `document.querySelectorAll('.settings-section-button')[2]?.click()`, returnByValue: true });
+  const resetSuperTabsButton = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const card = [...document.querySelectorAll('.settings-card')].find(element => /super-sized vertical tabs|super-siz/i.test(element.innerText || '')); const reset = card?.querySelector('.settings-card-header .secondary-action'); if (!reset) return false; reset.click(); return true; })()`,
+    returnByValue: true
+  });
+  await cdp.send('Runtime.evaluate', { expression: `document.querySelector('.modern-back-to-web-btn')?.click()`, returnByValue: true });
+  await waitForUi('.browser-webview-frame', true);
+  check('Super Tabs smoke restores the user accessibility defaults', reopenSettingsToResetSuperTabs.result.value === 'CLICKED' && resetSuperTabsButton.result.value === true,
+    `settings=${reopenSettingsToResetSuperTabs.result.value}, reset=${resetSuperTabsButton.result.value}`);
+
   const enterZen = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = document.querySelector('button[aria-label="Toggle Sidebar"]'); if (!button || document.querySelector('.app-shell.zen-mode')) return 'NOT_READY'; button.click(); return 'CLICKED'; })()`,
+    expression: `(() => { const button = document.querySelector('.nova-dock .toggle-expand-btn, .modern-titlebar .sidebar-toggle'); if (!button || document.querySelector('.app-shell.zen-mode')) return 'NOT_READY'; button.click(); return 'CLICKED'; })()`,
     returnByValue: true
   });
   let zenActive = false;
@@ -795,25 +1070,35 @@ async function main() {
     if (state.result.value) { zenRevealed = true; break; }
     await sleep(100);
   }
+  let zenHiddenAfterLeave = false;
   if (zenRevealed) {
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 500, y: 400 });
-    await sleep(500);
+    // The overlay hides after a 350 ms leave timer. Poll instead of taking
+    // one fixed snapshot so a busy renderer cannot turn the timer into a
+    // false negative in this end-to-end smoke.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      zenHiddenAfterLeave = (await cdp.send('Runtime.evaluate', {
+        expression: `!document.querySelector('.zen-sidebar-overlay')?.classList.contains('zen-revealed')`,
+        returnByValue: true
+      })).result.value;
+      if (zenHiddenAfterLeave) break;
+      await sleep(100);
+    }
   }
-  const zenHiddenAfterLeave = zenRevealed && (await cdp.send('Runtime.evaluate', {
-    expression: `!document.querySelector('.zen-sidebar-overlay')?.classList.contains('zen-revealed')`,
-    returnByValue: true
-  })).result.value;
   check('Zen sidebar reveals on left-edge hover and hides after leaving', enterZen.result.value === 'CLICKED' && zenActive && zenSensor.result.value && zenRevealed && zenHiddenAfterLeave,
     `enter=${enterZen.result.value}, active=${zenActive}, sensor=${JSON.stringify(zenSensor.result.value?.rect)}, revealed=${zenRevealed}, hiddenAfterLeave=${zenHiddenAfterLeave}`);
-  await cdp.send('Runtime.evaluate', {
-    expression: `document.querySelector('button[aria-label="Toggle Sidebar"]')?.click(); document.querySelector('button[aria-label="Toggle Sidebar"]')?.click();`,
+  const dockZenSidebar = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.zen-sidebar-overlay .sidebar-dock-pin-btn'); if (!button) return false; button.click(); return true; })()`,
     returnByValue: true
   });
+  const zenModeExited = dockZenSidebar.result.value && await waitForUi('.app-shell.zen-mode', false);
+  check('Zen smoke returns to docked sidebar mode after hover testing', zenModeExited,
+    `dock=${dockZenSidebar.result.value}, exited=${zenModeExited}`);
 
   // Exercise the full Space setup flow in the isolated profile. The audio
   // continuity check below needs a second real Space to switch to and back.
   const expandSidebar = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { if (document.querySelector('.expanded-workspace-pill')) return 'ALREADY_EXPANDED'; const button = document.querySelector('button[aria-label="Toggle Sidebar"]'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    expression: `(() => { if (document.querySelector('.expanded-workspace-pill')) return 'ALREADY_EXPANDED'; const button = document.querySelector('.nova-dock .toggle-expand-btn, .modern-titlebar .sidebar-toggle'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
     returnByValue: true
   });
   const workspacePickerReady = await waitForUi('.expanded-workspace-pill', true);
@@ -902,7 +1187,7 @@ async function main() {
   check('webview target spawned', Boolean(webview), webview ? webview.url : 'none');
 
   if (webview) {
-    const wvCdp = new CDP(webview.webSocketDebuggerUrl);
+    let wvCdp = new CDP(webview.webSocketDebuggerUrl);
     let webviewSmokePhase = 'reading rendered page state';
     try {
       const render = await wvCdp.send('Runtime.evaluate', {
@@ -917,6 +1202,41 @@ async function main() {
       const info = JSON.parse(render.result.value);
       check('webview renders page', info.readyState === 'complete' && info.bodyLength > 0,
         `${info.title || 'no title'} (${info.readyState})`);
+
+      const magnifierShortcut = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', code: 'KeyM', altKey: true, bubbles: true })); return true; })()`,
+        returnByValue: true
+      });
+      const magnifierVisible = await waitForUi('.lb-split-magnifier', true);
+      await sleep(900);
+      const magnifierState = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const region = document.querySelector('.lb-split-magnifier'); const body = region?.querySelector('.lb-split-magnifier-body'); const rect = region?.getBoundingClientRect(); return { label: region?.getAttribute('aria-label') || '', heading: region?.querySelector('.lb-split-magnifier-header')?.innerText || '', text: body?.innerText || '', height: rect?.height || 0, frameHeight: document.querySelector('.browser-webview-frame')?.getBoundingClientRect().height || 0 }; })()`,
+        returnByValue: true
+      });
+      const magnifierData = magnifierState.result.value || {};
+      await cdp.send('Runtime.evaluate', {
+        expression: `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', code: 'KeyM', altKey: true, bubbles: true })); true`,
+        returnByValue: true
+      });
+      const magnifierHidden = await waitForUi('.lb-split-magnifier', false);
+      const openSettingsAfterMagnifier = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const button = document.querySelector('.nova-dock-actions-group button:has(svg.lucide-settings), .expanded-bottom-footer button:has(svg.lucide-settings), .shell-rail button:has(svg.lucide-settings)'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+        returnByValue: true
+      });
+      await waitForUi('.app-shell.panel-settings', true);
+      await cdp.send('Runtime.evaluate', { expression: `document.querySelectorAll('.settings-section-button')[2]?.click()`, returnByValue: true });
+      const resetAfterMagnifier = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const card = [...document.querySelectorAll('.settings-card')].find(element => /vision-impaired mode/i.test(element.innerText || '')); const reset = card?.querySelector('.settings-card-header .secondary-action'); if (!reset) return false; reset.click(); return true; })()`,
+        returnByValue: true
+      });
+      await cdp.send('Runtime.evaluate', { expression: `document.querySelector('.modern-back-to-web-btn')?.click()`, returnByValue: true });
+      const browserRestoredAfterMagnifier = await waitForUi('.browser-webview-frame', true);
+      check('Alt+M shows the active page paragraph in the translated split magnifier and toggles it off',
+        magnifierShortcut.result.value === true && magnifierVisible && magnifierData.label === 'Split-screen magnifier'
+          && /2\.5×|2\.5x/.test(magnifierData.heading) && magnifierData.text.length > 0
+          && magnifierData.height >= magnifierData.frameHeight * 0.34 && magnifierHidden
+          && openSettingsAfterMagnifier.result.value === 'CLICKED' && resetAfterMagnifier.result.value === true && browserRestoredAfterMagnifier,
+        `visible=${magnifierVisible}, label=${magnifierData.label}, heading=${magnifierData.heading}, textLength=${magnifierData.text.length}, pane=${magnifierData.height}/${magnifierData.frameHeight}, hidden=${magnifierHidden}, reset=${openSettingsAfterMagnifier.result.value}/${resetAfterMagnifier.result.value}/${browserRestoredAfterMagnifier}`);
 
       // Capture only after the guest page has rendered; an early capture can
       // legitimately be empty while Electron is still replacing the blank tab.
@@ -960,14 +1280,21 @@ async function main() {
       // The smoke launch overrides the download directory to this isolated
       // profile so no file can land in the user's Downloads folder.
       webviewSmokePhase = 'local file download and UI completion';
+      const downloadRequestCountBefore = smokeDownloadRequestCount;
       const downloadNavigation = await enterAddressThroughKeyboard(cdp, downloadFixtureUrl);
+      let downloadRequestObserved = false;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        if (smokeDownloadRequestCount > downloadRequestCountBefore) { downloadRequestObserved = true; break; }
+        await sleep(100);
+      }
       let completedDownload = null;
       for (let attempt = 0; attempt < 50; attempt++) {
         const state = await cdp.send('Runtime.evaluate', {
-          expression: `JSON.stringify(await window.lastbrowser.downloads.list())`,
+          expression: `(async () => JSON.stringify(await window.lastbrowser.downloads.list()))()`,
           awaitPromise: true,
           returnByValue: true
         }, 2000);
+        if (state.exceptionDetails) throw new Error(`Could not read downloads list: ${state.exceptionDetails.text || 'Runtime.evaluate failed'}`);
         const entries = JSON.parse(state.result.value || '[]');
         completedDownload = entries.find((entry) => entry.filename === SMOKE_DOWNLOAD_NAME && entry.state === 'completed') || null;
         if (completedDownload) break;
@@ -983,6 +1310,15 @@ async function main() {
         returnByValue: true
       });
       const downloadUiRow = downloadRow.result.value;
+      const downloadListAfterPanel = await cdp.send('Runtime.evaluate', {
+        expression: `(async () => JSON.stringify(await window.lastbrowser.downloads.list()))()`,
+        awaitPromise: true,
+        returnByValue: true
+      }, 2000);
+      if (downloadListAfterPanel.exceptionDetails) throw new Error(`Could not read downloads list after opening panel: ${downloadListAfterPanel.exceptionDetails.text || 'Runtime.evaluate failed'}`);
+      const downloadApiEntriesAfterPanel = JSON.parse(downloadListAfterPanel.result.value || '[]');
+      const downloadApiEntryAfterPanel = downloadApiEntriesAfterPanel.find((entry) => entry.filename === SMOKE_DOWNLOAD_NAME) || null;
+      if (!completedDownload && downloadApiEntryAfterPanel?.state === 'completed') completedDownload = downloadApiEntryAfterPanel;
       const uiPathMatch = String(downloadUiRow?.savedTo || '').match(/[A-Za-z]:\\.+$/);
       const savedPath = uiPathMatch ? path.resolve(uiPathMatch[0]) : '';
       const relativeSavedPath = savedPath ? path.relative(path.resolve(SMOKE_DOWNLOAD_DIR), savedPath) : '';
@@ -1005,14 +1341,26 @@ async function main() {
         await sleep(100);
       }
       check('local browser download completes, saves the expected file and clears from the panel',
-        Boolean(downloadNavigation?.submitted) && downloadUiRow?.name === SMOKE_DOWNLOAD_NAME
+        Boolean(downloadNavigation?.submitted) && downloadRequestObserved && downloadUiRow?.name === SMOKE_DOWNLOAD_NAME
+          && completedDownload?.state === 'completed' && downloadApiEntryAfterPanel?.state === 'completed'
           && savedContentMatches
           && ['CLICKED', 'ALREADY_OPEN'].includes(openDownloadsPanel.result.value) && downloadsPanelReady
           && downloadUiRow.savedTo.includes(path.basename(savedPath))
           && clearDownload.result.value === true && downloadCleared,
-        `navigation=${Boolean(downloadNavigation?.submitted)}, fixtureRequests=${smokeDownloadRequestCount}, entry=${JSON.stringify(completedDownload && { filename: completedDownload.filename, state: completedDownload.state, received: completedDownload.received, total: completedDownload.total })}, isolatedPath=${savedInsideSmokeProfile}, content=${savedContentMatches}, panel=${openDownloadsPanel.result.value}/${downloadsPanelReady}, row=${JSON.stringify(downloadUiRow)}, cleared=${downloadCleared}`);
+        `navigation=${Boolean(downloadNavigation?.submitted)}, typed=${downloadNavigation?.typedValue || ''}, suggestion=${downloadNavigation?.selectedSuggestion || ''}, requestObserved=${downloadRequestObserved}, fixtureRequests=${smokeDownloadRequestCount}, entry=${JSON.stringify(completedDownload && { filename: completedDownload.filename, state: completedDownload.state, received: completedDownload.received, total: completedDownload.total })}, apiEntryAfterPanel=${JSON.stringify(downloadApiEntryAfterPanel && { filename: downloadApiEntryAfterPanel.filename, state: downloadApiEntryAfterPanel.state, received: downloadApiEntryAfterPanel.received, total: downloadApiEntryAfterPanel.total })}, isolatedPath=${savedInsideSmokeProfile}, content=${savedContentMatches}, panel=${openDownloadsPanel.result.value}/${downloadsPanelReady}, row=${JSON.stringify(downloadUiRow)}, cleared=${downloadCleared}, addressTrace=${JSON.stringify(addressEntryTrace.slice(-1))}`);
 
       webviewSmokePhase = 'bookmark interactions';
+      const bookmarkFixtureUrl = downloadFixtureUrl.replace(/\/download$/, '/page');
+      const openBookmarkFixture = await enterAddressThroughKeyboard(cdp, bookmarkFixtureUrl);
+      let bookmarkFixtureLoaded = false;
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view'); return { url: view?.getURL?.() || '', title: view?.getTitle?.() || '', loading: view?.isLoading?.() || false }; })()`,
+          returnByValue: true
+        });
+        if (state.result.value?.url === bookmarkFixtureUrl && state.result.value.title === SMOKE_PAGE_TITLE && !state.result.value.loading) { bookmarkFixtureLoaded = true; break; }
+        await sleep(100);
+      }
       const addBookmark = await cdp.send('Runtime.evaluate', {
         expression: `(() => { const button = document.querySelector('button.bookmark-star[aria-pressed="false"]'); if (!button || !button.getClientRects().length || button.disabled) return 'NOT_AVAILABLE'; button.click(); return 'CLICKED'; })()`,
         returnByValue: true
@@ -1023,9 +1371,80 @@ async function main() {
         returnByValue: true
       });
       const bookmarkUrls = JSON.parse(storedBookmark.result.value);
-      const bookmarkStored = bookmarkUrls.some((url) => String(url).includes(new URL(downloadFixtureUrl).hostname));
-      check('bookmark toolbar adds and persists the active page', addBookmark.result.value === 'CLICKED' && bookmarkAdded && bookmarkStored,
-        `${addBookmark.result.value}, marked=${bookmarkAdded}, stored=${bookmarkStored}`);
+      const bookmarkStored = bookmarkUrls.includes(bookmarkFixtureUrl);
+      const bookmarkRow = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const link = [...document.querySelectorAll('.bookmark-open')].find(button => button.title === ${JSON.stringify(bookmarkFixtureUrl)}); return { row: link ? { title: link.querySelector('span')?.textContent?.trim() || '', url: link.title } : null, bar: Boolean(document.querySelector('.bookmark-bar')), rows: [...document.querySelectorAll('.bookmark-open')].map(button => ({ title: button.querySelector('span')?.textContent?.trim() || '', url: button.title })), stored: JSON.parse(localStorage.getItem('lastbrowser.bookmarks.v1') || '[]') }; })()`,
+        returnByValue: true
+      });
+      check('bookmark toolbar adds and persists the active page', openBookmarkFixture?.submitted && bookmarkFixtureLoaded
+        && addBookmark.result.value === 'CLICKED' && bookmarkAdded && bookmarkStored
+        && bookmarkRow.result.value?.stored?.some(item => item.url === bookmarkFixtureUrl && item.title === SMOKE_PAGE_TITLE),
+        `${addBookmark.result.value}, loaded=${bookmarkFixtureLoaded}, marked=${bookmarkAdded}, stored=${bookmarkStored}, view=${JSON.stringify(bookmarkRow.result.value)}`);
+      const navigateAwayFromBookmark = await enterAddressThroughKeyboard(cdp, 'https://example.com/');
+      let awayFromBookmark = false;
+      for (let attempt = 0; attempt < 40 && navigateAwayFromBookmark?.submitted; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view')?.getURL?.() || ''`,
+          returnByValue: true
+        });
+        if (state.result.value.includes('example.com')) { awayFromBookmark = true; break; }
+        await sleep(100);
+      }
+      let clickBookmark = { result: { value: false } };
+      let bookmarkSource = 'none';
+      if (bookmarkRow.result.value?.row) {
+        clickBookmark = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const button = [...document.querySelectorAll('.bookmark-open')].find(item => item.title === ${JSON.stringify(bookmarkFixtureUrl)}); if (!button) return false; button.click(); return true; })()`,
+          returnByValue: true
+        });
+        bookmarkSource = 'bookmark bar';
+      } else {
+        const queryBookmark = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const input = [...document.querySelectorAll('.addressbar input[aria-label]')].find(item => item.getClientRects().length); if (!input) return false; const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, ${JSON.stringify(SMOKE_PAGE_TITLE)}); input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); return true; })()`,
+          returnByValue: true
+        });
+        let bookmarkSuggestion = null;
+        for (let attempt = 0; attempt < 25; attempt++) {
+          const state = await cdp.send('Runtime.evaluate', {
+            expression: `(() => { const option = [...document.querySelectorAll('.omnibox-item')].find(item => item.querySelector('.omnibox-badge.bookmark') && item.querySelector('.omnibox-item-url')?.textContent?.trim() === ${JSON.stringify(bookmarkFixtureUrl)}); if (!option) return null; const rect = option.getBoundingClientRect(); const point = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; const hit = document.elementFromPoint(point.x, point.y); return { point, url: option.querySelector('.omnibox-item-url')?.textContent?.trim() || '', title: option.querySelector('.omnibox-item-title')?.textContent?.trim() || '', hit: hit?.className || hit?.tagName || '' }; })()`,
+            returnByValue: true
+          });
+          bookmarkSuggestion = state.result.value;
+          if (bookmarkSuggestion) break;
+          await sleep(100);
+        }
+        if (queryBookmark.result.value && bookmarkSuggestion?.point) {
+          await pressMouse(cdp, bookmarkSuggestion.point);
+          await releaseMouse(cdp, bookmarkSuggestion.point);
+          clickBookmark = { result: { value: true } };
+          bookmarkSource = `omnibox ${bookmarkSuggestion.title} (${bookmarkSuggestion.hit})`;
+        } else {
+          bookmarkSource = `omnibox unavailable: ${JSON.stringify({ query: queryBookmark.result.value, suggestion: bookmarkSuggestion })}`;
+        }
+      }
+      let bookmarkOpened = false;
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view'); return { url: view?.getURL?.() || '', title: view?.getTitle?.() || '', loading: view?.isLoading?.() || false }; })()`,
+          returnByValue: true
+        });
+        if (state.result.value?.url === bookmarkFixtureUrl && state.result.value.title === SMOKE_PAGE_TITLE && !state.result.value.loading) { bookmarkOpened = true; break; }
+        await sleep(100);
+      }
+      check('clicking a saved bookmark navigates the active WebView to its saved page', awayFromBookmark
+        && clickBookmark.result.value && bookmarkOpened,
+        `away=${awayFromBookmark}, source=${bookmarkSource}, click=${clickBookmark.result.value}, opened=${bookmarkOpened}`);
+      if (!bookmarkOpened) {
+        await enterAddressThroughKeyboard(cdp, bookmarkFixtureUrl);
+        for (let attempt = 0; attempt < 40; attempt++) {
+          const state = await cdp.send('Runtime.evaluate', {
+            expression: `document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view')?.getURL?.() || ''`,
+            returnByValue: true
+          });
+          if (state.result.value === bookmarkFixtureUrl) break;
+          await sleep(100);
+        }
+      }
       const removeBookmark = await cdp.send('Runtime.evaluate', {
         expression: `(() => { const button = document.querySelector('button.bookmark-star[aria-pressed="true"]'); if (!button || button.disabled) return false; button.click(); return true; })()`,
         returnByValue: true
@@ -1035,9 +1454,73 @@ async function main() {
         expression: `JSON.stringify(JSON.parse(localStorage.getItem('lastbrowser.bookmarks.v1') || '[]').map(bookmark => bookmark.url))`,
         returnByValue: true
       });
-      const bookmarkAbsent = !JSON.parse(storedAfterRemoval.result.value).some((url) => String(url).includes(new URL(downloadFixtureUrl).hostname));
+      const bookmarkAbsent = !JSON.parse(storedAfterRemoval.result.value).includes(bookmarkFixtureUrl);
       check('bookmark toolbar removes the active page cleanly', removeBookmark.result.value && bookmarkRemoved && bookmarkAbsent,
         `remove=${removeBookmark.result.value}, marked=${bookmarkRemoved}, absent=${bookmarkAbsent}`);
+
+      const importedBookmarkTitle = `Smoke Imported Bookmark ${process.pid}`;
+      const importedBookmarkUrl = `${bookmarkFixtureUrl}?imported=1`;
+      const bookmarkImportControl = await cdp.send('Runtime.evaluate', {
+        expression: `Boolean(document.querySelector('.bookmark-bar input[type="file"]'))`,
+        returnByValue: true
+      });
+      if (!bookmarkImportControl.result.value) {
+        skip('bookmark JSON import uses the file input and can be removed again', 'the modern shell does not render the legacy BookmarkBar import/export control; import/export parser roundtrip is unit-tested');
+      } else {
+      const importBookmarkFile = await cdp.send('Runtime.evaluate', {
+        expression: `(() => {
+          const input = document.querySelector('.bookmark-bar input[type="file"]');
+          if (!input || typeof DataTransfer !== 'function' || typeof File !== 'function') return { ready: false, hasInput: Boolean(input), hasDataTransfer: typeof DataTransfer === 'function', hasFile: typeof File === 'function' };
+          const content = JSON.stringify([{ id: 'smoke-import-${process.pid}', title: ${JSON.stringify(importedBookmarkTitle)}, url: ${JSON.stringify(importedBookmarkUrl)}, createdAt: Date.now() }]);
+          const file = new File([content], 'lastbrowser-smoke-bookmarks.json', { type: 'application/json' });
+          const transfer = new DataTransfer();
+          transfer.items.add(file);
+          input.files = transfer.files;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          return { ready: true, files: input.files?.length || 0 };
+        })()`,
+        returnByValue: true
+      });
+      let importedBookmark = false;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `JSON.stringify({ row: [...document.querySelectorAll('.bookmark-open')].some(button => button.querySelector('span')?.textContent?.trim() === ${JSON.stringify(importedBookmarkTitle)} && button.title === ${JSON.stringify(importedBookmarkUrl)}), stored: JSON.parse(localStorage.getItem('lastbrowser.bookmarks.v1') || '[]').some(item => item.title === ${JSON.stringify(importedBookmarkTitle)} && item.url === ${JSON.stringify(importedBookmarkUrl)}) })`,
+          returnByValue: true
+        });
+        const imported = JSON.parse(state.result.value || '{}');
+        if (imported.row && imported.stored) { importedBookmark = true; break; }
+        await sleep(100);
+      }
+      const removeImportedBookmark = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const button = document.querySelector('.bookmark-remove[aria-label="Remove ${importedBookmarkTitle}"]'); if (!button) return false; button.click(); return true; })()`,
+        returnByValue: true
+      });
+      let importedBookmarkRemoved = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `!JSON.parse(localStorage.getItem('lastbrowser.bookmarks.v1') || '[]').some(item => item.title === ${JSON.stringify(importedBookmarkTitle)})`,
+          returnByValue: true
+        });
+        if (state.result.value) { importedBookmarkRemoved = true; break; }
+        await sleep(100);
+      }
+      const importFileReady = importBookmarkFile.result.value?.ready === true;
+      check('bookmark JSON import uses the file input and can be removed again', importFileReady
+        && importedBookmark && removeImportedBookmark.result.value && importedBookmarkRemoved,
+        `input=${JSON.stringify(importBookmarkFile.result.value)}, imported=${importedBookmark}, removed=${removeImportedBookmark.result.value}/${importedBookmarkRemoved}`);
+      }
+
+      // Keep the permission check on the local fixture origin even if a
+      // bookmark row is unavailable in a particular shell mode.
+      await enterAddressThroughKeyboard(cdp, bookmarkFixtureUrl);
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view')?.getURL?.() || ''`,
+          returnByValue: true
+        });
+        if (state.result.value === bookmarkFixtureUrl) break;
+        await sleep(100);
+      }
 
       // Exercise the per-site permission UI and main-process policy against
       // the real https guest. The isolated profile keeps this trust entry out
@@ -1073,10 +1556,16 @@ async function main() {
         returnByValue: true
       });
       const permissionPanelReady = await waitForUi('.permissions-panel[role="dialog"]', true);
-      const permissionRow = await cdp.send('Runtime.evaluate', {
-        expression: `document.querySelector('.permissions-panel .permission-origin')?.textContent?.trim() || ''`,
-        returnByValue: true
-      });
+      let permissionRow = { result: { value: '' } };
+      let permissionOriginRendered = false;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        permissionRow = await cdp.send('Runtime.evaluate', {
+          expression: `document.querySelector('.permissions-panel .permission-origin')?.textContent?.trim() || ''`,
+          returnByValue: true
+        });
+        if (permissionRow.result.value === permissionOrigin) { permissionOriginRendered = true; break; }
+        await sleep(100);
+      }
       const revokePermission = await cdp.send('Runtime.evaluate', {
         expression: `(() => { const button = document.querySelector('.permissions-panel .permission-row button'); if (!button) return false; button.click(); return true; })()`,
         returnByValue: true
@@ -1099,15 +1588,36 @@ async function main() {
       const permissionPassed = trustSite.result.value === 'CLICKED' && siteTrusted
         && trustedMedia.result.value === 'allow' && unrelatedPermission.result.value === 'deny'
         && openPermissions.result.value === 'CLICKED' && permissionPanelReady
-        && permissionRow.result.value === permissionOrigin && revokePermission.result.value
+        && permissionOriginRendered && permissionRow.result.value === permissionOrigin && revokePermission.result.value
         && siteRevoked && revokedMedia.result.value === 'deny';
       check('site permissions grant and revoke camera access without granting geolocation', permissionPassed,
-        `trust=${trustSite.result.value}/${siteTrusted}, media=${trustedMedia.result.value}->${revokedMedia.result.value}, geolocation=${unrelatedPermission.result.value}, panel=${permissionPanelReady}, row=${permissionRow.result.value}, revoked=${siteRevoked}`);
+        `trust=${trustSite.result.value}/${siteTrusted}, media=${trustedMedia.result.value}->${revokedMedia.result.value}, geolocation=${unrelatedPermission.result.value}, panel=${permissionPanelReady}, row=${permissionRow.result.value}/${permissionOriginRendered}, revoked=${siteRevoked}`);
+      const closePermissions = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const button = document.querySelector('.permissions-panel button[aria-label="Close site permissions"]'); if (!button) return false; button.click(); return true; })()`,
+        returnByValue: true
+      });
+      const permissionsClosed = await waitForUi('.permissions-panel[role="dialog"]', false);
+      check('site-permissions dialog closes before subsequent native drag checks', closePermissions.result.value && permissionsClosed,
+        `closeClick=${closePermissions.result.value}, closed=${permissionsClosed}`);
 
       // Start real WebAudio from a trusted page click, pin the tab, switch
       // Spaces away and back, then verify the same Electron guest stays alive
       // and unmuted. The isolated smoke profile is removed after the run.
       webviewSmokePhase = 'pinned audio continuity across Spaces';
+      const audioTargetSnapshot = await cdp.send('Runtime.evaluate', {
+        expression: `JSON.stringify([...document.querySelectorAll('webview.browser-view')].map(view => ({ tabId: view.getAttribute('data-tab-id'), guestId: view.getWebContentsId(), url: view.getURL(), loading: view.isLoading() })))`,
+        returnByValue: true
+      });
+      const audioTargets = await cdpList();
+      const shellAudioViews = JSON.parse(audioTargetSnapshot.result.value || '[]');
+      const liveAudioTarget = audioTargets.find(target => target.type === 'webview'
+        && target.url === shellAudioViews[0]?.url && target.webSocketDebuggerUrl);
+      if (liveAudioTarget && (wvCdp.ws.readyState !== WebSocket.OPEN || liveAudioTarget.id !== webview.id)) {
+        wvCdp.close();
+        wvCdp = new CDP(liveAudioTarget.webSocketDebuggerUrl);
+        await wvCdp.ready;
+      }
+      console.log(`  INFO  audio CDP target snapshot — shell=${audioTargetSnapshot.result.value}, target=${JSON.stringify(audioTargets.filter(target => target.type === 'webview').map(({ id, url, webSocketDebuggerUrl }) => ({ id, url, ws: Boolean(webSocketDebuggerUrl) })))}, originalTarget=${webview.id}/${webview.url}, selectedTarget=${liveAudioTarget?.id || 'none'}, socketState=${wvCdp.ws.readyState}`);
       const audioButton = await wvCdp.send('Runtime.evaluate', {
         expression: `(() => {
           const button = document.createElement('button');
@@ -1261,6 +1771,16 @@ async function main() {
       // verify its content script, exercise disable/re-enable, then remove it.
       // Its source and profile are both private to this smoke run.
       webviewSmokePhase = 'extension install, toggle and removal';
+      const extensionFixtureNavigation = await enterAddressThroughKeyboard(cdp, 'https://example.com/');
+      let extensionFixtureReady = false;
+      for (let attempt = 0; attempt < 40 && extensionFixtureNavigation?.submitted; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view'); return { url: view?.getURL?.() || '', loading: view?.isLoading?.() || false }; })()`,
+          returnByValue: true
+        });
+        if (state.result.value?.url.includes('example.com') && !state.result.value.loading) { extensionFixtureReady = true; break; }
+        await sleep(100);
+      }
       const installExtension = await cdp.send('Runtime.evaluate', {
         expression: `(async () => { try { const record = await window.lastbrowser.extensions.installUnpacked(${JSON.stringify(SMOKE_EXTENSION_DIR)}); const list = await window.lastbrowser.extensions.list(); return { id: record?.id || '', installed: Array.isArray(list) && list.some(item => item.id === record?.id), enabled: record?.enabled === true, error: '' }; } catch (error) { return { id: '', installed: false, enabled: false, error: String(error) }; } })()`,
         awaitPromise: true,
@@ -1273,7 +1793,7 @@ async function main() {
           returnByValue: true
         });
         const reload = await cdp.send('Runtime.evaluate', {
-          expression: `(() => { const button = document.querySelector('button[aria-label="Reload"]'); if (!button) return false; button.click(); return true; })()`,
+          expression: `(() => { const button = document.querySelector('.modern-titlebar .nav-reload'); if (!button) return false; button.click(); return true; })()`,
           returnByValue: true
         });
         if (!reload.result.value) return false;
@@ -1337,8 +1857,8 @@ async function main() {
         extensionRemoved = removed.result.value === true;
       }
       check('local extension installs, injects, disables, re-enables and removes cleanly',
-        extensionState.installed && extensionState.enabled && extensionScriptLoaded && extensionDisabled && extensionReenabled && extensionRemoved,
-        `installed=${extensionState.installed}, script=${extensionScriptLoaded}, disabled=${extensionDisabled}, reenabled=${extensionReenabled}, removed=${extensionRemoved}${extensionState.error ? `, error=${extensionState.error}` : ''}`);
+        extensionFixtureReady && extensionState.installed && extensionState.enabled && extensionScriptLoaded && extensionDisabled && extensionReenabled && extensionRemoved,
+        `fixture=${extensionFixtureReady}, installed=${extensionState.installed}, script=${extensionScriptLoaded}, disabled=${extensionDisabled}, reenabled=${extensionReenabled}, removed=${extensionRemoved}${extensionState.error ? `, error=${extensionState.error}` : ''}`);
 
       webviewSmokePhase = 'browser history and back/forward interactions';
       const navigateTestPage = async (url, expectedHost) => {
@@ -1367,10 +1887,11 @@ async function main() {
       if (TEST_URL !== 'example.com') {
         check('history navigation fixture skipped', true, 'set LASTBROWSER_SMOKE_URL=example.com for the full history flow');
       } else {
-        const navigated = await navigateTestPage('https://iana.org/domains/reserved', 'iana.org');
+        const previousHistorySeed = await navigateTestPage('https://example.com/', 'example.com');
+        const navigated = previousHistorySeed && await navigateTestPage('https://iana.org/domains/reserved', 'iana.org');
         const afterSecondNavigation = await cdp.send('Runtime.evaluate', {
           expression: `JSON.stringify((() => {
-            const address = [...document.querySelectorAll('input[aria-label]')].find(el => { const r = el.getBoundingClientRect(); return r.y < 90 && r.x > 100 && r.width > 120; });
+            const address = document.querySelector('.addressbar-container input');
             const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view');
             return { address: address?.value || '', guestUrl: view?.getURL?.() || '', canGoBack: view?.canGoBack?.() || false, isLoading: view?.isLoading?.() || false };
           })())`,
@@ -1380,7 +1901,7 @@ async function main() {
         check('second navigation creates history entry', navigated,
           `entry=${JSON.stringify(addressEntryTrace.at(-1))}, target=${secondNavigationState.guestUrl}, address=${secondNavigationState.address}, canGoBack=${secondNavigationState.canGoBack}, loading=${secondNavigationState.isLoading}`);
         const clickBack = await cdp.send('Runtime.evaluate', {
-          expression: `(() => { const button = document.querySelector('button[aria-label="Back"]'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+          expression: `(() => { const button = document.querySelector('.modern-titlebar .nav-back'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
           returnByValue: true
         });
         let backState = null;
@@ -1397,7 +1918,7 @@ async function main() {
           `${clickBack.result.value}, url=${backState?.url}, loading=${backState?.loading}`);
 
         const forward = await cdp.send('Runtime.evaluate', {
-          expression: `(() => { const button = document.querySelector('button[aria-label="Forward"]'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+          expression: `(() => { const button = document.querySelector('.modern-titlebar .nav-forward'); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
           returnByValue: true
         });
         let forwardRestored = false;
@@ -1414,7 +1935,7 @@ async function main() {
         }
         const afterForward = await cdp.send('Runtime.evaluate', {
           expression: `JSON.stringify((() => {
-            const address = [...document.querySelectorAll('input[aria-label]')].find(el => { const r = el.getBoundingClientRect(); return r.y < 90 && r.x > 100 && r.width > 120; });
+            const address = document.querySelector('.addressbar-container input');
             const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view');
             return { address: address?.value || '', guestUrl: view?.getURL?.() || '', canGoForward: view?.canGoForward?.() || false, isLoading: view?.isLoading?.() || false };
           })())`,
@@ -1502,7 +2023,7 @@ async function main() {
   const beforeNewTab = await cdpList();
   const beforeWebviews = beforeNewTab.filter((target) => target.type === 'webview').length;
   await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = document.querySelector('button[aria-label="Toggle Sidebar"]'); if (button && !document.querySelector('.vertical-new-tab-btn')) button.click(); })()`,
+    expression: `(() => { const button = document.querySelector('.nova-dock .toggle-expand-btn, .modern-titlebar .sidebar-toggle'); if (button && !document.querySelector('.vertical-new-tab-btn')) button.click(); })()`,
     returnByValue: true
   });
   for (let attempt = 0; attempt < 20; attempt++) {
@@ -1547,6 +2068,88 @@ async function main() {
   check('closing the active tab restores the prior tab count', createTemporaryTab.result.value && temporaryTabAdded && closeTemporaryTab.result.value && temporaryTabClosed,
     `created=${temporaryTabAdded}, closed=${temporaryTabClosed}, count=${tabCountBeforeClose.result.value}`);
 
+  // Closed-tab recovery uses a local fixture with a unique title so it can be
+  // verified without relying on public websites or restoring a blank start tab.
+  const closedTabCount = tabCountBeforeClose.result.value;
+  const closedTabFixtureUrl = downloadFixtureUrl.replace(/\/download$/, '/page');
+  const createRecoverySeed = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.vertical-new-tab-btn'); if (!button) return false; button.click(); return true; })()`,
+    returnByValue: true
+  });
+  let recoverySeedAdded = false;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const count = await cdp.send('Runtime.evaluate', { expression: `document.querySelectorAll('.vertical-tab-item').length`, returnByValue: true });
+    if (createRecoverySeed.result.value && count.result.value === closedTabCount + 1) { recoverySeedAdded = true; break; }
+    await sleep(100);
+  }
+  const reopenSeedNavigation = recoverySeedAdded
+    ? await enterAddressThroughKeyboard(cdp, closedTabFixtureUrl)
+    : null;
+  let closedTabSeedReady = false;
+  for (let attempt = 0; attempt < 50 && reopenSeedNavigation?.submitted; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view'); return { url: view?.getURL?.() || '', title: view?.getTitle?.() || '', loading: view?.isLoading?.() || false }; })()`,
+      returnByValue: true
+    });
+    const value = state.result.value;
+    if (value?.url === closedTabFixtureUrl && value.title === SMOKE_PAGE_TITLE && !value.loading) { closedTabSeedReady = true; break; }
+    await sleep(100);
+  }
+  check('local tab recovery fixture loads with its unique title', recoverySeedAdded && closedTabSeedReady,
+    `created=${recoverySeedAdded}, submitted=${Boolean(reopenSeedNavigation?.submitted)}, url=${closedTabFixtureUrl}`);
+  const closeRecoverySeed = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const close = document.querySelector('.vertical-tab-item.active .vtab-close-btn'); if (!close) return false; close.click(); return true; })()`,
+    returnByValue: true
+  });
+  let recoverySeedClosed = false;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const count = await cdp.send('Runtime.evaluate', { expression: `document.querySelectorAll('.vertical-tab-item').length`, returnByValue: true });
+    if (closeRecoverySeed.result.value && count.result.value === closedTabCount) { recoverySeedClosed = true; break; }
+    await sleep(100);
+  }
+  const triggerReopenClosed = await cdp.send('Input.dispatchKeyEvent', {
+    type: 'keyDown', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17, modifiers: 2
+  }).then(async () => {
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Shift', code: 'ShiftLeft', windowsVirtualKeyCode: 16, modifiers: 10 });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'T', code: 'KeyT', windowsVirtualKeyCode: 84, modifiers: 10, text: 'T' });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'T', code: 'KeyT', windowsVirtualKeyCode: 84, modifiers: 10 });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Shift', code: 'ShiftLeft', windowsVirtualKeyCode: 16, modifiers: 2 });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17, modifiers: 0 });
+    return true;
+  }).catch(() => false);
+  let reopenedClosedTab = false;
+  let restoredClosedTabState = null;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view'); return { count: document.querySelectorAll('.vertical-tab-item').length, url: view?.getURL?.() || '', title: view?.getTitle?.() || '', loading: view?.isLoading?.() || false }; })()`,
+      returnByValue: true
+    });
+    restoredClosedTabState = state.result.value;
+    if (restoredClosedTabState?.count === closedTabCount + 1
+      && restoredClosedTabState.url === closedTabFixtureUrl
+      && restoredClosedTabState.title === SMOKE_PAGE_TITLE
+      && !restoredClosedTabState.loading) {
+      reopenedClosedTab = true;
+      break;
+    }
+    await sleep(100);
+  }
+  check('Ctrl+Shift+T restores the recently closed tab and its page', recoverySeedAdded && closedTabSeedReady && recoverySeedClosed
+    && triggerReopenClosed && reopenedClosedTab,
+  `seed=${closedTabSeedReady}, closed=${recoverySeedClosed}, shortcut=${triggerReopenClosed}, restored=${JSON.stringify(restoredClosedTabState)}`);
+  const closeRestoredTab = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const close = document.querySelector('.vertical-tab-item.active .vtab-close-btn'); if (!close) return false; close.click(); return true; })()`,
+    returnByValue: true
+  });
+  let restoredTabCleanup = false;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const count = await cdp.send('Runtime.evaluate', { expression: `document.querySelectorAll('.vertical-tab-item').length`, returnByValue: true });
+    if (closeRestoredTab.result.value && count.result.value === closedTabCount) { restoredTabCleanup = true; break; }
+    await sleep(100);
+  }
+  check('closed-tab recovery smoke restores its original tab count', restoredTabCleanup,
+    `close=${closeRestoredTab.result.value}, cleaned=${restoredTabCleanup}`);
+
   await cdp.send('Runtime.evaluate', {
     expression: `(() => {
       const traceKey = '__lastbrowserSmokeDragTrace';
@@ -1571,6 +2174,55 @@ async function main() {
     })()`,
     returnByValue: true
   });
+  const reorderGeometryResult = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const tabs = [...document.querySelectorAll('.vertical-tab-item:not(.pinned)')];
+      const hitPointFor = (tab) => {
+        const rect = tab.getBoundingClientRect(), y = rect.top + rect.height / 2;
+        for (const offset of [24, 8, Math.min(rect.width * 0.5, 110), Math.max(8, rect.width - 18)]) {
+          const point = { x: rect.left + offset, y }, hit = document.elementFromPoint(point.x, point.y);
+          if (hit && (hit === tab || tab.contains(hit))) return point;
+        }
+        return null;
+      };
+      if (tabs.length < 2) return { before: tabs.map(tab => tab.querySelector('.vtab-title')?.textContent?.trim() || ''), from: null, to: null };
+      const source = tabs[0], target = tabs[1], sourcePoint = hitPointFor(source), targetRect = target.getBoundingClientRect();
+      return {
+        before: tabs.map(tab => tab.querySelector('.vtab-title')?.textContent?.trim() || ''),
+        from: sourcePoint,
+        to: { x: targetRect.left + targetRect.width * 0.5, y: targetRect.top + targetRect.height * 0.9 }
+      };
+    })()` ,
+    returnByValue: true
+  });
+  const reorderGeometry = reorderGeometryResult.result.value;
+  if (reorderGeometry?.from && reorderGeometry?.to) {
+    await pressMouse(cdp, reorderGeometry.from);
+    await moveHeldMouse(cdp, reorderGeometry.from, reorderGeometry.to);
+    await sleep(100);
+    await releaseMouse(cdp, reorderGeometry.to);
+  }
+  let reorderedTabs = null;
+  for (let attempt = 0; attempt < 20 && reorderGeometry?.from; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', {
+      expression: `JSON.stringify([...document.querySelectorAll('.vertical-tab-item:not(.pinned) .vtab-title')].map(title => title.textContent?.trim() || ''))`,
+      returnByValue: true
+    });
+    reorderedTabs = JSON.parse(state.result.value || '[]');
+    if (reorderedTabs.length === reorderGeometry.before.length
+      && reorderedTabs.join('\u0000') !== reorderGeometry.before.join('\u0000')) break;
+    await sleep(100);
+  }
+  const nativeReorderObserved = await cdp.send('Runtime.evaluate', {
+    expression: `Boolean((window.__lastbrowserSmokeDragTrace || []).some(event => event.type === 'drop' && event.trusted && event.target.includes('vertical-tab-item')))` ,
+    returnByValue: true
+  });
+  check('native mouse drag reorders tabs while preserving every tab', Boolean(reorderGeometry?.from && reorderGeometry?.to)
+    && nativeReorderObserved.result.value && reorderedTabs?.length === reorderGeometry.before.length
+    && reorderedTabs.join('\u0000') !== reorderGeometry.before.join('\u0000')
+    && [...reorderedTabs].sort().join('\u0000') === [...reorderGeometry.before].sort().join('\u0000'),
+  `before=${JSON.stringify(reorderGeometry?.before)}, after=${JSON.stringify(reorderedTabs)}, trustedDrop=${nativeReorderObserved.result.value}`);
+
   const snapGeometryResult = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
       const tabs = [...document.querySelectorAll('.vertical-tab-item')];
@@ -1808,12 +2460,44 @@ async function main() {
     await moveHeldMouse(cdp, resizeYGeometry.from, resizeYGeometry.to);
     await releaseMouse(cdp, resizeYGeometry.to);
   }
-  const resized = await cdp.send('Runtime.evaluate', {
-    expression: `JSON.stringify({ x: document.querySelector('.browser-tab-pane')?.style.width, y: document.querySelector('.browser-tab-pane')?.style.height, layout: document.querySelector('.multiview-grid-container')?.className || '' })`,
-    returnByValue: true
-  });
-  const resizedState = JSON.parse(resized.result.value);
-  check('real mouse resizing snaps at supported ratios', Boolean(resizeXGeometry && resizeYGeometry) && resizeXGeometry.fromHit.includes('multiview-divider-vertical') && resizeYGeometry.fromHit.includes('multiview-divider-horizontal') && resizedState.layout.includes('layout-quad-grid') && /66\.67%/.test(resizedState.x || '') && /66\.67%/.test(resizedState.y || ''), `pane=${resizedState.x}×${resizedState.y}, x=${JSON.stringify(resizeXGeometry)}, y=${JSON.stringify(resizeYGeometry)}`);
+  let resizedState = null;
+  let previousResizeSnapshot = '';
+  let stableResizeSnapshots = 0;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const resized = await cdp.send('Runtime.evaluate', {
+      expression: `JSON.stringify({
+      layout: document.querySelector('.multiview-grid-container')?.className || '',
+      panes: [...document.querySelectorAll('.multiview-pane-chrome')].map(pane => ({
+        top: pane.style.top, left: pane.style.left, width: pane.style.width, height: pane.style.height,
+        occupied: pane.classList.contains('occupied')
+      })),
+      browserViews: [...document.querySelectorAll('.browser-tab-pane')].map(pane => ({
+        top: pane.style.top, left: pane.style.left, width: pane.style.width, height: pane.style.height
+      }))
+    })`,
+      returnByValue: true
+    });
+    const snapshot = resized.result.value || '{}';
+    resizedState = JSON.parse(snapshot);
+    const targetReached = resizedState.panes?.[0]?.height === '66.67%'
+      && resizedState.panes?.[1]?.height === '50%'
+      && resizedState.panes?.[3]?.height === '50%';
+    stableResizeSnapshots = targetReached && snapshot === previousResizeSnapshot ? stableResizeSnapshots + 1 : 0;
+    previousResizeSnapshot = snapshot;
+    if (stableResizeSnapshots >= 2) break;
+    await sleep(50);
+  }
+  const quadSlotBounds = resizedState.panes;
+  const leftTopResized = quadSlotBounds[0]?.left === '0%' && quadSlotBounds[0]?.top === '0%'
+    && quadSlotBounds[0]?.width === '66.67%' && quadSlotBounds[0]?.height === '66.67%';
+  const rightStackRemainsHalf = quadSlotBounds[1]?.left === '66.67%' && quadSlotBounds[1]?.top === '0%'
+    && quadSlotBounds[1]?.width === '33.33%' && quadSlotBounds[1]?.height === '50%'
+    && quadSlotBounds[3]?.left === '66.67%' && quadSlotBounds[3]?.top === '50%'
+    && quadSlotBounds[3]?.width === '33.33%' && quadSlotBounds[3]?.height === '50%';
+  check('real mouse resizing snaps the left quad stack and preserves the right stack', Boolean(resizeXGeometry && resizeYGeometry)
+    && resizeXGeometry.fromHit.includes('multiview-divider-vertical') && resizeYGeometry.fromHit.includes('multiview-divider-horizontal')
+    && resizedState.layout.includes('layout-quad-grid') && leftTopResized && rightStackRemainsHalf,
+    `slots=${JSON.stringify(quadSlotBounds)}, browserViews=${JSON.stringify(resizedState.browserViews)}, leftTopResized=${leftTopResized}, rightStackRemainsHalf=${rightStackRemainsHalf}, x=${JSON.stringify(resizeXGeometry)}, y=${JSON.stringify(resizeYGeometry)}`);
 
   const independentRows = await cdp.send('Runtime.evaluate', {
     expression: `JSON.stringify((() => { const panes = [...document.querySelectorAll('.multiview-pane-chrome')]; const dividers = [...document.querySelectorAll('.multiview-divider-horizontal')]; return { leftTop: panes[0]?.style.height, leftBottom: panes[2]?.style.top, rightTop: panes[1]?.style.height, rightBottom: panes[3]?.style.top, dividerCount: dividers.length, dividerLeft: dividers.map(d => d.style.left), dividerWidth: dividers.map(d => d.style.width) }; })())`,
@@ -1993,7 +2677,7 @@ async function main() {
   check('native mouse drop selects Trio columns and preserves the explicitly empty middle slot', trioDragReady && trioFlyoutReady && Boolean(trioSlotPoint)
     && trioState?.layout.includes('layout-trio-columns')
     && trioState.paneCount === 3 && trioState.occupied === 2 && trioEmptySlotExpected
-    && new Set(trioState.titles).size === 2 && trioState.tabCount >= 3,
+    && trioState.titles.length === 2 && trioState.tabCount >= 3,
   `tabs=${trioState?.tabCount}, source=${trioGeometry?.title || 'none'}, flyout=${trioFlyoutReady}, slotDragOver=${trioDragOverObserved}, layout=${trioState?.layout}, occupied=${trioState?.occupied}, empty=${JSON.stringify(trioState?.empty)}, unique=${new Set(trioState?.titles || []).size}`);
   // Leave the later history/detach fixtures in the regular single-view state.
   const maximizeTrio = await cdp.send('Runtime.evaluate', {

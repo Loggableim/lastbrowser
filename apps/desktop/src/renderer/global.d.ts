@@ -159,6 +159,7 @@ type BrowserDownloadEntry = {
   received: number;
   total: number;
   state: BrowserDownloadState;
+  active: boolean;
   savePath: string;
   startedAt: number;
 };
@@ -193,7 +194,12 @@ declare global {
         onOpenIncognitoTab: (callback: (url: string) => void) => () => void;
         onDeepResearch: (callback: (payload: { selectionText?: string; pageUrl?: string }) => void) => () => void;
         onShortcut: (callback: (event: { action: string; payload?: { index?: number } }) => void) => () => void;
-        clearData?: (options?: { cache?: boolean; cookies?: boolean; storage?: boolean }) => Promise<{ ok: boolean }>;
+        clearData?: (options?: { cache?: boolean; cookies?: boolean; storage?: boolean }) => Promise<{
+          ok: boolean;
+          clearedSessions: number;
+          failedSessions: number;
+          error?: string;
+        }>;
         clearDeletedProfileData?: (request: { profileId: string; spacePaths: string[] }) => Promise<{ ok: boolean; cleared: number; error?: string }>;
       };
       sidekick: {
@@ -525,6 +531,7 @@ declare global {
       };
       downloads: {
         list: () => Promise<BrowserDownloadEntry[]>;
+        cancel: (id: string) => Promise<boolean>;
         clear: (id?: string) => Promise<BrowserDownloadEntry[]>;
         onChanged: (callback: (entries: BrowserDownloadEntry[]) => void) => () => void;
       };
@@ -554,6 +561,9 @@ declare global {
         onInitDetachedTab?: (callback: (payload: { tab: unknown; spacePath?: string }) => void) => () => void;
       };
       cdp?: {
+        getPreference?: () => Promise<{ enabled: boolean; active: boolean }>;
+        savePreference?: (value: { enabled: boolean }) => Promise<{ ok: boolean; enabled?: boolean; active?: boolean; restartRequired?: boolean; error?: string }>;
+        restart?: () => Promise<{ ok: boolean }>;
         status: () => Promise<{
           available: boolean;
           port: number;

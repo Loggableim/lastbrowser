@@ -111,6 +111,55 @@ describe('desktop i18n', () => {
     }
   });
 
+  it('wires browser chrome, Insights, Logs, and Appearance labels through the seven locale catalogs', () => {
+    const header = readFileSync(resolve(__dirname, '../src/renderer/components/HeaderComponents.tsx'), 'utf8');
+    const panels = readFileSync(resolve(__dirname, '../src/renderer/panels/SystemPanels.tsx'), 'utf8');
+    const wiredLabels: Array<[string, string, string]> = [
+      ['header', header, 'browser.chrome.bookmarks'],
+      ['header', header, 'browser.chrome.profileStorageHint'],
+      ['header', header, 'browser.chrome.windowControls'],
+      ['header', header, 'browser.chrome.back'],
+      ['header', header, 'browser.chrome.adblockTooltip'],
+      ['header', header, 'browser.chrome.downloads'],
+      ['insights', panels, 'insights.overview'],
+      ['insights', panels, 'insights.systemHealth'],
+      ['insights', panels, 'insights.dailyTokens'],
+      ['insights', panels, 'insights.tokenBreakdown'],
+      ['insights', panels, 'insights.daysCount'],
+      ['logs', panels, 'logs.filterPlaceholder'],
+      ['logs', panels, 'logs.noLinesLoaded'],
+      ['logs', panels, 'logs.autoRefresh'],
+      ['appearance', panels, 'settings.panels.appearance.fisheye']
+    ];
+    const staleVisibleLiterals = [
+      [header, 'aria-label="Bookmarks"'],
+      [header, 'No bookmarks yet'],
+      [header, 'Import bookmarks (HTML/JSON)'],
+      [header, 'Each profile keeps its own cookies, logins and storage.'],
+      [header, 'Kante berühren, um Adressleiste einzublenden'],
+      [header, 'Contextual Quick Actions'],
+      [header, 'Find in page (Ctrl+F)'],
+      [header, 'Extensions & Add-ons (Manifest V3)'],
+      [panels, 'Activity, token/cost/model metrics and LLM wiki status from the existing backend.'],
+      [panels, 'No system health data.'],
+      [panels, 'Filter severity/text'],
+      [panels, 'No log lines loaded.'],
+      [panels, 'Fisheye-Vergrößerung (Fokus:']
+    ] as const;
+
+    for (const [surface, source, key] of wiredLabels) {
+      expect(source, `${surface} must render ${key} through i18n`).toContain(`t('${key}'`);
+      for (const locale of desktopLocaleIds) {
+        const value = createDesktopI18n(locale).t(key as never).trim();
+        expect(value, `${locale}.${key} must have visible copy`).not.toBe('');
+        expect(value, `${locale}.${key} must not render the raw key`).not.toBe(key);
+      }
+    }
+    for (const [source, literal] of staleVisibleLiterals) {
+      expect(source, `visible literal must be localized: ${literal}`).not.toContain(literal);
+    }
+  });
+
   it('localizes the Space picker chrome in all supported languages', () => {
     const expected: Record<string, string[]> = {
       en: ['Workspace', 'Switch space', 'Spaces'],

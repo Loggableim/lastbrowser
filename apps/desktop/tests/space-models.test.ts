@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadSpaceModel, removeSpaceModel, saveSpaceModel } from '../src/renderer/space-models.js';
+import { loadSpaceModel, loadSpaceModelSelection, removeSpaceModel, saveSpaceModel } from '../src/renderer/space-models.js';
 
 function createStorage(): Storage {
   const values = new Map<string, string>();
@@ -33,5 +33,17 @@ describe('per-Space model preferences', () => {
     expect(loadSpaceModel('C:/work/a', storage)).toBeNull();
     expect(() => saveSpaceModel('C:/work/a', 'smart-track', storage)).not.toThrow();
     expect(loadSpaceModel('C:/work/a', storage)).toBe('smart-track');
+  });
+
+  it('persists a provider with the Space model and reads legacy model-only entries', () => {
+    const storage = createStorage();
+    storage.setItem('lastbrowser.spaceModels.v1', JSON.stringify({ 'C:/work/legacy': 'model-x' }));
+    saveSpaceModel('C:/work/a', 'same-model', storage, 'openrouter');
+    saveSpaceModel('C:/work/b', 'same-model', storage, 'ollama-cloud');
+
+    expect(loadSpaceModel('C:/work/legacy', storage)).toBe('model-x');
+    expect(loadSpaceModelSelection('C:/work/legacy', storage)).toEqual({ model: 'model-x' });
+    expect(loadSpaceModelSelection('C:/work/a', storage)).toEqual({ model: 'same-model', provider: 'openrouter' });
+    expect(loadSpaceModelSelection('C:/work/b', storage)).toEqual({ model: 'same-model', provider: 'ollama-cloud' });
   });
 });

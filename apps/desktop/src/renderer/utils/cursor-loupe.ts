@@ -1,6 +1,19 @@
 export type LoupeCaptureRect = { x: number; y: number; width: number; height: number };
 export type LoupeViewportBounds = { x: number; y: number; width: number; height: number };
 
+/** Place the HUD beside the pointer while keeping the complete loupe in-window. */
+export function getLoupePosition(
+  x: number, y: number, viewportWidth: number, viewportHeight: number,
+  loupeSize: number, offsetX: number, offsetY: number
+): { x: number; y: number } | null {
+  if (![x, y, viewportWidth, viewportHeight, loupeSize, offsetX, offsetY].every(Number.isFinite)) return null;
+  if (viewportWidth <= 0 || viewportHeight <= 0 || loupeSize <= 0) return null;
+  return {
+    x: Math.min(Math.max(0, viewportWidth - loupeSize), Math.max(0, x + offsetX)),
+    y: Math.min(Math.max(0, viewportHeight - loupeSize), Math.max(0, y + offsetY))
+  };
+}
+
 /** Return a square guest-page crop centered on the pointer and clamped to the viewport. */
 export function getLoupeCaptureRect(
   x: number,

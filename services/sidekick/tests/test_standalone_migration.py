@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
 # Ensure the services/sidekick root is importable regardless of cwd.
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SIDKICK_ROOT = REPO_ROOT / "services" / "sidekick"
+SIDKICK_ROOT = Path(__file__).resolve().parents[1]
 if str(SIDKICK_ROOT) not in sys.path:
     sys.path.insert(0, str(SIDKICK_ROOT))
 
@@ -34,6 +35,7 @@ def standalone_home(tmp_path: Path) -> Path:
 def destination_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     dest = tmp_path / "lastbrowser-home"
     dest.mkdir()
+    monkeypatch.setenv("LASTBROWSER_HOME", str(dest))
     import web.api.onboarding as onboarding_module
 
     monkeypatch.setattr(onboarding_module, "_get_active_profile_home", lambda: dest)
@@ -190,3 +192,99 @@ class TestMigrateStandaloneInstall:
                 "source_home": "C:/../etc",
                 "items": {"spaces": True, "supermemory": False, "profiles": False},
             })
+
+
+def test_migration_destination_follows_isolated_sidekick_home_in_fresh_process(tmp_path: Path) -> None:
+    """The default migration destination must use this backend's configured home."""
+    isolated_home = (tmp_path / "isolated-sidekick-home").resolve()
+    env = {
+        **{
+            key: os.environ[key]
+            for key in ("PATH", "SYSTEMROOT", "SystemRoot", "WINDIR", "TEMP", "TMP")
+            if key in os.environ
+        },
+        "USERPROFILE": str(tmp_path),
+        "SIDEKICK_HOME": str(isolated_home),
+        "SIDEKICK_BASE_HOME": str(isolated_home),
+    }
+    # Import in a fresh process so module-level profile state cannot have been
+    # initialized from another test or a developer's normal Sidekick profile.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from web.api.onboarding import _get_active_profile_home; "
+            "print(_get_active_profile_home().resolve())",
+        ],
+        cwd=SIDKICK_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    assert Path(result.stdout.strip().splitlines()[-1]) == isolated_home
+
+
+def test_migration_allows_destination_in_a_named_runtime_profile(
+    standalone_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime_home = tmp_path / "lastbrowser-runtime"
+    named_profile = runtime_home / "profiles" / "work"
+    monkeypatch.setenv("LASTBROWSER_HOME", str(runtime_home))
+    import web.api.onboarding as onboarding_module
+
+    monkeypatch.setattr(onboarding_module, "_get_active_profile_home", lambda: named_profile)
+    report = migrate_standalone_install({
+        "source_home": str(standalone_home),
+        "items": {"spaces": True, "supermemory": False, "profiles": False},
+    })
+
+    assert report["copied"] == ["spaces"]
+    assert Path(report["destination"]).resolve() == named_profile.resolve()
+    assert (named_profile / "spaces" / "work" / "note.md").read_text(encoding="utf-8") == "hello"
+
+
+def test_migration_keeps_standalone_sidekick_home_fallback(
+    standalone_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    standalone_runtime = tmp_path / "standalone-sidekick-home"
+    named_profile = standalone_runtime / "profiles" / "work"
+    monkeypatch.delenv("LASTBROWSER_HOME", raising=False)
+    monkeypatch.delenv("SIDEKICK_BASE_HOME", raising=False)
+    monkeypatch.setenv("SIDEKICK_HOME", str(standalone_runtime))
+    import web.api.onboarding as onboarding_module
+
+    monkeypatch.setattr(onboarding_module, "_get_active_profile_home", lambda: named_profile)
+    report = migrate_standalone_install({
+        "source_home": str(standalone_home),
+        "items": {"spaces": True, "supermemory": False, "profiles": False},
+    })
+
+    assert report["copied"] == ["spaces"]
+    assert Path(report["destination"]).resolve() == named_profile.resolve()
+
+
+def test_migration_refuses_destination_outside_runtime_home_before_writing(
+    standalone_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime_home = tmp_path / "lastbrowser-runtime"
+    outside_destination = tmp_path / "outside-destination"
+    monkeypatch.setenv("LASTBROWSER_HOME", str(runtime_home))
+    import web.api.onboarding as onboarding_module
+
+    monkeypatch.setattr(onboarding_module, "_get_active_profile_home", lambda: outside_destination)
+    with pytest.raises(ValueError, match="outside the configured Sidekick runtime home"):
+        migrate_standalone_install({
+            "source_home": str(standalone_home),
+            "items": {"spaces": True, "supermemory": True, "profiles": True},
+        })
+
+    assert not outside_destination.exists()
+    assert not runtime_home.exists()

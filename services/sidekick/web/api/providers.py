@@ -428,6 +428,7 @@ _OAUTH_PROVIDERS = frozenset({
     "nous",
     "openai-codex",
     "google-gemini-cli",
+    "antigravity",
     "qwen-oauth",
 })
 
@@ -1298,6 +1299,23 @@ def get_providers() -> dict[str, Any]:
                     provider_available = False
                     auth_state = "unavailable"
                     auth_error = GOOGLE_GEMINI_CLI_UNAVAILABLE_MESSAGE
+                elif pid == "antigravity":
+                    # Antigravity stores multiple Google identities in its own
+                    # credential-pool slice. The generic CLI auth status reads
+                    # the legacy singleton slot and reports logged_out even
+                    # when those accounts are usable for round-robin requests.
+                    from runtime.antigravity_oauth import get_antigravity_auth_status
+                    from web.api.profiles import cron_profile_context
+
+                    with cron_profile_context():
+                        status = get_antigravity_auth_status()
+                    connected_accounts = int(status.get("connected_accounts") or 0)
+                    oauth_connected = connected_accounts > 0
+                    has_key = oauth_connected
+                    auth_state = "connected" if oauth_connected else "not_connected"
+                    oauth_email = str(
+                        (status.get("accounts") or [{}])[0].get("email") or ""
+                    ) if oauth_connected else ""
                 else:
                     from cli.auth import get_auth_status as _gas
                     status = _gas(pid)

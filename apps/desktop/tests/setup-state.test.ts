@@ -54,6 +54,21 @@ describe('cloud first-run setup state', () => {
     expect(openConnectWindow).not.toHaveBeenCalled();
   });
 
+  it('opens Antigravity OAuth only in the system browser', async () => {
+    const openExternal = vi.fn(async () => true);
+    const openConnectWindow = vi.fn(async () => true);
+    expect(await openProviderOAuthUrl('antigravity', 'https://accounts.google.com/oauth', {
+      openExternal, openConnectWindow
+    })).toBe(true);
+    expect(openExternal).toHaveBeenCalledOnce();
+    expect(openConnectWindow).not.toHaveBeenCalled();
+
+    expect(await openProviderOAuthUrl('antigravity', 'https://accounts.google.com/oauth', {
+      openExternal: vi.fn(async () => false), openConnectWindow
+    })).toBe(false);
+    expect(openConnectWindow).not.toHaveBeenCalled();
+  });
+
   it('opens the ChatGPT Codex OAuth URL in the dedicated connect window and reports failure', async () => {
     const openConnectWindow = vi.fn(async () => true);
     const opened = await openProviderOAuthUrl('openai-codex', 'https://auth.openai.com/authorize', {
@@ -136,6 +151,13 @@ describe('cloud first-run setup state', () => {
     });
 
     expect(options.find((option) => option.id === 'anthropic')?.oauthProvider).toBe('anthropic');
+  });
+
+  it('keeps Antigravity connectable when onboarding metadata omits oauth_provider', () => {
+    const options = cloudProviderOptions({ setup: { providers: [
+      { id: 'antigravity', label: 'Antigravity (Google)' }
+    ] } });
+    expect(options.find((option) => option.id === 'antigravity')?.oauthProvider).toBe('antigravity');
   });
 
   it('filters unsupported personal Gemini subscription connectors from provider selection', () => {

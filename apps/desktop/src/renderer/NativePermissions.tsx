@@ -8,7 +8,7 @@
  * page.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Camera, ShieldCheck, Trash2, X } from 'lucide-react';
+import { Camera, Loader2, ShieldCheck, Trash2, X } from 'lucide-react';
 
 function originOf(url: string): string {
   try {
@@ -26,13 +26,20 @@ export function PermissionsPanel({
   onClose: () => void;
 }): JSX.Element | null {
   const [origins, setOrigins] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const list = await window.lastbrowser.permissions.trustedOrigins();
       setOrigins(Array.isArray(list) ? (list as string[]) : []);
     } catch {
-      // Bridge not ready yet.
+      setError('Could not load trusted sites. Try again.');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -43,7 +50,7 @@ export function PermissionsPanel({
   if (!open) return null;
 
   return (
-    <div className="permissions-panel" role="dialog" aria-label="Site permissions">
+    <div className="permissions-panel" role="dialog" aria-label="Site permissions" aria-busy={loading}>
       <header>
         <ShieldCheck size={15} />
         <strong>Site permissions</strong>
@@ -53,7 +60,13 @@ export function PermissionsPanel({
         </button>
       </header>
       <div className="permissions-list">
-        {origins.length === 0 && (
+        {loading && (
+          <p className="permissions-empty"><Loader2 size={13} className="spin" /> Loading trusted sites…</p>
+        )}
+        {!loading && error && origins.length === 0 && (
+          <p className="permissions-empty" role="alert">{error}</p>
+        )}
+        {!loading && !error && origins.length === 0 && (
           <p className="permissions-empty">
             No sites are trusted yet. Camera and microphone are blocked everywhere by default.
           </p>
@@ -66,15 +79,26 @@ export function PermissionsPanel({
               type="button"
               aria-label={`Revoke camera and microphone access for ${origin}`}
               title="Revoke access"
-              onClick={() => void window.lastbrowser.permissions.revoke(origin).then((next) => {
-                setOrigins(Array.isArray(next) ? (next as string[]) : []);
-              })}
+              disabled={revoking === origin}
+              onClick={async () => {
+                setRevoking(origin);
+                setError(null);
+                try {
+                  const next = await window.lastbrowser.permissions.revoke(origin);
+                  setOrigins(Array.isArray(next) ? (next as string[]) : []);
+                } catch {
+                  setError(`Could not revoke access for ${origin}. Try again.`);
+                } finally {
+                  setRevoking(null);
+                }
+              }}
             >
               <Trash2 size={12} />
             </button>
           </div>
         ))}
       </div>
+      {error && !loading && origins.length > 0 && <p className="permissions-error" role="alert">{error}</p>}
       <p className="permissions-hint">
         Trusted sites may use the camera and microphone. Everything else — location, USB,
         serial devices — stays blocked.

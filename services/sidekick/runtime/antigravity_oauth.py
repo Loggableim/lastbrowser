@@ -41,6 +41,7 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -227,6 +228,21 @@ def _write_pool_entries(entries: List[Dict[str, Any]]) -> None:
     write_credential_pool(POOL_PROVIDER_ID, entries)
 
 
+@contextmanager
+def _pool_update_lock():
+    """Serialize credential-pool read/modify/write operations across workers.
+
+    ``write_credential_pool`` locks only the final write. Without holding the
+    same auth-store lock around the preceding read, two OAuth callbacks can
+    both read the old pool and the later write silently drops the earlier
+    account.
+    """
+    from cli.auth import _auth_store_lock
+
+    with _auth_store_lock():
+        yield
+
+
 def list_connected_accounts() -> List[Dict[str, Any]]:
     """Return metadata for every connected Antigravity account (no secrets)."""
     accounts: List[Dict[str, Any]] = []
@@ -251,12 +267,13 @@ def remove_account(email: str) -> bool:
     normalized = _normalized_account_email(email)
     if not normalized:
         return False
-    entries = _read_pool_entries()
-    remaining = [e for e in entries if _pool_entry_email(e) != normalized]
-    removed = len(remaining) < len(entries)
-    if removed:
-        _write_pool_entries(remaining)
-    return removed
+    with _pool_update_lock():
+        entries = _read_pool_entries()
+        remaining = [e for e in entries if _pool_entry_email(e) != normalized]
+        removed = len(remaining) < len(entries)
+        if removed:
+            _write_pool_entries(remaining)
+        return removed
 
 
 # =============================================================================
@@ -337,33 +354,34 @@ def save_account_credentials_to_pool(creds: AntigravityCredentials) -> None:
             "Google did not return an account email; credentials cannot be added.",
             code="antigravity_account_missing",
         )
-    entries = _read_pool_entries()
-    matching = next(
-        (entry for entry in entries if _pool_entry_email(entry) == normalized), None
-    )
-    fields = {
-        "access_token": creds.access_token,
-        "refresh_token": creds.refresh_token,
-        "expires_at_ms": int(creds.expires_ms),
-        "email": creds.email,
-        "project_id": creds.project_id,
-        "managed_project_id": creds.managed_project_id,
-        "auth_type": "oauth",
-        "source": "antigravity_oauth",
-        "label": creds.email,
-        "last_status": None,
-        "last_status_at": None,
-        "last_error_code": None,
-        "last_error_reason": None,
-        "last_error_message": None,
-        "last_error_reset_at": None,
-    }
-    if matching is None:
-        entries.append({"id": secrets.token_hex(8), **fields})
-    else:
-        matching.update(fields)
-        matching.pop("extra", None)
-    _write_pool_entries(entries)
+    with _pool_update_lock():
+        entries = _read_pool_entries()
+        matching = next(
+            (entry for entry in entries if _pool_entry_email(entry) == normalized), None
+        )
+        fields = {
+            "access_token": creds.access_token,
+            "refresh_token": creds.refresh_token,
+            "expires_at_ms": int(creds.expires_ms),
+            "email": creds.email,
+            "project_id": creds.project_id,
+            "managed_project_id": creds.managed_project_id,
+            "auth_type": "oauth",
+            "source": "antigravity_oauth",
+            "label": creds.email,
+            "last_status": None,
+            "last_status_at": None,
+            "last_error_code": None,
+            "last_error_reason": None,
+            "last_error_message": None,
+            "last_error_reset_at": None,
+        }
+        if matching is None:
+            entries.append({"id": secrets.token_hex(8), **fields})
+        else:
+            matching.update(fields)
+            matching.pop("extra", None)
+        _write_pool_entries(entries)
 
 
 # =============================================================================
@@ -489,10 +507,25 @@ def _get_valid_account_access_token(email: str, *, force_refresh: bool = False) 
         else:
             owner = False
     if not owner:
-        event.wait(timeout=LOCK_TIMEOUT_SECONDS)
+        completed = event.wait(timeout=LOCK_TIMEOUT_SECONDS)
         fresh = load_account_credentials(email)
         if fresh is not None and not fresh.access_token_expired():
             return fresh.access_token
+        # A waiter must never retry the same refresh token while the owner may
+        # still be exchanging it. Some OAuth servers rotate refresh tokens,
+        # so concurrent exchanges can invalidate the credential that the
+        # owner is about to persist. If the owner completed without producing
+        # a usable token, let this request fail and allow the next request to
+        # start a fresh, single-owner attempt.
+        if not completed:
+            raise AntigravityOAuthError(
+                "Another Antigravity token refresh is still in progress. Retry the request.",
+                code="antigravity_refresh_in_progress",
+            )
+        raise AntigravityOAuthError(
+            "The concurrent Antigravity token refresh did not produce a usable access token. Retry the request.",
+            code="antigravity_refresh_failed",
+        )
     try:
         response = refresh_access_token(rt)
         access = str(response.get("access_token", "") or "").strip()
@@ -510,15 +543,16 @@ def _get_valid_account_access_token(email: str, *, force_refresh: bool = False) 
     except AntigravityOAuthError as exc:
         if exc.code == "google_oauth_invalid_grant":
             # Mark ONLY this account as exhausted; other pool entries stay usable.
-            entries = _read_pool_entries()
-            for entry in entries:
-                if _pool_entry_email(entry) == _normalized_account_email(email):
-                    entry["last_status"] = "exhausted"
-                    entry["last_error_code"] = 401
-                    entry["last_error_reason"] = "invalid_grant"
-                    entry["last_status_at"] = time.time()
-                    break
-            _write_pool_entries(entries)
+            with _pool_update_lock():
+                entries = _read_pool_entries()
+                for entry in entries:
+                    if _pool_entry_email(entry) == _normalized_account_email(email):
+                        entry["last_status"] = "exhausted"
+                        entry["last_error_code"] = 401
+                        entry["last_error_reason"] = "invalid_grant"
+                        entry["last_status_at"] = time.time()
+                        break
+                _write_pool_entries(entries)
         raise
     finally:
         if owner:
@@ -573,6 +607,11 @@ def _post_code_assist(path: str, body: Dict[str, Any], access_token: str, timeou
             detail = exc.read().decode("utf-8", errors="replace")
         except Exception:
             pass
+        if _is_validation_required_response(exc.code, detail):
+            raise AntigravityOAuthError(
+                "Google requires account verification before Antigravity can be used.",
+                code="antigravity_validation_required",
+            ) from exc
         raise AntigravityOAuthError(
             f"Code Assist HTTP {exc.code}: {detail[:300] or exc.reason}",
             code=f"code_assist_http_{exc.code}",
@@ -582,6 +621,34 @@ def _post_code_assist(path: str, body: Dict[str, Any], access_token: str, timeou
             f"Code Assist request failed: {exc}",
             code="code_assist_network_error",
         ) from exc
+
+
+def _is_validation_required_response(status_code: int, response_body: str) -> bool:
+    """Recognize only Google's structured account-verification error.
+
+    Do not classify arbitrary 403s or messages that merely mention the phrase
+    as recoverable onboarding; a false positive would persist unusable OAuth
+    credentials as a connected account.
+    """
+    if status_code != 403:
+        return False
+    try:
+        payload = json.loads(response_body)
+    except (TypeError, ValueError):
+        return False
+
+    def has_reason(node: Any) -> bool:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if str(key).casefold() in {"reason", "status"} and value == "VALIDATION_REQUIRED":
+                    return True
+                if has_reason(value):
+                    return True
+        elif isinstance(node, list):
+            return any(has_reason(item) for item in node)
+        return False
+
+    return has_reason(payload)
 
 
 def resolve_project_id(access_token: str) -> str:
@@ -621,13 +688,25 @@ def onboard_account(access_token: str, *, tier_id: str = "free-tier") -> str:
         access_token,
         timeout=90.0,
     )
-    inner = resp.get("response") if isinstance(resp.get("response"), dict) else resp
-    project = ""
-    if isinstance(inner, dict):
-        companion = inner.get("cloudaicompanionProject")
-        if isinstance(companion, dict):
-            project = str(companion.get("id") or "")
-    return project or DEFAULT_ANTIGRAVITY_PROJECT
+    if not isinstance(resp, dict) or not resp:
+        raise AntigravityOAuthError(
+            "Antigravity onboarding returned an empty or invalid response.",
+            code="antigravity_onboarding_invalid_response",
+        )
+    inner = resp.get("response", resp)
+    if not isinstance(inner, dict):
+        raise AntigravityOAuthError(
+            "Antigravity onboarding returned an invalid response shape.",
+            code="antigravity_onboarding_invalid_response",
+        )
+    companion = inner.get("cloudaicompanionProject")
+    project = str(companion.get("id") or "").strip() if isinstance(companion, dict) else ""
+    if not project:
+        raise AntigravityOAuthError(
+            "Antigravity onboarding response did not include a consumer project.",
+            code="antigravity_onboarding_invalid_response",
+        )
+    return project
 
 
 # =============================================================================
@@ -659,9 +738,9 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
         callback_state = getattr(self.server, "oauth_callback_state", None)
         expected = getattr(callback_state, "expected_state", "")
         if state != expected:
-            if callback_state is not None:
-                callback_state.error = "state_mismatch"
-                callback_state.ready.set()
+            # A stray request to the localhost listener must not be able to
+            # terminate an in-progress OAuth flow. Reject this request, but
+            # keep waiting for the callback carrying the flow's real state.
             self._respond_html(400, _ERROR_PAGE.format(message="State mismatch — aborting for safety."))
         elif error:
             if callback_state is not None:
@@ -738,6 +817,7 @@ def start_antigravity_oauth_flow(
     open_browser: bool = True,
     callback_wait_seconds: float = CALLBACK_WAIT_SECONDS,
     on_auth_url=None,
+    on_credentials=None,
     cancel_event=None,
 ) -> AntigravityCredentials:
     """Run the browser OAuth flow and persist the account into the pool.
@@ -833,6 +913,9 @@ def start_antigravity_oauth_flow(
             code="antigravity_incomplete_token_response",
         )
 
+    if cancel_event is not None and cancel_event.is_set():
+        raise AntigravityOAuthError("Antigravity OAuth cancelled.", code="antigravity_oauth_cancelled")
+
     email = _fetch_user_email(access_token)
     creds = AntigravityCredentials(
         access_token=access_token,
@@ -848,13 +931,24 @@ def start_antigravity_oauth_flow(
     try:
         creds.project_id = onboard_account(access_token)
     except AntigravityOAuthError as exc:
-        # VALIDATION_REQUIRED (403) means Google wants an account verification
-        # in a browser first. Keep the account connected — the user can verify
-        # and it will work on the next request; surface the reason.
-        logger.warning("Antigravity onboarding pending for %s: %s", email or "unknown", exc.code)
+        # Only Google's structured VALIDATION_REQUIRED error is recoverable:
+        # the user must complete account verification before inference works.
+        # Every other error aborts login so we never report a false connection.
+        if exc.code != "antigravity_validation_required":
+            raise
+        logger.warning("Antigravity onboarding requires account verification for %s", email or "unknown")
         creds.project_id = DEFAULT_ANTIGRAVITY_PROJECT
 
-    save_account_credentials_to_pool(creds)
+    if cancel_event is not None and cancel_event.is_set():
+        raise AntigravityOAuthError("Antigravity OAuth cancelled.", code="antigravity_oauth_cancelled")
+
+    # The API worker may provide an atomic commit callback which checks the
+    # flow's cancellation state and persists credentials under the same lock
+    # used by the cancel endpoint. Standalone CLI callers keep the normal path.
+    if callable(on_credentials):
+        on_credentials(creds)
+    else:
+        save_account_credentials_to_pool(creds)
     logger.info("Antigravity account %s connected (project=%s)", creds.email, creds.project_id)
     return creds
 

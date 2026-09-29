@@ -923,12 +923,19 @@ def _file_lock(
             holder.depth = 0
         return
 
-    # On Windows, msvcrt.locking needs the file to have content and the
-    # file pointer at position 0. Ensure the lock file has at least 1 byte.
-    if msvcrt and (not lock_path.exists() or lock_path.stat().st_size == 0):
-        lock_path.write_text(" ", encoding="utf-8")
-
-    with lock_path.open("r+" if msvcrt else "a+", encoding="utf-8") as lock_file:
+    # Open/create the lock file through one handle. Checking existence/size and
+    # then calling Path.write_text() races on Windows: concurrent first users
+    # can both truncate/create the same file and one gets PermissionError.
+    # msvcrt requires a byte at offset zero; append mode lets concurrent
+    # initializers safely ensure that byte without reopening with truncate.
+    lock_file = lock_path.open("a+b") if msvcrt else lock_path.open("a+", encoding="utf-8")
+    with lock_file:
+        if msvcrt:
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write(b" ")
+                lock_file.flush()
+            lock_file.seek(0)
         deadline = time.monotonic() + max(1.0, timeout_seconds)
         while True:
             try:
@@ -1106,14 +1113,14 @@ def read_credential_pool(provider_id: Optional[str] = None) -> Dict[str, Any]:
     """Return the persisted credential pool, or one provider slice.
 
     In profile mode, the profile's credential pool is authoritative. If a
-    provider has no entries in the profile, entries from the global-root
+    provider has no entry in the profile, entries from the global-root
     ``auth.json`` are used as a read-only fallback — so workers spawned in a
     profile can see providers that were only authenticated at global scope.
 
-    Profile entries always win: the global fallback only applies per-provider
-    when the profile has zero entries for that provider. Once the user runs
-    ``sidekick auth add <provider>`` inside the profile, profile entries
-    fully shadow global for that provider on the next read.
+    Profile entries always win, including an explicitly empty list. This lets
+    a user remove the final account inherited from the global pool without it
+    reappearing on the next read. Providers absent from the profile still use
+    the read-only global fallback.
 
     Writes always go to the profile (``write_credential_pool`` is unchanged).
     See issue #18594 follow-up.
@@ -1134,15 +1141,15 @@ def read_credential_pool(provider_id: Optional[str] = None) -> Dict[str, Any]:
         for gp_key, gp_entries in global_pool.items():
             if not isinstance(gp_entries, list) or not gp_entries:
                 continue
-            # Per-provider shadowing: profile wins whenever it has ANY entries.
-            existing = merged.get(gp_key)
-            if isinstance(existing, list) and existing:
+            # Presence is significant: an explicit empty profile slice means
+            # the user intentionally removed/suppressed the global accounts.
+            if gp_key in merged and isinstance(merged.get(gp_key), list):
                 continue
             merged[gp_key] = list(gp_entries)
         return merged
 
     provider_entries = pool.get(provider_id)
-    if isinstance(provider_entries, list) and provider_entries:
+    if isinstance(provider_entries, list):
         return list(provider_entries)
     # Profile has no entries for this provider — fall back to global.
     global_entries = global_pool.get(provider_id)

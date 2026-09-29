@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CDP_PORT, formatCdpUrl, resolveCdpPort } from '../src/main/cdp.js';
+import { DEFAULT_CDP_PORT, formatCdpUrl, isCdpEnabled, resolveCdpPort } from '../src/main/cdp.js';
 
 describe('cdp (Chrome DevTools Protocol Port Resolution)', () => {
   it('returns DEFAULT_CDP_PORT (9222) when no environment or arguments are provided', () => {
     expect(DEFAULT_CDP_PORT).toBe(9222);
     expect(resolveCdpPort({}, [])).toBe(9222);
+    expect(isCdpEnabled({}, [])).toBe(false);
+  });
+
+  it('enables CDP only through an explicit opt-in', () => {
+    expect(isCdpEnabled({ LASTBROWSER_ENABLE_CDP: '1' }, [])).toBe(true);
+    expect(isCdpEnabled({ LASTBROWSER_ENABLE_CDP: 'true' }, [])).toBe(true);
+    expect(isCdpEnabled({ LASTBROWSER_CDP_PORT: '9333' }, [])).toBe(true);
+    expect(isCdpEnabled({}, ['Lastbrowser.exe', '--remote-debugging-port=9666'])).toBe(true);
+    expect(isCdpEnabled({ LASTBROWSER_ENABLE_CDP: 'false' }, [])).toBe(false);
   });
 
   it('resolves port from LASTBROWSER_CDP_PORT environment variable', () => {
@@ -45,6 +54,8 @@ describe('cdp (Chrome DevTools Protocol Port Resolution)', () => {
     expect(resolveCdpPort({ LASTBROWSER_CDP_PORT: 'invalid' }, [])).toBe(9222);
     expect(resolveCdpPort({ LASTBROWSER_CDP_PORT: '-10' }, [])).toBe(9222);
     expect(resolveCdpPort({ LASTBROWSER_CDP_PORT: '0' }, [])).toBe(9222);
+    expect(resolveCdpPort({ LASTBROWSER_CDP_PORT: '65536' }, [])).toBe(9222);
+    expect(resolveCdpPort({ LASTBROWSER_CDP_PORT: '9333oops' }, [])).toBe(9222);
   });
 
   it('falls back to default if command line argument port is not a valid positive number', () => {

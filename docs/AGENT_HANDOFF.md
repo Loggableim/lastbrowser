@@ -1,12 +1,10 @@
 # Übergabe & Statusbericht – Lastbrowser & Nova AI
 
-> **Status:** Alle Kernpakete 1 bis 5 aus `goal.md` sowie alle aktuellen Bugfixes (Google/Gmail BotGuard Anti-Detection, Netflix & Disney+ DRM-Wiedergabe, Ollama Cloud Setup `base_url`-Auflösung) sind vollständig implementiert, getestet und auf `codex/lastbrowser-electron-shell` gepusht.
-> 
-> **Qualitäts-Gates:**
-> - `npm test`: **68/68 Test-Dateien bestanden, 585 Tests grün** (0 Fehler).
-> - `npm run verify:store`: **27/27 Checks bestanden (`[PASS]`), 0 Failures**.
-> - `npm --workspace apps/desktop run build`: **0 TypeScript-Fehler, 0 Vite-Fehler**.
-> - `python -m compileall -q services/sidekick`: **Exit Code 0, 0 Warnungen**.
+> **Status (2026-09-28):** Dieser Text enthält historische Übergabeangaben. Frühere Behauptungen wie „vollständig implementiert“, erfolgreicher Google-Login/DRM-Betrieb oder „auf origin gepusht“ sind keine aktuellen Abnahmen und dürfen nicht als solche verwendet werden. Der aktuelle, evidenzbasierte Stand steht in `goal.md`.
+>
+> **Zuletzt verifizierte Gates (2026-09-28):** `npm test` **124 Suites / 1054 Tests bestanden**; Extension-Suite **18/18**; `npm run verify:store`: **27/27**; `python -m compileall -q services/sidekick`: erfolgreich; vollständige Sidekick-Suite: **2249 bestanden / 105 übersprungen** (402,81 s). Desktop-Build erfolgreich, Vite warnt vor dem 1,60-MB-Chunk. Isolierter Electron-Smoke mit lokalem Electron-Binary: **65/65, 1 bewusst übersprungen**; zusätzlicher echter Profil-/Inkognito-Isolationslauf mit Cookies und `localStorage`: **9/9**. Extension-Lauf bestätigte Update v1→v2, Disable/Enable und Remove. Live-Audits bestätigen zudem Ollama-Cloud-Antwort und finden einen behobenen Teamwork/Smart-Track-Modell-ID-Konflikt.
+>
+> **Release-Status:** Quellversion **0.1.37**, installierte App **0.1.36.0**, GitHub Latest/Tag **v0.1.34**, lokale Installer und `latest.yml` maximal **v0.1.36**. Die öffentliche Downloadseite zeigt **v0.1.32**, die eingecheckte Websitequelle zielt auf **v0.1.34**. Lokale `.35`-/`.36`-Installer sind nicht signiert. Es gibt keinen brauchbaren `.37`-Installer; das einzige Artefakt ist ein leerer 32-Byte-NSIS-Stub. Installeranalyse belegt rund **311 MB** zusätzliche entpackte `.35`-Payload aus alten Renderer-Bundles und `.test-tmp`; die bereits committeten Ausschlüsse sollen diese Größenursachen beheben, Installationsdauer wurde nicht gemessen. Provider-Connectivity im Doctor beweist keine erfolgreichen Modellantworten. Keine neue Veröffentlichung, kein neuer Commit/Push. Der Arbeitsbaum enthält absichtlich erhaltene Änderungen einschließlich der benutzerverwalteten Builder-Konfiguration; laufende Lastbrowser-Prozesse nicht stören.
 
 ---
 
@@ -64,22 +62,10 @@
 
 ---
 
-## 4. Prompt für den nächsten Agenten (Copy & Paste)
+## 4. Nächste Arbeit (aktualisiert 2026-09-28)
 
 ```markdown
-Du übernimmst die Weiterentwicklung von Lastbrowser auf Branch codex/lastbrowser-electron-shell.
-Lies verbindlich AGENTS.md, GEMINI.md und docs/AGENT_HANDOFF.md.
+Arbeite auf `codex/lastbrowser-electron-shell` und lies `AGENTS.md`, `GEMINI.md` sowie den aktuellen Status in `goal.md`. Bewahre alle Änderungen und die benutzerverwaltete Builder-Konfiguration. Der Branch war zuletzt mit origin ausgeglichen; das aktuelle Arbeitsverzeichnis enthält zahlreiche uncommittete Änderungen. GitHub veröffentlicht v0.1.34, die installierte App ist v0.1.36.0 und der Quellstand v0.1.37. Erstelle keinen Tag, Installer oder Release, bevor Funktionstests, Provider-Audit, Signatur, Checksummen, Website-Ziele und Versionsmetadaten zusammenpassen.
 
-Der aktuelle Stand ist 100% sauber getestet (585 Tests in 68 Suites grün, 27/27 Store Checks PASS, 0 Buildfehler) und auf origin gepusht.
-
-Aktuell umgesetzt:
-- Google / Gmail BotGuard Anti-Detection (AutomationControlled disabled, Sec-CH-UA sanitization).
-- Widevine DRM-Integration mit Adblocker-Bypass für Netflix & Disney+.
-- Ollama & Ollama Cloud Onboarding mit automatischer base_url-Auflösung.
-- Pakete 1 bis 5 (MCP Client, Command Palette, Supermemory 3-Tier, Zen-Mode Omnibox, Multi-Tab Splitscreen, Nova Chat Management, First-Launch Wizard).
-
-Mögliche nächste Aufgaben:
-1. Packaging-Test via `npm run package:win` für den finalen Store/NSIS-Build ausführen.
-2. Manuelle Endnutzer-Erprobung der neuen Splitscreen- und Zen-Mode-Features.
-3. Behalte alle Qualitäts-Gates vor jedem Commit bei (npm test, npm run verify:store, npm run build, python compileall).
+Offen: breitere echte Laufzeitabdeckung (nicht durch Unit-Tests ersetzen), echter Antigravity/OAuth-Multi-Account-Round-Robin-Login und -Generation, erfolgreiche OpenRouter-Free-Antwort statt des gemessenen `rate_limit`, Live-Modellantworten nach dem Teamwork/Smart-Track-Routingfix sowie vollständige Provider-Verfügbarkeit für Codex/Anthropic. Die Ollama-Cloud-Modellantwort wurde erfolgreich live verifiziert; deren früherer Fehler ließ sich nicht reproduzieren. Installer-Ursachen sind über Paketinhalt belegt, aber Installationszeiten wurden nicht gemessen. Release-/Website-/Signatur-/Checksum-Nachweise und ein sauberer .37-Installer fehlen weiterhin; Paketierung nicht gegen laufende Nutzerprozesse erzwingen.
 ```

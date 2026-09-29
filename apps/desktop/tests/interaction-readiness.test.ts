@@ -2,10 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { canCallSidekickApi, serviceReadinessLabel } from '../src/renderer/runtime-readiness.js';
 
 describe('renderer interaction readiness', () => {
-  it('allows native panel actions once the sidekick runtime has a local API URL', () => {
+  it('keeps native panel actions disabled until the HTTP health check succeeds', () => {
     expect(canCallSidekickApi({
       sidekick: 'ready',
       webuiHealth: 'checking',
+      webuiUrl: 'http://127.0.0.1:8788',
+      port: 8788,
+      lastError: null
+    })).toBe(false);
+    expect(canCallSidekickApi({
+      sidekick: 'ready',
+      webuiHealth: 'ready',
       webuiUrl: 'http://127.0.0.1:8788',
       port: 8788,
       lastError: null
@@ -37,6 +44,6 @@ describe('renderer interaction readiness', () => {
       webuiUrl: 'http://127.0.0.1:8788',
       port: 8788,
       lastError: null
-    })).toBe('Sidekick online');
+    })).toBe('Sidekick API starting');
   });
 });

@@ -1004,7 +1004,26 @@ def _schedule_smart_track_model_scan_on_startup() -> None:
         _log.warning("Smart Track startup scan could not be scheduled", exc_info=True)
 
 
+def _prepare_desktop_api_bridge_runtime_on_startup() -> None:
+    """Warm the legacy API bridge before desktop readiness is reported.
+
+    The Electron shell marks Sidekick healthy after the native onboarding
+    endpoint responds. Settings and many other desktop APIs still use the
+    legacy route bridge, whose first request initializes profile paths and the
+    agents database. Do that work during ASGI startup so the first IPC request
+    does not unexpectedly pay the cold-start cost after health already says
+    ``ready``. Standalone WebUI launches retain their lazy, read-only behavior.
+    """
+    if not os.environ.get("LASTBROWSER_HOME"):
+        return
+
+    from web.api.fastapi_bridge import _prepare_webui_runtime
+
+    _prepare_webui_runtime()
+
+
 app.router.on_startup.append(_install_asyncio_disconnect_exception_filter)
+app.router.on_startup.append(_prepare_desktop_api_bridge_runtime_on_startup)
 app.router.on_startup.append(_start_dashboard_cron_ticker)
 app.router.on_startup.append(_start_nova_space_supervision_ticker)
 app.router.on_startup.append(_release_game_mode_resources_on_startup)

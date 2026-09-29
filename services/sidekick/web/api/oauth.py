@@ -803,6 +803,12 @@ def _spawn_antigravity_oauth_worker(flow_id: str) -> None:
     def worker() -> None:
         try:
             from runtime.antigravity_oauth import start_antigravity_oauth_flow
+            from web.api.profiles import cron_profile_context_for_home
+
+            with _OAUTH_FLOWS_LOCK:
+                flow = _OAUTH_FLOWS.get(flow_id) or {}
+                sidekick_home = Path(flow.get("sidekick_home") or _get_active_profile_home())
+                cancel_event = flow.get("cancel_event")
 
             def publish_auth_url(url: str) -> None:
                 with _OAUTH_FLOWS_LOCK:
@@ -811,15 +817,45 @@ def _spawn_antigravity_oauth_worker(flow_id: str) -> None:
                         current["auth_url"] = url
                         current["updated_at"] = time.time()
 
-            creds = start_antigravity_oauth_flow(
-                open_browser=False,
-                callback_wait_seconds=GOOGLE_FLOW_MAX_WAIT_SECONDS,
-                on_auth_url=publish_auth_url,
-                cancel_event=_OAUTH_FLOWS.get(flow_id, {}).get("cancel_event"),
-            )
+            def persist_credentials(creds) -> None:
+                # Serialize the final credential write against cancel requests.
+                # If cancellation wins, the account is never added to the pool;
+                # if persistence wins, the flow is already terminal-success and
+                # a late cancel cannot misreport it as cancelled.
+                from runtime.antigravity_oauth import (
+                    AntigravityOAuthError,
+                    save_account_credentials_to_pool,
+                )
+
+                with _OAUTH_FLOWS_LOCK:
+                    current = _OAUTH_FLOWS.get(flow_id)
+                    if (
+                        not current
+                        or current.get("status") != "pending"
+                        or (cancel_event is not None and cancel_event.is_set())
+                    ):
+                        raise AntigravityOAuthError(
+                            "Antigravity OAuth cancelled.",
+                            code="antigravity_oauth_cancelled",
+                        )
+                    save_account_credentials_to_pool(creds)
+                    current.update({
+                        "status": "success",
+                        "email": creds.email,
+                        "updated_at": time.time(),
+                    })
+
+            with cron_profile_context_for_home(sidekick_home):
+                creds = start_antigravity_oauth_flow(
+                    open_browser=False,
+                    callback_wait_seconds=GOOGLE_FLOW_MAX_WAIT_SECONDS,
+                    on_auth_url=publish_auth_url,
+                    on_credentials=persist_credentials,
+                    cancel_event=cancel_event,
+                )
             with _OAUTH_FLOWS_LOCK:
                 flow = _OAUTH_FLOWS.get(flow_id)
-                if flow:
+                if flow and flow.get("status") == "pending":
                     flow.update({
                         "status": "success",
                         "email": creds.email,
@@ -829,7 +865,7 @@ def _spawn_antigravity_oauth_worker(flow_id: str) -> None:
             logger.warning("Antigravity OAuth flow failed: %s", exc)
             with _OAUTH_FLOWS_LOCK:
                 flow = _OAUTH_FLOWS.get(flow_id)
-                if flow:
+                if flow and flow.get("status") == "pending":
                     code = getattr(exc, "code", "antigravity_oauth_error")
                     flow.update({
                         "status": "error",
@@ -855,6 +891,7 @@ def start_onboarding_oauth_flow(body: dict[str, Any] | None) -> dict[str, Any]:
         flow_id = uuid.uuid4().hex
         flow = {
             "provider": "antigravity",
+            "sidekick_home": str(_get_active_profile_home()),
             "status": "pending",
             "expires_at": time.time() + GOOGLE_FLOW_MAX_WAIT_SECONDS,
             "poll_interval_seconds": 3,

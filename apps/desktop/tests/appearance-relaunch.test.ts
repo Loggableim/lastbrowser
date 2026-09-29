@@ -67,7 +67,7 @@ import {
   mergeDesktopSettings,
   fetchDesktopSettingsWithRetry
 } from '../src/renderer/App.js';
-import { applyDesktopAppearancePreview } from '../src/renderer/panels/SystemPanels.js';
+import { applyDesktopAppearancePreview, createOrderedSettingsWriter, createReadinessAwareSettingsWriter } from '../src/renderer/panels/SystemPanels.js';
 
 describe('Appearance Relaunch & Design-System Engine', () => {
   beforeEach(() => {
@@ -147,6 +147,101 @@ describe('Appearance Relaunch & Design-System Engine', () => {
 
       stopWatching();
       expect(systemThemeListeners.size).toBe(0);
+    });
+
+    it('follows OS changes when System mode is a live draft before saved settings catch up', () => {
+      // App state still reflects the previous saved theme when the user first
+      // selects System in the settings panel. The watcher must still observe
+      // the live preview while its auto-save is in flight.
+      const stopWatching = watchSystemThemeChanges({ theme: 'dark' });
+      applyDesktopAppearancePreview('system', 'default');
+      expect(_datasets.themeMode).toBe('system');
+      expect(_datasets.theme).toBe('dark');
+
+      systemThemeIsLight = true;
+      systemThemeListeners.forEach((listener) => listener());
+      expect(_datasets.theme).toBe('light');
+      expect(_classes.has('theme-light')).toBe(true);
+      expect(documentMock.documentElement.style.colorScheme).toBe('light');
+
+      stopWatching();
+    });
+
+    it('coalesces queued full settings snapshots and writes the latest appearance last', async () => {
+      const writes: number[] = [];
+      let releaseFirst!: () => void;
+      const write = createOrderedSettingsWriter(async (settings: { default_zoom: number }) => {
+        if (settings.default_zoom === 100) await new Promise<void>((resolve) => { releaseFirst = resolve; });
+        writes.push(settings.default_zoom);
+      });
+
+      const first = write({ default_zoom: 100 });
+      const intermediate = write({ default_zoom: 110 });
+      const latest = write({ default_zoom: 125 });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writes).toEqual([]);
+      releaseFirst();
+      await Promise.all([first, intermediate, latest]);
+      expect(writes).toEqual([100, 125]);
+    });
+
+    it('continues with the newest settings snapshot after an earlier write fails', async () => {
+      const writes: number[] = [];
+      let failFirst!: (error: Error) => void;
+      const write = createOrderedSettingsWriter(async (settings: { default_zoom: number }) => {
+        if (settings.default_zoom === 100) {
+          await new Promise<void>((_resolve, reject) => { failFirst = reject; });
+        }
+        writes.push(settings.default_zoom);
+      });
+
+      const first = write({ default_zoom: 100 });
+      const latest = write({ default_zoom: 125 });
+      await Promise.resolve();
+      await Promise.resolve();
+      failFirst(new Error('temporary save failure'));
+
+      await expect(first).rejects.toThrow('temporary save failure');
+      await expect(latest).resolves.toBeUndefined();
+      expect(writes).toEqual([125]);
+    });
+
+    it('queues the latest appearance snapshot while Sidekick is starting and flushes it when healthy', async () => {
+      const writes: Array<{ theme: string; font_size: string }> = [];
+      const writer = createReadinessAwareSettingsWriter(async (settings: { theme: string; font_size: string }) => {
+        writes.push(settings);
+      });
+
+      expect(await writer.enqueue({ theme: 'light', font_size: 'large' })).toBe(false);
+      expect(await writer.enqueue({ theme: 'oled', font_size: 'xlarge' })).toBe(false);
+      expect(writes).toEqual([]);
+
+      await writer.setReady(true);
+
+      expect(writes).toEqual([{ theme: 'oled', font_size: 'xlarge' }]);
+      expect(await writer.enqueue({ theme: 'system', font_size: 'default' })).toBe(true);
+      expect(writes).toEqual([
+        { theme: 'oled', font_size: 'xlarge' },
+        { theme: 'system', font_size: 'default' }
+      ]);
+    });
+
+    it('retains deferred appearance settings after a transient backend write error', async () => {
+      const writes: string[] = [];
+      let shouldFail = true;
+      const writer = createReadinessAwareSettingsWriter(async (theme: string) => {
+        writes.push(theme);
+        if (shouldFail) throw new Error('Sidekick still starting');
+      });
+      await writer.enqueue('oled');
+      await expect(writer.setReady(true)).rejects.toThrow('Sidekick still starting');
+
+      shouldFail = false;
+      await writer.setReady(false);
+      await writer.setReady(true);
+
+      expect(writes).toEqual(['oled', 'oled']);
     });
   });
 

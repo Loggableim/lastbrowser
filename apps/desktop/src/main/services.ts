@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { app } from 'electron';
+import { formatCdpUrl, isCdpEnabled, resolveCdpPort } from './cdp.js';
 
 export type ServiceLayout = {
   resourcesDir: string;
@@ -117,13 +118,8 @@ export function resolveServiceLayout(
 export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number): NodeJS.ProcessEnv {
   const webuiPortValue = String(webuiPort);
   const webuiBaseUrl = `http://127.0.0.1:${webuiPortValue}`;
-  const cdpPort = process.env.LASTBROWSER_CDP_PORT || process.env.CDP_PORT || '9222';
-  const cdpUrl = `http://127.0.0.1:${cdpPort}`;
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    BROWSER_CDP_URL: cdpUrl,
-    LASTBROWSER_CDP_URL: cdpUrl,
-    LASTBROWSER_CDP_PORT: cdpPort,
     LASTBROWSER_HOME: layout.runtimeDir,
     LASTBROWSER_WEBUI_AGENT_DIR: layout.sidekickDir,
     LASTBROWSER_WEBUI_STATE_DIR: path.join(layout.runtimeDir, 'webui'),
@@ -156,6 +152,13 @@ export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number
       ? `${layout.sidekickDir}${path.delimiter}${process.env.PYTHONPATH}`
       : layout.sidekickDir
   };
+  if (isCdpEnabled()) {
+    const cdpPort = String(resolveCdpPort());
+    const cdpUrl = formatCdpUrl(Number(cdpPort));
+    env.BROWSER_CDP_URL = cdpUrl;
+    env.LASTBROWSER_CDP_URL = cdpUrl;
+    env.LASTBROWSER_CDP_PORT = cdpPort;
+  }
   return env;
 }
 

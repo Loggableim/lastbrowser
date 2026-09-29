@@ -9,6 +9,7 @@
 import React, { useMemo, useState } from 'react';
 import { Clock, Search, Trash2, X } from 'lucide-react';
 import { groupVisitsByDay, searchVisits, type BrowserVisit } from './history.js';
+import { clearHistorySelection } from './utils/clear-browser-data.js';
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString(undefined, {
@@ -38,6 +39,7 @@ export function HistoryPanel({
   const [includeCache, setIncludeCache] = useState(true);
   const [includeCookies, setIncludeCookies] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [clearError, setClearError] = useState('');
 
   const groups = useMemo(
     () => groupVisitsByDay(searchVisits(visits, query)),
@@ -47,17 +49,15 @@ export function HistoryPanel({
 
   const handleClearConfirmed = async () => {
     setClearing(true);
+    setClearError('');
     try {
-      if (includeHistory) {
-        onClear();
-      }
-      if (includeCache || includeCookies) {
-        await window.lastbrowser?.browser?.clearData?.({
-          cache: includeCache,
-          cookies: includeCookies,
-          storage: includeCookies
-        });
-      }
+      const cleared = await clearHistorySelection(
+        { history: includeHistory, cache: includeCache, cookies: includeCookies },
+        window.lastbrowser?.browser?.clearData,
+        onClear,
+        () => setClearError('Browserdaten konnten nicht vollständig gelöscht werden. Bitte erneut versuchen.')
+      );
+      if (!cleared) return;
       setShowClearModal(false);
     } finally {
       setClearing(false);
@@ -98,6 +98,7 @@ export function HistoryPanel({
             </button>
           </div>
           <div className="history-clear-dialog-body">
+            {clearError && <p role="alert" className="history-clear-error">{clearError}</p>}
             <label className="history-clear-option">
               <input
                 type="checkbox"

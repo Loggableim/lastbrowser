@@ -5,9 +5,11 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, scr
 import { getChatCompletionNotification, shouldNotifyChatCompletion } from './chat-notifications.js';
 import { detachRequestKey, ensureDetachedPageReady, isGuestOwnedByRenderer, normalizeRestoredNavigationHistory, parseDetachTabPayload, PendingTabDetachRegistry, serializeNavigationHistory } from './window-tab-transfer.js';
 import { clearDeletedProfilePartitions } from './profile-partition-cleanup.js';
+import { registerBrowserDataCleanupIpc } from './browser-data-cleanup.js';
 import { broadcastDownloadSnapshot, createDownloadTracker } from './downloads.js';
 import { ExtensionManager } from './extensions.js';
-import { resolveCdpPort } from './cdp.js';
+import { isCdpEnabled, resolveCdpPort, setPersistedCdpEnabled } from './cdp.js';
+import { loadCdpPreference, saveCdpPreference } from './cdp-settings.js';
 import { moduleDirname } from './module-path.js';
 import { SidecarServices, appResourcesDir, resolveServiceLayout } from './services.js';
 import { loadSetupState, saveSetupState } from './setup-store.js';
@@ -189,6 +191,8 @@ app.on('child-process-gone', (_event, details) => {
 });
 
 const mainDir = moduleDirname(import.meta.url);
+const cdpPreference = loadCdpPreference(app.getPath('userData'));
+setPersistedCdpEnabled(cdpPreference.enabled);
 let mainWindow: BrowserWindow | null = null;
 let appReady = false;
 const secondaryWindows = new Set<BrowserWindow>();
@@ -451,28 +455,10 @@ function registerIpc(): void {
     }
     return true;
   });
-  ipcMain.handle('lastbrowser:browser:clearData', async (_event, options?: { cache?: boolean; cookies?: boolean; storage?: boolean }) => {
-    const opts = { cache: true, cookies: true, storage: true, ...options };
+  registerBrowserDataCleanupIpc(ipcMain, () => {
     const targets = Array.from(activeSessions);
     if (!targets.includes(session.defaultSession)) targets.push(session.defaultSession);
-
-    for (const sess of targets) {
-      if (!sess) continue;
-      try {
-        if (opts.cache && typeof sess.clearCache === 'function') {
-          await sess.clearCache();
-        }
-        const storagesToClear: string[] = [];
-        if (opts.cookies) storagesToClear.push('cookies');
-        if (opts.storage) storagesToClear.push('localstorage', 'cachestorage', 'indexdb', 'websql', 'serviceworkers');
-        if (storagesToClear.length > 0 && typeof sess.clearStorageData === 'function') {
-          await sess.clearStorageData({ storages: storagesToClear as any });
-        }
-      } catch (err) {
-        console.error('[lastbrowser] Failed to clear session data:', err);
-      }
-    }
-    return { ok: true };
+    return targets;
   });
   ipcMain.handle('lastbrowser:browser:clearDeletedProfileData', async (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -966,6 +952,10 @@ function registerIpc(): void {
   });
   // Download tracking: the renderer polls the list and gets pushed updates.
   ipcMain.handle('lastbrowser:downloads:list', () => downloads.list());
+  ipcMain.handle('lastbrowser:downloads:cancel', (_event, id: unknown) => {
+    const target = String(id || '');
+    return target ? downloads.cancel(target) : false;
+  });
   ipcMain.handle('lastbrowser:downloads:clear', (_event, id: unknown) => {
     const target = String(id || '');
     if (target) downloads.clear(target);
@@ -1022,12 +1012,32 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:extensions:chooseDir', async () => {
     return extensionManager.chooseDirectory(mainWindow || undefined);
   });
+  ipcMain.handle('lastbrowser:cdp:getPreference', async () => ({
+    enabled: loadCdpPreference(app.getPath('userData')).enabled,
+    active: isCdpEnabled()
+  }));
+  ipcMain.handle('lastbrowser:cdp:savePreference', async (_event, value: unknown) => {
+    if (!value || typeof value !== 'object' || typeof (value as { enabled?: unknown }).enabled !== 'boolean') {
+      return { ok: false, error: 'A boolean enabled value is required.' };
+    }
+    const saved = saveCdpPreference(app.getPath('userData'), { enabled: (value as { enabled: boolean }).enabled });
+    return { ok: true, enabled: saved.enabled, active: isCdpEnabled(), restartRequired: saved.enabled !== isCdpEnabled() };
+  });
+  ipcMain.handle('lastbrowser:cdp:restart', async () => {
+    app.relaunch();
+    app.exit(0);
+    return { ok: true };
+  });
   ipcMain.handle('lastbrowser:cdp:status', async () => {
+    if (!isCdpEnabled()) {
+      return { available: false, enabled: false, port: null, url: null, wsUrl: null, browser: null };
+    }
     try {
       const res = await fetch(`http://127.0.0.1:${cdpPort}/json/version`);
       const data = (await res.json()) as { webSocketDebuggerUrl?: string; Browser?: string };
       return {
         available: true,
+        enabled: true,
         port: cdpPort,
         url: `http://127.0.0.1:${cdpPort}`,
         wsUrl: data.webSocketDebuggerUrl ?? null,
@@ -1036,6 +1046,7 @@ function registerIpc(): void {
     } catch {
       return {
         available: false,
+        enabled: true,
         port: cdpPort,
         url: `http://127.0.0.1:${cdpPort}`,
         wsUrl: null,
@@ -1044,6 +1055,7 @@ function registerIpc(): void {
     }
   });
   ipcMain.handle('lastbrowser:cdp:execute', async (_event, request: unknown) => {
+    if (!isCdpEnabled()) return { ok: false, error: 'CDP debugging is disabled.' };
     const payload = (request || {}) as { targetUrl?: string; method?: string; params?: Record<string, unknown> };
     try {
       const listRes = await fetch(`http://127.0.0.1:${cdpPort}/json/list`);
@@ -1136,7 +1148,7 @@ async function ensureSidecarAuth(): Promise<void> {
 }
 
 export const cdpPort = resolveCdpPort();
-if (!process.argv.some((a) => a.startsWith('--remote-debugging-port'))) {
+if (isCdpEnabled() && !process.argv.some((a) => a.startsWith('--remote-debugging-port'))) {
   app.commandLine.appendSwitch('remote-debugging-port', String(cdpPort));
 }
 // Disable AutomationControlled blink feature to prevent navigator.webdriver = true

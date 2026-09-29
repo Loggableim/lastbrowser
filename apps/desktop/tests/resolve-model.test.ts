@@ -28,6 +28,29 @@ describe('resolveConfiguredModel', () => {
     expect(model).toBe('first/model');
   });
 
+  it('uses the active provider group instead of an earlier unrelated provider', async () => {
+    const model = await resolveConfiguredModel(
+      bridge({
+        active_provider: 'ollama-cloud',
+        groups: [
+          { provider: 'OpenRouter', provider_id: 'openrouter', models: [{ id: 'openrouter/free-model' }] },
+          { provider: 'Ollama Cloud', provider_id: 'ollama-cloud', models: [{ id: 'deepseek-v4.1-flash' }] }
+        ]
+      })
+    );
+    expect(model).toBe('deepseek-v4.1-flash');
+  });
+
+  it('returns no model when the active provider has no matching model group', async () => {
+    const model = await resolveConfiguredModel(
+      bridge({
+        active_provider: 'ollama-cloud',
+        groups: [{ provider: 'OpenRouter', provider_id: 'openrouter', models: [{ id: 'openrouter/free-model' }] }]
+      })
+    );
+    expect(model).toBe('');
+  });
+
   it('skips providers without usable models', async () => {
     const model = await resolveConfiguredModel(
       bridge({

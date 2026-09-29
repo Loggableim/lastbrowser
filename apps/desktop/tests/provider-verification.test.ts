@@ -16,32 +16,45 @@ const ONBOARDING_PROVIDER_IDS = [
 ];
 
 describe('provider verification claims', () => {
-  it('marks OpenRouter as live-tested only for the model used in the audit', () => {
+  it('does not infer live verification from provider identity alone', () => {
     for (const providerId of ONBOARDING_PROVIDER_IDS) {
       const result = providerVerification(providerId);
-      if (providerId === 'openrouter') {
-        expect(result.verified).toBe(true);
-        expect(result.statusKey).toBe('settings.panels.providers.openrouterLiveTested');
-        expect(result.evidenceKey).toBe('settings.panels.providers.openrouterChatEvidence');
-      } else {
-        expect(result.verified, providerId).toBe(false);
-        expect(result.statusKey, providerId).toBe('settings.panels.providers.betaUntested');
-      }
+      expect(result.verified, providerId).toBe(false);
+      expect(result.statusKey, providerId).toBe('settings.panels.providers.betaUntested');
     }
   });
 
-  it('does not imply that other OpenRouter catalog models were tested', () => {
-    const result = providerVerification('OpenRouter');
-    expect(result.verified).toBe(true);
-    expect(result.statusKey).toBe('settings.panels.providers.openrouterLiveTested');
-    expect(result.evidenceKey).toBe('settings.panels.providers.openrouterChatEvidence');
+  it('keeps Ollama Cloud catalog discovery separate from chat verification', () => {
+    const catalogOnly = providerVerification('ollama-cloud', { catalogVerified: true });
+    expect(catalogOnly.verified).toBe(false);
+    expect(catalogOnly.statusKey).toBe('settings.panels.providers.betaUntested');
+    expect(catalogOnly.evidenceKey).toBe('settings.panels.providers.ollamaCloudCatalogOnly');
+
+    const noEvidence = providerVerification('ollama-cloud');
+    expect(noEvidence.verified).toBe(false);
+    expect(noEvidence.evidenceKey).toBeUndefined();
   });
 
-  it('distinguishes Ollama Cloud catalog evidence from an unverified chat path', () => {
-    const result = providerVerification('ollama-cloud');
+  it('accepts successful Lastbrowser chat evidence, including direct Ollama', () => {
+    for (const providerId of ['ollama', 'ollama-cloud', 'openrouter']) {
+      const result = providerVerification(providerId, { successfulChat: true });
+      expect(result.verified, providerId).toBe(true);
+      expect(result.statusKey, providerId).toBe('settings.panels.providers.connectionSuccess');
+    }
+  });
+
+  it('does not claim OpenRouter or Ollama Cloud chat evidence by default', () => {
+    for (const providerId of ['openrouter', 'ollama-cloud']) {
+      const result = providerVerification(providerId);
+      expect(result.verified, providerId).toBe(false);
+      expect(result.statusKey, providerId).toBe('settings.panels.providers.betaUntested');
+    }
+  });
+
+  it('does not mark an unsuccessful runtime chat as verified', () => {
+    const result = providerVerification('ollama', { successfulChat: false });
     expect(result.verified).toBe(false);
     expect(result.statusKey).toBe('settings.panels.providers.betaUntested');
-    expect(result.evidenceKey).toBe('settings.panels.providers.ollamaCloudCatalogOnly');
   });
 
   it('does not claim Antigravity chat success from OAuth and onboarding alone', () => {
@@ -60,17 +73,16 @@ describe('provider verification claims', () => {
 
   it('normalizes provider ID casing and keeps unknown providers untested', () => {
     expect(providerVerification(' OLLAMA-CLOUD ').verified).toBe(false);
+    expect(providerVerification(' OLLAMA ', { successfulChat: true }).verified).toBe(true);
     expect(providerVerification('new-provider').verified).toBe(false);
     expect(providerVerification('new-provider').statusKey).toBe('settings.panels.providers.betaUntested');
   });
 
-  it('keeps the beta and verified labels localized in every shipped language', () => {
+  it('keeps the beta and successful-chat labels localized in every shipped language', () => {
     for (const locale of desktopLocaleIds) {
       const i18n = createDesktopI18n(locale);
       expect(i18n.t('settings.panels.providers.betaUntested')).not.toBe('settings.panels.providers.betaUntested');
-      expect(i18n.t('settings.panels.providers.ollamaCloudLiveVerified')).not.toBe('settings.panels.providers.ollamaCloudLiveVerified');
-      expect(i18n.t('settings.panels.providers.openrouterLiveTested')).not.toBe('settings.panels.providers.openrouterLiveTested');
-      expect(i18n.t('settings.panels.providers.openrouterChatEvidence')).not.toBe('settings.panels.providers.openrouterChatEvidence');
+      expect(i18n.t('settings.panels.providers.connectionSuccess')).not.toBe('settings.panels.providers.connectionSuccess');
       expect(i18n.t('settings.panels.providers.antigravityQuotaOnly')).not.toBe('settings.panels.providers.antigravityQuotaOnly');
       expect(i18n.t('settings.panels.providers.betaUntested').toLowerCase()).toContain(locale === 'ru' ? 'бета' : locale === 'fr' ? 'bêta' : 'beta');
     }

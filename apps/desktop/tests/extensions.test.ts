@@ -303,6 +303,27 @@ describe('extensions engine', () => {
       expect(manager.list().length).toBe(1);
     });
 
+    it('unloads and reloads an existing extension when reinstalling the same folder ID', async () => {
+      const extDir = path.join(tempDir, 'reloadable-extension');
+      mkdirSync(extDir, { recursive: true });
+      const manifestPath = path.join(extDir, 'manifest.json');
+      writeFileSync(manifestPath, JSON.stringify({ name: 'Reloadable', version: '1.0.0', manifest_version: 3 }));
+
+      const manager = new ExtensionManager(tempDir, () => [fakeSession]);
+      await manager.init();
+      const first = await manager.installFromDirectory(extDir);
+      expect(first.version).toBe('1.0.0');
+      expect(fakeSession.loadExtension).toHaveBeenCalledTimes(1);
+
+      writeFileSync(manifestPath, JSON.stringify({ name: 'Reloadable', version: '2.0.0', manifest_version: 3 }));
+      const updated = await manager.installFromDirectory(extDir);
+
+      expect(updated.version).toBe('2.0.0');
+      expect(fakeSession.removeExtension).toHaveBeenCalledWith(`chromium-${first.id}`);
+      expect(fakeSession.loadExtension).toHaveBeenCalledTimes(2);
+      expect(loadedExtensions.has(`chromium-${first.id}`)).toBe(true);
+    });
+
     it('supports toggling enable/disable and toggling incognito', async () => {
       const extDir = path.join(tempDir, 'toggle-test');
       mkdirSync(extDir, { recursive: true });
@@ -403,6 +424,38 @@ describe('extensions engine', () => {
 
         await manager.toggleIncognito(record.id, true);
         expect(incognitoSession.loadExtension).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('reloads an updated Chrome Web Store package in active sessions', async () => {
+      const extensionId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      const zipV1 = createTestZip({
+        'manifest.json': JSON.stringify({ name: 'CWS Reload', version: '1.0.0', manifest_version: 3 })
+      });
+      const zipV2 = createTestZip({
+        'manifest.json': JSON.stringify({ name: 'CWS Reload', version: '2.0.0', manifest_version: 3 })
+      });
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => zipV1.buffer.slice(zipV1.byteOffset, zipV1.byteOffset + zipV1.byteLength)
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => zipV2.buffer.slice(zipV2.byteOffset, zipV2.byteOffset + zipV2.byteLength)
+        });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const manager = new ExtensionManager(tempDir, () => [fakeSession]);
+        await manager.init();
+        expect((await manager.installFromCws(extensionId)).version).toBe('1.0.0');
+        expect((await manager.installFromCws(extensionId)).version).toBe('2.0.0');
+
+        expect(fakeSession.removeExtension).toHaveBeenCalledWith(`chromium-${extensionId}`);
+        expect(fakeSession.loadExtension).toHaveBeenCalledTimes(2);
+        expect(loadedExtensions.has(`chromium-${extensionId}`)).toBe(true);
       } finally {
         vi.unstubAllGlobals();
       }

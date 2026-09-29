@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createAbortScript,
   createFormDiscoveryScript,
@@ -8,20 +8,31 @@ import {
   type VisualAction
 } from '../src/renderer/live-automation.js';
 import { buildSidecarEnvironment, type ServiceLayout } from '../src/main/services.js';
-import { resolveCdpPort, DEFAULT_CDP_PORT } from '../src/main/cdp.js';
+import { resolveCdpPort, DEFAULT_CDP_PORT, isCdpEnabled, setPersistedCdpEnabled } from '../src/main/cdp.js';
 
 describe('Live Webview CDP-Automatisierung & Visueller Assistent (Phase 10.3)', () => {
   describe('CDP port resolution and Sidekick environment coupling', () => {
-    it('resolves default CDP port 9222 when no override is present', () => {
-      const origEnv = process.env.LASTBROWSER_CDP_PORT;
-      delete process.env.LASTBROWSER_CDP_PORT;
-      delete process.env.CDP_PORT;
-      expect(DEFAULT_CDP_PORT).toBe(9222);
-      expect(resolveCdpPort()).toBe(9222);
-      if (origEnv) process.env.LASTBROWSER_CDP_PORT = origEnv;
+    beforeEach(() => {
+      setPersistedCdpEnabled(undefined);
+      vi.stubEnv('LASTBROWSER_ENABLE_CDP', undefined);
+      vi.stubEnv('LASTBROWSER_CDP_PORT', undefined);
+      vi.stubEnv('CDP_PORT', undefined);
+      vi.stubEnv('BROWSER_CDP_URL', undefined);
+      vi.stubEnv('LASTBROWSER_CDP_URL', undefined);
     });
 
-    it('injects BROWSER_CDP_URL into Sidekick sidecar environment for direct webview attachment', () => {
+    afterEach(() => {
+      setPersistedCdpEnabled(undefined);
+      vi.unstubAllEnvs();
+    });
+
+    it('keeps CDP disabled by default even though the compatibility port is known', () => {
+      expect(DEFAULT_CDP_PORT).toBe(9222);
+      expect(resolveCdpPort({}, [])).toBe(9222);
+      expect(isCdpEnabled({}, [])).toBe(false);
+    });
+
+    it('does not expose the app browser CDP endpoint to Sidekick by default', () => {
       const layout: ServiceLayout = {
         resourcesDir: 'C:/resources',
         runtimeDir: 'C:/runtime',
@@ -34,9 +45,54 @@ describe('Live Webview CDP-Automatisierung & Visueller Assistent (Phase 10.3)', 
       };
 
       const env = buildSidecarEnvironment(layout, 8420);
-      expect(env.BROWSER_CDP_URL).toBeDefined();
-      expect(env.BROWSER_CDP_URL).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
-      expect(env.LASTBROWSER_CDP_PORT).toBeDefined();
+      expect(env.BROWSER_CDP_URL).toBeUndefined();
+      expect(env.LASTBROWSER_CDP_URL).toBeUndefined();
+      expect(env.LASTBROWSER_CDP_PORT).toBeUndefined();
+    });
+
+    it('injects direct webview attachment only when the CDP port is explicitly configured', () => {
+      vi.stubEnv('LASTBROWSER_CDP_PORT', '9333');
+      const layout: ServiceLayout = {
+        resourcesDir: 'C:/resources', runtimeDir: 'C:/runtime', sidekickDir: 'C:/sidekick',
+        webuiDir: 'C:/webui', webuiServer: 'C:/webui/server.py', webuiMode: 'monorepo',
+        pythonExe: 'C:/runtime/python.exe', bridgeToken: 'test-token'
+      };
+
+      const env = buildSidecarEnvironment(layout, 8420);
+      expect(env.BROWSER_CDP_URL).toBe('http://127.0.0.1:9333');
+      expect(env.LASTBROWSER_CDP_URL).toBe(env.BROWSER_CDP_URL);
+      expect(env.LASTBROWSER_CDP_PORT).toBe('9333');
+    });
+
+    it('keeps CDP off by default but enables its endpoint and Sidekick wiring from the persisted user preference', () => {
+      const layout: ServiceLayout = {
+        resourcesDir: 'C:/resources', runtimeDir: 'C:/runtime', sidekickDir: 'C:/sidekick',
+        webuiDir: 'C:/webui', webuiServer: 'C:/webui/server.py', webuiMode: 'monorepo',
+        pythonExe: 'C:/runtime/python.exe', bridgeToken: 'test-token'
+      };
+
+      expect(isCdpEnabled({}, [])).toBe(false);
+      expect(buildSidecarEnvironment(layout, 8420).BROWSER_CDP_URL).toBeUndefined();
+
+      setPersistedCdpEnabled(true);
+      expect(isCdpEnabled({}, [])).toBe(true);
+      const env = buildSidecarEnvironment(layout, 8420);
+      expect(env.BROWSER_CDP_URL).toBe('http://127.0.0.1:9222');
+      expect(env.LASTBROWSER_CDP_PORT).toBe('9222');
+    });
+
+    it('preserves an explicitly supplied external browser CDP URL without enabling app CDP', () => {
+      vi.stubEnv('BROWSER_CDP_URL', 'http://127.0.0.1:9444');
+      const layout: ServiceLayout = {
+        resourcesDir: 'C:/resources', runtimeDir: 'C:/runtime', sidekickDir: 'C:/sidekick',
+        webuiDir: 'C:/webui', webuiServer: 'C:/webui/server.py', webuiMode: 'monorepo',
+        pythonExe: 'C:/runtime/python.exe', bridgeToken: 'test-token'
+      };
+
+      const env = buildSidecarEnvironment(layout, 8420);
+      expect(env.BROWSER_CDP_URL).toBe('http://127.0.0.1:9444');
+      expect(env.LASTBROWSER_CDP_URL).toBeUndefined();
+      expect(isCdpEnabled()).toBe(false);
     });
   });
 

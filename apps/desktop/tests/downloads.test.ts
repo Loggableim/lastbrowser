@@ -24,7 +24,8 @@ function fakeItem(overrides: Partial<{
     total: overrides.total ?? 1000,
     savePath: overrides.savePath ?? 'C:/Users/test/Downloads/report.pdf',
     assignedSavePath: '',
-    paused: overrides.paused ?? false
+    paused: overrides.paused ?? false,
+    cancelCalls: 0
   };
   return {
     state,
@@ -34,6 +35,7 @@ function fakeItem(overrides: Partial<{
     getTotalBytes: () => state.total,
     getSavePath: () => state.assignedSavePath || state.savePath,
     isPaused: () => state.paused,
+    cancel: () => { state.cancelCalls += 1; },
     setSavePath: (path: string) => { state.assignedSavePath = path; },
     on(event: string, listener: Listener) {
       listeners.set(event, [...(listeners.get(event) ?? []), listener]);
@@ -82,7 +84,7 @@ describe('download tracker', () => {
     const mainSend = vi.fn();
     const detachedSend = vi.fn();
     const destroyedSend = vi.fn();
-    const entries = [{ id: 'dl-1', filename: 'a.txt', url: 'https://example.com/a.txt', received: 1, total: 2, state: 'progressing' as const, savePath: '', startedAt: 1 }];
+    const entries = [{ id: 'dl-1', filename: 'a.txt', url: 'https://example.com/a.txt', received: 1, total: 2, state: 'progressing' as const, active: true, savePath: '', startedAt: 1 }];
 
     broadcastDownloadSnapshot([
       { isDestroyed: () => false, webContents: { send: mainSend } },
@@ -350,11 +352,57 @@ describe('download tracker', () => {
     const tracker = createDownloadTracker();
     const session = fakeSession();
     tracker.attach(session);
-    session.start(fakeItem());
+    const item = fakeItem();
+    session.start(item);
 
     const id = tracker.list()[0].id;
+    // Live downloads cannot be hidden by the history-remove action.
+    tracker.clear(id);
+    expect(tracker.list()).toHaveLength(1);
+    item.fire('done', {}, 'completed');
     tracker.clear(id);
     expect(tracker.list()).toHaveLength(0);
+  });
+
+  it('cancels the owned Electron DownloadItem and retains its row until done', () => {
+    const tracker = createDownloadTracker();
+    const session = fakeSession();
+    tracker.attach(session);
+    const item = fakeItem();
+    session.start(item);
+    const id = tracker.list()[0].id;
+
+    expect(tracker.cancel(id)).toBe(true);
+    expect(item.state.cancelCalls).toBe(1);
+    expect(tracker.list()[0].state).toBe('progressing');
+    expect(tracker.list()[0].active).toBe(true);
+    expect(tracker.cancel('missing')).toBe(false);
+
+    item.fire('done', {}, 'cancelled');
+    expect(tracker.list()[0].state).toBe('cancelled');
+    expect(tracker.list()[0].active).toBe(false);
+    expect(tracker.cancel(id)).toBe(false);
+  });
+
+  it('routes active-row actions to cancel and terminal-row actions to history removal', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/renderer/NativeDownloads.tsx'), 'utf8');
+    expect(source).toContain("entry.active ? onCancel(entry.id) : onClear(entry.id)");
+    expect(source).toContain("window.lastbrowser.downloads.cancel(id)");
+  });
+
+  it('keeps paused downloads cancellable because Electron still owns the item', () => {
+    const tracker = createDownloadTracker();
+    const session = fakeSession();
+    tracker.attach(session);
+    const item = fakeItem({ paused: true });
+    session.start(item);
+    item.fire('updated');
+    const entry = tracker.list()[0];
+
+    expect(entry.state).toBe('interrupted');
+    expect(entry.active).toBe(true);
+    expect(tracker.cancel(entry.id)).toBe(true);
+    expect(item.state.cancelCalls).toBe(1);
   });
 
   it('attaches to a session only once', () => {

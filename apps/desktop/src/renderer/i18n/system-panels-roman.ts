@@ -19,6 +19,8 @@ type SystemPanelKey = Extract<DesktopTranslationKey,
   | `settings.panels.appearance.${string}`
   | `settings.panels.notifications.${string}`
   | `settings.panels.providers.${string}`
+  | `insights.${string}`
+  | `logs.${string}`
 >;
 
 type SystemPanelTranslations = Partial<Record<SystemPanelKey, string>>;
@@ -160,7 +162,9 @@ export const systemPanelsRomanTranslations = {
     'settings.panels.providers.enabledPlugins': 'Aktivierte Plugins',
     'settings.panels.providers.pluginKeysCsv': 'Plugin-Schlüssel (CSV)',
     'settings.panels.providers.pluginInventory': 'Plugin-Übersicht',
-    'settings.panels.providers.pluginInventoryDescription': 'Zeigt die verfügbaren und konfigurierten Plugins an.'
+    'settings.panels.providers.pluginInventoryDescription': 'Zeigt die verfügbaren und konfigurierten Plugins an.',
+    'insights.overview': 'Übersicht', 'insights.sessions': 'Sitzungen', 'insights.messages': 'Nachrichten', 'insights.tokens': 'Tokens', 'insights.input': 'Eingabe', 'insights.output': 'Ausgabe', 'insights.averagePerSession': 'Durchschnitt pro Sitzung', 'insights.weeklyTotal': 'Wochensumme', 'insights.systemHealth': 'Systemstatus', 'insights.noSystemHealth': 'Keine Systemstatusdaten vorhanden.', 'insights.sidekickStarting': 'Sidekick wird gestartet.', 'insights.llmWikiStatus': 'LLM-Wiki-Status', 'insights.dailyTokens': 'Tokens pro Tag', 'insights.day': 'Tag {day}', 'insights.noDailyUsage': 'Keine täglichen Nutzungsdaten vorhanden.', 'insights.noModelData': 'Keine Modelldaten vorhanden.', 'insights.model': 'Modell', 'insights.sessionsCount': '{count} Sitzungen', 'insights.tokensCount': '{count} Tokens', 'insights.tokenBreakdown': 'Token-Aufschlüsselung', 'insights.activityByHour': 'Aktivität nach Stunde', 'insights.noHourlyActivity': 'Keine stündlichen Aktivitätsdaten vorhanden.', 'insights.noMetrics': 'Noch keine Kennzahlen vorhanden.', 'insights.daysCount': '{count} Tage',
+    'logs.filterPlaceholder': 'Schweregrad oder Text filtern', 'logs.noLinesLoaded': 'Keine Logzeilen geladen.', 'logs.agent': 'Agent', 'logs.webUi': 'Weboberfläche', 'logs.errors': 'Fehler', 'logs.gateway': 'Gateway'
   },
   es: {
     'settings.sections.teamwork': 'Teamwork', 'settings.sections.googleAccounts': 'Cuentas de Google', 'settings.sections.extensions': 'Extensiones',
@@ -298,7 +302,9 @@ export const systemPanelsRomanTranslations = {
     'settings.panels.providers.enabledPlugins': 'Plugins activados',
     'settings.panels.providers.pluginKeysCsv': 'Claves de plugins (CSV)',
     'settings.panels.providers.pluginInventory': 'Inventario de plugins',
-    'settings.panels.providers.pluginInventoryDescription': 'Muestra los plugins disponibles y configurados.'
+    'settings.panels.providers.pluginInventoryDescription': 'Muestra los plugins disponibles y configurados.',
+    'insights.overview': 'Resumen', 'insights.sessions': 'Sesiones', 'insights.messages': 'Mensajes', 'insights.tokens': 'Tokens', 'insights.input': 'Entrada', 'insights.output': 'Salida', 'insights.averagePerSession': 'Promedio por sesión', 'insights.weeklyTotal': 'Total semanal', 'insights.systemHealth': 'Estado del sistema', 'insights.noSystemHealth': 'No hay datos del estado del sistema.', 'insights.sidekickStarting': 'Sidekick se está iniciando.', 'insights.llmWikiStatus': 'Estado de la Wiki de LLM', 'insights.dailyTokens': 'Tokens diarios', 'insights.day': 'Día {day}', 'insights.noDailyUsage': 'No hay datos de uso diario.', 'insights.noModelData': 'No hay datos de modelos.', 'insights.model': 'Modelo', 'insights.sessionsCount': '{count} sesiones', 'insights.tokensCount': '{count} tokens', 'insights.tokenBreakdown': 'Desglose de tokens', 'insights.activityByHour': 'Actividad por hora', 'insights.noHourlyActivity': 'No hay datos de actividad por hora.', 'insights.noMetrics': 'Aún no hay métricas.', 'insights.daysCount': '{count} días',
+    'logs.filterPlaceholder': 'Filtrar nivel o texto', 'logs.noLinesLoaded': 'No se han cargado líneas de registro.', 'logs.agent': 'Agente', 'logs.webUi': 'Interfaz web', 'logs.errors': 'Errores', 'logs.gateway': 'Pasarela'
   },
   fr: {
     'settings.sections.teamwork': 'Teamwork', 'settings.sections.googleAccounts': 'Comptes Google', 'settings.sections.extensions': 'Extensions',
@@ -436,7 +442,9 @@ export const systemPanelsRomanTranslations = {
     'settings.panels.providers.enabledPlugins': 'Extensions activées',
     'settings.panels.providers.pluginKeysCsv': 'Clés des extensions (CSV)',
     'settings.panels.providers.pluginInventory': 'Inventaire des extensions',
-    'settings.panels.providers.pluginInventoryDescription': 'Affiche les extensions disponibles et configurées.'
+    'settings.panels.providers.pluginInventoryDescription': 'Affiche les extensions disponibles et configurées.',
+    'insights.overview': 'Vue d’ensemble', 'insights.sessions': 'Sessions', 'insights.messages': 'Messages', 'insights.tokens': 'Jetons', 'insights.input': 'Entrée', 'insights.output': 'Sortie', 'insights.averagePerSession': 'Moyenne par session', 'insights.weeklyTotal': 'Total hebdomadaire', 'insights.systemHealth': 'État du système', 'insights.noSystemHealth': 'Aucune donnée sur l’état du système.', 'insights.sidekickStarting': 'Sidekick démarre.', 'insights.llmWikiStatus': 'État du wiki LLM', 'insights.dailyTokens': 'Jetons par jour', 'insights.day': 'Jour {day}', 'insights.noDailyUsage': 'Aucune donnée d’utilisation quotidienne.', 'insights.noModelData': 'Aucune donnée de modèle.', 'insights.model': 'Modèle', 'insights.sessionsCount': '{count} sessions', 'insights.tokensCount': '{count} jetons', 'insights.tokenBreakdown': 'Répartition des jetons', 'insights.activityByHour': 'Activité par heure', 'insights.noHourlyActivity': 'Aucune donnée d’activité horaire.', 'insights.noMetrics': 'Aucune mesure pour le moment.', 'insights.daysCount': '{count} jours',
+    'logs.filterPlaceholder': 'Filtrer par niveau ou texte', 'logs.noLinesLoaded': 'Aucune ligne de journal chargée.', 'logs.agent': 'Agent', 'logs.webUi': 'Interface web', 'logs.errors': 'Erreurs', 'logs.gateway': 'Passerelle'
   },
   it: {
     'settings.sections.teamwork': 'Teamwork', 'settings.sections.googleAccounts': 'Account Google', 'settings.sections.extensions': 'Estensioni',
@@ -574,6 +582,8 @@ export const systemPanelsRomanTranslations = {
     'settings.panels.providers.enabledPlugins': 'Plugin attivati',
     'settings.panels.providers.pluginKeysCsv': 'Chiavi dei plugin (CSV)',
     'settings.panels.providers.pluginInventory': 'Inventario dei plugin',
-    'settings.panels.providers.pluginInventoryDescription': 'Mostra i plugin disponibili e configurati.'
+    'settings.panels.providers.pluginInventoryDescription': 'Mostra i plugin disponibili e configurati.',
+    'insights.overview': 'Panoramica', 'insights.sessions': 'Sessioni', 'insights.messages': 'Messaggi', 'insights.tokens': 'Token', 'insights.input': 'Input', 'insights.output': 'Output', 'insights.averagePerSession': 'Media per sessione', 'insights.weeklyTotal': 'Totale settimanale', 'insights.systemHealth': 'Stato del sistema', 'insights.noSystemHealth': 'Nessun dato sullo stato del sistema.', 'insights.sidekickStarting': 'Sidekick è in avvio.', 'insights.llmWikiStatus': 'Stato della Wiki LLM', 'insights.dailyTokens': 'Token giornalieri', 'insights.day': 'Giorno {day}', 'insights.noDailyUsage': 'Nessun dato di utilizzo giornaliero.', 'insights.noModelData': 'Nessun dato sui modelli.', 'insights.model': 'Modello', 'insights.sessionsCount': '{count} sessioni', 'insights.tokensCount': '{count} token', 'insights.tokenBreakdown': 'Ripartizione dei token', 'insights.activityByHour': 'Attività per ora', 'insights.noHourlyActivity': 'Nessun dato di attività oraria.', 'insights.noMetrics': 'Nessuna metrica disponibile.', 'insights.daysCount': '{count} giorni',
+    'logs.filterPlaceholder': 'Filtra per livello o testo', 'logs.noLinesLoaded': 'Nessuna riga di log caricata.', 'logs.agent': 'Agente', 'logs.webUi': 'Interfaccia web', 'logs.errors': 'Errori', 'logs.gateway': 'Gateway'
   }
 } satisfies Record<'de' | 'es' | 'fr' | 'it', SystemPanelTranslations>;

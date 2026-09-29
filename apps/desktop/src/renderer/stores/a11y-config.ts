@@ -7,7 +7,7 @@ export type HighContrastPalette = 'ambra-matte' | 'onyx-cyan' | 'ivory-navy' | '
 export type LoupePosition = 'top' | 'bottom' | 'left' | 'right';
 export type ColorVisionFilter = 'none' | 'protanopia' | 'deuteranopia' | 'tritanopia' | 'achromatopsia';
 export type CursorSize = 'normal' | 'large' | 'huge' | 'mega'; // 24px, 36px, 48px, 64px
-export type A11yFontFamily = 'system' | 'atkinson' | 'lexend';
+export type A11yFontFamily = 'system' | 'atkinson' | 'lexend' | 'opendyslexic';
 export type MinClickTargetSize = 48 | 56 | 64;
 export type CursorLoupeSize = 120 | 180 | 240;
 export type CursorLoupeFactor = 1.5 | 2.0 | 3.0 | 4.0;
@@ -79,7 +79,20 @@ export const DEFAULT_VISION_IMPAIRED_CONFIG: VisionImpairedConfig = {
   copilotAudioChime: false
 };
 
-const FONT_FAMILIES: readonly A11yFontFamily[] = ['system', 'atkinson', 'lexend'];
+export type ToggleableVisionFeature = 'cursorLoupeEnabled' | 'splitScreenMagnifier';
+
+/** Shortcut/titlebar activation must also enable the master mode that renders the feature. */
+export function toggleVisionImpairedFeature(
+  config: VisionImpairedConfig,
+  feature: ToggleableVisionFeature
+): Partial<Pick<VisionImpairedConfig, 'enabled' | ToggleableVisionFeature>> {
+  const isActive = config.enabled && config[feature];
+  return isActive
+    ? { enabled: config.enabled, [feature]: false }
+    : { enabled: true, [feature]: true };
+}
+
+const FONT_FAMILIES: readonly A11yFontFamily[] = ['system', 'atkinson', 'lexend', 'opendyslexic'];
 const PALETTES: readonly HighContrastPalette[] = ['ambra-matte', 'onyx-cyan', 'ivory-navy', 'monochrom-high'];
 const LOUPE_POSITIONS: readonly LoupePosition[] = ['top', 'bottom', 'left', 'right'];
 const CVD_FILTERS: readonly ColorVisionFilter[] = ['none', 'protanopia', 'deuteranopia', 'tritanopia', 'achromatopsia'];
@@ -156,27 +169,29 @@ export function saveVisionImpairedConfig(config: VisionImpairedConfig): void {
 export function applyVisionImpairedToDom(config: VisionImpairedConfig): void {
   if (typeof document === 'undefined' || !document.documentElement) return;
   const root = document.documentElement;
+  const enabled = config.enabled;
   root.dataset.a11yViEnabled = String(config.enabled);
-  root.dataset.a11yFont = config.fontFamily;
-  root.dataset.a11yEnhancedSpacing = String(config.enhancedSpacing);
-  root.dataset.a11yBoldWeight = String(config.boldWeight);
-  root.dataset.a11yNoEllipsis = String(config.noEllipsisWrap);
-  root.dataset.a11yBionicReading = String(config.bionicReading);
-  root.dataset.a11ySuperTabs = String(config.superSizedVerticalTabs);
-  root.dataset.a11yEnlargedTopbar = String(config.enlargedTopBar);
-  root.dataset.a11yPalette = config.palette;
-  root.dataset.a11ySmartInvert = String(config.smartInvertWebview);
-  root.dataset.a11yAntiHalation = String(config.antiHalation);
-  root.dataset.a11yCvdFilter = config.colorVisionFilter;
-  root.dataset.a11ySoftContrast = String(config.softContrastText);
-  root.dataset.a11yReducedMotion = String(config.reduceMotionStrict);
-  root.dataset.a11yCopilotChime = String(config.copilotAudioChime);
-  root.dataset.a11ySplitMagnifier = String(config.splitScreenMagnifier);
-  root.dataset.cursorSize = config.cursorSize;
-  root.dataset.a11yShakeLocate = String(config.shakeToLocate);
-  root.dataset.a11yLoupeEnabled = String(config.cursorLoupeEnabled);
+  root.dataset.a11yFont = enabled ? config.fontFamily : 'system';
+  root.dataset.a11yEnhancedSpacing = String(enabled && config.enhancedSpacing);
+  root.dataset.a11yBoldWeight = String(enabled && config.boldWeight);
+  root.dataset.a11yNoEllipsis = String(enabled && config.noEllipsisWrap);
+  root.dataset.a11yBionicReading = String(enabled && config.bionicReading);
+  root.dataset.a11ySuperTabs = String(enabled && config.superSizedVerticalTabs);
+  root.dataset.a11yEnlargedTopbar = String(enabled && config.enlargedTopBar);
+  root.dataset.a11yMinTarget = String(enabled ? config.minClickTargetSize : 48);
+  root.dataset.a11yPalette = enabled ? config.palette : 'ambra-matte';
+  root.dataset.a11ySmartInvert = String(enabled && config.smartInvertWebview);
+  root.dataset.a11yAntiHalation = String(enabled && config.antiHalation);
+  root.dataset.a11yCvdFilter = enabled ? config.colorVisionFilter : 'none';
+  root.dataset.a11ySoftContrast = String(enabled && config.softContrastText);
+  root.dataset.a11yReducedMotion = String(enabled && config.reduceMotionStrict);
+  root.dataset.a11yCopilotChime = String(enabled && config.copilotAudioChime);
+  root.dataset.a11ySplitMagnifier = String(enabled && config.splitScreenMagnifier);
+  root.dataset.cursorSize = enabled ? config.cursorSize : 'normal';
+  root.dataset.a11yShakeLocate = String(enabled && config.shakeToLocate);
+  root.dataset.a11yLoupeEnabled = String(enabled && config.cursorLoupeEnabled);
   root.dataset.a11yLoupePosition = config.cursorLoupePosition;
-  root.style.setProperty('--lb-min-target-size', `${config.minClickTargetSize}px`);
+  root.style.setProperty('--lb-min-target-size', `${enabled ? config.minClickTargetSize : 48}px`);
   root.style.setProperty('--lb-loupe-size', `${config.cursorLoupeSize}px`);
   root.style.setProperty('--lb-loupe-factor', String(config.cursorLoupeFactor));
 }

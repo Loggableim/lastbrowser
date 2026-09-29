@@ -197,12 +197,26 @@ export async function resolveConfiguredModel(
   try {
     const data = (await requestWebui({ method: 'GET', path: '/api/models' })) as {
       default_model?: string;
-      groups?: Array<{ provider?: string; models?: Array<{ id?: string }> }>;
+      active_provider?: string;
+      groups?: Array<{ provider?: string; provider_id?: string; models?: Array<{ id?: string }> }>;
     };
     const configured = typeof data?.default_model === 'string' ? data.default_model.trim() : '';
     if (configured) return configured;
     const groups = Array.isArray(data?.groups) ? data.groups : [];
-    for (const group of groups) {
+    const activeProvider = typeof data?.active_provider === 'string'
+      ? data.active_provider.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+      : '';
+    const activeGroup = activeProvider
+      ? groups.find((group) => [group?.provider_id, group?.provider].some((provider) => (
+        typeof provider === 'string' && provider.trim().toLowerCase().replace(/[^a-z0-9]/g, '') === activeProvider
+      )))
+      : undefined;
+    // If the backend identifies an active provider, only use its models. An
+    // unmatched provider intentionally yields no renderer fallback so the
+    // backend can resolve its own default instead of receiving another
+    // provider's model id.
+    const fallbackGroups = activeProvider ? (activeGroup ? [activeGroup] : []) : groups;
+    for (const group of fallbackGroups) {
       const models = Array.isArray(group?.models) ? group.models : [];
       const first = models.find((model) => typeof model?.id === 'string' && model.id.trim());
       if (first?.id) return first.id.trim();

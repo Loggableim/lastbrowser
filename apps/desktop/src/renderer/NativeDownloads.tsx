@@ -36,6 +36,7 @@ export type DownloadEntry = {
   received: number;
   total: number;
   state: 'progressing' | 'completed' | 'cancelled' | 'interrupted';
+  active: boolean;
   savePath: string;
   startedAt: number;
 };
@@ -91,10 +92,12 @@ function progressOf(entry: DownloadEntry): number | null {
 
 export function DownloadItemRow({
   entry,
-  onClear
+  onClear,
+  onCancel
 }: {
   entry: DownloadEntry;
   onClear: (id: string) => void;
+  onCancel: (id: string) => void;
 }): React.JSX.Element {
   const { t } = useDesktopI18n();
   const progress = progressOf(entry);
@@ -125,8 +128,13 @@ export function DownloadItemRow({
           </span>
         )}
       </span>
-      <button type="button" aria-label={t('downloads.remove')} title={t('downloads.remove')} onClick={() => onClear(entry.id)}>
-        <X size={13} />
+      <button
+        type="button"
+        aria-label={entry.active ? t('downloads.cancel') : t('downloads.remove')}
+        title={entry.active ? t('downloads.cancel') : t('downloads.remove')}
+        onClick={() => entry.active ? onCancel(entry.id) : onClear(entry.id)}
+      >
+        {entry.active ? <XCircle size={13} /> : <X size={13} />}
       </button>
     </div>
   );
@@ -253,7 +261,7 @@ export function DownloadsPanel({
 
   if (!open) return null;
 
-  const active = entries.filter((entry) => entry.state === 'progressing').length;
+  const active = entries.filter((entry) => entry.active).length;
   const completed = entries.filter((entry) => entry.state === 'completed').length;
 
   // Render Minimized Pill
@@ -478,6 +486,7 @@ export function DownloadsPanel({
           <DownloadItemRow
             key={entry.id}
             entry={entry}
+            onCancel={(id) => void window.lastbrowser.downloads.cancel(id)}
             onClear={(id) => void window.lastbrowser.downloads.clear(id).then(setEntries)}
           />
         ))}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ZoomIn } from 'lucide-react';
+import { useDesktopI18n } from '../i18n.js';
 
 /**
  * Split-Screen Magnifier (docs/visionimpaired.md §6, Feature 18).
@@ -47,6 +48,7 @@ export type SplitScreenMagnifierProps = {
 };
 
 export function SplitScreenMagnifier({ webview, syncKey }: SplitScreenMagnifierProps): React.JSX.Element | null {
+  const { t } = useDesktopI18n();
   const [paragraph, setParagraph] = useState<{ text: string; scrollY: number }>({ text: '', scrollY: 0 });
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
@@ -77,15 +79,15 @@ export function SplitScreenMagnifier({ webview, syncKey }: SplitScreenMagnifierP
   if (!webview) return null;
 
   return (
-    <div className="lb-split-magnifier" role="region" aria-label="Split screen magnifier">
+    <div className="lb-split-magnifier" role="region" aria-label={t('visionImpaired.splitMagnifier.region')}>
       <div className="lb-split-magnifier-header">
         <ZoomIn size={16} />
-        <span>2.5× · {Math.round(paragraph.scrollY)}px</span>
+        <span>{t('visionImpaired.splitMagnifier.position', { position: Math.round(paragraph.scrollY) })}</span>
       </div>
       <div className="lb-split-magnifier-body" ref={bodyRef}>
         {paragraph.text
           ? paragraph.text.split(/\n+/).map((chunk, index) => <p key={index}>{chunk}</p>)
-          : <p>·</p>}
+          : <p>{t('visionImpaired.splitMagnifier.empty')}</p>}
       </div>
     </div>
   );

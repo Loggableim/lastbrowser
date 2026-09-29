@@ -64,7 +64,7 @@ describe('Castlabs EVS Windows afterSign hook', () => {
     expect(log).toHaveBeenCalledWith('[EVS/VMP] Widevine VMP package signing and verification succeeded.');
   });
 
-  it('fails closed when required EVS credentials are missing', async () => {
+  it('fails closed when release-mode EVS credentials are missing', async () => {
     const spawnSync = vi.fn(() => ({ status: 0 }));
     const hook = createEvsSigningHook({
       spawnSync,
@@ -117,6 +117,107 @@ describe('Castlabs EVS Windows afterSign hook', () => {
 
     await expect(hook(context)).rejects.toThrow('VMP package verification failed');
     expect(spawnSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed when the VMP command throws unexpectedly', async () => {
+    const spawnSync = vi.fn(() => {
+      throw new Error('process launch failed');
+    });
+    const hook = createEvsSigningHook({
+      spawnSync,
+      existsSync: vi.fn(() => true),
+      env: {
+        EVS_REQUIRED: '1',
+        EVS_ACCOUNT_NAME: 'account-fixture',
+        EVS_PASSWD: 'password-fixture'
+      },
+      log: vi.fn(),
+      warn: vi.fn()
+    });
+
+    await expect(hook(context)).rejects.toThrow('VMP signing step failed (process launch failed)');
+  });
+
+  it('allows a local test build without credentials and clearly warns that it is not release-ready', async () => {
+    const spawnSync = vi.fn(() => ({ status: 0 }));
+    const warn = vi.fn();
+    const hook = createEvsSigningHook({
+      spawnSync,
+      existsSync: vi.fn(() => true),
+      env: { EVS_NO_ASK: '1' },
+      log: vi.fn(),
+      warn
+    });
+
+    await expect(hook(context)).resolves.toBeUndefined();
+    expect(spawnSync).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('local test build without a verified VMP signature; do not release'));
+  });
+
+  it('allows a local test build when the package executable is missing but warns', async () => {
+    const { hook, spawnSync, warn } = createRequiredHook([{ status: 0 }, { status: 0 }]);
+    const localHook = createEvsSigningHook({
+      spawnSync,
+      existsSync: vi.fn(() => false),
+      env: { EVS_ACCOUNT_NAME: 'account-fixture', EVS_PASSWD: 'password-fixture' },
+      log: vi.fn(),
+      warn
+    });
+
+    await expect(localHook(context)).resolves.toBeUndefined();
+    expect(spawnSync).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('local test build without a verified VMP signature; do not release'));
+  });
+
+  it('allows a local test build after a VMP signing failure but warns and skips verification', async () => {
+    const spawnSync = vi.fn(() => ({ status: 12 }));
+    const warn = vi.fn();
+    const hook = createEvsSigningHook({
+      spawnSync,
+      existsSync: vi.fn(() => true),
+      env: { EVS_ACCOUNT_NAME: 'account-fixture', EVS_PASSWD: 'password-fixture' },
+      log: vi.fn(),
+      warn
+    });
+
+    await expect(hook(context)).resolves.toBeUndefined();
+    expect(spawnSync).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('VMP signing failed (exit code 12)'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('local test build without a verified VMP signature; do not release'));
+  });
+
+  it('allows a local test build when VMP verification fails but warns', async () => {
+    const spawnSync = vi.fn().mockReturnValueOnce({ status: 0 }).mockReturnValueOnce({ status: 8 });
+    const warn = vi.fn();
+    const hook = createEvsSigningHook({
+      spawnSync,
+      existsSync: vi.fn(() => true),
+      env: { EVS_ACCOUNT_NAME: 'account-fixture', EVS_PASSWD: 'password-fixture' },
+      log: vi.fn(),
+      warn
+    });
+
+    await expect(hook(context)).resolves.toBeUndefined();
+    expect(spawnSync).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('VMP package verification failed (exit code 8)'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('local test build without a verified VMP signature; do not release'));
+  });
+
+  it('allows a local test build if the VMP command cannot launch but warns', async () => {
+    const spawnSync = vi.fn(() => ({ status: null, error: new Error('process launch failed') }));
+    const warn = vi.fn();
+    const hook = createEvsSigningHook({
+      spawnSync,
+      existsSync: vi.fn(() => true),
+      env: { EVS_ACCOUNT_NAME: 'account-fixture', EVS_PASSWD: 'password-fixture' },
+      log: vi.fn(),
+      warn
+    });
+
+    await expect(hook(context)).resolves.toBeUndefined();
+    expect(spawnSync).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('VMP signing failed (process launch failed)'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('local test build without a verified VMP signature; do not release'));
   });
 
   it('does not invoke Windows EVS signing for other platforms', async () => {

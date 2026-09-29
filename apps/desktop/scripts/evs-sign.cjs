@@ -25,22 +25,24 @@ function createEvsSigningHook(overrides = {}) {
 
     const appOutDir = context.appOutDir;
     const required = deps.env.EVS_REQUIRED === '1';
-    const fail = (message) => {
+    const failOrWarn = (message) => {
+      const diagnostic = `[EVS/VMP] ${message}`;
       if (required) {
-        throw new Error(message);
+        throw new Error(diagnostic);
       }
-      deps.warn(`[EVS/VMP] ${message}`);
+      deps.warn(`${diagnostic} Continuing only as a local test build without a verified VMP signature; do not release this artifact.`);
     };
 
     deps.log(`\n[EVS/VMP] Executing afterSign hook: Widevine VMP signing for ${appOutDir}`);
 
-    if (required && (!deps.env.EVS_ACCOUNT_NAME?.trim() || !deps.env.EVS_PASSWD?.trim())) {
-      throw new Error('[EVS/VMP] Required EVS account credentials are missing.');
+    if (!deps.env.EVS_ACCOUNT_NAME?.trim() || !deps.env.EVS_PASSWD?.trim()) {
+      failOrWarn('Required EVS account credentials are missing.');
+      return;
     }
 
     const targetExe = path.join(appOutDir, 'Lastbrowser.exe');
     if (!deps.existsSync(targetExe)) {
-      fail(`Required package executable not found: ${targetExe}`);
+      failOrWarn(`Required package executable not found: ${targetExe}`);
       return;
     }
 
@@ -52,23 +54,24 @@ function createEvsSigningHook(overrides = {}) {
       const signResult = deps.spawnSync(pythonCmd, [...vmpArgs, 'sign-pkg', appOutDir], options);
       if (signResult.error || signResult.status !== 0) {
         const details = signResult.error?.message || `exit code ${signResult.status}`;
-        fail(`VMP signing failed (${details}).`);
+        failOrWarn(`VMP signing failed (${details}).`);
         return;
       }
 
       const verifyResult = deps.spawnSync(pythonCmd, [...vmpArgs, 'verify-pkg', appOutDir], options);
       if (verifyResult.error || verifyResult.status !== 0) {
         const details = verifyResult.error?.message || `exit code ${verifyResult.status}`;
-        fail(`VMP package verification failed (${details}).`);
+        failOrWarn(`VMP package verification failed (${details}).`);
         return;
       }
 
       deps.log('[EVS/VMP] Widevine VMP package signing and verification succeeded.');
     } catch (err) {
-      if (required) {
+      if (err instanceof Error && err.message.startsWith('[EVS/VMP]')) {
         throw err;
       }
-      deps.warn('[EVS/VMP] VMP signing step warning:', err.message);
+      const details = err instanceof Error ? err.message : String(err);
+      failOrWarn(`VMP signing step failed (${details}).`);
     }
   };
 }

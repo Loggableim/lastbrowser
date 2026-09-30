@@ -400,7 +400,13 @@ class _ProfileGoalManager:
         self._save(self._state)
         self._state = None
 
-    def evaluate_after_turn(self, last_response: str, *, user_initiated: bool = True) -> Dict[str, Any]:
+    def evaluate_after_turn(
+        self,
+        last_response: str,
+        *,
+        user_initiated: bool = True,
+        judged_result: tuple[str, str, bool] | None = None,
+    ) -> Dict[str, Any]:
         state = self._state
         if state is None or state.status != "active":
             return {
@@ -415,7 +421,9 @@ class _ProfileGoalManager:
         state.turns_used += 1
         state.last_turn_at = time.time()
 
-        if judge_goal is None:
+        if judged_result is not None:
+            verdict, reason, parse_failed = judged_result
+        elif judge_goal is None:
             verdict, reason, parse_failed = "continue", "goal judge unavailable", False
         else:
             verdict, reason, parse_failed = judge_goal(state.goal, str(last_response or ""))
@@ -960,7 +968,7 @@ def evaluate_goal_after_turn(
     profile_home: str | Path | None = None,
     space_slug: str | None = None,
 ) -> Dict[str, Any]:
-    """Evaluate a completed turn against the standing goal, if any."""
+    """Evaluate a completed turn without overwriting concurrent user changes."""
     sid = str(session_id or "").strip()
     if not sid:
         return {
@@ -971,27 +979,58 @@ def evaluate_goal_after_turn(
             "reason": "missing session_id",
             "message": "",
         }
-    mgr = _manager(sid, profile_home=profile_home, space_slug=space_slug)
-    if mgr is None:
-        return {
-            "status": None,
-            "should_continue": False,
-            "continuation_prompt": None,
-            "verdict": "inactive",
-            "reason": "goals unavailable",
-            "message": "",
-        }
+
+    # Snapshot the state under the same lock as pause/resume/clear, then run
+    # the potentially slow judge call without holding that lock so user
+    # controls remain responsive.
     try:
-        if not mgr.is_active():
-            return {
-                "status": getattr(getattr(mgr, "state", None), "status", None),
-                "should_continue": False,
-                "continuation_prompt": None,
-                "verdict": "inactive",
-                "reason": "no active goal",
-                "message": "",
-            }
-        decision = mgr.evaluate_after_turn(str(last_response or ""), user_initiated=user_initiated)
+        with _CONTINUATION_LOCK:
+            mgr = _manager(sid, profile_home=profile_home, space_slug=space_slug)
+            if mgr is None:
+                return {
+                    "status": None,
+                    "should_continue": False,
+                    "continuation_prompt": None,
+                    "verdict": "inactive",
+                    "reason": "goals unavailable",
+                    "message": "",
+                }
+            expected_state = copy.deepcopy(getattr(mgr, "state", None))
+            if not expected_state or str(getattr(expected_state, "status", "") or "") != "active":
+                return {
+                    "status": getattr(expected_state, "status", None),
+                    "should_continue": False,
+                    "continuation_prompt": None,
+                    "verdict": "inactive",
+                    "reason": "no active goal",
+                    "message": "",
+                }
+
+        judged_result = (
+            ("continue", "goal judge unavailable", False)
+            if judge_goal is None
+            else judge_goal(expected_state.goal, str(last_response or ""))
+        )
+
+        # Commit the judge result only if the state still matches the snapshot.
+        # A pause, clear, replacement, or other turn's evaluation always wins.
+        with _CONTINUATION_LOCK:
+            commit_mgr = _manager(sid, profile_home=profile_home, space_slug=space_slug)
+            current_state = copy.deepcopy(getattr(commit_mgr, "state", None)) if commit_mgr else None
+            if current_state != expected_state or str(getattr(current_state, "status", "") or "") != "active":
+                return {
+                    "status": getattr(current_state, "status", None),
+                    "should_continue": False,
+                    "continuation_prompt": None,
+                    "verdict": "stale",
+                    "reason": "goal changed during evaluation",
+                    "message": "",
+                }
+            decision = commit_mgr.evaluate_after_turn(
+                str(last_response or ""),
+                user_initiated=user_initiated,
+                judged_result=judged_result,
+            )
     except Exception as exc:
         logger.debug("goal evaluation failed for session=%s: %s", sid, exc)
         return {
@@ -1008,5 +1047,5 @@ def evaluate_goal_after_turn(
     decision.setdefault("continuation_prompt", None)
     decision.setdefault("message", "")
     decision = dict(decision)
-    decision = _goal_decision_payload(decision, getattr(mgr, "state", None))
+    decision = _goal_decision_payload(decision, getattr(commit_mgr, "state", None))
     return decision

@@ -677,3 +677,92 @@ def test_run_teamwork_turn_flow():
         assert "debate" in stage_names
         assert "critic" in stage_names
         assert "synthesizing" in stage_names
+
+
+@pytest.mark.parametrize("failed_stage", ["planner", "critic", "synthesizer"])
+def test_ollama_cloud_teamwork_failure_stages_keep_a_visible_answer(failed_stage):
+    from types import SimpleNamespace
+
+    model_id = "@ollama-cloud:deepseek-v4.1-flash"
+    model = {
+        "id": model_id,
+        "call_model": "deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "provider": "ollama-cloud",
+        "tier": "fast",
+    }
+    plan = {
+        "strategy": "balanced",
+        "planner": model if failed_stage == "planner" else None,
+        "workers": [{
+            "model": model_id,
+            "call_model": model["call_model"],
+            "provider": model["provider"],
+            "name": model["name"],
+            "role": "Pragmatiker",
+            "focus": "direct answer",
+        }],
+        "critic": model_id,
+        "critic_provider": model["provider"],
+        "synthesizer": model_id,
+        "synthesizer_provider": model["provider"],
+        "pool": [model],
+    }
+    calls = []
+    events = []
+    session = MagicMock(messages=[])
+
+    def fake_call_llm(*, provider, model, messages, **_kwargs):
+        content = str(messages[0].get("content", ""))
+        role = "planner" if "Arbeitsplan" in content else "critic"
+        calls.append((role, provider, model))
+        if role == failed_stage:
+            raise RuntimeError(f"{role} unavailable")
+        return SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content=f"{role} result"),
+        )])
+
+    def fake_stream_llm(*, provider, model, on_content, on_reasoning=None, **_kwargs):
+        calls.append(("synthesizer", provider, model))
+        if failed_stage == "synthesizer":
+            raise RuntimeError("synthesizer unavailable before first token")
+        on_content("synthesized answer")
+        return "synthesized answer"
+
+    worker_result = {
+        "model": model_id,
+        "provider": model["provider"],
+        "name": model["name"],
+        "role": "Pragmatiker",
+        "focus": "direct answer",
+        "content": "worker draft fallback",
+        "execution_ms": 1,
+        "error": None,
+        "swapped": False,
+    }
+    config = {"shared_grounding": False, "hot_swap": {"enabled": False, "fallback_quorum_min": 1}}
+
+    with patch("runtime.teamwork_orchestrator.resolve_team_plan", return_value=plan), \
+         patch("runtime.teamwork_orchestrator._invoke_worker", return_value=worker_result), \
+         patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
+         patch("runtime.auxiliary_client.extract_content_or_reasoning", side_effect=lambda r: r.choices[0].message.content), \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=fake_stream_llm):
+        result = run_teamwork_turn(
+            session,
+            "Answer a small question using Ollama Cloud.",
+            config=config,
+            stream_put=lambda event, data: events.append((event, data)),
+        )
+
+    expected = "worker draft fallback" if failed_stage == "synthesizer" else "synthesized answer"
+    assert result["content"] == expected
+    assert session.messages[-1]["content"] == expected
+    assert any(event == "teamwork_complete" for event, _data in events)
+    assert calls and all(
+        provider == model["provider"] and selected_model == model["call_model"]
+        for _role, provider, selected_model in calls
+    )
+    if failed_stage == "critic":
+        assert "Kritik konnte nicht separat generiert werden" in result["metadata"]["critic"]["review"]
+    if failed_stage == "synthesizer":
+        assert [data["content"] for event, data in events if event == "delta"] == [expected]

@@ -1,6 +1,9 @@
 """Regression tests for profile and Space boundaries in persistent goals."""
 
 import json
+import threading
+
+import pytest
 
 
 def test_explicit_space_goal_is_stored_only_in_that_space(monkeypatch, tmp_path):
@@ -249,6 +252,61 @@ def test_goal_lifecycle_survives_manager_restarts_and_is_profile_scoped(monkeypa
     assert goals.goal_state_for_session(
         "same-session-id", profile_home=profile_b,
     )["goal"] == "Separate task"
+
+
+@pytest.mark.parametrize(("user_action", "expected_status"), [("pause", "paused"), ("clear", None)])
+def test_slow_goal_judge_cannot_overwrite_concurrent_user_action(
+    monkeypatch, tmp_path, user_action, expected_status,
+):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+
+    from web.api import goals
+
+    goals._DB_CACHE.clear()
+    monkeypatch.setattr(goals, "_space_goals_path", lambda *_args, **_kwargs: None)
+    profile_home = tmp_path / "profiles" / "default"
+    session_id = f"judge-race-{user_action}"
+    assert goals.goal_command_payload(
+        session_id, "Finish the task", profile_home=profile_home,
+    )["ok"] is True
+
+    judge_started = threading.Event()
+    finish_judge = threading.Event()
+    evaluation = {}
+
+    def blocked_judge(*_args, **_kwargs):
+        judge_started.set()
+        assert finish_judge.wait(timeout=3)
+        return "continue", "not done yet", False
+
+    monkeypatch.setattr(goals, "judge_goal", blocked_judge)
+
+    def evaluate():
+        evaluation["decision"] = goals.evaluate_goal_after_turn(
+            session_id, "Still working", profile_home=profile_home,
+        )
+
+    worker = threading.Thread(target=evaluate)
+    worker.start()
+    assert judge_started.wait(timeout=3)
+
+    control = goals.goal_command_payload(
+        session_id, user_action, profile_home=profile_home,
+    )
+    assert control["ok"] is True
+    finish_judge.set()
+    worker.join(timeout=3)
+
+    assert not worker.is_alive()
+    assert evaluation["decision"]["verdict"] == "stale"
+    assert evaluation["decision"]["should_continue"] is False
+    goals._DB_CACHE.clear()
+    state = goals.goal_state_for_session(session_id, profile_home=profile_home)
+    if expected_status is None:
+        assert state is None
+    else:
+        assert state["status"] == expected_status
+        assert state["turns_used"] == 0
 
 
 def test_profile_goal_without_space_does_not_follow_active_space(monkeypatch, tmp_path):

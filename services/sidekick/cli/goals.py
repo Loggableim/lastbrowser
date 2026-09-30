@@ -571,6 +571,7 @@ class GoalManager:
         last_response: str,
         *,
         user_initiated: bool = True,
+        judged_result: Optional[Tuple[str, str, bool]] = None,
     ) -> Dict[str, Any]:
         """Run the judge and update state. Return a decision dict.
 
@@ -601,7 +602,9 @@ class GoalManager:
         state.turns_used += 1
         state.last_turn_at = time.time()
 
-        verdict, reason, parse_failed = judge_goal(state.goal, last_response)
+        verdict, reason, parse_failed = (
+            judged_result if judged_result is not None else judge_goal(state.goal, last_response)
+        )
         state.last_verdict = verdict
         state.last_reason = reason
 

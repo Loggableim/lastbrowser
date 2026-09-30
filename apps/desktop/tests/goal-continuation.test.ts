@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  adoptCreatedTurnSession,
+  continuationAfterTerminalEvent,
   isActiveTurnContextCurrent,
   isGoalContinuationContextCurrent,
   readGoalContinuationPrompt,
@@ -9,6 +11,12 @@ import {
 const expected = { sessionId: 'session-1', profileId: 'work', spacePath: 'C:/spaces/research' };
 
 describe('persistent goal continuation handoff', () => {
+  it('drops a queued continuation when the stream is cancelled', () => {
+    const prompt = 'Continue the active task from the latest result.';
+    expect(continuationAfterTerminalEvent(prompt, 'cancel')).toBeNull();
+    expect(continuationAfterTerminalEvent(prompt, 'error')).toBeNull();
+    expect(continuationAfterTerminalEvent(prompt, 'stream_end')).toBe(prompt);
+  });
   it('accepts only an exact continuation event for the current stream and session', () => {
     const prompt = 'Continue the active task from the latest result.';
     expect(readGoalContinuationPrompt({
@@ -60,6 +68,32 @@ describe('persistent goal continuation handoff', () => {
       ...expected,
       sessionId: null
     })).toBe(true);
+  });
+
+  it('adopts the backend session for a new chat while retaining context-change guards', () => {
+    const freshContext = { sessionId: '', profileId: 'work', spacePath: 'C:/spaces/research' };
+    const adopted = adoptCreatedTurnSession(freshContext, {
+      sessionId: null,
+      profileId: freshContext.profileId,
+      spacePath: freshContext.spacePath
+    }, 'created-session');
+    expect(adopted).toEqual({ ...freshContext, sessionId: 'created-session' });
+
+    expect(adoptCreatedTurnSession(freshContext, {
+      sessionId: 'user-selected-session',
+      profileId: freshContext.profileId,
+      spacePath: freshContext.spacePath
+    }, 'created-session')).toBeNull();
+    expect(adoptCreatedTurnSession(freshContext, {
+      sessionId: null,
+      profileId: 'personal',
+      spacePath: freshContext.spacePath
+    }, 'created-session')).toBeNull();
+    expect(adoptCreatedTurnSession(freshContext, {
+      sessionId: null,
+      profileId: freshContext.profileId,
+      spacePath: 'C:/spaces/other'
+    }, 'created-session')).toBeNull();
   });
 
   it('does not start the next turn after the user switches session, profile, or Space', async () => {

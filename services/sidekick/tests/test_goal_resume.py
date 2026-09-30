@@ -291,7 +291,7 @@ def test_pending_goal_continuations_are_isolated_by_session_profile_and_space(mo
     assert goal_api.consume_goal_continuation("shared-id", prompt_a, profile_home=profile_a, space_slug="alpha") == "active"
     assert goal_api.consume_goal_continuation("shared-id", prompt_b, profile_home=profile_a, space_slug="beta") == "active"
     assert goal_api.consume_goal_continuation("other-id", prompt_c, profile_home=profile_a, space_slug="alpha") == "active"
-    assert goal_api.consume_goal_continuation("shared-id", prompt_a, profile_home=profile_b, space_slug="alpha") == "none"
+    assert goal_api.consume_goal_continuation("shared-id", prompt_a, profile_home=profile_b, space_slug="alpha") == "cancelled"
 
 
 def test_goal_continuation_recovers_after_backend_restart_from_active_persisted_goal(monkeypatch, tmp_path):
@@ -745,3 +745,163 @@ def test_cli_goal_command_resume_reports_budget_exhausted(monkeypatch):
 
     assert any("paused" in line.lower() for line in outputs)
     assert all("resumed" not in line.lower() for line in outputs)
+
+
+def test_chat_start_fails_retryably_when_goal_state_cannot_be_read(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from web.api import goals, routes
+
+    session = SimpleNamespace(
+        session_id="goal-state-unavailable",
+        profile="default",
+        workspace=str(tmp_path),
+        workspace_slug="work",
+        model="deepseek-v4.1-flash",
+        model_provider="ollama-cloud",
+        active_stream_id=None,
+        messages=[],
+        context_messages=[],
+        pending_user_message=None,
+    )
+    monkeypatch.setattr(routes, "get_session", lambda _session_id: session)
+    monkeypatch.setattr(routes, "resolve_trusted_workspace", lambda value: value)
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: tmp_path)
+    monkeypatch.setattr(goals, "_DB_CACHE", {})
+    monkeypatch.setattr(goals, "_profile_db", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, status=200, **_kwargs: {**payload, "_status": status},
+    )
+    monkeypatch.setattr(
+        routes.threading,
+        "Thread",
+        lambda **_kwargs: pytest.fail("chat must not start when goal state is unknown"),
+    )
+
+    response = routes._handle_chat_start(object(), {
+        "session_id": session.session_id,
+        "message": "continue working",
+        "workspace": session.workspace,
+        "model": session.model,
+    })
+
+    assert response["_status"] == 503
+    assert response["error_code"] == "goal_state_unavailable"
+    assert response["retryable"] is True
+
+
+def test_goal_command_fails_closed_when_profile_scope_cannot_be_resolved(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from web.api import routes
+
+    session = SimpleNamespace(
+        session_id="profile-scope-unavailable",
+        profile="work",
+        workspace=str(tmp_path),
+        active_stream_id=None,
+        messages=[],
+        context_messages=[],
+        pending_user_message=None,
+    )
+    monkeypatch.setattr(routes, "get_session", lambda _session_id: session)
+
+    def unavailable(_profile):
+        raise OSError("profile store unavailable")
+
+    monkeypatch.setattr("web.api.profiles.get_profile_home", unavailable)
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, status=200, **_kwargs: {**payload, "_status": status},
+    )
+
+    response = routes._handle_goal_command(object(), {
+        "session_id": session.session_id,
+        "args": "Keep working",
+    })
+
+    assert response["_status"] == 503
+    assert response["error"] == "goal_state_unavailable"
+    assert response["retryable"] is True
+
+
+@pytest.mark.parametrize("failure_stage", ["continuation", "active_goal"])
+def test_stream_start_fails_closed_when_goal_state_is_unknown(monkeypatch, tmp_path, failure_stage):
+    from types import SimpleNamespace
+    from web.api import routes
+
+    session = SimpleNamespace(
+        session_id=f"goal-state-{failure_stage}",
+        profile="default",
+        workspace_slug="work",
+        active_stream_id=None,
+    )
+
+    def unavailable(*_args, **_kwargs):
+        raise OSError("goal store temporarily unavailable")
+
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: tmp_path)
+    monkeypatch.setattr(
+        "web.api.goals.consume_goal_continuation",
+        unavailable if failure_stage == "continuation" else lambda *_args, **_kwargs: "none",
+    )
+    monkeypatch.setattr(
+        "web.api.goals.has_active_goal",
+        unavailable if failure_stage == "active_goal" else lambda *_args, **_kwargs: False,
+    )
+
+    response = routes._start_chat_stream_for_session(
+        session,
+        msg="continue working",
+        workspace=str(tmp_path),
+        model="deepseek-v4.1-flash",
+        model_provider="ollama-cloud",
+    )
+
+    assert response["_status"] == 503
+    assert response["error_code"] == "goal_state_unavailable"
+    assert response["retryable"] is True
+
+
+def test_unknown_persisted_goal_cannot_fall_through_as_a_continuation_message(monkeypatch):
+    from web.api import goals
+
+    monkeypatch.setattr(goals, "_manager", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("store unavailable")))
+    prompt = goals.CONTINUATION_PROMPT_TEMPLATE.format(goal="Keep the app stable")
+
+    assert goals.consume_goal_continuation("session-1", prompt) == "cancelled"
+
+
+def test_cancelled_continuation_is_rejected_even_when_another_goal_is_active(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from web.api import routes
+
+    session = SimpleNamespace(
+        session_id="replacement-goal-active",
+        profile="default",
+        workspace_slug="work",
+        active_stream_id=None,
+    )
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: tmp_path)
+    monkeypatch.setattr(
+        "web.api.goals.consume_goal_continuation",
+        lambda *_args, **_kwargs: "cancelled",
+    )
+    monkeypatch.setattr(
+        routes.threading,
+        "Thread",
+        lambda **_kwargs: pytest.fail("stale goal continuation must not start a stream"),
+    )
+
+    response = routes._start_chat_stream_for_session(
+        session,
+        msg="[INTERNAL GOAL CONTINUATION] old goal",
+        workspace=str(tmp_path),
+        model="deepseek-v4.1-flash",
+        model_provider="ollama-cloud",
+        goal_related=True,
+    )
+
+    assert response["_status"] == 409
+    assert response["error_code"] == "goal_continuation_cancelled"

@@ -23,6 +23,14 @@ export function readGoalContinuationPrompt(
   return prompt;
 }
 
+/** A cancelled stream must never hand off its queued automatic continuation. */
+export function continuationAfterTerminalEvent(
+  prompt: string | null,
+  event: 'stream_end' | 'cancel' | 'error'
+): string | null {
+  return event === 'stream_end' ? prompt : null;
+}
+
 export function isGoalContinuationContextCurrent(
   expected: { sessionId: string; profileId: string; spacePath: string },
   current: { sessionId: string | null; profileId: string; spacePath: string }
@@ -40,6 +48,18 @@ export function isActiveTurnContextCurrent(
   return current.sessionId === (expected.sessionId || null)
     && current.profileId === expected.profileId
     && current.spacePath === expected.spacePath;
+}
+
+/** Adopt a newly created backend session only while the original context is still selected. */
+export function adoptCreatedTurnSession(
+  expected: { sessionId: string; profileId: string; spacePath: string },
+  current: { sessionId: string | null; profileId: string; spacePath: string },
+  createdSessionId: string
+): { sessionId: string; profileId: string; spacePath: string } | null {
+  if (!isActiveTurnContextCurrent(expected, current)) return null;
+  const sessionId = createdSessionId.trim();
+  if (!sessionId) return null;
+  return expected.sessionId ? expected : { ...expected, sessionId };
 }
 
 /** Start a queued continuation only while the owning chat context is selected. */

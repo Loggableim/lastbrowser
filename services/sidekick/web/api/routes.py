@@ -11675,48 +11675,47 @@ def _start_chat_stream_for_session(
     # Pause/clear can race with delivery of the SSE event, so the goal bridge
     # returns "cancelled" for an already-invalidated prompt and we must not run
     # it as an ordinary chat message.
-    if not goal_related:
-        try:
-            from web.api.goals import consume_goal_continuation
+    try:
+        from web.api.goals import consume_goal_continuation
 
-            try:
-                from web.api.profiles import get_profile_home
+        from web.api.profiles import get_profile_home
 
-                continuation_profile_home = get_profile_home(getattr(s, "profile", None))
-            except Exception:
-                continuation_profile_home = None
-            continuation_space_slug = str(
-                getattr(s, "workspace_slug", None)
-                or getattr(s, "space_slug", None)
-                or getattr(s, "space", None)
-                or ""
-            ).strip().lower() or None
-            continuation_state = consume_goal_continuation(
-                s.session_id,
-                msg,
-                profile_home=continuation_profile_home,
-                space_slug=continuation_space_slug,
-            )
-            if continuation_state == "cancelled":
-                return {
-                    "error": "The persistent goal was paused or cleared before this continuation started.",
-                    "error_code": "goal_continuation_cancelled",
-                    "_status": 409,
-                }
-            if continuation_state == "active":
-                goal_related = True
-        except Exception:
-            logger.debug("Could not validate pending goal continuation", exc_info=True)
+        continuation_profile_home = get_profile_home(getattr(s, "profile", None))
+        continuation_space_slug = str(
+            getattr(s, "workspace_slug", None)
+            or getattr(s, "space_slug", None)
+            or getattr(s, "space", None)
+            or ""
+        ).strip().lower() or None
+        continuation_state = consume_goal_continuation(
+            s.session_id,
+            msg,
+            profile_home=continuation_profile_home,
+            space_slug=continuation_space_slug,
+        )
+        if continuation_state == "cancelled":
+            return {
+                "error": "The persistent goal was paused or cleared before this continuation started.",
+                "error_code": "goal_continuation_cancelled",
+                "_status": 409,
+            }
+        if continuation_state == "active":
+            goal_related = True
+    except Exception:
+        logger.error("Could not validate pending goal continuation", exc_info=True)
+        return {
+            "error": "Could not validate persistent goal state. Please retry the chat request.",
+            "error_code": "goal_state_unavailable",
+            "retryable": True,
+            "_status": 503,
+        }
     if not goal_related:
         try:
             from web.api.goals import has_active_goal
 
-            try:
-                from web.api.profiles import get_profile_home
+            from web.api.profiles import get_profile_home
 
-                profile_home = get_profile_home(getattr(s, "profile", None))
-            except Exception:
-                profile_home = None
+            profile_home = get_profile_home(getattr(s, "profile", None))
             goal_space_slug = str(
                 getattr(s, "workspace_slug", None)
                 or getattr(s, "space_slug", None)
@@ -11729,7 +11728,13 @@ def _start_chat_stream_for_session(
                 space_slug=goal_space_slug,
             )
         except Exception:
-            pass
+            logger.error("Could not determine persistent goal state before chat start", exc_info=True)
+            return {
+                "error": "Could not validate persistent goal state. Please retry the chat request.",
+                "error_code": "goal_state_unavailable",
+                "retryable": True,
+                "_status": 503,
+            }
 
     stream_id = uuid.uuid4().hex
     session_lock = _get_session_agent_lock(s.session_id)
@@ -11972,7 +11977,17 @@ def _handle_goal_command(handler, body):
 
         profile_home = get_profile_home(getattr(s, "profile", None))
     except Exception:
-        profile_home = None
+        logger.error("Could not resolve profile scope for persistent goal command", exc_info=True)
+        return j(
+            handler,
+            {
+                "ok": False,
+                "error": "goal_state_unavailable",
+                "message": "Could not resolve the profile for this persistent goal. Please retry.",
+                "retryable": True,
+            },
+            status=503,
+        )
     space_slug = str(
         body.get("workspace_slug")
         or body.get("space_slug")
@@ -12178,20 +12193,25 @@ def _handle_chat_start(handler, body, diag=None):
         goal_related = False
         try:
             from web.api.goals import has_active_goal
+            from web.api.profiles import get_profile_home
 
-            try:
-                from web.api.profiles import get_profile_home
-
-                profile_home = get_profile_home(getattr(s, "profile", None))
-            except Exception:
-                profile_home = None
+            profile_home = get_profile_home(getattr(s, "profile", None))
             goal_related = has_active_goal(
                 s.session_id,
                 profile_home=profile_home,
                 space_slug=space_slug,
             )
         except Exception:
-            goal_related = False
+            logger.error("Could not determine persistent goal state before chat start", exc_info=True)
+            return j(
+                handler,
+                {
+                    "error": "Could not validate persistent goal state. Please retry the chat request.",
+                    "error_code": "goal_state_unavailable",
+                    "retryable": True,
+                },
+                status=503,
+            )
         requested_model = body.get("model") or s.model
         requested_provider = (
             body.get("model_provider")

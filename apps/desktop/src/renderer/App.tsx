@@ -63,7 +63,7 @@ import { applyLiveChatDelta, finishLiveChatMessage, readLiveChatDelta } from './
 import { playChatCompletionSound } from './notification-sound.js';
 import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
-import { isActiveTurnContextCurrent, isGoalContinuationContextCurrent, readGoalContinuationPrompt, startGoalContinuation } from './goal-continuation.js';
+import { adoptCreatedTurnSession, continuationAfterTerminalEvent, isActiveTurnContextCurrent, isGoalContinuationContextCurrent, readGoalContinuationPrompt, startGoalContinuation } from './goal-continuation.js';
 import { executeBrowserAction, parseNaturalLanguageBrowserCommand } from './browser-agent-tools.js';
 import {
   bookmarkFromTab,
@@ -2303,6 +2303,7 @@ function AppContent(): JSX.Element {
         return;
       }
       if (event.event === 'cancel') {
+        goalContinuationPrompt = continuationAfterTerminalEvent(goalContinuationPrompt, 'cancel');
         sawStreamEnd = true;
         if (isOwningContextCurrent()) {
           setChatMessages((current) => finishLiveChatMessage(current));
@@ -2311,6 +2312,7 @@ function AppContent(): JSX.Element {
         return;
       }
       if (event.event === 'error') {
+        goalContinuationPrompt = continuationAfterTerminalEvent(goalContinuationPrompt, 'error');
         streamFailed = true;
         return;
       }
@@ -2406,7 +2408,7 @@ function AppContent(): JSX.Element {
   ): Promise<void> {
     const trimmed = message.trim();
     if (!trimmed) return;
-    const turnContext = continuation ?? {
+    let turnContext = continuation ?? {
       sessionId: activeSessionIdRef.current ?? '',
       profileId: activeProfileIdRef.current,
       spacePath: activeSpacePathRef.current
@@ -2513,12 +2515,18 @@ function AppContent(): JSX.Element {
         workspace: turnContext.spacePath,
         mode: composerMode
       });
-      const turnContextStillCurrentAfterStream = activeTurnIsCurrent();
+      const currentTurnContext = adoptCreatedTurnSession(turnContext, {
+        sessionId: activeSessionIdRef.current,
+        profileId: activeProfileIdRef.current,
+        spacePath: activeSpacePathRef.current
+      }, response.sessionId);
+      const turnContextStillCurrentAfterStream = currentTurnContext !== null;
       // When a fresh conversation is created implicitly by startChat, the
       // selected account could not be bound before the backend returned its
       // session ID. Bind it now so follow-up messages stay on this account in
       // per-session round-robin mode.
-      if (turnContextStillCurrentAfterStream) {
+      if (currentTurnContext) {
+        turnContext = currentTurnContext;
         setActiveSessionId(response.sessionId);
         activeSessionIdRef.current = response.sessionId;
       }

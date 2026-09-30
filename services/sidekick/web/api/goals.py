@@ -170,9 +170,10 @@ def consume_goal_continuation(
             try:
                 mgr = _manager(session_id, profile_home=profile_home, space_slug=space_slug)
             except Exception:
-                # A scope that cannot be resolved is not evidence that this
-                # message belongs to an internal continuation.
-                return "none"
+                # This message already has the internal continuation prefix.
+                # If the matching persisted goal cannot be loaded, never let
+                # the prompt fall through as ordinary user text.
+                return "cancelled"
             try:
                 if (
                     mgr is not None
@@ -506,7 +507,7 @@ class _ProfileGoalManager:
 
 def _manager(session_id: str, *, profile_home: str | Path | None = None, space_slug: str | None = None):
     if GoalManager is None:
-        return None
+        raise RuntimeError("Persistent goal support is unavailable")
     if (profile_home or space_slug) and GoalManager is _NativeGoalManager and GoalState is not None:
         try:
             effective_profile_home = profile_home
@@ -524,8 +525,8 @@ def _manager(session_id: str, *, profile_home: str | Path | None = None, space_s
                 space_slug=space_slug,
             )
         except Exception as exc:
-            logger.debug("Profile-scoped GoalManager unavailable: %s", exc)
-            return None
+            logger.warning("Profile-scoped GoalManager unavailable: %s", exc)
+            raise RuntimeError("Persistent goal store is unavailable") from exc
     return GoalManager(session_id=session_id, default_max_turns=_default_max_turns())
 
 
@@ -792,7 +793,11 @@ def goal_command_payload(
     if not sid:
         return _payload(ok=False, action="error", error="missing_session", message="session_id required", space_slug=space_slug)
 
-    mgr = _manager(sid, profile_home=profile_home, space_slug=space_slug)
+    try:
+        mgr = _manager(sid, profile_home=profile_home, space_slug=space_slug)
+    except Exception as exc:
+        logger.warning("Goal state unavailable for session %s: %s", sid, exc)
+        mgr = None
     if mgr is None:
         return _payload(ok=False, action="error", error="unavailable", message="Goals unavailable on this session.", session_id=sid, space_slug=space_slug)
 
@@ -952,12 +957,12 @@ def has_active_goal(
         return False
     mgr = _manager(sid, profile_home=profile_home, space_slug=space_slug)
     if mgr is None:
-        return False
+        raise RuntimeError("Persistent goal state is unavailable")
     try:
         return bool(mgr.is_active())
     except Exception as exc:
-        logger.debug("goal active-state check failed for session=%s: %s", sid, exc)
-        return False
+        logger.warning("goal active-state check failed for session=%s: %s", sid, exc)
+        raise RuntimeError("Persistent goal state is unavailable") from exc
 
 
 def evaluate_goal_after_turn(

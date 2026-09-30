@@ -1,41 +1,25 @@
-# Lastbrowser & Nova AI – Master Goal: Maximal-Paralleles Swarm-Debugging & Feature-Exzellenz
+# Lastbrowser – Release-Readiness-Ziel
 
-> **MANDATORY INSTRUCTION FOR AUTONOMOUS AGENTS (SWARM ORCHESTRATION):**  
-> Dieses Dokument definiert das **verbindliche, persistente Ziel** für Lastbrowser.  
-> **MAXIMALE SUBAGENTEN-EFFIZIENZ:** Der Haupt-Agent soll dieses Ziel nicht sequenziell im Monolog abarbeiten, sondern Aufgabenpakete sofort in **parallele Subagenten (`invoke_subagent`)** zerlegen.  
-> Jeder Subagent übernimmt einen eigenständigen, klar abgegrenzten Arbeitsbereich (gemäß den Isolationsregeln in [`AGENTS.md`](file:///c:/projekte/lastbrowser/AGENTS.md)), implementiert die Lösung, verifiziert sie lokal mit Unit-Tests und meldet Vollzug an den Lead-Orchestrator.
+Dieses Arbeitsziel folgt der aktuellen Nutzeranweisung: Browser stabilisieren und releasefähig machen; vorerst keine neuen Produktfunktionen hinzufügen. Vorrang haben eine verlässliche Ollama-Cloud-Anbindung (Standardmodell `deepseek-v4.1-flash`), korrekt abgestimmte Teamwork-Ausführung und persistente Ziele.
 
----
+Änderungen bleiben im bestehenden Monorepo und erhalten vorhandene Nutzerarbeit. Parallel-Agenten können für klar abgegrenzte Audits oder Fixes eingesetzt werden. Für jede Anforderung sind Implementierung, automatisierte Prüfung und echter Laufzeitnachweis getrennt zu dokumentieren.
 
-## 1. Subagenten-Allokationsmatrix (Parallele Schwarm-Aufteilung)
+## 1. Nachweiskriterien
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        LEAD ORCHESTRATOR (Lead Agent / Antigravity)                    │
-├────────────────────┬────────────────────┬──────────────────────┬───────────────────────┤
-│ SUBAGENT 1 (Main)  │ SUBAGENT 2 (Zen)   │ SUBAGENT 3 (Audio)   │ SUBAGENT 4 (Appr)     │
-│ Window Controls &  │ Zen-Mode Hover &   │ Tab Pinning, RAM     │ Themes, Skins,        │
-│ Detached IPC       │ Slim-Bar Retention │ Discard & Space-Audio│ A11y & Typografie     │
-├────────────────────┼────────────────────┼──────────────────────┼───────────────────────┤
-│ SUBAGENT 5 (Dock)  │ SUBAGENT 6 (Migr)  │ SUBAGENT 7 (Chat)    │ SUBAGENT 8 (Gate)     │
-│ Nova Dock Position │ First-Run Wizard   │ Copilot & Chat-      │ Quality Gatekeeper:   │
-│ & Floating Overlay │ Standalone-Import  │ Layout-Sanierung     │ Tests, Preflight, Bld │
-└────────────────────┴────────────────────┴──────────────────────┴───────────────────────┘
-```
+- Ollama Cloud: Provider-Auflösung, Modellliste, Fehler-/Retry-Behandlung, Streaming und Teamwork-Pfad prüfen; keine Antwort aus Unit-Tests als echter Modellaufruf darstellen.
+- Teamwork und persistente Ziele: Worker-/Quorum-Routing sowie Setzen, Lesen, Pause, Resume, Reload und Löschen prüfen.
+- Release: aktuelle veröffentlichte Version, signierte Artefakte, Prüfsummen, Downloadseiten und Deployment-Quelle gegen Live-Belege abgleichen. Keine Version duplizieren.
+- Browserabläufe: Quelltests und Builds belegen keine funktionierende Bedienung; UI-Smokes separat als solche ausweisen.
 
 ---
 
 ## 2. Aufgabenpakete im Detail
 
-> **AKTUELLER PRÜFSTATUS (2026-09-29):** Desktop-Gates aus der letzten frischen Ausführung: `npm test` **125 Suites / 1086 Tests**, `npm run verify:store` **27/27**, Main-/Renderer-Build ohne Fehler (Vite-Bundle 1,638 MB, über dem 500-kB-Richtwert), Python-`compileall` erfolgreich. Die jetzt abgeschlossene vollständige Sidekick-Suite besteht **2276 Tests, 105 übersprungen, 0 fehlgeschlagen** (503.72 s). Die Antigravity-Route-Regressionsprüfungen wurden ergänzt: sequenzielle ungebundene Starts rotieren A→B, gepinnte Konten rotieren nicht, ausgewähltes Konto erreicht genau einen Runtime-Worker; gezielte Provider-Suite zuvor **66 bestanden**. Der isolierte Electron/CDP-Source-Smoke bestand im vorigen Lauf **65/65, 1 bewusst übersprungen**. Live geprüft wurden Downloads, Appearance-Vorschau und Settings-Readback, Zen-Hover, Space-Erstellung/-Auswahl mit angehefteten Apps, Audio desselben WebView-Gasts über Space-Wechsel, Snap-Flyout/Vorschau, asymmetrisches Quad-Resizing ohne Verschieben der Gegenseite, Trio mit leerem Slot, Aktivieren/Maximieren/Schließen/Herauslösen, Navigation/History, Permissions, Erweiterungsablauf und Rücknavigation im abgetrennten Fenster. Profil-/Inkognito-Isolation **12/12** wurde zuvor mit echten WebView-Cookies und `localStorage` geprüft. Appearance-Smoke **14/14**; Zoom wurde nach Scrollen des Sliders und echten Pointer-Events auf 125 gesetzt und im Settings-Readback bestätigt. Ein späterer Source-Smoke war **48/49**: die externe `example.com`-Webview-CDP-Zielerkennung timeoutete nach `ERR_ABORTED`; lokales Fixture und übrige Checks liefen weiter. Das ist kein Beleg gegen die zuvor erfolgreiche gepackte 65/65-Runde, aber bleibt ein reproduzierbarer/umgebungsabhängiger offener Smoke-Punkt.
->
-> Doctor wurde isoliert mit dem Quellstand ausgeführt: Visual- und Rohansicht zeigen **38 bestanden, 0 Warnungen, 0 Fehler**. Der installierte Browser ist **0.1.36**; dessen Antigravity-Datei hat tatsächlich den fehlenden `@dataclass`-Dekorator und verursacht „takes no arguments“. Der aktuelle Quellstand und der ältere 0.1.37-Entpackstand enthalten den Dekorator. Nach einem falschen OAuth-`state` kann der gültige Callback nun weiterhin abgeschlossen werden; zwei gezielte Tests bestehen. Modellrouting speichert Provider getrennt je Space und sendet `model_provider`; **45 gezielte Tests** bestehen.
->
-> Provider: Vorherige Live-Aufrufe an Ollama Cloud und OpenRouter Free waren erfolgreich, sind aber kein aktueller Nachweis nach dem Provider-Routing-Fix. Doctor-Connectivity allein belegt keine Modellantwort. Echter Google-/Antigravity-Login und Round-Robin, Anthropic-/Codex-Chat sowie Teamwork-/Smart-Track-Generierung in der laufenden App sind nicht nachgewiesen.
->
-> UI-Nachtrag: Der installierte Browserprozess läuft aus `%LOCALAPPDATA%\Programs\Lastbrowser` und wurde am 28.09. gestartet; Paketversion ist **0.1.36**, während der Quellstand **0.1.37** ist. Das erklärt die noch sichtbare Profil-Leiste. Commit `20442a7` entfernt den Browser-Profilwähler aus moderner und klassischer Topbar; aktuelle Renderer-Regressionstests bestätigen, dass die Topbar keine Profile rendert und der Browserprofil-Dialog nur in **Settings → Preferences** bleibt. Der linke Eintrag „Profiles“ ist Sidekick-Agentprofilverwaltung. Die Installationsdauer-Ursache wird noch geprüft.
->
-> Release: GitHub zeigt **v0.1.34** als neuesten öffentlichen Release; lokal ist **0.1.37** die Paketversion. Die vorhandenen `local-test-final` 0.1.37 Setup- und Portable-Dateien sind **nicht signiert**. VMP-Transfer scheiterte früher nach 140/195,6 MB in 1172,7 Sekunden; ein Signiervorgang ist aktuell nicht verifiziert. Der `afterSign`-Hook wurde korrigiert: Release-Modus (`EVS_REQUIRED=1`, bereits im Workflow gesetzt) scheitert bei fehlenden Zugangsdaten/Datei oder Fehlern beim Signieren/Prüfen; lokaler Testmodus darf ein klar als nicht releasefähig protokolliertes unsigniertes Paket erstellen. 13 Hooktests und 5 Release-Workflowtests bestehen. Kein Tag, Push oder Release erstellt. Provider-Audit: gezielte Settings-/Katalogtests bestehen, aber aktuelle echte Ollama-Cloud-, OpenRouter-, Antigravity-Chatantworten und Zwei-Account-Rotation bleiben unbewiesen. Nutzerprozesse wurden nicht beendet; die ungetrackte Builder-Konfiguration bleibt unangetastet.
+> **AKTUELLER PRÜFSTATUS (2026-09-30, HEAD f5dcdf2):** `npm test` besteht mit **127 Dateien / 1100 Tests**, `npm run verify:store` mit **27/27**, Desktop-Build und `python -m compileall -q services/sidekick` ebenfalls. Der Build meldet weiterhin einen Renderer-Chunk über 500 kB. Die vollständige Sidekick-pytest-Suite besteht mit **2302 bestanden, 105 übersprungen, 0 fehlgeschlagen** (397,90 s). Zuletzt gezielte Ollama-/Teamwork-/Goal-Regressionen: **220 bestanden, 8 übersprungen**.
+> Backend-Laufzeitnachweis aus dem vorherigen Lauf: ein echter Ollama-Cloud-Aufruf mit `deepseek-v4.1-flash` lieferte ein erstes Stream-Delta. Ein echter Backend-Teamwork-Durchlauf mit einem Worker lieferte `delta` und `teamwork_complete`; persistente Goals bestanden Setzen, Status, Pause, Resume, Reload und Löschen. Dies belegt weder die Browser-UI noch mehrere Anbieter im selben Teamwork-Lauf.
+> Release: GitHub veröffentlicht **v0.1.38**. Die lokalen Setup- und Portable-Dateien sind Authenticode-signiert; ihre SHA-256-Werte stimmen mit den GitHub-Asset-Digests überein. Der zugehörige Release-Workflow war abgebrochen; es wurde kein neuer Release erstellt.
+> Website: Commit `f5dcdf2` aktualisiert die Repo-Quellen auf v0.1.38 und wurde auf `codex/lastbrowser-electron-shell` gepusht. Ein frischer öffentlicher Abruf zeigt weiterhin v0.1.32; die Download-Proxy-URLs liefern dort HTML statt Installer. Die ausgelieferten Dateien entsprechen `origin/main` bei `4689cbd`, also einem älteren Website-Stand. Der Cloudflare-Pages-Produktionsbranch bzw. die verbundene Quelle ist ohne Dashboard/API-Zugriff nicht bestätigt.
+> UI-Abnahme: In diesem Prüflauf gab es keinen aktuellen Laufzeittest der installierten Browser-UI. Unit-Tests und Quell-Smokes sind kein Nachweis für Appearance-, Sidebar-, Snap-, Provider- oder Space-Abläufe im installierten Browser.
 
 ### 🔴 Paket 1: Window Controls & Detached Window IPC-Bug (Kritisch) ✅
 * **Zuständiger Subagent:** `Subagent 1: Window Controls Specialist`
@@ -157,3 +141,5 @@
 2. **Keine ungebundenen JSX-Variablen:** Vor jedem Renderer-Build sicherstellen, dass alle Komponenten explizit importiert sind.
 3. **Schutz bestehender Funktionen:** Keine bestehenden Audio- oder Tab-Mechaniken entfernen, sondern gezielt erweitern.
 4. **Dokumentation:** Nach Abschluss jedes Pakets die Checkbox im Master Goal (`[x]`) setzen.
+
+> Die darunterliegenden Arbeitspakete dokumentieren frühere Implementierungsaufträge. Ihre Häkchen sind kein Abnahmenachweis für das aktuelle Release-Ziel.

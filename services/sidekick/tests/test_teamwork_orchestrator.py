@@ -324,6 +324,93 @@ def test_teamwork_cancellation_does_not_wait_for_blocked_worker():
     assert not runner.is_alive()
 
 
+@pytest.mark.parametrize("blocked_stage", ["planner", "critic"])
+def test_teamwork_cancellation_interrupts_blocked_planner_and_critic_without_unbounded_threads(blocked_stage):
+    from runtime import teamwork_orchestrator as orchestrator
+
+    started = threading.Event()
+    release_provider = threading.Event()
+    cancel = threading.Event()
+    finished = threading.Event()
+    model = {"id": "model-a", "name": "A", "provider": "mock", "tier": "balanced"}
+    plan = {
+        "workers": [dict(model, role="analyst", focus="analyze", call_model="model-a")],
+        "critic": "model-a", "critic_provider": "mock",
+        "synthesizer": "model-a", "synthesizer_provider": "mock",
+        "pool": [model],
+        "planner": dict(model, call_model="model-a") if blocked_stage == "planner" else None,
+    }
+
+    def blocked_call(**_kwargs):
+        started.set()
+        if not release_provider.wait(timeout=5):
+            raise RuntimeError("test provider release timed out")
+        return MagicMock()
+
+    def run():
+        try:
+            with patch("runtime.teamwork_orchestrator.resolve_team_plan", return_value=plan), \
+                 patch("runtime.teamwork_orchestrator._invoke_worker", return_value={
+                     "model": "model-a", "provider": "mock", "name": "A", "role": "analyst",
+                     "focus": "analyze", "content": "draft", "execution_ms": 1,
+                     "error": None, "swapped": False,
+                 }), \
+                 patch("runtime.auxiliary_client.call_llm", side_effect=blocked_call), \
+                 patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="text"):
+                run_teamwork_turn(
+                    MagicMock(messages=[]), "Do the task",
+                    config={"enabled": True, "shared_grounding": False,
+                            "hot_swap": {"enabled": False, "fallback_quorum_min": 1}},
+                    cancel_event=cancel,
+                )
+        except InterruptedError:
+            pass
+        finally:
+            finished.set()
+
+    runner = threading.Thread(target=run, daemon=True)
+    runner.start()
+    try:
+        assert started.wait(timeout=2), f"{blocked_stage} provider call did not start"
+        before = {thread.ident for thread in threading.enumerate() if thread.name == "teamwork-provider-call"}
+        cancel.set()
+        assert finished.wait(timeout=1), f"cancellation waited for blocked {blocked_stage} provider"
+        current = [thread for thread in threading.enumerate() if thread.name == "teamwork-provider-call"]
+        assert len(current) <= 2, "detached provider calls exceeded the global bound"
+        assert len({thread.ident for thread in current} - before) <= 1
+    finally:
+        release_provider.set()
+        runner.join(timeout=2)
+    assert not runner.is_alive()
+
+
+def test_teamwork_cancellable_calls_apply_backpressure_at_global_limit():
+    cancel = threading.Event()
+    result = []
+    # Fill the semaphore with two deliberately blocked calls.
+    from runtime import teamwork_orchestrator as orchestrator
+    orchestrator._CANCELLABLE_CALL_SLOTS.acquire()
+    orchestrator._CANCELLABLE_CALL_SLOTS.acquire()
+    runner = threading.Thread(target=lambda: _run_cancelled_call(result, cancel), daemon=True)
+    runner.start()
+    try:
+        cancel.set()
+        runner.join(timeout=1)
+        assert not runner.is_alive(), "waiting for a call slot ignored cancellation"
+        assert result == ["cancelled"]
+    finally:
+        orchestrator._CANCELLABLE_CALL_SLOTS.release()
+        orchestrator._CANCELLABLE_CALL_SLOTS.release()
+
+
+def _run_cancelled_call(result, cancel):
+    from runtime.teamwork_orchestrator import _call_llm_cancellable
+    try:
+        _call_llm_cancellable(lambda: "unexpected", cancel_event=cancel)
+    except InterruptedError:
+        result.append("cancelled")
+
+
 def test_teamwork_does_not_invent_models_when_provider_catalog_is_empty():
     with patch("web.api.config.get_available_models", return_value={"groups": []}):
         assert get_teamwork_model_pool() == []

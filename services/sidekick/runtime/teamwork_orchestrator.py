@@ -16,6 +16,7 @@ import copy
 import json
 import logging
 import os
+import queue
 import re
 import threading
 import time
@@ -24,6 +25,53 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("sidekick.teamwork")
+
+# Synchronous planner/critic clients cannot be interrupted directly. Bound
+# detached provider calls globally so repeated cancellations cannot accumulate
+# unbounded threads. Daemon workers cannot hold process shutdown if a provider
+# ignores its timeout.
+_CANCELLABLE_CALL_SLOTS = threading.BoundedSemaphore(2)
+
+
+def _call_llm_cancellable(call_llm: Callable[..., Any], *, cancel_event: Optional[threading.Event], **kwargs: Any) -> Any:
+    """Call a sync provider while allowing prompt cancellation."""
+    if cancel_event is None:
+        return call_llm(**kwargs)
+
+    while not _CANCELLABLE_CALL_SLOTS.acquire(timeout=0.05):
+        if cancel_event.is_set():
+            raise InterruptedError("Cancelled")
+    if cancel_event.is_set():
+        _CANCELLABLE_CALL_SLOTS.release()
+        raise InterruptedError("Cancelled")
+
+    result: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
+
+    def invoke() -> None:
+        try:
+            result.put((True, call_llm(**kwargs)))
+        except BaseException as exc:
+            result.put((False, exc))
+        finally:
+            _CANCELLABLE_CALL_SLOTS.release()
+
+    thread = threading.Thread(target=invoke, name="teamwork-provider-call", daemon=True)
+    try:
+        thread.start()
+    except BaseException:
+        _CANCELLABLE_CALL_SLOTS.release()
+        raise
+
+    while True:
+        if cancel_event.is_set():
+            raise InterruptedError("Cancelled")
+        try:
+            succeeded, value = result.get(timeout=0.05)
+        except queue.Empty:
+            continue
+        if succeeded:
+            return value
+        raise value
 
 DEFAULT_TEAMWORK_CONFIG: Dict[str, Any] = {
     "enabled": True,
@@ -577,7 +625,9 @@ def run_teamwork_turn(
             "message": "Planer strukturiert die Teilfragen...",
         })
         try:
-            planner_resp = call_llm(
+            planner_resp = _call_llm_cancellable(
+                call_llm,
+                cancel_event=cancel_event,
                 provider=planner_model["provider"],
                 model=planner_model.get("call_model", planner_model["id"]),
                 messages=[
@@ -591,6 +641,8 @@ def run_teamwork_turn(
                 planner_context = str(planner_resp.choices[0].message.content or "").strip()
             if planner_context:
                 put_event("teamwork_plan", {"model": planner_model["id"], "content": planner_context})
+        except InterruptedError:
+            raise
         except Exception as e:
             logger.warning("Teamwork planner failed; continuing without plan: %s", e)
 
@@ -715,7 +767,9 @@ def run_teamwork_turn(
     critic_review = ""
     try:
         critic_entry = next((m for m in pool if m["id"] == critic_model), None)
-        critic_resp = call_llm(
+        critic_resp = _call_llm_cancellable(
+            call_llm,
+            cancel_event=cancel_event,
             provider=critic_provider,
             model=critic_entry.get("call_model", critic_model) if critic_entry else critic_model,
             messages=[{"role": "user", "content": critic_prompt}],
@@ -724,6 +778,8 @@ def run_teamwork_turn(
         critic_review = extract_content_or_reasoning(critic_resp)
         if not critic_review:
             critic_review = str(critic_resp.choices[0].message.content or "").strip()
+    except InterruptedError:
+        raise
     except Exception as e:
         logger.warning("Critic evaluation failed: %s, continuing with best draft directly", e)
         critic_review = f"Kritik konnte nicht separat generiert werden ({e}). Synthese basiert auf den Roh-Entwürfen."

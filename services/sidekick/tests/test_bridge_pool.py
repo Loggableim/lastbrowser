@@ -40,6 +40,10 @@ def test_streaming_classifier() -> None:
     for path in ("/api/status", "/api/sessions", "/api/space/config"):
         assert not fastapi_bridge._is_streaming_bridge_path(path), path
 
+    assert fastapi_bridge._is_chat_start_path("POST", "/api/chat/start")
+    assert fastapi_bridge._is_chat_start_path("POST", "/api/chat/start/?x=1")
+    assert not fastapi_bridge._is_chat_start_path("GET", "/api/chat/start")
+
 
 def test_concurrent_bridge_requests_use_a_bounded_pool(monkeypatch, tmp_path):
     """100 concurrent bridge calls must not create 100 threads."""
@@ -100,3 +104,94 @@ def test_backpressure_rejects_when_the_queue_is_saturated(monkeypatch, tmp_path)
         assert fastapi_bridge._bridge_pool_has_capacity() is True
     finally:
         fastapi_bridge._bridge_pool_pending = original
+
+
+def test_chat_start_isolated_from_saturated_generic_pool(monkeypatch, tmp_path):
+    """Generic long-running routes must not occupy chat-start worker capacity."""
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+    from cli import web_server
+    from web.api import fastapi_bridge, routes
+
+    monkeypatch.setattr(routes, "_setup_workspace_from_request", lambda *_: None)
+    monkeypatch.setattr(routes, "_teardown_workspace_context", lambda: None)
+
+    def fake_get(handler, parsed):
+        handler.send_response(200)
+        handler.end_headers()
+        handler.wfile.write(b'{"ok":true}')
+        return True
+
+    def fake_post(handler, parsed):
+        assert parsed.path == "/api/chat/start"
+        handler.send_response(200)
+        handler.send_header("Content-Type", "application/json")
+        handler.end_headers()
+        handler.wfile.write(b'{"stream_id":"mock-stream","session_id":"mock-session"}')
+        return True
+
+    monkeypatch.setattr(routes, "handle_get", fake_get)
+    monkeypatch.setattr(routes, "handle_post", fake_post)
+    client = TestClient(web_server.app)
+    headers = {web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN}
+    client.get("/api/bridge-pool-warmup", headers=headers)
+
+    release = threading.Event()
+    started = [threading.Event() for _ in range(fastapi_bridge._BRIDGE_POOL_MAX_WORKERS)]
+    pool = fastapi_bridge._get_bridge_pool()
+
+    def hold_worker(index: int) -> None:
+        started[index].set()
+        release.wait(timeout=5)
+
+    blockers = [pool.submit(hold_worker, index) for index in range(len(started))]
+    try:
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and not all(event.is_set() for event in started):
+            time.sleep(0.005)
+        assert all(event.is_set() for event in started), "generic bridge workers did not become busy"
+
+        before = time.monotonic()
+        response = client.post("/api/chat/start", json={"session_id": "mock"}, headers=headers)
+        elapsed = time.monotonic() - before
+        assert response.status_code == 200, response.text
+        assert response.json()["stream_id"] == "mock-stream"
+        assert elapsed < 2.0, f"chat-start waited behind generic pool for {elapsed:.2f}s"
+    finally:
+        release.set()
+        for blocker in blockers:
+            blocker.result(timeout=3)
+
+
+def test_chat_start_saturation_returns_retryable_503(monkeypatch, tmp_path):
+    """A full reserved chat-start pool is rejected promptly, not as a 20s 504."""
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+    from cli import web_server
+    from web.api import fastapi_bridge, routes
+
+    monkeypatch.setattr(routes, "_setup_workspace_from_request", lambda *_: None)
+    monkeypatch.setattr(routes, "_teardown_workspace_context", lambda: None)
+    route_called = threading.Event()
+
+    def fake_post(handler, parsed):
+        route_called.set()
+        handler.send_response(200)
+        handler.end_headers()
+        return True
+
+    monkeypatch.setattr(routes, "handle_post", fake_post)
+    client = TestClient(web_server.app)
+    headers = {web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN}
+    original = fastapi_bridge._chat_start_pool_pending
+    try:
+        with fastapi_bridge._chat_start_pool_pending_lock:
+            fastapi_bridge._chat_start_pool_pending = fastapi_bridge._CHAT_START_POOL_PENDING_LIMIT
+        before = time.monotonic()
+        response = client.post("/api/chat/start", json={"session_id": "mock"}, headers=headers)
+        elapsed = time.monotonic() - before
+        assert response.status_code == 503
+        assert response.headers.get("Retry-After") == "1"
+        assert elapsed < 1.0, f"saturated chat-start waited {elapsed:.2f}s before rejection"
+        assert not route_called.is_set()
+    finally:
+        with fastapi_bridge._chat_start_pool_pending_lock:
+            fastapi_bridge._chat_start_pool_pending = original

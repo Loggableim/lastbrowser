@@ -46,6 +46,19 @@ _BRIDGE_POOL_QUEUE_LIMIT = 256
 _bridge_pool: "concurrent.futures.ThreadPoolExecutor | None" = None
 _bridge_pool_lock = threading.Lock()
 _bridge_pool_pending = 0
+_bridge_pool_pending_lock = threading.Lock()
+
+# Interactive chat-start requests get an isolated, smaller bounded pool. The
+# generic compatibility pool also carries slow background/settings routes; a
+# backlog there must not make the chat composer wait for the bridge header
+# timeout. Keep this pool independently bounded so reserving capacity cannot
+# turn into unbounded thread creation.
+_CHAT_START_POOL_MAX_WORKERS = 4
+_CHAT_START_POOL_PENDING_LIMIT = 16
+_chat_start_pool: "concurrent.futures.ThreadPoolExecutor | None" = None
+_chat_start_pool_lock = threading.Lock()
+_chat_start_pool_pending_lock = threading.Lock()
+_chat_start_pool_pending = 0
 
 # Mirrors ``cli.web_server._STREAMING_EXACT_PATHS`` / ``_STREAMING_PREFIXES``.
 # Duplicated on purpose: ``cli.web_server`` imports this module at import time,
@@ -76,6 +89,12 @@ def _is_streaming_bridge_path(path: str) -> bool:
     )
 
 
+def _is_chat_start_path(method: str, path: str) -> bool:
+    """True for the latency-sensitive interactive chat-start request."""
+    clean = str(path or "").split("?", 1)[0].rstrip("/")
+    return method.upper() == "POST" and clean == "/api/chat/start"
+
+
 def _get_bridge_pool() -> "concurrent.futures.ThreadPoolExecutor":
     global _bridge_pool
     if _bridge_pool is None:
@@ -88,9 +107,35 @@ def _get_bridge_pool() -> "concurrent.futures.ThreadPoolExecutor":
     return _bridge_pool
 
 
+def _get_chat_start_pool() -> "concurrent.futures.ThreadPoolExecutor":
+    global _chat_start_pool
+    if _chat_start_pool is None:
+        with _chat_start_pool_lock:
+            if _chat_start_pool is None:
+                _chat_start_pool = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=_CHAT_START_POOL_MAX_WORKERS,
+                    thread_name_prefix="api-chat-start",
+                )
+    return _chat_start_pool
+
+
 def _bridge_pool_has_capacity() -> bool:
     """Backpressure check: refuse work when the pool queue is saturated."""
-    return _bridge_pool_pending < _BRIDGE_POOL_QUEUE_LIMIT
+    with _bridge_pool_pending_lock:
+        return _bridge_pool_pending < _BRIDGE_POOL_QUEUE_LIMIT
+
+
+def _chat_start_pool_has_capacity() -> bool:
+    with _chat_start_pool_pending_lock:
+        return _chat_start_pool_pending < _CHAT_START_POOL_PENDING_LIMIT
+
+
+def _route_pool_has_capacity(method: str, path: str) -> bool:
+    if _is_streaming_bridge_path(path):
+        return True
+    if _is_chat_start_path(method, path):
+        return _chat_start_pool_has_capacity()
+    return _bridge_pool_has_capacity()
 
 
 def _is_pure_swarm_get(method: str, path: str) -> bool:
@@ -247,34 +292,54 @@ class _RouteExecution:
         self.thread: threading.Thread | None = None
         self._pool_future: concurrent.futures.Future | None = None
 
-    def start(self) -> None:
+    def start(self) -> bool:
         """Run the handler on the bounded pool, or a dedicated thread for SSE.
 
         SSE handlers hold their worker until the stream ends, so they must not
         occupy a shared pool slot; they get their own daemon thread as before.
+        Chat-start work uses its isolated bounded pool so generic route backlog
+        cannot starve interactive requests.
         """
-        global _bridge_pool_pending
+        global _bridge_pool_pending, _chat_start_pool_pending
         if _is_streaming_bridge_path(self.handler.path):
             self.thread = threading.Thread(target=self._run, daemon=True)
             self.thread.start()
-            return
+            return True
 
-        pool = _get_bridge_pool()
-        _bridge_pool_pending += 1
+        chat_start = _is_chat_start_path(self.handler.command, self.handler.path)
+        pending_lock = _chat_start_pool_pending_lock if chat_start else _bridge_pool_pending_lock
+        pending_limit = _CHAT_START_POOL_PENDING_LIMIT if chat_start else _BRIDGE_POOL_QUEUE_LIMIT
+        pool_getter = _get_chat_start_pool if chat_start else _get_bridge_pool
+        with pending_lock:
+            pending = _chat_start_pool_pending if chat_start else _bridge_pool_pending
+            if pending >= pending_limit:
+                return False
+            if chat_start:
+                _chat_start_pool_pending += 1
+            else:
+                _bridge_pool_pending += 1
         try:
-            self._pool_future = pool.submit(self._run)
+            self._pool_future = pool_getter().submit(self._run)
         except RuntimeError:
-            # Pool shut down (interpreter teardown): fall back to a thread.
-            _bridge_pool_pending -= 1
-            self.thread = threading.Thread(target=self._run, daemon=True)
-            self.thread.start()
-            return
+            # Do not fall back to unbounded thread creation during shutdown.
+            with pending_lock:
+                if chat_start:
+                    _chat_start_pool_pending -= 1
+                else:
+                    _bridge_pool_pending -= 1
+            return False
 
         def _release(_future: concurrent.futures.Future) -> None:
             global _bridge_pool_pending
-            _bridge_pool_pending -= 1
+            global _chat_start_pool_pending
+            with pending_lock:
+                if chat_start:
+                    _chat_start_pool_pending -= 1
+                else:
+                    _bridge_pool_pending -= 1
 
         self._pool_future.add_done_callback(_release)
+        return True
 
     def _run(self) -> None:
         # A Swarm read has its own project-local, read-only initialization
@@ -378,7 +443,7 @@ async def dispatch_route(request: Request) -> Response:
 
     # Backpressure: refuse new non-streaming work when the bounded pool queue
     # is saturated, instead of growing the queue without bound.
-    if not _is_streaming_bridge_path(request.url.path) and not _bridge_pool_has_capacity():
+    if not _route_pool_has_capacity(request.method, request.url.path):
         return JSONResponse(
             {"error": "route bridge overloaded, retry shortly"},
             status_code=503,
@@ -386,7 +451,12 @@ async def dispatch_route(request: Request) -> Response:
         )
 
     execution = _RouteExecution(request, body)
-    execution.start()
+    if not execution.start():
+        return JSONResponse(
+            {"error": "route bridge is saturated or shutting down, retry shortly"},
+            status_code=503,
+            headers={"Retry-After": "1"},
+        )
     headers_ready = await asyncio.to_thread(
         execution.handler.headers_ready.wait, _HEADER_WAIT_SECONDS
     )

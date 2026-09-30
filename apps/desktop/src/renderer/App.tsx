@@ -63,6 +63,7 @@ import { applyLiveChatDelta, finishLiveChatMessage, readLiveChatDelta } from './
 import { playChatCompletionSound } from './notification-sound.js';
 import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
+import { isActiveTurnContextCurrent, isGoalContinuationContextCurrent, readGoalContinuationPrompt, startGoalContinuation } from './goal-continuation.js';
 import { executeBrowserAction, parseNaturalLanguageBrowserCommand } from './browser-agent-tools.js';
 import {
   bookmarkFromTab,
@@ -1008,6 +1009,10 @@ function AppContent(): JSX.Element {
   const activeBookmarked = useMemo(() => isBookmarked(bookmarks, activeTab.url), [activeTab.url, bookmarks]);
   const activeTabIdRef = useRef(activeTabId);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  const activeProfileIdRef = useRef(activeProfileId);
+  const activeSpacePathRef = useRef(activeSpacePath);
+  activeProfileIdRef.current = activeProfileId;
+  activeSpacePathRef.current = activeSpacePath;
   const isCreatingSessionRef = useRef(false);
   const browserFrameRef = useRef<HTMLDivElement | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
@@ -2260,11 +2265,12 @@ function AppContent(): JSX.Element {
     sessionId: string,
     earlyEvents: Array<{ streamId?: string; event?: string; data?: unknown }> = [],
     unsubscribeEarly?: () => void
-  ): Promise<void> {
+  ): Promise<string | null> {
     const deadline = Date.now() + 120000;
     let sawStreamEnd = false;
     let streamFailed = false;
     let hasLiveOutput = false;
+    let goalContinuationPrompt: string | null = null;
     const notifyCompletion = createOnceChatCompletionNotifier(
       desktopSettings?.sound_enabled === true,
       desktopSettings?.notifications_enabled === true,
@@ -2276,7 +2282,7 @@ function AppContent(): JSX.Element {
       const event = payload as { streamId?: string; event?: string; data?: unknown } | null;
       if (!event || event.streamId !== streamId) return;
       if (event.event === 'stream_end') {
-        notifyCompletion();
+        if (!goalContinuationPrompt) notifyCompletion();
         sawStreamEnd = true;
         setChatMessages((current) => finishLiveChatMessage(current));
         setMessages((current) => finishLiveChatMessage(current));
@@ -2299,6 +2305,9 @@ function AppContent(): JSX.Element {
         return;
       }
       if (typeof event.event !== 'string') return;
+      if (!goalContinuationPrompt) {
+        goalContinuationPrompt = readGoalContinuationPrompt(event, streamId, sessionId);
+      }
       if (event.event === 'token' || event.event === 'delta' || event.event === 'reasoning') {
         const delta = readLiveChatDelta(event.event, event.data);
         if (delta) {
@@ -2344,7 +2353,7 @@ function AppContent(): JSX.Element {
 
       while (Date.now() < deadline) {
         await delay(600);
-        if (sawStreamEnd) return;
+        if (sawStreamEnd) return goalContinuationPrompt;
         if (streamFailed) break;
         // The stream is the fast path, but a dropped connection must not hang
         // the turn: poll occasionally as a safety net.
@@ -2353,13 +2362,13 @@ function AppContent(): JSX.Element {
           if (!hasLiveOutput || streamStatus?.active === false) {
             const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
             if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
-              notifyCompletion();
-              return;
+              if (!goalContinuationPrompt) notifyCompletion();
+              return goalContinuationPrompt;
             }
           }
         }
       }
-      if (sawStreamEnd) return;
+      if (sawStreamEnd) return goalContinuationPrompt;
     } finally {
       unsubscribe();
       void window.lastbrowser.sidekick.unsubscribeChatStream({ streamId }).catch(() => null);
@@ -2371,16 +2380,34 @@ function AppContent(): JSX.Element {
       const streamStatus = await window.lastbrowser.sidekick.getStreamStatus(streamId).catch(() => null);
       const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
       if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
-        notifyCompletion();
-        return;
+        if (!goalContinuationPrompt) notifyCompletion();
+        return goalContinuationPrompt;
       }
     }
     throw new Error('Sidekick is still working. Try again in a moment.');
   }
 
-  async function startNativeChat(message: string, displayText = message): Promise<void> {
+  async function startNativeChat(
+    message: string,
+    displayText = message,
+    continuation?: { sessionId: string; profileId: string; spacePath: string }
+  ): Promise<void> {
     const trimmed = message.trim();
-    if (!trimmed || sidekickBusy || chatRunState === 'starting' || chatRunState === 'streaming') return;
+    if (!trimmed) return;
+    const turnContext = continuation ?? {
+      sessionId: activeSessionIdRef.current ?? '',
+      profileId: activeProfileIdRef.current,
+      spacePath: activeSpacePathRef.current
+    };
+    if (continuation) {
+      if (!isGoalContinuationContextCurrent(continuation, {
+        sessionId: activeSessionIdRef.current,
+        profileId: activeProfileIdRef.current,
+        spacePath: activeSpacePathRef.current
+      })) return;
+    } else if (sidekickBusy || chatRunState === 'starting' || chatRunState === 'streaming') {
+      return;
+    }
 
     // Fast-path: Check for natural language browser management commands (Phase 10.4)
     const browserCommand = parseNaturalLanguageBrowserCommand(trimmed);
@@ -2412,6 +2439,14 @@ function AppContent(): JSX.Element {
     ]);
     setSidekickBusy(true);
     setChatRunState('starting');
+    const activeTurnIsCurrent = (): boolean => {
+      return isActiveTurnContextCurrent(turnContext, {
+        sessionId: activeSessionIdRef.current,
+        profileId: activeProfileIdRef.current,
+        spacePath: activeSpacePathRef.current
+      });
+    };
+    let turnFailed = false;
     setChatError('');
     // Register before asking Sidekick to start. Fast providers can emit their
     // first token while startChat is still resolving through IPC.
@@ -2424,7 +2459,7 @@ function AppContent(): JSX.Element {
     });
     try {
       const storedModel = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('lastbrowser.selectedModel.v1') : null;
-      const spaceModelSelection = loadSpaceModelSelection(activeSpacePath, window.localStorage);
+      const spaceModelSelection = loadSpaceModelSelection(turnContext.spacePath, window.localStorage);
       const effectiveSelectedModel = resolvePreferredChatModel(
         spaceModelSelection?.model,
         storedModel,
@@ -2454,7 +2489,7 @@ function AppContent(): JSX.Element {
       }
 
       const response = await window.lastbrowser.sidekick.startChat({
-        sessionId: activeSessionId,
+        sessionId: turnContext.sessionId || null,
         message: trimmed,
         // Resolve the model explicitly. The setup state is often empty (the
         // wizard may have been skipped), and sending nothing made the backend
@@ -2463,14 +2498,18 @@ function AppContent(): JSX.Element {
         model: configuredChatModel,
         modelProvider: chatModelProvider,
         groundingContext: teamworkGroundingContext,
-        workspace: activeSpacePath,
+        workspace: turnContext.spacePath,
         mode: composerMode
       });
+      const turnContextStillCurrentAfterStream = activeTurnIsCurrent();
       // When a fresh conversation is created implicitly by startChat, the
       // selected account could not be bound before the backend returned its
       // session ID. Bind it now so follow-up messages stay on this account in
       // per-session round-robin mode.
-      setActiveSessionId(response.sessionId);
+      if (turnContextStillCurrentAfterStream) {
+        setActiveSessionId(response.sessionId);
+        activeSessionIdRef.current = response.sessionId;
+      }
       setActiveStreamId(response.streamId);
       setComposerText('');
       setChatRunState('streaming');
@@ -2478,22 +2517,25 @@ function AppContent(): JSX.Element {
       // already captured by startChat; clearing it can finish in the background.
       void window.lastbrowser.sidekick.saveDraft({ sessionId: response.sessionId, text: '', files: [] }).catch(() => null);
       captureEarlyEvents = false;
-      await pollNativeChat(
+      const nextGoalPrompt = await pollNativeChat(
         response.streamId,
         response.sessionId,
         earlyStreamEvents,
         unsubscribeEarly
       );
+      const turnContextStillCurrent = activeTurnIsCurrent();
       // Show the ACTUAL answer. The pending placeholder used to be replaced with
       // the literal string "Sidekick finished.", so every reply — including
       // errors and full summaries — was hidden behind that text.
       const finished = await loadActiveSession(response.sessionId, { loadDraft: false, showLoading: false });
       const answer = lastAssistantText(finished);
-      setMessages((current) => current.map((item) => (
-        item.pending
-          ? { ...item, content: answer || 'Sidekick finished.', pending: false }
-          : item
-      )));
+      if (turnContextStillCurrent) {
+        setMessages((current) => current.map((item) => (
+          item.pending
+            ? { ...item, content: answer || 'Sidekick finished.', pending: false }
+            : item
+        )));
+      }
 
       // Auto-generate a concise session title from first user prompt if untitled or generic
       const currentSessionSummary = sessions.find((s) => s.session_id === response.sessionId);
@@ -2516,29 +2558,43 @@ function AppContent(): JSX.Element {
       }
 
       void refreshSessions();
+      if (nextGoalPrompt && turnContextStillCurrentAfterStream) {
+        const continuationContext = { ...turnContext, sessionId: response.sessionId };
+        await startGoalContinuation(nextGoalPrompt, continuationContext, {
+          sessionId: activeSessionIdRef.current,
+          profileId: activeProfileIdRef.current,
+          spacePath: activeSpacePathRef.current
+        }, (prompt) => startNativeChat(prompt, prompt, continuationContext));
+      }
     } catch (error) {
       captureEarlyEvents = false;
       unsubscribeEarly();
       const messageText = error instanceof Error ? error.message : String(error);
       setChatError(messageText);
-      setChatMessages((current) => current.map((item) => (
-        item.pending ? { ...item, content: `Sidekick could not respond: ${messageText}`, pending: false } : item
-      )));
-      setMessages((current) => current.map((item) => (
-        item.pending ? { ...item, content: `Sidekick could not respond: ${messageText}`, pending: false } : item
-      )));
-      setChatRunState('error');
+      turnFailed = true;
+      if (activeTurnIsCurrent()) {
+        setChatMessages((current) => current.map((item) => (
+          item.pending ? { ...item, content: `Sidekick could not respond: ${messageText}`, pending: false } : item
+        )));
+        setMessages((current) => current.map((item) => (
+          item.pending ? { ...item, content: `Sidekick could not respond: ${messageText}`, pending: false } : item
+        )));
+        setChatRunState('error');
+      }
     } finally {
-      setSidekickBusy(false);
-      setActiveStreamId(null);
-      setChatRunState((current) => {
-        // Vision-Impaired Feature 36: soft audio gong when Nova finishes.
-        const vision = usePanelStore.getState().visionImpaired;
-        if (current !== 'error' && vision.enabled && vision.copilotAudioChime) {
-          playCopilotSuccessChime();
-        }
-        return current === 'error' ? 'error' : 'idle';
-      });
+      const turnIsCurrentAfterCompletion = activeTurnIsCurrent();
+      if (turnIsCurrentAfterCompletion) {
+        setSidekickBusy(false);
+        setActiveStreamId(null);
+        setChatRunState((current) => {
+          // Vision-Impaired Feature 36: soft audio gong when Nova finishes.
+          const vision = usePanelStore.getState().visionImpaired;
+          if (!turnFailed && vision.enabled && vision.copilotAudioChime) {
+            playCopilotSuccessChime();
+          }
+          return turnFailed ? 'error' : 'idle';
+        });
+      }
     }
   }
 

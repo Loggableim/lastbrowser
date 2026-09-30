@@ -1,8 +1,10 @@
 """Unit tests for the Teamwork Multi-Agent Orchestrator."""
 import os
 import json
+import queue
 import tempfile
 import threading
+import time
 
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -348,6 +350,119 @@ def test_teamwork_cancellation_does_not_wait_for_blocked_worker():
         release_worker.set()
         runner.join(timeout=2)
     assert not runner.is_alive()
+
+
+def test_repeated_worker_cancellation_keeps_executor_threads_within_global_bound(monkeypatch):
+    from runtime import teamwork_orchestrator as orchestrator
+
+    # Use a small deterministic process-wide cap to prove a second cancelled
+    # turn cannot create another executor thread while the first turn's
+    # synchronous provider calls remain blocked.
+    class TrackingSemaphore:
+        def __init__(self, value):
+            self._semaphore = threading.BoundedSemaphore(value)
+            self.waiting = threading.Event()
+
+        def acquire(self, timeout=None):
+            acquired = self._semaphore.acquire(timeout=timeout)
+            if not acquired:
+                self.waiting.set()
+            return acquired
+
+        def release(self):
+            self._semaphore.release()
+
+    worker_slots = TrackingSemaphore(2)
+    monkeypatch.setattr(orchestrator, "_TEAMWORK_WORKER_SLOTS", worker_slots)
+    workers = [
+        {"id": f"model-{index}", "call_model": f"model-{index}", "provider": "mock",
+         "name": f"M{index}", "role": "analyst", "focus": "test", "tier": "balanced"}
+        for index in range(2)
+    ]
+    plan = {
+        "workers": workers,
+        "critic": "model-0", "critic_provider": "mock",
+        "synthesizer": "model-0", "synthesizer_provider": "mock",
+        "pool": workers, "planner": None,
+    }
+    release_workers = threading.Event()
+    started_workers = queue.Queue()
+    worker_thread_ids = set()
+    worker_thread_ids_lock = threading.Lock()
+    runners = []
+
+    def blocked_worker(worker, *_args, **_kwargs):
+        with worker_thread_ids_lock:
+            worker_thread_ids.add(threading.get_ident())
+        started_workers.put(worker["id"])
+        if not release_workers.wait(timeout=5):
+            raise RuntimeError("test worker release timed out")
+        return {
+            "model": worker["id"], "provider": "mock", "name": worker["name"],
+            "role": worker["role"], "focus": worker["focus"], "content": "draft",
+            "execution_ms": 1, "error": None, "swapped": False,
+        }
+
+    def live_worker_threads():
+        with worker_thread_ids_lock:
+            known_thread_ids = set(worker_thread_ids)
+        return {thread.ident for thread in threading.enumerate()
+                if thread.is_alive() and thread.ident in known_thread_ids}
+
+    def start_cancelled_turn():
+        cancel = threading.Event()
+        entered = threading.Event()
+        finished = threading.Event()
+
+        def run():
+            entered.set()
+            try:
+                orchestrator.run_teamwork_turn(
+                    MagicMock(messages=[]), "Do the task",
+                    config={"shared_grounding": False,
+                            "hot_swap": {"enabled": False, "fallback_quorum_min": 1}},
+                    cancel_event=cancel,
+                )
+            except InterruptedError:
+                pass
+            finally:
+                finished.set()
+
+        runner = threading.Thread(target=run, daemon=True)
+        runner.start()
+        runners.append(runner)
+        assert entered.wait(timeout=1)
+        return cancel, finished, runner
+
+    try:
+        with patch.object(orchestrator, "resolve_team_plan", return_value=plan), \
+             patch.object(orchestrator, "_invoke_worker", side_effect=blocked_worker):
+            first_cancel, first_finished, first_runner = start_cancelled_turn()
+            assert {started_workers.get(timeout=2), started_workers.get(timeout=2)} == {
+                "model-0", "model-1",
+            }
+            first_cancel.set()
+            assert first_finished.wait(timeout=1), "first cancellation waited for blocked workers"
+            assert len(live_worker_threads()) == 2
+
+            second_cancel, second_finished, second_runner = start_cancelled_turn()
+            assert worker_slots.waiting.wait(timeout=1), "second run did not wait for a worker slot"
+            second_cancel.set()
+            assert second_finished.wait(timeout=1), "slot-waiting cancellation did not return"
+            assert started_workers.empty(), "a second run started workers beyond the process-wide cap"
+            assert len(live_worker_threads()) == 2
+            first_runner.join(timeout=1)
+            second_runner.join(timeout=1)
+            assert not first_runner.is_alive()
+            assert not second_runner.is_alive()
+    finally:
+        release_workers.set()
+        for runner in runners:
+            runner.join(timeout=2)
+        deadline = time.monotonic() + 3
+        while live_worker_threads() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert not live_worker_threads(), "blocked worker executor threads leaked after test cleanup"
 
 
 @pytest.mark.parametrize("blocked_stage", ["planner", "critic"])

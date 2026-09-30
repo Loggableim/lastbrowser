@@ -31,6 +31,12 @@ logger = logging.getLogger("sidekick.teamwork")
 # unbounded threads. Daemon workers cannot hold process shutdown if a provider
 # ignores its timeout.
 _CANCELLABLE_CALL_SLOTS = threading.BoundedSemaphore(2)
+# Worker providers run in a per-turn ThreadPoolExecutor so they can respond in
+# parallel. A cancelled synchronous HTTP call cannot be killed safely, though,
+# so cap detached/running workers across all turns. Slots are acquired before a
+# task is submitted (rather than inside it) to avoid accumulating executor
+# threads waiting on the semaphore after repeated cancellations.
+_TEAMWORK_WORKER_SLOTS = threading.BoundedSemaphore(8)
 
 
 def _call_llm_cancellable(call_llm: Callable[..., Any], *, cancel_event: Optional[threading.Event], **kwargs: Any) -> Any:
@@ -638,6 +644,14 @@ def _invoke_worker(
             }
 
 
+def _invoke_worker_with_slot(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    """Run a worker and release its process-wide concurrency slot on exit."""
+    try:
+        return _invoke_worker(*args, **kwargs)
+    finally:
+        _TEAMWORK_WORKER_SLOTS.release()
+
+
 def run_teamwork_turn(
     session: Any,
     prompt: str,
@@ -744,24 +758,43 @@ def run_teamwork_turn(
         hot_swap_cfg = {}
     allow_hot_swap = bool(hot_swap_cfg.get("enabled", True))
     executor = ThreadPoolExecutor(max_workers=len(workers))
-    futures = {
-        executor.submit(
-            _invoke_worker,
-            w,
-            prompt,
-            team_context,
-            pool,
-            allow_hot_swap=allow_hot_swap,
-        ): w
-        for w in workers
-    }
+    futures = {}
     cancelled = False
-    pending = set(futures)
+    pending = set()
     try:
+        # Reserve global capacity before submitting each task. Waiting here is
+        # cancellation-aware, and submitting one at a time avoids deadlocks
+        # between concurrent turns that each need more slots than remain free.
+        for worker in workers:
+            while cancel_event and cancel_event.is_set():
+                cancelled = True
+                raise InterruptedError("Cancelled")
+            while not _TEAMWORK_WORKER_SLOTS.acquire(timeout=0.05):
+                if cancel_event and cancel_event.is_set():
+                    cancelled = True
+                    raise InterruptedError("Cancelled")
+            if cancel_event and cancel_event.is_set():
+                _TEAMWORK_WORKER_SLOTS.release()
+                cancelled = True
+                raise InterruptedError("Cancelled")
+            try:
+                future = executor.submit(
+                    _invoke_worker_with_slot,
+                    worker,
+                    prompt,
+                    team_context,
+                    pool,
+                    allow_hot_swap=allow_hot_swap,
+                )
+            except BaseException:
+                _TEAMWORK_WORKER_SLOTS.release()
+                raise
+            futures[future] = worker
+            pending.add(future)
+
         while pending:
             if cancel_event and cancel_event.is_set():
                 cancelled = True
-                executor.shutdown(wait=False, cancel_futures=True)
                 raise InterruptedError("Cancelled")
             completed, pending = wait(
                 pending,
@@ -805,6 +838,13 @@ def run_teamwork_turn(
         # ThreadPoolExecutor.__exit__ always waits for workers, even after a
         # shutdown(wait=False). Avoid that implicit wait when the caller has
         # cancelled; provider calls can be blocked or may ignore their timeout.
+        if cancelled:
+            # A successfully cancelled future never entered the wrapper and
+            # therefore cannot release its reserved slot itself. Running tasks
+            # release theirs from _invoke_worker_with_slot when they return.
+            for future in futures:
+                if future.cancel():
+                    _TEAMWORK_WORKER_SLOTS.release()
         executor.shutdown(wait=not cancelled, cancel_futures=cancelled)
 
     # Quorum check

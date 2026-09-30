@@ -26,7 +26,8 @@ describe('Ollama settings configuration flow', () => {
 
   it('uses the server model default in the chat picker when no local choice exists', () => {
     const chatSource = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8');
-    expect(chatSource).toContain("resolveCatalogModelSelection(data?.default_model, rawParsed)");
+    expect(chatSource).toContain("resolveCatalogModelSelection(data?.default_model, rawParsed, data?.active_provider)");
+    expect(chatSource).toContain("currentSelection.setSelectedModelProvider(defaultSelection.provider || '')");
     expect(chatSource).toContain('catalogDefaultModel,\n    \'default\'');
   });
 });

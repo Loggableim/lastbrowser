@@ -2345,6 +2345,15 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const fallbackState = useApiState(() => window.lastbrowser.sidekick.getFallbackModel(), [ready], ready);
   const fallbackModelConfig = isRecord(fallbackState.data?.fallback_model) ? fallbackState.data.fallback_model : {};
   const fallbackModel = settingsText(fallbackModelConfig.model, '');
+  const refreshSettingsData = useCallback(async () => {
+    await Promise.allSettled([
+      settingsState.refresh(),
+      modelsState.refresh(),
+      authState.refresh(),
+      pluginsState.refresh(),
+      fallbackState.refresh()
+    ]);
+  }, [settingsState.refresh, modelsState.refresh, authState.refresh, pluginsState.refresh, fallbackState.refresh]);
 
   useEffect(() => {
     const match = normalizeSettingsSectionId(activeContextItem);
@@ -2493,8 +2502,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       window.dispatchEvent(new CustomEvent('lastbrowser:settings-changed', { detail: payload }));
       setDirty(false);
       setPasswordDraft('');
-      await settingsState.refresh();
-      await authState.refresh();
+      await refreshSettingsData();
     } catch (error) {
       showToast(`Settings save failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -2503,7 +2511,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   }
 
   async function disableAuth(): Promise<void> {
-    if (!ready || saving) return;
+    if (!ready || saving || !loggedIn) return;
     if (!window.confirm('Disable authentication for this instance?')) return;
     setSaving(true);
     try {
@@ -2511,10 +2519,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       if (result.auth_enabled !== false) {
         throw new Error(t('settings.panels.system.authDisableNotConfirmed'));
       }
+      const confirmedAuth = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/auth/status' });
+      if (confirmedAuth.auth_enabled !== false) {
+        throw new Error(t('settings.panels.system.authDisableNotConfirmed'));
+      }
       window.dispatchEvent(new CustomEvent('lastbrowser:settings-changed', { detail: { _clear_password: true } }));
       setPasswordDraft('');
-      await settingsState.refresh();
-      await authState.refresh();
+      await refreshSettingsData();
       showToast(t('settings.panels.system.authDisabled'));
     } catch (error) {
       showToast(`${t('settings.panels.system.disableAuthFailed')} ${error instanceof Error ? error.message : String(error)}`);
@@ -2874,7 +2885,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         detail={t('settings.detail')}
         loading={settingsState.loading}
         ready={ready}
-        onRefresh={settingsState.refresh}
+        onRefresh={refreshSettingsData}
       />
       <ErrorLine error={settingsState.error || authState.error || pluginsState.error} />
 
@@ -4318,11 +4329,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       <Shield size={15} />
                       <span>{t('settings.panels.system.signOut')}</span>
                     </button>
-                    <button type="button" className="secondary-action compact" onClick={() => void disableAuth()} disabled={!ready || !authEnabled || passwordEnvLocked}>
+                    <button type="button" className="secondary-action compact" onClick={() => void disableAuth()} disabled={!ready || !authEnabled || !loggedIn || passwordEnvLocked}>
                       <Trash2 size={15} />
                       <span>{t(authEnabled ? 'settings.panels.system.disableAuth' : 'settings.panels.system.authDisabled')}</span>
                     </button>
                   </div>
+                  {authEnabled && !loggedIn && !passwordEnvLocked && (
+                    <p className="settings-hint">{t('settings.panels.system.authDisableLoginRequired')}</p>
+                  )}
                   <div className="settings-system-status">
                     <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>{t('settings.panels.system.updateState', { state: updateState })}</span>
                     {updateCurrentVersion && <span className="settings-badge">{t('settings.panels.system.currentVersion', { version: updateCurrentVersion })}</span>}

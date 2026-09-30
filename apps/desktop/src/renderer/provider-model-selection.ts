@@ -7,9 +7,19 @@ export interface ProviderModelSelection {
 export function resolveCatalogModelSelection(
   rawId: unknown,
   groups: Array<{ providerId?: string; models: Array<{ id: string }> }>,
+  activeProvider?: unknown,
 ): ProviderModelSelection {
   const value = typeof rawId === 'string' ? rawId.trim() : '';
-  if (!value) return { model: '' };
+  if (!value) {
+    const provider = typeof activeProvider === 'string' ? activeProvider.trim() : '';
+    const activeGroup = provider
+      ? groups.find((candidate) => candidate.providerId === provider)
+      : undefined;
+    const firstModel = activeGroup?.models.find((model) => typeof model.id === 'string' && model.id.trim());
+    return firstModel
+      ? { model: firstModel.id, ...(activeGroup?.providerId ? { provider: activeGroup.providerId } : {}) }
+      : { model: '' };
+  }
 
   const parsed = parseProviderModelId(value);
   if (parsed.provider) return parsed;

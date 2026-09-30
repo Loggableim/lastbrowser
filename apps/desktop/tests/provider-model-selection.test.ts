@@ -52,4 +52,16 @@ describe('provider-aware model selection', () => {
       model: 'deepseek-v4.1-flash'
     });
   });
+
+  it('falls back to the first model from the active provider when no default is configured', () => {
+    const groups = [
+      { providerId: 'openrouter', models: [{ id: 'free-model' }] },
+      { providerId: 'ollama-cloud', models: [{ id: 'deepseek-v4.1-flash' }] }
+    ];
+    expect(resolveCatalogModelSelection(null, groups, 'ollama-cloud')).toEqual({
+      provider: 'ollama-cloud',
+      model: 'deepseek-v4.1-flash'
+    });
+    expect(resolveCatalogModelSelection(null, groups, 'missing-provider')).toEqual({ model: '' });
+  });
 });

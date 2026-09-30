@@ -54,5 +54,10 @@ describe('desktop access password lock', () => {
     expect(source).toContain('if (result.auth_enabled !== false)');
     expect(source).toContain("t('settings.panels.system.authDisableNotConfirmed')");
     expect(source).toContain("t('settings.panels.system.disableAuthFailed')");
+    expect(source).toContain('disabled={!ready || !authEnabled || !loggedIn || passwordEnvLocked}');
+    expect(source).toContain("t('settings.panels.system.authDisableLoginRequired')");
+    expect(source).toContain('onRefresh={refreshSettingsData}');
+    expect(source).toContain('pluginsState.refresh()');
+    expect(source).toContain("path: '/api/auth/status' });\n      if (confirmedAuth.auth_enabled !== false)");
   });
 });

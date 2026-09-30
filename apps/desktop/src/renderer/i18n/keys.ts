@@ -1117,6 +1117,7 @@ export const desktopTranslationKeys = [
   'settings.panels.system.authActive',
   'settings.panels.system.authDisabled',
   'settings.panels.system.authDisableNotConfirmed',
+  'settings.panels.system.authDisableLoginRequired',
   'settings.panels.system.disableAuthFailed',
   'settings.panels.system.environmentPasswordNotice',
   'settings.panels.system.checkUpdates',

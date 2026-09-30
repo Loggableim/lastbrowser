@@ -147,8 +147,13 @@ export function NativeChatMain({
           })
           .filter((group) => group.models.length > 0);
 
-        const defaultSelection = resolveCatalogModelSelection(data?.default_model, rawParsed);
+        const defaultSelection = resolveCatalogModelSelection(data?.default_model, rawParsed, data?.active_provider);
         setCatalogDefaultModel(defaultSelection.model);
+        const currentSelection = useChatStore.getState();
+        const currentSpaceModel = loadSpaceModelSelection(activeSpacePath, window.localStorage)?.model;
+        if (!resolvePreferredChatModel(currentSpaceModel, currentSelection.selectedModel, activeSession?.model, setupModel)) {
+          currentSelection.setSelectedModelProvider(defaultSelection.provider || '');
+        }
         const hasCli = rawParsed.some((g) => g.provider.toLowerCase().includes('gemini'));
         setModelCatalog(rawParsed);
       } catch {
@@ -158,7 +163,7 @@ export function NativeChatMain({
     };
     void load();
     return () => { alive = false; };
-  }, [ready]);
+  }, [ready, activeSpacePath, activeSession?.model, setupModel]);
 
   /** Switch the model for this conversation (persists as the new default). */
   const handleComposerModelChange = useCallback((nextModel: string) => {

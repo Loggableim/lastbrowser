@@ -12059,6 +12059,11 @@ def _handle_goal_command(handler, body):
 
     kickoff_prompt = str(payload.get("kickoff_prompt") or "").strip()
     if kickoff_prompt:
+        kickoff_goal_state = goal_state_snapshot(
+            s.session_id,
+            profile_home=profile_home,
+            space_slug=space_slug,
+        )
         if workspace is None:
             try:
                 workspace = str(resolve_trusted_workspace(body.get("workspace") or s.workspace))
@@ -12096,7 +12101,14 @@ def _handle_goal_command(handler, body):
         status = int(stream_response.pop("_status", 200) or 200)
         payload.update(stream_response)
         if status >= 400:
-            restore_goal_state(s.session_id, previous_goal_state, profile_home=profile_home, space_slug=space_slug)
+            restore_goal_state(
+                s.session_id,
+                previous_goal_state,
+                profile_home=profile_home,
+                space_slug=space_slug,
+                expected_current=kickoff_goal_state,
+                check_expected_current=True,
+            )
             payload["ok"] = False
             return j(handler, payload, status=status)
 

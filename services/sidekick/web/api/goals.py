@@ -705,27 +705,40 @@ def restore_goal_state(
     *,
     profile_home: str | Path | None = None,
     space_slug: str | None = None,
-) -> None:
-    """Restore a prior goal state after kickoff stream creation fails."""
-    mgr = _manager(str(session_id or ""), profile_home=profile_home, space_slug=space_slug)
-    if mgr is None:
-        return
-    if snapshot is None:
-        try:
-            mgr.clear()
-        except Exception:
-            pass
-        return
-    if isinstance(mgr, _ProfileGoalManager):
-        mgr._state = snapshot
-        mgr._save(snapshot)
-        return
-    try:
-        from cli.goals import save_goal  # type: ignore
+    expected_current: Any = None,
+    check_expected_current: bool = False,
+) -> bool:
+    """Restore a prior state only if the failed kickoff still owns the goal.
 
-        save_goal(str(session_id or ""), snapshot)
-    except Exception as exc:  # pragma: no cover - native fallback only
-        logger.debug("Goal state restore failed for %s: %s", session_id, exc)
+    A concurrent pause, clear, or replacement goal must win over rollback. The
+    expected state is captured immediately after the command mutation and
+    compared under the same lock used by goal lifecycle commands.
+    """
+    with _CONTINUATION_LOCK:
+        mgr = _manager(str(session_id or ""), profile_home=profile_home, space_slug=space_slug)
+        if mgr is None:
+            return False
+        current = copy.deepcopy(getattr(mgr, "state", None))
+        if check_expected_current and current != expected_current:
+            return False
+        if snapshot is None:
+            try:
+                mgr.clear()
+                return True
+            except Exception:
+                return False
+        if isinstance(mgr, _ProfileGoalManager):
+            mgr._state = snapshot
+            mgr._save(snapshot)
+            return True
+        try:
+            from cli.goals import save_goal  # type: ignore
+
+            save_goal(str(session_id or ""), snapshot)
+            return True
+        except Exception as exc:  # pragma: no cover - native fallback only
+            logger.debug("Goal state restore failed for %s: %s", session_id, exc)
+            return False
 
 
 def goal_state_for_session(

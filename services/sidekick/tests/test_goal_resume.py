@@ -409,6 +409,63 @@ def test_resume_kickoff_failure_restores_the_pre_resume_goal(monkeypatch, tmp_pa
     assert restored["status"] == "paused"
 
 
+def test_failed_resume_kickoff_does_not_resurrect_goal_cleared_during_start(monkeypatch, tmp_path):
+    """A concurrent clear must not be overwritten by failed-kickoff rollback."""
+    from types import SimpleNamespace
+    from web.api import goals as goal_api
+    from web.api import routes
+
+    goal_api._DB_CACHE.clear()
+    monkeypatch.setattr(goal_api, "_space_goals_path", lambda *_args, **_kwargs: None)
+    profile_home = tmp_path / "profile"
+    session_id = "resume-kickoff-concurrent-clear"
+    assert goal_api.goal_command_payload(
+        session_id, "Continue shipping", profile_home=profile_home,
+    )["ok"] is True
+    assert goal_api.goal_command_payload(
+        session_id, "pause", profile_home=profile_home,
+    )["goal"]["status"] == "paused"
+
+    session = SimpleNamespace(
+        session_id=session_id,
+        profile="default",
+        workspace=str(tmp_path),
+        model="test-model",
+        model_provider="test-provider",
+        active_stream_id=None,
+        messages=[],
+        context_messages=[],
+        pending_user_message=None,
+    )
+    monkeypatch.setattr(routes, "get_session", lambda _sid: session)
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: profile_home)
+    monkeypatch.setattr(routes, "resolve_trusted_workspace", lambda value: value)
+    monkeypatch.setattr(
+        routes,
+        "_resolve_compatible_session_model_state",
+        lambda _model, _provider: ("test-model", "test-provider", False),
+    )
+
+    def clear_then_fail(*_args, **_kwargs):
+        cleared = goal_api.goal_command_payload(
+            session_id, "clear", profile_home=profile_home,
+        )
+        assert cleared["action"] == "clear"
+        return {"_status": 503, "error": "chat start failed"}
+
+    monkeypatch.setattr(routes, "_start_chat_stream_for_session", clear_then_fail)
+    monkeypatch.setattr(routes, "j", lambda _handler, payload, status=200, **_kwargs: (status, payload))
+
+    status, payload = routes._handle_goal_command(
+        object(), {"session_id": session_id, "args": "resume", "workspace": str(tmp_path)},
+    )
+
+    assert status == 503
+    assert payload["ok"] is False
+    goal_api._DB_CACHE.clear()
+    assert goal_api.goal_state_for_session(session_id, profile_home=profile_home) is None
+
+
 def test_webui_goal_command_passes_custom_and_unlimited_budget(monkeypatch):
     from web.api import goals as goal_api
     from web.api import routes

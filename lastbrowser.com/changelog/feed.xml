@@ -5,9 +5,23 @@
     <link>https://lastbrowser.com/changelog/</link>
     <description>Offizieller Release- und Update-Feed für Lastbrowser – Der AI-native Windows-Browser.</description>
     <language>de</language>
-    <lastBuildDate>Tue, 29 Sep 2026 12:00:00 GMT</lastBuildDate>
+    <lastBuildDate>Tue, 29 Sep 2026 19:11:40 GMT</lastBuildDate>
     <atom:link href="https://lastbrowser.com/changelog/feed.xml" rel="self" type="application/rss+xml"/>
     
+    <item>
+      <title>Lastbrowser v0.1.38 Beta – Release signing verification</title>
+      <link>https://lastbrowser.com/releases/#v0.1.38</link>
+      <guid isPermaLink="false">lastbrowser-v0.1.38</guid>
+      <pubDate>Tue, 29 Sep 2026 19:11:40 GMT</pubDate>
+      <description><![CDATA[
+        <p>Release verification and Windows package signing were hardened.</p>
+        <ul>
+          <li>Release builds use a locally cached Castlabs EVS session when explicit CI credentials are absent, then verify the signed package.</li>
+          <li>Release signing fails closed when required credentials are unavailable.</li>
+        </ul>
+      ]]></description>
+    </item>
+
     <item>
       <title>Lastbrowser v0.1.34 Beta – Multi-Account Spaces &amp; Castlabs Widevine DRM L3</title>
       <link>https://lastbrowser.com/releases/#v0.1.34</link>

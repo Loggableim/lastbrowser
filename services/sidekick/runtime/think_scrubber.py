@@ -56,7 +56,7 @@ intentional, bounded construct.
 
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Callable, Tuple
 
 __all__ = ["StreamingThinkScrubber"]
 
@@ -92,10 +92,22 @@ class StreamingThinkScrubber:
     # Pre-compute the longest tag (for partial-tag hold-back bound).
     _MAX_TAG_LEN: int = max(len(tag) for tag in _OPEN_TAGS + _CLOSE_TAGS)
 
-    def __init__(self) -> None:
+    def __init__(self, reasoning_callback: Callable[[str], None] | None = None) -> None:
         self._in_block: bool = False
         self._buf: str = ""
         self._last_emitted_ended_newline: bool = True
+        self._reasoning_callback = reasoning_callback
+
+    def _emit_reasoning(self, text: str) -> None:
+        """Route discarded thinking text to the opt-in reasoning consumer."""
+        if not text or self._reasoning_callback is None:
+            return
+        try:
+            self._reasoning_callback(text)
+        except Exception:
+            # A display callback must never break generation or expose the
+            # reasoning block through the ordinary answer stream as fallback.
+            pass
 
     def reset(self) -> None:
         """Reset all state.  Call at the top of every new turn."""
@@ -124,11 +136,13 @@ class StreamingThinkScrubber:
                 )
                 if close_idx == -1:
                     # No close yet — hold back a potential partial
-                    # close-tag prefix; discard everything else.
+                    # close-tag prefix; route the rest as live reasoning.
                     held = self._max_partial_suffix(buf, self._CLOSE_TAGS)
                     self._buf = buf[-held:] if held else ""
+                    self._emit_reasoning(buf[:-held] if held else buf)
                     return "".join(out)
-                # Found close: discard block content + tag, continue.
+                # Found close: route block content, discard the tag, continue.
+                self._emit_reasoning(buf[:close_idx])
                 buf = buf[close_idx + close_len:]
                 self._in_block = False
             else:
@@ -150,6 +164,19 @@ class StreamingThinkScrubber:
                     open_idx == -1 or pair[0] <= open_idx
                 ):
                     start_idx, end_idx = pair
+                    # A complete inline pair can be consumed in one delta;
+                    # preserve its payload in the reasoning stream.
+                    open_tag_len = next(
+                        len(tag) for tag in self._OPEN_TAGS
+                        if buf[start_idx:start_idx + len(tag)].lower() == tag.lower()
+                    )
+                    close_tag = next(
+                        tag for tag in self._CLOSE_TAGS
+                        if buf[end_idx - len(tag):end_idx].lower() == tag.lower()
+                    )
+                    self._emit_reasoning(
+                        buf[start_idx + open_tag_len:end_idx - len(close_tag)]
+                    )
                     preceding = buf[:start_idx]
                     if preceding:
                         preceding = self._strip_orphan_close_tags(preceding)

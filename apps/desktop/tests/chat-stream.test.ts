@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { drainSseBuffer, parseSseFrame } from '../src/main/chat-stream.js';
+import { setAccessAuthRequiredHandler } from '../src/main/sidekick-api.js';
+import { drainSseBuffer, parseSseFrame, subscribeChatStream } from '../src/main/chat-stream.js';
 
 describe('parseSseFrame', () => {
   it('parses an event name and JSON payload', () => {
@@ -66,5 +67,36 @@ describe('drainSseBuffer', () => {
     const { events } = drainSseBuffer(': ping\n\nevent: delta\ndata: {"t":1}\n\n');
     expect(events).toHaveLength(1);
     expect(events[0].event).toBe('delta');
+  });
+});
+
+describe('chat stream access auth', () => {
+  it('sends the auth cookie and broadcasts a protected-route 401', async () => {
+    let locked = 0;
+    let requestInit: RequestInit | undefined;
+    const events: Array<{ event: string; data: unknown; raw: string }> = [];
+    setAccessAuthRequiredHandler(() => { locked += 1; });
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      requestInit = init;
+      return new Response(JSON.stringify({ error: 'Authentication required' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' }
+      });
+    };
+
+    const stream = subscribeChatStream(
+      'http://127.0.0.1:8787',
+      'stream-1',
+      'session-token',
+      (event) => events.push(event),
+      fetchImpl,
+      'sidekick_session=auth-cookie'
+    );
+    await stream.done;
+
+    expect(new Headers(requestInit?.headers).get('cookie')).toBe('sidekick_session=auth-cookie');
+    expect(locked).toBe(1);
+    expect(events).toEqual([{ event: 'error', data: { error: 'HTTP 401' }, raw: '' }]);
+    setAccessAuthRequiredHandler(null);
   });
 });

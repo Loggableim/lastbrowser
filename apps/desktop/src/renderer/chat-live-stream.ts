@@ -6,6 +6,24 @@ export type LiveChatMessage = {
   streaming?: boolean;
 };
 
+/** Normalize native provider and orchestration delta payloads for live rendering. */
+export function readLiveChatDelta(
+  event: string,
+  data: unknown,
+): { kind: 'token' | 'reasoning'; text: string } | null {
+  if (event !== 'token' && event !== 'delta' && event !== 'reasoning') return null;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+
+  const payload = data as Record<string, unknown>;
+  const text = typeof payload.text === 'string'
+    ? payload.text
+    : event === 'delta' && typeof payload.content === 'string'
+      ? payload.content
+      : '';
+  if (!text) return null;
+  return { kind: event === 'reasoning' ? 'reasoning' : 'token', text };
+}
+
 /** Apply a provider delta to the visible in-flight assistant message. */
 export function applyLiveChatDelta<T extends LiveChatMessage>(
   messages: T[],
@@ -24,17 +42,23 @@ export function applyLiveChatDelta<T extends LiveChatMessage>(
 
   const current = messages[index];
   const next = [...messages];
+  const pendingContent = current.pending || current.content === 'Working on it...' ? '' : current.content || '';
+  const pendingReasoning = current.reasoning || '';
+  const waitingForAnswer = event === 'reasoning' && pendingContent.trim().length === 0;
   next[index] = {
     ...current,
-    pending: false,
+    // Reasoning may arrive well before the first answer token. Keep the
+    // activity indicator alive during that gap, especially when the user has
+    // hidden reasoning details in settings.
+    pending: waitingForAnswer ? current.pending : false,
     streaming: true,
     ...(event === 'token'
-      ? { content: `${current.content === 'Working on it...' ? '' : current.content || ''}${text}` }
-      : { reasoning: `${current.reasoning || ''}${text}` }),
+      ? { content: `${pendingContent}${text}` }
+      : { content: pendingContent, reasoning: `${pendingReasoning}${text}` }),
   };
   return next;
 }
 
 export function finishLiveChatMessage<T extends LiveChatMessage>(messages: T[]): T[] {
-  return messages.map((message) => message.streaming ? { ...message, streaming: false } : message);
+  return messages.map((message) => message.streaming ? { ...message, pending: false, streaming: false } : message);
 }

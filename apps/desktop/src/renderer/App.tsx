@@ -57,8 +57,9 @@ import {
   X
 } from 'lucide-react';
 import { hideWebviewScrollbars } from './browser-view.js';
+import { canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
-import { applyLiveChatDelta, finishLiveChatMessage } from './chat-live-stream.js';
+import { applyLiveChatDelta, finishLiveChatMessage, readLiveChatDelta } from './chat-live-stream.js';
 import { playChatCompletionSound } from './notification-sound.js';
 import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
@@ -1033,6 +1034,10 @@ function AppContent(): JSX.Element {
       } catch (error) {
         if (!alive) return;
         setAccessAuthError(error instanceof Error ? error.message : String(error));
+        // A failed auth-status check (including a 401 after the sidecar
+        // session token changes) must never leave an already-unlocked shell
+        // visible. Keep the retry screen up until status can be verified.
+        setAccessAuthChecked(false);
       }
     };
     void checkAccessStatus();
@@ -2289,13 +2294,11 @@ function AppContent(): JSX.Element {
       }
       if (typeof event.event !== 'string') return;
       if (event.event === 'token' || event.event === 'delta' || event.event === 'reasoning') {
-        const delta = isRecord(event.data) ? event.data : {};
-        const text = typeof delta.text === 'string' ? delta.text : '';
-        if (text) {
+        const delta = readLiveChatDelta(event.event, event.data);
+        if (delta) {
           hasLiveOutput = true;
-          const kind = event.event === 'reasoning' ? 'reasoning' : 'token';
-          setChatMessages((current) => applyLiveChatDelta(current, kind, text));
-          setMessages((current) => applyLiveChatDelta(current, kind, text));
+          setChatMessages((current) => applyLiveChatDelta(current, delta.kind, delta.text));
+          setMessages((current) => applyLiveChatDelta(current, delta.kind, delta.text));
         }
         return;
       }
@@ -2935,7 +2938,10 @@ function AppContent(): JSX.Element {
 
   const isModernBrowser = layoutMode === 'modern';
 
-  if (!accessAuthChecked || accessAuthRequired) {
+  if (!canRenderBrowserForAccessAuth(accessAuthChecked, {
+    auth_enabled: accessAuthRequired || !accessAuthChecked,
+    logged_in: accessAuthChecked && !accessAuthRequired
+  })) {
     return (
       <main className="access-lock-screen">
         <section className="access-lock-card" aria-labelledby="access-lock-title">

@@ -1698,6 +1698,7 @@ def set_provider_key(provider_id: str, api_key: str | None) -> dict[str, Any]:
                 _config._save_yaml_config_file(config_path, cfg)
             _config.reload_config()
             invalidate_models_cache()
+            _invalidate_ollama_cloud_catalog_if_needed(provider_id)
         except Exception as exc:
             logger.exception("Failed to save local Ollama API key")
             return {"ok": False, "error": f"Failed to save API key: {exc}"}
@@ -1734,6 +1735,7 @@ def set_provider_key(provider_id: str, api_key: str | None) -> dict[str, Any]:
     # Using invalidate_models_cache() instead of reload_config() to avoid
     # disrupting active streaming sessions that may be reading config.cfg.
     invalidate_models_cache()
+    _invalidate_ollama_cloud_catalog_if_needed(provider_id)
 
     return {
         "ok": True,
@@ -1741,6 +1743,20 @@ def set_provider_key(provider_id: str, api_key: str | None) -> dict[str, Any]:
         "display_name": _PROVIDER_DISPLAY.get(provider_id, provider_id),
         "action": "updated" if api_key else "removed",
     }
+
+
+def _invalidate_ollama_cloud_catalog_if_needed(provider_id: str) -> None:
+    """Drop Ollama's live model snapshot when its own credential changes."""
+    if provider_id != "ollama-cloud":
+        return
+    try:
+        # Lazy import avoids coupling provider/config module initialization to
+        # the CLI catalog implementation.
+        from cli.models import invalidate_ollama_cloud_models_cache
+
+        invalidate_ollama_cloud_models_cache()
+    except Exception:
+        logger.debug("Failed to invalidate Ollama Cloud model cache", exc_info=True)
 
 
 def normalize_provider_model_allowlist(provider_id: str, models: Any) -> list[str]:

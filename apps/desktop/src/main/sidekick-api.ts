@@ -552,9 +552,13 @@ async function sendJson(
   captureSidekickAuthCookie(response);
   if (response.status !== 401) return response;
   const refreshed = await refreshWebuiAuth(webuiUrl, fetchImpl);
-  if (!refreshed) return response;
+  if (!refreshed) {
+    await signalAccessAuthRequired(response);
+    return response;
+  }
   const retried = await request();
   captureSidekickAuthCookie(retried);
+  await signalAccessAuthRequired(retried);
   return retried;
 }
 
@@ -572,6 +576,31 @@ const SESSION_HEADER = 'X-Sidekick-Session-Token';
 let _sessionToken: string | null = null;
 let _authAttempted = false;
 let _sidekickAuthCookie: string | null = null;
+let _accessAuthRequiredHandler: (() => void) | null = null;
+
+/** Install the main-process callback used to lock every browser window on a protected-route 401. */
+export function setAccessAuthRequiredHandler(handler: (() => void) | null): void {
+  _accessAuthRequiredHandler = handler;
+}
+
+export async function signalAccessAuthRequired(response: Response): Promise<void> {
+  if (response.status !== 401 || !_accessAuthRequiredHandler) return;
+  let payload: Record<string, unknown> | null = null;
+  try {
+    payload = await response.clone().json() as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  const error = payload.error;
+  const message = typeof error === 'string'
+    ? error
+    : error && typeof error === 'object'
+      ? String((error as Record<string, unknown>).message || (error as Record<string, unknown>).detail || '')
+      : String(payload.message || payload.detail || '');
+  if (message.trim().toLowerCase() !== 'authentication required') return;
+  _sidekickAuthCookie = null;
+  _accessAuthRequiredHandler();
+}
 
 function captureSidekickAuthCookie(response: Response): void {
   const setCookie = typeof response.headers.getSetCookie === 'function'
@@ -681,6 +710,7 @@ export async function requestWebui(
       response = await fetchImpl(url.toString(), init);
     }
   }
+  await signalAccessAuthRequired(response);
   const raw = await response.text();
   let payload: Record<string, unknown>;
   try {
@@ -715,6 +745,11 @@ export async function loginAccessPassword(webuiUrl: string, password: string, fe
 
 export function clearAccessAuthCookie(): void {
   _sidekickAuthCookie = null;
+}
+
+/** Cookie accessor for main-process streaming bridges; never exposed in preload. */
+export function getAccessAuthCookie(): string | null {
+  return _sidekickAuthCookie;
 }
 
 export function extractLastAssistantMessage(session: { messages?: Array<{ role?: string; content?: string }> }): string {

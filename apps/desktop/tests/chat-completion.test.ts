@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from '../src/renderer/chat-completion.js';
-import { applyLiveChatDelta, finishLiveChatMessage } from '../src/renderer/chat-live-stream.js';
+import { applyLiveChatDelta, finishLiveChatMessage, readLiveChatDelta } from '../src/renderer/chat-live-stream.js';
 
 describe('native chat completion signals', () => {
   it('renders each arriving token into the pending assistant message immediately', () => {
@@ -20,14 +20,41 @@ describe('native chat completion signals', () => {
   it('streams reasoning separately from user-visible answer text', () => {
     const initial = [{ id: 'assistant-1', role: 'assistant' as const, content: 'Working on it...', pending: true }];
     const withReasoning = applyLiveChatDelta(initial, 'reasoning', 'Let me consider this.');
+    const withMoreReasoning = applyLiveChatDelta(withReasoning, 'reasoning', ' Check constraints.');
     const withAnswer = applyLiveChatDelta(withReasoning, 'token', 'Hello.');
 
-    expect(withReasoning[0]).toMatchObject({ pending: false, streaming: true });
+    expect(withReasoning[0]).toMatchObject({ content: '', pending: true, streaming: true });
+    expect(withMoreReasoning[0]).toMatchObject({ pending: true, reasoning: 'Let me consider this. Check constraints.' });
     expect(withAnswer[0]).toMatchObject({
       content: 'Hello.',
       reasoning: 'Let me consider this.',
       pending: false,
     });
+    expect(finishLiveChatMessage(withReasoning)[0]).toMatchObject({ pending: false, streaming: false });
+  });
+
+  it('renders the Teamwork final synthesis delta sent as data.content immediately', () => {
+    const initial = [{ id: 'assistant-1', role: 'assistant' as const, content: 'Teamwork: Synthese abgeschlossen', pending: true }];
+    const delta = readLiveChatDelta('delta', { content: 'Synthesized answer' });
+    expect(delta).toEqual({ kind: 'token', text: 'Synthesized answer' });
+
+    const rendered = delta
+      ? applyLiveChatDelta(initial, delta.kind, delta.text)
+      : initial;
+    expect(rendered[0]).toMatchObject({
+      content: 'Synthesized answer',
+      pending: false,
+      streaming: true,
+    });
+  });
+
+  it('preserves text-token and separate reasoning delta formats', () => {
+    expect(readLiveChatDelta('token', { text: 'Hello' })).toEqual({ kind: 'token', text: 'Hello' });
+    expect(readLiveChatDelta('reasoning', { text: 'Thinking' })).toEqual({ kind: 'reasoning', text: 'Thinking' });
+    expect(readLiveChatDelta('delta', { text: 'preferred', content: 'fallback' }))
+      .toEqual({ kind: 'token', text: 'preferred' });
+    expect(readLiveChatDelta('reasoning', { content: 'not reasoning text' })).toBeNull();
+    expect(readLiveChatDelta('teamwork_complete', { content: 'done' })).toBeNull();
   });
 
   it('requires a loaded, idle session and no active stream', () => {

@@ -17,7 +17,8 @@ def test_new_cloud_models_survive_live_picker_filter(monkeypatch, tmp_path):
     ]
     monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
     monkeypatch.setattr(models, "fetch_api_models", lambda *_args, **_kwargs: available + ["unrelated-model"])
-    monkeypatch.setattr(models_dev, "list_agentic_models", lambda *_args: ["kimi-k3:cloud"])
+    # A stale models.dev entry must not be mixed into a successful live list.
+    monkeypatch.setattr(models_dev, "list_agentic_models", lambda *_args: ["kimi-k3:cloud", "minimax-m2.5:cloud"])
     result = models.fetch_ollama_cloud_models(
         api_key="test-only", base_url="https://ollama.com/v1", force_refresh=True
     )
@@ -25,6 +26,50 @@ def test_new_cloud_models_survive_live_picker_filter(monkeypatch, tmp_path):
     # A cached request must retain the new choices without a provider call.
     monkeypatch.setattr(models, "fetch_api_models", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected network")))
     assert models.fetch_ollama_cloud_models(api_key="test-only") == available
+
+
+def test_ollama_live_catalog_is_authoritative_against_stale_registry(monkeypatch, tmp_path):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
+    monkeypatch.setattr(models, "_load_ollama_cloud_cache", lambda **_kwargs: None)
+    monkeypatch.setattr(models, "_save_ollama_cloud_cache", lambda _models: None)
+    monkeypatch.setattr(models, "fetch_api_models", lambda *_args, **_kwargs: ["deepseek-v4.1-flash"])
+    monkeypatch.setattr(
+        models_dev,
+        "list_agentic_models",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("registry must not be queried when live catalog works")),
+    )
+
+    result = models.fetch_ollama_cloud_models(
+        api_key="test-only", base_url="https://ollama.com/v1", force_refresh=True
+    )
+
+    assert result == ["deepseek-v4.1-flash"]
+
+
+def test_ollama_registry_remains_fallback_when_live_catalog_is_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
+    monkeypatch.setattr(models, "_load_ollama_cloud_cache", lambda **_kwargs: None)
+    monkeypatch.setattr(models, "_save_ollama_cloud_cache", lambda _models: None)
+    monkeypatch.setattr(models, "fetch_api_models", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(models_dev, "list_agentic_models", lambda *_args: ["deepseek-v4.1-flash:cloud"])
+
+    result = models.fetch_ollama_cloud_models(
+        api_key="test-only", base_url="https://ollama.com/v1", force_refresh=True
+    )
+
+    assert result == ["deepseek-v4.1-flash"]
+
+
+def test_ollama_live_catalog_keeps_versioned_live_ids(monkeypatch, tmp_path):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
+    monkeypatch.setattr(models, "_load_ollama_cloud_cache", lambda **_kwargs: None)
+    monkeypatch.setattr(models, "_save_ollama_cloud_cache", lambda _models: None)
+    monkeypatch.setattr(models, "fetch_api_models", lambda *_args, **_kwargs: ["deepseek-v4-pro:0813"])
+    monkeypatch.setattr(models_dev, "list_agentic_models", lambda *_args: [])
+
+    assert models.fetch_ollama_cloud_models(
+        api_key="test-only", base_url="https://ollama.com/v1", force_refresh=True
+    ) == ["deepseek-v4-pro:0813"]
 
 
 def test_malformed_live_catalog_entries_are_ignored_and_valid_ids_are_normalized(monkeypatch, tmp_path):
@@ -52,7 +97,7 @@ def test_malformed_live_catalog_entries_are_ignored_and_valid_ids_are_normalized
 def test_corrupt_ollama_cache_entries_are_filtered(tmp_path, monkeypatch):
     cache_path = tmp_path / "ollama_cloud_models_cache.json"
     cache_path.write_text(
-        '{"models":[" deepseek-v4.1-flash ", {"id":"bad"}, "deepseek-v4.1-flash"],'
+        '{"version":2,"models":[" deepseek-v4.1-flash ", {"id":"bad"}, "deepseek-v4.1-flash"],'
         '"cached_at":9999999999}',
         encoding="utf-8",
     )
@@ -62,6 +107,17 @@ def test_corrupt_ollama_cache_entries_are_filtered(tmp_path, monkeypatch):
 
     assert cached is not None
     assert cached["models"] == ["deepseek-v4.1-flash"]
+
+
+def test_legacy_merged_ollama_cache_is_invalidated(tmp_path, monkeypatch):
+    cache_path = tmp_path / "ollama_cloud_models_cache.json"
+    cache_path.write_text(
+        '{"models":["deepseek-v4.1-flash","minimax-m2.5"],"cached_at":9999999999}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
+
+    assert models._load_ollama_cloud_cache() is None
 
 
 @pytest.mark.parametrize(

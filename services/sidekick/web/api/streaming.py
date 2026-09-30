@@ -70,6 +70,15 @@ _SSE_DISCONNECT_ERRORS = (
 )
 
 
+def _should_fail_fast_on_provider_resolution_error(error: Exception, provider: str | None) -> bool:
+    """Typed credential errors for explicit API-key providers are fatal."""
+    from cli.auth import AuthError
+
+    return isinstance(error, AuthError) and (provider or "").strip().lower() in {
+        "ollama-cloud", "openrouter", "anthropic", "openai", "xai"
+    }
+
+
 def _is_nova_self_query(user_message: str | None) -> bool:
     msg = " ".join(str(user_message or "").strip().lower().split())
     if not msg:
@@ -3301,6 +3310,11 @@ def _run_agent_streaming(
                     resolved_base_url = _rt_base_url
             except Exception as _e:
                 print(f"[webui] WARNING: resolve_runtime_provider failed: {_e}", flush=True)
+                # A user-selected API-key provider must fail at configuration
+                # time. Continuing with an empty key obscures the real cause
+                # and may route a request using stale/default credentials.
+                if _should_fail_fast_on_provider_resolution_error(_e, resolved_provider):
+                    raise
 
             # Named custom providers (custom:slug) may not be resolvable by
             # sidekick_cli.runtime_provider directly. Fall back to config.yaml

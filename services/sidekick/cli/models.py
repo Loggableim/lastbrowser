@@ -2515,6 +2515,7 @@ def fetch_api_models(
 
 # Cache TTL: 1 hour
 _OLLAMA_CLOUD_CACHE_TTL = 3600
+_OLLAMA_CLOUD_CACHE_VERSION = 2
 
 # Curated subset of Ollama Cloud thinking models shown in the WebUI picker.
 # Keep this aligned with the official thinking catalog and only include
@@ -2602,6 +2603,8 @@ def _load_ollama_cloud_cache(*, ignore_ttl: bool = False) -> Optional[dict]:
             data = json.load(f)
         if not isinstance(data, dict):
             return None
+        if data.get("version") != _OLLAMA_CLOUD_CACHE_VERSION:
+            return None  # invalidate catalogs created by the previous merge policy
         models = _valid_ollama_cloud_model_ids(data.get("models"))
         if not models:
             return None
@@ -2616,7 +2619,7 @@ def _load_ollama_cloud_cache(*, ignore_ttl: bool = False) -> Optional[dict]:
 
 
 def _save_ollama_cloud_cache(models: list[str]) -> None:
-    """Persist the merged Ollama Cloud model list to disk."""
+    """Persist the available Ollama Cloud model list to disk."""
     try:
         from shared.utils import atomic_json_write
         cache_path = _ollama_cloud_cache_path()
@@ -2624,8 +2627,22 @@ def _save_ollama_cloud_cache(models: list[str]) -> None:
         valid_models = _valid_ollama_cloud_model_ids(models)
         if not valid_models:
             return
-        atomic_json_write(cache_path, {"models": valid_models, "cached_at": time.time()}, indent=None)
+        atomic_json_write(cache_path, {
+            "version": _OLLAMA_CLOUD_CACHE_VERSION,
+            "models": valid_models,
+            "cached_at": time.time(),
+        }, indent=None)
     except Exception:
+        pass
+
+
+def invalidate_ollama_cloud_models_cache() -> None:
+    """Remove the persisted live catalog after Ollama Cloud credentials change."""
+    try:
+        _ollama_cloud_cache_path().unlink(missing_ok=True)
+    except OSError:
+        # Cache invalidation is best-effort; the cache has a bounded TTL and
+        # callers should not fail a credential write because cache cleanup did.
         pass
 
 
@@ -2635,13 +2652,17 @@ def fetch_ollama_cloud_models(
     *,
     force_refresh: bool = False,
 ) -> list[str]:
-    """Fetch Ollama Cloud models by merging live API + models.dev, with disk cache.
+    """Fetch Ollama Cloud models, preferring the live availability catalog.
 
     Resolution order:
       1. Disk cache (if fresh, < 1 hour, and not force_refresh)
       2. Live ``/v1/models`` endpoint (primary — freshest source)
-      3. models.dev registry (secondary — fills gaps for unlisted models)
-      4. Merge: live models first, then models.dev additions (deduped)
+      3. models.dev registry (fallback when the live endpoint is unavailable)
+
+    The live ``/models`` response is authoritative when non-empty. Registry
+    entries are metadata/discovery hints and can lag provider availability;
+    merging them into a successful live response exposes models which return
+    410 from the actual inference endpoint.
 
     Returns a list of model IDs (never None — empty list on total failure).
     """
@@ -2681,39 +2702,36 @@ def fetch_ollama_cloud_models(
         if result:
             live_models = _valid_ollama_cloud_model_ids(result)
 
-    # 3. models.dev registry
+    # 3. models.dev is a fallback only; avoid its extra network lookup when
+    # the provider supplied an authoritative availability list.
     mdev_models: list[str] = []
-    try:
-        from runtime.models_dev import list_agentic_models
-        mdev_models = _valid_ollama_cloud_model_ids(
-            list_agentic_models("ollama-cloud")
-        )
-    except Exception:
-        pass
+    if not live_models:
+        try:
+            from runtime.models_dev import list_agentic_models
+            mdev_models = _valid_ollama_cloud_model_ids(
+                list_agentic_models("ollama-cloud")
+            )
+        except Exception:
+            pass
 
-    # 4. Merge: live first, then models.dev additions (deduped, order-preserving)
-    if live_models or mdev_models:
-        seen: set[str] = set()
-        merged: list[str] = []
-        for m in live_models:
-            if m and m not in seen:
-                seen.add(m)
-                merged.append(m)
-        for m in mdev_models:
-            normalized = _strip_ollama_cloud_suffix(m)
-            if normalized and normalized not in seen:
-                seen.add(normalized)
-                merged.append(normalized)
-        if merged:
-            # Filter to curated subset for WebUI picker
-            curated = [m for m in merged if m in OLLAMA_CLOUD_CURATED_MODELS]
-            if curated:
-                _save_ollama_cloud_cache(curated)
-                return curated
-            # Fallback: if none matched curated, return merged anyway
-            # (avoids empty picker when curated list is stale)
-            _save_ollama_cloud_cache(merged)
-            return merged
+    # 4. Use the provider's live list as the source of availability.
+    if live_models:
+        live_models = list(dict.fromkeys(live_models))
+        curated = [m for m in live_models if m in OLLAMA_CLOUD_CURATED_MODELS]
+        result = curated or live_models
+        _save_ollama_cloud_cache(result)
+        return result
+
+    # The external registry is useful only as an outage fallback. Never let
+    # it add choices when Ollama has returned a live list above.
+    if mdev_models:
+        fallback = list(dict.fromkeys(_strip_ollama_cloud_suffix(m) for m in mdev_models))
+        fallback = [m for m in fallback if m]
+        curated = [m for m in fallback if m in OLLAMA_CLOUD_CURATED_MODELS]
+        result = curated or fallback
+        if result:
+            _save_ollama_cloud_cache(result)
+            return result
 
     # Total failure — return stale cache if available (ignore TTL)
     stale = _load_ollama_cloud_cache(ignore_ttl=True)

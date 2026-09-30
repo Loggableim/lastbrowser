@@ -55,6 +55,7 @@ import {
   getSettings,
   loginAccessPassword,
   clearAccessAuthCookie,
+  setAccessAuthRequiredHandler,
   getSkillContent,
   getSupermemoryStatus,
   getSupermemoryDocument,
@@ -1058,6 +1059,53 @@ describe('desktop access password bridge', () => {
     expect(new Headers(calls[1].init?.headers).get('cookie')).toBe('sidekick_session=session-token');
     expect(new Headers(calls[2].init?.headers).get('cookie')).toBe('sidekick_session=session-token');
     expect(new Headers(calls[3].init?.headers).has('cookie')).toBe(false);
+    clearAccessAuthCookie();
+  });
+
+  it('signals only a protected-route Authentication required response after the session-token retry', async () => {
+    clearAccessAuthCookie();
+    let authRequiredSignals = 0;
+    let settingsCalls = 0;
+    setAccessAuthRequiredHandler(() => { authRequiredSignals += 1; });
+    const fetchImpl = async (url: string | URL) => {
+      const path = new URL(String(url)).pathname;
+      if (path === '/') {
+        return new Response('window.__SIDEKICK_SESSION_TOKEN__ = "fresh-token";', { status: 200 });
+      }
+      if (path === '/api/settings') {
+        settingsCalls += 1;
+        return new Response(JSON.stringify({ error: 'Authentication required' }), {
+          status: 401,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      return new Response('{}', { status: 200 });
+    };
+
+    await expect(getSettings('http://127.0.0.1:8787', fetchImpl)).rejects.toThrow('Authentication required');
+    expect(settingsCalls).toBe(2);
+    expect(authRequiredSignals).toBe(1);
+
+    setAccessAuthRequiredHandler(null);
+    clearAccessAuthCookie();
+  });
+
+  it('does not treat unrelated provider authentication failures as an app-lock event', async () => {
+    clearAccessAuthCookie();
+    let authRequiredSignals = 0;
+    setAccessAuthRequiredHandler(() => { authRequiredSignals += 1; });
+    const fetchImpl = async (url: string | URL) => {
+      const path = new URL(String(url)).pathname;
+      if (path === '/') return new Response('window.__SIDEKICK_SESSION_TOKEN__ = "fresh-token";', { status: 200 });
+      return new Response(JSON.stringify({ error: 'Invalid provider API key' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' }
+      });
+    };
+
+    await expect(getSettings('http://127.0.0.1:8787', fetchImpl)).rejects.toThrow('Invalid provider API key');
+    expect(authRequiredSignals).toBe(0);
+    setAccessAuthRequiredHandler(null);
     clearAccessAuthCookie();
   });
 });

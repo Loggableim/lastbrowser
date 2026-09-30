@@ -1,3 +1,5 @@
+import { signalAccessAuthRequired } from './sidekick-api.js';
+
 /**
  * Server-Sent Events client for the Sidekick chat stream.
  *
@@ -80,7 +82,8 @@ export function subscribeChatStream(
   streamId: string,
   sessionToken: string | null,
   onEvent: (event: ChatStreamEvent) => void,
-  fetchImpl: FetchLike = fetch
+  fetchImpl: FetchLike = fetch,
+  authCookie: string | null = null
 ): ChatStreamHandle {
   const controller = new AbortController();
   const url = new URL('/api/chat/stream', webuiUrl.endsWith('/') ? webuiUrl : `${webuiUrl}/`);
@@ -92,10 +95,14 @@ export function subscribeChatStream(
   const done = (async () => {
     try {
       const response = await fetchImpl(url.toString(), {
-        headers: { accept: 'text/event-stream' },
+        headers: {
+          accept: 'text/event-stream',
+          ...(authCookie ? { cookie: authCookie } : {})
+        },
         signal: controller.signal
       });
       if (!response.ok || !response.body) {
+        await signalAccessAuthRequired(response);
         onEvent({ event: 'error', data: { error: `HTTP ${response.status}` }, raw: '' });
         return;
       }

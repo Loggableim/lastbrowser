@@ -36,6 +36,31 @@ def test_local_ollama_key_is_saved_provider_scoped_without_changing_cloud_env(mo
         config.reload_config()
 
 
+@pytest.mark.parametrize("action", ["set", "remove"])
+def test_ollama_cloud_key_change_invalidates_live_catalog_cache(monkeypatch, tmp_path, action):
+    from web.api import config, providers
+    from cli import models
+
+    config_path = tmp_path / "config.yaml"
+    monkeypatch.setattr(config, "_get_config_path", lambda: config_path)
+    monkeypatch.setattr(providers, "_get_sidekick_home", lambda: tmp_path)
+    monkeypatch.setattr(providers, "_write_env_file", lambda _path, _updates: None)
+    cache_path = tmp_path / "ollama_cloud_models_cache.json"
+    monkeypatch.setattr(models, "_ollama_cloud_cache_path", lambda: cache_path)
+    cache_path.write_text('{"version":2,"models":["stale-model"],"cached_at":0}', encoding="utf-8")
+
+    # The API models cache uses the shared invalidator; this provider-specific
+    # cache is separately dropped only for Ollama Cloud key changes.
+    monkeypatch.setattr(config, "_delete_models_cache_on_disk", lambda: None)
+    if action == "set":
+        result = providers.set_provider_key("ollama-cloud", "cloud-test-key")
+    else:
+        result = providers.remove_provider_key("ollama-cloud")
+
+    assert result["ok"] is True
+    assert not cache_path.exists()
+
+
 def test_ollama_connection_probe_runs_in_backend_and_does_not_persist_key(monkeypatch):
     from web.api import providers
 

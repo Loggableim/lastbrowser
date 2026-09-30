@@ -4482,6 +4482,25 @@ def test_game_mode_chat_sync_routes_nova_local_model_to_ollama_cloud_deepseek(mo
     assert session.model_provider == "ollama-cloud"
 
 
+@pytest.mark.parametrize("provider", ["ollama-cloud", "openrouter", "anthropic", "openai", "xai"])
+def test_streaming_fails_fast_for_typed_api_key_provider_errors(provider):
+    from cli.auth import AuthError
+    from web.api.streaming import _should_fail_fast_on_provider_resolution_error
+
+    error = AuthError("Provider key is missing", provider=provider, code="missing_api_key")
+    assert _should_fail_fast_on_provider_resolution_error(error, provider) is True
+
+
+def test_streaming_keeps_non_auth_resolution_fallback():
+    from cli.auth import AuthError
+    from web.api.streaming import _should_fail_fast_on_provider_resolution_error
+
+    assert _should_fail_fast_on_provider_resolution_error(RuntimeError("temporary resolver issue"), "ollama-cloud") is False
+    assert _should_fail_fast_on_provider_resolution_error(
+        AuthError("OAuth account missing", provider="antigravity"), "antigravity"
+    ) is False
+
+
 def test_game_mode_session_compress_routes_nova_local_model_to_ollama_cloud_deepseek(monkeypatch, tmp_path):
     from types import SimpleNamespace
 

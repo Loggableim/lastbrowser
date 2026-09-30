@@ -112,6 +112,8 @@ import {
   requestWebui,
   getAccessAuthStatus,
   loginAccessPassword,
+  setAccessAuthRequiredHandler,
+  getAccessAuthCookie,
   renameSpace,
   renameWorkspaceEntry,
   reorderSpaces,
@@ -397,7 +399,15 @@ const openUrlLifecycle = createOpenUrlLifecycle({
   isAppReady: () => appReady
 });
 
+function broadcastAccessAuthLocked(): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed() || window.webContents.isDestroyed()) continue;
+    try { window.webContents.send('lastbrowser:access-auth-locked'); } catch { /* Window closed during broadcast. */ }
+  }
+}
+
 function registerIpc(): void {
+  setAccessAuthRequiredHandler(broadcastAccessAuthLocked);
   ipcMain.handle('lastbrowser:system:getCursorPosition', (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window || window.isDestroyed()) return null;
@@ -547,7 +557,9 @@ function registerIpc(): void {
       (streamEvent) => {
         if (event.sender.isDestroyed()) return;
         event.sender.send('lastbrowser:sidekick:chatStreamEvent', { streamId, ...streamEvent });
-      }
+      },
+      undefined,
+      getAccessAuthCookie()
     );
     chatStreams.set(streamId, handle);
     void handle.done.finally(() => {
@@ -674,9 +686,7 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:getAccessAuthStatus', () => getAccessAuthStatus(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:loginAccessPassword', (_event, request) => loginAccessPassword(requireWebuiUrl(), String(request?.password || '')));
   ipcMain.handle('lastbrowser:sidekick:lockAccessWindows', () => {
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (!window.isDestroyed()) window.webContents.send('lastbrowser:access-auth-locked');
-    }
+    broadcastAccessAuthLocked();
     return { ok: true };
   });
   ipcMain.handle('lastbrowser:sidekick:saveSettings', (_event, request) => saveSettings(requireWebuiUrl(), request));

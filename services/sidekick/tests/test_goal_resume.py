@@ -351,6 +351,64 @@ def test_orphaned_goal_continuation_after_restart_is_rejected(monkeypatch, tmp_p
     ) == "cancelled"
 
 
+def test_resume_kickoff_failure_restores_the_pre_resume_goal(monkeypatch, tmp_path):
+    """A failed resume kickoff must not clear the previously paused goal."""
+    from types import SimpleNamespace
+    from web.api import goals as goal_api
+    from web.api import routes
+
+    goal_api._DB_CACHE.clear()
+    monkeypatch.setattr(goal_api, "_space_goals_path", lambda *_args, **_kwargs: None)
+    profile_home = tmp_path / "profile"
+    session_id = "resume-kickoff-failure"
+    assert goal_api.goal_command_payload(
+        session_id, "Continue shipping", profile_home=profile_home,
+    )["ok"] is True
+    paused = goal_api.goal_command_payload(
+        session_id, "pause", profile_home=profile_home,
+    )
+    assert paused["goal"]["status"] == "paused"
+
+    session = SimpleNamespace(
+        session_id=session_id,
+        profile="default",
+        workspace=str(tmp_path),
+        model="test-model",
+        model_provider="test-provider",
+        active_stream_id=None,
+        messages=[],
+        context_messages=[],
+        pending_user_message=None,
+    )
+    monkeypatch.setattr(routes, "get_session", lambda _sid: session)
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: profile_home)
+    monkeypatch.setattr(routes, "resolve_trusted_workspace", lambda value: value)
+    monkeypatch.setattr(
+        routes,
+        "_resolve_compatible_session_model_state",
+        lambda _model, _provider: ("test-model", "test-provider", False),
+    )
+    monkeypatch.setattr(
+        routes,
+        "_start_chat_stream_for_session",
+        lambda *_args, **_kwargs: {"_status": 503, "error": "chat start failed"},
+    )
+    monkeypatch.setattr(routes, "j", lambda _handler, payload, status=200, **_kwargs: (status, payload))
+
+    status, payload = routes._handle_goal_command(
+        object(),
+        {"session_id": session_id, "args": "resume", "workspace": str(tmp_path)},
+    )
+
+    assert status == 503
+    assert payload["ok"] is False
+    goal_api._DB_CACHE.clear()
+    restored = goal_api.goal_state_for_session(session_id, profile_home=profile_home)
+    assert restored is not None
+    assert restored["goal"] == "Continue shipping"
+    assert restored["status"] == "paused"
+
+
 def test_webui_goal_command_passes_custom_and_unlimited_budget(monkeypatch):
     from web.api import goals as goal_api
     from web.api import routes

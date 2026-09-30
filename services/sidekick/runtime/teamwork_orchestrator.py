@@ -846,6 +846,7 @@ def run_teamwork_turn(
             on_reasoning=emit_synthesis_reasoning,
             timeout=65.0,
             cancel_event=cancel_event,
+            retry_transient_before_first_token=True,
         )
         if not final_answer.strip():
             final_answer = successful_drafts[0]["content"]

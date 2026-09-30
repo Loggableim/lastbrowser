@@ -12024,7 +12024,10 @@ def _handle_goal_command(handler, body):
     )
     workspace = model = model_provider = normalized_model = None
     previous_goal_state = None
-    if will_kickoff:
+    # ``resume`` can also return a kickoff prompt when no stream is running.
+    # Preserve the pre-resume state so a failed kickoff restores the paused
+    # goal instead of treating the missing snapshot as a request to clear it.
+    if will_kickoff or goal_action == "resume":
         try:
             workspace = str(resolve_trusted_workspace(body.get("workspace") or s.workspace))
         except ValueError as e:

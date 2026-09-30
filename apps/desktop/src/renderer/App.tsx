@@ -1601,6 +1601,9 @@ function AppContent(): JSX.Element {
       ]);
       const session = sessionResult.session || null;
       if (!session) throw new Error('Sidekick session was not found.');
+      // Session fetches can resolve after the user has selected another chat.
+      // Never let a stale response replace the currently visible transcript.
+      if (activeSessionIdRef.current !== sessionId) return session;
       setActiveSession(session);
       setChatMessages(normalizeChatMessages(session.messages));
       setActiveStreamId(session.active_stream_id || null);
@@ -1612,10 +1615,12 @@ function AppContent(): JSX.Element {
       return session;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setChatError(isTransientSidekickFetchError(message) ? '' : message);
+      if (activeSessionIdRef.current === sessionId) {
+        setChatError(isTransientSidekickFetchError(message) ? '' : message);
+      }
       return null;
     } finally {
-      if (options.showLoading !== false) setActiveSessionLoading(false);
+      if (options.showLoading !== false && activeSessionIdRef.current === sessionId) setActiveSessionLoading(false);
     }
   }, [sidekickApiReady]);
 
@@ -2264,7 +2269,8 @@ function AppContent(): JSX.Element {
     streamId: string,
     sessionId: string,
     earlyEvents: Array<{ streamId?: string; event?: string; data?: unknown }> = [],
-    unsubscribeEarly?: () => void
+    unsubscribeEarly?: () => void,
+    isOwningContextCurrent: () => boolean = () => activeSessionIdRef.current === sessionId
   ): Promise<string | null> {
     const deadline = Date.now() + 120000;
     let sawStreamEnd = false;
@@ -2282,22 +2288,26 @@ function AppContent(): JSX.Element {
       const event = payload as { streamId?: string; event?: string; data?: unknown } | null;
       if (!event || event.streamId !== streamId) return;
       if (event.event === 'stream_end') {
-        if (!goalContinuationPrompt) notifyCompletion();
+        if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
         sawStreamEnd = true;
-        setChatMessages((current) => finishLiveChatMessage(current));
-        setMessages((current) => finishLiveChatMessage(current));
+        if (isOwningContextCurrent()) {
+          setChatMessages((current) => finishLiveChatMessage(current));
+          setMessages((current) => finishLiveChatMessage(current));
+        }
         return;
       }
       if (event.event === 'done') {
         const payload = isRecord(event.data) ? event.data : {};
         const usage = normalizeNativeChatTurnUsage(payload.usage);
-        if (usage) setLastChatTurnUsage({ sessionId, usage });
+        if (usage && isOwningContextCurrent()) setLastChatTurnUsage({ sessionId, usage });
         return;
       }
       if (event.event === 'cancel') {
         sawStreamEnd = true;
-        setChatMessages((current) => finishLiveChatMessage(current));
-        setMessages((current) => finishLiveChatMessage(current));
+        if (isOwningContextCurrent()) {
+          setChatMessages((current) => finishLiveChatMessage(current));
+          setMessages((current) => finishLiveChatMessage(current));
+        }
         return;
       }
       if (event.event === 'error') {
@@ -2310,7 +2320,7 @@ function AppContent(): JSX.Element {
       }
       if (event.event === 'token' || event.event === 'delta' || event.event === 'reasoning') {
         const delta = readLiveChatDelta(event.event, event.data);
-        if (delta) {
+        if (delta && isOwningContextCurrent()) {
           hasLiveOutput = true;
           setChatMessages((current) => applyLiveChatDelta(current, delta.kind, delta.text));
           setMessages((current) => applyLiveChatDelta(current, delta.kind, delta.text));
@@ -2324,8 +2334,10 @@ function AppContent(): JSX.Element {
             ? { ...item, content: orchestrationProgress.message }
             : item
         ));
-        setChatMessages(updatePending);
-        setMessages(updatePending);
+        if (isOwningContextCurrent()) {
+          setChatMessages(updatePending);
+          setMessages(updatePending);
+        }
         return;
       }
       // Events without incremental text still need a session refresh to update
@@ -2337,7 +2349,7 @@ function AppContent(): JSX.Element {
         event.event === 'tool_complete' ||
         event.event === 'interim_assistant'
       ) {
-        if (!hasLiveOutput) void loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
+        if (!hasLiveOutput && isOwningContextCurrent()) void loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
       }
     };
     const unsubscribe = window.lastbrowser.sidekick.onChatStreamEvent(handleStreamEvent);
@@ -2362,7 +2374,7 @@ function AppContent(): JSX.Element {
           if (!hasLiveOutput || streamStatus?.active === false) {
             const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
             if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
-              if (!goalContinuationPrompt) notifyCompletion();
+              if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
               return goalContinuationPrompt;
             }
           }
@@ -2380,7 +2392,7 @@ function AppContent(): JSX.Element {
       const streamStatus = await window.lastbrowser.sidekick.getStreamStatus(streamId).catch(() => null);
       const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
       if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
-        if (!goalContinuationPrompt) notifyCompletion();
+        if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
         return goalContinuationPrompt;
       }
     }
@@ -2521,7 +2533,8 @@ function AppContent(): JSX.Element {
         response.streamId,
         response.sessionId,
         earlyStreamEvents,
-        unsubscribeEarly
+        unsubscribeEarly,
+        activeTurnIsCurrent
       );
       const turnContextStillCurrent = activeTurnIsCurrent();
       // Show the ACTUAL answer. The pending placeholder used to be replaced with
@@ -2570,9 +2583,9 @@ function AppContent(): JSX.Element {
       captureEarlyEvents = false;
       unsubscribeEarly();
       const messageText = error instanceof Error ? error.message : String(error);
-      setChatError(messageText);
       turnFailed = true;
       if (activeTurnIsCurrent()) {
+        setChatError(messageText);
         setChatMessages((current) => current.map((item) => (
           item.pending ? { ...item, content: `Sidekick could not respond: ${messageText}`, pending: false } : item
         )));
@@ -2583,8 +2596,10 @@ function AppContent(): JSX.Element {
       }
     } finally {
       const turnIsCurrentAfterCompletion = activeTurnIsCurrent();
+      // The composer has one in-flight turn at a time even when its session is
+      // no longer selected. Always release the global busy lock when it ends.
+      setSidekickBusy(false);
       if (turnIsCurrentAfterCompletion) {
-        setSidekickBusy(false);
         setActiveStreamId(null);
         setChatRunState((current) => {
           // Vision-Impaired Feature 36: soft audio gong when Nova finishes.

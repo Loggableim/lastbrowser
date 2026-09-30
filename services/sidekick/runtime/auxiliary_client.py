@@ -4255,6 +4255,7 @@ def stream_llm(
     on_reasoning: Optional[Callable[[str], None]] = None,
     timeout: float = 30.0,
     cancel_event: Optional[threading.Event] = None,
+    retry_transient_before_first_token: bool = False,
 ) -> str:
     """Stream a selected provider response and return its visible text.
 
@@ -4273,101 +4274,137 @@ def stream_llm(
     if cancel_event is not None and cancel_event.is_set():
         raise InterruptedError("Teamwork synthesis cancelled")
     _raise_if_game_mode_blocks_local_request(resolved_provider, resolved_base_url)
-    client, final_model = _get_cached_client(
-        resolved_provider,
-        resolved_model,
-        base_url=resolved_base_url,
-        api_key=resolved_api_key,
-        api_mode=resolved_api_mode,
-    )
-    if client is None:
-        raise RuntimeError(
-            f"No LLM provider configured for teamwork synthesis: {resolved_provider}. "
-            "Connect the provider and try again."
+    def is_retryable_pre_token_error(exc: Exception) -> bool:
+        # This opt-in retry is deliberately narrower than call_llm's general
+        # recovery path. In particular, never retry 429/quota errors here:
+        # concurrent Teamwork workers may already be consuming the same
+        # provider quota, and retrying would amplify overload.
+        status = getattr(exc, "status_code", None)
+        if status == 429 or _is_payment_error(exc) or _is_rate_limit_error(exc):
+            return False
+        return _is_connection_error(exc) or status in {408, 500, 502, 503, 504}
+
+    max_attempts = 2 if retry_transient_before_first_token else 1
+    for attempt in range(max_attempts):
+        if cancel_event is not None and cancel_event.is_set():
+            raise InterruptedError("Teamwork synthesis cancelled")
+
+        client, final_model = _get_cached_client(
+            resolved_provider,
+            resolved_model,
+            base_url=resolved_base_url,
+            api_key=resolved_api_key,
+            api_mode=resolved_api_mode,
         )
+        if client is None:
+            raise RuntimeError(
+                f"No LLM provider configured for teamwork synthesis: {resolved_provider}. "
+                "Connect the provider and try again."
+            )
 
-    actual_endpoint = str(getattr(client, "base_url", "") or "").strip().rstrip("/")
-    _raise_if_game_mode_blocks_local_request(
-        resolved_provider,
-        actual_endpoint or resolved_base_url,
-    )
-    kwargs = _build_call_kwargs(
-        resolved_provider,
-        final_model,
-        messages,
-        timeout=timeout,
-        base_url=actual_endpoint or resolved_base_url,
-    )
-    if _is_anthropic_compat_endpoint(resolved_provider, actual_endpoint):
-        kwargs["messages"] = _convert_openai_images_to_anthropic(kwargs["messages"])
-    kwargs["stream"] = True
+        actual_endpoint = str(getattr(client, "base_url", "") or "").strip().rstrip("/")
+        _raise_if_game_mode_blocks_local_request(
+            resolved_provider,
+            actual_endpoint or resolved_base_url,
+        )
+        kwargs = _build_call_kwargs(
+            resolved_provider,
+            final_model,
+            messages,
+            timeout=timeout,
+            base_url=actual_endpoint or resolved_base_url,
+        )
+        if _is_anthropic_compat_endpoint(resolved_provider, actual_endpoint):
+            kwargs["messages"] = _convert_openai_images_to_anthropic(kwargs["messages"])
+        kwargs["stream"] = True
 
-    visible_parts: List[str] = []
+        visible_parts: List[str] = []
+        emitted_anything = False
 
-    def emit_reasoning(text: str) -> None:
-        if not text:
-            return
-        if callable(on_reasoning):
-            on_reasoning(text)
+        def emit_reasoning(text: str) -> None:
+            nonlocal emitted_anything
+            if not text:
+                return
+            emitted_anything = True
+            if callable(on_reasoning):
+                on_reasoning(text)
 
-    def emit_content(text: str) -> None:
-        if not text:
-            return
-        visible_parts.append(text)
-        on_content(text)
+        def emit_content(text: str) -> None:
+            nonlocal emitted_anything
+            if not text:
+                return
+            emitted_anything = True
+            visible_parts.append(text)
+            on_content(text)
 
-    scrubber = StreamingThinkScrubber(reasoning_callback=emit_reasoning)
-    stream = client.chat.completions.create(**kwargs)
-    if cancel_event is not None and cancel_event.is_set():
-        close = getattr(stream, "close", None)
-        if callable(close):
-            try:
-                close()
-            except Exception:
-                logger.debug("Failed to close cancelled auxiliary response stream", exc_info=True)
-        raise InterruptedError("Teamwork synthesis cancelled")
-
-    # Some compatibility adapters (Codex/Anthropic) currently return a
-    # complete response even when the caller requests streaming. Keep them
-    # usable; native OpenAI-compatible streams take the incremental path below.
-    if hasattr(stream, "choices"):
-        choices = getattr(stream, "choices", None) or []
-        message = getattr(choices[0], "message", None) if choices else None
-        content = _stream_text_value(getattr(message, "content", None))
-        reasoning = _stream_reasoning_value(message)
-        emit_reasoning(reasoning)
-        emit_content(scrubber.feed(content))
-        emit_content(scrubber.flush())
-        _record_completion_metadata(resolved_provider, stream)
-        return "".join(visible_parts)
-
-    try:
-        for chunk in stream:
+        scrubber = StreamingThinkScrubber(reasoning_callback=emit_reasoning)
+        stream = None
+        try:
+            stream = client.chat.completions.create(**kwargs)
             if cancel_event is not None and cancel_event.is_set():
                 raise InterruptedError("Teamwork synthesis cancelled")
-            usage = getattr(chunk, "usage", None)
-            if usage is not None:
-                _record_completion_metadata(resolved_provider, chunk)
-            choices = getattr(chunk, "choices", None) or []
-            if not choices:
-                continue
-            delta = getattr(choices[0], "delta", None)
-            emit_reasoning(_stream_reasoning_value(delta))
-            content = _stream_text_value(getattr(delta, "content", None))
-            emit_content(scrubber.feed(content))
-    finally:
-        close = getattr(stream, "close", None)
-        if callable(close):
-            try:
-                close()
-            except Exception:
-                logger.debug("Failed to close auxiliary response stream", exc_info=True)
 
-    if cancel_event is not None and cancel_event.is_set():
-        raise InterruptedError("Teamwork synthesis cancelled")
-    emit_content(scrubber.flush())
-    _record_completion_metadata(resolved_provider, stream)
-    return "".join(visible_parts)
+            # Some compatibility adapters (Codex/Anthropic) currently return
+            # a complete response even when streaming is requested.
+            if hasattr(stream, "choices"):
+                choices = getattr(stream, "choices", None) or []
+                message = getattr(choices[0], "message", None) if choices else None
+                content = _stream_text_value(getattr(message, "content", None))
+                reasoning = _stream_reasoning_value(message)
+                emit_reasoning(reasoning)
+                emit_content(scrubber.feed(content))
+                emit_content(scrubber.flush())
+                _record_completion_metadata(resolved_provider, stream)
+                return "".join(visible_parts)
+
+            for chunk in stream:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise InterruptedError("Teamwork synthesis cancelled")
+                usage = getattr(chunk, "usage", None)
+                if usage is not None:
+                    _record_completion_metadata(resolved_provider, chunk)
+                choices = getattr(chunk, "choices", None) or []
+                if not choices:
+                    continue
+                delta = getattr(choices[0], "delta", None)
+                emit_reasoning(_stream_reasoning_value(delta))
+                content = _stream_text_value(getattr(delta, "content", None))
+                emit_content(scrubber.feed(content))
+
+            if cancel_event is not None and cancel_event.is_set():
+                raise InterruptedError("Teamwork synthesis cancelled")
+            emit_content(scrubber.flush())
+            _record_completion_metadata(resolved_provider, stream)
+            return "".join(visible_parts)
+        except InterruptedError:
+            raise
+        except Exception as exc:
+            if (
+                attempt + 1 < max_attempts
+                and not emitted_anything
+                and is_retryable_pre_token_error(exc)
+            ):
+                # A failed response may leave the transport unusable. Evict it
+                # so the next attempt resolves a fresh provider client/stream.
+                _evict_cached_client_instance(client)
+                if cancel_event is not None and cancel_event.is_set():
+                    raise InterruptedError("Teamwork synthesis cancelled") from exc
+                logger.info(
+                    "Teamwork synthesis retrying %s once before first output after %s",
+                    resolved_provider,
+                    type(exc).__name__,
+                )
+                continue
+            raise
+        finally:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    logger.debug("Failed to close auxiliary response stream", exc_info=True)
+
+    raise RuntimeError("Teamwork synthesis retry loop ended unexpectedly")
 
 
 def _stream_text_value(value: Any) -> str:

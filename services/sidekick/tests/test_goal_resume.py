@@ -466,6 +466,82 @@ def test_failed_resume_kickoff_does_not_resurrect_goal_cleared_during_start(monk
     assert goal_api.goal_state_for_session(session_id, profile_home=profile_home) is None
 
 
+def test_failed_resume_kickoff_snapshots_state_atomically_with_resume(monkeypatch, tmp_path):
+    """A clear between resume and its rollback snapshot must remain cleared."""
+    import threading
+    from types import SimpleNamespace
+    from web.api import goals as goal_api
+    from web.api import routes
+
+    goal_api._DB_CACHE.clear()
+    monkeypatch.setattr(goal_api, "_space_goals_path", lambda *_args, **_kwargs: None)
+    profile_home = tmp_path / "profile"
+    session_id = "resume-snapshot-concurrent-clear"
+    assert goal_api.goal_command_payload(
+        session_id, "Continue shipping", profile_home=profile_home,
+    )["ok"] is True
+    assert goal_api.goal_command_payload(
+        session_id, "pause", profile_home=profile_home,
+    )["goal"]["status"] == "paused"
+
+    session = SimpleNamespace(
+        session_id=session_id,
+        profile="default",
+        workspace=str(tmp_path),
+        model="test-model",
+        model_provider="test-provider",
+        active_stream_id=None,
+        messages=[],
+        context_messages=[],
+        pending_user_message=None,
+    )
+    monkeypatch.setattr(routes, "get_session", lambda _sid: session)
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: profile_home)
+    monkeypatch.setattr(routes, "resolve_trusted_workspace", lambda value: value)
+    monkeypatch.setattr(
+        routes,
+        "_resolve_compatible_session_model_state",
+        lambda _model, _provider: ("test-model", "test-provider", False),
+    )
+
+    clear_started = threading.Event()
+    clear_finished = threading.Event()
+    original_goal_command = goal_api.goal_command_payload
+
+    def concurrent_clear_after_resume(sid, args="", **kwargs):
+        result = original_goal_command(sid, args, **kwargs)
+        if args == "resume":
+            def clear_goal():
+                clear_started.set()
+                original_goal_command(sid, "clear", **kwargs)
+                clear_finished.set()
+
+            threading.Thread(target=clear_goal, daemon=True).start()
+            assert clear_started.wait(timeout=2)
+            # The route must still hold the lifecycle lock while it captures
+            # the expected post-resume state.
+            assert not clear_finished.wait(timeout=0.1)
+        return result
+
+    monkeypatch.setattr(goal_api, "goal_command_payload", concurrent_clear_after_resume)
+
+    def fail_after_concurrent_clear(*_args, **_kwargs):
+        assert clear_finished.wait(timeout=2)
+        return {"_status": 503, "error": "chat start failed"}
+
+    monkeypatch.setattr(routes, "_start_chat_stream_for_session", fail_after_concurrent_clear)
+    monkeypatch.setattr(routes, "j", lambda _handler, payload, status=200, **_kwargs: (status, payload))
+
+    status, payload = routes._handle_goal_command(
+        object(), {"session_id": session_id, "args": "resume", "workspace": str(tmp_path)},
+    )
+
+    assert status == 503
+    assert payload["ok"] is False
+    goal_api._DB_CACHE.clear()
+    assert goal_api.goal_state_for_session(session_id, profile_home=profile_home) is None
+
+
 def test_webui_goal_command_passes_custom_and_unlimited_budget(monkeypatch):
     from web.api import goals as goal_api
     from web.api import routes

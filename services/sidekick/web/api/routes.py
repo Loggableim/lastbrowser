@@ -11983,7 +11983,7 @@ def _handle_goal_command(handler, body):
         or ""
     ).strip().lower() or None
 
-    from web.api.goals import goal_command_payload, goal_state_snapshot, restore_goal_state
+    from web.api.goals import _CONTINUATION_LOCK, goal_command_payload, goal_state_snapshot, restore_goal_state
 
     goal_args = str(body.get("args", "") or body.get("text", "") or "")
     goal_unlimited = bool(body.get("unlimited", body.get("goal_unlimited", False)))
@@ -12042,28 +12042,34 @@ def _handle_goal_command(handler, body):
             requested_model,
             requested_provider,
         )
-        previous_goal_state = goal_state_snapshot(s.session_id, profile_home=profile_home, space_slug=space_slug)
-
-    payload = goal_command_payload(
-        s.session_id,
-        goal_args,
-        stream_running=stream_running,
-        profile_home=profile_home,
-        space_slug=space_slug,
-        max_turns=goal_max_turns if not goal_unlimited else None,
-        unlimited=goal_unlimited,
-    )
+    # Keep the pre-command and post-command snapshots adjacent to the state
+    # mutation. Otherwise a concurrent clear between mutation and snapshot
+    # could be mistaken for the state created by this kickoff and rolled back.
+    with _CONTINUATION_LOCK:
+        if will_kickoff or goal_action == "resume":
+            previous_goal_state = goal_state_snapshot(
+                s.session_id, profile_home=profile_home, space_slug=space_slug,
+            )
+        payload = goal_command_payload(
+            s.session_id,
+            goal_args,
+            stream_running=stream_running,
+            profile_home=profile_home,
+            space_slug=space_slug,
+            max_turns=goal_max_turns if not goal_unlimited else None,
+            unlimited=goal_unlimited,
+        )
+        kickoff_prompt = str(payload.get("kickoff_prompt") or "").strip()
+        kickoff_goal_state = (
+            goal_state_snapshot(s.session_id, profile_home=profile_home, space_slug=space_slug)
+            if kickoff_prompt
+            else None
+        )
     if not payload.get("ok", True):
         status = 409 if payload.get("error") == "agent_running" else 400
         return j(handler, payload, status=status)
 
-    kickoff_prompt = str(payload.get("kickoff_prompt") or "").strip()
     if kickoff_prompt:
-        kickoff_goal_state = goal_state_snapshot(
-            s.session_id,
-            profile_home=profile_home,
-            space_slug=space_slug,
-        )
         if workspace is None:
             try:
                 workspace = str(resolve_trusted_workspace(body.get("workspace") or s.workspace))

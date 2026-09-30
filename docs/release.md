@@ -30,7 +30,7 @@ The release gate requires exactly one version-matched setup executable and one p
 ## Requirements
 
 - The GitHub Release must not remain a draft, because draft releases are invisible to `electron-updater`.
-- The workflow needs `contents: write` permission and `GH_TOKEN` from `${{ secrets.GITHUB_TOKEN }}`.
+- The build/signing job runs with `contents: read`; only the separate publisher job receives `contents: write` and `${{ secrets.GITHUB_TOKEN }}`, after the signed artifacts have been verified and transferred as a workflow artifact.
 - GitHub Actions must have all five Azure Trusted Signing secrets configured: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_TRUSTED_SIGNING_ACCOUNT`, and `AZURE_CERTIFICATE_PROFILE`, plus the Castlabs EVS credentials `EVS_ACCOUNT_NAME` and `EVS_PASSWD`. The workflow stops before building if any are missing, requires exactly the expected setup and portable executables, and publishes only after Authenticode verification succeeds for both and the packaged VMP signature verifies.
 - The workflow runs the Sidekick Python syntax check and full Python tests, desktop tests, and Store preflight before packaging. A local installer build does not establish that either Authenticode or VMP signing succeeded.
 - The `publish` config in `apps/desktop/package.json` points to `Loggableim/lastbrowser`.

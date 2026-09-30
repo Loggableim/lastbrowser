@@ -5117,14 +5117,26 @@ def handle_get(handler, parsed) -> bool:
                     sid,
                     profile_home=profile_home,
                     space_slug=(
-                        query.get("workspace", [None])[0]
-                        or getattr(s, "workspace_slug", None)
+                        # The loaded session owns its persistence scope. A
+                        # request query parameter may help locate a session,
+                        # but must never redirect its goal lookup into another
+                        # Space's goals.db.
+                        getattr(s, "workspace_slug", None)
                         or getattr(s, "space_slug", None)
                         or getattr(s, "space", None)
                     ),
                 )
             except Exception:
-                goal_state = None
+                logger.exception("Could not read persistent goal state for session %s", sid)
+                return j(
+                    handler,
+                    {
+                        "error": "goal_state_unavailable",
+                        "message": "Could not load persistent goal state. Please retry.",
+                        "retryable": True,
+                    },
+                    status=503,
+                )
             raw = s.compact() | {
                 "messages": _truncated_msgs,
                 "tool_calls": getattr(s, "tool_calls", []) if include_session_tool_calls else [],

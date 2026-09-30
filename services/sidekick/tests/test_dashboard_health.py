@@ -1387,6 +1387,41 @@ def test_session_detail_includes_persisted_goal_state(monkeypatch, tmp_path):
     assert payload["goal"]["session_id"] == "goal-session"
     assert payload["goal"]["space"] == "color"
 
+    # Selecting a different Space cannot make this session reveal a goal
+    # stored there (the session is only present in its owning Space).
+    mismatched_space = TestClient(web_server.app).get(
+        "/api/session?session_id=goal-session&workspace=other&messages=0&resolve_model=0",
+        headers={web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN},
+    )
+    assert mismatched_space.status_code == 404
+
+
+def test_session_detail_returns_retryable_error_when_goal_state_is_unavailable(monkeypatch, tmp_path):
+    from cli import web_server
+    from web.api.models import Session
+
+    session = Session(session_id="goal-error-session", profile="default")
+    session.messages = []
+    session.tool_calls = []
+    monkeypatch.setattr("web.api.routes.get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr("web.api.routes._clear_stale_stream_state", lambda _session: None)
+    monkeypatch.setattr("web.api.routes._lookup_cli_session_metadata", lambda _sid: None)
+    monkeypatch.setattr("web.api.routes._is_messaging_session_record", lambda _record: False)
+
+    def fail_goal_read(*_args, **_kwargs):
+        raise RuntimeError("goal store unavailable")
+
+    monkeypatch.setattr("web.api.goals.goal_state_for_session", fail_goal_read)
+    response = TestClient(web_server.app).get(
+        "/api/session?session_id=goal-error-session&messages=0&resolve_model=0",
+        headers={web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error"] == "goal_state_unavailable"
+    assert response.json()["retryable"] is True
+    assert "session" not in response.json()
+
 
 def test_goal_command_payload_uses_space_goal_store(monkeypatch, tmp_path):
     monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))

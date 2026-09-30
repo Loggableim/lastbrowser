@@ -1,3 +1,6 @@
+import io
+import urllib.error
+
 from cli import models
 from runtime import models_dev
 import pytest
@@ -101,7 +104,7 @@ def test_configured_ollama_key_is_resolved_for_live_catalog(monkeypatch, tmp_pat
     assert requests == [(
         "runtime-test-key",
         "https://ollama.com/v1",
-        {"timeout": 8.0, "allow_redirects": False},
+        {"timeout": 8.0, "allow_redirects": False, "include_status": True},
     )]
 
 
@@ -305,9 +308,65 @@ def test_ollama_cloud_catalog_requests_disable_redirects(monkeypatch, tmp_path):
     )
 
     assert calls == [(
-        "test-only", "https://ollama.com/v1", {"timeout": 8.0, "allow_redirects": False}
+        "test-only", "https://ollama.com/v1", {
+            "timeout": 8.0,
+            "allow_redirects": False,
+            "include_status": True,
+        }
     )]
     assert result == ["deepseek-v4.1-flash"]
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+def test_ollama_cloud_auth_rejection_invalidates_only_its_cached_catalog(
+    monkeypatch, tmp_path, status_code
+):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
+    monkeypatch.setattr(models_dev, "list_agentic_models", lambda *_args: [])
+    current_scope = models._ollama_cloud_cache_scope(
+        "revoked-test-credential", "https://ollama.com/v1"
+    )
+    other_scope = models._ollama_cloud_cache_scope(
+        "other-test-credential", "https://ollama.com/v1"
+    )
+    models._save_ollama_cloud_cache(["deepseek-v4.1-flash"], scope=current_scope)
+    models._save_ollama_cloud_cache(["glm-5.3-flash"], scope=other_scope)
+    monkeypatch.setattr(
+        models,
+        "fetch_api_models",
+        lambda *_args, **_kwargs: {"models": None, "status_code": status_code},
+    )
+
+    result = models.fetch_ollama_cloud_models(
+        "revoked-test-credential",
+        "https://ollama.com/v1",
+        force_refresh=True,
+    )
+
+    assert result == []
+    assert not models._ollama_cloud_cache_path(current_scope).exists()
+    assert models._load_ollama_cloud_cache(scope=other_scope)["models"] == ["glm-5.3-flash"]
+
+
+def test_ollama_cloud_network_outage_keeps_using_account_scoped_live_cache(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
+    monkeypatch.setattr(models_dev, "list_agentic_models", lambda *_args: [])
+    api_key = "temporary-network-outage-test-credential"
+    base_url = "https://ollama.com/v1"
+    scope = models._ollama_cloud_cache_scope(api_key, base_url)
+    models._save_ollama_cloud_cache(["deepseek-v4.1-flash"], scope=scope)
+    monkeypatch.setattr(
+        models,
+        "fetch_api_models",
+        lambda *_args, **_kwargs: {"models": None, "status_code": None},
+    )
+
+    result = models.fetch_ollama_cloud_models(api_key, base_url, force_refresh=True)
+
+    assert result == ["deepseek-v4.1-flash"]
+    assert models._load_ollama_cloud_cache(ignore_ttl=True, scope=scope)["models"] == result
 
 
 def test_ollama_cloud_model_probe_refuses_http_redirects(monkeypatch):
@@ -343,3 +402,24 @@ def test_ollama_cloud_model_probe_refuses_http_redirects(monkeypatch):
         ("https://ollama.com/v1/models", 5.0),
         ("https://ollama.com/models", 5.0),
     ]
+
+
+def test_model_probe_reports_authorization_status_without_trying_alternate_url(monkeypatch):
+    opened = []
+
+    class Opener:
+        def open(self, request, timeout):
+            opened.append((request.full_url, timeout))
+            raise urllib.error.HTTPError(
+                request.full_url, 401, "Unauthorized", {}, io.BytesIO(b"invalid credential")
+            )
+
+    monkeypatch.setattr(models.urllib.request, "build_opener", lambda _handler: Opener())
+
+    result = models.fetch_api_models(
+        "test-only", "https://ollama.com/v1", allow_redirects=False, include_status=True
+    )
+
+    assert result["models"] is None
+    assert result["status_code"] == 401
+    assert opened == [("https://ollama.com/v1/models", 5.0)]

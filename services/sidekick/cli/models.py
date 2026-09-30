@@ -2390,6 +2390,7 @@ def probe_api_models(
             "resolved_base_url": "",
             "suggested_base_url": None,
             "used_fallback": False,
+            "status_code": None,
         }
 
     if _is_github_models_base_url(normalized):
@@ -2400,6 +2401,7 @@ def probe_api_models(
             "resolved_base_url": COPILOT_BASE_URL,
             "suggested_base_url": None,
             "used_fallback": False,
+            "status_code": None,
         }
 
     if normalized.endswith("/v1"):
@@ -2412,6 +2414,7 @@ def probe_api_models(
         candidates.append((alternate_base, True))
 
     tried: list[str] = []
+    last_status_code: Optional[int] = None
     headers: dict[str, str] = {"User-Agent": _SIDEKICK_USER_AGENT}
     if api_key and api_mode == "anthropic_messages":
         headers["x-api-key"] = api_key
@@ -2444,7 +2447,23 @@ def probe_api_models(
                     "resolved_base_url": candidate_base.rstrip("/"),
                     "suggested_base_url": alternate_base if alternate_base != candidate_base else normalized,
                     "used_fallback": is_fallback,
+                    "status_code": getattr(resp, "status", None),
                 }
+        except urllib.error.HTTPError as exc:
+            last_status_code = exc.code
+            if exc.code in (401, 403):
+                # Authentication failures are authoritative: trying a second
+                # URL or treating them like a transient outage can keep a
+                # revoked credential's cached catalog looking available.
+                return {
+                    "models": None,
+                    "probed_url": url,
+                    "resolved_base_url": candidate_base.rstrip("/"),
+                    "suggested_base_url": alternate_base if alternate_base != candidate_base else normalized,
+                    "used_fallback": is_fallback,
+                    "status_code": exc.code,
+                }
+            continue
         except Exception:
             continue
 
@@ -2454,6 +2473,7 @@ def probe_api_models(
         "resolved_base_url": normalized,
         "suggested_base_url": alternate_base if alternate_base != normalized else None,
         "used_fallback": False,
+        "status_code": last_status_code,
     }
 
 
@@ -2494,19 +2514,23 @@ def fetch_api_models(
     api_mode: Optional[str] = None,
     *,
     allow_redirects: bool = True,
-) -> Optional[list[str]]:
+    include_status: bool = False,
+) -> Any:
     """Fetch the list of available model IDs from the provider's ``/models`` endpoint.
 
     Returns a list of model ID strings, or ``None`` if the endpoint could not
-    be reached (network error, timeout, auth failure, etc.).
+    be reached (network error, timeout, auth failure, etc.). When
+    ``include_status`` is True, returns the complete probe result so callers
+    can distinguish rejected credentials from a temporary outage.
     """
-    return probe_api_models(
+    result = probe_api_models(
         api_key,
         base_url,
         timeout=timeout,
         api_mode=api_mode,
         allow_redirects=allow_redirects,
-    ).get("models")
+    )
+    return result if include_status else result.get("models")
 
 
 # ---------------------------------------------------------------------------
@@ -2659,6 +2683,14 @@ def _save_ollama_cloud_cache(models: list[str], *, scope: Optional[str] = None) 
         pass
 
 
+def _invalidate_ollama_cloud_cache_scope(scope: str) -> None:
+    """Remove only the cached catalog for a credential rejected by Ollama."""
+    try:
+        _ollama_cloud_cache_path(scope).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def invalidate_ollama_cloud_models_cache() -> None:
     """Remove the persisted live catalog after Ollama Cloud credentials change."""
     try:
@@ -2730,9 +2762,18 @@ def fetch_ollama_cloud_models(
         return []
 
     if api_key:
-        live_result = fetch_api_models(
-            api_key, base_url, timeout=8.0, allow_redirects=False
+        live_probe = fetch_api_models(
+            api_key, base_url, timeout=8.0, allow_redirects=False, include_status=True
         )
+        if isinstance(live_probe, dict) and "models" in live_probe:
+            live_result = live_probe.get("models")
+            if live_probe.get("status_code") in (401, 403):
+                _invalidate_ollama_cloud_cache_scope(cache_scope)
+                return []
+        else:
+            # Preserve lightweight test/custom integrations that wrap the
+            # legacy helper and return only the model list.
+            live_result = live_probe
         if live_result is not None:
             live_models = list(dict.fromkeys(_valid_ollama_cloud_model_ids(live_result)))
             # Keep the default and familiar catalog models at the top while

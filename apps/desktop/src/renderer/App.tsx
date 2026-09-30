@@ -64,7 +64,7 @@ import { playChatCompletionSound } from './notification-sound.js';
 import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
 import { isNativeChatProgressEvent, isNativeChatStreamWaitExpired } from './chat-stream-timeout.js';
-import { adoptCreatedTurnSession, continuationAfterTerminalEvent, isActiveTurnContextCurrent, isGoalContinuationContextCurrent, readGoalContinuationPrompt, readGoalEvaluationError, startGoalContinuation } from './goal-continuation.js';
+import { adoptCreatedTurnSession, claimRestorableGoalContinuation, continuationAfterTerminalEvent, isActiveTurnContextCurrent, isGoalContinuationContextCurrent, readGoalContinuationPrompt, readGoalEvaluationError, readRestorableGoalContinuation, startGoalContinuation } from './goal-continuation.js';
 import { parsePersistentGoalCommand, requestPersistentGoalCommand } from './persistent-goal-command.js';
 import { readPersistentGoalStateError } from './persistent-goal-state.js';
 import { executeBrowserAction, parseNaturalLanguageBrowserCommand } from './browser-agent-tools.js';
@@ -1018,6 +1018,7 @@ function AppContent(): JSX.Element {
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
   const activeProfileIdRef = useRef(activeProfileId);
   const activeSpacePathRef = useRef(activeSpacePath);
+  const restoredGoalContinuationClaimsRef = useRef(new Set<string>());
   activeProfileIdRef.current = activeProfileId;
   activeSpacePathRef.current = activeSpacePath;
   const isCreatingSessionRef = useRef(false);
@@ -1656,6 +1657,43 @@ function AppContent(): JSX.Element {
     void loadActiveSession(activeSessionId, { loadDraft: true, showLoading: true });
     return undefined;
   }, [activeSessionId, loadActiveSession]);
+
+  useEffect(() => {
+    if (
+      !sidekickApiReady
+      || !activeSession
+      || activeSessionLoading
+      || sidekickBusy
+      || chatRunState !== 'idle'
+      || activeSession.session_id !== activeSessionId
+    ) return;
+    const prompt = readRestorableGoalContinuation(activeSession);
+    if (!prompt) return;
+    const expected = {
+      sessionId: activeSession.session_id,
+      profileId: activeProfileId,
+      spacePath: activeSpacePath
+    };
+    const current = {
+      sessionId: activeSessionIdRef.current,
+      profileId: activeProfileIdRef.current,
+      spacePath: activeSpacePathRef.current
+    };
+    if (!claimRestorableGoalContinuation(
+      prompt,
+      expected,
+      current,
+      restoredGoalContinuationClaimsRef.current
+    )) return;
+
+    setActivePanel('chat');
+    void startGoalContinuation(
+      prompt,
+      expected,
+      current,
+      (continuationPrompt) => startNativeChat(continuationPrompt, continuationPrompt, expected)
+    );
+  }, [activeSession, activeSessionId, activeSessionLoading, activeProfileId, activeSpacePath, sidekickApiReady, sidekickBusy, chatRunState]);
 
   useEffect(() => {
     if (!activeSessionId || !sidekickApiReady) return undefined;

@@ -5,6 +5,17 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.40] - 2026-09-30 (release candidate)
+
+### Fixes
+- Restore pending persistent-goal turns after the native desktop renderer restarts, using the exact stored continuation prompt and guarding against duplicate or stale session/profile/Space handoffs.
+- Expose a continuation prompt in session state only while the goal is active and that continuation turn remains unconsumed.
+
+### Verification
+- Desktop tests: 132 files, 1,152 passed; Store preflight: 27/27; desktop build and Python compile check passed.
+- Sidekick tests: 2,439 passed, 105 skipped.
+- The local candidate installer is signed and verified locally. GitHub publication is still blocked by unavailable CI signing credentials; this is not a published release.
+
 ## [0.1.39] - 2026-09-30
 
 ### Fixes
@@ -20,7 +31,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 - Desktop tests: 129 files, 1,127 passed; Store preflight: 27/27; desktop build and Python compile check passed.
 - Sidekick tests: 2,390 passed, 105 skipped.
 - Ollama Cloud account catalog: 17 live models including `deepseek-v4.1-flash`; a previous Smart Track inference returned streamed answer and reasoning deltas.
-- Local 0.1.39 preview installers built; VMP verified, Authenticode unsigned. These are not published release artifacts.
+- Local 0.1.39 preview installers were verified with valid Authenticode signatures, VMP verification, and matching setup metadata. GitHub publication was blocked by missing CI signing credentials; these are not published release artifacts.
 
 ## [0.1.38] - 2026-09-29
 

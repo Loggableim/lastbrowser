@@ -886,7 +886,28 @@ def goal_state_for_session(
         return None
     if str(getattr(state, "status", "") or "").strip() == "cleared":
         return None
-    return _state_payload(state, str(session_id or ""), space_slug=space_slug)
+    payload = _state_payload(state, str(session_id or ""), space_slug=space_slug)
+    # The native renderer may restart after the goal evaluator has saved its
+    # decision but before it consumes the goal_continue SSE event. The prompt
+    # is deterministic from the durable goal state and continuation claim, so
+    # expose it only while that turn is still pending. The renderer can then
+    # safely reconcile the handoff after restoring this exact session.
+    consumed_turn = getattr(state, "consumed_continuation_turn", -1)
+    consumed_turn = -1 if consumed_turn is None else int(consumed_turn)
+    if (
+        payload is not None
+        and str(getattr(state, "status", "") or "").strip() == "active"
+        and consumed_turn < int(getattr(state, "turns_used", 0) or 0)
+    ):
+        try:
+            prompt = mgr.next_continuation_prompt()
+            if prompt:
+                payload["continuation_prompt"] = prompt
+        except Exception:
+            # Keep the goal status available; the session read path already
+            # reports goal-store failures separately.
+            logger.debug("Could not recover goal continuation for session %s", session_id, exc_info=True)
+    return payload
 
 
 def goal_command_payload(

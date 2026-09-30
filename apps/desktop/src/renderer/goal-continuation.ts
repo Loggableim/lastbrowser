@@ -4,6 +4,21 @@ export interface GoalContinuationEvent {
   data?: unknown;
 }
 
+/** Recover only a durable, still-unconsumed goal handoff from a restored session. */
+export function readRestorableGoalContinuation(session: unknown): string | null {
+  if (!session || typeof session !== 'object' || Array.isArray(session)) return null;
+  const restored = session as Record<string, unknown>;
+  const sessionId = typeof restored.session_id === 'string' ? restored.session_id.trim() : '';
+  if (!sessionId || restored.active_stream_id || restored.pending_user_message) return null;
+  if (restored.goal_state_error) return null;
+  const goal = restored.goal;
+  if (!goal || typeof goal !== 'object' || Array.isArray(goal)) return null;
+  const state = goal as Record<string, unknown>;
+  if (state.session_id !== sessionId || state.status !== 'active') return null;
+  const prompt = typeof state.continuation_prompt === 'string' ? state.continuation_prompt.trim() : '';
+  return prompt || null;
+}
+
 /** Read a goal-evaluation warning only from the stream and session that own it. */
 export function readGoalEvaluationError(
   event: GoalContinuationEvent,
@@ -53,6 +68,21 @@ export function isGoalContinuationContextCurrent(
   return current.sessionId === expected.sessionId
     && current.profileId === expected.profileId
     && current.spacePath === expected.spacePath;
+}
+
+/** Claim one restored continuation per exact session/profile/Space/prompt tuple. */
+export function claimRestorableGoalContinuation(
+  prompt: string,
+  expected: { sessionId: string; profileId: string; spacePath: string },
+  current: { sessionId: string | null; profileId: string; spacePath: string },
+  claimed: Set<string>
+): boolean {
+  const text = prompt.trim();
+  if (!text || !isGoalContinuationContextCurrent(expected, current)) return false;
+  const key = JSON.stringify([expected.sessionId, expected.profileId, expected.spacePath, text]);
+  if (claimed.has(key)) return false;
+  claimed.add(key);
+  return true;
 }
 
 /** Compare a chat turn's frozen context with the currently selected context. */

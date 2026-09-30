@@ -1,17 +1,78 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   adoptCreatedTurnSession,
+  claimRestorableGoalContinuation,
   continuationAfterTerminalEvent,
   isActiveTurnContextCurrent,
   isGoalContinuationContextCurrent,
   readGoalEvaluationError,
   readGoalContinuationPrompt,
+  readRestorableGoalContinuation,
   startGoalContinuation
 } from '../src/renderer/goal-continuation.js';
 
 const expected = { sessionId: 'session-1', profileId: 'work', spacePath: 'C:/spaces/research' };
 
 describe('persistent goal continuation handoff', () => {
+  it('restores only an active, pending continuation from its exact idle session', () => {
+    const session = {
+      session_id: expected.sessionId,
+      active_stream_id: null,
+      pending_user_message: null,
+      goal: {
+        session_id: expected.sessionId,
+        status: 'active',
+        continuation_prompt: 'Continue the active task from the latest result.'
+      }
+    };
+    expect(readRestorableGoalContinuation(session)).toBe(session.goal.continuation_prompt);
+    expect(readRestorableGoalContinuation({
+      ...session,
+      active_stream_id: 'stream-running'
+    })).toBeNull();
+    expect(readRestorableGoalContinuation({
+      ...session,
+      pending_user_message: 'a turn is still pending'
+    })).toBeNull();
+    expect(readRestorableGoalContinuation({
+      ...session,
+      goal_state_error: { retryable: true }
+    })).toBeNull();
+    expect(readRestorableGoalContinuation({
+      ...session,
+      goal: { ...session.goal, status: 'paused' }
+    })).toBeNull();
+    expect(readRestorableGoalContinuation({
+      ...session,
+      goal: { ...session.goal, session_id: 'another-session' }
+    })).toBeNull();
+  });
+
+  it('claims a restored prompt once and never across a changed profile or Space', () => {
+    const claims = new Set<string>();
+    const prompt = 'Continue the active task from the latest result.';
+    expect(claimRestorableGoalContinuation(prompt, expected, {
+      sessionId: expected.sessionId,
+      profileId: expected.profileId,
+      spacePath: expected.spacePath
+    }, claims)).toBe(true);
+    expect(claimRestorableGoalContinuation(prompt, expected, {
+      sessionId: expected.sessionId,
+      profileId: expected.profileId,
+      spacePath: expected.spacePath
+    }, claims)).toBe(false);
+    expect(claimRestorableGoalContinuation(prompt, expected, {
+      sessionId: expected.sessionId,
+      profileId: 'personal',
+      spacePath: expected.spacePath
+    }, claims)).toBe(false);
+    expect(claimRestorableGoalContinuation(prompt, expected, {
+      sessionId: expected.sessionId,
+      profileId: expected.profileId,
+      spacePath: 'C:/spaces/other'
+    }, claims)).toBe(false);
+  });
+
   it('drops a queued continuation when the stream is cancelled', () => {
     const prompt = 'Continue the active task from the latest result.';
     expect(continuationAfterTerminalEvent(prompt, 'cancel')).toBeNull();

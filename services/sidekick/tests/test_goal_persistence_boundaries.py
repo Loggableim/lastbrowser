@@ -349,6 +349,62 @@ def test_profile_goal_without_space_does_not_follow_active_space(monkeypatch, tm
     )
 
 
+def test_goal_state_exposes_only_an_unconsumed_continuation_for_renderer_recovery(monkeypatch, tmp_path):
+    from web.api import goals
+
+    monkeypatch.setattr(goals, "judge_goal", lambda *_args, **_kwargs: ("continue", "keep going", False))
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+    goals._DB_CACHE.clear()
+    monkeypatch.setattr(goals, "_space_goals_path", lambda *_args, **_kwargs: None)
+    profile_home = tmp_path / "profiles" / "work"
+    profile_home.mkdir(parents=True)
+    session_id = "renderer-recovery-session"
+
+    response = goals.goal_command_payload(
+        session_id,
+        "Finish the release audit",
+        profile_home=profile_home,
+    )
+    assert response["kickoff_prompt"]
+
+    # The initial turn has not yet consumed the kickoff, so a restored renderer
+    # may recover it if the app closed before starting the chat request.
+    initial = goals.goal_state_for_session(
+        session_id, profile_home=profile_home,
+    )
+    assert "Finish the release audit" in initial["continuation_prompt"]
+    assert initial["continuation_prompt"] != response["kickoff_prompt"]
+
+    manager = goals._manager(
+        session_id, profile_home=profile_home,
+    )
+    assert manager.consume_continuation() is True
+    consumed = goals.goal_state_for_session(
+        session_id, profile_home=profile_home,
+    )
+    assert "continuation_prompt" not in consumed
+
+    decision = goals.evaluate_goal_after_turn(
+        session_id,
+        "The first pass is complete; one release check remains.",
+        profile_home=profile_home,
+    )
+    assert decision["should_continue"] is True
+    pending = goals.goal_state_for_session(
+        session_id, profile_home=profile_home,
+    )
+    assert pending["continuation_prompt"] == decision["continuation_prompt"]
+
+    goals.goal_command_payload(
+        session_id, "pause", profile_home=profile_home,
+    )
+    paused = goals.goal_state_for_session(
+        session_id, profile_home=profile_home,
+    )
+    assert paused["status"] == "paused"
+    assert "continuation_prompt" not in paused
+
+
 def test_goal_set_reports_persistence_failure_instead_of_claiming_success(monkeypatch, tmp_path):
     from web.api import goals
 

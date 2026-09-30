@@ -16,4 +16,17 @@ describe('Ollama settings configuration flow', () => {
     expect(source).not.toContain('fetch(testUrl');
     expect(source).toContain("path: '/api/providers'");
   });
+
+  it('keeps the API key in a password field and out of general desktop settings', () => {
+    expect(source).toContain('type="password"');
+    expect(source).toContain('api_key: ollamaKey.trim()');
+    expect(source).toContain('...cleanSettingsPayload(settings)');
+    expect(source).not.toContain('api_key: ollamaKey.trim(),\n                                  ...cleanSettingsPayload');
+  });
+
+  it('uses the server model default in the chat picker when no local choice exists', () => {
+    const chatSource = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8');
+    expect(chatSource).toContain("resolveCatalogModelSelection(data?.default_model, rawParsed)");
+    expect(chatSource).toContain('catalogDefaultModel,\n    \'default\'');
+  });
 });

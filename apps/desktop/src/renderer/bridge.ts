@@ -228,6 +228,51 @@ export async function resolveConfiguredModel(
   }
 }
 
+/** Resolve the configured chat model and the provider that owns it. */
+export async function resolveConfiguredModelSelection(
+  requestWebui: (request: { method: 'GET'; path: string }) => Promise<unknown>
+): Promise<{ model: string; provider: string }> {
+  try {
+    const selectionPayload = (await requestWebui({ method: 'GET', path: '/api/models' })) as {
+      default_model?: string;
+      active_provider?: string;
+      groups?: Array<{ provider?: string; provider_id?: string; models?: Array<{ id?: string }> }>;
+    };
+    const rawModel = typeof selectionPayload?.default_model === 'string' ? selectionPayload.default_model.trim() : '';
+    if (rawModel.startsWith('@')) {
+      const separator = rawModel.indexOf(':');
+      if (separator > 1 && separator < rawModel.length - 1) {
+        return { provider: rawModel.slice(1, separator), model: rawModel.slice(separator + 1) };
+      }
+    }
+    const groups = Array.isArray(selectionPayload?.groups) ? selectionPayload.groups : [];
+    if (!rawModel) {
+      const activeProvider = typeof selectionPayload?.active_provider === 'string' ? selectionPayload.active_provider : '';
+      const activeGroup = groups.find((group) => [group?.provider_id, group?.provider].some((candidate) => (
+        typeof candidate === 'string' && candidate.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+          === activeProvider.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+      )));
+      for (const candidate of (activeProvider ? (activeGroup ? [activeGroup] : []) : groups)) {
+        const model = candidate.models?.find((entry) => typeof entry?.id === 'string' && entry.id.trim());
+        if (model?.id) {
+          return {
+            model: model.id.trim(),
+            provider: String(candidate.provider_id || candidate.provider || activeProvider)
+          };
+        }
+      }
+      return { model: '', provider: '' };
+    }
+    const owner = groups.find((group) => (group.models || []).some((model) => model?.id === rawModel));
+    const provider = typeof owner?.provider_id === 'string' ? owner.provider_id
+      : typeof owner?.provider === 'string' ? owner.provider
+        : typeof selectionPayload?.active_provider === 'string' ? selectionPayload.active_provider : '';
+    return { model: rawModel, provider };
+  } catch {
+    return { model: '', provider: '' };
+  }
+}
+
 export async function collectBrowserContext(
   webview: Electron.WebviewTag | null,
   activeTab: { url: string; title: string }

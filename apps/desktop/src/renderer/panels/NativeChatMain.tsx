@@ -35,7 +35,7 @@ import {
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
 import { loadSpaceModelSelection, saveSpaceModel } from '../space-models.js';
-import { qualifyModelForProvider, resolvePreferredChatModel } from '../provider-model-selection.js';
+import { qualifyModelForProvider, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
 import type { NativeChatTurnUsage } from '../chat-usage.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
@@ -106,11 +106,13 @@ export function NativeChatMain({
   const setSelectedModel = useChatStore((state) => state.setSelectedModel);
   const setSelectedModelProvider = useChatStore((state) => state.setSelectedModelProvider);
   const spaceModelSelection = loadSpaceModelSelection(activeSpacePath, window.localStorage);
+  const [catalogDefaultModel, setCatalogDefaultModel] = useState('');
   const model = resolvePreferredChatModel(
     spaceModelSelection?.model,
     selectedModel,
     activeSession?.model,
     setupModel,
+    catalogDefaultModel,
     'default'
   );
 
@@ -145,9 +147,12 @@ export function NativeChatMain({
           })
           .filter((group) => group.models.length > 0);
 
+        const defaultSelection = resolveCatalogModelSelection(data?.default_model, rawParsed);
+        setCatalogDefaultModel(defaultSelection.model);
         const hasCli = rawParsed.some((g) => g.provider.toLowerCase().includes('gemini'));
         setModelCatalog(rawParsed);
       } catch {
+        setCatalogDefaultModel('');
         setModelCatalog([]);
       }
     };

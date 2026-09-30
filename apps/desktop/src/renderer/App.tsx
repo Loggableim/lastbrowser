@@ -145,6 +145,7 @@ import {
   collectBrowserContext,
   lastAssistantText,
   resolveConfiguredModel,
+  resolveConfiguredModelSelection,
   sidekickActionLabels
 } from './bridge.js';
 import {
@@ -2444,10 +2445,13 @@ function AppContent(): JSX.Element {
         storedModel,
         setupState.model
       ) || undefined;
+      const configuredSelection = selectedModel
+        ? null
+        : await resolveConfiguredModelSelection((request) => window.lastbrowser.sidekick.requestWebui(request));
       const selectedProvider = spaceModelSelection?.provider
         || (selectedModel === useChatStore.getState().selectedModel
         ? useChatStore.getState().selectedModelProvider || undefined
-        : selectedModel === setupState.model ? setupState.provider || undefined : undefined);
+        : selectedModel === setupState.model ? setupState.provider || undefined : configuredSelection?.provider || undefined);
 
       if (!turnContext.sessionId) {
         const created = await window.lastbrowser.sidekick.createSession({
@@ -2627,12 +2631,15 @@ function AppContent(): JSX.Element {
         storedModel,
         setupState.model
       ) || undefined;
+      const configuredSelection = effectiveSelectedModel
+        ? null
+        : await resolveConfiguredModelSelection((request) => window.lastbrowser.sidekick.requestWebui(request));
       const chatModelProvider = spaceModelSelection?.provider
         || (effectiveSelectedModel === useChatStore.getState().selectedModel
           ? useChatStore.getState().selectedModelProvider || undefined
-          : effectiveSelectedModel === setupState.model ? setupState.provider || undefined : undefined);
+          : effectiveSelectedModel === setupState.model ? setupState.provider || undefined : configuredSelection?.provider || undefined);
       const configuredChatModel = effectiveSelectedModel
-        || (await resolveConfiguredModel((request) => window.lastbrowser.sidekick.requestWebui(request)))
+        || configuredSelection?.model
         || undefined;
       let teamworkGroundingContext;
       if (configuredChatModel === 'teamwork') {

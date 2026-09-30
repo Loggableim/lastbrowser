@@ -277,3 +277,78 @@ def test_same_space_slug_and_session_are_scoped_to_the_session_profile(
     assert goals.consume_goal_continuation(
         session_id, prompt_b, profile_home=profile_b, space_slug="shared-slug",
     ) == "active"
+
+
+def test_stream_worker_without_request_context_uses_owning_profile_and_restores_context(
+    monkeypatch, tmp_path,
+):
+    """A real worker thread must persist the goal under its session profile.
+
+    ContextVars are not inherited by a newly-created ``threading.Thread``.
+    The process-level active profile deliberately points elsewhere to model a
+    user switching profiles while a stream is running.
+    """
+    import threading
+
+    from web.api import goals, profiles, space_engine
+
+    home = tmp_path / "sidekick-home"
+    profile_a = home / "profiles" / "alpha"
+    profile_b = home / "profiles" / "beta"
+    root_a = profile_a / "spaces" / "shared-slug"
+    root_b = profile_b / "spaces" / "shared-slug"
+    root_a.mkdir(parents=True)
+    root_b.mkdir(parents=True)
+
+    monkeypatch.setenv("SIDEKICK_HOME", str(home))
+    monkeypatch.setattr(profiles, "_DEFAULT_SIDEKICK_HOME", home)
+    monkeypatch.setattr(profiles, "_active_profile", "alpha")
+    monkeypatch.setattr(goals, "_DB_CACHE", {})
+    monkeypatch.setattr(goals, "_PENDING_CONTINUATIONS", {})
+    monkeypatch.setattr(goals, "_CANCELLED_CONTINUATIONS", {})
+
+    def profile_space(slug):
+        selected = profiles.get_active_profile_name()
+        roots = {"alpha": profile_a / "spaces", "beta": profile_b / "spaces"}
+        root = roots.get(selected, home / "invalid") / slug
+        return SimpleNamespace(root=root) if root.is_dir() else None
+
+    monkeypatch.setattr(space_engine, "get_workspace", profile_space)
+
+    # The request handler is handling beta, but a plain background thread does
+    # not inherit this token. The owning profile_home must therefore be passed
+    # explicitly to the goal bridge.
+    request_token = profiles.set_request_profile("beta")
+    observed = {}
+
+    def stream_worker():
+        observed["profile_before"] = profiles.get_active_profile_name()
+        observed["response"] = goals.goal_command_payload(
+            "thread-scoped-session",
+            "Persist under beta",
+            profile_home=profile_b,
+            space_slug="shared-slug",
+        )
+        observed["profile_after"] = profiles.get_active_profile_name()
+
+    worker = threading.Thread(target=stream_worker)
+    try:
+        worker.start()
+        worker.join(timeout=5)
+    finally:
+        profiles._request_profile.reset(request_token)
+
+    assert not worker.is_alive()
+    assert observed["profile_before"] == "alpha"
+    assert observed["response"]["ok"] is True
+    assert observed["profile_after"] == "alpha"
+
+    goals._DB_CACHE.clear()
+    state_b = goals.goal_state_for_session(
+        "thread-scoped-session", profile_home=profile_b, space_slug="shared-slug",
+    )
+    state_a = goals.goal_state_for_session(
+        "thread-scoped-session", profile_home=profile_a, space_slug="shared-slug",
+    )
+    assert state_b["goal"] == "Persist under beta"
+    assert state_a is None

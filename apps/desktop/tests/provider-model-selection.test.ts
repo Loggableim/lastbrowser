@@ -3,6 +3,7 @@ import {
   isProviderModelSelected,
   parseProviderModelId,
   qualifyModelForProvider,
+  resolveCatalogModelSelection,
   resolvePreferredChatModel
 } from '../src/renderer/provider-model-selection.js';
 
@@ -38,5 +39,17 @@ describe('provider-aware model selection', () => {
       .toBe('@ollama-cloud:deepseek-v4.1-flash');
     expect(qualifyModelForProvider('@ollama-cloud:deepseek-v4.1-flash', 'ollama-cloud'))
       .toBe('@ollama-cloud:deepseek-v4.1-flash');
+  });
+
+  it('maps a provider-qualified configured default to the bare picker ID', () => {
+    const groups = [{ providerId: 'ollama-cloud', models: [{ id: 'deepseek-v4.1-flash' }] }];
+    expect(resolveCatalogModelSelection('@ollama-cloud:deepseek-v4.1-flash', groups)).toEqual({
+      provider: 'ollama-cloud',
+      model: 'deepseek-v4.1-flash'
+    });
+    expect(resolveCatalogModelSelection('deepseek-v4.1-flash', groups)).toEqual({
+      provider: 'ollama-cloud',
+      model: 'deepseek-v4.1-flash'
+    });
   });
 });

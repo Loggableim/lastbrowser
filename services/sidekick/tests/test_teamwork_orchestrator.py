@@ -202,6 +202,32 @@ def test_worker_reports_hot_swap_even_when_every_candidate_fails():
     assert result["swapped"] is True
 
 
+def test_worker_hot_swaps_when_provider_returns_empty_completion():
+    worker = {
+        "model": "model-a", "call_model": "model-a", "provider": "provider-a",
+        "name": "A", "role": "Pragmatiker", "focus": "Implementation",
+    }
+    backup = {"id": "model-b", "call_model": "model-b", "provider": "provider-b", "name": "B"}
+    empty_response = MagicMock()
+    empty_response.choices[0].message.content = "   "
+    successful_response = MagicMock()
+    successful_response.choices[0].message.content = "usable draft"
+    calls = []
+
+    def return_empty_then_answer(*, provider, **_kwargs):
+        calls.append(provider)
+        return empty_response if len(calls) == 1 else successful_response
+
+    with patch("runtime.auxiliary_client.call_llm", side_effect=return_empty_then_answer), \
+         patch("runtime.auxiliary_client.extract_content_or_reasoning", side_effect=["", "usable draft"]):
+        result = _invoke_worker(worker, "task", "", [backup])
+
+    assert calls == ["provider-a", "provider-b"]
+    assert result["content"] == "usable draft"
+    assert result["model"] == "model-b"
+    assert result["swapped"] is True
+
+
 def test_worker_does_not_call_backup_when_hot_swap_is_disabled():
     worker = {
         "model": "model-a", "call_model": "model-a", "provider": "provider-a",

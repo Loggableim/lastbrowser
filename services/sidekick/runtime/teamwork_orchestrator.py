@@ -574,6 +574,13 @@ def _invoke_worker(
             content = extract_content_or_reasoning(resp)
             if not content:
                 content = str(resp.choices[0].message.content or "").strip()
+            else:
+                content = str(content).strip()
+            if not content:
+                # An empty completion is not a usable draft. Treat it like an
+                # operational provider failure so the configured hot-swap
+                # policy can try another currently available model.
+                raise RuntimeError("provider returned an empty response")
             elapsed_ms = int((time.time() - start_t) * 1000)
             return {
                 "model": current_worker["model"],

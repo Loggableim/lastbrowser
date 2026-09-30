@@ -3,6 +3,20 @@ export interface ProviderModelSelection {
   provider?: string;
 }
 
+/** Resolve an API default to the raw id used by the chat model picker. */
+export function resolveCatalogModelSelection(
+  rawId: unknown,
+  groups: Array<{ providerId?: string; models: Array<{ id: string }> }>,
+): ProviderModelSelection {
+  const value = typeof rawId === 'string' ? rawId.trim() : '';
+  if (!value) return { model: '' };
+
+  const parsed = parseProviderModelId(value);
+  if (parsed.provider) return parsed;
+  const group = groups.find((candidate) => candidate.models.some((model) => model.id === parsed.model));
+  return { model: parsed.model, ...(group?.providerId ? { provider: group.providerId } : {}) };
+}
+
 /** Return the first explicitly selected model before any setup/default fallback. */
 export function resolvePreferredChatModel(...choices: unknown[]): string {
   for (const choice of choices) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveConfiguredModel } from '../src/renderer/bridge.js';
+import { resolveConfiguredModel, resolveConfiguredModelSelection } from '../src/renderer/bridge.js';
 
 function bridge(payload: unknown) {
   return async () => payload;
@@ -88,5 +88,36 @@ describe('resolveConfiguredModel', () => {
 
   it('trims the configured default', async () => {
     expect(await resolveConfiguredModel(bridge({ default_model: '  spaced/model  ' }))).toBe('spaced/model');
+  });
+
+  it('returns the provider-qualified configured default for chat requests', async () => {
+    const selection = await resolveConfiguredModelSelection(bridge({
+      default_model: '@ollama-cloud:deepseek-v4.1-flash',
+      groups: [{ provider: 'Ollama Cloud', provider_id: 'ollama-cloud', models: [{ id: 'deepseek-v4.1-flash' }] }]
+    }));
+    expect(selection).toEqual({ model: 'deepseek-v4.1-flash', provider: 'ollama-cloud' });
+  });
+
+  it('resolves the provider from the group when the configured model is unqualified', async () => {
+    const selection = await resolveConfiguredModelSelection(bridge({
+      default_model: 'deepseek-v4.1-flash',
+      active_provider: 'openrouter',
+      groups: [
+        { provider: 'Ollama Cloud', provider_id: 'ollama-cloud', models: [{ id: 'deepseek-v4.1-flash' }] },
+        { provider: 'OpenRouter', provider_id: 'openrouter', models: [{ id: 'another/model' }] }
+      ]
+    }));
+    expect(selection).toEqual({ model: 'deepseek-v4.1-flash', provider: 'ollama-cloud' });
+  });
+
+  it('returns active provider and model together when no default is configured', async () => {
+    const selection = await resolveConfiguredModelSelection(bridge({
+      active_provider: 'ollama-cloud',
+      groups: [
+        { provider: 'OpenRouter', provider_id: 'openrouter', models: [{ id: 'other/model' }] },
+        { provider: 'Ollama Cloud', provider_id: 'ollama-cloud', models: [{ id: 'deepseek-v4.1-flash' }] }
+      ]
+    }));
+    expect(selection).toEqual({ model: 'deepseek-v4.1-flash', provider: 'ollama-cloud' });
   });
 });

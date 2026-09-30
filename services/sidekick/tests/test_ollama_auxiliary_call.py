@@ -3,6 +3,34 @@
 from types import SimpleNamespace
 
 
+def test_ollama_cloud_client_uses_deepseek_flash_when_model_is_omitted(monkeypatch):
+    from cli import auth
+    from runtime import auxiliary_client
+
+    client = SimpleNamespace(base_url="https://ollama.com/v1")
+    captured = {}
+    monkeypatch.setattr(
+        auth,
+        "resolve_api_key_provider_credentials",
+        lambda _provider: {
+            "api_key": "ollama-runtime-test-credential",
+            "base_url": "https://ollama.com/v1",
+        },
+    )
+    monkeypatch.setattr(
+        auxiliary_client,
+        "OpenAI",
+        lambda **kwargs: captured.update(kwargs) or client,
+    )
+
+    resolved_client, model = auxiliary_client.resolve_provider_client("ollama-cloud")
+
+    assert resolved_client is client
+    assert model == "deepseek-v4.1-flash"
+    assert captured["base_url"] == "https://ollama.com/v1"
+    assert captured["api_key"] == "ollama-runtime-test-credential"
+
+
 def test_ollama_cloud_call_preserves_response_reasoning_and_tool_contract(monkeypatch):
     from runtime import auxiliary_client
 

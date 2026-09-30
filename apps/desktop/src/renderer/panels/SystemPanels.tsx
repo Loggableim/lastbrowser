@@ -2507,14 +2507,17 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     if (!window.confirm('Disable authentication for this instance?')) return;
     setSaving(true);
     try {
-      await window.lastbrowser.sidekick.saveSettings({ settings: { _clear_password: true } });
+      const result = await window.lastbrowser.sidekick.saveSettings({ settings: { _clear_password: true } });
+      if (result.auth_enabled !== false) {
+        throw new Error(t('settings.panels.system.authDisableNotConfirmed'));
+      }
       window.dispatchEvent(new CustomEvent('lastbrowser:settings-changed', { detail: { _clear_password: true } }));
       setPasswordDraft('');
       await settingsState.refresh();
       await authState.refresh();
       showToast(t('settings.panels.system.authDisabled'));
     } catch (error) {
-      showToast(`Disable auth failed: ${error instanceof Error ? error.message : String(error)}`);
+      showToast(`${t('settings.panels.system.disableAuthFailed')} ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setSaving(false);
     }

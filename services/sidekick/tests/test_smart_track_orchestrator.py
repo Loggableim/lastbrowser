@@ -63,6 +63,10 @@ def test_classify_smart_model():
     assert tier == "high"
     assert "reasoning" in tags
 
+    tier, tags = classify_smart_model("deepseek-v4.1-flash", "ollama-cloud")
+    assert tier == "low"
+    assert "fast" in tags
+
 
 def test_build_model_wall():
     mock_catalog = {
@@ -106,6 +110,41 @@ def test_smart_track_model_wall_preserves_ollama_model_size_tags():
     assert wall["high"]["models"][0]["id"] == "deepseek-r1:70b"
 
 
+def test_smart_track_excludes_ollama_cloud_setup_hints_without_account_credentials():
+    catalog = {
+        "groups": [{
+            "provider_id": "ollama-cloud",
+            "provider": "Ollama Cloud",
+            "models": [{"id": "deepseek-v4.1-flash"}, {"id": "setup-hint-model"}],
+        }]
+    }
+    with patch("web.api.config.get_available_models", return_value=catalog), \
+         patch("cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": ""}), \
+         patch("cli.models.fetch_ollama_cloud_models") as fetch:
+        wall = build_model_wall()
+
+    assert all(not tier["models"] for tier in wall.values())
+    fetch.assert_not_called()
+
+
+def test_smart_track_routes_only_ollama_cloud_models_from_the_live_account_catalog():
+    catalog = {
+        "groups": [{
+            "provider_id": "ollama-cloud",
+            "provider": "Ollama Cloud",
+            "models": [{"id": "stale-setup-hint"}],
+        }]
+    }
+    with patch("web.api.config.get_available_models", return_value=catalog), \
+         patch("cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": "configured"}), \
+         patch("cli.models.fetch_ollama_cloud_models", return_value=["deepseek-v4.1-flash", "gemma4:31b"]):
+        wall = build_model_wall()
+
+    wall_models = [model for tier in wall.values() for model in tier["models"]]
+    assert {model["id"] for model in wall_models} == {"deepseek-v4.1-flash", "gemma4:31b"}
+    assert wall["low"]["default"] == "deepseek-v4.1-flash"
+
+
 def test_smart_track_routes_provider_qualified_duplicate_to_the_matching_provider():
     catalog = {
         "groups": [
@@ -114,14 +153,15 @@ def test_smart_track_routes_provider_qualified_duplicate_to_the_matching_provide
         ]
     }
     calls = []
-    response = MagicMock()
-    response.choices = [MagicMock()]
-    response.choices[0].message.content = "answer"
     session = MagicMock(messages=[])
 
+    def stream_response(*, provider, model, on_content, **_kwargs):
+        calls.append((provider, model))
+        on_content("answer")
+        return "answer"
+
     with patch("web.api.config.get_available_models", return_value=catalog), \
-         patch("runtime.auxiliary_client.call_llm", side_effect=lambda **kwargs: calls.append((kwargs["provider"], kwargs["model"])) or response), \
-         patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="answer"):
+         patch("runtime.auxiliary_client.stream_llm", side_effect=stream_response):
         wall = build_model_wall()
         assert {m["id"] for tier in wall.values() for m in tier["models"]} >= {
             "shared-model", "@openrouter:shared-model"
@@ -139,7 +179,8 @@ def test_smart_track_routes_provider_qualified_duplicate_to_the_matching_provide
 
 
 def test_empty_model_catalog_does_not_inject_gemini_fallbacks():
-    with patch("web.api.config.get_available_models", return_value={"groups": []}):
+    with patch("web.api.config.get_available_models", return_value={"groups": []}), \
+         patch("cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": ""}):
         wall = build_model_wall()
     assert all(tier["models"] == [] and tier["default"] == "" for tier in wall.values())
     with patch("runtime.smart_track_orchestrator.build_model_wall", return_value=wall):
@@ -331,12 +372,14 @@ def test_run_smart_track_turn_medium():
     def mock_put(ev, data):
         events.append((ev, data))
 
-    mock_resp = MagicMock()
-    mock_resp.choices = [MagicMock()]
-    mock_resp.choices[0].message.content = "Hier ist die Antwort für Medium Effort."
+    stream_calls = []
+    def mock_stream_llm(*, provider, model, on_content, **_kwargs):
+        stream_calls.append((provider, model))
+        on_content("Hier ist die Antwort ")
+        on_content("für Medium Effort.")
+        return "Hier ist die Antwort für Medium Effort."
 
-    with patch("runtime.auxiliary_client.call_llm", return_value=mock_resp), \
-         patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="Hier ist die Antwort für Medium Effort."):
+    with patch("runtime.auxiliary_client.stream_llm", side_effect=mock_stream_llm):
         result = run_smart_track_turn(
             session=session,
             prompt="Erkläre kurz DNS",
@@ -368,20 +411,17 @@ def test_run_smart_track_turn_high_preplan():
     def mock_put(ev, data):
         events.append((ev, data))
 
-    # Preplan call returns structured steps; main call returns final answer
+    # Preplan returns structured steps, while supported thinking deltas are
+    # exposed immediately and the main response streams incrementally.
     calls = []
-    def mock_call_llm(*args, **kwargs):
-        calls.append(kwargs)
-        resp = MagicMock()
-        resp.choices = [MagicMock()]
-        if len(calls) == 1:
-            resp.choices[0].message.content = "1. Zielanalyse\n2. Randbedingungen"
-        else:
-            resp.choices[0].message.content = "Finale tiefgehende Begründung."
-        return resp
-
-    def mock_extract(resp):
-        return resp.choices[0].message.content
+    def mock_stream_llm(*, provider, model, messages, on_content, on_reasoning, **_kwargs):
+        calls.append((provider, model))
+        if "Aufgaben-Strukturierer" in messages[0].get("content", ""):
+            on_reasoning("Planning the constraints.")
+            return "1. Zielanalyse\n2. Randbedingungen"
+        on_content("Finale tiefgehende ")
+        on_content("Begründung.")
+        return "Finale tiefgehende Begründung."
 
     wall = {
         "low": {"default": "qwen3:4b", "models": [{"id": "qwen3:4b", "name": "Qwen", "provider": "ollama"}]},
@@ -389,8 +429,7 @@ def test_run_smart_track_turn_high_preplan():
         "high": {"default": "gemini-pro", "reasoning": "gemini-pro", "models": [{"id": "gemini-pro", "name": "Gemini Pro", "provider": "google-gemini-cli"}]},
     }
 
-    with patch("runtime.auxiliary_client.call_llm", side_effect=mock_call_llm), \
-         patch("runtime.auxiliary_client.extract_content_or_reasoning", side_effect=mock_extract), \
+    with patch("runtime.auxiliary_client.stream_llm", side_effect=mock_stream_llm), \
          patch("runtime.smart_track_orchestrator.build_model_wall", return_value=wall):
         result = run_smart_track_turn(
             session=session,
@@ -401,14 +440,127 @@ def test_run_smart_track_turn_high_preplan():
         )
 
         assert result["content"] == "Finale tiefgehende Begründung."
-        assert len(calls) == 2  # Preplan + Main execution
-        assert calls[0].get("provider") == "ollama"
-        assert calls[0].get("model") == "qwen3:4b"
-        assert calls[1].get("provider") == "google-gemini-cli"
-        assert calls[1].get("model") == "gemini-pro"
+        assert calls == [("ollama", "qwen3:4b"), ("google-gemini-cli", "gemini-pro")]
 
         event_names = [e[0] for e in events]
         assert "smart_track_preplan" in event_names
         assert "smart_track_complete" in event_names
+        assert [data["text"] for event, data in events if event == "reasoning"] == ["Planning the constraints."]
+        assert session.messages[0]["reasoning"] == "Planning the constraints."
         assert session.messages[0]["smartTrack"]["effort"] == "high"
         assert "preplan" in session.messages[0]["smartTrack"]
+
+
+def test_smart_track_main_response_streams_content_and_reasoning_incrementally():
+    session = MagicMock(messages=[])
+    events = []
+
+    def stream_response(*, on_content, on_reasoning, **_kwargs):
+        on_reasoning("analyzing")
+        on_content("Hello")
+        on_content(" world")
+        return "Hello world"
+
+    with patch("runtime.auxiliary_client.stream_llm", side_effect=stream_response):
+        result = run_smart_track_turn(
+            session,
+            "Hello",
+            stream_put=lambda event, data: events.append((event, data)),
+            config={"preplan_on_high": False},
+        )
+
+    assert result["content"] == "Hello world"
+    assert session.messages[-1]["content"] == "Hello world"
+    assert session.messages[-1]["reasoning"] == "analyzing"
+    assert [(event, data) for event, data in events if event in {"delta", "reasoning"}] == [
+        ("reasoning", {"text": "analyzing"}),
+        ("delta", {"content": "Hello"}),
+        ("delta", {"content": " world"}),
+    ]
+
+
+def test_smart_track_falls_back_only_before_first_visible_output():
+    session = MagicMock(messages=[])
+    events = []
+    calls = []
+    stream_options = []
+    routed = {
+        "tier": "high", "intent": "reasoning", "model": "primary",
+        "call_model": "primary-call", "provider": "provider-a", "name": "Primary",
+    }
+    wall = {
+        "medium": {"default": "medium-model", "models": [
+            {"id": "medium-model", "call_model": "medium-call", "provider": "provider-b"},
+        ]},
+    }
+
+    def stream_response(*, provider, model, on_content, timeout, retry_transient_before_first_token, **_kwargs):
+        calls.append((provider, model))
+        stream_options.append((timeout, retry_transient_before_first_token))
+        if len(calls) == 2:
+            assert any(event == "smart_track_step" and data.get("stage") == "fallback"
+                       for event, data in events), "fallback must be announced before its provider call"
+        if len(calls) == 1:
+            raise RuntimeError("primary unavailable")
+        on_content("fallback answer")
+        return "fallback answer"
+
+    with patch("runtime.smart_track_orchestrator.resolve_smart_track_model", return_value=routed), \
+         patch("runtime.smart_track_orchestrator.build_model_wall", return_value=wall), \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=stream_response):
+        result = run_smart_track_turn(
+            session,
+            "Question",
+            effort="high",
+            stream_put=lambda event, data: events.append((event, data)),
+            config={"preplan_on_high": False},
+        )
+
+    assert calls == [("provider-a", "primary-call"), ("provider-b", "medium-call")]
+    assert stream_options == [(160.0, False), (160.0, False)]
+    assert result["content"] == session.messages[-1]["content"] == "fallback answer"
+    fallback_index = next(i for i, (event, data) in enumerate(events)
+                          if event == "smart_track_step" and data.get("stage") == "fallback")
+    answer_index = next(i for i, (event, _data) in enumerate(events) if event == "delta")
+    assert fallback_index < answer_index
+    assert [data["content"] for event, data in events if event == "delta"] == ["fallback answer"]
+
+
+@pytest.mark.parametrize("first_output", ["content", "reasoning"])
+def test_smart_track_does_not_fallback_after_any_visible_partial_output(first_output):
+    events = []
+    calls = []
+    routed = {
+        "tier": "high", "intent": "reasoning", "model": "primary",
+        "call_model": "primary-call", "provider": "provider-a", "name": "Primary",
+    }
+    wall = {"medium": {"default": "medium-model", "models": [
+        {"id": "medium-model", "call_model": "medium-call", "provider": "provider-b"},
+    ]}}
+
+    def stream_response(*, on_content, on_reasoning, **_kwargs):
+        calls.append(True)
+        if first_output == "content":
+            on_content("partial answer")
+        else:
+            on_reasoning("partial thinking")
+        raise RuntimeError("connection lost after output")
+
+    with patch("runtime.smart_track_orchestrator.resolve_smart_track_model", return_value=routed), \
+         patch("runtime.smart_track_orchestrator.build_model_wall", return_value=wall), \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=stream_response):
+        with pytest.raises(RuntimeError, match="failed after partial output"):
+            run_smart_track_turn(
+                MagicMock(messages=[]),
+                "Question",
+                effort="high",
+                stream_put=lambda event, data: events.append((event, data)),
+                config={"preplan_on_high": False},
+            )
+
+    assert len(calls) == 1
+    assert not any(event == "smart_track_step" and data.get("stage") == "fallback" for event, data in events)
+    if first_output == "content":
+        assert [data["content"] for event, data in events if event == "delta"] == ["partial answer"]
+    else:
+        assert [data["text"] for event, data in events if event == "reasoning"] == ["partial thinking"]

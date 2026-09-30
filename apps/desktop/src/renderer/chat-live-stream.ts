@@ -4,7 +4,18 @@ export type LiveChatMessage = {
   reasoning?: string;
   pending?: boolean;
   streaming?: boolean;
+  progress?: string;
 };
+
+/** Attach orchestration activity to the pending bubble without changing answer text. */
+export function applyLiveChatProgress<T extends LiveChatMessage>(messages: T[], progress: string): T[] {
+  if (!progress) return messages;
+  return messages.map((message) => (
+    message.role === 'assistant' && message.pending
+      ? { ...message, progress }
+      : message
+  ));
+}
 
 /** Normalize native provider and orchestration delta payloads for live rendering. */
 export function readLiveChatDelta(
@@ -52,6 +63,7 @@ export function applyLiveChatDelta<T extends LiveChatMessage>(
     // hidden reasoning details in settings.
     pending: waitingForAnswer ? current.pending : false,
     streaming: true,
+    ...(event === 'token' ? { progress: undefined } : {}),
     ...(event === 'token'
       ? { content: `${pendingContent}${text}` }
       : { content: pendingContent, reasoning: `${pendingReasoning}${text}` }),
@@ -60,5 +72,7 @@ export function applyLiveChatDelta<T extends LiveChatMessage>(
 }
 
 export function finishLiveChatMessage<T extends LiveChatMessage>(messages: T[]): T[] {
-  return messages.map((message) => message.streaming ? { ...message, pending: false, streaming: false } : message);
+  return messages.map((message) => message.pending || message.streaming || message.progress
+    ? { ...message, pending: false, streaming: false, progress: undefined }
+    : message);
 }

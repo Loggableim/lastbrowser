@@ -849,15 +849,20 @@ def run_teamwork_turn(
             retry_transient_before_first_token=True,
         )
         if not final_answer.strip():
+            if streamed_answer_parts or streamed_reasoning_parts:
+                raise RuntimeError(
+                    "Teamwork synthesis returned no final answer after partial output; "
+                    "the visible synthesis was left unchanged."
+                )
             final_answer = successful_drafts[0]["content"]
             emit_synthesis_content(final_answer)
     except InterruptedError:
         raise
     except Exception as e:
-        if streamed_answer_parts:
+        if streamed_answer_parts or streamed_reasoning_parts:
             raise RuntimeError(
                 "Teamwork synthesis stream failed after partial output; "
-                "the partial answer was left visible and was not replaced."
+                "the partial answer or reasoning was left visible and was not replaced."
             ) from e
         logger.error("Synthesis failed: %s, falling back to best individual draft", e)
         final_answer = successful_drafts[0]["content"]

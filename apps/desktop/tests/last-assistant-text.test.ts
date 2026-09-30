@@ -24,6 +24,16 @@ describe('lastAssistantText', () => {
     expect(lastAssistantText(session)).toBe('the answer');
   });
 
+  it('skips trailing persisted error notices and returns the real assistant answer', () => {
+    const session = {
+      messages: [
+        { role: 'assistant', content: 'the answer' },
+        { role: 'assistant', content: 'Goal progress unverified', _error: true }
+      ]
+    };
+    expect(lastAssistantText(session)).toBe('the answer');
+  });
+
   it('returns an empty string when there is no assistant message', () => {
     expect(lastAssistantText({ messages: [{ role: 'user', content: 'hi' }] })).toBe('');
   });

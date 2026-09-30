@@ -157,7 +157,7 @@ def classify_smart_model(model_id: str, provider: str = "") -> Tuple[str, List[s
         tags.append("web")
     if any(k in mid for k in ("pro", "r1", "o1", "o3", "sonnet", "opus", "qwq")):
         tags.append("reasoning")
-    if any(k in mid for k in ("flash-lite", "lite", "nano", "mini", "haiku")) or re.search(r"(?:^|[:_\-])(?:3|4|7|8)b(?:$|[:_\-])", mid):
+    if any(k in mid for k in ("flash", "lite", "nano", "mini", "haiku")) or re.search(r"(?:^|[:_\-])(?:3|4|7|8)b(?:$|[:_\-])", mid):
         tags.append("fast")
 
     # Tier assignment
@@ -173,7 +173,7 @@ def classify_smart_model(model_id: str, provider: str = "") -> Tuple[str, List[s
         return "high", tags
 
     # Low / Eco Tier
-    if any(k in mid for k in ("lite", "nano", "mini", "haiku")) or re.search(r"(?:^|[:_\-])(?:3|4|7|8)b(?:$|[:_\-])", mid):
+    if any(k in mid for k in ("flash", "lite", "nano", "mini", "haiku")) or re.search(r"(?:^|[:_\-])(?:3|4|7|8)b(?:$|[:_\-])", mid):
         return "low", tags
 
     # Medium Tier
@@ -184,7 +184,40 @@ def build_model_wall() -> Dict[str, Any]:
     """Scan connected models and build the 3-tier Model Wall with capability index."""
     from web.api.config import get_available_models
     catalog = get_available_models()
+    groups = list(catalog.get("groups", []))
     seen = set()
+
+    def verified_ollama_cloud_models() -> List[str]:
+        """Exclude Ollama setup hints unless this account has live models."""
+        try:
+            from cli.auth import resolve_api_key_provider_credentials
+
+            credentials = resolve_api_key_provider_credentials("ollama-cloud")
+            if not str(credentials.get("api_key") or "").strip():
+                return []
+
+            from cli.models import fetch_ollama_cloud_models
+
+            return list(dict.fromkeys(
+                str(model_id).strip()
+                for model_id in fetch_ollama_cloud_models()
+                if str(model_id).strip()
+            ))
+        except Exception:
+            logger.warning("Unable to verify Ollama Cloud Smart Track models", exc_info=True)
+            return []
+
+    ollama_cloud_models: Optional[List[str]] = None
+    if not any(
+        (group.get("provider_id") or group.get("provider")) == "ollama-cloud"
+        for group in groups
+    ):
+        # Smart Track scans providers directly, so a fresh credential-scoped
+        # catalog remains discoverable even when the general model picker has
+        # a stale cached group or omits this provider entirely.
+        ollama_cloud_models = verified_ollama_cloud_models()
+        if ollama_cloud_models:
+            groups.append({"provider_id": "ollama-cloud", "provider": "Ollama Cloud", "models": []})
 
     tiers: Dict[str, List[Dict[str, Any]]] = {
         "low": [],
@@ -192,10 +225,36 @@ def build_model_wall() -> Dict[str, Any]:
         "high": [],
     }
 
-    for group in catalog.get("groups", []):
+    for group in groups:
         provider_id = group.get("provider_id") or group.get("provider") or "unknown"
         provider_label = group.get("provider") or provider_id
-        for m in group.get("models", []):
+        if provider_id == "ollama-cloud":
+            if ollama_cloud_models is None:
+                ollama_cloud_models = verified_ollama_cloud_models()
+            if not ollama_cloud_models:
+                # The static provider catalog is useful for setup UI, but it is
+                # not evidence that a credential or account entitlement exists.
+                continue
+            catalog_models = group.get("models", [])
+            by_call_model: Dict[str, Dict[str, Any]] = {}
+            for model in catalog_models:
+                raw_id = str(model.get("id") or "").strip()
+                prefix = f"@{provider_id}:"
+                call_id = raw_id[len(prefix):] if raw_id.startswith(prefix) else raw_id
+                if call_id:
+                    by_call_model[call_id] = model
+            group_models = []
+            for live_id in ollama_cloud_models:
+                cached_model = by_call_model.get(live_id)
+                group_models.append({
+                    **(cached_model or {}),
+                    "id": (cached_model or {}).get("id") or live_id,
+                    "name": (cached_model or {}).get("name") or live_id,
+                })
+        else:
+            group_models = group.get("models", [])
+
+        for m in group_models:
             raw_id = str(m.get("id") or "").strip()
             if not raw_id:
                 continue
@@ -372,7 +431,7 @@ def run_smart_track_turn(
     config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Execute a single-track smart turn with live SSE event emission."""
-    from runtime.auxiliary_client import call_llm, extract_content_or_reasoning
+    from runtime.auxiliary_client import stream_llm
 
     start_total_t = time.time()
     cfg = config or load_smart_track_config()
@@ -404,6 +463,12 @@ def run_smart_track_turn(
 
     preplan_content: Optional[str] = None
     preplan_ms: int = 0
+    preplan_reasoning_parts: List[str] = []
+
+    def emit_preplan_reasoning(text: str) -> None:
+        if text:
+            preplan_reasoning_parts.append(text)
+            put_event("reasoning", {"text": text})
 
     # High Effort: Sequential 2-Phase execution (Pre-planning -> Deep Flagship execution)
     if effort_norm == "high" and cfg.get("preplan_on_high", True):
@@ -429,18 +494,19 @@ def run_smart_track_turn(
                 (m for tier_data in wall.values() for m in tier_data.get("models", []) if m.get("id") == preplan_model),
                 None,
             )
-            preplan_resp = call_llm(
+            preplan_content = stream_llm(
                 provider=_provider_for_wall_model(wall, preplan_model, routed["provider"]),
                 model=(preplan_entry or {}).get("call_model", preplan_model),
                 messages=[
                     {"role": "system", "content": preplan_sys},
                     {"role": "user", "content": prompt},
                 ],
+                on_content=lambda _text: None,
+                on_reasoning=emit_preplan_reasoning,
                 timeout=25.0,
+                cancel_event=cancel_event,
+                retry_transient_before_first_token=False,
             )
-            preplan_content = extract_content_or_reasoning(preplan_resp)
-            if not preplan_content:
-                preplan_content = str(preplan_resp.choices[0].message.content or "").strip()
         except Exception as e:
             logger.warning("Smart track pre-plan step skipped due to error: %s", e)
             preplan_content = None
@@ -474,18 +540,51 @@ def run_smart_track_turn(
     main_messages.append({"role": "user", "content": prompt})
 
     main_t0 = time.time()
-    try:
-        main_resp = call_llm(
+    answer_parts: List[str] = []
+    reasoning_parts: List[str] = list(preplan_reasoning_parts)
+
+    def emit_main_content(text: str) -> None:
+        if text:
+            answer_parts.append(text)
+            put_event("delta", {"content": text})
+
+    def emit_main_reasoning(text: str) -> None:
+        if text:
+            reasoning_parts.append(text)
+            put_event("reasoning", {"text": text})
+
+    def has_visible_output() -> bool:
+        return bool(answer_parts or reasoning_parts)
+
+    def stream_main_response(*, timeout: float) -> str:
+        return stream_llm(
             provider=routed["provider"],
             model=routed.get("call_model", routed["model"]),
             messages=main_messages,
-            timeout=120.0,
+            on_content=emit_main_content,
+            on_reasoning=emit_main_reasoning,
+            timeout=timeout,
+            cancel_event=cancel_event,
+            retry_transient_before_first_token=False,
         )
-        final_answer = extract_content_or_reasoning(main_resp)
-        if not final_answer:
-            final_answer = str(main_resp.choices[0].message.content or "").strip()
+
+    try:
+        # Keep one provider attempt inside the renderer's 180s idle window;
+        # if it fails before output, the announced medium fallback gets its
+        # own bounded attempt below.
+        final_answer = stream_main_response(timeout=160.0)
+    except InterruptedError:
+        raise
     except Exception as e:
-        logger.error("Smart track main call to %s failed: %s", routed["model"], e)
+        # Never switch models once any answer or reasoning has reached the UI:
+        # the fallback could contradict already visible output.
+        if has_visible_output():
+            raise RuntimeError(
+                "Smart Track response stream failed after partial output; "
+                "the partial response was left visible and was not replaced."
+            ) from e
+
+        logger.error("Smart track main call to %s failed before output: %s", routed["model"], e)
         wall = build_model_wall()
         fb_model = wall.get("medium", {}).get("default") or routed["model"]
         fb_entry = next(
@@ -493,25 +592,40 @@ def run_smart_track_turn(
             None,
         )
         fb_provider = _provider_for_wall_model(wall, fb_model, routed["provider"])
-        fb_resp = call_llm(
-            provider=fb_provider,
-            model=(fb_entry or {}).get("call_model", fb_model),
-            messages=main_messages,
-            timeout=60.0,
-        )
-        final_answer = extract_content_or_reasoning(fb_resp)
-        if not final_answer:
-            final_answer = str(fb_resp.choices[0].message.content or "").strip()
+        put_event("smart_track_step", {
+            "stage": "fallback",
+            "message": f"{routed['name']} ist vor der ersten Ausgabe fehlgeschlagen; wechsle zu {fb_model}...",
+            "model": fb_model,
+            "provider": fb_provider,
+        })
         routed["model"] = fb_model
         routed["call_model"] = (fb_entry or {}).get("call_model", fb_model)
         routed["provider"] = fb_provider
         routed["name"] = f"{fb_model} (Fallback)"
+        try:
+            final_answer = stream_main_response(timeout=160.0)
+        except InterruptedError:
+            raise
+        except Exception:
+            if has_visible_output():
+                raise RuntimeError(
+                    "Smart Track fallback stream failed after partial output; "
+                    "the partial response was left visible and was not replaced."
+                )
+            raise
+
+    # Some compatible adapters may return a complete response without invoking
+    # callbacks. Emit it once; streamed callbacks remain the authoritative text
+    # whenever they already delivered content.
+    if not answer_parts and final_answer:
+        emit_main_content(final_answer)
+    final_answer = "".join(answer_parts) if answer_parts else final_answer
+
+    if cancel_event and cancel_event.is_set():
+        raise InterruptedError("Cancelled during smart track response")
 
     main_ms = int((time.time() - main_t0) * 1000)
     total_ms = int((time.time() - start_total_t) * 1000)
-
-    # Stream out the text
-    put_event("delta", {"content": final_answer})
 
     metadata_payload = {
         "effort": effort_norm,
@@ -535,6 +649,8 @@ def run_smart_track_turn(
         "timestamp": int(time.time()),
         "smartTrack": metadata_payload,
     }
+    if reasoning_parts:
+        assistant_entry["reasoning"] = "".join(reasoning_parts)
     session.messages.append(assistant_entry)
     try:
         session.save()

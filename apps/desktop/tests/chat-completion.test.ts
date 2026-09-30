@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from '../src/renderer/chat-completion.js';
-import { applyLiveChatDelta, finishLiveChatMessage, readLiveChatDelta } from '../src/renderer/chat-live-stream.js';
+import { applyLiveChatDelta, applyLiveChatProgress, finishLiveChatMessage, readLiveChatDelta } from '../src/renderer/chat-live-stream.js';
 
 describe('native chat completion signals', () => {
   it('renders each arriving token into the pending assistant message immediately', () => {
@@ -45,6 +45,38 @@ describe('native chat completion signals', () => {
       content: 'Synthesized answer',
       pending: false,
       streaming: true,
+    });
+  });
+
+  it('keeps Teamwork stage status separate from the final assistant answer', () => {
+    const initial = [{ id: 'assistant-1', role: 'assistant' as const, content: 'Working on it...', pending: true }];
+    const withProgress = applyLiveChatProgress(initial, 'Teamwork: 2 models are drafting.');
+    expect(withProgress[0]).toMatchObject({
+      content: 'Working on it...',
+      progress: 'Teamwork: 2 models are drafting.',
+      pending: true,
+    });
+
+    const withAnswer = applyLiveChatDelta(withProgress, 'token', 'Synthesized answer');
+    expect(withAnswer[0]).toMatchObject({
+      content: 'Synthesized answer',
+      progress: undefined,
+      pending: false,
+    });
+    expect(finishLiveChatMessage(withProgress)[0]).toMatchObject({
+      content: 'Working on it...',
+      progress: undefined,
+      pending: false,
+    });
+  });
+
+  it('clears a pending placeholder when a stream terminates before any visible output', () => {
+    const initial = [{ id: 'assistant-1', role: 'assistant' as const, content: 'Working on it...', pending: true }];
+    expect(finishLiveChatMessage(initial)[0]).toMatchObject({
+      content: 'Working on it...',
+      pending: false,
+      streaming: false,
+      progress: undefined,
     });
   });
 

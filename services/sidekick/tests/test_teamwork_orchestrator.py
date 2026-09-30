@@ -766,3 +766,157 @@ def test_ollama_cloud_teamwork_failure_stages_keep_a_visible_answer(failed_stage
         assert "Kritik konnte nicht separat generiert werden" in result["metadata"]["critic"]["review"]
     if failed_stage == "synthesizer":
         assert [data["content"] for event, data in events if event == "delta"] == [expected]
+
+
+@pytest.mark.parametrize("visible_output", ["content", "reasoning"])
+@pytest.mark.parametrize("failure_mode", ["exception", "empty"])
+def test_teamwork_synthesis_never_replaces_visible_partial_output(visible_output, failure_mode):
+    from types import SimpleNamespace
+
+    model_id = "@ollama-cloud:deepseek-v4.1-flash"
+    model = {
+        "id": model_id,
+        "call_model": "deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "provider": "ollama-cloud",
+        "tier": "fast",
+    }
+    plan = {
+        "strategy": "balanced",
+        "planner": None,
+        "workers": [{
+            "model": model_id,
+            "call_model": model["call_model"],
+            "provider": model["provider"],
+            "name": model["name"],
+            "role": "Pragmatiker",
+            "focus": "direct answer",
+        }],
+        "critic": model_id,
+        "critic_provider": model["provider"],
+        "synthesizer": model_id,
+        "synthesizer_provider": model["provider"],
+        "pool": [model],
+    }
+    worker_result = {
+        "model": model_id,
+        "provider": model["provider"],
+        "name": model["name"],
+        "role": "Pragmatiker",
+        "focus": "direct answer",
+        "content": "worker draft fallback",
+        "execution_ms": 1,
+        "error": None,
+        "swapped": False,
+    }
+    events = []
+
+    def fake_call_llm(**_kwargs):
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="critic result"))])
+
+    def fake_stream_llm(*, on_content, on_reasoning=None, **_kwargs):
+        if visible_output == "content":
+            on_content("partial synthesis")
+        else:
+            on_reasoning("partial synthesis reasoning")
+        if failure_mode == "exception":
+            raise RuntimeError("synthesis stream failed")
+        return ""
+
+    with patch("runtime.teamwork_orchestrator.resolve_team_plan", return_value=plan), \
+         patch("runtime.teamwork_orchestrator._invoke_worker", return_value=worker_result), \
+         patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
+         patch("runtime.auxiliary_client.extract_content_or_reasoning", side_effect=lambda r: r.choices[0].message.content), \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=fake_stream_llm):
+        with pytest.raises(RuntimeError, match="after partial output"):
+            run_teamwork_turn(
+                MagicMock(messages=[]),
+                "Answer a small question using Ollama Cloud.",
+                config={"shared_grounding": False, "hot_swap": {"enabled": False, "fallback_quorum_min": 1}},
+                stream_put=lambda event, data: events.append((event, data)),
+            )
+
+    assert not any(event == "teamwork_complete" for event, _data in events)
+    assert [data["content"] for event, data in events if event == "delta"] == (
+        ["partial synthesis"] if visible_output == "content" else []
+    )
+    assert [data["text"] for event, data in events if event == "reasoning"] == (
+        ["partial synthesis reasoning"] if visible_output == "reasoning" else []
+    )
+
+
+@pytest.mark.parametrize("visible_output", ["content", "reasoning"])
+@pytest.mark.parametrize("failure_mode", ["exception", "empty"])
+def test_teamwork_synthesis_never_replaces_visible_partial_output(visible_output, failure_mode):
+    from types import SimpleNamespace
+
+    model_id = "@ollama-cloud:deepseek-v4.1-flash"
+    model = {
+        "id": model_id,
+        "call_model": "deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "provider": "ollama-cloud",
+        "tier": "fast",
+    }
+    plan = {
+        "strategy": "balanced",
+        "planner": None,
+        "workers": [{
+            "model": model_id,
+            "call_model": model["call_model"],
+            "provider": model["provider"],
+            "name": model["name"],
+            "role": "Pragmatiker",
+            "focus": "direct answer",
+        }],
+        "critic": model_id,
+        "critic_provider": model["provider"],
+        "synthesizer": model_id,
+        "synthesizer_provider": model["provider"],
+        "pool": [model],
+    }
+    worker_result = {
+        "model": model_id,
+        "provider": model["provider"],
+        "name": model["name"],
+        "role": "Pragmatiker",
+        "focus": "direct answer",
+        "content": "worker draft fallback",
+        "execution_ms": 1,
+        "error": None,
+        "swapped": False,
+    }
+    events = []
+
+    def fake_call_llm(**_kwargs):
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="critic result"))])
+
+    def fake_stream_llm(*, on_content, on_reasoning=None, **_kwargs):
+        if visible_output == "content":
+            on_content("partial synthesis")
+        else:
+            on_reasoning("partial synthesis reasoning")
+        if failure_mode == "exception":
+            raise RuntimeError("synthesis stream failed")
+        return ""
+
+    with patch("runtime.teamwork_orchestrator.resolve_team_plan", return_value=plan), \
+         patch("runtime.teamwork_orchestrator._invoke_worker", return_value=worker_result), \
+         patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
+         patch("runtime.auxiliary_client.extract_content_or_reasoning", side_effect=lambda r: r.choices[0].message.content), \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=fake_stream_llm):
+        with pytest.raises(RuntimeError, match="after partial output"):
+            run_teamwork_turn(
+                MagicMock(messages=[]),
+                "Answer a small question using Ollama Cloud.",
+                config={"shared_grounding": False, "hot_swap": {"enabled": False, "fallback_quorum_min": 1}},
+                stream_put=lambda event, data: events.append((event, data)),
+            )
+
+    assert not any(event == "teamwork_complete" for event, _data in events)
+    assert [data["content"] for event, data in events if event == "delta"] == (
+        ["partial synthesis"] if visible_output == "content" else []
+    )
+    assert [data["text"] for event, data in events if event == "reasoning"] == (
+        ["partial synthesis reasoning"] if visible_output == "reasoning" else []
+    )

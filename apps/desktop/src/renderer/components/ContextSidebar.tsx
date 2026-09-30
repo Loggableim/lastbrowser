@@ -33,6 +33,7 @@ export type SidekickMessage = {
   content: string;
   reasoning?: string;
   pending?: boolean;
+  progress?: string;
 };
 
 export const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = {

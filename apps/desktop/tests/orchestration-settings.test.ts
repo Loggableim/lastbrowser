@@ -7,11 +7,11 @@ function readRendererFile(fileName: string): string {
 }
 
 describe('Teamwork and Smart Track settings contracts', () => {
-  it('routes orchestration SSE progress into the pending chat transcript', () => {
+  it('routes orchestration SSE progress into separate pending status state', () => {
     const app = readRendererFile('App.tsx');
     expect(app).toContain('describeOrchestrationProgress(event.event, event.data)');
-    expect(app).toContain('setChatMessages(updatePending);');
-    expect(app).toContain('setMessages(updatePending);');
+    expect(app).toContain('applyLiveChatProgress(current, orchestrationProgress.message)');
+    expect(app).not.toContain('content: orchestrationProgress.message');
   });
 
   it('uses saved enabled state to expose only enabled orchestration choices', () => {

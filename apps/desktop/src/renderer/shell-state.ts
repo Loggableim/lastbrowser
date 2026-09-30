@@ -68,6 +68,7 @@ export type DesktopChatMessage = {
   reasoning?: string;
   _turnTps?: number;
   pending?: boolean;
+  progress?: string;
   teamwork?: unknown;
   smartTrack?: unknown;
 };

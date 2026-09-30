@@ -13340,6 +13340,23 @@ html.theme-light .browser-start-search input {
   gap: 10px;
 }
 
+.copilot-orchestration-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent, #6366f1) 28%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent, #6366f1) 12%, transparent);
+  color: var(--accent, #6366f1);
+  font-size: 0.78rem;
+}
+
+.copilot-orchestration-progress svg {
+  flex: 0 0 auto;
+}
+
 .copilot-message-row {
   display: flex;
   gap: 8px;

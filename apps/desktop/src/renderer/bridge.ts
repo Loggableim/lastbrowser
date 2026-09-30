@@ -171,11 +171,12 @@ export function buildSidekickPrompt(action: SidekickActionId, context: BrowserCo
  * has no assistant message yet.
  */
 export function lastAssistantText(session: unknown): string {
-  const record = (session || {}) as { messages?: Array<{ role?: string; content?: string }> };
+  const record = (session || {}) as { messages?: Array<{ role?: string; content?: string; _error?: boolean }> };
   const messages = Array.isArray(record.messages) ? record.messages : [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (message && message.role === 'assistant' && typeof message.content === 'string' && message.content.trim()) {
+    if (message && message.role === 'assistant' && message._error !== true &&
+        typeof message.content === 'string' && message.content.trim()) {
       return message.content.trim();
     }
   }

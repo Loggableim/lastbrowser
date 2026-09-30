@@ -165,6 +165,45 @@ def test_goal_hook_surfaces_unverified_evaluation_failure_and_does_not_continue(
     session.save.assert_called_once()
 
 
+def test_goal_hook_surfaces_goal_state_read_failure_and_does_not_continue(monkeypatch):
+    from web.api import streaming
+
+    session = SimpleNamespace(
+        profile="profile-a",
+        workspace_slug="research",
+        messages=[{"role": "assistant", "content": "The synthesis answer."}],
+        save=Mock(),
+    )
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: "profile-home")
+    monkeypatch.setattr(
+        "web.api.goals.has_active_goal",
+        Mock(side_effect=OSError("goal database is unavailable")),
+    )
+    evaluate = Mock(side_effect=AssertionError("the judge must not run when goal state cannot be read"))
+    monkeypatch.setattr("web.api.goals.evaluate_goal_after_turn", evaluate)
+    events = []
+
+    decision = streaming._evaluate_goal_after_stream_turn(
+        session,
+        "goal-session",
+        True,
+        lambda name, payload: events.append((name, payload)),
+    )
+
+    assert decision["verdict"] == "error"
+    assert decision["should_continue"] is False
+    evaluate.assert_not_called()
+    assert [name for name, _payload in events] == ["goal"]
+    assert events[-1][1]["state"] == "error"
+    assert events[-1][1]["error_code"] == "goal_evaluation_failed"
+    assert events[-1][1]["retryable"] is True
+    warning = session.messages[-1]
+    assert warning["_error"] is True
+    assert warning["error_code"] == "goal_evaluation_failed"
+    assert "Check /goal status before retrying" in warning["content"]
+    session.save.assert_called_once()
+
+
 def test_goal_evaluation_warning_stays_visible_but_is_excluded_from_model_history():
     from web.api.streaming import _session_context_messages
 
@@ -180,6 +219,48 @@ def test_goal_evaluation_warning_stays_visible_but_is_excluded_from_model_histor
     assert warning in session.messages
     assert _session_context_messages(session) == [answer]
     assert _session_context_messages(SimpleNamespace(context_messages=[answer, warning], messages=[])) == [answer]
+
+
+def test_persisted_goal_error_does_not_shift_reasoning_metadata_restore_positions():
+    from web.api.streaming import _restore_reasoning_metadata
+
+    previous_messages = [
+        {"role": "user", "content": "first question"},
+        {
+            "role": "assistant",
+            "content": "first answer",
+            "reasoning": "first reasoning",
+            "timestamp": 100,
+        },
+        {
+            "role": "assistant",
+            "content": "Goal progress could not be verified.",
+            "_error": True,
+            "error_code": "goal_evaluation_failed",
+        },
+        {"role": "user", "content": "second question"},
+        {
+            "role": "assistant",
+            "content": "second answer",
+            "reasoning": "second reasoning",
+            "timestamp": 200,
+        },
+    ]
+    # This is the API-safe conversation returned by the model. The persisted
+    # error notice is intentionally absent, just as it is from provider input.
+    updated_messages = [
+        {"role": "user", "content": "first question"},
+        {"role": "assistant", "content": "first answer"},
+        {"role": "user", "content": "second question"},
+        {"role": "assistant", "content": "second answer"},
+    ]
+
+    restored = _restore_reasoning_metadata(previous_messages, updated_messages)
+
+    assert restored[1]["reasoning"] == "first reasoning"
+    assert restored[1]["timestamp"] == 100
+    assert restored[3]["reasoning"] == "second reasoning"
+    assert restored[3]["timestamp"] == 200
 
 
 @pytest.mark.parametrize(

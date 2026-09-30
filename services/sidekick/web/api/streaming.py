@@ -1777,6 +1777,12 @@ def _api_safe_message_positions(messages):
     for idx, msg in enumerate(messages):
         if not isinstance(msg, dict):
             continue
+        # Keep the position map aligned with _sanitize_messages_for_api().
+        # Persisted error notices remain visible in the transcript but are not
+        # sent to the model, so they must not shift reasoning metadata onto a
+        # later message when the model returns its sanitized history.
+        if msg.get('_error'):
+            continue
         role = msg.get('role')
         if role == 'tool':
             tid = msg.get('tool_call_id') or ''
@@ -2355,6 +2361,36 @@ def _clear_orchestration_pending_state(session, session_id: str, stream_id: str)
     return True
 
 
+def _report_goal_progress_unverified(session, session_id, put):
+    """Keep goal-status failures visible without feeding them back to the model."""
+    message = (
+        "Persistent goal progress could not be verified or saved. "
+        "No automatic continuation was started. Check /goal status before retrying."
+    )
+    messages = getattr(session, "messages", None)
+    if isinstance(messages, list):
+        messages.append({
+            "role": "assistant",
+            "content": f"**Goal progress unverified:** {message}",
+            "timestamp": int(time.time()),
+            "_error": True,
+            "error_code": "goal_evaluation_failed",
+            "retryable": True,
+        })
+        try:
+            session.save()
+        except Exception:
+            logger.exception("Could not persist goal-evaluation warning for %s", session_id)
+    put("goal", {
+        "session_id": session_id,
+        "state": "error",
+        "error_code": "goal_evaluation_failed",
+        "retryable": True,
+        "message": message,
+    })
+    return message
+
+
 def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
     """Run the persistent-goal judge and publish the usual SSE continuation events.
 
@@ -2418,34 +2454,7 @@ def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
             space_slug=space_slug,
         ) or {}
         if str(decision.get("verdict") or "").strip().lower() == "error":
-            message = (
-                "Persistent goal progress could not be verified or saved. "
-                "No automatic continuation was started. Check /goal status before retrying."
-            )
-            # Keep the warning in the persisted transcript, but mark it as an
-            # error so it is excluded from future model context. The normal
-            # turn completion then returns it to the renderer with the answer.
-            messages = getattr(session, "messages", None)
-            if isinstance(messages, list):
-                messages.append({
-                    "role": "assistant",
-                    "content": f"**Goal progress unverified:** {message}",
-                    "timestamp": int(time.time()),
-                    "_error": True,
-                    "error_code": "goal_evaluation_failed",
-                    "retryable": True,
-                })
-                try:
-                    session.save()
-                except Exception:
-                    logger.exception("Could not persist goal-evaluation warning for %s", session_id)
-            put("goal", {
-                "session_id": session_id,
-                "state": "error",
-                "error_code": "goal_evaluation_failed",
-                "retryable": True,
-                "message": message,
-            })
+            _report_goal_progress_unverified(session, session_id, put)
             return decision
         message = str(decision.get("message") or "").strip()
         if message:
@@ -2477,8 +2486,15 @@ def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
                     })
         return decision
     except Exception as exc:
-        logger.debug("Goal continuation hook failed for session %s: %s", session_id, exc)
-        return {}
+        logger.exception("Goal continuation hook failed for session %s: %s", session_id, exc)
+        _report_goal_progress_unverified(session, session_id, put)
+        return {
+            "status": None,
+            "should_continue": False,
+            "continuation_prompt": None,
+            "verdict": "error",
+            "reason": "goal continuation state could not be verified",
+        }
 
 
 def _run_agent_streaming(

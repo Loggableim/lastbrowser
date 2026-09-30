@@ -59,7 +59,7 @@ import {
 import { hideWebviewScrollbars } from './browser-view.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
-import { applyLiveChatDelta, finishLiveChatMessage, readLiveChatDelta } from './chat-live-stream.js';
+import { applyLiveChatDelta, applyLiveChatProgress, finishLiveChatMessage, readLiveChatDelta } from './chat-live-stream.js';
 import { playChatCompletionSound } from './notification-sound.js';
 import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
@@ -2338,14 +2338,9 @@ function AppContent(): JSX.Element {
       }
       const orchestrationProgress = describeOrchestrationProgress(event.event, event.data);
       if (orchestrationProgress) {
-        const updatePending = <T extends { role?: string; pending?: boolean; content?: string },>(items: T[]): T[] => items.map((item) => (
-          item.role === 'assistant' && item.pending
-            ? { ...item, content: orchestrationProgress.message }
-            : item
-        ));
         if (isOwningContextCurrent()) {
-          setChatMessages(updatePending);
-          setMessages(updatePending);
+          setChatMessages((current) => applyLiveChatProgress(current, orchestrationProgress.message));
+          setMessages((current) => applyLiveChatProgress(current, orchestrationProgress.message));
         }
         return;
       }
@@ -2558,9 +2553,14 @@ function AppContent(): JSX.Element {
       const finished = await loadActiveSession(response.sessionId, { loadDraft: false, showLoading: false });
       const answer = lastAssistantText(finished);
       if (turnContextStillCurrent) {
+        setChatMessages((current) => current.map((item) => (
+          item.pending
+            ? { ...item, content: answer || 'Sidekick finished.', pending: false, progress: undefined }
+            : item
+        )));
         setMessages((current) => current.map((item) => (
           item.pending
-            ? { ...item, content: answer || 'Sidekick finished.', pending: false }
+            ? { ...item, content: answer || 'Sidekick finished.', pending: false, progress: undefined }
             : item
         )));
         if (streamResult.goalError) setChatError(streamResult.goalError);
@@ -2603,10 +2603,10 @@ function AppContent(): JSX.Element {
       if (activeTurnIsCurrent()) {
         setChatError(messageText);
         setChatMessages((current) => current.map((item) => (
-          item.pending ? { ...item, content: `Sidekick could not respond: ${messageText}`, pending: false } : item
+          item.pending ? { ...item, content: `Sidekick could not respond: ${messageText}`, pending: false, progress: undefined } : item
         )));
         setMessages((current) => current.map((item) => (
-          item.pending ? { ...item, content: `Sidekick could not respond: ${messageText}`, pending: false } : item
+          item.pending ? { ...item, content: `Sidekick could not respond: ${messageText}`, pending: false, progress: undefined } : item
         )));
         setChatRunState('error');
       }

@@ -9,6 +9,7 @@ import {
   FileText,
   Filter,
   History,
+  Loader2,
   Minus,
   Paperclip,
   Plus,
@@ -920,19 +921,25 @@ export function CopilotSplitView({
 
                   <div className={`copilot-bubble ${isUser ? 'user' : 'assistant'}`}>
                     <div className="copilot-bubble-body">
+                      {isAssistant && msg.pending && msg.progress && (
+                        <div role="status" className="copilot-orchestration-progress">
+                          <Loader2 size={13} className="spin" aria-hidden="true" />
+                          <span>{msg.progress}</span>
+                        </div>
+                      )}
                       {isAssistant && Boolean(msg.teamwork) && (
                         <TeamworkProcessCard metadata={msg.teamwork as TeamworkMetadata} />
                       )}
                       {isAssistant && Boolean(msg.smartTrack) && (
                         <SmartTrackProcessCard metadata={msg.smartTrack} />
                       )}
-                      {isAssistant && msg.pending && activeModelItem.id === 'teamwork' && (
+                      {isAssistant && !msg.progress && msg.pending && activeModelItem.id === 'teamwork' && (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', padding: '4px 10px', borderRadius: '6px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent, #6366f1)', fontSize: '0.78rem', marginBottom: '0.5rem', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
                           <Users size={13} className="spin" />
                           <span>Teamwork aktiv: Subagenten debattieren & prüfen...</span>
                         </div>
                       )}
-                      {isAssistant && msg.pending && activeModelItem.id.startsWith('smart-track') && (
+                      {isAssistant && !msg.progress && msg.pending && activeModelItem.id.startsWith('smart-track') && (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', padding: '4px 10px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', fontSize: '0.78rem', marginBottom: '0.5rem', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
                           <Target size={13} className="spin" />
                           <span>Smart Track aktiv: Kuriertes Modell wird gestartet...</span>

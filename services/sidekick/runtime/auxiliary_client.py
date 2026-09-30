@@ -38,6 +38,7 @@ Payment / credit exhaustion fallback:
   their OpenRouter balance but has Codex OAuth or another provider available.
 """
 
+import hashlib
 import inspect
 import json
 import logging
@@ -3316,7 +3317,7 @@ def auxiliary_max_tokens_param(value: int) -> dict:
 # Every auxiliary LLM consumer should use these instead of manually
 # constructing clients and calling .chat.completions.create().
 
-# Client cache: (provider, async_mode, base_url, api_key, api_mode, runtime_key) -> (client, default_model, loop)
+# Client cache: (provider, async_mode, base_url, api_key_fingerprint, api_mode, runtime_key) -> (client, default_model, loop)
 # NOTE: loop identity is NOT part of the key.  On async cache hits we check
 # whether the cached loop is the *current* loop; if not, the stale entry is
 # replaced in-place.  This bounds cache growth to one entry per unique
@@ -3338,9 +3339,23 @@ def _client_cache_key(
     is_vision: bool = False,
 ) -> tuple:
     runtime = _normalize_main_runtime(main_runtime)
-    runtime_key = tuple(runtime.get(field, "") for field in _MAIN_RUNTIME_FIELDS) if provider == "auto" else ()
+    runtime_key = (
+        tuple(
+            hashlib.sha256(runtime[field].encode("utf-8")).hexdigest()
+            if field == "api_key" and runtime.get(field)
+            else runtime.get(field, "")
+            for field in _MAIN_RUNTIME_FIELDS
+        )
+        if provider == "auto"
+        else ()
+    )
     pool_hint = _pool_cache_hint(provider, main_runtime=main_runtime)
-    return (provider, async_mode, base_url or "", api_key or "", api_mode or "", runtime_key, is_vision, pool_hint)
+    # Credentials must distinguish clients, but should never be retained in a
+    # process-global cache key where diagnostics or accidental repr() calls
+    # could expose them. API keys are high-entropy secrets, so a one-way digest
+    # preserves cache isolation without storing the raw credential.
+    api_key_fingerprint = hashlib.sha256(api_key.encode("utf-8")).hexdigest() if api_key else ""
+    return (provider, async_mode, base_url or "", api_key_fingerprint, api_mode or "", runtime_key, is_vision, pool_hint)
 
 
 def _store_cached_client(cache_key: tuple, client: Any, default_model: Optional[str], *, bound_loop: Any = None) -> None:

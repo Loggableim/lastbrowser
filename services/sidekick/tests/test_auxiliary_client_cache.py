@@ -3,7 +3,37 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from unittest.mock import AsyncMock, Mock
+
+
+def test_provider_cache_keys_fingerprint_credentials_without_retaining_them():
+    from runtime import auxiliary_client
+
+    credential = "ollama-cloud-cache-test-credential"
+    key = auxiliary_client._client_cache_key(
+        "ollama-cloud",
+        async_mode=False,
+        base_url="https://ollama.com/v1",
+        api_key=credential,
+    )
+    other_key = auxiliary_client._client_cache_key(
+        "ollama-cloud",
+        async_mode=False,
+        base_url="https://ollama.com/v1",
+        api_key=credential + "-rotated",
+    )
+    auto_key = auxiliary_client._client_cache_key(
+        "auto",
+        async_mode=False,
+        main_runtime={"provider": "ollama-cloud", "api_key": credential},
+    )
+
+    assert credential not in repr(key)
+    assert credential not in repr(auto_key)
+    assert key[3] == hashlib.sha256(credential.encode("utf-8")).hexdigest()
+    assert auto_key[5][3] == hashlib.sha256(credential.encode("utf-8")).hexdigest()
+    assert key != other_key
 
 
 def test_provider_eviction_closes_sync_and_async_clients_without_awaiting():

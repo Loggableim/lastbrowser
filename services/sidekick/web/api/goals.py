@@ -61,7 +61,7 @@ _DB_CACHE: dict[str, Any] = {}
 _CONTINUATION_LOCK = threading.RLock()
 _PENDING_CONTINUATIONS: dict[tuple[str, str, str], str] = {}
 _CANCELLED_CONTINUATIONS: dict[tuple[str, str, str], str] = {}
-_GOAL_RUN_MARKER_RE = re.compile(r"\n\n<!-- lastbrowser-goal-run:([0-9a-f]{32}) -->$")
+_GOAL_RUN_MARKER_RE = re.compile(r"\n\n<!-- lastbrowser-goal-run:([0-9a-f]{32}:\d+) -->$")
 
 
 def _is_internal_goal_continuation(text: str) -> bool:
@@ -247,7 +247,7 @@ def _profile_db(profile_home: str | Path, *, space_slug: str | None = None):
     # resolved, never fall through to a profile/global store: that would make
     # a stale Space ID silently read or overwrite another scope's goal.
     if space_slug:
-        sp = _space_goals_path(space_slug)
+        sp = _space_goals_path(space_slug, profile_home=profile_home)
         if sp is None:
             return None
         key = str(sp)
@@ -283,9 +283,51 @@ def _profile_db(profile_home: str | Path, *, space_slug: str | None = None):
     return db
 
 
-def _space_goals_path(space_slug: str | None = None) -> Path | None:
-    """Return path to space-scoped goals.db, or None if not in a space context."""
+def _space_goals_path(
+    space_slug: str | None = None,
+    *,
+    profile_home: str | Path | None = None,
+) -> Path | None:
+    """Return the goals DB for this Space inside the owning profile's Space root.
+
+    Stream workers are plain threads and do not inherit the request's profile
+    ContextVar. Resolve the Space while temporarily setting the profile that
+    owns this session, rather than trusting whichever profile is globally
+    active when a continuation is evaluated.
+    """
+    profile_module = None
+    profile_token = None
     try:
+        if profile_home is not None:
+            from web.api import profiles as profile_module
+
+            home = Path(profile_home).expanduser().resolve()
+            # Resolve from the current launcher environment as well as the
+            # module snapshot. Test runners and embedded Sidekick launchers can
+            # set SIDEKICK_HOME after profiles.py was imported.
+            try:
+                base_home = Path(profile_module._resolve_base_sidekick_home()).expanduser().resolve()
+            except Exception:
+                base_home = Path(profile_module._DEFAULT_SIDEKICK_HOME).expanduser().resolve()
+            module_base_home = Path(profile_module._DEFAULT_SIDEKICK_HOME).expanduser().resolve()
+            known_base_homes = {base_home, module_base_home}
+            if home in known_base_homes or (
+                home.name == "default" and home.parent.name == "profiles"
+            ):
+                profile_name = "default"
+            elif home.parent.name == "profiles" and home.parent.parent in known_base_homes:
+                if home.name == "default":
+                    profile_name = "default"
+                elif profile_module._PROFILE_ID_RE.fullmatch(home.name):
+                    profile_name = home.name
+                else:
+                    return None
+            else:
+                # Do not silently resolve a Space from the active profile when
+                # the session's explicit profile home cannot be identified.
+                return None
+            profile_token = profile_module.set_request_profile(profile_name)
+
         from web.api.space_engine import DEFAULT_SPACE_SLUG, get_workspace, resolve_active_space
 
         if space_slug:
@@ -300,6 +342,12 @@ def _space_goals_path(space_slug: str | None = None) -> Path | None:
         return p
     except Exception:
         return None
+    finally:
+        if profile_module is not None and profile_token is not None:
+            try:
+                profile_module._request_profile.reset(profile_token)
+            except Exception:
+                logger.debug("Could not restore profile context after resolving goal Space")
 
 
 class _ProfileGoalManager:
@@ -554,7 +602,8 @@ class _ProfileGoalManager:
         prompt = CONTINUATION_PROMPT_TEMPLATE.format(goal=self._state.goal)
         run_id = self._run_id()
         if run_id:
-            prompt = f"{prompt}\n\n<!-- lastbrowser-goal-run:{run_id} -->"
+            turn = int(self._state.turns_used or 0)
+            prompt = f"{prompt}\n\n<!-- lastbrowser-goal-run:{run_id}:{turn} -->"
         return prompt
 
     def consume_continuation(self) -> bool:

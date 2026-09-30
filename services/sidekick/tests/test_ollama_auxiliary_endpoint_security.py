@@ -4,6 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
+# Import the runtime resolver before the tests monkeypatch cli.auth. The
+# resolver binds several auth helpers at import time, and the auxiliary-client
+# test below lazily imports it while a test-only credential function is active.
+from cli import runtime_provider as _runtime_provider  # noqa: F401
+
 
 @pytest.mark.parametrize(
     "base_url",
@@ -95,4 +100,3 @@ def test_custom_local_ollama_endpoint_remains_supported(monkeypatch):
 
     assert resolved_client is client
     assert model == "qwen3:4b"
-

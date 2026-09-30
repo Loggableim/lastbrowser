@@ -424,7 +424,10 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
             if match:
                 selected_workers.append(match)
         if selected_workers:
-            target_workers = min(len(selected_workers), max_sub)
+            # A manually selected pool defines eligible models, not a request
+            # to run every selected model at once. Preserve complexity-based
+            # auto-scaling while honoring the configured hard cap.
+            target_workers = min(len(selected_workers), target_workers, max_sub)
             selected_workers = selected_workers[:target_workers]
 
     if not selected_workers:

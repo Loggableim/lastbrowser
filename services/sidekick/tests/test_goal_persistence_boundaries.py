@@ -118,8 +118,11 @@ def test_browser_goal_context_uses_the_owning_session_space(monkeypatch, tmp_pat
     from types import SimpleNamespace
     from web.api import goals
     from web.api.browser_runtime import _active_goal_context
+    from web.api import profiles
 
     goals._DB_CACHE.clear()
+    profile_base = tmp_path / "profile-base"
+    monkeypatch.setattr(profiles, "_DEFAULT_SIDEKICK_HOME", profile_base)
     alpha_root = tmp_path / "home" / "spaces" / "alpha"
     beta_root = tmp_path / "home" / "spaces" / "beta"
     alpha_root.mkdir(parents=True)
@@ -142,7 +145,7 @@ def test_browser_goal_context_uses_the_owning_session_space(monkeypatch, tmp_pat
     )
     monkeypatch.setattr(
         "web.api.profiles.get_profile_home",
-        lambda profile: tmp_path / "profiles" / profile,
+        lambda profile: profile_base / "profiles" / profile,
     )
 
     active = {
@@ -322,7 +325,7 @@ def test_profile_goal_without_space_does_not_follow_active_space(monkeypatch, tm
     active_space_root.mkdir(parents=True)
     active_space_lookups = []
 
-    def active_space_path(space_slug=None):
+    def active_space_path(space_slug=None, *, profile_home=None):
         active_space_lookups.append(space_slug)
         return active_space_root / "goals.db"
 

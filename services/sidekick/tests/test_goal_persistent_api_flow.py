@@ -29,7 +29,7 @@ def test_goal_scope_survives_stream_resume_clear_and_cache_reload(monkeypatch, t
         "web.api.space_engine.get_workspace",
         lambda slug: Workspace({"alpha": alpha_root, "beta": beta_root}[slug]),
     )
-    monkeypatch.setattr(goals, "_space_goals_path", lambda slug: {
+    monkeypatch.setattr(goals, "_space_goals_path", lambda slug, *, profile_home=None: {
         "alpha": alpha_root / "goals.db",
         "beta": beta_root / "goals.db",
     }.get(slug))

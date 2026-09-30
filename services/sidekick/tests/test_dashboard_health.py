@@ -1417,10 +1417,12 @@ def test_session_detail_returns_retryable_error_when_goal_state_is_unavailable(m
         headers={web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN},
     )
 
-    assert response.status_code == 503
-    assert response.json()["error"] == "goal_state_unavailable"
-    assert response.json()["retryable"] is True
-    assert "session" not in response.json()
+    assert response.status_code == 200
+    payload = response.json()["session"]
+    assert payload["session_id"] == "goal-error-session"
+    assert "goal" not in payload
+    assert payload["goal_state_error"]["error"] == "goal_state_unavailable"
+    assert payload["goal_state_error"]["retryable"] is True
 
 
 def test_goal_command_payload_uses_space_goal_store(monkeypatch, tmp_path):

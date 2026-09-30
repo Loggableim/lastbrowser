@@ -523,11 +523,49 @@ def test_web_server_session_endpoints(monkeypatch, tmp_path):
     assert patched_response.status_code == 200
     assert patched_response.json()["session"]["title"] == "Renamed Session"
 
+    # Session deletion must remove persistent state from the session's own
+    # profile/Space store, even when the caller does not issue /goal clear.
+    from web.api.models import get_session as load_web_session
+    from web.api.profiles import get_profile_home
+    from web.api.goals import (
+        CONTINUATION_PROMPT_TEMPLATE,
+        goal_command_payload,
+        goal_state_for_session,
+        queue_goal_continuation,
+        consume_goal_continuation,
+    )
+
+    web_session = load_web_session(session_id)
+    profile_home = get_profile_home(getattr(web_session, "profile", None))
+    space_slug = (
+        getattr(web_session, "workspace_slug", None)
+        or getattr(web_session, "space_slug", None)
+        or getattr(web_session, "space", None)
+    )
+    set_goal = goal_command_payload(
+        session_id, "Delete this goal with the session", profile_home=profile_home,
+        space_slug=space_slug,
+    )
+    assert set_goal["ok"] is True
+    assert goal_state_for_session(
+        session_id, profile_home=profile_home, space_slug=space_slug,
+    ) is not None
+    continuation = CONTINUATION_PROMPT_TEMPLATE.format(goal="Delete this goal with the session")
+    assert queue_goal_continuation(
+        session_id, continuation, profile_home=profile_home, space_slug=space_slug,
+    ) is True
+
     deleted_response = client.post(
         "/api/session/delete", json={"session_id": session_id}, headers=headers
     )
     assert deleted_response.status_code == 200
     assert deleted_response.json()["ok"] is True
+    assert goal_state_for_session(
+        session_id, profile_home=profile_home, space_slug=space_slug,
+    ) is None
+    assert consume_goal_continuation(
+        session_id, continuation, profile_home=profile_home, space_slug=space_slug,
+    ) == "cancelled"
 
 
 def test_web_server_chat_endpoint_appends_assistant_reply(monkeypatch, tmp_path):

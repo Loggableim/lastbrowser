@@ -42,7 +42,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -715,8 +715,8 @@ def onboard_account(access_token: str, *, tier_id: str = "free-tier") -> str:
 
 @dataclass
 class _OAuthCallbackState:
-    expected_state: str
-    ready: threading.Event
+    expected_state: str = ""
+    ready: threading.Event = field(default_factory=threading.Event)
     code: Optional[str] = None
     error: Optional[str] = None
 
@@ -960,9 +960,12 @@ def start_antigravity_oauth_flow(
 def get_antigravity_auth_status() -> Dict[str, Any]:
     """Report connected accounts without exposing any secrets."""
     accounts = list_connected_accounts()
+    logged_in = len(accounts) > 0
     return {
         "provider_available": True,
         "connected_accounts": len(accounts),
         "accounts": accounts,
         "round_robin": True,
+        "logged_in": logged_in,
+        "key_source": "oauth" if logged_in else "none",
     }

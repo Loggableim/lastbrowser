@@ -56,7 +56,7 @@ describe('desktop runtime packaging', () => {
   });
 
   it('runs browser smoke against the local source Electron and requires an explicit opt-in for installed builds', () => {
-    const smokeScript = readFileSync(path.resolve(process.cwd(), 'scripts/smoke-browser.mjs'), 'utf8');
+    const smokeScript = readFileSync(path.resolve(process.cwd(), 'scripts/smoke-browser.mjs'), 'utf8').replace(/\r\n/g, '\n');
     expect(smokeScript).toContain("'node_modules',\n  'electron',\n  'dist'");
     expect(smokeScript).toContain('LASTBROWSER_SMOKE_ALLOW_INSTALLED');
     expect(smokeScript).toContain('LASTBROWSER_DOWNLOADS_DIR: SMOKE_DOWNLOAD_DIR');

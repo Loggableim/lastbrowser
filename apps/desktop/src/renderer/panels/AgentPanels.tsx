@@ -18,7 +18,7 @@ import {
 import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
-import { normalizeSkillCategories, normalizeSkillCategory } from './skill-categories.js';
+import { extractLinkedFiles, normalizeSkillCategories, normalizeSkillCategory } from './skill-categories.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -58,9 +58,7 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
     return matchesCategory && haystack.includes(query.toLowerCase());
   });
   const selectedSkill = filtered.find((skill) => idOf(skill) === selectedName || text(skill.name) === selectedName) || filtered[0] || null;
-  const linkedFiles = isRecord(selectedSkill?.linked_files)
-    ? Object.keys(selectedSkill.linked_files)
-    : arrayFrom(isRecord(selectedSkill?.linked_files) ? selectedSkill.linked_files : null, ['files']).map(idOf);
+  const linkedFiles = extractLinkedFiles(selectedSkill?.linked_files);
 
   useEffect(() => {
     setSection(activeContextItem || 'Library');

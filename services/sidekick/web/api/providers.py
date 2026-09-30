@@ -1746,7 +1746,7 @@ def set_provider_key(provider_id: str, api_key: str | None) -> dict[str, Any]:
 
 
 def _invalidate_ollama_cloud_catalog_if_needed(provider_id: str) -> None:
-    """Drop Ollama's live model snapshot when its own credential changes."""
+    """Drop Ollama Cloud model and client caches when its key changes."""
     if provider_id != "ollama-cloud":
         return
     try:
@@ -1757,6 +1757,15 @@ def _invalidate_ollama_cloud_catalog_if_needed(provider_id: str) -> None:
         invalidate_ollama_cloud_models_cache()
     except Exception:
         logger.debug("Failed to invalidate Ollama Cloud model cache", exc_info=True)
+    try:
+        # Auxiliary clients are cached by provider and explicit overrides. A
+        # normal provider call passes no explicit key, so rotating the stored
+        # key otherwise leaves the old Authorization header alive in-process.
+        from runtime.auxiliary_client import _evict_cached_clients
+
+        _evict_cached_clients("ollama-cloud")
+    except Exception:
+        logger.debug("Failed to invalidate Ollama Cloud client cache", exc_info=True)
 
 
 def normalize_provider_model_allowlist(provider_id: str, models: Any) -> list[str]:

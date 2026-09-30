@@ -887,3 +887,98 @@ def test_generic_google_resource_exhausted_is_not_mislabeled_as_daily_quota():
     assert error.code == "code_assist_rate_limited"
     assert "does not confirm" in str(error)
     assert "Check /gquota" not in str(error)
+
+
+def test_oauth_callback_state_supports_zero_argument_and_parameterized_construction():
+    """_OAuthCallbackState must accept 0 arguments as well as explicit arguments."""
+    state_empty = ag._OAuthCallbackState()
+    assert state_empty.expected_state == ""
+    assert isinstance(state_empty.ready, threading.Event)
+    assert state_empty.code is None
+    assert state_empty.error is None
+
+    ev = threading.Event()
+    state_full = ag._OAuthCallbackState("state-1", ev, "code-1", "error-1")
+    assert state_full.expected_state == "state-1"
+    assert state_full.ready is ev
+    assert state_full.code == "code-1"
+    assert state_full.error == "error-1"
+
+
+def test_antigravity_auth_status_reports_logged_in_and_oauth_key_source(pool_env):
+    """get_antigravity_auth_status must report logged_in and oauth key_source."""
+    from cli import auth as auth_mod
+
+    # Initially empty pool
+    status_empty = ag.get_antigravity_auth_status()
+    assert status_empty["provider_available"] is True
+    assert status_empty["connected_accounts"] == 0
+    assert status_empty["logged_in"] is False
+    assert status_empty["key_source"] == "none"
+
+    cli_status_empty = auth_mod.get_auth_status("antigravity")
+    assert cli_status_empty["logged_in"] is False
+
+    # After adding an account
+    _add_account("verified@example.com")
+    status_connected = ag.get_antigravity_auth_status()
+    assert status_connected["provider_available"] is True
+    assert status_connected["connected_accounts"] == 1
+    assert status_connected["logged_in"] is True
+    assert status_connected["key_source"] == "oauth"
+
+    cli_status_connected = auth_mod.get_auth_status("antigravity")
+    assert cli_status_connected["logged_in"] is True
+    assert cli_status_connected["key_source"] == "oauth"
+
+
+def test_antigravity_provider_status_reports_oauth_key_source_when_connected(pool_env, monkeypatch):
+    """providers.get_providers() must report key_source='oauth' (not config_yaml) when accounts exist."""
+    from contextlib import nullcontext
+    from cli import auth as auth_mod
+    from web.api import providers, profiles
+
+    _add_account("user@example.com")
+    monkeypatch.setattr(providers, "_PROVIDER_DISPLAY", {"antigravity": "Antigravity"})
+    monkeypatch.setattr(providers, "_PROVIDER_MODELS", {"antigravity": []})
+    monkeypatch.setattr(providers, "_PROVIDER_ENV_VAR", {})
+    monkeypatch.setattr(providers, "_provider_has_key", lambda _provider_id: False)
+    monkeypatch.setattr(providers, "get_config", lambda: {})
+    monkeypatch.setattr(profiles, "cron_profile_context", nullcontext)
+
+    result = providers.get_providers()["providers"]
+    antigravity = next(provider for provider in result if provider["id"] == "antigravity")
+
+    assert antigravity["is_oauth"] is True
+    assert antigravity["has_key"] is True
+    assert antigravity["oauth_connected"] is True
+    assert antigravity["auth_state"] == "connected"
+    assert antigravity["key_source"] == "oauth"
+    assert antigravity["oauth_email"] == "user@example.com"
+
+
+def test_quota_429_does_not_disable_account_or_mark_exhausted(pool_env):
+    """429 Resource Exhausted during inference must not disable an account from round-robin."""
+    _add_account("first@example.com")
+    _add_account("second@example.com")
+
+    # Simulate 429 translation error (e.g. from Code Assist)
+    import httpx
+    from runtime.gemini_cloudcode_adapter import _gemini_http_error
+
+    response = httpx.Response(
+        429,
+        json={"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "Rate limit exceeded"}},
+    )
+    error = _gemini_http_error(response)
+    assert error.code == "code_assist_rate_limited"
+
+    # Pool entries must remain intact and NOT marked exhausted
+    entries = ag._read_pool_entries()
+    for entry in entries:
+        assert entry.get("last_status") != "exhausted"
+        assert entry.get("last_error_reason") != "invalid_grant"
+
+    # Round-robin continues rotating both accounts
+    picks = [ag.select_next_account_email() for _ in range(4)]
+    assert picks == ["first@example.com", "second@example.com", "first@example.com", "second@example.com"]

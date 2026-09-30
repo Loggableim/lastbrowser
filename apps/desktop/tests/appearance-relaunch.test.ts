@@ -110,6 +110,16 @@ describe('Appearance Relaunch & Design-System Engine', () => {
       expect(settings).toEqual({ theme: 'light', skin: 'custom' });
     });
 
+    it('fails fast when Sidekick settings require authentication', async () => {
+      let attempts = 0;
+      await expect(fetchDesktopSettingsWithRetry(async () => {
+        attempts += 1;
+        throw new Error('Authentication required');
+      }, 8, 1000)).rejects.toThrow('Authentication required');
+
+      expect(attempts).toBe(1);
+    });
+
     it('stops retry delays when the settings load is cancelled', async () => {
       const controller = new AbortController();
       let attempts = 0;

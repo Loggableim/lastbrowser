@@ -40,6 +40,7 @@ def test_local_ollama_key_is_saved_provider_scoped_without_changing_cloud_env(mo
 def test_ollama_cloud_key_change_invalidates_live_catalog_cache(monkeypatch, tmp_path, action):
     from web.api import config, providers
     from cli import models
+    from runtime import auxiliary_client
 
     config_path = tmp_path / "config.yaml"
     monkeypatch.setattr(config, "_get_config_path", lambda: config_path)
@@ -48,6 +49,8 @@ def test_ollama_cloud_key_change_invalidates_live_catalog_cache(monkeypatch, tmp
     cache_path = tmp_path / "ollama_cloud_models_cache.json"
     monkeypatch.setattr(models, "_ollama_cloud_cache_path", lambda: cache_path)
     cache_path.write_text('{"version":2,"models":["stale-model"],"cached_at":0}', encoding="utf-8")
+    evicted = []
+    monkeypatch.setattr(auxiliary_client, "_evict_cached_clients", lambda provider: evicted.append(provider))
 
     # The API models cache uses the shared invalidator; this provider-specific
     # cache is separately dropped only for Ollama Cloud key changes.
@@ -59,6 +62,7 @@ def test_ollama_cloud_key_change_invalidates_live_catalog_cache(monkeypatch, tmp
 
     assert result["ok"] is True
     assert not cache_path.exists()
+    assert evicted == ["ollama-cloud"]
 
 
 def test_ollama_connection_probe_runs_in_backend_and_does_not_persist_key(monkeypatch):

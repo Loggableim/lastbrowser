@@ -81,6 +81,7 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<'teamwork' | 'smart-track'>('teamwork');
   const [models, setModels] = useState<DetectedModelItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshingModels, setRefreshingModels] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +89,25 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
   const plannerSelectId = useId();
   const criticSelectId = useId();
   const synthSelectId = useId();
+
+  async function refreshModelCatalog(): Promise<void> {
+    try {
+      setRefreshingModels(true);
+      setError(null);
+      const status = await window.lastbrowser.sidekick.requestWebui({
+        method: 'GET',
+        path: '/api/teamwork/status'
+      });
+      if (!status || typeof status !== 'object' || !Array.isArray((status as any).models)) {
+        throw new Error('The provider model catalog returned an invalid response.');
+      }
+      setModels((status as any).models);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRefreshingModels(false);
+    }
+  }
 
   // Load live config and detected models
   useEffect(() => {
@@ -582,9 +602,22 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
         title={t('teamwork.modelPool.title')}
         description={t('teamwork.modelPool.description')}
         action={
-          <span className="native-rest-pill">
-            {models.length} {models.length === 1 ? t('teamwork.modelPool.recognizedOne') : t('teamwork.modelPool.recognizedMany')}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span className="native-rest-pill">
+              {models.length} {models.length === 1 ? t('teamwork.modelPool.recognizedOne') : t('teamwork.modelPool.recognizedMany')}
+            </span>
+            <button
+              type="button"
+              className="secondary-action compact"
+              onClick={() => void refreshModelCatalog()}
+              disabled={refreshingModels}
+              aria-label={t('common.refresh')}
+              title={t('common.refresh')}
+            >
+              <RefreshCw size={14} className={refreshingModels ? 'spin' : undefined} />
+              <span>{t('common.refresh')}</span>
+            </button>
+          </div>
         }
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.25rem' }}>

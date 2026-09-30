@@ -44,6 +44,17 @@ describe('Teamwork and Smart Track settings contracts', () => {
     expect(teamwork).not.toContain('einsatzbereit');
   });
 
+  it('lets users refresh the current backend provider catalog without overwriting unsaved role choices', () => {
+    const teamwork = readRendererFile('panels/TeamworkSettingsPanel.tsx');
+    expect(teamwork).toContain('async function refreshModelCatalog()');
+    expect(teamwork).toContain("path: '/api/teamwork/status'");
+    expect(teamwork).toContain('setModels((status as any).models)');
+    expect(teamwork).toContain("aria-label={t('common.refresh')}");
+    expect(teamwork).toContain('disabled={refreshingModels}');
+    expect(teamwork).toContain('setError(err instanceof Error ? err.message : String(err))');
+    expect(teamwork).not.toContain('setConfig((status as any).config)');
+  });
+
   it('exposes persisted Smart Track enabled and auto-scan values and confirms API saves', () => {
     const smartTrack = readRendererFile('panels/SmartTrackSettingsTab.tsx');
     expect(smartTrack).toContain("aria-label={t('smartTrack.enabled')}");

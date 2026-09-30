@@ -5110,6 +5110,7 @@ def handle_get(handler, parsed) -> bool:
                 profile_home = get_profile_home(getattr(s, "profile", None))
             except Exception:
                 profile_home = None
+            goal_state_error = None
             try:
                 from web.api.goals import goal_state_for_session
 
@@ -5128,15 +5129,12 @@ def handle_get(handler, parsed) -> bool:
                 )
             except Exception:
                 logger.exception("Could not read persistent goal state for session %s", sid)
-                return j(
-                    handler,
-                    {
-                        "error": "goal_state_unavailable",
-                        "message": "Could not load persistent goal state. Please retry.",
-                        "retryable": True,
-                    },
-                    status=503,
-                )
+                goal_state = None
+                goal_state_error = {
+                    "error": "goal_state_unavailable",
+                    "message": "Could not load persistent goal state. Please retry.",
+                    "retryable": True,
+                }
             raw = s.compact() | {
                 "messages": _truncated_msgs,
                 "tool_calls": getattr(s, "tool_calls", []) if include_session_tool_calls else [],
@@ -5148,7 +5146,13 @@ def handle_get(handler, parsed) -> bool:
                 "threshold_tokens": getattr(s, "threshold_tokens", 0) or 0,
                 "last_prompt_tokens": getattr(s, "last_prompt_tokens", 0) or 0,
             }
-            raw["goal"] = goal_state
+            if goal_state_error:
+                # Preserve session and transcript reads when only the optional
+                # goal store is unavailable; omitting `goal` distinguishes an
+                # unknown state from a confirmed session with no goal.
+                raw["goal_state_error"] = goal_state_error
+            else:
+                raw["goal"] = goal_state
             if cli_meta and _is_messaging_session_record(cli_meta):
                 raw = _merge_cli_sidebar_metadata(raw, cli_meta)
             # Signal to the frontend that older messages were omitted.
@@ -7489,6 +7493,64 @@ def handle_post(handler, parsed) -> bool:
         cli_meta_for_delete = _lookup_cli_session_metadata(sid)
         if cli_meta_for_delete.get("read_only"):
             return bad(handler, "Read-only imported sessions cannot be deleted from WebUI", 400)
+        # A persistent goal is stored separately from the session transcript.
+        # Clear it before deleting the session so no active goal or queued
+        # continuation can survive as an orphan. Fail closed if its scope or
+        # store cannot be resolved; deleting first would make cleanup harder.
+        try:
+            goal_session = get_session(sid)
+        except KeyError:
+            goal_session = None
+        if goal_session is not None:
+            try:
+                from web.api.profiles import get_profile_home
+                from web.api.goals import (
+                    _CONTINUATION_LOCK,
+                    cancel_goal_continuation,
+                    goal_command_payload,
+                )
+
+                goal_profile_home = get_profile_home(getattr(goal_session, "profile", None))
+                goal_space_slug = (
+                    getattr(goal_session, "workspace_slug", None)
+                    or getattr(goal_session, "space_slug", None)
+                    or getattr(goal_session, "space", None)
+                )
+                with _CONTINUATION_LOCK:
+                    cancel_goal_continuation(
+                        sid, profile_home=goal_profile_home, space_slug=goal_space_slug,
+                    )
+                    goal_clear = goal_command_payload(
+                        sid, "clear", profile_home=goal_profile_home,
+                        space_slug=goal_space_slug,
+                    )
+                if not goal_clear.get("ok", False):
+                    logger.error(
+                        "Could not clear persistent goal for session %s before delete: %s",
+                        sid, goal_clear.get("error", "unknown error"),
+                    )
+                    return j(
+                        handler,
+                        {
+                            "ok": False,
+                            "error": "goal_state_unavailable",
+                            "message": "Could not clear this session's persistent goal. Please retry.",
+                            "retryable": True,
+                        },
+                        status=503,
+                    )
+            except Exception:
+                logger.exception("Could not clear persistent goal for session %s before delete", sid)
+                return j(
+                    handler,
+                    {
+                        "ok": False,
+                        "error": "goal_state_unavailable",
+                        "message": "Could not clear this session's persistent goal. Please retry.",
+                        "retryable": True,
+                    },
+                    status=503,
+                )
         is_messaging_session = _is_messaging_session_id(sid)
         worktree_retained = _worktree_retained_payload_for_session_id(sid)
         from web.api import models as _models

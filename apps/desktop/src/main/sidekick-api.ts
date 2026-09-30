@@ -106,6 +106,8 @@ export type DesktopSessionDetail = DesktopSessionSummary & {
   pending_user_message?: string | null;
   messages?: DesktopChatMessage[];
   composer_draft?: ComposerDraft;
+  goal?: Record<string, unknown> | null;
+  goal_state_error?: { error?: string; message?: string; retryable?: boolean };
 };
 
 export type ChatRunState = 'idle' | 'starting' | 'streaming' | 'cancelling' | 'error';

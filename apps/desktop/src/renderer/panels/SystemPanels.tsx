@@ -2323,6 +2323,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   useEffect(() => {
     if (!desktopSettings || !settingsState.error) return;
+    if (/auth|unauthorized/i.test(settingsState.error)) return;
     void settingsState.refresh();
   }, [desktopSettings, settingsState.error, settingsState.refresh]);
 

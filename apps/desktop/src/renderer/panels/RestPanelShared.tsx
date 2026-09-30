@@ -56,6 +56,18 @@ export function isRecord(value: unknown): value is AnyRecord {
 
 export function text(value: unknown, fallback = ''): string {
   if (value === undefined || value === null) return fallback;
+  if (typeof value === 'object') {
+    if (Array.isArray(value)) return fallback;
+    const record = value as Record<string, unknown>;
+    for (const key of ['name', 'title', 'label', 'slug', 'id', 'value', 'message', 'text']) {
+      const field = record[key];
+      if (typeof field === 'string' || typeof field === 'number') {
+        const str = String(field).trim();
+        if (str) return str;
+      }
+    }
+    return fallback;
+  }
   return String(value);
 }
 

@@ -10,8 +10,8 @@ goals accumulated in the live nova goals.db (96 rows total, 83% garbage).
 
 Two guards:
 1. The smoke script must clear the goal it created before deleting the session.
-2. The goals API must report a cleared goal as ``None`` (the contract the
-   cleanup relies on) — pinned here against the space-scoped store.
+2. The session-delete route clears the persistent goal before removing the
+   session, and the goals API reports cleared state as ``None``.
 """
 
 from __future__ import annotations
@@ -47,6 +47,18 @@ def test_smoke_goal_check_clears_goal_in_cleanup() -> None:
     assert cleanup.find('"clear"') < cleanup.find('"/api/session/delete"'), (
         "goal clear should run before the session delete"
     )
+
+
+def test_session_delete_clears_goal_before_removing_session():
+    """The API must own goal cleanup instead of relying on each caller."""
+    source = (REPO_ROOT / "web" / "api" / "routes.py").read_text(encoding="utf-8")
+    start = source.find('if parsed.path == "/api/session/delete":')
+    assert start != -1
+    end = source.find('\n    if parsed.path == "/api/session/clear":', start)
+    body = source[start:end]
+    assert 'goal_command_payload(' in body and '"clear"' in body
+    assert body.find('goal_command_payload(') < body.find('_mark_session_deleted(sid)')
+    assert 'cancel_goal_continuation(' in body
 
 
 def test_goal_clear_removes_state_from_space_store(monkeypatch, tmp_path):

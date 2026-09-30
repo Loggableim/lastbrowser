@@ -1018,12 +1018,18 @@ def _spawn_antigravity_oauth_worker(flow_id: str) -> None:
                 flow = _OAUTH_FLOWS.get(flow_id)
                 if flow and flow.get("status") == "pending":
                     code = getattr(exc, "code", "antigravity_oauth_error")
-                    flow.update({
-                        "status": "error",
-                        "error_code": code,
-                        "error": str(exc),
-                        "updated_at": time.time(),
-                    })
+                    if code == "antigravity_oauth_cancelled":
+                        flow.update({
+                            "status": "cancelled",
+                            "updated_at": time.time(),
+                        })
+                    else:
+                        flow.update({
+                            "status": "error",
+                            "error_code": code,
+                            "error": str(exc),
+                            "updated_at": time.time(),
+                        })
 
     threading.Thread(target=worker, name="sidekick-antigravity-oauth", daemon=True).start()
 

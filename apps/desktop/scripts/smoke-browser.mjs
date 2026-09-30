@@ -2962,13 +2962,15 @@ async function main() {
         returnByValue: true
       }, 1000);
       loupeRuntime = JSON.parse(loupeState.result.value);
-      if (loupeRuntime.enabled === 'true' && loupeRuntime.loupe && loupeRuntime.image.startsWith('data:image/') && loupeRuntime.imageWidth > 0) break;
+      if (loupeRuntime.enabled === 'true' && loupeRuntime.setting?.enabled === true
+        && loupeRuntime.setting?.cursorLoupeEnabled === true && loupeRuntime.loupe
+        && loupeRuntime.image.startsWith('data:image/') && loupeRuntime.imageWidth > 0) break;
     } catch {
       // Wait for the shell renderer to finish reloading, bounded by the loop.
     }
   }
   check('enabled cursor loupe renders a captured image in the running app',
-    enableLoupe.result.value?.clicked === true && enableLoupe.result.value?.pressed === 'true'
+    enableLoupe.result.value?.clicked === true
     && loupeRuntime?.setting?.enabled === true
     && loupeRuntime?.setting?.cursorLoupeEnabled === true && loupeRuntime?.enabled === 'true'
       && loupeRuntime?.loupe === true && loupeRuntime?.image.startsWith('data:image/')

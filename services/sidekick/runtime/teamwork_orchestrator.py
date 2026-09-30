@@ -340,6 +340,18 @@ def _provider_failure_kind(error: Any) -> Optional[int]:
     return None
 
 
+def _safe_provider_failure(error: Any) -> str:
+    """Describe provider failures without copying externally supplied text."""
+    status = _provider_failure_kind(error)
+    if status == 401:
+        return "HTTP 401: authentication failed"
+    if status == 429:
+        return "HTTP 429: rate limit or quota reached"
+    if status is not None:
+        return f"HTTP {status}: provider request failed"
+    return "provider request failed"
+
+
 def _teamwork_quorum_error(failed_drafts: List[Dict[str, Any]], required: int) -> str:
     """Return actionable, deterministic errors without echoing provider payloads."""
     statuses = {
@@ -522,7 +534,12 @@ def _invoke_worker(
     timeout: float = 45.0,
     allow_hot_swap: bool = True,
 ) -> Dict[str, Any]:
-    """Call a single debate worker with hot-swap retry."""
+    """Call one debate worker, swapping on operational failures only.
+
+    Authentication and quota responses are returned immediately. Falling
+    through to another provider after those responses could silently consume
+    a different (potentially paid) account or model.
+    """
     from runtime.auxiliary_client import call_llm, extract_content_or_reasoning
 
     current_worker = dict(worker)
@@ -567,8 +584,10 @@ def _invoke_worker(
                 "swapped": swapped,
             }
         except Exception as e:
-            logger.warning("Worker %s failed: %s", current_worker["model"], e)
-            if not allow_hot_swap:
+            failure_status = _provider_failure_kind(e)
+            safe_failure = _safe_provider_failure(e)
+            logger.warning("Worker %s failed: %s", current_worker["model"], safe_failure)
+            if not allow_hot_swap or failure_status in {401, 429}:
                 elapsed_ms = int((time.time() - start_t) * 1000)
                 return {
                     "model": current_worker["model"],
@@ -578,8 +597,8 @@ def _invoke_worker(
                     "focus": current_worker["focus"],
                     "content": "",
                     "execution_ms": elapsed_ms,
-                    "error": str(e),
-                    "http_status": _provider_failure_kind(e),
+                    "error": safe_failure,
+                    "http_status": failure_status,
                     "swapped": False,
                 }
             # Try hot-swap from backup pool
@@ -603,8 +622,8 @@ def _invoke_worker(
                 "focus": current_worker["focus"],
                 "content": "",
                 "execution_ms": elapsed_ms,
-                "error": str(e),
-                "http_status": _provider_failure_kind(e),
+                "error": safe_failure,
+                "http_status": failure_status,
                 "swapped": swapped,
             }
 
@@ -663,6 +682,7 @@ def run_teamwork_turn(
         raise RuntimeError("Teamwork hat keine aktuell verfügbaren Modelle. Verbinde zuerst mindestens einen Modellanbieter.")
 
     planner_context = ""
+    planner_failure = None
     planner_model = plan.get("planner")
     if planner_model:
         put_event("teamwork_stage", {
@@ -690,7 +710,8 @@ def run_teamwork_turn(
         except InterruptedError:
             raise
         except Exception as e:
-            logger.warning("Teamwork planner failed; continuing without plan: %s", e)
+            planner_failure = _safe_provider_failure(e)
+            logger.warning("Teamwork planner failed; continuing without plan: %s", planner_failure)
 
     team_context = grounding_text
     if planner_context:
@@ -766,7 +787,7 @@ def run_teamwork_turn(
                             "skipped": True,
                         })
                 except Exception as e:
-                    logger.error("Worker future raised error: %s", e)
+                    logger.error("Worker future raised error: %s", _safe_provider_failure(e))
         if cancel_event and cancel_event.is_set():
             cancelled = True
             raise InterruptedError("Cancelled")
@@ -834,8 +855,9 @@ def run_teamwork_turn(
     except InterruptedError:
         raise
     except Exception as e:
-        logger.warning("Critic evaluation failed: %s, continuing with best draft directly", e)
-        critic_review = f"Kritik konnte nicht separat generiert werden ({e}). Synthese basiert auf den Roh-Entwürfen."
+        safe_failure = _safe_provider_failure(e)
+        logger.warning("Critic evaluation failed: %s, continuing with best draft directly", safe_failure)
+        critic_review = f"Kritik konnte nicht separat generiert werden ({safe_failure}). Synthese basiert auf den Roh-Entwürfen."
 
     critic_ms = int((time.time() - critic_t0) * 1000)
     put_event("teamwork_critic", {
@@ -874,6 +896,7 @@ def run_teamwork_turn(
     )
 
     synth_t0 = time.time()
+    synthesis_failure = None
     streamed_answer_parts: List[str] = []
     streamed_reasoning_parts: List[str] = []
 
@@ -913,11 +936,13 @@ def run_teamwork_turn(
         raise
     except Exception as e:
         if streamed_answer_parts or streamed_reasoning_parts:
+            safe_failure = _safe_provider_failure(e)
             raise RuntimeError(
-                "Teamwork synthesis stream failed after partial output; "
+                f"Teamwork synthesis stream failed after partial output ({safe_failure}); "
                 "the partial answer or reasoning was left visible and was not replaced."
-            ) from e
-        logger.error("Synthesis failed: %s, falling back to best individual draft", e)
+            )
+        synthesis_failure = _safe_provider_failure(e)
+        logger.error("Synthesis failed: %s, falling back to best individual draft", synthesis_failure)
         final_answer = successful_drafts[0]["content"]
         emit_synthesis_content(final_answer)
 
@@ -927,6 +952,7 @@ def run_teamwork_turn(
     metadata_payload = {
         "strategy": cfg.get("strategy", "balanced"),
         "planner": planner_model["id"] if planner_model else None,
+        "planner_failure": planner_failure,
         "models_used": ([planner_model["id"]] if planner_model else []) + [d["model"] for d in drafts] + [critic_model, synth_model],
         "drafts": [
             {
@@ -945,6 +971,7 @@ def run_teamwork_turn(
             "review": critic_review,
             "execution_ms": critic_ms,
         },
+        "synthesis_failure": synthesis_failure,
         "stats": {
             "duration_ms": total_duration_ms,
             "drafts_count": len(successful_drafts),

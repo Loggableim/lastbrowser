@@ -197,7 +197,7 @@ def test_worker_reports_hot_swap_even_when_every_candidate_fails():
     with patch("runtime.auxiliary_client.call_llm", side_effect=RuntimeError("offline")):
         result = _invoke_worker(worker, "task", "", [backup])
 
-    assert result["error"] == "offline"
+    assert result["error"] == "provider request failed"
     assert result["model"] == "model-b"
     assert result["swapped"] is True
 
@@ -223,7 +223,7 @@ def test_worker_does_not_call_backup_when_hot_swap_is_disabled():
     assert result["model"] == "model-a"
     assert result["provider"] == "provider-a"
     assert result["swapped"] is False
-    assert result["error"] == "provider unavailable"
+    assert result["error"] == "provider request failed"
 
 
 def test_teamwork_config_disables_backup_provider_hot_swap():

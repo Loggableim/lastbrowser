@@ -528,7 +528,7 @@ def test_web_server_session_endpoints(monkeypatch, tmp_path):
     from web.api.models import get_session as load_web_session
     from web.api.profiles import get_profile_home
     from web.api.goals import (
-        CONTINUATION_PROMPT_TEMPLATE,
+        _manager,
         goal_command_payload,
         goal_state_for_session,
         queue_goal_continuation,
@@ -550,7 +550,9 @@ def test_web_server_session_endpoints(monkeypatch, tmp_path):
     assert goal_state_for_session(
         session_id, profile_home=profile_home, space_slug=space_slug,
     ) is not None
-    continuation = CONTINUATION_PROMPT_TEMPLATE.format(goal="Delete this goal with the session")
+    continuation = _manager(
+        session_id, profile_home=profile_home, space_slug=space_slug,
+    ).next_continuation_prompt()
     assert queue_goal_continuation(
         session_id, continuation, profile_home=profile_home, space_slug=space_slug,
     ) is True

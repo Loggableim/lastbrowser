@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import re
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -59,6 +61,17 @@ _DB_CACHE: dict[str, Any] = {}
 _CONTINUATION_LOCK = threading.RLock()
 _PENDING_CONTINUATIONS: dict[tuple[str, str, str], str] = {}
 _CANCELLED_CONTINUATIONS: dict[tuple[str, str, str], str] = {}
+_GOAL_RUN_MARKER_RE = re.compile(r"\n\n<!-- lastbrowser-goal-run:([0-9a-f]{32}) -->$")
+
+
+def _is_internal_goal_continuation(text: str) -> bool:
+    prefix = str(CONTINUATION_PROMPT_TEMPLATE or "").split("{goal}", 1)[0]
+    return bool(prefix and str(text or "").startswith(prefix))
+
+
+def strip_goal_continuation_marker(text: str) -> str:
+    """Remove the durable run discriminator before the prompt reaches the model."""
+    return _GOAL_RUN_MARKER_RE.sub("", str(text or "").strip())
 
 
 def _continuation_key(
@@ -148,6 +161,10 @@ def consume_goal_continuation(
         pending = _PENDING_CONTINUATIONS.get(key)
         if pending is not None:
             if text != pending:
+                # A delayed internal continuation from an older goal run must
+                # not supersede a newer queued continuation in the same scope.
+                if _is_internal_goal_continuation(text):
+                    return "cancelled"
                 _PENDING_CONTINUATIONS.pop(key, None)
                 _CANCELLED_CONTINUATIONS[key] = pending
                 return "none"
@@ -177,8 +194,7 @@ def consume_goal_continuation(
         # persisted active goal. Conversely, never let an orphaned internal
         # continuation fall through as an ordinary user message after pause,
         # clear, or goal replacement.
-        continuation_prefix = str(CONTINUATION_PROMPT_TEMPLATE or "").split("{goal}", 1)[0]
-        if continuation_prefix and text.startswith(continuation_prefix):
+        if _is_internal_goal_continuation(text):
             try:
                 mgr = _manager(session_id, profile_home=profile_home, space_slug=space_slug)
             except Exception:
@@ -315,7 +331,13 @@ class _ProfileGoalManager:
         if not raw:
             return None
         try:
-            return GoalState.from_json(raw)  # type: ignore[union-attr]
+            state = GoalState.from_json(raw)  # type: ignore[union-attr]
+            # Older goal records have no discriminator and keep their legacy
+            # continuation text until the user explicitly resumes/replaces it.
+            parsed = json.loads(raw)
+            run_id = str(parsed.get("_goal_run_id") or "").strip()
+            state._goal_run_id = run_id if re.fullmatch(r"[0-9a-f]{32}", run_id) else None
+            return state
         except Exception as exc:
             # Treat corrupt persisted state as unavailable. Returning None here
             # makes callers believe no goal exists and can silently overwrite
@@ -332,9 +354,18 @@ class _ProfileGoalManager:
         if db is None:
             raise RuntimeError("Persistent goal store is unavailable")
         try:
-            db.set_meta(_meta_key(self.session_id), state.to_json())
+            serialized = json.loads(state.to_json())
+            run_id = getattr(state, "_goal_run_id", None)
+            if run_id:
+                serialized["_goal_run_id"] = str(run_id)
+            db.set_meta(_meta_key(self.session_id), json.dumps(serialized, ensure_ascii=False))
         except Exception as exc:
             raise RuntimeError("Failed to persist goal state") from exc
+
+    def _run_id(self) -> str | None:
+        """Return the discriminator persisted alongside this scoped goal."""
+        value = str(getattr(self._state, "_goal_run_id", "") or "").strip()
+        return value if re.fullmatch(r"[0-9a-f]{32}", value) else None
 
     def is_active(self) -> bool:
         return self._state is not None and self._state.status == "active"
@@ -378,6 +409,7 @@ class _ProfileGoalManager:
             created_at=time.time(),
             last_turn_at=0.0,
         )
+        state._goal_run_id = uuid.uuid4().hex
         self._state = state
         self._save(state)
         return state
@@ -399,6 +431,7 @@ class _ProfileGoalManager:
         )
         if exhausted and not reset_budget:
             return self._state
+        self._state._goal_run_id = uuid.uuid4().hex
         self._state.status = "active"
         self._state.paused_reason = None
         # A user-requested resume is a fresh attempt even if the previous
@@ -518,7 +551,11 @@ class _ProfileGoalManager:
     def next_continuation_prompt(self) -> Optional[str]:
         if not self._state or self._state.status != "active":
             return None
-        return CONTINUATION_PROMPT_TEMPLATE.format(goal=self._state.goal)
+        prompt = CONTINUATION_PROMPT_TEMPLATE.format(goal=self._state.goal)
+        run_id = self._run_id()
+        if run_id:
+            prompt = f"{prompt}\n\n<!-- lastbrowser-goal-run:{run_id} -->"
+        return prompt
 
     def consume_continuation(self) -> bool:
         """Persist an idempotent claim for this turn's continuation prompt."""
@@ -759,7 +796,11 @@ def restore_goal_state(
         if mgr is None:
             return False
         current = copy.deepcopy(getattr(mgr, "state", None))
-        if check_expected_current and current != expected_current:
+        current_run_id = getattr(current, "_goal_run_id", None)
+        expected_run_id = getattr(expected_current, "_goal_run_id", None)
+        if check_expected_current and (
+            current != expected_current or current_run_id != expected_run_id
+        ):
             return False
         if snapshot is None:
             try:

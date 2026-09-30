@@ -103,7 +103,12 @@ OpenAI = _OpenAIProxy()  # module-level name, resolves lazily on call/isinstance
 from runtime.credential_pool import load_pool
 from cli.config import get_sidekick_home
 from runtime._compat.shim_constants import OPENROUTER_BASE_URL
-from shared.utils import base_url_host_matches, base_url_hostname, normalize_proxy_env_vars
+from shared.utils import (
+    base_url_host_matches,
+    base_url_hostname,
+    is_official_ollama_cloud_url,
+    normalize_proxy_env_vars,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -2823,6 +2828,7 @@ def resolve_provider_client(
     # ── API-key providers from PROVIDER_REGISTRY ─────────────────────
     try:
         from cli.auth import (
+            AuthError,
             PROVIDER_REGISTRY,
             resolve_api_key_provider_credentials,
             resolve_external_process_provider_credentials,
@@ -2869,6 +2875,16 @@ def resolve_provider_client(
         # built-in provider name but targets a user-specified endpoint.
         if explicit_base_url:
             base_url = _to_openai_base_url(explicit_base_url.strip().rstrip("/"))
+        # The Ollama Cloud key is a provider credential, so an auxiliary task's
+        # explicit URL must not redirect it to a custom or local endpoint. The
+        # local Ollama path is provider="custom" and remains independently
+        # configurable above.
+        if provider == "ollama-cloud" and not is_official_ollama_cloud_url(base_url):
+            raise AuthError(
+                "Ollama Cloud credentials may only be sent to the official HTTPS ollama.com endpoint.",
+                provider=provider,
+                code="invalid_ollama_cloud_base_url",
+            )
 
         default_model = _get_aux_model_for_provider(provider)
         final_model = _normalize_resolved_model(model or default_model, provider)

@@ -308,7 +308,9 @@ def test_goal_continuation_recovers_after_backend_restart_from_active_persisted_
         session_id, "Finish after restarting", profile_home=profile_home,
     )
     assert created["ok"] is True
-    prompt = goal_api.CONTINUATION_PROMPT_TEMPLATE.format(goal="Finish after restarting")
+    prompt = goal_api._manager(
+        session_id, profile_home=profile_home,
+    ).next_continuation_prompt()
 
     # Simulate a process restart: the goal DB survives, but pending in-memory
     # hand-off state is gone before the renderer POST arrives.
@@ -384,12 +386,16 @@ def test_explicit_goal_resume_rearms_failed_continuation_attempt(monkeypatch, tm
     resumed = goal_api.goal_command_payload(
         session_id, "resume", profile_home=profile_home,
     )
-    assert resumed["kickoff_prompt"] == prompt
+    resumed_prompt = resumed["kickoff_prompt"]
+    assert resumed_prompt != prompt
     assert goal_api.consume_goal_continuation(
         session_id, prompt, profile_home=profile_home,
+    ) == "cancelled"
+    assert goal_api.consume_goal_continuation(
+        session_id, resumed_prompt, profile_home=profile_home,
     ) == "active"
     assert goal_api.consume_goal_continuation(
-        session_id, prompt, profile_home=profile_home,
+        session_id, resumed_prompt, profile_home=profile_home,
     ) == "cancelled"
 
 
@@ -408,7 +414,9 @@ def test_orphaned_goal_continuation_after_restart_is_rejected(monkeypatch, tmp_p
     assert goal_api.goal_command_payload(
         session_id, goal, profile_home=profile_home,
     )["ok"] is True
-    prompt = goal_api.CONTINUATION_PROMPT_TEMPLATE.format(goal=goal)
+    prompt = goal_api._manager(
+        session_id, profile_home=profile_home,
+    ).next_continuation_prompt()
     assert goal_api.goal_command_payload(
         session_id, command, profile_home=profile_home,
     )["action"] == command

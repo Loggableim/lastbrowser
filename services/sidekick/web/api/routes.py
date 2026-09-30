@@ -11750,7 +11750,7 @@ def _start_chat_stream_for_session(
     # returns "cancelled" for an already-invalidated prompt and we must not run
     # it as an ordinary chat message.
     try:
-        from web.api.goals import consume_goal_continuation
+        from web.api.goals import consume_goal_continuation, strip_goal_continuation_marker
 
         from web.api.profiles import get_profile_home
 
@@ -11775,6 +11775,9 @@ def _start_chat_stream_for_session(
             }
         if continuation_state == "active":
             goal_related = True
+            # The run discriminator is transport metadata used to reject stale
+            # retries; don't expose it to the model or persist it in the chat.
+            msg = strip_goal_continuation_marker(msg)
     except Exception:
         logger.error("Could not validate pending goal continuation", exc_info=True)
         return {

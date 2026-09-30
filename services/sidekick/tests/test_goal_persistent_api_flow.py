@@ -8,6 +8,9 @@ def test_goal_scope_survives_stream_resume_clear_and_cache_reload(monkeypatch, t
     from web.api import goals, routes
 
     monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(goals, "_DB_CACHE", dict(goals._DB_CACHE))
+    monkeypatch.setattr(routes, "STREAMS", dict(routes.STREAMS))
+    monkeypatch.setattr(routes, "STREAM_GOAL_RELATED", dict(routes.STREAM_GOAL_RELATED))
     goals._DB_CACHE.clear()
     routes.STREAMS.clear()
     routes.STREAM_GOAL_RELATED.clear()
@@ -50,7 +53,9 @@ def test_goal_scope_survives_stream_resume_clear_and_cache_reload(monkeypatch, t
         session_id, profile_home=profile_home, space_slug="beta",
     )["goal"] == "Beta task"
 
-    continuation = goals.CONTINUATION_PROMPT_TEMPLATE.format(goal="Finish alpha task")
+    continuation = goals._manager(
+        session_id, profile_home=profile_home, space_slug="alpha",
+    ).next_continuation_prompt()
     assert goals.queue_goal_continuation(
         session_id, continuation, profile_home=profile_home, space_slug="alpha",
     ) is True

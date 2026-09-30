@@ -63,7 +63,8 @@ import { applyLiveChatDelta, finishLiveChatMessage, readLiveChatDelta } from './
 import { playChatCompletionSound } from './notification-sound.js';
 import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
-import { adoptCreatedTurnSession, continuationAfterTerminalEvent, isActiveTurnContextCurrent, isGoalContinuationContextCurrent, readGoalContinuationPrompt, startGoalContinuation } from './goal-continuation.js';
+import { isNativeChatProgressEvent, isNativeChatStreamWaitExpired } from './chat-stream-timeout.js';
+import { adoptCreatedTurnSession, continuationAfterTerminalEvent, isActiveTurnContextCurrent, isGoalContinuationContextCurrent, readGoalContinuationPrompt, readGoalEvaluationError, startGoalContinuation } from './goal-continuation.js';
 import { executeBrowserAction, parseNaturalLanguageBrowserCommand } from './browser-agent-tools.js';
 import {
   bookmarkFromTab,
@@ -2271,12 +2272,14 @@ function AppContent(): JSX.Element {
     earlyEvents: Array<{ streamId?: string; event?: string; data?: unknown }> = [],
     unsubscribeEarly?: () => void,
     isOwningContextCurrent: () => boolean = () => activeSessionIdRef.current === sessionId
-  ): Promise<string | null> {
-    const deadline = Date.now() + 120000;
+  ): Promise<{ continuationPrompt: string | null; goalError: string | null }> {
+    const streamStartedAt = Date.now();
+    let lastProgressAt = streamStartedAt;
     let sawStreamEnd = false;
     let streamFailed = false;
     let hasLiveOutput = false;
     let goalContinuationPrompt: string | null = null;
+    let goalEvaluationError: string | null = null;
     const notifyCompletion = createOnceChatCompletionNotifier(
       desktopSettings?.sound_enabled === true,
       desktopSettings?.notifications_enabled === true,
@@ -2287,6 +2290,7 @@ function AppContent(): JSX.Element {
     const handleStreamEvent = (payload: unknown): void => {
       const event = payload as { streamId?: string; event?: string; data?: unknown } | null;
       if (!event || event.streamId !== streamId) return;
+      if (isNativeChatProgressEvent(event.event)) lastProgressAt = Date.now();
       if (event.event === 'stream_end') {
         if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
         sawStreamEnd = true;
@@ -2319,6 +2323,9 @@ function AppContent(): JSX.Element {
       if (typeof event.event !== 'string') return;
       if (!goalContinuationPrompt) {
         goalContinuationPrompt = readGoalContinuationPrompt(event, streamId, sessionId);
+      }
+      if (!goalEvaluationError) {
+        goalEvaluationError = readGoalEvaluationError(event, streamId, sessionId);
       }
       if (event.event === 'token' || event.event === 'delta' || event.event === 'reasoning') {
         const delta = readLiveChatDelta(event.event, event.data);
@@ -2365,9 +2372,9 @@ function AppContent(): JSX.Element {
         streamFailed = true;
       });
 
-      while (Date.now() < deadline) {
+      while (!isNativeChatStreamWaitExpired(streamStartedAt, lastProgressAt, Date.now())) {
         await delay(600);
-        if (sawStreamEnd) return goalContinuationPrompt;
+        if (sawStreamEnd) return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError };
         if (streamFailed) break;
         // The stream is the fast path, but a dropped connection must not hang
         // the turn: poll occasionally as a safety net.
@@ -2377,25 +2384,25 @@ function AppContent(): JSX.Element {
             const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
             if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
               if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
-              return goalContinuationPrompt;
+              return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError };
             }
           }
         }
       }
-      if (sawStreamEnd) return goalContinuationPrompt;
+      if (sawStreamEnd) return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError };
     } finally {
       unsubscribe();
       void window.lastbrowser.sidekick.unsubscribeChatStream({ streamId }).catch(() => null);
     }
 
     // Stream path ended without a terminal event — fall back to polling.
-    while (Date.now() < deadline) {
+    while (!isNativeChatStreamWaitExpired(streamStartedAt, lastProgressAt, Date.now())) {
       await delay(1200);
       const streamStatus = await window.lastbrowser.sidekick.getStreamStatus(streamId).catch(() => null);
       const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
       if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
         if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
-        return goalContinuationPrompt;
+        return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError };
       }
     }
     throw new Error('Sidekick is still working. Try again in a moment.');
@@ -2537,7 +2544,7 @@ function AppContent(): JSX.Element {
       // already captured by startChat; clearing it can finish in the background.
       void window.lastbrowser.sidekick.saveDraft({ sessionId: response.sessionId, text: '', files: [] }).catch(() => null);
       captureEarlyEvents = false;
-      const nextGoalPrompt = await pollNativeChat(
+      const streamResult = await pollNativeChat(
         response.streamId,
         response.sessionId,
         earlyStreamEvents,
@@ -2556,6 +2563,7 @@ function AppContent(): JSX.Element {
             ? { ...item, content: answer || 'Sidekick finished.', pending: false }
             : item
         )));
+        if (streamResult.goalError) setChatError(streamResult.goalError);
       }
 
       // Auto-generate a concise session title from first user prompt if untitled or generic
@@ -2579,9 +2587,9 @@ function AppContent(): JSX.Element {
       }
 
       void refreshSessions();
-      if (nextGoalPrompt && turnContextStillCurrentAfterStream) {
+      if (streamResult.continuationPrompt && turnContextStillCurrentAfterStream) {
         const continuationContext = { ...turnContext, sessionId: response.sessionId };
-        await startGoalContinuation(nextGoalPrompt, continuationContext, {
+        await startGoalContinuation(streamResult.continuationPrompt, continuationContext, {
           sessionId: activeSessionIdRef.current,
           profileId: activeProfileIdRef.current,
           spacePath: activeSpacePathRef.current

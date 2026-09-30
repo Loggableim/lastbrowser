@@ -1845,9 +1845,10 @@ def _restore_reasoning_metadata(previous_messages, updated_messages):
 def _session_context_messages(session):
     """Return model-facing history without assuming it matches the UI transcript."""
     context_messages = getattr(session, 'context_messages', None)
-    if isinstance(context_messages, list) and context_messages:
-        return context_messages
-    return session.messages or []
+    messages = context_messages if isinstance(context_messages, list) and context_messages else (session.messages or [])
+    # Error notices are useful in the visible transcript but must never become
+    # instructions or prior assistant content for the next model request.
+    return [msg for msg in messages if not (isinstance(msg, dict) and msg.get('_error'))]
 
 
 def _message_identity(msg):
@@ -2332,7 +2333,26 @@ def _orchestration_is_enabled(orchestration: str) -> bool:
             return load_smart_track_config().get("enabled") is True
     except Exception:
         logger.exception("Failed to load %s orchestration config; denying request", orchestration)
+        return False
     return False
+
+
+def _clear_orchestration_pending_state(session, session_id: str, stream_id: str) -> bool:
+    """Clear this orchestration's persisted pending state without touching a newer run."""
+    lock = _get_session_agent_lock(session_id) if session_id else contextlib.nullcontext()
+    with lock:
+        if getattr(session, "active_stream_id", None) != stream_id:
+            return False
+        session.active_stream_id = None
+        session.pending_user_message = None
+        session.pending_attachments = []
+        session.pending_started_at = None
+        try:
+            session.save()
+        except Exception:
+            logger.exception("Failed to clear completed orchestration state for session %s", session_id)
+            return False
+    return True
 
 
 def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
@@ -2397,6 +2417,36 @@ def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
             profile_home=profile_home,
             space_slug=space_slug,
         ) or {}
+        if str(decision.get("verdict") or "").strip().lower() == "error":
+            message = (
+                "Persistent goal progress could not be verified or saved. "
+                "No automatic continuation was started. Check /goal status before retrying."
+            )
+            # Keep the warning in the persisted transcript, but mark it as an
+            # error so it is excluded from future model context. The normal
+            # turn completion then returns it to the renderer with the answer.
+            messages = getattr(session, "messages", None)
+            if isinstance(messages, list):
+                messages.append({
+                    "role": "assistant",
+                    "content": f"**Goal progress unverified:** {message}",
+                    "timestamp": int(time.time()),
+                    "_error": True,
+                    "error_code": "goal_evaluation_failed",
+                    "retryable": True,
+                })
+                try:
+                    session.save()
+                except Exception:
+                    logger.exception("Could not persist goal-evaluation warning for %s", session_id)
+            put("goal", {
+                "session_id": session_id,
+                "state": "error",
+                "error_code": "goal_evaluation_failed",
+                "retryable": True,
+                "message": message,
+            })
+            return decision
         message = str(decision.get("message") or "").strip()
         if message:
             put("goal", {
@@ -2741,19 +2791,16 @@ def _run_agent_streaming(
                     cancel_event=cancel_event,
                 )
                 _evaluate_goal_after_stream_turn(s, session_id, goal_related, put)
-                s.active_stream_id = None
-                s.pending_user_message = None
-                try:
-                    s.save()
-                except Exception:
-                    pass
+                _clear_orchestration_pending_state(s, session_id, stream_id)
                 put('stream_end', {'session_id': session_id, 'stream_id': stream_id})
                 return
             except InterruptedError:
+                _clear_orchestration_pending_state(s, session_id, stream_id)
                 put('cancel', {'message': 'Teamwork turn cancelled'})
                 return
             except Exception as e:
                 logger.error("Teamwork turn failed: %s", e, exc_info=True)
+                _clear_orchestration_pending_state(s, session_id, stream_id)
                 put('error', {'error': str(e), 'session_id': session_id})
                 return
 
@@ -2778,19 +2825,16 @@ def _run_agent_streaming(
                     cancel_event=cancel_event,
                 )
                 _evaluate_goal_after_stream_turn(s, session_id, goal_related, put)
-                s.active_stream_id = None
-                s.pending_user_message = None
-                try:
-                    s.save()
-                except Exception:
-                    pass
+                _clear_orchestration_pending_state(s, session_id, stream_id)
                 put('stream_end', {'session_id': session_id, 'stream_id': stream_id})
                 return
             except InterruptedError:
+                _clear_orchestration_pending_state(s, session_id, stream_id)
                 put('cancel', {'message': 'Smart Track turn cancelled'})
                 return
             except Exception as e:
                 logger.error("Smart Track turn failed: %s", e, exc_info=True)
+                _clear_orchestration_pending_state(s, session_id, stream_id)
                 put('error', {'error': str(e), 'session_id': session_id})
                 return
 

@@ -125,6 +125,63 @@ def test_goal_hook_for_orchestrator_turn_persists_decision_and_queues_continuati
     ) == "active"
 
 
+def test_goal_hook_surfaces_unverified_evaluation_failure_and_does_not_continue(monkeypatch):
+    from web.api import streaming
+
+    session = SimpleNamespace(
+        profile="profile-a",
+        workspace_slug="research",
+        messages=[{"role": "assistant", "content": "The synthesis answer."}],
+        save=Mock(),
+    )
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: "profile-home")
+    monkeypatch.setattr("web.api.goals.has_active_goal", lambda *_a, **_k: True)
+    monkeypatch.setattr("web.api.goals.evaluate_goal_after_turn", lambda *_a, **_k: {
+        "status": None,
+        "should_continue": False,
+        "continuation_prompt": None,
+        "verdict": "error",
+        "reason": "goal evaluation failed: OSError",
+        "message": "",
+    })
+    events = []
+
+    decision = streaming._evaluate_goal_after_stream_turn(
+        session,
+        "goal-session",
+        True,
+        lambda name, payload: events.append((name, payload)),
+    )
+
+    assert decision["verdict"] == "error"
+    assert [name for name, _payload in events] == ["goal", "goal"]
+    assert events[-1][1]["state"] == "error"
+    assert events[-1][1]["error_code"] == "goal_evaluation_failed"
+    assert events[-1][1]["retryable"] is True
+    warning = session.messages[-1]
+    assert warning["_error"] is True
+    assert warning["error_code"] == "goal_evaluation_failed"
+    assert "Check /goal status before retrying" in warning["content"]
+    session.save.assert_called_once()
+
+
+def test_goal_evaluation_warning_stays_visible_but_is_excluded_from_model_history():
+    from web.api.streaming import _session_context_messages
+
+    warning = {
+        "role": "assistant",
+        "content": "**Goal progress unverified:** Check /goal status before retrying.",
+        "_error": True,
+        "error_code": "goal_evaluation_failed",
+    }
+    answer = {"role": "assistant", "content": "The synthesis answer."}
+    session = SimpleNamespace(context_messages=[], messages=[answer, warning])
+
+    assert warning in session.messages
+    assert _session_context_messages(session) == [answer]
+    assert _session_context_messages(SimpleNamespace(context_messages=[answer, warning], messages=[])) == [answer]
+
+
 @pytest.mark.parametrize(
     ("orchestration", "model", "config_module", "config_loader", "runner_name"),
     [
@@ -282,6 +339,88 @@ def test_enabled_orchestration_stream_runs_persistent_goal_hook(
             "",
             profile_home=tmp_path / "profile",
         ) == "none"
+    finally:
+        with STREAMS_LOCK:
+            STREAMS.pop(stream_id, None)
+
+
+@pytest.mark.parametrize(
+    ("orchestration", "model", "config_module", "config_loader", "runner_name"),
+    [
+        ("teamwork", "teamwork", "runtime.teamwork_orchestrator", "load_teamwork_config", "run_teamwork_turn"),
+        ("smart-track", "smart-track-medium", "runtime.smart_track_orchestrator", "load_smart_track_config", "run_smart_track_turn"),
+    ],
+)
+@pytest.mark.parametrize("terminal", ["cancel", "error"])
+def test_orchestration_cancel_and_error_clear_pending_session_state(
+    monkeypatch, tmp_path, orchestration, model, config_module, config_loader, runner_name, terminal
+):
+    import importlib
+    from web.api import streaming
+    from web.api.config import STREAMS, STREAMS_LOCK, StreamChannel
+
+    stream_id = f"{terminal}-{orchestration}"
+    channel = StreamChannel()
+    with STREAMS_LOCK:
+        STREAMS[stream_id] = channel
+    session = SimpleNamespace(
+        session_id=f"session-{orchestration}",
+        workspace_slug=None,
+        space_slug=None,
+        space=None,
+        workspace=str(tmp_path),
+        model="",
+        model_provider=None,
+        active_stream_id=stream_id,
+        pending_user_message="still running",
+        pending_attachments=[{"name": "attachment"}],
+        pending_started_at=123.0,
+        save=Mock(),
+        messages=[],
+    )
+    monkeypatch.setattr(streaming, "get_session", lambda _sid: session)
+    monkeypatch.setattr(streaming, "register_active_run", lambda *_a, **_k: None)
+    monkeypatch.setattr(streaming, "update_active_run", lambda *_a, **_k: None)
+    monkeypatch.setattr(streaming, "unregister_active_run", lambda *_a, **_k: None)
+    monkeypatch.setattr(streaming, "append_turn_journal_event_for_stream", lambda *_a, **_k: None)
+    monkeypatch.setattr(streaming, "_get_session_agent_lock", lambda _sid: nullcontext())
+    monkeypatch.setattr(
+        streaming,
+        "meter",
+        lambda: SimpleNamespace(begin_session=lambda *_a: None, get_interval=lambda: 10.0, get_stats=lambda: {}),
+    )
+    monkeypatch.setattr(streaming, "_clear_thread_env", lambda: None)
+    monkeypatch.setattr(streaming, "_restore_streaming_home_env", lambda *_a: None)
+    monkeypatch.setattr(streaming, "_restore_streaming_browser_env", lambda *_a: None)
+    monkeypatch.setattr("web.api.kanban_orchestration.session_has_kanban_orchestration", lambda _s: False)
+    monkeypatch.setattr("web.api.kanban_orchestration.set_webui_kanban_orchestration", lambda _v: None)
+    monkeypatch.setattr("web.api.kanban_orchestration.clear_webui_kanban_orchestration", lambda: None)
+
+    orchestrator_module = importlib.import_module(config_module)
+    monkeypatch.setattr(orchestrator_module, config_loader, lambda: {"enabled": True})
+
+    def terminate(*_args, **_kwargs):
+        if terminal == "cancel":
+            raise InterruptedError("cancelled")
+        raise RuntimeError("provider failed")
+
+    monkeypatch.setattr(orchestrator_module, runner_name, terminate)
+    try:
+        streaming._run_agent_streaming(
+            session.session_id,
+            "Request",
+            model,
+            str(tmp_path),
+            stream_id,
+        )
+
+        assert session.active_stream_id is None
+        assert session.pending_user_message is None
+        assert session.pending_attachments == []
+        assert session.pending_started_at is None
+        session.save.assert_called_once()
+        events = [event for event, _payload in channel._offline_buffer]
+        assert events[-1] == ("cancel" if terminal == "cancel" else "error")
     finally:
         with STREAMS_LOCK:
             STREAMS.pop(stream_id, None)

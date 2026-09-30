@@ -4,6 +4,7 @@ import {
   continuationAfterTerminalEvent,
   isActiveTurnContextCurrent,
   isGoalContinuationContextCurrent,
+  readGoalEvaluationError,
   readGoalContinuationPrompt,
   startGoalContinuation
 } from '../src/renderer/goal-continuation.js';
@@ -24,6 +25,19 @@ describe('persistent goal continuation handoff', () => {
       event: 'goal_continue',
       data: { session_id: expected.sessionId, continuation_prompt: prompt, text: prompt }
     }, 'stream-1', expected.sessionId)).toBe(prompt);
+  });
+
+  it('surfaces goal evaluation errors only for the owning stream and session', () => {
+    const event = {
+      streamId: 'stream-1',
+      event: 'goal',
+      data: { session_id: expected.sessionId, state: 'error', message: 'Could not save goal progress.' }
+    };
+    expect(readGoalEvaluationError(event, 'stream-1', expected.sessionId)).toBe('Could not save goal progress.');
+    expect(readGoalEvaluationError({ ...event, streamId: 'old-stream' }, 'stream-1', expected.sessionId)).toBeNull();
+    expect(readGoalEvaluationError({ ...event, data: { ...event.data, session_id: 'other-session' } }, 'stream-1', expected.sessionId)).toBeNull();
+    expect(readGoalEvaluationError({ ...event, data: { ...event.data, state: 'complete' } }, 'stream-1', expected.sessionId)).toBeNull();
+    expect(readGoalEvaluationError({ ...event, data: { session_id: expected.sessionId, state: 'error' } }, 'stream-1', expected.sessionId)).toBe('Goal evaluation failed.');
   });
 
   it('rejects unrelated, stale, malformed, and mismatched continuation events', () => {

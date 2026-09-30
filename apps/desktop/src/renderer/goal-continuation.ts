@@ -4,6 +4,21 @@ export interface GoalContinuationEvent {
   data?: unknown;
 }
 
+/** Read a goal-evaluation warning only from the stream and session that own it. */
+export function readGoalEvaluationError(
+  event: GoalContinuationEvent,
+  expectedStreamId: string,
+  expectedSessionId: string
+): string | null {
+  if (event.event !== 'goal' || event.streamId !== expectedStreamId) return null;
+  if (!event.data || typeof event.data !== 'object' || Array.isArray(event.data)) return null;
+
+  const data = event.data as Record<string, unknown>;
+  if (data.session_id !== expectedSessionId || data.state !== 'error') return null;
+  const message = typeof data.message === 'string' ? data.message.trim() : '';
+  return (message || 'Goal evaluation failed.').slice(0, 500);
+}
+
 /** Read a goal continuation only from the stream and session that own it. */
 export function readGoalContinuationPrompt(
   event: GoalContinuationEvent,

@@ -36,4 +36,39 @@ describe('public release download references', () => {
     expect(source).toContain('/${RELEASE_TAG}/latest.yml');
     expect(source).not.toContain('v0.1.34');
   });
+
+  it('shows v0.1.38 as the current published release across localized site entry points', () => {
+    const locales = ['', 'en/', 'es/', 'fr/', 'it/', 'ja/', 'pt/'];
+
+    for (const locale of locales) {
+      const home = readFileSync(path.join(repoRoot, 'lastbrowser.com', `${locale}index.html`), 'utf8');
+      const changelog = readFileSync(path.join(repoRoot, 'lastbrowser.com', `${locale}changelog/index.html`), 'utf8');
+
+      expect(home).toContain('v0.1.38');
+      expect(home).not.toContain('v0.1.32 Beta');
+      expect(changelog).toContain('v0.1.38');
+      expect(changelog).toContain('published release');
+      expect(changelog).not.toContain('v0.1.35');
+      expect(changelog).not.toMatch(/not yet published|not published|nicht veröffentlicht|no publicado|non publié|未公開/i);
+    }
+  });
+
+  it('does not market the obsolete Gemini CLI subscription or dated model list', () => {
+    const websiteRoot = path.join(repoRoot, 'lastbrowser.com');
+    const sources = [
+      'llms.txt',
+      'llms-full.txt',
+      'changelog/feed.xml',
+      ...['', 'en/', 'es/', 'fr/', 'it/', 'ja/', 'pt/'].flatMap((locale) => [
+        `${locale}index.html`,
+        `${locale}features/index.html`,
+        `${locale}changelog/index.html`,
+      ]),
+    ];
+
+    for (const relativePath of sources) {
+      const source = readFileSync(path.join(websiteRoot, relativePath), 'utf8');
+      expect(source).not.toMatch(/Gemini\s*CLI|Gemini\s+2\.5|Gemini\s+1\.[05]|Multi-Account Gemini/i);
+    }
+  });
 });

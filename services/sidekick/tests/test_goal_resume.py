@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 
 def test_cli_goal_resume_preserves_budget_progress_and_resets_parse_failure_counter(monkeypatch):
     from cli.goals import GoalManager, GoalState
@@ -180,6 +182,116 @@ def test_webui_goal_command_resume_uses_budget_exhausted_message_without_reason(
     assert payload["message_key"] == "goal_paused_budget_exhausted"
     assert payload["message_args"] == [20, "20"]
     assert "turns used" in payload["message"].lower()
+
+
+@pytest.mark.parametrize("command", ["pause", "clear"])
+def test_queued_goal_continuation_is_rejected_after_pause_or_clear(monkeypatch, command, tmp_path):
+    from cli.goals import GoalState
+    from web.api import goals as goal_api
+    from web.api import routes
+
+    class FakeManager:
+        def __init__(self):
+            self.state = GoalState(goal="Finish the task", status="active", created_at=42)
+
+        def is_active(self):
+            return self.state is not None and self.state.status == "active"
+
+        def next_continuation_prompt(self):
+            if not self.is_active():
+                return None
+            return goal_api.CONTINUATION_PROMPT_TEMPLATE.format(goal=self.state.goal)
+
+        def pause(self, reason="user-paused"):
+            self.state.status = "paused"
+            self.state.paused_reason = reason
+            return self.state
+
+        def has_goal(self):
+            return self.state is not None
+
+        def clear(self):
+            if self.state is not None:
+                self.state.status = "cleared"
+            self.state = None
+
+    manager = FakeManager()
+    monkeypatch.setattr(goal_api, "_manager", lambda *_args, **_kwargs: manager)
+    profile_home = tmp_path / "profile"
+    continuation = manager.next_continuation_prompt()
+    assert goal_api.queue_goal_continuation(
+        "goal-race-session", continuation, profile_home=profile_home, space_slug="work"
+    )
+
+    payload = goal_api.goal_command_payload(
+        "goal-race-session", command, profile_home=profile_home, space_slug="work"
+    )
+    assert payload["action"] == command
+
+    class Session:
+        session_id = "goal-race-session"
+        profile = "default"
+        workspace = "workspace"
+        workspace_slug = "work"
+        space_slug = None
+        space = None
+        active_stream_id = None
+
+    monkeypatch.setattr(
+        "web.api.profiles.get_profile_home", lambda _profile: profile_home
+    )
+    response = routes._start_chat_stream_for_session(
+        Session(),
+        msg=continuation,
+        workspace="workspace",
+        model="model",
+        model_provider="provider",
+    )
+
+    assert response["error_code"] == "goal_continuation_cancelled"
+    assert response["_status"] == 409
+
+
+def test_pending_goal_continuations_are_isolated_by_session_profile_and_space(monkeypatch, tmp_path):
+    from cli.goals import GoalState
+    from web.api import goals as goal_api
+
+    class FakeManager:
+        def __init__(self, goal):
+            self.state = GoalState(goal=goal, status="active")
+
+        def is_active(self):
+            return self.state.status == "active"
+
+        def next_continuation_prompt(self):
+            if not self.is_active():
+                return None
+            return goal_api.CONTINUATION_PROMPT_TEMPLATE.format(goal=self.state.goal)
+
+    managers = {}
+
+    def manager_for(session_id, *, profile_home=None, space_slug=None):
+        key = (session_id, str(profile_home), space_slug)
+        return managers[key]
+
+    monkeypatch.setattr(goal_api, "_manager", manager_for)
+    profile_a = tmp_path / "profile-a"
+    profile_b = tmp_path / "profile-b"
+    managers[("shared-id", str(profile_a), "alpha")] = FakeManager("Goal A")
+    managers[("shared-id", str(profile_a), "beta")] = FakeManager("Goal B")
+    managers[("other-id", str(profile_a), "alpha")] = FakeManager("Goal C")
+    prompt_a = managers[("shared-id", str(profile_a), "alpha")].next_continuation_prompt()
+    prompt_b = managers[("shared-id", str(profile_a), "beta")].next_continuation_prompt()
+    prompt_c = managers[("other-id", str(profile_a), "alpha")].next_continuation_prompt()
+
+    assert goal_api.queue_goal_continuation("shared-id", prompt_a, profile_home=profile_a, space_slug="alpha")
+    assert goal_api.queue_goal_continuation("shared-id", prompt_b, profile_home=profile_a, space_slug="beta")
+    assert goal_api.queue_goal_continuation("other-id", prompt_c, profile_home=profile_a, space_slug="alpha")
+
+    assert goal_api.consume_goal_continuation("shared-id", prompt_a, profile_home=profile_a, space_slug="alpha") == "active"
+    assert goal_api.consume_goal_continuation("shared-id", prompt_b, profile_home=profile_a, space_slug="beta") == "active"
+    assert goal_api.consume_goal_continuation("other-id", prompt_c, profile_home=profile_a, space_slug="alpha") == "active"
+    assert goal_api.consume_goal_continuation("shared-id", prompt_a, profile_home=profile_b, space_slug="alpha") == "none"
 
 
 def test_webui_goal_command_passes_custom_and_unlimited_budget(monkeypatch):

@@ -5,7 +5,7 @@
 ## Core Pillars
 - **Platform:** Windows 10 & 11 (x64) native desktop application.
 - **Privacy & Security:** 100% Local-First. Zero telemetry. All tabs, cookies, and keys stored in `%APPDATA%\Lastbrowser` with Windows DPAPI encryption.
-- **AI Integration:** BYOK (Bring Your Own Key) for Gemini CLI Multi-Account, Claude, OpenAI, and local Ollama models.
+- **AI Integration:** Configure available AI providers in the app settings or use local Ollama models. Provider availability and costs depend on the service.
 - **Spaces:** Strict session isolation (`persist:profile:space`) separating cookies, cache, and logins per Space.
 - **ConPTY Terminal:** Native Windows pseudo-console embedded in the browser sidebar.
 - **Commercial Licensing:** Free for personal use, research, and open source. Enterprise rollout and commercial fleet deployment contact: `rainer@dominik.in`.

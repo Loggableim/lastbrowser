@@ -9,15 +9,15 @@
     <atom:link href="https://lastbrowser.com/changelog/feed.xml" rel="self" type="application/rss+xml"/>
     
     <item>
-      <title>Lastbrowser v0.1.38 Beta – Release signing verification</title>
+      <title>Lastbrowser v0.1.38 Beta – Stability and provider updates</title>
       <link>https://lastbrowser.com/releases/#v0.1.38</link>
       <guid isPermaLink="false">lastbrowser-v0.1.38</guid>
       <pubDate>Tue, 29 Sep 2026 19:11:40 GMT</pubDate>
       <description><![CDATA[
-        <p>Release verification and Windows package signing were hardened.</p>
+        <p>v0.1.38 is the current published Windows release, with stability and provider fixes since v0.1.34.</p>
         <ul>
-          <li>Release builds use a locally cached Castlabs EVS session when explicit CI credentials are absent, then verify the signed package.</li>
-          <li>Release signing fails closed when required credentials are unavailable.</li>
+          <li>The GitHub release includes Windows setup and portable packages.</li>
+          <li>See the <a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.38">published release notes</a> for details.</li>
         </ul>
       ]]></description>
     </item>
@@ -62,7 +62,7 @@
         <p>Neuerungen in Version 0.1.32 Beta:</p>
         <ul>
           <li>Nova AI Copilot mit anpassbarer Mentalität und Rollenkonfiguration.</li>
-          <li>Bring Your Own Key (BYOK) Unterstützung für lokale Ollama Modelle, Gemini CLI, Claude und GPT-4o.</li>
+          <li>Konfigurierbare KI-Provider und lokale Ollama-Modelle für Nova AI.</li>
           <li>Lokale DPAPI-Verschlüsselung aller API-Keys im Windows Credential Manager.</li>
         </ul>
       ]]></description>

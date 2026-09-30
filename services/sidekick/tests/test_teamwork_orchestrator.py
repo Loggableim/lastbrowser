@@ -2,6 +2,8 @@
 import os
 import json
 import tempfile
+import threading
+
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -200,6 +202,128 @@ def test_worker_reports_hot_swap_even_when_every_candidate_fails():
     assert result["swapped"] is True
 
 
+def test_worker_does_not_call_backup_when_hot_swap_is_disabled():
+    worker = {
+        "model": "model-a", "call_model": "model-a", "provider": "provider-a",
+        "name": "A", "role": "Pragmatiker", "focus": "Implementation",
+    }
+    backup = {"id": "model-b", "call_model": "model-b", "provider": "provider-b", "name": "B"}
+    calls = []
+
+    def fail(provider, **_kwargs):
+        calls.append(provider)
+        raise RuntimeError("provider unavailable")
+
+    with patch("runtime.auxiliary_client.call_llm", side_effect=fail):
+        result = _invoke_worker(
+            worker, "task", "", [backup], allow_hot_swap=False,
+        )
+
+    assert calls == ["provider-a"]
+    assert result["model"] == "model-a"
+    assert result["provider"] == "provider-a"
+    assert result["swapped"] is False
+    assert result["error"] == "provider unavailable"
+
+
+def test_teamwork_config_disables_backup_provider_hot_swap():
+    pool = [
+        {"id": "model-a", "name": "A", "provider": "provider-a", "tier": "balanced"},
+        {"id": "model-b", "name": "B", "provider": "provider-b", "tier": "balanced"},
+    ]
+    providers = []
+
+    def fake_call_llm(*, provider, messages, **_kwargs):
+        providers.append(provider)
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        if "Arbeitsplan" in messages[0]["content"]:
+            response.choices[0].message.content = "plan"
+            return response
+        if provider == "provider-a":
+            raise RuntimeError("primary unavailable")
+        response.choices[0].message.content = "backup answer"
+        return response
+
+    with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=pool), \
+         patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
+         patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="answer"):
+        with pytest.raises(RuntimeError, match="kein Lösungsentwurf"):
+            run_teamwork_turn(
+                MagicMock(messages=[]),
+                "Do the task",
+                config={
+                    "enabled": True, "strategy": "balanced", "auto_scale": False,
+                    "max_subagents": 1,
+                    "roles": {
+                        "planner": "model-a", "worker_pool": ["model-a"],
+                        "critic": "model-a", "synthesizer": "model-a",
+                    },
+                    "hot_swap": {"enabled": False, "fallback_quorum_min": 1},
+                },
+            )
+
+    assert providers == ["provider-a", "provider-a"]  # planner + primary worker only
+
+
+def test_teamwork_cancellation_does_not_wait_for_blocked_worker():
+    worker_started = threading.Event()
+    release_worker = threading.Event()
+    cancel = threading.Event()
+    finished = threading.Event()
+    model = {"id": "model-a", "name": "A", "provider": "mock", "tier": "balanced"}
+    calls = 0
+
+    def fake_call_llm(*, messages, **_kwargs):
+        nonlocal calls
+        calls += 1
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        if calls == 1:
+            # The planner call completes so execution reaches the worker phase.
+            response.choices[0].message.content = "plan"
+            return response
+        worker_started.set()
+        if not release_worker.wait(timeout=5):
+            raise RuntimeError("test worker release timed out")
+        response.choices[0].message.content = "draft"
+        return response
+
+    def run():
+        try:
+            with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[model]), \
+                 patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
+                 patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="answer"):
+                run_teamwork_turn(
+                    MagicMock(messages=[]),
+                    "Do the task",
+                    config={
+                        "enabled": True, "strategy": "balanced", "auto_scale": False,
+                        "max_subagents": 1, "roles": {},
+                        "hot_swap": {"enabled": False, "fallback_quorum_min": 1},
+                    },
+                    cancel_event=cancel,
+                )
+        except InterruptedError:
+            pass
+        finally:
+            finished.set()
+
+    runner = threading.Thread(target=run, daemon=True)
+    runner.start()
+    try:
+        assert worker_started.wait(timeout=2), "worker call did not start"
+        cancel.set()
+        assert finished.wait(timeout=1), "cancelled teamwork call waited for blocked worker"
+    finally:
+        # Always release the executor thread before the test exits, including
+        # on assertion failure. This keeps the regression deterministic and
+        # avoids leaking a non-daemon ThreadPoolExecutor worker.
+        release_worker.set()
+        runner.join(timeout=2)
+    assert not runner.is_alive()
+
+
 def test_teamwork_does_not_invent_models_when_provider_catalog_is_empty():
     with patch("web.api.config.get_available_models", return_value={"groups": []}):
         assert get_teamwork_model_pool() == []
@@ -347,13 +471,20 @@ def test_run_teamwork_turn_flow():
         resp.choices[0].message.content = f"Lösungsansatz von {model}"
         return resp
 
+    def fake_stream_llm(*, on_content, on_reasoning=None, **kwargs):
+        on_reasoning("prüft den Entwurf")
+        on_content("Finale Antwort ")
+        on_content("wird gestreamt.")
+        return "Finale Antwort wird gestreamt."
+
     mock_pool = [
         {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "provider": "google-gemini-cli", "tier": "balanced"},
         {"id": "deepseek-r1", "name": "DeepSeek R1", "provider": "ollama", "tier": "quality"},
     ]
 
     with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=mock_pool), \
-         patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm):
+         patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=fake_stream_llm):
         result = run_teamwork_turn(
             mock_session,
             "Erstelle eine REST API für Lastbrowser",
@@ -366,7 +497,16 @@ def test_run_teamwork_turn_flow():
         assert result["metadata"]["planner"] == "gemini-2.5-flash"
         assert len(mock_session.messages) == 1
         assert "teamwork" in mock_session.messages[0]
+        assert mock_session.messages[0]["reasoning"] == "prüft den Entwurf"
         assert any(model == "deepseek-r1" and kwargs.get("provider") == "ollama" for model, kwargs in llm_calls)
+        assert result["content"] == "Finale Antwort wird gestreamt."
+        assert [data["content"] for event, data in events if event == "delta"] == [
+            "Finale Antwort ",
+            "wird gestreamt.",
+        ]
+        assert [data["text"] for event, data in events if event == "reasoning"] == [
+            "prüft den Entwurf",
+        ]
 
         # Verify emitted stages
         stage_names = [data["stage"] for ev, data in events if ev == "teamwork_stage"]

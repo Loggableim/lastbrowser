@@ -607,6 +607,18 @@ function _clearPendingGoalContinuation(sessionId){
   _clearPendingGoalContinuationLaunchState();
 }
 
+function _discardCancelledGoalContinuation(sessionId){
+  const sid=String(sessionId||'').trim();
+  if(!sid) return;
+  _clearPendingGoalContinuation(sid);
+  if(_pendingGoalContinuation&&_pendingGoalContinuation.sid===sid) _pendingGoalContinuation=null;
+  if(_queueDrainSid===sid) _queueDrainSid=null;
+}
+
+function _isCancelledGoalContinuationError(error){
+  return !!(error&&error.status===409&&error.data&&error.data.error_code==='goal_continuation_cancelled');
+}
+
 function _clearPendingGoalContinuationRetryTimer(){
   if(_pendingGoalContinuationRetryTimer){
     clearTimeout(_pendingGoalContinuationRetryTimer);
@@ -701,6 +713,10 @@ function _launchGoalContinuation(goalNext, attempt=0){
     _pendingGoalContinuationLaunchInFlight=false;
   }).catch((e)=>{
     _pendingGoalContinuationLaunchInFlight=false;
+    if(_isCancelledGoalContinuationError(e)){
+      _discardCancelledGoalContinuation(goalNext.sid);
+      return;
+    }
     const msg=String((e&&e.message)||'');
     if(/already has an active stream/i.test(msg)&&attempt<8){
       setTimeout(()=>_launchGoalContinuation(goalNext,attempt+1),500+attempt*250);
@@ -1344,6 +1360,10 @@ let _latestGoalStatus=null;
       });
       if(typeof renderSessionList==='function') void renderSessionList();
     }).catch((e)=>{
+      if(_isCancelledGoalContinuationError(e)){
+        _discardCancelledGoalContinuation(goalNext.sid);
+        return;
+      }
       const msg=String((e&&e.message)||'');
       if(/already has an active stream/i.test(msg)&&attempt<8){
         setTimeout(()=>_startGoalContinuation(goalNext,attempt+1),500+attempt*250);

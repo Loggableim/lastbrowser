@@ -46,7 +46,7 @@ import threading
 import time
 from pathlib import Path  # noqa: F401 — used by test mocks
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 from urllib.parse import urlparse, parse_qs, urlunparse
 
 from runtime.provider_response_state import record_provider_response
@@ -4244,6 +4244,178 @@ def call_llm(
                 logger.debug("Auxiliary: cache eviction after connection error failed",
                              exc_info=True)
         raise
+
+
+def stream_llm(
+    *,
+    provider: str,
+    model: str,
+    messages: list,
+    on_content: Callable[[str], None],
+    on_reasoning: Optional[Callable[[str], None]] = None,
+    timeout: float = 30.0,
+    cancel_event: Optional[threading.Event] = None,
+) -> str:
+    """Stream a selected provider response and return its visible text.
+
+    This is intentionally a no-fallback path: once any answer text is sent to
+    the caller, retrying through another provider could duplicate or contradict
+    the partial answer. Callers may fall back before the first emitted token.
+    The helper shares provider resolution and request formatting with
+    :func:`call_llm` so Ollama Cloud, OpenRouter, and compatible providers use
+    the same credential and model routing.
+    """
+    from runtime.think_scrubber import StreamingThinkScrubber
+
+    resolved_provider, resolved_model, resolved_base_url, resolved_api_key, resolved_api_mode = (
+        _resolve_task_provider_model(None, provider, model, None, None)
+    )
+    if cancel_event is not None and cancel_event.is_set():
+        raise InterruptedError("Teamwork synthesis cancelled")
+    _raise_if_game_mode_blocks_local_request(resolved_provider, resolved_base_url)
+    client, final_model = _get_cached_client(
+        resolved_provider,
+        resolved_model,
+        base_url=resolved_base_url,
+        api_key=resolved_api_key,
+        api_mode=resolved_api_mode,
+    )
+    if client is None:
+        raise RuntimeError(
+            f"No LLM provider configured for teamwork synthesis: {resolved_provider}. "
+            "Connect the provider and try again."
+        )
+
+    actual_endpoint = str(getattr(client, "base_url", "") or "").strip().rstrip("/")
+    _raise_if_game_mode_blocks_local_request(
+        resolved_provider,
+        actual_endpoint or resolved_base_url,
+    )
+    kwargs = _build_call_kwargs(
+        resolved_provider,
+        final_model,
+        messages,
+        timeout=timeout,
+        base_url=actual_endpoint or resolved_base_url,
+    )
+    if _is_anthropic_compat_endpoint(resolved_provider, actual_endpoint):
+        kwargs["messages"] = _convert_openai_images_to_anthropic(kwargs["messages"])
+    kwargs["stream"] = True
+
+    visible_parts: List[str] = []
+
+    def emit_reasoning(text: str) -> None:
+        if not text:
+            return
+        if callable(on_reasoning):
+            on_reasoning(text)
+
+    def emit_content(text: str) -> None:
+        if not text:
+            return
+        visible_parts.append(text)
+        on_content(text)
+
+    scrubber = StreamingThinkScrubber(reasoning_callback=emit_reasoning)
+    stream = client.chat.completions.create(**kwargs)
+    if cancel_event is not None and cancel_event.is_set():
+        close = getattr(stream, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                logger.debug("Failed to close cancelled auxiliary response stream", exc_info=True)
+        raise InterruptedError("Teamwork synthesis cancelled")
+
+    # Some compatibility adapters (Codex/Anthropic) currently return a
+    # complete response even when the caller requests streaming. Keep them
+    # usable; native OpenAI-compatible streams take the incremental path below.
+    if hasattr(stream, "choices"):
+        choices = getattr(stream, "choices", None) or []
+        message = getattr(choices[0], "message", None) if choices else None
+        content = _stream_text_value(getattr(message, "content", None))
+        reasoning = _stream_reasoning_value(message)
+        emit_reasoning(reasoning)
+        emit_content(scrubber.feed(content))
+        emit_content(scrubber.flush())
+        _record_completion_metadata(resolved_provider, stream)
+        return "".join(visible_parts)
+
+    try:
+        for chunk in stream:
+            if cancel_event is not None and cancel_event.is_set():
+                raise InterruptedError("Teamwork synthesis cancelled")
+            usage = getattr(chunk, "usage", None)
+            if usage is not None:
+                _record_completion_metadata(resolved_provider, chunk)
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+            delta = getattr(choices[0], "delta", None)
+            emit_reasoning(_stream_reasoning_value(delta))
+            content = _stream_text_value(getattr(delta, "content", None))
+            emit_content(scrubber.feed(content))
+    finally:
+        close = getattr(stream, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                logger.debug("Failed to close auxiliary response stream", exc_info=True)
+
+    if cancel_event is not None and cancel_event.is_set():
+        raise InterruptedError("Teamwork synthesis cancelled")
+    emit_content(scrubber.flush())
+    _record_completion_metadata(resolved_provider, stream)
+    return "".join(visible_parts)
+
+
+def _stream_text_value(value: Any) -> str:
+    """Extract plain text from OpenAI-compatible content delta shapes."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict) and isinstance(item.get("text"), str):
+                parts.append(item["text"])
+            else:
+                text = getattr(item, "text", None)
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+    return ""
+
+
+def _stream_reasoning_value(value: Any) -> str:
+    """Read supported structured reasoning fields without exposing them as content."""
+    if value is None:
+        return ""
+    for key in ("reasoning_content", "reasoning"):
+        text = _stream_text_value(
+            value.get(key) if isinstance(value, dict) else getattr(value, key, None)
+        )
+        if text:
+            return text
+    details = (
+        value.get("reasoning_details")
+        if isinstance(value, dict)
+        else getattr(value, "reasoning_details", None)
+    )
+    if isinstance(details, dict):
+        details = [details]
+    if isinstance(details, list):
+        parts = []
+        for item in details:
+            if not isinstance(item, dict):
+                continue
+            text = item.get("summary") or item.get("text") or item.get("content")
+            if isinstance(text, str):
+                parts.append(text)
+        return "".join(parts)
+    return ""
 
 
 def extract_content_or_reasoning(response) -> str:

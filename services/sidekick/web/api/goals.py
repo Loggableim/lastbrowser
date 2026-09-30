@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -50,6 +51,114 @@ except Exception:  # pragma: no cover - depends on installed sidekick-agent
 GoalManager = _NativeGoalManager  # type: ignore
 
 _DB_CACHE: dict[str, Any] = {}
+
+# A continuation event is delivered to the renderer before it can POST the
+# next chat turn. Keep that hand-off scoped and synchronized with pause/clear.
+# The old set in config.py only recorded a session id, so a later pause could
+# not invalidate the already-emitted continuation prompt.
+_CONTINUATION_LOCK = threading.RLock()
+_PENDING_CONTINUATIONS: dict[tuple[str, str, str], str] = {}
+_CANCELLED_CONTINUATIONS: dict[tuple[str, str, str], str] = {}
+
+
+def _continuation_key(
+    session_id: str,
+    *,
+    profile_home: str | Path | None = None,
+    space_slug: str | None = None,
+) -> tuple[str, str, str]:
+    try:
+        profile_key = str(Path(profile_home).expanduser().resolve()) if profile_home else ""
+    except Exception:
+        profile_key = str(profile_home or "").strip()
+    return (
+        str(session_id or "").strip(),
+        profile_key,
+        str(space_slug or "").strip().lower(),
+    )
+
+
+def queue_goal_continuation(
+    session_id: str,
+    prompt: str,
+    *,
+    profile_home: str | Path | None = None,
+    space_slug: str | None = None,
+) -> bool:
+    """Queue a continuation only while the same scoped goal remains active."""
+    sid = str(session_id or "").strip()
+    text = str(prompt or "").strip()
+    if not sid or not text:
+        return False
+    key = _continuation_key(sid, profile_home=profile_home, space_slug=space_slug)
+    with _CONTINUATION_LOCK:
+        mgr = _manager(sid, profile_home=profile_home, space_slug=space_slug)
+        try:
+            if mgr is None or not mgr.is_active() or mgr.next_continuation_prompt() != text:
+                return False
+        except Exception:
+            return False
+        _CANCELLED_CONTINUATIONS.pop(key, None)
+        _PENDING_CONTINUATIONS[key] = text
+        return True
+
+
+def cancel_goal_continuation(
+    session_id: str,
+    *,
+    profile_home: str | Path | None = None,
+    space_slug: str | None = None,
+) -> None:
+    """Invalidate a queued continuation while retaining a one-shot tombstone.
+
+    The renderer may already have received the event. The tombstone lets the
+    next chat request reject that exact stale prompt instead of running it as
+    an ordinary user message.
+    """
+    key = _continuation_key(session_id, profile_home=profile_home, space_slug=space_slug)
+    with _CONTINUATION_LOCK:
+        prompt = _PENDING_CONTINUATIONS.pop(key, None)
+        if prompt:
+            _CANCELLED_CONTINUATIONS[key] = prompt
+
+
+def consume_goal_continuation(
+    session_id: str,
+    message: str,
+    *,
+    profile_home: str | Path | None = None,
+    space_slug: str | None = None,
+) -> str:
+    """Return ``active``, ``cancelled``, or ``none`` for the pending hand-off.
+
+    A different user message supersedes the queued continuation and records a
+    tombstone for any delayed renderer POST. A matching prompt is only allowed
+    through if its goal is still active in the same profile/Space.
+    """
+    key = _continuation_key(session_id, profile_home=profile_home, space_slug=space_slug)
+    text = str(message or "").strip()
+    with _CONTINUATION_LOCK:
+        pending = _PENDING_CONTINUATIONS.get(key)
+        if pending is not None:
+            if text != pending:
+                _PENDING_CONTINUATIONS.pop(key, None)
+                _CANCELLED_CONTINUATIONS[key] = pending
+                return "none"
+            _PENDING_CONTINUATIONS.pop(key, None)
+            mgr = _manager(session_id, profile_home=profile_home, space_slug=space_slug)
+            try:
+                if mgr is not None and mgr.is_active() and mgr.next_continuation_prompt() == pending:
+                    return "active"
+            except Exception:
+                pass
+            _CANCELLED_CONTINUATIONS[key] = pending
+            return "cancelled"
+
+        cancelled = _CANCELLED_CONTINUATIONS.get(key)
+        if cancelled is not None and text == cancelled:
+            _CANCELLED_CONTINUATIONS.pop(key, None)
+            return "cancelled"
+        return "none"
 
 
 def _default_max_turns() -> int:
@@ -669,7 +778,9 @@ def goal_command_payload(
 
     if lower == "pause":
         try:
-            state = mgr.pause(reason="user-paused")
+            with _CONTINUATION_LOCK:
+                cancel_goal_continuation(sid, profile_home=profile_home, space_slug=space_slug)
+                state = mgr.pause(reason="user-paused")
         except Exception as exc:
             logger.warning("Could not persist goal pause for session %s: %s", sid, exc)
             return _payload(ok=False, action="pause", error="persistence_failed", message="Goal state could not be saved.", session_id=sid, space_slug=space_slug)
@@ -695,7 +806,9 @@ def goal_command_payload(
 
     if lower == "resume":
         try:
-            state = mgr.resume()
+            with _CONTINUATION_LOCK:
+                cancel_goal_continuation(sid, profile_home=profile_home, space_slug=space_slug)
+                state = mgr.resume()
         except Exception as exc:
             logger.warning("Could not persist goal resume for session %s: %s", sid, exc)
             return _payload(ok=False, action="resume", error="persistence_failed", message="Goal state could not be saved.", session_id=sid, space_slug=space_slug)
@@ -738,7 +851,9 @@ def goal_command_payload(
     if lower in ("clear", "stop", "done"):
         had = bool(mgr.has_goal())
         try:
-            mgr.clear()
+            with _CONTINUATION_LOCK:
+                cancel_goal_continuation(sid, profile_home=profile_home, space_slug=space_slug)
+                mgr.clear()
         except Exception as exc:
             logger.warning("Could not persist goal clear for session %s: %s", sid, exc)
             return _payload(ok=False, action="clear", error="persistence_failed", message="Goal state could not be saved.", session_id=sid, space_slug=space_slug)
@@ -765,7 +880,9 @@ def goal_command_payload(
         )
 
     try:
-        state = mgr.set(text, max_turns=max_turns, unlimited=unlimited)
+        with _CONTINUATION_LOCK:
+            cancel_goal_continuation(sid, profile_home=profile_home, space_slug=space_slug)
+            state = mgr.set(text, max_turns=max_turns, unlimited=unlimited)
     except ValueError as exc:
         return _payload(ok=False, action="set", error="invalid_goal", message=f"Invalid goal: {exc}", session_id=sid, space_slug=space_slug)
     except Exception as exc:

@@ -23,7 +23,7 @@ from web.api.config import (
     get_config,
     STREAMS, STREAMS_LOCK, CANCEL_FLAGS, AGENT_INSTANCES, STREAM_PARTIAL_TEXT,
     STREAM_REASONING_TEXT, STREAM_LIVE_TOOL_CALLS,
-    STREAM_GOAL_RELATED, PENDING_GOAL_CONTINUATION,
+    STREAM_GOAL_RELATED,
     LOCK, SESSIONS, get_session_dir,
     _get_session_agent_lock, _set_thread_env, _clear_thread_env,
     register_active_run, update_active_run, unregister_active_run,
@@ -2345,7 +2345,11 @@ def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
     if not goal_related:
         return {}
     try:
-        from web.api.goals import evaluate_goal_after_turn, has_active_goal
+        from web.api.goals import (
+            evaluate_goal_after_turn,
+            has_active_goal,
+            queue_goal_continuation,
+        )
 
         try:
             from web.api.profiles import get_profile_home
@@ -2406,16 +2410,21 @@ def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
         if decision.get("should_continue"):
             continuation_prompt = str(decision.get("continuation_prompt") or "").strip()
             if continuation_prompt:
-                PENDING_GOAL_CONTINUATION.add(session_id)
-                put("goal_continue", {
-                    "session_id": session_id,
-                    "continuation_prompt": continuation_prompt,
-                    "text": continuation_prompt,
-                    "message": message,
-                    "message_key": decision.get("message_key") or "goal_continuing",
-                    "message_args": decision.get("message_args") or [],
-                    "decision": decision,
-                })
+                if queue_goal_continuation(
+                    session_id,
+                    continuation_prompt,
+                    profile_home=profile_home,
+                    space_slug=space_slug,
+                ):
+                    put("goal_continue", {
+                        "session_id": session_id,
+                        "continuation_prompt": continuation_prompt,
+                        "text": continuation_prompt,
+                        "message": message,
+                        "message_key": decision.get("message_key") or "goal_continuing",
+                        "message_args": decision.get("message_args") or [],
+                        "decision": decision,
+                    })
         return decision
     except Exception as exc:
         logger.debug("Goal continuation hook failed for session %s: %s", session_id, exc)
@@ -4726,15 +4735,6 @@ def _run_agent_streaming(
             STREAM_LIVE_TOOL_CALLS.pop(stream_id, None)  # Clean up tool calls (#1361 §B)
             STREAM_GOAL_RELATED.pop(stream_id, None)  # Clean up goal-related flag (#1932)
             unregister_active_run(stream_id)
-            # NOTE: do NOT discard PENDING_GOAL_CONTINUATION here. The marker
-            # is set by goal_continue (line ~3328) inside the SAME function
-            # call and consumed atomically by `_start_chat_stream_for_session`
-            # in routes.py (around line 6522) when the next stream starts.
-            # Discarding here in the streaming worker's `finally` would
-            # almost always race ahead of the frontend's SSE-receive →
-            # POST /api/chat/start round-trip and erase the marker before
-            # the next stream can read it, breaking the goal-continuation
-            # chain. Stage-326 critical fix per Opus advisor review.
 
 # ============================================================
 # SECTION: HTTP Request Handler

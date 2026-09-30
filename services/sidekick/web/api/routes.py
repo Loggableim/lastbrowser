@@ -1259,7 +1259,6 @@ from web.api.config import (
     create_stream_channel,
     get_webui_session_save_mode,
     STREAM_GOAL_RELATED,
-    PENDING_GOAL_CONTINUATION,
     DEV_MODE,
 )
 from web.api.helpers import (
@@ -11672,12 +11671,42 @@ def _start_chat_stream_for_session(
         diag.stage("stale_stream_cleanup") if diag else None
         _clear_stale_stream_state(s)
 
-    # #1932: check if this session has a pending goal continuation flag.
-    # The streaming hook sets PENDING_GOAL_CONTINUATION when goal_continue fires,
-    # so the next chat/start for this session is automatically treated as goal-related.
-    if not goal_related and s.session_id in PENDING_GOAL_CONTINUATION:
-        goal_related = True
-        PENDING_GOAL_CONTINUATION.discard(s.session_id)
+    # Consume only the exact continuation prompt emitted for this profile/Space.
+    # Pause/clear can race with delivery of the SSE event, so the goal bridge
+    # returns "cancelled" for an already-invalidated prompt and we must not run
+    # it as an ordinary chat message.
+    if not goal_related:
+        try:
+            from web.api.goals import consume_goal_continuation
+
+            try:
+                from web.api.profiles import get_profile_home
+
+                continuation_profile_home = get_profile_home(getattr(s, "profile", None))
+            except Exception:
+                continuation_profile_home = None
+            continuation_space_slug = str(
+                getattr(s, "workspace_slug", None)
+                or getattr(s, "space_slug", None)
+                or getattr(s, "space", None)
+                or ""
+            ).strip().lower() or None
+            continuation_state = consume_goal_continuation(
+                s.session_id,
+                msg,
+                profile_home=continuation_profile_home,
+                space_slug=continuation_space_slug,
+            )
+            if continuation_state == "cancelled":
+                return {
+                    "error": "The persistent goal was paused or cleared before this continuation started.",
+                    "error_code": "goal_continuation_cancelled",
+                    "_status": 409,
+                }
+            if continuation_state == "active":
+                goal_related = True
+        except Exception:
+            logger.debug("Could not validate pending goal continuation", exc_info=True)
     if not goal_related:
         try:
             from web.api.goals import has_active_goal

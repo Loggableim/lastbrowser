@@ -28,7 +28,7 @@ A native terminal lives directly in the browser shell:
 
 ### 3.3 Nova AI Copilot & 48 Agentic Workflows
 Nova AI operates in a 70/30 split view alongside web content:
-- **Zero Cloud Mandate / BYOK:** Supports local Ollama models (offline), Gemini CLI Multi-Account, Anthropic Claude, and OpenAI GPT-4o.
+- **AI providers:** Configure available providers in the app settings or use local Ollama models. Availability and costs depend on the selected service.
 - **Agentic Skills Catalog:** 48 curated skills categorised into:
   1. Research (Academic paper summarizer, competitive analysis, fact checker)
   2. Content (Social thread generator, translation, markdown exporter)

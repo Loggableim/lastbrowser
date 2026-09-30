@@ -39,6 +39,7 @@ def test_orchestration_config_load_errors_fail_closed(monkeypatch, orchestration
 
 def test_goal_hook_for_orchestrator_turn_persists_decision_and_queues_continuation(monkeypatch):
     from web.api import streaming
+    from web.api import goals as goals_api
 
     session = SimpleNamespace(
         profile="profile-a",
@@ -54,20 +55,29 @@ def test_goal_hook_for_orchestrator_turn_persists_decision_and_queues_continuati
             "space_slug": "research",
         },
     )
+    continuation_prompt = goals_api.CONTINUATION_PROMPT_TEMPLATE.format(goal="more work")
+
+    class ActiveGoal:
+        def is_active(self):
+            return True
+
+        def next_continuation_prompt(self):
+            return continuation_prompt
+
+    monkeypatch.setattr(goals_api, "_manager", lambda *_args, **_kwargs: ActiveGoal())
 
     def evaluate(session_id, response, **kwargs):
         evaluated.update(session_id=session_id, response=response, **kwargs)
         return {
             "status": "active",
             "should_continue": True,
-            "continuation_prompt": "[goal continuation]",
+            "continuation_prompt": continuation_prompt,
             "message": "Continuing toward the goal.",
             "message_key": "goal_continuing",
             "message_args": [1, 20, "more work"],
         }
 
     monkeypatch.setattr("web.api.goals.evaluate_goal_after_turn", evaluate)
-    streaming.PENDING_GOAL_CONTINUATION.discard("goal-session")
     events = []
 
     result = streaming._evaluate_goal_after_stream_turn(
@@ -86,9 +96,25 @@ def test_goal_hook_for_orchestrator_turn_persists_decision_and_queues_continuati
         "space_slug": "research",
     }
     assert [name for name, _ in events] == ["goal", "goal", "goal_continue"]
-    assert events[-1][1]["continuation_prompt"] == "[goal continuation]"
-    assert "goal-session" in streaming.PENDING_GOAL_CONTINUATION
-    streaming.PENDING_GOAL_CONTINUATION.discard("goal-session")
+    assert events[-1][1]["continuation_prompt"] == continuation_prompt
+    assert goals_api.consume_goal_continuation(
+        "another-session",
+        continuation_prompt,
+        profile_home="home:profile-a",
+        space_slug="research",
+    ) == "none"
+    assert goals_api.consume_goal_continuation(
+        "goal-session",
+        continuation_prompt,
+        profile_home="home:profile-a",
+        space_slug="other-space",
+    ) == "none"
+    assert goals_api.consume_goal_continuation(
+        "goal-session",
+        continuation_prompt,
+        profile_home="home:profile-a",
+        space_slug="research",
+    ) == "active"
 
 
 @pytest.mark.parametrize(
@@ -243,7 +269,11 @@ def test_enabled_orchestration_stream_runs_persistent_goal_hook(
         events = [event for event, _payload in channel._offline_buffer]
         assert events[:2] == ["goal", "goal"]
         assert events[-1] == "stream_end"
-        assert session.session_id not in streaming.PENDING_GOAL_CONTINUATION
+        assert goals_api.consume_goal_continuation(
+            session.session_id,
+            "",
+            profile_home=tmp_path / "profile",
+        ) == "none"
     finally:
         with STREAMS_LOCK:
             STREAMS.pop(stream_id, None)

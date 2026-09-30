@@ -19,7 +19,7 @@ import os
 import re
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -380,7 +380,8 @@ def _invoke_worker(
     prompt: str,
     grounding: str,
     backup_pool: List[Dict[str, Any]],
-    timeout: float = 45.0
+    timeout: float = 45.0,
+    allow_hot_swap: bool = True,
 ) -> Dict[str, Any]:
     """Call a single debate worker with hot-swap retry."""
     from runtime.auxiliary_client import call_llm, extract_content_or_reasoning
@@ -428,6 +429,19 @@ def _invoke_worker(
             }
         except Exception as e:
             logger.warning("Worker %s failed: %s", current_worker["model"], e)
+            if not allow_hot_swap:
+                elapsed_ms = int((time.time() - start_t) * 1000)
+                return {
+                    "model": current_worker["model"],
+                    "provider": current_worker["provider"],
+                    "name": current_worker.get("name", current_worker["model"]),
+                    "role": current_worker["role"],
+                    "focus": current_worker["focus"],
+                    "content": "",
+                    "execution_ms": elapsed_ms,
+                    "error": str(e),
+                    "swapped": False,
+                }
             # Try hot-swap from backup pool
             swap_candidate = next((m for m in backup_pool if m["id"] not in tried_models), None)
             if swap_candidate:
@@ -464,7 +478,7 @@ def run_teamwork_turn(
     cancel_event: Optional[threading.Event] = None,
 ) -> Dict[str, Any]:
     """Execute a complete Consensus & Debate Teamwork turn with live SSE event emission."""
-    from runtime.auxiliary_client import call_llm, extract_content_or_reasoning
+    from runtime.auxiliary_client import call_llm, extract_content_or_reasoning, stream_llm
 
     start_total_t = time.time()
     cfg = config or load_teamwork_config()
@@ -549,43 +563,69 @@ def run_teamwork_turn(
 
     # 3. Phase: Parallele Debatte (ThreadPoolExecutor)
     drafts: List[Dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=len(workers)) as executor:
-        futures = {
-            executor.submit(_invoke_worker, w, prompt, team_context, pool): w
-            for w in workers
-        }
-        for future in as_completed(futures):
-            if cancel_event and cancel_event.is_set():
-                executor.shutdown(wait=False, cancel_futures=True)
-                raise InterruptedError("Cancelled")
-            try:
-                res = future.result()
-                drafts.append(res)
-                if not res.get("error"):
-                    put_event("teamwork_draft", {
-                        "model": res["model"],
-                        "name": res["name"],
-                        "role": res["role"],
-                        "content": res["content"],
-                        "execution_ms": res["execution_ms"],
-                        "swapped": res.get("swapped", False),
-                    })
-                else:
-                    put_event("teamwork_draft", {
-                        "model": res["model"],
-                        "name": res["name"],
-                        "role": res["role"],
-                        "error": res["error"],
-                        "skipped": True,
-                    })
-            except Exception as e:
-                logger.error("Worker future raised error: %s", e)
-
-    # Quorum check
-    successful_drafts = [d for d in drafts if not d.get("error") and d.get("content")]
     hot_swap_cfg = cfg.get("hot_swap", {})
     if not isinstance(hot_swap_cfg, dict):
         hot_swap_cfg = {}
+    allow_hot_swap = bool(hot_swap_cfg.get("enabled", True))
+    executor = ThreadPoolExecutor(max_workers=len(workers))
+    futures = {
+        executor.submit(
+            _invoke_worker,
+            w,
+            prompt,
+            team_context,
+            pool,
+            allow_hot_swap=allow_hot_swap,
+        ): w
+        for w in workers
+    }
+    cancelled = False
+    pending = set(futures)
+    try:
+        while pending:
+            if cancel_event and cancel_event.is_set():
+                cancelled = True
+                executor.shutdown(wait=False, cancel_futures=True)
+                raise InterruptedError("Cancelled")
+            completed, pending = wait(
+                pending,
+                timeout=0.05 if cancel_event else None,
+                return_when=FIRST_COMPLETED,
+            )
+            for future in completed:
+                try:
+                    res = future.result()
+                    drafts.append(res)
+                    if not res.get("error"):
+                        put_event("teamwork_draft", {
+                            "model": res["model"],
+                            "name": res["name"],
+                            "role": res["role"],
+                            "content": res["content"],
+                            "execution_ms": res["execution_ms"],
+                            "swapped": res.get("swapped", False),
+                        })
+                    else:
+                        put_event("teamwork_draft", {
+                            "model": res["model"],
+                            "name": res["name"],
+                            "role": res["role"],
+                            "error": res["error"],
+                            "skipped": True,
+                        })
+                except Exception as e:
+                    logger.error("Worker future raised error: %s", e)
+        if cancel_event and cancel_event.is_set():
+            cancelled = True
+            raise InterruptedError("Cancelled")
+    finally:
+        # ThreadPoolExecutor.__exit__ always waits for workers, even after a
+        # shutdown(wait=False). Avoid that implicit wait when the caller has
+        # cancelled; provider calls can be blocked or may ignore their timeout.
+        executor.shutdown(wait=not cancelled, cancel_futures=cancelled)
+
+    # Quorum check
+    successful_drafts = [d for d in drafts if not d.get("error") and d.get("content")]
     try:
         min_quorum = max(1, min(8, int(hot_swap_cfg.get("fallback_quorum_min", 1))))
     except (TypeError, ValueError):
@@ -678,26 +718,49 @@ def run_teamwork_turn(
     )
 
     synth_t0 = time.time()
+    streamed_answer_parts: List[str] = []
+    streamed_reasoning_parts: List[str] = []
+
+    def emit_synthesis_content(text: str) -> None:
+        if not text:
+            return
+        streamed_answer_parts.append(text)
+        put_event("delta", {"content": text})
+
+    def emit_synthesis_reasoning(text: str) -> None:
+        if not text:
+            return
+        streamed_reasoning_parts.append(text)
+        put_event("reasoning", {"text": text})
+
     try:
         synth_entry = next((m for m in pool if m["id"] == synth_model), None)
-        synth_resp = call_llm(
+        final_answer = stream_llm(
             provider=synth_provider,
             model=synth_entry.get("call_model", synth_model) if synth_entry else synth_model,
             messages=[{"role": "user", "content": synthesis_prompt}],
+            on_content=emit_synthesis_content,
+            on_reasoning=emit_synthesis_reasoning,
             timeout=65.0,
+            cancel_event=cancel_event,
         )
-        final_answer = extract_content_or_reasoning(synth_resp)
-        if not final_answer:
-            final_answer = str(synth_resp.choices[0].message.content or "").strip()
+        if not final_answer.strip():
+            final_answer = successful_drafts[0]["content"]
+            emit_synthesis_content(final_answer)
+    except InterruptedError:
+        raise
     except Exception as e:
+        if streamed_answer_parts:
+            raise RuntimeError(
+                "Teamwork synthesis stream failed after partial output; "
+                "the partial answer was left visible and was not replaced."
+            ) from e
         logger.error("Synthesis failed: %s, falling back to best individual draft", e)
         final_answer = successful_drafts[0]["content"]
+        emit_synthesis_content(final_answer)
 
     synth_ms = int((time.time() - synth_t0) * 1000)
     total_duration_ms = int((time.time() - start_total_t) * 1000)
-
-    # Stream the final answer tokens/blocks into client stream
-    put_event("delta", {"content": final_answer})
 
     metadata_payload = {
         "strategy": cfg.get("strategy", "balanced"),
@@ -736,6 +799,8 @@ def run_teamwork_turn(
         "timestamp": int(time.time()),
         "teamwork": metadata_payload,
     }
+    if streamed_reasoning_parts:
+        assistant_entry["reasoning"] = "".join(streamed_reasoning_parts)
     session.messages.append(assistant_entry)
     try:
         session.save()

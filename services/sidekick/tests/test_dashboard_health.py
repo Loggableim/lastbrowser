@@ -5759,6 +5759,31 @@ def test_goal_continuation_auto_starts_after_delivery():
     assert "goal_related=goal_related" in routes_py
 
 
+def test_cancelled_goal_continuation_is_not_requeued_from_either_launch_path():
+    messages_js = Path("web/static/messages.js").read_text(encoding="utf-8")
+
+    assert "function _isCancelledGoalContinuationError(error)" in messages_js
+    assert "error.status===409&&error.data&&error.data.error_code==='goal_continuation_cancelled'" in messages_js
+    assert "function _discardCancelledGoalContinuation(sessionId)" in messages_js
+
+    launch_path = messages_js[
+        messages_js.index("function _launchGoalContinuation(goalNext, attempt=0)"):
+        messages_js.index("function _restorePendingGoalContinuationForSession")
+    ]
+    nested_path = messages_js[
+        messages_js.index("function _startGoalContinuation(goalNext, attempt=0)"):
+        messages_js.index("function _pollSettledSessionUntilDone()")
+    ]
+
+    for source in (launch_path, nested_path):
+        catch_start = source.index("}).catch((e)=>{")
+        catch_source = source[catch_start:]
+        cancelled_branch = catch_source.index("if(_isCancelledGoalContinuationError(e))")
+        queue_fallback = catch_source.index("queueSessionMessage(goalNext.sid")
+        assert cancelled_branch < queue_fallback
+        assert "_discardCancelledGoalContinuation(goalNext.sid)" in catch_source[cancelled_branch:queue_fallback]
+
+
 def test_asyncio_disconnect_context_is_suppressed():
     from cli import web_server
 

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { canRenderBrowserForAccessAuth } from '../src/renderer/access-auth.js';
 
 const appPath = path.resolve(process.cwd(), 'src/renderer/App.tsx');
+const settingsPanelsPath = path.resolve(process.cwd(), 'src/renderer/panels/SystemPanels.tsx');
 const mainPath = path.resolve(process.cwd(), 'src/main/main.ts');
 const preloadPath = path.resolve(process.cwd(), 'src/main/preload.ts');
 
@@ -44,5 +45,11 @@ describe('desktop access password lock', () => {
     expect(source).toContain('setInterval(() => void checkAccessStatus(), 10_000)');
     expect(source).toContain('setAccessAuthChecked(false)');
     expect(source).toContain("document.addEventListener('visibilitychange', onVisible)");
+  });
+
+  it('shows the disabled auth state after removing the password gate', () => {
+    const source = readFileSync(settingsPanelsPath, 'utf8');
+    expect(source).toContain("t(authEnabled ? 'settings.panels.system.disableAuth' : 'settings.panels.system.authDisabled')");
+    expect(source).toContain("showToast(t('settings.panels.system.authDisabled'))");
   });
 });

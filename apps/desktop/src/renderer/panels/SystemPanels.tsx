@@ -2512,6 +2512,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       setPasswordDraft('');
       await settingsState.refresh();
       await authState.refresh();
+      showToast(t('settings.panels.system.authDisabled'));
     } catch (error) {
       showToast(`Disable auth failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -4316,7 +4317,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     </button>
                     <button type="button" className="secondary-action compact" onClick={() => void disableAuth()} disabled={!ready || !authEnabled || passwordEnvLocked}>
                       <Trash2 size={15} />
-                      <span>{t('settings.panels.system.disableAuth')}</span>
+                      <span>{t(authEnabled ? 'settings.panels.system.disableAuth' : 'settings.panels.system.authDisabled')}</span>
                     </button>
                   </div>
                   <div className="settings-system-status">

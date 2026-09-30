@@ -40,7 +40,6 @@ def test_local_ollama_key_is_saved_provider_scoped_without_changing_cloud_env(mo
 def test_ollama_cloud_key_change_invalidates_live_catalog_cache(monkeypatch, tmp_path, action):
     from web.api import config, providers
     from cli import models
-    from runtime import auxiliary_client
 
     config_path = tmp_path / "config.yaml"
     monkeypatch.setattr(config, "_get_config_path", lambda: config_path)
@@ -49,8 +48,6 @@ def test_ollama_cloud_key_change_invalidates_live_catalog_cache(monkeypatch, tmp
     cache_path = tmp_path / "ollama_cloud_models_cache.json"
     monkeypatch.setattr(models, "_ollama_cloud_cache_path", lambda: cache_path)
     cache_path.write_text('{"version":2,"models":["stale-model"],"cached_at":0}', encoding="utf-8")
-    evicted = []
-    monkeypatch.setattr(auxiliary_client, "_evict_cached_clients", lambda provider: evicted.append(provider))
 
     # The API models cache uses the shared invalidator; this provider-specific
     # cache is separately dropped only for Ollama Cloud key changes.
@@ -62,7 +59,59 @@ def test_ollama_cloud_key_change_invalidates_live_catalog_cache(monkeypatch, tmp
 
     assert result["ok"] is True
     assert not cache_path.exists()
-    assert evicted == ["ollama-cloud"]
+
+
+@pytest.mark.parametrize("action", ["set", "remove"])
+def test_ollama_cloud_credential_change_evicts_real_sync_and_async_runtime_clients(
+    monkeypatch, tmp_path, action
+):
+    """Changing the stored credential must invalidate actual SDK clients in the runtime cache."""
+    from openai import AsyncOpenAI, OpenAI
+    from web.api import config, providers
+    from runtime import auxiliary_client
+
+    config_path = tmp_path / "config.yaml"
+    monkeypatch.setattr(config, "_get_config_path", lambda: config_path)
+    monkeypatch.setattr(providers, "_get_sidekick_home", lambda: tmp_path)
+    monkeypatch.setattr(providers, "_write_env_file", lambda _path, _updates: None)
+    monkeypatch.setattr(config, "_delete_models_cache_on_disk", lambda: None)
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+
+    # Seed the process-global cache through its normal cache-key/store helpers,
+    # using real SDK objects so this verifies sync and async client eviction.
+    sync_client = OpenAI(api_key="old-test-credential", base_url="https://ollama.com/v1")
+    async_client = AsyncOpenAI(api_key="old-test-credential", base_url="https://ollama.com/v1")
+    sync_key = auxiliary_client._client_cache_key(
+        "ollama-cloud", async_mode=False, base_url="https://ollama.com/v1", api_key=None
+    )
+    async_key = auxiliary_client._client_cache_key(
+        "ollama-cloud", async_mode=True, base_url="https://ollama.com/v1", api_key=None
+    )
+    async_key_other_provider = auxiliary_client._client_cache_key(
+        "openrouter", async_mode=True, base_url="https://openrouter.ai/api/v1", api_key=None
+    )
+    other_client = AsyncOpenAI(api_key="other-test-credential", base_url="https://openrouter.ai/api/v1")
+    auxiliary_client._store_cached_client(sync_key, sync_client, "deepseek-v4.1-flash")
+    auxiliary_client._store_cached_client(async_key, async_client, "deepseek-v4.1-flash")
+    auxiliary_client._store_cached_client(async_key_other_provider, other_client, "test-model")
+
+    try:
+        if action == "set":
+            result = providers.set_provider_key("ollama-cloud", "new-test-credential")
+        else:
+            result = providers.remove_provider_key("ollama-cloud")
+
+        assert result["ok"] is True
+        assert sync_key not in auxiliary_client._client_cache
+        assert async_key not in auxiliary_client._client_cache
+        assert async_key_other_provider in auxiliary_client._client_cache
+        assert sync_client._client.is_closed
+        assert async_client._client.is_closed
+        assert not other_client._client.is_closed
+    finally:
+        auxiliary_client._force_close_async_httpx(other_client)
+        with auxiliary_client._client_cache_lock:
+            auxiliary_client._client_cache.pop(async_key_other_provider, None)
 
 
 def test_ollama_connection_probe_runs_in_backend_and_does_not_persist_key(monkeypatch):

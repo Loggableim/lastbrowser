@@ -111,6 +111,7 @@ class GoalState:
     last_reason: Optional[str] = None
     paused_reason: Optional[str] = None       # why we auto-paused (budget, etc.)
     consecutive_parse_failures: int = 0       # judge-output parse failures in a row
+    consumed_continuation_turn: int = -1       # idempotency marker for continuation delivery
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -139,6 +140,7 @@ class GoalState:
             last_reason=data.get("last_reason"),
             paused_reason=data.get("paused_reason"),
             consecutive_parse_failures=int(data.get("consecutive_parse_failures", 0) or 0),
+            consumed_continuation_turn=int(data.get("consumed_continuation_turn", -1)),
         )
 
 
@@ -543,6 +545,9 @@ class GoalManager:
             return self._state
         self._state.status = "active"
         self._state.paused_reason = None
+        # Explicit resume starts a new continuation attempt even when the goal
+        # turn counter did not advance before the previous stream failed.
+        self._state.consumed_continuation_turn = -1
         if reset_budget:
             self._state.turns_used = 0
         self._state.consecutive_parse_failures = 0
@@ -690,6 +695,18 @@ class GoalManager:
         if not self._state or self._state.status != "active":
             return None
         return CONTINUATION_PROMPT_TEMPLATE.format(goal=self._state.goal)
+
+    def consume_continuation(self) -> bool:
+        """Atomically claim this turn's continuation once, including after restart."""
+        state = self._state
+        if not state or state.status != "active":
+            return False
+        turn = int(state.turns_used or 0)
+        if int(state.consumed_continuation_turn) == turn:
+            return False
+        state.consumed_continuation_turn = turn
+        save_goal(self.session_id, state)
+        return True
 
 
 __all__ = [

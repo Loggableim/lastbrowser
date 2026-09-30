@@ -13,7 +13,7 @@ import { signalAccessAuthRequired } from './sidekick-api.js';
  */
 
 export type ChatStreamEvent = {
-  /** SSE event name: heartbeat | delta | message | tool | stream_end | error | cancel */
+  /** SSE event name: heartbeat | delta | message | tool | stream_end | error | apperror | cancel */
   event: string;
   /** Parsed JSON payload, or the raw string when the payload is not JSON. */
   data: unknown;
@@ -117,7 +117,7 @@ export function subscribeChatStream(
         buffer = rest;
         for (const event of events) {
           onEvent(event);
-          if (event.event === 'stream_end' || event.event === 'error' || event.event === 'cancel') {
+          if (event.event === 'stream_end' || event.event === 'error' || event.event === 'apperror' || event.event === 'cancel') {
             controller.abort();
             return;
           }

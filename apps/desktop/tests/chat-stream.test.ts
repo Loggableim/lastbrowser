@@ -99,4 +99,27 @@ describe('chat stream access auth', () => {
     expect(events).toEqual([{ event: 'error', data: { error: 'HTTP 401' }, raw: '' }]);
     setAccessAuthRequiredHandler(null);
   });
+
+  it('forwards the Sidekick apperror event and closes the SSE reader immediately', async () => {
+    const events: Array<{ event: string; data: unknown; raw: string }> = [];
+    const fetchImpl: typeof fetch = async () => new Response(
+      'event: apperror\ndata: {"message":"HTTP 429: quota exhausted"}\n\n',
+      { status: 200, headers: { 'content-type': 'text/event-stream' } },
+    );
+
+    const stream = subscribeChatStream(
+      'http://127.0.0.1:8787',
+      'stream-apperror',
+      null,
+      (event) => events.push(event),
+      fetchImpl,
+    );
+    await stream.done;
+
+    expect(events).toEqual([{
+      event: 'apperror',
+      data: { message: 'HTTP 429: quota exhausted' },
+      raw: '{"message":"HTTP 429: quota exhausted"}',
+    }]);
+  });
 });

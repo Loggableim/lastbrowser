@@ -1758,9 +1758,9 @@ def _invalidate_ollama_cloud_catalog_if_needed(provider_id: str) -> None:
     except Exception:
         logger.debug("Failed to invalidate Ollama Cloud model cache", exc_info=True)
     try:
-        # Auxiliary clients are cached by provider and explicit overrides. A
-        # normal provider call passes no explicit key, so rotating the stored
-        # key otherwise leaves the old Authorization header alive in-process.
+        # A normal provider call uses the stored key through the cached SDK
+        # client, so credential rotation must close and evict both sync/async
+        # clients before another request can reuse their old Authorization.
         from runtime.auxiliary_client import _evict_cached_clients
 
         _evict_cached_clients("ollama-cloud")

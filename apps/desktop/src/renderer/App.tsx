@@ -59,7 +59,7 @@ import {
 import { hideWebviewScrollbars } from './browser-view.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
-import { applyLiveChatDelta, applyLiveChatProgress, finishLiveChatMessage, readLiveChatDelta } from './chat-live-stream.js';
+import { applyLiveChatDelta, applyLiveChatProgress, finishLiveChatMessage, finishLiveChatMessageWithError, readLiveChatDelta, readNativeChatStreamError } from './chat-live-stream.js';
 import { playChatCompletionSound } from './notification-sound.js';
 import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
@@ -2277,11 +2277,12 @@ function AppContent(): JSX.Element {
     earlyEvents: Array<{ streamId?: string; event?: string; data?: unknown }> = [],
     unsubscribeEarly?: () => void,
     isOwningContextCurrent: () => boolean = () => activeSessionIdRef.current === sessionId
-  ): Promise<{ continuationPrompt: string | null; goalError: string | null }> {
+  ): Promise<{ continuationPrompt: string | null; goalError: string | null; streamError: string | null }> {
     const streamStartedAt = Date.now();
     let lastProgressAt = streamStartedAt;
     let sawStreamEnd = false;
     let streamFailed = false;
+    let streamError: string | null = null;
     let hasLiveOutput = false;
     let goalContinuationPrompt: string | null = null;
     let goalEvaluationError: string | null = null;
@@ -2320,9 +2321,15 @@ function AppContent(): JSX.Element {
         }
         return;
       }
-      if (event.event === 'error') {
+      if (event.event === 'error' || event.event === 'apperror') {
         goalContinuationPrompt = continuationAfterTerminalEvent(goalContinuationPrompt, 'error');
+        streamError = readNativeChatStreamError(event.data);
         streamFailed = true;
+        sawStreamEnd = true;
+        if (isOwningContextCurrent()) {
+          setChatMessages((current) => finishLiveChatMessageWithError(current, streamError!));
+          setMessages((current) => finishLiveChatMessageWithError(current, streamError!));
+        }
         return;
       }
       if (typeof event.event !== 'string') return;
@@ -2372,9 +2379,9 @@ function AppContent(): JSX.Element {
         streamFailed = true;
       });
 
-      while (!isNativeChatStreamWaitExpired(streamStartedAt, lastProgressAt, Date.now())) {
+      while (!sawStreamEnd && !isNativeChatStreamWaitExpired(streamStartedAt, lastProgressAt, Date.now())) {
         await delay(600);
-        if (sawStreamEnd) return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError };
+        if (sawStreamEnd) return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError };
         if (streamFailed) break;
         // The stream is the fast path, but a dropped connection must not hang
         // the turn: poll occasionally as a safety net.
@@ -2384,12 +2391,12 @@ function AppContent(): JSX.Element {
             const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
             if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
               if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
-              return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError };
+              return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError };
             }
           }
         }
       }
-      if (sawStreamEnd) return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError };
+      if (sawStreamEnd) return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError };
     } finally {
       unsubscribe();
       void window.lastbrowser.sidekick.unsubscribeChatStream({ streamId }).catch(() => null);
@@ -2402,7 +2409,7 @@ function AppContent(): JSX.Element {
       const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
       if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
         if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
-        return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError };
+        return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError };
       }
     }
     throw new Error('Sidekick is still working. Try again in a moment.');
@@ -2475,7 +2482,7 @@ function AppContent(): JSX.Element {
       const responseSessionId = typeof response.session_id === 'string' && response.session_id.trim()
         ? response.session_id.trim()
         : turnContext.sessionId;
-      let streamResult: { continuationPrompt: string | null; goalError: string | null } | null = null;
+      let streamResult: { continuationPrompt: string | null; goalError: string | null; streamError: string | null } | null = null;
 
       if (streamId) {
         turnContext = { ...turnContext, sessionId: responseSessionId };
@@ -2484,18 +2491,27 @@ function AppContent(): JSX.Element {
         streamResult = await pollNativeChat(streamId, responseSessionId, [], undefined, isOwningContextCurrent);
         const updated = await loadActiveSession(responseSessionId, { loadDraft: false, showLoading: false });
         const answer = lastAssistantText(updated);
-        if (answer) reply = [reply, answer].filter(Boolean).join('\n\n');
+        if (streamResult.streamError) {
+          failed = true;
+          if (isOwningContextCurrent()) {
+            setChatError(streamResult.streamError);
+            setChatMessages((current) => finishLiveChatMessageWithError(current, streamResult!.streamError!));
+            setMessages((current) => finishLiveChatMessageWithError(current, streamResult!.streamError!));
+          }
+        } else if (answer) reply = [reply, answer].filter(Boolean).join('\n\n');
         if (streamResult.goalError) setChatError(streamResult.goalError);
       }
 
       if (isOwningContextCurrent()) {
-        const finalReply = reply || 'Persistent goal updated.';
-        setChatMessages((current) => current.map((item) => (
-          item.pending ? { ...item, content: finalReply, pending: false, progress: undefined } : item
-        )));
-        setMessages((current) => current.map((item) => (
-          item.pending ? { ...item, content: reply || 'Persistent goal updated.', pending: false, progress: undefined } : item
-        )));
+        if (!streamResult?.streamError) {
+          const finalReply = reply || 'Persistent goal updated.';
+          setChatMessages((current) => current.map((item) => (
+            item.pending ? { ...item, content: finalReply, pending: false, progress: undefined } : item
+          )));
+          setMessages((current) => current.map((item) => (
+            item.pending ? { ...item, content: reply || 'Persistent goal updated.', pending: false, progress: undefined } : item
+          )));
+        }
       }
 
       if (streamResult?.continuationPrompt && isOwningContextCurrent()) {
@@ -2683,16 +2699,23 @@ function AppContent(): JSX.Element {
       const finished = await loadActiveSession(response.sessionId, { loadDraft: false, showLoading: false });
       const answer = lastAssistantText(finished);
       if (turnContextStillCurrent) {
-        setChatMessages((current) => current.map((item) => (
-          item.pending
-            ? { ...item, content: answer || 'Sidekick finished.', pending: false, progress: undefined }
-            : item
-        )));
-        setMessages((current) => current.map((item) => (
-          item.pending
-            ? { ...item, content: answer || 'Sidekick finished.', pending: false, progress: undefined }
-            : item
-        )));
+        if (streamResult.streamError) {
+          turnFailed = true;
+          setChatError(streamResult.streamError);
+          setChatMessages((current) => finishLiveChatMessageWithError(current, streamResult.streamError!));
+          setMessages((current) => finishLiveChatMessageWithError(current, streamResult.streamError!));
+        } else {
+          setChatMessages((current) => current.map((item) => (
+            item.pending
+              ? { ...item, content: answer || 'Sidekick finished.', pending: false, progress: undefined }
+              : item
+          )));
+          setMessages((current) => current.map((item) => (
+            item.pending
+              ? { ...item, content: answer || 'Sidekick finished.', pending: false, progress: undefined }
+              : item
+          )));
+        }
         if (streamResult.goalError) setChatError(streamResult.goalError);
       }
 

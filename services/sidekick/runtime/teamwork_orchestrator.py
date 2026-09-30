@@ -320,6 +320,50 @@ def _scaled_worker_target(complexity: int, max_subagents: int) -> int:
     return min(cap, 2 + ((cap - 2) * (level - 1) + 3) // 4)
 
 
+def _provider_failure_kind(error: Any) -> Optional[int]:
+    """Extract only an HTTP status from provider exceptions for safe UI guidance."""
+    for candidate in (
+        getattr(error, "status_code", None),
+        getattr(getattr(error, "response", None), "status_code", None),
+    ):
+        try:
+            status = int(candidate)
+        except (TypeError, ValueError):
+            continue
+        if 400 <= status <= 599:
+            return status
+    # Some SDK wrappers expose only a formatted exception string. Match the
+    # status token, but never forward that string because it may include data.
+    match = re.search(r"\bHTTP\s*(401|429)\b|\b(401|429)\b", str(error), re.IGNORECASE)
+    if match:
+        return int(match.group(1) or match.group(2))
+    return None
+
+
+def _teamwork_quorum_error(failed_drafts: List[Dict[str, Any]], required: int) -> str:
+    """Return actionable, deterministic errors without echoing provider payloads."""
+    statuses = {
+        status
+        for draft in failed_drafts
+        if (status := (draft.get("http_status") or _provider_failure_kind(draft.get("error")))) is not None
+    }
+    if 401 in statuses:
+        return (
+            "Teamwork konnte keinen Lösungsentwurf erzeugen: Der Anbieter hat die "
+            "Anmeldung abgelehnt (HTTP 401). Prüfe die gespeicherten Zugangsdaten."
+        )
+    if 429 in statuses:
+        return (
+            "Teamwork konnte keinen Lösungsentwurf erzeugen: Der Anbieter meldet "
+            "ein Rate-Limit oder erschöpftes Kontingent (HTTP 429). Warte auf die "
+            "Rücksetzung oder aktiviere einen weiteren Anbieter."
+        )
+    return (
+        "Teamwork-Fehler: Es konnte kein Lösungsentwurf generiert werden "
+        f"({len(failed_drafts)} Modelle fehlgeschlagen; mindestens {required} erforderlich)."
+    )
+
+
 def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Resolve the specific models and roles for a teamwork session."""
     cfg = config or load_teamwork_config()
@@ -535,6 +579,7 @@ def _invoke_worker(
                     "content": "",
                     "execution_ms": elapsed_ms,
                     "error": str(e),
+                    "http_status": _provider_failure_kind(e),
                     "swapped": False,
                 }
             # Try hot-swap from backup pool
@@ -559,6 +604,7 @@ def _invoke_worker(
                 "content": "",
                 "execution_ms": elapsed_ms,
                 "error": str(e),
+                "http_status": _provider_failure_kind(e),
                 "swapped": swapped,
             }
 
@@ -705,11 +751,18 @@ def run_teamwork_turn(
                             "swapped": res.get("swapped", False),
                         })
                     else:
+                        status = res.get("http_status") or _provider_failure_kind(res.get("error"))
                         put_event("teamwork_draft", {
                             "model": res["model"],
                             "name": res["name"],
                             "role": res["role"],
-                            "error": res["error"],
+                            # Provider exceptions can contain URLs, request
+                            # details, or credential fragments. Only expose a
+                            # normalized status category in the UI event.
+                            "error": (
+                                f"HTTP {status}" if status in (401, 429)
+                                else "Anbieteraufruf fehlgeschlagen"
+                            ),
                             "skipped": True,
                         })
                 except Exception as e:
@@ -730,10 +783,10 @@ def run_teamwork_turn(
     except (TypeError, ValueError):
         min_quorum = 1
     if len(successful_drafts) < min_quorum:
-        raise RuntimeError(
-            f"Teamwork-Fehler: Es konnte kein Lösungsentwurf generiert werden "
-            f"({len(drafts)} Modelle fehlgeschlagen)."
-        )
+        raise RuntimeError(_teamwork_quorum_error(
+            [draft for draft in drafts if draft.get("error") or not draft.get("content")],
+            min_quorum,
+        ))
 
     if cancel_event and cancel_event.is_set():
         raise InterruptedError("Cancelled")

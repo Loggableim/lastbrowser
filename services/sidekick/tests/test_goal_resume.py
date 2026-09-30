@@ -319,6 +319,78 @@ def test_goal_continuation_recovers_after_backend_restart_from_active_persisted_
     assert goal_api.consume_goal_continuation(
         session_id, prompt, profile_home=profile_home,
     ) == "active"
+    # The one-shot claim must survive replacing the scoped DB/manager cache too.
+    goal_api._DB_CACHE.clear()
+    assert goal_api.consume_goal_continuation(
+        session_id, prompt, profile_home=profile_home,
+    ) == "cancelled"
+
+
+def test_goal_continuation_is_consumed_once_per_turn(monkeypatch, tmp_path):
+    from web.api import goals as goal_api
+
+    monkeypatch.setattr(goal_api, "_space_goals_path", lambda *_args, **_kwargs: None)
+    goal_api._DB_CACHE.clear()
+    goal_api._PENDING_CONTINUATIONS.clear()
+    goal_api._CANCELLED_CONTINUATIONS.clear()
+    profile_home = tmp_path / "profile"
+    session_id = "continuation-idempotency"
+    goal = "Continue one request at a time"
+
+    assert goal_api.goal_command_payload(
+        session_id, goal, profile_home=profile_home,
+    )["ok"] is True
+    manager = goal_api._manager(session_id, profile_home=profile_home)
+    manager.evaluate_after_turn("first response", judged_result=("continue", "incomplete", False))
+    prompt = manager.next_continuation_prompt()
+    assert goal_api.queue_goal_continuation(
+        session_id, prompt, profile_home=profile_home,
+    )
+    assert goal_api.consume_goal_continuation(
+        session_id, prompt, profile_home=profile_home,
+    ) == "active"
+    assert goal_api.consume_goal_continuation(
+        session_id, prompt, profile_home=profile_home,
+    ) == "cancelled"
+
+
+def test_explicit_goal_resume_rearms_failed_continuation_attempt(monkeypatch, tmp_path):
+    from web.api import goals as goal_api
+
+    monkeypatch.setattr(goal_api, "_space_goals_path", lambda *_args, **_kwargs: None)
+    goal_api._DB_CACHE.clear()
+    goal_api._PENDING_CONTINUATIONS.clear()
+    goal_api._CANCELLED_CONTINUATIONS.clear()
+    profile_home = tmp_path / "profile"
+    session_id = "continuation-resume-retry"
+    goal = "Continue after a failed request"
+
+    assert goal_api.goal_command_payload(
+        session_id, goal, profile_home=profile_home,
+    )["ok"] is True
+    manager = goal_api._manager(session_id, profile_home=profile_home)
+    manager.evaluate_after_turn("first response", judged_result=("continue", "incomplete", False))
+    prompt = manager.next_continuation_prompt()
+    assert goal_api.queue_goal_continuation(
+        session_id, prompt, profile_home=profile_home,
+    )
+    assert goal_api.consume_goal_continuation(
+        session_id, prompt, profile_home=profile_home,
+    ) == "active"
+    assert goal_api.goal_command_payload(
+        session_id, "pause", profile_home=profile_home,
+    )["action"] == "pause"
+
+    resumed = goal_api.goal_command_payload(
+        session_id, "resume", profile_home=profile_home,
+    )
+    assert resumed["kickoff_prompt"] == prompt
+    assert goal_api.consume_goal_continuation(
+        session_id, prompt, profile_home=profile_home,
+    ) == "active"
+    assert goal_api.consume_goal_continuation(
+        session_id, prompt, profile_home=profile_home,
+    ) == "cancelled"
 
 
 @pytest.mark.parametrize("command", ["pause", "clear"])
@@ -824,6 +896,50 @@ def test_goal_command_fails_closed_when_profile_scope_cannot_be_resolved(monkeyp
     assert response["_status"] == 503
     assert response["error"] == "goal_state_unavailable"
     assert response["retryable"] is True
+
+
+@pytest.mark.parametrize(
+    ("command", "error", "expected_status"),
+    [
+        ("status", "unavailable", 503),
+        ("pause", "persistence_failed", 503),
+        ("status", "invalid_goal", 400),
+        ("status", "agent_running", 409),
+    ],
+)
+def test_goal_command_maps_backend_failures_to_retryable_statuses(
+    monkeypatch, tmp_path, command, error, expected_status,
+):
+    from types import SimpleNamespace
+    from web.api import goals as goal_api
+    from web.api import routes
+
+    session = SimpleNamespace(
+        session_id="goal-command-http-status",
+        profile="default",
+        workspace=str(tmp_path),
+        active_stream_id=None,
+        messages=[],
+        context_messages=[],
+        pending_user_message=None,
+    )
+    monkeypatch.setattr(routes, "get_session", lambda _sid: session)
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: tmp_path)
+    monkeypatch.setattr(goal_api, "goal_state_snapshot", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        goal_api,
+        "goal_command_payload",
+        lambda *_args, **_kwargs: {"ok": False, "error": error},
+    )
+    monkeypatch.setattr(routes, "j", lambda _handler, payload, status=200, **_kwargs: (status, payload))
+
+    status, payload = routes._handle_goal_command(
+        object(), {"session_id": session.session_id, "args": command},
+    )
+
+    assert status == expected_status
+    if expected_status == 503:
+        assert payload["retryable"] is True
 
 
 @pytest.mark.parametrize("failure_stage", ["continuation", "active_goal"])

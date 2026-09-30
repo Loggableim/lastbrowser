@@ -768,6 +768,67 @@ def test_ollama_cloud_teamwork_failure_stages_keep_a_visible_answer(failed_stage
         assert [data["content"] for event, data in events if event == "delta"] == [expected]
 
 
+@pytest.mark.parametrize(
+    ("status_code", "expected_hint"),
+    [
+        (401, "Prüfe die gespeicherten Zugangsdaten"),
+        (429, "Warte auf die Rücksetzung oder aktiviere einen weiteren Anbieter"),
+    ],
+)
+def test_singleton_ollama_cloud_quorum_failure_is_actionable_and_does_not_echo_provider_error(
+    status_code, expected_hint,
+):
+    model_id = "@ollama-cloud:deepseek-v4.1-flash"
+    model = {
+        "id": model_id,
+        "call_model": "deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "provider": "ollama-cloud",
+        "tier": "fast",
+    }
+    plan = {
+        "strategy": "balanced",
+        "planner": None,
+        "workers": [{
+            "model": model_id,
+            "call_model": model["call_model"],
+            "provider": model["provider"],
+            "name": model["name"],
+            "role": "Pragmatiker",
+            "focus": "direct answer",
+        }],
+        "critic": model_id,
+        "critic_provider": model["provider"],
+        "synthesizer": model_id,
+        "synthesizer_provider": model["provider"],
+        "pool": [model],
+    }
+    events = []
+    session = MagicMock(messages=[])
+
+    class ProviderError(Exception):
+        def __init__(self):
+            super().__init__("provider error containing private request details")
+            self.status_code = status_code
+
+    with patch("runtime.teamwork_orchestrator.resolve_team_plan", return_value=plan), \
+         patch("runtime.auxiliary_client.call_llm", side_effect=ProviderError):
+        with pytest.raises(RuntimeError) as exc_info:
+            run_teamwork_turn(
+                session,
+                "Answer a small question using Ollama Cloud.",
+                config={"shared_grounding": False, "hot_swap": {"enabled": True, "fallback_quorum_min": 1}},
+                stream_put=lambda event, data: events.append((event, data)),
+            )
+
+    assert expected_hint in str(exc_info.value)
+    assert str(status_code) in str(exc_info.value)
+    assert "private request details" not in str(exc_info.value)
+    draft_error = next(data["error"] for event, data in events if event == "teamwork_draft")
+    assert draft_error == f"HTTP {status_code}"
+    assert "private request details" not in draft_error
+
+
 @pytest.mark.parametrize("visible_output", ["content", "reasoning"])
 @pytest.mark.parametrize("failure_mode", ["exception", "empty"])
 def test_teamwork_synthesis_never_replaces_visible_partial_output(visible_output, failure_mode):

@@ -78,6 +78,13 @@ def _continuation_key(
     )
 
 
+def _claim_continuation_once(manager: Any) -> bool:
+    claim = getattr(manager, "consume_continuation", None)
+    # Lightweight manager doubles used by integrations predating durable
+    # claims have no persisted state API; production GoalManager always does.
+    return bool(claim()) if callable(claim) else True
+
+
 def queue_goal_continuation(
     session_id: str,
     prompt: str,
@@ -147,7 +154,12 @@ def consume_goal_continuation(
             _PENDING_CONTINUATIONS.pop(key, None)
             mgr = _manager(session_id, profile_home=profile_home, space_slug=space_slug)
             try:
-                if mgr is not None and mgr.is_active() and mgr.next_continuation_prompt() == pending:
+                if (
+                    mgr is not None
+                    and mgr.is_active()
+                    and mgr.next_continuation_prompt() == pending
+                    and _claim_continuation_once(mgr)
+                ):
                     return "active"
             except Exception:
                 pass
@@ -179,6 +191,7 @@ def consume_goal_continuation(
                     mgr is not None
                     and mgr.is_active()
                     and mgr.next_continuation_prompt() == text
+                    and _claim_continuation_once(mgr)
                 ):
                     return "active"
             except Exception:
@@ -388,6 +401,9 @@ class _ProfileGoalManager:
             return self._state
         self._state.status = "active"
         self._state.paused_reason = None
+        # A user-requested resume is a fresh attempt even if the previous
+        # continuation failed before GoalManager could advance turns_used.
+        self._state.consumed_continuation_turn = -1
         if reset_budget:
             self._state.turns_used = 0
         self._state.consecutive_parse_failures = 0
@@ -504,6 +520,18 @@ class _ProfileGoalManager:
             return None
         return CONTINUATION_PROMPT_TEMPLATE.format(goal=self._state.goal)
 
+    def consume_continuation(self) -> bool:
+        """Persist an idempotent claim for this turn's continuation prompt."""
+        state = self._state
+        if not state or state.status != "active":
+            return False
+        turn = int(state.turns_used or 0)
+        if int(state.consumed_continuation_turn) == turn:
+            return False
+        state.consumed_continuation_turn = turn
+        self._save(state)
+        return True
+
 
 def _manager(session_id: str, *, profile_home: str | Path | None = None, space_slug: str | None = None):
     if GoalManager is None:
@@ -565,6 +593,7 @@ def _payload(
     decision: Dict[str, Any] | None = None,
     message_key: str | None = None,
     message_args: list[Any] | None = None,
+    retryable: bool = False,
 ) -> Dict[str, Any]:
     body: Dict[str, Any] = {
         "ok": bool(ok),
@@ -574,6 +603,8 @@ def _payload(
     }
     if error:
         body["error"] = error
+    if retryable:
+        body["retryable"] = True
     if kickoff_prompt:
         body["kickoff_prompt"] = kickoff_prompt
     if decision is not None:
@@ -799,7 +830,7 @@ def goal_command_payload(
         logger.warning("Goal state unavailable for session %s: %s", sid, exc)
         mgr = None
     if mgr is None:
-        return _payload(ok=False, action="error", error="unavailable", message="Goals unavailable on this session.", session_id=sid, space_slug=space_slug)
+        return _payload(ok=False, action="error", error="unavailable", message="Goals unavailable on this session.", retryable=True, session_id=sid, space_slug=space_slug)
 
     text = str(args or "").strip()
     lower = text.lower()
@@ -818,7 +849,7 @@ def goal_command_payload(
                 state = mgr.pause(reason="user-paused")
         except Exception as exc:
             logger.warning("Could not persist goal pause for session %s: %s", sid, exc)
-            return _payload(ok=False, action="pause", error="persistence_failed", message="Goal state could not be saved.", session_id=sid, space_slug=space_slug)
+            return _payload(ok=False, action="pause", error="persistence_failed", message="Goal state could not be saved.", retryable=True, session_id=sid, space_slug=space_slug)
         if state is None:
             return _payload(
                 ok=False,
@@ -846,7 +877,7 @@ def goal_command_payload(
                 state = mgr.resume()
         except Exception as exc:
             logger.warning("Could not persist goal resume for session %s: %s", sid, exc)
-            return _payload(ok=False, action="resume", error="persistence_failed", message="Goal state could not be saved.", session_id=sid, space_slug=space_slug)
+            return _payload(ok=False, action="resume", error="persistence_failed", message="Goal state could not be saved.", retryable=True, session_id=sid, space_slug=space_slug)
         if state is None:
             return _payload(
                 ok=False,
@@ -891,7 +922,7 @@ def goal_command_payload(
                 mgr.clear()
         except Exception as exc:
             logger.warning("Could not persist goal clear for session %s: %s", sid, exc)
-            return _payload(ok=False, action="clear", error="persistence_failed", message="Goal state could not be saved.", session_id=sid, space_slug=space_slug)
+            return _payload(ok=False, action="clear", error="persistence_failed", message="Goal state could not be saved.", retryable=True, session_id=sid, space_slug=space_slug)
         return _payload(
             action="clear",
             message="Goal cleared." if had else "No active goal.",
@@ -922,7 +953,7 @@ def goal_command_payload(
         return _payload(ok=False, action="set", error="invalid_goal", message=f"Invalid goal: {exc}", session_id=sid, space_slug=space_slug)
     except Exception as exc:
         logger.warning("Could not persist goal for session %s: %s", sid, exc)
-        return _payload(ok=False, action="set", error="persistence_failed", message="Goal state could not be saved.", session_id=sid, space_slug=space_slug)
+        return _payload(ok=False, action="set", error="persistence_failed", message="Goal state could not be saved.", retryable=True, session_id=sid, space_slug=space_slug)
 
     budget_label = "unlimited runs" if getattr(state, "max_turns", None) is None else f"{state.max_turns} runs"
     followup = (

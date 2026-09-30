@@ -76,3 +76,42 @@ export function finishLiveChatMessage<T extends LiveChatMessage>(messages: T[]):
     ? { ...message, pending: false, streaming: false, progress: undefined }
     : message);
 }
+
+/** Read actionable provider errors from native chat SSE payload variants. */
+export function readNativeChatStreamError(data: unknown): string {
+  if (typeof data === 'string' && data.trim()) return data.trim();
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const payload = data as Record<string, unknown>;
+    for (const key of ['error', 'message', 'detail']) {
+      const value = payload[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const nested = value as Record<string, unknown>;
+        for (const nestedKey of ['message', 'detail', 'error']) {
+          if (typeof nested[nestedKey] === 'string' && nested[nestedKey].trim()) {
+            return (nested[nestedKey] as string).trim();
+          }
+        }
+      }
+    }
+  }
+  return 'The provider stream failed before completing the response.';
+}
+
+/** Finalize a failed live turn without discarding streamed text or reasoning. */
+export function finishLiveChatMessageWithError<T extends LiveChatMessage>(
+  messages: T[],
+  error: string,
+): T[] {
+  return messages.map((message) => {
+    if (!(message.pending || message.streaming || message.progress)) return message;
+    const hasPartialOutput = Boolean(message.content && message.content !== 'Working on it...') || Boolean(message.reasoning);
+    return {
+      ...message,
+      content: hasPartialOutput ? message.content : `Sidekick could not respond: ${error}`,
+      pending: false,
+      streaming: false,
+      progress: undefined,
+    };
+  });
+}

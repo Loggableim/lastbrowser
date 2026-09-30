@@ -1980,13 +1980,22 @@ def _evict_cached_clients(provider: str) -> None:
         for key in stale_keys:
             client = _client_cache.get(key, (None, None, None))[0]
             if client is not None:
-                _force_close_async_httpx(client)
-                try:
-                    close_fn = getattr(client, "close", None)
-                    if callable(close_fn):
-                        close_fn()
-                except Exception:
-                    pass
+                # Cache keys are (provider, async_mode, ...). AsyncOpenAI's
+                # close() returns an awaitable and must not be called from this
+                # synchronous helper: awaiting it could block or require the
+                # caller's event loop, while dropping the coroutine leaks a
+                # RuntimeWarning. Only async transports use the force-close
+                # path; sync clients must run their normal transport close.
+                async_mode = len(key) > 1 and bool(key[1])
+                if async_mode:
+                    _force_close_async_httpx(client)
+                else:
+                    try:
+                        close_fn = getattr(client, "close", None)
+                        if callable(close_fn):
+                            close_fn()
+                    except Exception:
+                        pass
             _client_cache.pop(key, None)
 
 

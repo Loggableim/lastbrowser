@@ -12155,7 +12155,14 @@ def _handle_goal_command(handler, body):
             else None
         )
     if not payload.get("ok", True):
-        status = 409 if payload.get("error") == "agent_running" else 400
+        error_code = payload.get("error")
+        if error_code == "agent_running":
+            status = 409
+        elif error_code in {"unavailable", "persistence_failed", "goal_state_unavailable"}:
+            status = 503
+            payload.setdefault("retryable", True)
+        else:
+            status = 400
         return j(handler, payload, status=status)
 
     if kickoff_prompt:

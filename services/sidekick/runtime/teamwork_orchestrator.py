@@ -174,9 +174,39 @@ def get_teamwork_model_pool() -> List[Dict[str, Any]]:
     models: List[Dict[str, Any]] = []
     seen_ids = set()
 
+    def verified_ollama_cloud_models() -> set[str]:
+        """Return only account-verified Ollama Cloud models, never setup hints."""
+        try:
+            from cli.auth import resolve_api_key_provider_credentials
+
+            credentials = resolve_api_key_provider_credentials("ollama-cloud")
+            if not str(credentials.get("api_key") or "").strip():
+                return set()
+
+            # This catalog is account-scoped and only returns live results or
+            # a previously live-verified cache when credentials are present.
+            from cli.models import fetch_ollama_cloud_models
+
+            return {
+                str(model_id).strip()
+                for model_id in fetch_ollama_cloud_models()
+                if str(model_id).strip()
+            }
+        except Exception:
+            return set()
+
+    ollama_cloud_models: Optional[set[str]] = None
+
     for group in catalog.get("groups", []):
         provider_id = group.get("provider_id") or group.get("provider") or "unknown"
         provider_label = group.get("provider") or provider_id
+        if provider_id == "ollama-cloud":
+            if ollama_cloud_models is None:
+                ollama_cloud_models = verified_ollama_cloud_models()
+            if not ollama_cloud_models:
+                # config.get_available_models may intentionally show curated
+                # models as setup hints; those are not an inference-ready pool.
+                continue
         for m in group.get("models", []):
             raw_id = str(m.get("id") or "").strip()
             if not raw_id:
@@ -189,6 +219,8 @@ def get_teamwork_model_pool() -> List[Dict[str, Any]]:
             # expose the same model ID. Strip it only for the provider API call.
             qualified_prefix = f"@{provider_id}:"
             call_model = raw_id[len(qualified_prefix):] if raw_id.startswith(qualified_prefix) else raw_id
+            if provider_id == "ollama-cloud" and call_model not in ollama_cloud_models:
+                continue
             if call_model.lower() == "teamwork" or raw_id in seen_ids:
                 continue
             seen_ids.add(raw_id)

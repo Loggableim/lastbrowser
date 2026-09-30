@@ -368,7 +368,9 @@ def test_teamwork_balanced_auto_routing_uses_ollama_cloud_default_and_classifies
         ]
     }
 
-    with patch("web.api.config.get_available_models", return_value=catalog):
+    with patch("web.api.config.get_available_models", return_value=catalog), \
+         patch("cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": "test-key"}), \
+         patch("cli.models.fetch_ollama_cloud_models", return_value=["deepseek-v4.1-flash"]):
         pool = get_teamwork_model_pool()
         plan = resolve_team_plan(
             "Review this change",
@@ -384,6 +386,44 @@ def test_teamwork_balanced_auto_routing_uses_ollama_cloud_default_and_classifies
     assert plan["planner"]["id"] == "deepseek-v4.1-flash"
     assert "deepseek-v4.1-flash" in [worker["model"] for worker in plan["workers"]]
     assert len(plan["workers"]) == 2
+
+
+def test_teamwork_excludes_ollama_cloud_setup_hints_without_credentials():
+    catalog = {
+        "groups": [
+            {"provider_id": "ollama-cloud", "provider": "Ollama Cloud", "models": [
+                {"id": "deepseek-v4.1-flash"},
+            ]},
+            {"provider_id": "anthropic", "provider": "Anthropic", "models": [
+                {"id": "claude-3-7-sonnet"},
+            ]},
+        ]
+    }
+
+    with patch("web.api.config.get_available_models", return_value=catalog), \
+         patch("cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": ""}), \
+         patch("cli.models.fetch_ollama_cloud_models", side_effect=AssertionError("must not fetch without a key")):
+        models = get_teamwork_model_pool()
+
+    assert [(model["provider"], model["id"]) for model in models] == [
+        ("anthropic", "claude-3-7-sonnet"),
+    ]
+
+
+def test_teamwork_only_routes_ollama_cloud_models_in_live_account_catalog():
+    catalog = {
+        "groups": [{"provider_id": "ollama-cloud", "provider": "Ollama Cloud", "models": [
+            {"id": "deepseek-v4.1-flash"},
+            {"id": "qwen3-coder:cloud"},
+        ]}]
+    }
+
+    with patch("web.api.config.get_available_models", return_value=catalog), \
+         patch("cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": "test-key"}), \
+         patch("cli.models.fetch_ollama_cloud_models", return_value=["deepseek-v4.1-flash"]):
+        models = get_teamwork_model_pool()
+
+    assert [model["id"] for model in models] == ["deepseek-v4.1-flash"]
 
 
 def test_teamwork_keeps_provider_qualified_duplicate_and_routes_bare_model_to_provider():

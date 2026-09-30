@@ -23,10 +23,10 @@ def test_new_cloud_models_survive_live_picker_filter(monkeypatch, tmp_path):
     result = models.fetch_ollama_cloud_models(
         api_key="test-only", base_url="https://ollama.com/v1", force_refresh=True
     )
-    assert result == available
+    assert result == available + ["unrelated-model"]
     # A cached request must retain the new choices without a provider call.
     monkeypatch.setattr(models, "fetch_api_models", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected network")))
-    assert models.fetch_ollama_cloud_models(api_key="test-only") == available
+    assert models.fetch_ollama_cloud_models(api_key="test-only") == available + ["unrelated-model"]
 
 
 def test_ollama_live_catalog_is_authoritative_against_stale_registry(monkeypatch, tmp_path):
@@ -49,6 +49,8 @@ def test_ollama_live_catalog_is_authoritative_against_stale_registry(monkeypatch
 
 def test_ollama_registry_remains_fallback_when_live_catalog_is_unavailable(monkeypatch, tmp_path):
     monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
     monkeypatch.setattr(models, "_load_ollama_cloud_cache", lambda **_kwargs: None)
     monkeypatch.setattr(models, "_save_ollama_cloud_cache", lambda _models, **_kwargs: None)
     monkeypatch.setattr(models, "fetch_api_models", lambda *_args, **_kwargs: None)
@@ -58,7 +60,49 @@ def test_ollama_registry_remains_fallback_when_live_catalog_is_unavailable(monke
         api_key="test-only", base_url="https://ollama.com/v1", force_refresh=True
     )
 
-    assert result == ["deepseek-v4.1-flash"]
+    assert result == []
+
+
+def test_configured_ollama_key_is_resolved_for_live_catalog(monkeypatch, tmp_path):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    monkeypatch.setattr(models, "_load_ollama_cloud_cache", lambda **_kwargs: None)
+    monkeypatch.setattr(models, "_save_ollama_cloud_cache", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "cli.config.get_env_value",
+        lambda name: "runtime-test-key" if name == "OLLAMA_API_KEY" else None,
+    )
+    monkeypatch.setattr(
+        "cli.auth.resolve_api_key_provider_credentials",
+        lambda _provider: {
+            "api_key": "runtime-test-key",
+            "base_url": "https://ollama.com/v1",
+        },
+    )
+    requests = []
+
+    def fetch(api_key, base_url, **kwargs):
+        requests.append((api_key, base_url, kwargs))
+        return ["unlisted-live-model", "deepseek-v4.1-flash", "glm-5.3"]
+
+    monkeypatch.setattr(models, "fetch_api_models", fetch)
+    monkeypatch.setattr(
+        models_dev,
+        "list_agentic_models",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("registry catalog must not replace account availability")
+        ),
+    )
+
+    result = models.fetch_ollama_cloud_models(force_refresh=True)
+
+    assert result == ["deepseek-v4.1-flash", "glm-5.3", "unlisted-live-model"]
+    assert requests == [(
+        "runtime-test-key",
+        "https://ollama.com/v1",
+        {"timeout": 8.0, "allow_redirects": False},
+    )]
 
 
 def test_ollama_live_catalog_keeps_versioned_live_ids(monkeypatch, tmp_path):
@@ -98,7 +142,7 @@ def test_malformed_live_catalog_entries_are_ignored_and_valid_ids_are_normalized
 def test_corrupt_ollama_cache_entries_are_filtered(tmp_path, monkeypatch):
     cache_path = tmp_path / "ollama_cloud_models_cache.json"
     cache_path.write_text(
-        '{"version":3,"models":[" deepseek-v4.1-flash ", {"id":"bad"}, "deepseek-v4.1-flash"],'
+        '{"version":4,"source":"live-api","models":[" deepseek-v4.1-flash ", {"id":"bad"}, "deepseek-v4.1-flash"],'
         '"cached_at":9999999999}',
         encoding="utf-8",
     )
@@ -114,6 +158,18 @@ def test_legacy_merged_ollama_cache_is_invalidated(tmp_path, monkeypatch):
     cache_path = tmp_path / "ollama_cloud_models_cache.json"
     cache_path.write_text(
         '{"models":["deepseek-v4.1-flash","minimax-m2.5"],"cached_at":9999999999}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
+
+    assert models._load_ollama_cloud_cache() is None
+
+
+def test_ollama_registry_cache_is_not_treated_as_live_availability(tmp_path, monkeypatch):
+    cache_path = tmp_path / "ollama_cloud_models_cache.json"
+    cache_path.write_text(
+        '{"version":4,"source":"models.dev","models":["deepseek-v4.1-flash"],'
+        '"cached_at":9999999999}',
         encoding="utf-8",
     )
     monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
@@ -226,7 +282,7 @@ def test_ollama_cloud_catalog_never_sends_key_to_unapproved_endpoint(monkeypatch
         force_refresh=True,
     )
 
-    assert result == models.OLLAMA_CLOUD_CURATED_MODELS
+    assert result == []
 
 
 def test_ollama_cloud_catalog_requests_disable_redirects(monkeypatch, tmp_path):

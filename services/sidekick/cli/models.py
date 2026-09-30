@@ -2516,7 +2516,7 @@ def fetch_api_models(
 
 # Cache TTL: 1 hour
 _OLLAMA_CLOUD_CACHE_TTL = 3600
-_OLLAMA_CLOUD_CACHE_VERSION = 3
+_OLLAMA_CLOUD_CACHE_VERSION = 4
 
 # Curated subset of Ollama Cloud thinking models shown in the WebUI picker.
 # Keep this aligned with the official thinking catalog and only include
@@ -2622,6 +2622,8 @@ def _load_ollama_cloud_cache(
             return None
         if data.get("version") != _OLLAMA_CLOUD_CACHE_VERSION:
             return None  # invalidate catalogs created by the previous merge policy
+        if data.get("source") != "live-api":
+            return None  # registry snapshots are not proof of account availability
         if scope is not None and data.get("scope") != scope:
             return None
         models = _valid_ollama_cloud_model_ids(data.get("models"))
@@ -2648,6 +2650,7 @@ def _save_ollama_cloud_cache(models: list[str], *, scope: Optional[str] = None) 
             return
         atomic_json_write(cache_path, {
             "version": _OLLAMA_CLOUD_CACHE_VERSION,
+            "source": "live-api",
             "models": valid_models,
             "cached_at": time.time(),
             "scope": scope,
@@ -2680,12 +2683,11 @@ def fetch_ollama_cloud_models(
     Resolution order:
       1. Disk cache (if fresh, < 1 hour, and not force_refresh)
       2. Live ``/v1/models`` endpoint (primary — freshest source)
-      3. models.dev registry (fallback when the live endpoint is unavailable)
+      3. A stale, previously live-verified cache during an endpoint outage
 
-    The live ``/models`` response is authoritative when non-empty. Registry
-    entries are metadata/discovery hints and can lag provider availability;
-    merging them into a successful live response exposes models which return
-    410 from the actual inference endpoint.
+    Registry catalogs are not used for an account with credentials: they can
+    list models unavailable to that account. Without credentials, the curated
+    catalog is returned as a setup hint, not an availability claim.
 
     Returns a list of model IDs (never None — empty list on total failure).
     """
@@ -2695,7 +2697,8 @@ def fetch_ollama_cloud_models(
         api_key = os.getenv("OLLAMA_API_KEY", "")
     if not api_key:
         try:
-            from cli.auth import resolve_api_key_provider_credentials, get_env_value
+            from cli.config import get_env_value
+            from cli.auth import resolve_api_key_provider_credentials
             api_key = get_env_value("OLLAMA_API_KEY")
             if not api_key:
                 creds = resolve_api_key_provider_credentials("ollama-cloud")
@@ -2722,49 +2725,45 @@ def fetch_ollama_cloud_models(
         if cached is not None:
             return cached["models"]
 
-    live_models: list[str] = []
-    if api_key and is_official_ollama_cloud_url(base_url):
-        result = fetch_api_models(api_key, base_url, timeout=8.0, allow_redirects=False)
-        if result:
-            live_models = _valid_ollama_cloud_model_ids(result)
+    # Never send an Ollama Cloud key to a custom, insecure or ambiguous origin.
+    if api_key and not is_official_ollama_cloud_url(base_url):
+        return []
 
-    # 3. models.dev is a fallback only; avoid its extra network lookup when
-    # the provider supplied an authoritative availability list.
-    mdev_models: list[str] = []
-    if not live_models:
-        try:
-            from runtime.models_dev import list_agentic_models
-            mdev_models = _valid_ollama_cloud_model_ids(
-                list_agentic_models("ollama-cloud")
-            )
-        except Exception:
-            pass
-
-    # 4. Use the provider's live list as the source of availability.
-    if live_models:
-        live_models = list(dict.fromkeys(live_models))
-        curated = [m for m in live_models if m in OLLAMA_CLOUD_CURATED_MODELS]
-        result = curated or live_models
-        _save_ollama_cloud_cache(result, scope=cache_scope)
-        return result
-
-    # The external registry is useful only as an outage fallback. Never let
-    # it add choices when Ollama has returned a live list above.
-    if mdev_models:
-        fallback = list(dict.fromkeys(_strip_ollama_cloud_suffix(m) for m in mdev_models))
-        fallback = [m for m in fallback if m]
-        curated = [m for m in fallback if m in OLLAMA_CLOUD_CURATED_MODELS]
-        result = curated or fallback
-        if result:
-            _save_ollama_cloud_cache(result, scope=cache_scope)
+    if api_key:
+        live_result = fetch_api_models(
+            api_key, base_url, timeout=8.0, allow_redirects=False
+        )
+        if live_result is not None:
+            live_models = list(dict.fromkeys(_valid_ollama_cloud_model_ids(live_result)))
+            # Keep the default and familiar catalog models at the top while
+            # retaining every additional model the account actually exposes.
+            live_set = set(live_models)
+            result = [m for m in OLLAMA_CLOUD_CURATED_MODELS if m in live_set]
+            preferred_set = set(result)
+            result.extend(m for m in live_models if m not in preferred_set)
+            if result:
+                _save_ollama_cloud_cache(result, scope=cache_scope)
             return result
 
-    # Total failure — return stale cache if available (ignore TTL)
-    stale = _load_ollama_cloud_cache(ignore_ttl=True, scope=cache_scope)
-    if stale is not None:
-        return stale["models"]
+        # On outage use only a previously account-scoped live snapshot. Never
+        # promote models.dev or the static catalog to account availability.
+        stale = _load_ollama_cloud_cache(ignore_ttl=True, scope=cache_scope)
+        return stale["models"] if stale is not None else []
 
-    return list(OLLAMA_CLOUD_CURATED_MODELS)
+    # No credential: the known catalog helps with setup and is explicitly only
+    # a picker hint. No account-specific cache is written in this branch.
+    result = list(OLLAMA_CLOUD_CURATED_MODELS)
+    try:
+        from runtime.models_dev import list_agentic_models
+        known = _valid_ollama_cloud_model_ids(list_agentic_models("ollama-cloud"))
+        normalized = list(dict.fromkeys(_strip_ollama_cloud_suffix(m) for m in known))
+        if normalized:
+            known_set = set(normalized)
+            preferred = [m for m in OLLAMA_CLOUD_CURATED_MODELS if m in known_set]
+            result = preferred + [m for m in normalized if m not in set(preferred)]
+    except Exception:
+        pass
+    return result
 
 
 def validate_requested_model(

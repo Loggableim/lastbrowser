@@ -251,6 +251,43 @@ def test_goal_lifecycle_survives_manager_restarts_and_is_profile_scoped(monkeypa
     )["goal"] == "Separate task"
 
 
+def test_profile_goal_without_space_does_not_follow_active_space(monkeypatch, tmp_path):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+
+    from runtime._compat.shim_state import SessionDB
+    from web.api import goals
+
+    goals._DB_CACHE.clear()
+    profile_home = tmp_path / "profiles" / "work"
+    active_space_root = tmp_path / "home" / "spaces" / "currently-selected"
+    profile_home.mkdir(parents=True)
+    active_space_root.mkdir(parents=True)
+    active_space_lookups = []
+
+    def active_space_path(space_slug=None):
+        active_space_lookups.append(space_slug)
+        return active_space_root / "goals.db"
+
+    monkeypatch.setattr(goals, "_space_goals_path", active_space_path)
+
+    response = goals.goal_command_payload(
+        "same-session-id",
+        "Profile-owned goal",
+        profile_home=profile_home,
+        space_slug=None,
+    )
+
+    assert response["ok"] is True
+    assert goals.goal_state_for_session(
+        "same-session-id", profile_home=profile_home, space_slug=None,
+    )["goal"] == "Profile-owned goal"
+    assert active_space_lookups == []
+    assert not (active_space_root / "goals.db").exists()
+    assert SessionDB(db_path=profile_home / "state.db").get_meta(
+        "goal:same-session-id"
+    )
+
+
 def test_goal_set_reports_persistence_failure_instead_of_claiming_success(monkeypatch, tmp_path):
     from web.api import goals
 

@@ -209,25 +209,9 @@ def _profile_db(profile_home: str | Path, *, space_slug: str | None = None):
         _DB_CACHE[key] = db
         return db
 
-    # With no explicit Space, retain the active-Space behavior for older
-    # callers, then fall back to the selected profile's database.
-    sp = _space_goals_path()
-    if sp:
-        key = str(sp)
-        cached = _DB_CACHE.get(key)
-        if cached is not None:
-            return cached
-        try:
-            from runtime._compat.shim_state import SessionDB  # type: ignore
-
-            db = SessionDB(db_path=sp)
-        except Exception as exc:
-            logger.debug("GoalManager active-space DB unavailable at %s: %s", sp, exc)
-            return None
-        _DB_CACHE[key] = db
-        return db
-
-    # 2. fallback: profile-scoped
+    # No explicit Space means profile scope. Never derive this from the
+    # currently selected Space: background sessions and profile switches can
+    # otherwise read or overwrite a different session's goal store.
     home = Path(profile_home).expanduser().resolve()
     key = str(home)
     cached = _DB_CACHE.get(key)

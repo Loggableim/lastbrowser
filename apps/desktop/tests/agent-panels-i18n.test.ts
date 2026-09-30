@@ -48,4 +48,10 @@ describe('AgentPanels localization wiring', () => {
       expect(source, `${literal} should not be hardcoded in AgentPanels`).not.toContain(literal);
     }
   });
+
+  it('renders skill category objects by their display field instead of coercing them to object text', () => {
+    expect(source).toContain('normalizeSkillCategories(skillsState.data?.categories)');
+    expect(source).toContain('normalizeSkillCategory(skill.category)');
+    expect(source).not.toContain('text(selectedSkill?.category)');
+  });
 });

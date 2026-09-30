@@ -173,20 +173,20 @@ body[data-cursor-size="huge"]  { cursor: url('./assets/cursors/cursor-amber-48.s
 body[data-cursor-size="mega"]  { cursor: url('./assets/cursors/cursor-amber-64.svg') 0 0, auto !important; }
 ```
 
-### 4.2 Shake-to-Locate & Hotkey-Radar (Feature 26)
-* **Geste:** Rasche Hin- und Herbewegung der Maus innerhalb von 300ms (Messung von $\Delta x / \Delta t$ im Window-Event-Listener) oder Betätigung der linken `Strg`-Taste.
+### 4.2 Shake-to-Locate Radar (Feature 26)
+* **Geste:** Deutliche horizontale Schüttelbewegung mit mindestens zwei Richtungswechseln und 280px Gesamtweg innerhalb von 700ms. Einzelne schnelle Mausbewegungen, kleine Korrekturen und Tastendrücke lösen das Radar nicht aus.
 * **Effekt:** Zentrierte radiale Animationswelle (Durchmesser bis 250px) mit hochkontrastierendem Goldring, der zum Cursor hin konvergiert, um ihn sofort ins Sichtfeld zu holen.
 
 ### 4.3 Die Maus-Begleitlupe (Maus-Hover-Lupe)
 Der Nutzer kann den Mauszeiger um eine mitlaufende Lupe ergänzen:
 * **Position:** Relativ zum Zeiger (`left`, `right`, `top`, `bottom`) mit 18px Offset.
-* **Geometrie:** Abgerundetes Quadrat (`border-radius: 14px`) mit 3px hochkontrastivem Goldrand und dezentem Schatten.
+* **Geometrie:** Abgerundetes Quadrat (`border-radius: 14px`) mit feinem hochkontrastivem Goldrand und dezentem Schatten.
 * **Größen:** 120px (Kompakt), 180px (Standard), 240px (Groß).
 * **Faktor:** 1.5×, 2×, 3× oder 4×.
 * **Technische Implementierung im Renderer:**
   - Komponente: `<CursorLoupeHUD />` wird auf oberster Ebene (`z-index: 99999`) gerendert.
   - Tracking: `pointermove`-Listener aktualisiert via `transform: translate3d(x, y, 0)` die Position.
-  - Bildextraktion: Die Lupe greift entweder via CSS `element()` / SVG-Canvas-Sampling auf den sichtbaren Bereich zu oder nutzt die Chromium Webview Zoom-Mirror API (`capturePage` Throttled Stream 60fps), um den Bereich pixelgenau vergrößert darzustellen.
+  - Bildextraktion: Die Lupe erfasst den kleinen Bereich unter dem Zeiger über die Browser-WebView oder das App-Fenster. Der Ausschnitt füllt die gesamte Lupenfläche und wird gemäß eingestelltem Faktor (1.5× bis 4×) skaliert; falls kein Bild verfügbar ist, zeigt sie den Text unter dem Zeiger vergrößert an.
 
 ### 4.4 Bildschirmlupen-Icon in der Titelleiste (Feature 11)
 * In der oberen `ModernTitlebar` wird neben den Zen-/Split-Controls ein barrierefreies 42px-Icon (Stilisiertes Lupen-Symbol mit Kontrastrand) platziert.

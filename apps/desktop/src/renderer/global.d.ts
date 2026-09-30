@@ -391,6 +391,10 @@ declare global {
         updateAllAppstore: () => Promise<Record<string, unknown>>;
         submitAppstoreApp: (request: { manifest: Record<string, unknown> }) => Promise<Record<string, unknown>>;
         getSettings: () => Promise<Record<string, unknown>>;
+        getAccessAuthStatus: () => Promise<{ auth_enabled: boolean; logged_in: boolean }>;
+        loginAccessPassword: (request: { password: string }) => Promise<{ ok: boolean }>;
+        lockAccessWindows: () => Promise<{ ok: boolean }>;
+        onAccessAuthLocked: (callback: () => void) => () => void;
         getFallbackModel: () => Promise<Record<string, unknown>>;
         setFallbackModel: (request: { model: string; provider?: string; baseUrl?: string }) => Promise<Record<string, unknown>>;
         saveSettings: (request: { settings: Record<string, unknown> }) => Promise<Record<string, unknown>>;

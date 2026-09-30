@@ -170,9 +170,8 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
         "gemini-3.1-pro-preview",
     ],
     "ollama-cloud": [
-        "deepseek-v4-flash",
-        "deepseek-v4-pro",
         "deepseek-v4.1-flash",
+        "deepseek-v4-pro",
         "gemma4",
         "gemma4:31b",
         "glm-5.3",
@@ -2521,9 +2520,8 @@ _OLLAMA_CLOUD_CACHE_TTL = 3600
 # Keep this aligned with the official thinking catalog and only include
 # models that are actually served by the Ollama Cloud endpoint.
 OLLAMA_CLOUD_CURATED_MODELS: list[str] = [
-    "deepseek-v4-flash",
-    "deepseek-v4-pro",
     "deepseek-v4.1-flash",
+    "deepseek-v4-pro",
     "gemma4",
     "gemma4:31b",
     "glm-5",

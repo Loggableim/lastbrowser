@@ -326,11 +326,14 @@ describe('Vision-Impaired 2.0 §4: cursor, loupe & radar (CSS)', () => {
     expect(css).toContain('@keyframes lb-locate-converge');
   });
 
-  it('styles the cursor loupe with 14px radius and 3px gold border', () => {
+  it('styles the cursor loupe with a fine gold border and full-size capture surface', () => {
     const loupeBlock = block('.lb-cursor-loupe {');
     expect(loupeBlock).toContain('border-radius: 14px');
-    expect(loupeBlock).toContain('border: 3px solid #FFD700');
+    expect(loupeBlock).toContain('border: 1px solid rgba(255, 215, 0, 0.9)');
     expect(loupeBlock).toContain('z-index: 99999');
+    expect(block('.lb-cursor-loupe .lb-loupe-content {')).toContain('width: 100%');
+    expect(block('.lb-cursor-loupe .lb-loupe-content.has-capture {')).toContain('padding: 0');
+    expect(block('.lb-cursor-loupe .lb-loupe-capture {')).toContain('height: 100%');
   });
 });
 
@@ -638,6 +641,24 @@ describe('Vision-Impaired 2.0 §9: settings UI wiring (source contracts)', () =>
 });
 
 describe('Vision-Impaired 2.0 §4.3: cursor loupe capture geometry', () => {
+  it('only recognizes a quick, repeated side-to-side shake', async () => {
+    const { isCursorShake } = await import('../src/renderer/utils/cursor-loupe.js');
+    expect(isCursorShake([
+      { t: 0, x: 0 }, { t: 100, x: 320 }
+    ])).toBe(false);
+    expect(isCursorShake([
+      { t: 0, x: 0 }, { t: 100, x: 120 }, { t: 200, x: 0 }
+    ])).toBe(false);
+    expect(isCursorShake([
+      { t: 0, x: 0 }, { t: 100, x: 100 }, { t: 200, x: 0 },
+      { t: 300, x: 100 }, { t: 400, x: 0 }
+    ])).toBe(true);
+    expect(isCursorShake([
+      { t: 0, x: 0 }, { t: 200, x: 100 }, { t: 400, x: 0 },
+      { t: 800, x: 100 }, { t: 900, x: 0 }
+    ])).toBe(false);
+  });
+
   it('keeps the complete loupe visible at every window edge', async () => {
     const { getLoupePosition } = await import('../src/renderer/utils/cursor-loupe.js');
     expect(getLoupePosition(790, 590, 800, 600, 180, 24, 24)).toEqual({ x: 620, y: 420 });

@@ -18,6 +18,7 @@ import {
 import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
+import { normalizeSkillCategories, normalizeSkillCategory } from './skill-categories.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -40,7 +41,7 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
   const ready = isReady(serviceStatus);
   const skillsState = useApiState(() => window.lastbrowser.sidekick.listSkills(), [ready], ready);
   const skills = arrayFrom(skillsState.data, ['skills', 'items', 'files']);
-  const skillCategories = arrayFrom(skillsState.data, ['categories']).map((item) => text(item)).filter(Boolean);
+  const skillCategories = normalizeSkillCategories(skillsState.data?.categories);
   const [query, setQuery] = useState('');
   const [section, setSection] = useState(activeContextItem || 'Library');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -52,7 +53,7 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
   const bundledCatalog = text(skillsState.data?.source) === 'bundled';
   const filtered = skills.filter((skill) => {
     const haystack = jsonPreview(skill).toLowerCase();
-    const category = text(skill.category).toLowerCase();
+    const category = normalizeSkillCategory(skill.category).toLowerCase();
     const matchesCategory = !selectedCategory || category === selectedCategory.toLowerCase();
     return matchesCategory && haystack.includes(query.toLowerCase());
   });
@@ -66,7 +67,7 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
   }, [activeContextItem]);
 
   useEffect(() => {
-    setSkillCategoryDraft(text(selectedSkill?.category));
+    setSkillCategoryDraft(normalizeSkillCategory(selectedSkill?.category));
   }, [selectedSkill?.category, selectedSkill?.name, selectedSkill?.path]);
 
   const visibleSkills = section === 'Create skill'
@@ -105,7 +106,7 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
     if (!selectedName) return;
     await window.lastbrowser.sidekick.saveSkill({
       name: selectedName,
-      category: skillCategoryDraft.trim() || text(selectedSkill?.category),
+      category: skillCategoryDraft.trim() || normalizeSkillCategory(selectedSkill?.category),
       path: selectedSkill && text(selectedSkill?.source) === 'bundled' ? undefined : text(selectedSkill?.path) || undefined,
       content
     });
@@ -163,7 +164,7 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
             <button key={idOf(skill)} type="button" className={`integration-row ${idOf(skill) === selectedName ? 'active' : ''}`} onClick={() => { setSelectedName(text(skill.name || idOf(skill))); setSelectedFile(''); }}>
               <img src={brandAssets.sidebarIcons.skills} alt="" />
               <span>{titleOf(skill, idOf(skill))}</span>
-              <small>{text(skill.path || skill.category || skill.source)}</small>
+              <small>{text(skill.path) || normalizeSkillCategory(skill.category) || text(skill.source)}</small>
             </button>
           ))}
           {!visibleSkills.length && <EmptyState icon={<Sparkles size={22} />} label={ready ? t('skills.empty') : t('agentPanels.noSkillsStarting')} />}

@@ -169,6 +169,14 @@ if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMai
     updateAllAppstore: () => ipcRenderer.invoke('lastbrowser:sidekick:updateAllAppstore'),
     submitAppstoreApp: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:submitAppstoreApp', request),
     getSettings: () => ipcRenderer.invoke('lastbrowser:sidekick:getSettings'),
+    getAccessAuthStatus: () => ipcRenderer.invoke('lastbrowser:sidekick:getAccessAuthStatus'),
+    loginAccessPassword: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:loginAccessPassword', request),
+    lockAccessWindows: () => ipcRenderer.invoke('lastbrowser:sidekick:lockAccessWindows'),
+    onAccessAuthLocked: (callback: () => void) => {
+      const listener = () => callback();
+      ipcRenderer.on('lastbrowser:access-auth-locked', listener);
+      return () => ipcRenderer.removeListener('lastbrowser:access-auth-locked', listener);
+    },
     saveSettings: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:saveSettings', request),
     notifyChatCompleted: (enabled: boolean) => ipcRenderer.invoke('lastbrowser:notifications:chatCompleted', enabled),
     listGmailAccounts: () => ipcRenderer.invoke('lastbrowser:sidekick:listGmailAccounts'),

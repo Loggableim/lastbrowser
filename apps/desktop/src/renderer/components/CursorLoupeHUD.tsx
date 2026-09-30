@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePanelStore } from '../stores/usePanelStore.js';
 import type { LoupePosition } from '../stores/a11y-config.js';
-import { getLoupeCaptureRect, getLoupePosition, getWebviewLoupeCaptureRect } from '../utils/cursor-loupe.js';
+import { getLoupeCaptureRect, getLoupePosition, getWebviewLoupeCaptureRect, isCursorShake } from '../utils/cursor-loupe.js';
 
 /**
  * Maus-Begleitlupe & Shake-to-Locate Radar (docs/visionimpaired.md §4.2/§4.3).
@@ -9,12 +9,11 @@ import { getLoupeCaptureRect, getLoupePosition, getWebviewLoupeCaptureRect } fro
  * Die Lupe folgt dem Zeiger mit 18px Offset in der gewählten Richtung und
  * erfasst einen kleinen Ausschnitt des sichtbaren Browserfensters und skaliert
  * echte Seiten- oder Chrome-Pixel in die Lupe.
- * Shake-to-Locate: schnelle Δx-Bewegung (>250px in <300ms) oder Ctrl-Tap
- * löst die konvergierende Gold-Radarwelle aus.
+ * Shake-to-Locate: eine deutliche horizontale Hin-und-her-Bewegung löst die
+ * konvergierende Radarwelle aus. Tastendrücke lösen sie nicht aus.
  */
 
-const SHAKE_WINDOW_MS = 300;
-const SHAKE_DELTA_THRESHOLD_PX = 250;
+const SHAKE_WINDOW_MS = 700;
 const RADAR_LIFETIME_MS = 950;
 
 function computeLoupeOffset(position: LoupePosition, size: number): { dx: number; dy: number } {
@@ -77,6 +76,19 @@ export function CursorLoupeHUD(): React.JSX.Element | null {
   const radarSeqRef = useRef(0);
   const loupeImageRef = useRef('');
 
+  const recordShakePoint = useCallback((point: { x: number; y: number }) => {
+    if (!shakeToLocate) return;
+    const now = performance.now();
+    const samples = shakeWindowRef.current;
+    samples.push({ t: now, x: point.x });
+    while (samples.length > 0 && now - samples[0]!.t > SHAKE_WINDOW_MS) samples.shift();
+    if (isCursorShake(samples)) {
+      radarSeqRef.current += 1;
+      setRadar({ x: point.x, y: point.y, id: radarSeqRef.current });
+      samples.length = 0;
+    }
+  }, [shakeToLocate]);
+
   // Webview guests are isolated renderers and do not forward their mouse events
   // to the embedder. Poll the main process for a window-local cursor position,
   // then capture only the small visible window crop at 8 Hz.
@@ -94,19 +106,6 @@ export function CursorLoupeHUD(): React.JSX.Element | null {
     const onPointerMove = (event: PointerEvent) => {
       pointerRef.current = { x: event.clientX, y: event.clientY };
     };
-    const trackShake = (point: { x: number; y: number }) => {
-      if (!shakeToLocate) return;
-      const now = performance.now();
-      const win = shakeWindowRef.current;
-      win.push({ t: now, x: point.x });
-      while (win.length > 0 && now - win[0].t > SHAKE_WINDOW_MS) win.shift();
-      if (win.length >= 2 && Math.abs(point.x - win[0].x) > SHAKE_DELTA_THRESHOLD_PX) {
-        radarSeqRef.current += 1;
-        setRadar({ x: point.x, y: point.y, id: radarSeqRef.current });
-        win.length = 0;
-      }
-    };
-
     const update = async () => {
       if (cancelled || pollInFlight) return;
       pollInFlight = true;
@@ -114,7 +113,7 @@ export function CursorLoupeHUD(): React.JSX.Element | null {
         const point = await window.lastbrowser?.system?.getCursorPosition?.();
         if (cancelled || !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
         pointerRef.current = point;
-        trackShake(point);
+        recordShakePoint(point);
         if (!enabled || !loupeEl) return;
         const { dx, dy } = computeLoupeOffset(position, size);
         const loupePosition = getLoupePosition(point.x, point.y, window.innerWidth, window.innerHeight, size, dx, dy);
@@ -209,44 +208,20 @@ export function CursorLoupeHUD(): React.JSX.Element | null {
       window.removeEventListener('pointermove', onPointerMove);
       window.clearInterval(positionTimer);
     };
-  }, [enabled, shakeToLocate, position, size, factor]);
+  }, [enabled, shakeToLocate, position, size, factor, recordShakePoint]);
 
-  // Shake-to-Locate: rapid horizontal movement or Ctrl-tap triggers the radar.
+  // Pointer events keep detection responsive in the shell. The position poll
+  // above also feeds the same detector for isolated Electron WebView guests.
   useEffect(() => {
     if (!shakeToLocate) return undefined;
-
-    const triggerRadar = (x: number, y: number) => {
-      radarSeqRef.current += 1;
-      setRadar({ x, y, id: radarSeqRef.current });
-    };
-
     const onPointerMove = (event: PointerEvent) => {
-      const now = performance.now();
-      const win = shakeWindowRef.current;
-      win.push({ t: now, x: event.clientX });
-      while (win.length > 0 && now - win[0].t > SHAKE_WINDOW_MS) win.shift();
-      if (win.length >= 2) {
-        const deltaX = Math.abs(event.clientX - win[0].x);
-        if (deltaX > SHAKE_DELTA_THRESHOLD_PX) {
-          triggerRadar(event.clientX, event.clientY);
-          win.length = 0;
-        }
-      }
+      recordShakePoint({ x: event.clientX, y: event.clientY });
     };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Control' && !event.repeat) {
-        triggerRadar(pointerRef.current.x, pointerRef.current.y);
-      }
-    };
-
     window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('keydown', onKeyDown);
     };
-  }, [shakeToLocate]);
+  }, [shakeToLocate, recordShakePoint]);
 
   // Auto-dismiss the radar wave after its animation.
   useEffect(() => {
@@ -273,7 +248,7 @@ export function CursorLoupeHUD(): React.JSX.Element | null {
           aria-hidden="true"
         >
           <div
-            className="lb-loupe-content"
+            className={`lb-loupe-content${loupeImage ? ' has-capture' : ''}`}
             style={{ fontSize: `${Math.round(13 * factor)}px`, transform: loupeImage ? undefined : `scale(${factor})` }}
           >
             {loupeImage ? <img className="lb-loupe-capture" src={loupeImage} alt="" /> : (loupeText || '·')}

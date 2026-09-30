@@ -1,4 +1,11 @@
 export const desktopTranslationKeys = [
+  'access.lock.checking',
+  'access.lock.description',
+  'access.lock.password',
+  'access.lock.retry',
+  'access.lock.title',
+  'access.lock.unlock',
+  'access.lock.unlocking',
   'app.title',
   'agentPanels.agentChat',
   'agentPanels.agentDetail',

@@ -544,14 +544,18 @@ async function sendJson(
     headers: {
       'content-type': 'application/json',
       ...authHeader(),
+      ...(_sidekickAuthCookie ? { cookie: _sidekickAuthCookie } : {}),
       ...(init.headers || {})
     }
   });
   const response = await request();
+  captureSidekickAuthCookie(response);
   if (response.status !== 401) return response;
   const refreshed = await refreshWebuiAuth(webuiUrl, fetchImpl);
   if (!refreshed) return response;
-  return request();
+  const retried = await request();
+  captureSidekickAuthCookie(retried);
+  return retried;
 }
 
 /**
@@ -567,6 +571,16 @@ async function sendJson(
 const SESSION_HEADER = 'X-Sidekick-Session-Token';
 let _sessionToken: string | null = null;
 let _authAttempted = false;
+let _sidekickAuthCookie: string | null = null;
+
+function captureSidekickAuthCookie(response: Response): void {
+  const setCookie = typeof response.headers.getSetCookie === 'function'
+    ? response.headers.getSetCookie().join(', ')
+    : response.headers.get('set-cookie') || '';
+  const cookieMatch = setCookie.match(/(?:^|,\s*)sidekick_session=([^;,\s]+)/i);
+  if (cookieMatch?.[1]) _sidekickAuthCookie = `sidekick_session=${cookieMatch[1]}`;
+  else if (/sidekick_session=;|sidekick_session=""/i.test(setCookie)) _sidekickAuthCookie = null;
+}
 
 export function setWebuiSessionToken(token: string | null): void {
   _sessionToken = token;
@@ -651,6 +665,7 @@ export async function requestWebui(
   appendQuery(url, request.query);
 
   const headers: Record<string, string> = { ...authHeader(), ...(request.headers || {}) };
+  if (_sidekickAuthCookie && !headers.cookie) headers.cookie = _sidekickAuthCookie;
   const init: RequestInit = { method, headers };
   if (method !== 'GET' && request.body !== undefined) {
     headers['content-type'] = headers['content-type'] || 'application/json';
@@ -676,7 +691,30 @@ export async function requestWebui(
   if (!response.ok) {
     throw new Error(String(payload.error || payload.message || `HTTP ${response.status}`));
   }
+  if (path === '/api/auth/logout') _sidekickAuthCookie = null;
   return payload;
+}
+
+export async function getAccessAuthStatus(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<{ auth_enabled: boolean; logged_in: boolean }> {
+  return requestWebui(webuiUrl, { method: 'GET', path: '/api/auth/status' }, fetchImpl) as Promise<{ auth_enabled: boolean; logged_in: boolean }>;
+}
+
+export async function loginAccessPassword(webuiUrl: string, password: string, fetchImpl: FetchLike = fetch): Promise<{ ok: boolean }> {
+  const response = await fetchImpl(urlFor(webuiUrl, '/api/auth/login'), {
+    method: 'POST',
+    headers: { ...authHeader(), 'content-type': 'application/json' },
+    body: JSON.stringify({ password })
+  });
+  captureSidekickAuthCookie(response);
+  const raw = await response.text();
+  let payload: Record<string, unknown> = {};
+  try { payload = raw ? JSON.parse(raw) as Record<string, unknown> : {}; } catch {}
+  if (!response.ok) throw new Error(String(payload.error || payload.message || `HTTP ${response.status}`));
+  return { ok: payload.ok === true };
+}
+
+export function clearAccessAuthCookie(): void {
+  _sidekickAuthCookie = null;
 }
 
 export function extractLastAssistantMessage(session: { messages?: Array<{ role?: string; content?: string }> }): string {

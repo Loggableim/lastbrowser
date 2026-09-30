@@ -3,6 +3,13 @@ from runtime import models_dev
 import pytest
 
 
+def test_ollama_cloud_static_catalog_uses_live_deepseek_flash_id():
+    assert "deepseek-v4.1-flash" in models.OLLAMA_CLOUD_CURATED_MODELS
+    assert "deepseek-v4-flash" not in models.OLLAMA_CLOUD_CURATED_MODELS
+    assert "deepseek-v4.1-flash" in models._PROVIDER_MODELS["ollama-cloud"]
+    assert "deepseek-v4-flash" not in models._PROVIDER_MODELS["ollama-cloud"]
+
+
 def test_new_cloud_models_survive_live_picker_filter(monkeypatch, tmp_path):
     available = [
         "glm-5.3", "glm-5.3-flash", "gpt-oss:20b", "gpt-oss:120b",

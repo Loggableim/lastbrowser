@@ -67,7 +67,7 @@ import {
   mergeDesktopSettings,
   fetchDesktopSettingsWithRetry
 } from '../src/renderer/App.js';
-import { applyDesktopAppearancePreview, createOrderedSettingsWriter, createReadinessAwareSettingsWriter } from '../src/renderer/panels/SystemPanels.js';
+import { applyDesktopAppearancePreview, createOrderedSettingsWriter, createReadinessAwareSettingsWriter, mergeAppearanceSettings } from '../src/renderer/panels/SystemPanels.js';
 
 describe('Appearance Relaunch & Design-System Engine', () => {
   beforeEach(() => {
@@ -81,6 +81,13 @@ describe('Appearance Relaunch & Design-System Engine', () => {
   });
 
   describe('1. Theme Normalization & OLED Support', () => {
+    it('prefers the latest desktop event snapshot over a stale settings API result', () => {
+      expect(mergeAppearanceSettings(
+        { settings: { theme: 'dark', skin: 'default' } },
+        { theme: 'light', skin: 'ares' }
+      )).toMatchObject({ theme: 'light', skin: 'ares' });
+    });
+
     it('prefers persisted server appearance over a stale renderer cache after relaunch', () => {
       const merged = mergeDesktopSettings(
         { settings: { theme: 'light', skin: 'custom', accent_color: '#ff00aa' } },

@@ -839,6 +839,11 @@ function AppContent(): JSX.Element {
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const { isMaximized: windowMaximized, handleDoubleClick: handleTopbarDoubleClick, handleMouseDown: handleTopbarMouseDown } = useWindowDrag();
   const [status, setStatus] = useState<ServiceStatus | null>(null);
+  const [accessAuthChecked, setAccessAuthChecked] = useState(false);
+  const [accessAuthRequired, setAccessAuthRequired] = useState(false);
+  const [accessPassword, setAccessPassword] = useState('');
+  const [accessAuthError, setAccessAuthError] = useState('');
+  const [accessAuthBusy, setAccessAuthBusy] = useState(false);
   const [setupState, setSetupState] = useState<SetupState>(defaultSetupState);
   // The wizard covers the whole window, so it must always be dismissible —
   // otherwise a user who cannot finish setup is locked out of the browser.
@@ -1012,7 +1017,65 @@ function AppContent(): JSX.Element {
   const workspacePanelCollapsedRef = useRef(workspacePanelCollapsed);
   const leftSidebarCollapsedRef = useRef(leftSidebarCollapsed);
   const setupRequired = isFirstRunRequired(setupState, onboardingStatus) && !setupDismissed;
-  const sidekickApiReady = canCallSidekickApi(status);
+  const sidekickTransportReady = canCallSidekickApi(status);
+  const sidekickApiReady = sidekickTransportReady && accessAuthChecked && !accessAuthRequired;
+
+  useEffect(() => {
+    if (!sidekickTransportReady) return;
+    let alive = true;
+    const checkAccessStatus = async (): Promise<void> => {
+      try {
+        const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
+        if (!alive) return;
+        setAccessAuthRequired(Boolean(auth.auth_enabled && !auth.logged_in));
+        setAccessAuthChecked(true);
+        setAccessAuthError('');
+      } catch (error) {
+        if (!alive) return;
+        setAccessAuthError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    void checkAccessStatus();
+    const timer = window.setInterval(() => void checkAccessStatus(), 10_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void checkAccessStatus();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [sidekickTransportReady]);
+
+  useEffect(() => {
+    const lockBrowser = () => {
+      setAccessPassword('');
+      setAccessAuthError('');
+      setAccessAuthRequired(true);
+      setAccessAuthChecked(true);
+    };
+    return window.lastbrowser.sidekick.onAccessAuthLocked(lockBrowser);
+  }, []);
+
+  async function unlockBrowser(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!accessPassword || accessAuthBusy) return;
+    setAccessAuthBusy(true);
+    setAccessAuthError('');
+    try {
+      await window.lastbrowser.sidekick.loginAccessPassword({ password: accessPassword });
+      const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
+      if (!auth.logged_in) throw new Error('Login did not create an authenticated session.');
+      setAccessAuthRequired(false);
+      setAccessAuthChecked(true);
+      setAccessPassword('');
+    } catch (error) {
+      setAccessAuthError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAccessAuthBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!sidekickApiReady) return undefined;
@@ -2871,6 +2934,37 @@ function AppContent(): JSX.Element {
   }, [activeTab, setCopilotOpen, startNativeChat]);
 
   const isModernBrowser = layoutMode === 'modern';
+
+  if (!accessAuthChecked || accessAuthRequired) {
+    return (
+      <main className="access-lock-screen">
+        <section className="access-lock-card" aria-labelledby="access-lock-title">
+          <div className="access-lock-icon"><ShieldCheck size={28} /></div>
+          <p className="eyebrow">Lastbrowser</p>
+          <h1 id="access-lock-title">{accessAuthRequired ? t('access.lock.title') : t('access.lock.checking')}</h1>
+          <p>{accessAuthRequired
+            ? t('access.lock.description')
+            : (accessAuthError || t('access.lock.checking'))}</p>
+          {accessAuthRequired ? (
+            <form onSubmit={(event) => void unlockBrowser(event)}>
+              <label htmlFor="access-lock-password">{t('access.lock.password')}</label>
+              <input id="access-lock-password" autoFocus type="password" autoComplete="current-password" value={accessPassword} onChange={(event) => setAccessPassword(event.target.value)} />
+              {accessAuthError && <div className="access-lock-error" role="alert">{accessAuthError}</div>}
+              <button type="submit" disabled={!accessPassword || accessAuthBusy}>{accessAuthBusy ? t('access.lock.unlocking') : t('access.lock.unlock')}</button>
+            </form>
+          ) : (
+            <button type="button" onClick={() => {
+              void window.lastbrowser.sidekick.getAccessAuthStatus().then((auth) => {
+                setAccessAuthRequired(Boolean(auth.auth_enabled && !auth.logged_in));
+                setAccessAuthChecked(true);
+                setAccessAuthError('');
+              }).catch((error) => setAccessAuthError(error instanceof Error ? error.message : String(error)));
+            }}>{t('access.lock.retry')}</button>
+          )}
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className={`app-shell panel-${activePanel} ${isModernBrowser ? 'modern-mode' : ''} ${windowMaximized ? 'is-maximized' : ''} ${sidebarMode === 'hidden' ? 'zen-mode' : ''}`}>

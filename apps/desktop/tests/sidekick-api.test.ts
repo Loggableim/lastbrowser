@@ -53,6 +53,8 @@ import {
   getMemory,
   getSessionDraft,
   getSettings,
+  loginAccessPassword,
+  clearAccessAuthCookie,
   getSkillContent,
   getSupermemoryStatus,
   getSupermemoryDocument,
@@ -1029,5 +1031,33 @@ describe('sidekick api client', () => {
       .rejects.toThrow('Only local WebUI API paths are allowed');
     await expect(requestWebui('http://127.0.0.1:8787', { path: '/admin' }, fetchImpl))
       .rejects.toThrow('Only local WebUI API paths are allowed');
+  });
+});
+
+describe('desktop access password bridge', () => {
+  it('keeps the HttpOnly login cookie in the main process for authenticated API calls', async () => {
+    clearAccessAuthCookie();
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      if (String(url).endsWith('/api/auth/login')) {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json', 'set-cookie': 'sidekick_session=session-token; HttpOnly; Path=/' }
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    await loginAccessPassword('http://127.0.0.1:8787', 'test-password', fetchImpl);
+    await getSettings('http://127.0.0.1:8787', fetchImpl);
+    await requestWebui('http://127.0.0.1:8787', { method: 'POST', path: '/api/auth/logout', body: {} }, fetchImpl);
+    await getSettings('http://127.0.0.1:8787', fetchImpl);
+
+    expect(calls[0].init?.body).toBe(JSON.stringify({ password: 'test-password' }));
+    expect(new Headers(calls[1].init?.headers).get('cookie')).toBe('sidekick_session=session-token');
+    expect(new Headers(calls[2].init?.headers).get('cookie')).toBe('sidekick_session=session-token');
+    expect(new Headers(calls[3].init?.headers).has('cookie')).toBe(false);
+    clearAccessAuthCookie();
   });
 });

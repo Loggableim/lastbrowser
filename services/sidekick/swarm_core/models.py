@@ -18,6 +18,9 @@ MODEL_CATALOG_ALIASES = {
     "deepseek-v4-flash:0731-cloud": "deepseek-v4-flash",
     "deepseek-v4-flash:0731": "deepseek-v4-flash",
     "deepseek-v4-flash:preview": "deepseek-v4-flash",
+    # The live Ollama Cloud catalog currently reports Pro with a dated tag,
+    # while the OpenAI-compatible endpoint accepts the stable model alias.
+    "deepseek-v4-pro:0813": "deepseek-v4-pro",
 }
 MODEL_HEALTH_HEALTHY = "healthy"
 MODEL_HEALTH_UNAVAILABLE = "unavailable"

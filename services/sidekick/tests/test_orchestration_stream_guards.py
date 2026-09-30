@@ -37,6 +37,60 @@ def test_orchestration_config_load_errors_fail_closed(monkeypatch, orchestration
     assert streaming._orchestration_is_enabled(orchestration) is False
 
 
+def test_goal_hook_for_orchestrator_turn_persists_decision_and_queues_continuation(monkeypatch):
+    from web.api import streaming
+
+    session = SimpleNamespace(
+        profile="profile-a",
+        workspace_slug="research",
+        messages=[{"role": "assistant", "content": "The synthesis answer."}],
+    )
+    evaluated = {}
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda profile: f"home:{profile}")
+    monkeypatch.setattr(
+        "web.api.goals.has_active_goal",
+        lambda session_id, **kwargs: session_id == "goal-session" and kwargs == {
+            "profile_home": "home:profile-a",
+            "space_slug": "research",
+        },
+    )
+
+    def evaluate(session_id, response, **kwargs):
+        evaluated.update(session_id=session_id, response=response, **kwargs)
+        return {
+            "status": "active",
+            "should_continue": True,
+            "continuation_prompt": "[goal continuation]",
+            "message": "Continuing toward the goal.",
+            "message_key": "goal_continuing",
+            "message_args": [1, 20, "more work"],
+        }
+
+    monkeypatch.setattr("web.api.goals.evaluate_goal_after_turn", evaluate)
+    streaming.PENDING_GOAL_CONTINUATION.discard("goal-session")
+    events = []
+
+    result = streaming._evaluate_goal_after_stream_turn(
+        session,
+        "goal-session",
+        True,
+        lambda name, payload: events.append((name, payload)),
+    )
+
+    assert result["should_continue"] is True
+    assert evaluated == {
+        "session_id": "goal-session",
+        "response": "The synthesis answer.",
+        "user_initiated": True,
+        "profile_home": "home:profile-a",
+        "space_slug": "research",
+    }
+    assert [name for name, _ in events] == ["goal", "goal", "goal_continue"]
+    assert events[-1][1]["continuation_prompt"] == "[goal continuation]"
+    assert "goal-session" in streaming.PENDING_GOAL_CONTINUATION
+    streaming.PENDING_GOAL_CONTINUATION.discard("goal-session")
+
+
 @pytest.mark.parametrize(
     ("orchestration", "model", "config_module", "config_loader", "runner_name"),
     [
@@ -94,6 +148,102 @@ def test_disabled_orchestration_stream_emits_error_without_model_call(
         assert session.pending_user_message is None
         session.save.assert_called_once()
         runner.assert_not_called()
+    finally:
+        with STREAMS_LOCK:
+            STREAMS.pop(stream_id, None)
+
+
+@pytest.mark.parametrize(
+    ("orchestration", "model", "config_module", "config_loader", "runner_name"),
+    [
+        ("teamwork", "teamwork", "runtime.teamwork_orchestrator", "load_teamwork_config", "run_teamwork_turn"),
+        ("smart-track", "smart-track-high", "runtime.smart_track_orchestrator", "load_smart_track_config", "run_smart_track_turn"),
+    ],
+)
+def test_enabled_orchestration_stream_runs_persistent_goal_hook(
+    monkeypatch, tmp_path, orchestration, model, config_module, config_loader, runner_name
+):
+    import importlib
+    from web.api import streaming
+    from web.api.config import STREAMS, STREAMS_LOCK, StreamChannel
+    from web.api import goals as goals_api
+
+    stream_id = f"goal-{orchestration}"
+    channel = StreamChannel()
+    with STREAMS_LOCK:
+        STREAMS[stream_id] = channel
+
+    session = SimpleNamespace(
+        session_id=f"session-{orchestration}",
+        profile="default",
+        workspace_slug=None,
+        space_slug=None,
+        space=None,
+        workspace=str(tmp_path),
+        model="",
+        model_provider=None,
+        active_stream_id=stream_id,
+        pending_user_message="Keep working",
+        save=Mock(),
+        messages=[],
+    )
+    monkeypatch.setattr(streaming, "get_session", lambda _sid: session)
+    monkeypatch.setattr(streaming, "register_active_run", lambda *_a, **_k: None)
+    monkeypatch.setattr(streaming, "update_active_run", lambda *_a, **_k: None)
+    monkeypatch.setattr(streaming, "unregister_active_run", lambda *_a, **_k: None)
+    monkeypatch.setattr(streaming, "append_turn_journal_event_for_stream", lambda *_a, **_k: None)
+    monkeypatch.setattr(streaming, "_get_session_agent_lock", lambda _sid: nullcontext())
+    monkeypatch.setattr(
+        streaming,
+        "meter",
+        lambda: SimpleNamespace(begin_session=lambda *_a: None, get_interval=lambda: 10.0, get_stats=lambda: {}),
+    )
+    monkeypatch.setattr(streaming, "_clear_thread_env", lambda: None)
+    monkeypatch.setattr(streaming, "_restore_streaming_home_env", lambda *_a: None)
+    monkeypatch.setattr(streaming, "_restore_streaming_browser_env", lambda *_a: None)
+    monkeypatch.setattr("web.api.kanban_orchestration.session_has_kanban_orchestration", lambda _s: False)
+    monkeypatch.setattr("web.api.kanban_orchestration.set_webui_kanban_orchestration", lambda _v: None)
+    monkeypatch.setattr("web.api.kanban_orchestration.clear_webui_kanban_orchestration", lambda: None)
+
+    orchestrator_module = importlib.import_module(config_module)
+    monkeypatch.setattr(orchestrator_module, config_loader, lambda: {"enabled": True})
+
+    def run_turn(*_args, **_kwargs):
+        session.messages.append({"role": "assistant", "content": "Team answer"})
+
+    monkeypatch.setattr(orchestrator_module, runner_name, run_turn)
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: tmp_path / "profile")
+    monkeypatch.setattr(goals_api, "has_active_goal", lambda *_a, **_k: True)
+    evaluation = Mock(return_value={
+        "status": "done",
+        "should_continue": False,
+        "message": "Goal complete.",
+        "message_key": "goal_achieved",
+    })
+    monkeypatch.setattr(goals_api, "evaluate_goal_after_turn", evaluation)
+
+    try:
+        streaming._run_agent_streaming(
+            session.session_id,
+            "Keep working",
+            model,
+            str(tmp_path),
+            stream_id,
+            goal_related=True,
+        )
+        evaluation.assert_called_once_with(
+            session.session_id,
+            "Team answer",
+            user_initiated=True,
+            profile_home=tmp_path / "profile",
+            space_slug=None,
+        )
+        assert session.active_stream_id is None
+        assert session.pending_user_message is None
+        events = [event for event, _payload in channel._offline_buffer]
+        assert events[:2] == ["goal", "goal"]
+        assert events[-1] == "stream_end"
+        assert session.session_id not in streaming.PENDING_GOAL_CONTINUATION
     finally:
         with STREAMS_LOCK:
             STREAMS.pop(stream_id, None)

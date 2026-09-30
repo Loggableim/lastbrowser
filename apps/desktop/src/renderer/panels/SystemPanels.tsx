@@ -170,7 +170,7 @@ export function normalizeAppstoreRecord(app: AnyRecord): NormalizedAppstoreRecor
   };
 }
 
-export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'teamwork' | 'extensions' | 'plugins' | 'system';
+export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'teamwork' | 'plugins' | 'system';
 
 export type SettingsSectionMeta ={
   title: string;
@@ -227,11 +227,6 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
     description: 'Multi-Agent Teamwork, Smart Track (Single Track) & kuratierte Modellwand.',
     icon: <Users size={16} />
   },
-  extensions: {
-    title: 'Extensions',
-    description: 'Chrome extensions, Manifest V3 add-ons, and content scripts.',
-    icon: <Puzzle size={16} />
-  },
   plugins: {
     title: 'Plugins',
     description: 'Installed app integrations and plugin inventory.',
@@ -250,7 +245,6 @@ const SETTINGS_SECTION_COPY: Record<SettingsSectionId, { title: DesktopTranslati
   preferences: { title: 'settings.sections.preferences', description: 'settings.sectionDescriptions.preferences' },
   providers: { title: 'settings.sections.providers', description: 'settings.sectionDescriptions.providers' },
   teamwork: { title: 'settings.sections.teamwork', description: 'settings.sectionDescriptions.teamwork' },
-  extensions: { title: 'settings.sections.extensions', description: 'settings.sectionDescriptions.extensions' },
   plugins: { title: 'settings.sections.plugins', description: 'settings.sectionDescriptions.plugins' },
   system: { title: 'settings.sections.system', description: 'settings.sectionDescriptions.system' }
 };
@@ -2078,6 +2072,25 @@ function VisionImpairedSettingsCard(): JSX.Element {
   );
 }
 
+export function normalizeSettingsSectionId(value: string): SettingsSectionId | null {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'extensions') return 'plugins';
+  return (Object.keys(SETTINGS_SECTIONS) as SettingsSectionId[]).find((key) => key === normalized) ?? null;
+}
+
+export function mergeAppearanceSettings(
+  apiPayload: unknown,
+  desktopSettings: unknown
+): AnyRecord {
+  const apiSettings = isRecord(apiPayload)
+    ? (isRecord(apiPayload.settings) ? apiPayload.settings : apiPayload)
+    : {};
+  return {
+    ...apiSettings,
+    ...(isRecord(desktopSettings) ? desktopSettings : {})
+  };
+}
+
 /**
  * Serialize settings writes and coalesce queued snapshots. Writes contain the
  * complete settings object, so once an in-flight write finishes only the
@@ -2228,6 +2241,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const setDockSettings = usePanelStore((s) => s.setDockSettings);
   const applyDockPreset = usePanelStore((s) => s.applyDockPreset);
   const resetFloatingDockPos = usePanelStore((s) => s.resetFloatingDockPos);
+  const sidebarMode = usePanelStore((s) => s.sidebarMode);
 
   const [defaultBrowserStatus, setDefaultBrowserStatus] = useState<boolean | null>(null);
   const [cdpPreference, setCdpPreference] = useState<{ enabled: boolean; active: boolean } | null>(null);
@@ -2301,9 +2315,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     }
   };
 
-  const settings = isRecord(settingsState.data?.settings)
-    ? settingsState.data.settings
-    : (settingsState.data || desktopSettings || {});
+  // The desktop event stream receives each successful auto-save before the
+  // settings query is refreshed. Prefer that current snapshot over the query's
+  // still-stale result so the draft hydration below cannot flash back to the
+  // previous skin/theme immediately after a click.
+  const settings = mergeAppearanceSettings(settingsState.data, desktopSettings);
 
   useEffect(() => {
     if (!desktopSettings || !settingsState.error) return;
@@ -2330,8 +2346,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const fallbackModel = settingsText(fallbackModelConfig.model, '');
 
   useEffect(() => {
-    const normalized = activeContextItem.trim().toLowerCase();
-    const match = (Object.keys(SETTINGS_SECTIONS) as SettingsSectionId[]).find((key) => key === normalized);
+    const match = normalizeSettingsSectionId(activeContextItem);
     if (match) setSection(match);
   }, [activeContextItem]);
 
@@ -2508,6 +2523,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     try {
       await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/auth/logout', body: {} });
       await authState.refresh();
+      await window.lastbrowser.sidekick.lockAccessWindows();
     } catch (error) {
       showToast(`Sign out failed: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -2983,6 +2999,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           onClick={() => {
                             setZenExitModeState('slim');
                             usePanelStore.getState().setZenExitDefaultMode('slim');
+                            if (sidebarMode !== 'hidden') {
+                              usePanelStore.getState().setSidebarMode('slim');
+                            }
                           }}
                         >
                           {t('settings.panels.appearance.compactDock')}
@@ -2993,6 +3012,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           onClick={() => {
                             setZenExitModeState('expanded');
                             usePanelStore.getState().setZenExitDefaultMode('expanded');
+                            if (sidebarMode !== 'hidden') {
+                              usePanelStore.getState().setSidebarMode('expanded');
+                            }
                           }}
                         >
                           {t('settings.panels.appearance.fullSidebar')} (240px)
@@ -3242,7 +3264,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                             key={acc.id}
                             type="button"
                             className={`settings-accent-btn ${themeAccent === acc.id ? 'active' : ''}`}
-                            onClick={() => usePanelStore.getState().setThemeAccent(acc.id as ThemeAccent)}
+                            onClick={() => {
+                              usePanelStore.getState().setThemeAccent(acc.id as ThemeAccent);
+                              // Preset accents and legacy skins used separate
+                              // settings. Clear a previously selected custom
+                              // skin so its inline color cannot mask this choice.
+                              updateDraftField('skin', 'default');
+                              updateDraftField('accent_color', '');
+                            }}
                             title={acc.name}
                           >
                             <span className="accent-swatch" style={{ background: acc.color, boxShadow: `0 0 10px ${acc.color}66` }} />
@@ -4180,7 +4209,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
               <TeamworkSettingsPanel />
             )}
 
-            {(section === 'extensions' || section === 'plugins') && (
+            {section === 'plugins' && (
               <>
                 <ExtensionsSettingsSection />
                 <SettingsCard title={t('settings.panels.plugins.connectedApps')} description={t('settings.panels.plugins.connectedAppsDescription')}>

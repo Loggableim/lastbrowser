@@ -4,12 +4,19 @@ import { describe, expect, it } from 'vitest';
 import { usePanelStore } from '../src/renderer/stores/usePanelStore.js';
 import { AVAILABLE_MODELS } from '../src/renderer/components/CopilotSplitView.js';
 import { brandAssets } from '../src/renderer/brand.js';
+import { normalizeSettingsSectionId, SETTINGS_SECTIONS } from '../src/renderer/panels/SystemPanels.js';
 
 function readRendererFile(fileName: string): string {
   return readFileSync(path.resolve(process.cwd(), 'src/renderer', fileName), 'utf8');
 }
 
 describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () => {
+  it('keeps one plugin settings destination and redirects the legacy Extensions section', () => {
+    expect(Object.keys(SETTINGS_SECTIONS)).toContain('plugins');
+    expect(Object.keys(SETTINGS_SECTIONS)).not.toContain('extensions');
+    expect(normalizeSettingsSectionId('extensions')).toBe('plugins');
+  });
+
   describe('Panel Store & Zen Exit Default Mode', () => {
     it('manages zenExitDefaultMode, sidebarDrawerTab, and actionBarDock in usePanelStore', () => {
       const store = usePanelStore.getState();
@@ -218,6 +225,17 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
       expect(source).toContain('settings.panels.appearance.fullSidebar');
       expect(source).toContain('settings.panels.appearance.actionBarTitle');
       expect(source).toContain('settings-dock-btn');
+      expect(source).toContain("setSidebarMode('slim')");
+      expect(source).toContain("setSidebarMode('expanded')");
+    });
+
+    it('uses the configured Nova Dock animation duration for entering and leaving states', () => {
+      const css = readRendererFile('styles.css');
+      const dock = readRendererFile('components/NovaDock.tsx');
+      expect(dock).toContain("'--dock-anim-duration': `${dockSettings.animationDuration}ms`");
+      expect(css).toContain('.nova-dock.anim-slide {');
+      expect(css).toContain('.nova-dock.anim-fade {');
+      expect(css).toContain('transition: transform var(--dock-anim-duration');
     });
 
     it('provides Theme Accents, Glassmorphism, and UI Density settings in SystemPanels.tsx', () => {

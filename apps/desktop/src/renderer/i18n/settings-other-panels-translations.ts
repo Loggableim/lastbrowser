@@ -2,6 +2,13 @@ import type { DesktopCatalog, DesktopLocaleId, DesktopTranslationKey } from './k
 
 type Values = Record<DesktopLocaleId, string>;
 const rows: Partial<Record<DesktopTranslationKey, Values>> = {
+  'access.lock.checking': { en: 'Checking the secure session…', de: 'Sichere Sitzung wird geprüft…', it: 'Verifica della sessione sicura…', es: 'Comprobando la sesión segura…', fr: 'Vérification de la session sécurisée…', 'pt-BR': 'Verificando a sessão segura…', ru: 'Проверка защищённого сеанса…' },
+  'access.lock.description': { en: 'Enter your access password to open the browser.', de: 'Gib dein Zugriffspasswort ein, um den Browser zu öffnen.', it: 'Inserisci la password di accesso per aprire il browser.', es: 'Introduce la contraseña de acceso para abrir el navegador.', fr: 'Saisissez le mot de passe d’accès pour ouvrir le navigateur.', 'pt-BR': 'Digite sua senha de acesso para abrir o navegador.', ru: 'Введите пароль доступа, чтобы открыть браузер.' },
+  'access.lock.password': { en: 'Access password', de: 'Zugriffspasswort', it: 'Password di accesso', es: 'Contraseña de acceso', fr: 'Mot de passe d’accès', 'pt-BR': 'Senha de acesso', ru: 'Пароль доступа' },
+  'access.lock.retry': { en: 'Try again', de: 'Erneut versuchen', it: 'Riprova', es: 'Intentar de nuevo', fr: 'Réessayer', 'pt-BR': 'Tentar novamente', ru: 'Повторить' },
+  'access.lock.title': { en: 'Browser locked', de: 'Browser gesperrt', it: 'Browser bloccato', es: 'Navegador bloqueado', fr: 'Navigateur verrouillé', 'pt-BR': 'Navegador bloqueado', ru: 'Браузер заблокирован' },
+  'access.lock.unlock': { en: 'Unlock', de: 'Entsperren', it: 'Sblocca', es: 'Desbloquear', fr: 'Déverrouiller', 'pt-BR': 'Desbloquear', ru: 'Разблокировать' },
+  'access.lock.unlocking': { en: 'Unlocking…', de: 'Wird entsperrt…', it: 'Sblocco…', es: 'Desbloqueando…', fr: 'Déverrouillage…', 'pt-BR': 'Desbloqueando…', ru: 'Разблокировка…' },
   'chat.reasoning': { en: 'Reasoning', de: 'Überlegungen', it: 'Ragionamento', es: 'Razonamiento', fr: 'Raisonnement', 'pt-BR': 'Raciocínio', ru: 'Рассуждение' },
   'chat.turnUsage': { en: 'Turn usage', de: 'Verbrauch dieser Antwort', it: 'Utilizzo della risposta', es: 'Uso de esta respuesta', fr: 'Utilisation de cette réponse', 'pt-BR': 'Uso desta resposta', ru: 'Использование в этом ответе' },
   'chat.inputTokens': { en: 'Input {count} tokens', de: '{count} Eingabetokens', it: '{count} token di input', es: '{count} tokens de entrada', fr: '{count} jetons d’entrée', 'pt-BR': '{count} tokens de entrada', ru: 'Входные токены: {count}' },

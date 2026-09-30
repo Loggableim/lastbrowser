@@ -1,5 +1,64 @@
 export type LoupeCaptureRect = { x: number; y: number; width: number; height: number };
 export type LoupeViewportBounds = { x: number; y: number; width: number; height: number };
+export type CursorShakeSample = { t: number; x: number };
+
+/** Require a sustained, alternating horizontal shake; one fast sweep is not a shake. */
+export function isCursorShake(samples: readonly CursorShakeSample[]): boolean {
+  if (samples.length < 4) return false;
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  if (!first || !last || last.t - first.t > 700) return false;
+
+  let totalTravel = 0;
+  let minX = first.x;
+  let maxX = first.x;
+  for (let index = 1; index < samples.length; index += 1) {
+    const previous = samples[index - 1];
+    const current = samples[index];
+    if (!previous || !current || !Number.isFinite(previous.x) || !Number.isFinite(current.x)) return false;
+    totalTravel += Math.abs(current.x - previous.x);
+    minX = Math.min(minX, current.x);
+    maxX = Math.max(maxX, current.x);
+  }
+  if (totalTravel < 280 || maxX - minX < 70) return false;
+
+  let direction = 0;
+  let legStartX = first.x;
+  let previousX = first.x;
+  let previousLegDirection = 0;
+  let reversals = 0;
+  for (const sample of samples.slice(1)) {
+    const delta = sample.x - previousX;
+    if (Math.abs(delta) < 4) {
+      previousX = sample.x;
+      continue;
+    }
+    const nextDirection = Math.sign(delta);
+    if (!direction) {
+      direction = nextDirection;
+      legStartX = sample.x - delta;
+      previousX = sample.x;
+      continue;
+    }
+    if (nextDirection === direction) {
+      previousX = sample.x;
+      continue;
+    }
+
+    // Ignore tiny corrections and hand tremor; only count a reversal after a
+    // substantial leg has been completed.
+    if (Math.abs(previousX - legStartX) < 55) {
+      previousX = sample.x;
+      continue;
+    }
+    if (previousLegDirection && previousLegDirection !== direction) reversals += 1;
+    previousLegDirection = direction;
+    direction = nextDirection;
+    legStartX = previousX;
+    previousX = sample.x;
+  }
+  return reversals >= 2;
+}
 
 /** Place the HUD beside the pointer while keeping the complete loupe in-window. */
 export function getLoupePosition(

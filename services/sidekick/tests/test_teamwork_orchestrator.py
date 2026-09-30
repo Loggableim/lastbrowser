@@ -84,6 +84,20 @@ def test_config_load_and_save():
             assert reloaded["max_subagents"] == 6
 
 
+def test_nested_teamwork_config_mutation_does_not_change_cached_or_persisted_settings():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = Path(tmpdir) / "teamwork.json"
+        with patch("runtime.teamwork_orchestrator._get_teamwork_config_path", return_value=config_path):
+            loaded = load_teamwork_config(reload=True)
+            loaded["roles"]["planner"] = "unpersisted-model"
+
+            reloaded_from_cache = load_teamwork_config()
+            reloaded_from_disk = load_teamwork_config(reload=True)
+
+    assert reloaded_from_cache["roles"]["planner"] == "auto"
+    assert reloaded_from_disk["roles"]["planner"] == "auto"
+
+
 def test_removed_autonomous_tools_flag_is_not_returned_or_persisted():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "teamwork.json"

@@ -79,9 +79,13 @@ def _profile_db(profile_home: str | Path, *, space_slug: str | None = None):
     state.db path whenever the caller provides the session's profile home.
     When in a space context, returns a space-scoped goals.db instead.
     """
-    # 1. space-scoped
-    sp = _space_goals_path(space_slug)
-    if sp:
+    # An explicit Space is a hard persistence boundary. If it cannot be
+    # resolved, never fall through to a profile/global store: that would make
+    # a stale Space ID silently read or overwrite another scope's goal.
+    if space_slug:
+        sp = _space_goals_path(space_slug)
+        if sp is None:
+            return None
         key = str(sp)
         cached = _DB_CACHE.get(key)
         if cached is not None:
@@ -92,6 +96,24 @@ def _profile_db(profile_home: str | Path, *, space_slug: str | None = None):
             db = SessionDB(db_path=sp)
         except Exception as exc:
             logger.debug("GoalManager space DB unavailable at %s: %s", sp, exc)
+            return None
+        _DB_CACHE[key] = db
+        return db
+
+    # With no explicit Space, retain the active-Space behavior for older
+    # callers, then fall back to the selected profile's database.
+    sp = _space_goals_path()
+    if sp:
+        key = str(sp)
+        cached = _DB_CACHE.get(key)
+        if cached is not None:
+            return cached
+        try:
+            from runtime._compat.shim_state import SessionDB  # type: ignore
+
+            db = SessionDB(db_path=sp)
+        except Exception as exc:
+            logger.debug("GoalManager active-space DB unavailable at %s: %s", sp, exc)
             return None
         _DB_CACHE[key] = db
         return db
@@ -142,6 +164,8 @@ class _ProfileGoalManager:
         self.profile_home = Path(profile_home).expanduser().resolve()
         self.space_slug = str(space_slug or "").strip().lower() or None
         self.default_max_turns = int(default_max_turns or DEFAULT_MAX_TURNS or 20)
+        if _profile_db(self.profile_home, space_slug=self.space_slug) is None:
+            raise RuntimeError("Persistent goal store unavailable for the requested profile or Space")
         self._state = self._load()
 
     @property
@@ -155,8 +179,7 @@ class _ProfileGoalManager:
         try:
             raw = db.get_meta(_meta_key(self.session_id))
         except Exception as exc:
-            logger.debug("GoalManager profile get_meta failed: %s", exc)
-            return None
+            raise RuntimeError("Failed to read persistent goal state") from exc
         if not raw:
             return None
         try:
@@ -172,7 +195,7 @@ class _ProfileGoalManager:
         try:
             db.set_meta(_meta_key(self.session_id), state.to_json())
         except Exception as exc:
-            logger.debug("GoalManager profile set_meta failed: %s", exc)
+            raise RuntimeError("Failed to persist goal state") from exc
 
     def is_active(self) -> bool:
         return self._state is not None and self._state.status == "active"
@@ -638,7 +661,11 @@ def goal_command_payload(
         return _payload(action="status", state=visible_state, session_id=sid, space_slug=space_slug, **status_payload)
 
     if lower == "pause":
-        state = mgr.pause(reason="user-paused")
+        try:
+            state = mgr.pause(reason="user-paused")
+        except Exception as exc:
+            logger.warning("Could not persist goal pause for session %s: %s", sid, exc)
+            return _payload(ok=False, action="pause", error="persistence_failed", message="Goal state could not be saved.", session_id=sid, space_slug=space_slug)
         if state is None:
             return _payload(
                 ok=False,
@@ -660,7 +687,11 @@ def goal_command_payload(
         )
 
     if lower == "resume":
-        state = mgr.resume()
+        try:
+            state = mgr.resume()
+        except Exception as exc:
+            logger.warning("Could not persist goal resume for session %s: %s", sid, exc)
+            return _payload(ok=False, action="resume", error="persistence_failed", message="Goal state could not be saved.", session_id=sid, space_slug=space_slug)
         if state is None:
             return _payload(
                 ok=False,
@@ -699,7 +730,11 @@ def goal_command_payload(
 
     if lower in ("clear", "stop", "done"):
         had = bool(mgr.has_goal())
-        mgr.clear()
+        try:
+            mgr.clear()
+        except Exception as exc:
+            logger.warning("Could not persist goal clear for session %s: %s", sid, exc)
+            return _payload(ok=False, action="clear", error="persistence_failed", message="Goal state could not be saved.", session_id=sid, space_slug=space_slug)
         return _payload(
             action="clear",
             message="Goal cleared." if had else "No active goal.",
@@ -726,6 +761,9 @@ def goal_command_payload(
         state = mgr.set(text, max_turns=max_turns, unlimited=unlimited)
     except ValueError as exc:
         return _payload(ok=False, action="set", error="invalid_goal", message=f"Invalid goal: {exc}", session_id=sid, space_slug=space_slug)
+    except Exception as exc:
+        logger.warning("Could not persist goal for session %s: %s", sid, exc)
+        return _payload(ok=False, action="set", error="persistence_failed", message="Goal state could not be saved.", session_id=sid, space_slug=space_slug)
 
     budget_label = "unlimited runs" if getattr(state, "max_turns", None) is None else f"{state.max_turns} runs"
     followup = (

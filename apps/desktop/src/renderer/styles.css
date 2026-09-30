@@ -186,6 +186,44 @@ html.theme-oled .browser-start-card {
   grid-template-rows: 34px minmax(0, 1fr);
 }
 
+.access-lock-screen {
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: 100vh;
+  padding: 24px;
+  color: var(--lb-text);
+  background: radial-gradient(circle at 50% 30%, rgba(0, 217, 255, .12), transparent 42%), var(--lb-bg);
+  -webkit-app-region: drag;
+}
+
+.access-lock-card {
+  width: min(420px, 100%);
+  padding: 32px;
+  border: 1px solid var(--lb-border);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--lb-panel) 88%, transparent);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .38);
+  -webkit-app-region: no-drag;
+}
+
+.access-lock-card form,
+.access-lock-card button,
+.access-lock-card input {
+  -webkit-app-region: no-drag;
+}
+
+.access-lock-icon { color: var(--lb-accent, #00d9ff); }
+.access-lock-card .eyebrow { margin: 14px 0 6px; color: var(--lb-muted); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+.access-lock-card h1 { margin: 0; font-size: 26px; }
+.access-lock-card p:not(.eyebrow) { color: var(--lb-muted); line-height: 1.5; }
+.access-lock-card form { display: grid; gap: 12px; margin-top: 22px; }
+.access-lock-card label { font-size: 13px; font-weight: 600; }
+.access-lock-card input { width: 100%; padding: 12px 14px; border: 1px solid var(--lb-border); border-radius: 10px; background: var(--lb-bg); color: var(--lb-text); }
+.access-lock-card button { min-height: 42px; border: 0; border-radius: 10px; background: var(--lb-accent, #00d9ff); color: #03111b; font-weight: 700; cursor: pointer; }
+.access-lock-card button:disabled { opacity: .55; cursor: wait; }
+.access-lock-error { color: #ff8181; font-size: 13px; }
+
 .browser-titlebar {
   display: flex;
   align-items: center;
@@ -10580,6 +10618,11 @@ html.theme-light .browser-start-search input {
 
 /* ─── Auto-Hide Animations ──────────────────────────────────────────────── */
 /* Slide Animation */
+.nova-dock.anim-slide {
+  transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1),
+    opacity var(--dock-anim-duration, 250ms) ease;
+}
+
 .nova-dock.anim-slide.pos-bottom.is-hidden {
   transform: translateX(-50%) translateY(calc(100% + 24px));
   opacity: 0;
@@ -10588,7 +10631,6 @@ html.theme-light .browser-start-search input {
 .nova-dock.anim-slide.pos-bottom.is-revealed {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
-  transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1), opacity var(--dock-anim-duration, 250ms) ease;
 }
 
 .nova-dock.anim-slide.pos-top.is-hidden {
@@ -10599,7 +10641,6 @@ html.theme-light .browser-start-search input {
 .nova-dock.anim-slide.pos-top.is-revealed {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
-  transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1), opacity var(--dock-anim-duration, 250ms) ease;
 }
 
 .nova-dock.anim-slide.pos-left.is-hidden {
@@ -10610,7 +10651,6 @@ html.theme-light .browser-start-search input {
 .nova-dock.anim-slide.pos-left.is-revealed {
   transform: translateX(0);
   opacity: 1;
-  transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1), opacity var(--dock-anim-duration, 250ms) ease;
 }
 
 .nova-dock.anim-slide.pos-right.is-hidden {
@@ -10621,7 +10661,6 @@ html.theme-light .browser-start-search input {
 .nova-dock.anim-slide.pos-right.is-revealed {
   transform: translateX(0) translateY(-50%);
   opacity: 1;
-  transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1), opacity var(--dock-anim-duration, 250ms) ease;
 }
 
 .nova-dock.anim-slide.pos-floating.is-hidden {
@@ -10632,10 +10671,14 @@ html.theme-light .browser-start-search input {
 .nova-dock.anim-slide.pos-floating.is-revealed {
   transform: scale(1);
   opacity: 1;
-  transition: transform var(--dock-anim-duration, 250ms) cubic-bezier(0.16, 1, 0.3, 1), opacity var(--dock-anim-duration, 250ms) ease;
 }
 
 /* Fade Animation */
+.nova-dock.anim-fade {
+  transition: opacity var(--dock-anim-duration, 200ms) ease,
+    transform var(--dock-anim-duration, 200ms) ease;
+}
+
 .nova-dock.anim-fade.is-hidden {
   opacity: 0;
   pointer-events: none;
@@ -10645,7 +10688,6 @@ html.theme-light .browser-start-search input {
   opacity: 1;
   pointer-events: auto;
   transform: scale(1);
-  transition: opacity var(--dock-anim-duration, 200ms) ease, transform var(--dock-anim-duration, 200ms) ease;
 }
 
 /* Instant Animation */
@@ -18854,8 +18896,8 @@ html[data-cursor-size='mega'] body *:not(webview) {
   z-index: 99999;
   pointer-events: none;
   border-radius: 14px;
-  border: 3px solid #FFD700;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 215, 0, 0.9);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.38);
   background: #000;
   overflow: hidden;
   display: flex;
@@ -18869,15 +18911,29 @@ html[data-cursor-size='mega'] body *:not(webview) {
   font-weight: 650;
   line-height: 1.5;
   letter-spacing: 0.02em;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 6px;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   max-width: 100%;
 }
+.lb-cursor-loupe .lb-loupe-content.has-capture {
+  padding: 0;
+}
 .lb-cursor-loupe .lb-loupe-capture {
   display: block;
+  flex: 1 1 auto;
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   object-fit: fill;
 }
 

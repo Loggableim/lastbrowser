@@ -2326,6 +2326,93 @@ def _orchestration_is_enabled(orchestration: str) -> bool:
     return False
 
 
+def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
+    """Run the persistent-goal judge and publish the usual SSE continuation events.
+
+    Orchestrator modes return before the normal agent completion path, so they
+    must call this same post-turn hook explicitly or standing goals never make
+    progress while Teamwork/Smart Track is selected.
+    """
+    if not goal_related:
+        return {}
+    try:
+        from web.api.goals import evaluate_goal_after_turn, has_active_goal
+
+        try:
+            from web.api.profiles import get_profile_home
+
+            profile_home = get_profile_home(getattr(session, "profile", None))
+        except Exception:
+            profile_home = get_webui_home()
+        space_slug = str(
+            getattr(session, "workspace_slug", "")
+            or getattr(session, "space_slug", "")
+            or getattr(session, "space", "")
+            or ""
+        ).strip().lower() or None
+
+        if not has_active_goal(session_id, profile_home=profile_home, space_slug=space_slug):
+            return {}
+
+        last_response = ""
+        for message in reversed(getattr(session, "messages", None) or []):
+            if not isinstance(message, dict) or message.get("role") != "assistant":
+                continue
+            content = message.get("content", "")
+            if isinstance(content, list):
+                text_parts = []
+                for part in content:
+                    if isinstance(part, dict):
+                        text = part.get("text") or part.get("content")
+                        if text:
+                            text_parts.append(str(text))
+                last_response = "\n".join(text_parts)
+            else:
+                last_response = str(content or "")
+            break
+
+        put("goal", {
+            "session_id": session_id,
+            "state": "evaluating",
+            "message": "Evaluating goal progress…",
+            "message_key": "goal_evaluating_progress",
+        })
+        decision = evaluate_goal_after_turn(
+            session_id,
+            last_response,
+            user_initiated=True,
+            profile_home=profile_home,
+            space_slug=space_slug,
+        ) or {}
+        message = str(decision.get("message") or "").strip()
+        if message:
+            put("goal", {
+                "session_id": session_id,
+                "state": "continuing" if decision.get("should_continue") else "idle",
+                "message": message,
+                "message_key": decision.get("message_key") or "goal_continuing",
+                "message_args": decision.get("message_args") or [],
+                "decision": decision,
+            })
+        if decision.get("should_continue"):
+            continuation_prompt = str(decision.get("continuation_prompt") or "").strip()
+            if continuation_prompt:
+                PENDING_GOAL_CONTINUATION.add(session_id)
+                put("goal_continue", {
+                    "session_id": session_id,
+                    "continuation_prompt": continuation_prompt,
+                    "text": continuation_prompt,
+                    "message": message,
+                    "message_key": decision.get("message_key") or "goal_continuing",
+                    "message_args": decision.get("message_args") or [],
+                    "decision": decision,
+                })
+        return decision
+    except Exception as exc:
+        logger.debug("Goal continuation hook failed for session %s: %s", session_id, exc)
+        return {}
+
+
 def _run_agent_streaming(
     session_id,
     msg_text,
@@ -2635,6 +2722,7 @@ def _run_agent_streaming(
                     stream_put=put,
                     cancel_event=cancel_event,
                 )
+                _evaluate_goal_after_stream_turn(s, session_id, goal_related, put)
                 s.active_stream_id = None
                 s.pending_user_message = None
                 try:
@@ -2671,6 +2759,7 @@ def _run_agent_streaming(
                     stream_put=put,
                     cancel_event=cancel_event,
                 )
+                _evaluate_goal_after_stream_turn(s, session_id, goal_related, put)
                 s.active_stream_id = None
                 s.pending_user_message = None
                 try:
@@ -4372,77 +4461,8 @@ def _run_agent_streaming(
                     })
             except Exception:
                 logger.debug("Failed to drain pending steer for session %s", session_id)
-            # /goal parity: after a successful assistant turn, run the Sidekick
-            # GoalManager judge before terminal done/stream_end events. The
-            # frontend surfaces the status line and queues continuation_prompt as
-            # a normal next user message so /queue and user input keep priority.
-            # #1932: only evaluate when the turn was goal-related (set via
-            # STREAM_GOAL_RELATED or goal_related parameter).
-            try:
-                from web.api.goals import evaluate_goal_after_turn, has_active_goal
-
-                _goal_space_slug = str(getattr(s, 'workspace_slug', '') or getattr(s, 'space_slug', '') or getattr(s, 'space', '') or '').strip().lower() or None
-
-                if not goal_related or not has_active_goal(session_id, profile_home=_profile_home, space_slug=_goal_space_slug):
-                    _goal_decision = {}
-                else:
-                    _last_goal_response = ''
-                    for _goal_msg in reversed(s.messages or []):
-                        if not isinstance(_goal_msg, dict) or _goal_msg.get('role') != 'assistant':
-                            continue
-                        _goal_content = _goal_msg.get('content', '')
-                        if isinstance(_goal_content, list):
-                            _goal_parts = []
-                            for _goal_part in _goal_content:
-                                if isinstance(_goal_part, dict):
-                                    _goal_text = _goal_part.get('text') or _goal_part.get('content')
-                                    if _goal_text:
-                                        _goal_parts.append(str(_goal_text))
-                            _last_goal_response = '\n'.join(_goal_parts)
-                        else:
-                            _last_goal_response = str(_goal_content or '')
-                        break
-                    put('goal', {
-                        'session_id': session_id,
-                        'state': 'evaluating',
-                        'message': 'Evaluating goal progress…',
-                        'message_key': 'goal_evaluating_progress',
-                    })
-                    _goal_decision = evaluate_goal_after_turn(
-                        session_id,
-                        _last_goal_response,
-                        user_initiated=True,
-                        profile_home=_profile_home,
-                        space_slug=_goal_space_slug,
-                    )
-                decision = _goal_decision or {}
-                _goal_message = str(decision.get('message') or '').strip()
-                if _goal_message:
-                    put('goal', {
-                        'session_id': session_id,
-                        'state': 'continuing' if decision.get('should_continue') else 'idle',
-                        'message': _goal_message,
-                        'message_key': decision.get('message_key') or ('goal_continuing' if _goal_message else ''),
-                        'message_args': decision.get('message_args') or [],
-                        'decision': decision,
-                    })
-                if decision.get('should_continue'):
-                    continuation_prompt = str(decision.get('continuation_prompt') or '').strip()
-                    if continuation_prompt:
-                        # #1932: mark this session as pending a goal continuation
-                        # so the next /chat/start creates a goal-related stream.
-                        PENDING_GOAL_CONTINUATION.add(session_id)
-                        put('goal_continue', {
-                            'session_id': session_id,
-                            'continuation_prompt': continuation_prompt,
-                            'text': continuation_prompt,
-                            'message': _goal_message,
-                            'message_key': decision.get('message_key') or 'goal_continuing',
-                            'message_args': decision.get('message_args') or [],
-                            'decision': decision,
-                        })
-            except Exception as _goal_exc:
-                logger.debug("Goal continuation hook failed for session %s: %s", session_id, _goal_exc)
+            # Run the same persistent-goal hook used by orchestration streams.
+            _evaluate_goal_after_stream_turn(s, session_id, goal_related, put)
             raw_session = s.compact() | {'messages': s.messages, 'tool_calls': tool_calls}
             put('done', {'session': redact_session_data(raw_session), 'usage': usage})
             # Emit one last metering packet for the live message-header TPS label.

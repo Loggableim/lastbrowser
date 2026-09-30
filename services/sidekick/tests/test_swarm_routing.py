@@ -813,6 +813,16 @@ def test_dated_deepseek_cloud_catalog_tag_proves_stable_route_only():
         ModelRouter(registry).select("scout", {"structured-output"})
 
 
+def test_live_dated_deepseek_pro_catalog_tag_enables_stable_planner_route():
+    registry = ModelRegistry(["deepseek-v4-pro:0813", "kimi-k2.6"])
+
+    assert registry.is_available("deepseek-v4-pro")
+    assert ModelRouter(registry).select("planner", {"planning"}).models == (
+        "deepseek-v4-pro",
+        "kimi-k2.6",
+    )
+
+
 def test_unknown_dated_deepseek_tag_remains_fail_closed():
     registry = ModelRegistry(["deepseek-v4-flash:other"])
     assert not registry.is_available("deepseek-v4-flash")

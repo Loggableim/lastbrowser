@@ -12,6 +12,7 @@ Features:
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
@@ -59,7 +60,7 @@ def load_teamwork_config(reload: bool = False) -> Dict[str, Any]:
     global _CACHED_CONFIG
     with _CONFIG_LOCK:
         if not reload and _CACHED_CONFIG is not None:
-            return dict(_CACHED_CONFIG)
+            return copy.deepcopy(_CACHED_CONFIG)
         cfg_path = _get_teamwork_config_path()
         config = dict(DEFAULT_TEAMWORK_CONFIG)
         if cfg_path.exists():
@@ -90,8 +91,8 @@ def load_teamwork_config(reload: bool = False) -> Dict[str, Any]:
             config["max_subagents"] = 4
         if config.get("strategy") not in ("cost", "balanced", "quality"):
             config["strategy"] = "balanced"
-        _CACHED_CONFIG = dict(config)
-        return config
+        _CACHED_CONFIG = copy.deepcopy(config)
+        return copy.deepcopy(config)
 
 
 def save_teamwork_config(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -123,8 +124,8 @@ def save_teamwork_config(data: Dict[str, Any]) -> Dict[str, Any]:
         tmp_path = cfg_path.with_suffix(f".tmp.{os.getpid()}.{threading.current_thread().ident}")
         tmp_path.write_text(json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8")
         os.replace(str(tmp_path), str(cfg_path))
-        _CACHED_CONFIG = dict(current)
-        return current
+        _CACHED_CONFIG = copy.deepcopy(current)
+        return copy.deepcopy(current)
 
 
 def classify_model_tier(model_id: str, provider: str = "") -> str:

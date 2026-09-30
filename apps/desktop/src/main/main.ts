@@ -110,6 +110,8 @@ import {
   readWorkspaceFile,
   removeSpace,
   requestWebui,
+  getAccessAuthStatus,
+  loginAccessPassword,
   renameSpace,
   renameWorkspaceEntry,
   reorderSpaces,
@@ -669,6 +671,14 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:updateAllAppstore', () => updateAllAppstore(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:submitAppstoreApp', (_event, request) => submitAppstoreApp(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:getSettings', () => getSettings(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:sidekick:getAccessAuthStatus', () => getAccessAuthStatus(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:sidekick:loginAccessPassword', (_event, request) => loginAccessPassword(requireWebuiUrl(), String(request?.password || '')));
+  ipcMain.handle('lastbrowser:sidekick:lockAccessWindows', () => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send('lastbrowser:access-auth-locked');
+    }
+    return { ok: true };
+  });
   ipcMain.handle('lastbrowser:sidekick:saveSettings', (_event, request) => saveSettings(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:listGmailAccounts', () => listGmailAccounts(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:listGmailMessages', (_event, request) => listGmailMessages(requireWebuiUrl(), request || {}));

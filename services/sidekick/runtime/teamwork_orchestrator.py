@@ -91,6 +91,16 @@ def load_teamwork_config(reload: bool = False) -> Dict[str, Any]:
             config["max_subagents"] = 4
         if config.get("strategy") not in ("cost", "balanced", "quality"):
             config["strategy"] = "balanced"
+        # A quorum of zero (or a negative value) would let Teamwork report a
+        # successful run even when every worker failed. Keep persisted config
+        # within the same bounds as the UI's supported worker count.
+        try:
+            config["hot_swap"]["fallback_quorum_min"] = max(
+                1, min(8, int(config["hot_swap"].get("fallback_quorum_min", 1)))
+            )
+        except (TypeError, ValueError):
+            config["hot_swap"]["fallback_quorum_min"] = 1
+        config["hot_swap"]["enabled"] = bool(config["hot_swap"].get("enabled", True))
         _CACHED_CONFIG = copy.deepcopy(config)
         return copy.deepcopy(config)
 
@@ -118,6 +128,13 @@ def save_teamwork_config(data: Dict[str, Any]) -> Dict[str, Any]:
             current["roles"].update(data["roles"])
         if isinstance(data.get("hot_swap"), dict):
             current["hot_swap"].update(data["hot_swap"])
+        try:
+            current["hot_swap"]["fallback_quorum_min"] = max(
+                1, min(8, int(current["hot_swap"].get("fallback_quorum_min", 1)))
+            )
+        except (TypeError, ValueError):
+            current["hot_swap"]["fallback_quorum_min"] = 1
+        current["hot_swap"]["enabled"] = bool(current["hot_swap"].get("enabled", True))
 
         cfg_path = _get_teamwork_config_path()
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
@@ -234,6 +251,8 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
     auto_scale = cfg.get("auto_scale", True)
     strategy = cfg.get("strategy", "balanced")
     roles_cfg = cfg.get("roles", {})
+    if not isinstance(roles_cfg, dict):
+        roles_cfg = {}
 
     complexity = evaluate_task_complexity(prompt)
     if auto_scale:
@@ -252,7 +271,14 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
     selected_workers: List[Dict[str, Any]] = []
     manual_workers = roles_cfg.get("worker_pool")
     if isinstance(manual_workers, list) and len(manual_workers) > 0 and manual_workers[0] != "auto":
+        seen_worker_ids = set()
         for mid in manual_workers:
+            mid = str(mid or "").strip()
+            if not mid:
+                continue
+            if mid in seen_worker_ids:
+                continue
+            seen_worker_ids.add(mid)
             match = next((m for m in pool if m["id"] == mid), None)
             if match:
                 selected_workers.append(match)
@@ -300,19 +326,20 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
 
     # Critic & Synthesizer models
     manual_critic = roles_cfg.get("critic")
-    critic_model = manual_critic if manual_critic and manual_critic != "auto" else None
-    if not critic_model:
-        # Pick highest reasoning model available
-        critic_cand = next((m["id"] for m in quality_models), None) or next((m["id"] for m in balanced_models), None) or (pool[0]["id"] if pool else "")
-        critic_model = critic_cand
-    critic_entry = next((m for m in pool if m["id"] == critic_model), None)
+    critic_entry = next((m for m in pool if m["id"] == manual_critic), None) if manual_critic and manual_critic != "auto" else None
+    if critic_entry is None:
+        # A configured model may have been disconnected or removed from the
+        # provider catalog since the preference was saved. Resolve to a model
+        # that is actually available instead of routing an invalid model ID.
+        critic_entry = next(iter(quality_models), None) or next(iter(balanced_models), None) or (pool[0] if pool else None)
+    critic_model = critic_entry["id"] if critic_entry else ""
     critic_provider = critic_entry["provider"] if critic_entry else None
 
     manual_synth = roles_cfg.get("synthesizer")
-    synth_model = manual_synth if manual_synth and manual_synth != "auto" else None
-    if not synth_model:
-        synth_model = critic_model
-    synth_entry = next((m for m in pool if m["id"] == synth_model), None)
+    synth_entry = next((m for m in pool if m["id"] == manual_synth), None) if manual_synth and manual_synth != "auto" else None
+    if synth_entry is None:
+        synth_entry = critic_entry
+    synth_model = synth_entry["id"] if synth_entry else ""
     synth_provider = synth_entry["provider"] if synth_entry else None
 
     # Assign diverse perspectives to each worker
@@ -360,6 +387,7 @@ def _invoke_worker(
 
     current_worker = dict(worker)
     tried_models = {current_worker["model"]}
+    swapped = False
     start_t = time.time()
 
     sys_instruction = (
@@ -396,7 +424,7 @@ def _invoke_worker(
                 "content": content,
                 "execution_ms": elapsed_ms,
                 "error": None,
-                "swapped": current_worker["model"] != worker["model"],
+                "swapped": swapped,
             }
         except Exception as e:
             logger.warning("Worker %s failed: %s", current_worker["model"], e)
@@ -409,6 +437,7 @@ def _invoke_worker(
                 current_worker["call_model"] = swap_candidate.get("call_model", swap_candidate["id"])
                 current_worker["provider"] = swap_candidate["provider"]
                 current_worker["name"] = swap_candidate.get("name", swap_candidate["id"])
+                swapped = True
                 continue
             # No candidate left, return failed draft
             elapsed_ms = int((time.time() - start_t) * 1000)
@@ -421,7 +450,7 @@ def _invoke_worker(
                 "content": "",
                 "execution_ms": elapsed_ms,
                 "error": str(e),
-                "swapped": False,
+                "swapped": swapped,
             }
 
 
@@ -554,7 +583,13 @@ def run_teamwork_turn(
 
     # Quorum check
     successful_drafts = [d for d in drafts if not d.get("error") and d.get("content")]
-    min_quorum = cfg.get("hot_swap", {}).get("fallback_quorum_min", 1)
+    hot_swap_cfg = cfg.get("hot_swap", {})
+    if not isinstance(hot_swap_cfg, dict):
+        hot_swap_cfg = {}
+    try:
+        min_quorum = max(1, min(8, int(hot_swap_cfg.get("fallback_quorum_min", 1))))
+    except (TypeError, ValueError):
+        min_quorum = 1
     if len(successful_drafts) < min_quorum:
         raise RuntimeError(
             f"Teamwork-Fehler: Es konnte kein Lösungsentwurf generiert werden "

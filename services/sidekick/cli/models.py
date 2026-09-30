@@ -2560,6 +2560,28 @@ def _strip_ollama_cloud_suffix(model_id: str) -> str:
     return model_id
 
 
+def _valid_ollama_cloud_model_ids(values: Any) -> list[str]:
+    """Return unique, non-empty string model IDs from an untrusted catalog.
+
+    The provider endpoint and the on-disk cache are external inputs. A malformed
+    ``id`` (for example a JSON object) must not make model-picker requests fail
+    while we deduplicate the merged catalog.
+    """
+    if not isinstance(values, (list, tuple)):
+        return []
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        model_id = value.strip()
+        if not model_id or len(model_id) > 256 or model_id in seen:
+            continue
+        seen.add(model_id)
+        result.append(model_id)
+    return result
+
+
 def _ollama_cloud_cache_path() -> Path:
     """Return the path for the Ollama Cloud model cache."""
     from runtime._compat.shim_constants import get_sidekick_home
@@ -2580,14 +2602,14 @@ def _load_ollama_cloud_cache(*, ignore_ttl: bool = False) -> Optional[dict]:
             data = json.load(f)
         if not isinstance(data, dict):
             return None
-        models = data.get("models")
-        if not (isinstance(models, list) and models):
+        models = _valid_ollama_cloud_model_ids(data.get("models"))
+        if not models:
             return None
         if not ignore_ttl:
             cached_at = data.get("cached_at", 0)
             if (time.time() - cached_at) > _OLLAMA_CLOUD_CACHE_TTL:
                 return None  # stale
-        return data
+        return {**data, "models": models}
     except Exception:
         pass
     return None
@@ -2599,7 +2621,10 @@ def _save_ollama_cloud_cache(models: list[str]) -> None:
         from shared.utils import atomic_json_write
         cache_path = _ollama_cloud_cache_path()
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_json_write(cache_path, {"models": models, "cached_at": time.time()}, indent=None)
+        valid_models = _valid_ollama_cloud_model_ids(models)
+        if not valid_models:
+            return
+        atomic_json_write(cache_path, {"models": valid_models, "cached_at": time.time()}, indent=None)
     except Exception:
         pass
 
@@ -2654,13 +2679,15 @@ def fetch_ollama_cloud_models(
     if api_key and is_official_ollama_cloud_url(base_url):
         result = fetch_api_models(api_key, base_url, timeout=8.0, allow_redirects=False)
         if result:
-            live_models = result
+            live_models = _valid_ollama_cloud_model_ids(result)
 
     # 3. models.dev registry
     mdev_models: list[str] = []
     try:
         from runtime.models_dev import list_agentic_models
-        mdev_models = list_agentic_models("ollama-cloud")
+        mdev_models = _valid_ollama_cloud_model_ids(
+            list_agentic_models("ollama-cloud")
+        )
     except Exception:
         pass
 

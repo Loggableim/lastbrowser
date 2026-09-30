@@ -27,6 +27,43 @@ def test_new_cloud_models_survive_live_picker_filter(monkeypatch, tmp_path):
     assert models.fetch_ollama_cloud_models(api_key="test-only") == available
 
 
+def test_malformed_live_catalog_entries_are_ignored_and_valid_ids_are_normalized(monkeypatch, tmp_path):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
+    monkeypatch.setattr(models, "_load_ollama_cloud_cache", lambda **_kwargs: None)
+    monkeypatch.setattr(models, "_save_ollama_cloud_cache", lambda _models: None)
+    monkeypatch.setattr(
+        models,
+        "fetch_api_models",
+        lambda *_args, **_kwargs: [
+            {"id": "wrong-shape"},
+            None,
+            " deepseek-v4.1-flash ",
+            "deepseek-v4.1-flash",
+            "x" * 257,
+        ],
+    )
+    monkeypatch.setattr(models_dev, "list_agentic_models", lambda *_args: [])
+
+    assert models.fetch_ollama_cloud_models(
+        api_key="test-only", base_url="https://ollama.com/v1", force_refresh=True
+    ) == ["deepseek-v4.1-flash"]
+
+
+def test_corrupt_ollama_cache_entries_are_filtered(tmp_path, monkeypatch):
+    cache_path = tmp_path / "ollama_cloud_models_cache.json"
+    cache_path.write_text(
+        '{"models":[" deepseek-v4.1-flash ", {"id":"bad"}, "deepseek-v4.1-flash"],'
+        '"cached_at":9999999999}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path))
+
+    cached = models._load_ollama_cloud_cache()
+
+    assert cached is not None
+    assert cached["models"] == ["deepseek-v4.1-flash"]
+
+
 @pytest.mark.parametrize(
     "base_url",
     [

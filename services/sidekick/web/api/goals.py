@@ -185,13 +185,20 @@ class _ProfileGoalManager:
         try:
             return GoalState.from_json(raw)  # type: ignore[union-attr]
         except Exception as exc:
+            # Treat corrupt persisted state as unavailable. Returning None here
+            # makes callers believe no goal exists and can silently overwrite
+            # the unreadable value with a new goal.
             logger.warning("GoalManager profile state parse failed for %s: %s", self.session_id, exc)
-            return None
+            raise RuntimeError("Failed to parse persistent goal state") from exc
 
     def _save(self, state) -> None:
         db = _profile_db(self.profile_home, space_slug=self.space_slug)
-        if db is None or not self.session_id or state is None:
+        if not self.session_id:
             return
+        if state is None:
+            raise RuntimeError("Cannot persist an empty goal state")
+        if db is None:
+            raise RuntimeError("Persistent goal store is unavailable")
         try:
             db.set_meta(_meta_key(self.session_id), state.to_json())
         except Exception as exc:

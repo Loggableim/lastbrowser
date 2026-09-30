@@ -18,6 +18,7 @@ from runtime.teamwork_orchestrator import (
     save_teamwork_config,
     run_teamwork_turn,
     _scaled_worker_target,
+    _invoke_worker,
 )
 
 
@@ -110,6 +111,17 @@ def test_removed_autonomous_tools_flag_is_not_returned_or_persisted():
             assert "allow_autonomous_tools" not in json.loads(path.read_text(encoding="utf-8"))
 
 
+def test_teamwork_config_clamps_invalid_fallback_quorum():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "teamwork.json"
+        path.write_text('{"hot_swap":{"fallback_quorum_min":0}}', encoding="utf-8")
+        with patch("runtime.teamwork_orchestrator._get_teamwork_config_path", return_value=path):
+            cfg = load_teamwork_config(reload=True)
+            assert cfg["hot_swap"]["fallback_quorum_min"] == 1
+            saved = save_teamwork_config({"hot_swap": {"fallback_quorum_min": -5}})
+            assert saved["hot_swap"]["fallback_quorum_min"] == 1
+
+
 def test_resolve_team_plan():
     mock_pool = [
         {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "provider": "google-gemini-cli", "tier": "balanced"},
@@ -148,6 +160,44 @@ def test_auto_scaled_plan_uses_cap_eight_and_honors_planner_override():
         })
     assert len(plan["workers"]) == 8
     assert plan["planner"]["id"] == "model-7"
+
+
+def test_teamwork_plan_deduplicates_manual_workers_and_falls_back_from_removed_roles():
+    pool = [
+        {"id": "available-a", "name": "A", "provider": "ollama", "tier": "balanced"},
+        {"id": "available-b", "name": "B", "provider": "openrouter", "tier": "quality"},
+    ]
+    with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=pool):
+        plan = resolve_team_plan("Review this", {
+            "strategy": "balanced", "auto_scale": False, "max_subagents": 4,
+            "roles": {
+                "planner": "removed-model",
+                "worker_pool": ["available-a", "available-a", "removed-model"],
+                "critic": "removed-model",
+                "synthesizer": "removed-model",
+            },
+        })
+
+    assert [worker["model"] for worker in plan["workers"]] == ["available-a"]
+    assert plan["planner"]["id"] in {"available-a", "available-b"}
+    assert plan["critic"] in {"available-a", "available-b"}
+    assert plan["critic_provider"] in {"ollama", "openrouter"}
+    assert plan["synthesizer"] == plan["critic"]
+    assert plan["synthesizer_provider"] == plan["critic_provider"]
+
+
+def test_worker_reports_hot_swap_even_when_every_candidate_fails():
+    worker = {
+        "model": "model-a", "call_model": "model-a", "provider": "provider-a",
+        "name": "A", "role": "Pragmatiker", "focus": "Implementation",
+    }
+    backup = {"id": "model-b", "call_model": "model-b", "provider": "provider-b", "name": "B"}
+    with patch("runtime.auxiliary_client.call_llm", side_effect=RuntimeError("offline")):
+        result = _invoke_worker(worker, "task", "", [backup])
+
+    assert result["error"] == "offline"
+    assert result["model"] == "model-b"
+    assert result["swapped"] is True
 
 
 def test_teamwork_does_not_invent_models_when_provider_catalog_is_empty():
@@ -226,6 +276,22 @@ def test_teamwork_fails_clearly_when_no_models_are_available():
         with pytest.raises(RuntimeError, match="keine aktuell verfügbaren Modelle"):
             run_teamwork_turn(MagicMock(messages=[]), "Review this change")
         call_llm.assert_not_called()
+
+
+def test_teamwork_zero_quorum_cannot_succeed_without_any_worker_draft():
+    model = {"id": "model-a", "name": "A", "provider": "mock", "tier": "balanced"}
+    with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[model]), \
+         patch("runtime.auxiliary_client.call_llm", side_effect=RuntimeError("provider offline")):
+        with pytest.raises(RuntimeError, match="kein Lösungsentwurf"):
+            run_teamwork_turn(
+                MagicMock(messages=[]),
+                "Do the task",
+                config={
+                    "enabled": True, "strategy": "balanced", "auto_scale": False,
+                    "max_subagents": 1, "roles": {},
+                    "hot_swap": {"fallback_quorum_min": 0},
+                },
+            )
 
 
 @pytest.mark.parametrize("shared_grounding", [True, False])

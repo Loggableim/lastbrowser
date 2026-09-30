@@ -147,3 +147,41 @@ def test_goal_status_reports_unavailable_when_persistent_store_cannot_be_read(mo
 
     assert response["ok"] is False
     assert response["error"] == "unavailable"
+
+
+def test_corrupt_persisted_goal_fails_closed_instead_of_appearing_absent(monkeypatch, tmp_path):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+
+    from runtime._compat.shim_state import SessionDB
+    from web.api import goals
+
+    goals._DB_CACHE.clear()
+    monkeypatch.setattr(goals, "_space_goals_path", lambda *_args, **_kwargs: None)
+    profile_home = tmp_path / "profiles" / "default"
+    profile_home.mkdir(parents=True)
+    db = SessionDB(db_path=profile_home / "state.db")
+    db.set_meta("goal:session-1", "{not valid json")
+
+    response = goals.goal_command_payload(
+        "session-1", "status", profile_home=profile_home,
+    )
+
+    assert response["ok"] is False
+    assert response["error"] == "unavailable"
+    assert db.get_meta("goal:session-1") == "{not valid json"
+
+
+def test_goal_pause_reports_failure_if_store_becomes_unavailable(monkeypatch, tmp_path):
+    from web.api import goals
+
+    manager = goals._ProfileGoalManager("session-1", profile_home=tmp_path)
+    manager.set("Keep this goal")
+    monkeypatch.setattr(goals, "_manager", lambda *_args, **_kwargs: manager)
+    monkeypatch.setattr(goals, "_profile_db", lambda *_args, **_kwargs: None)
+
+    response = goals.goal_command_payload(
+        "session-1", "pause", profile_home=tmp_path,
+    )
+
+    assert response["ok"] is False
+    assert response["error"] == "persistence_failed"

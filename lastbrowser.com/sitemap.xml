@@ -265,8 +265,90 @@
   <url><loc>https://lastbrowser.com/releases/</loc><priority>0.75</priority></url>
   <url><loc>https://lastbrowser.com/security/</loc><priority>0.8</priority></url>
   <url><loc>https://lastbrowser.com/press/</loc><priority>0.6</priority></url>
-  <url><loc>https://lastbrowser.com/changelog/</loc><priority>0.75</priority></url>
-  <url><loc>https://lastbrowser.com/en/changelog/</loc><priority>0.7</priority></url>
+  <url>
+    <loc>https://lastbrowser.com/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/changelog/"/>
+    <priority>0.75</priority>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/en/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/changelog/"/>
+    <priority>0.70</priority>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/es/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/changelog/"/>
+    <priority>0.70</priority>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/fr/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/changelog/"/>
+    <priority>0.70</priority>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/it/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/changelog/"/>
+    <priority>0.70</priority>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/pt/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/changelog/"/>
+    <priority>0.70</priority>
+  </url>
+  <url>
+    <loc>https://lastbrowser.com/ja/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://lastbrowser.com/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/changelog/"/>
+    <priority>0.70</priority>
+  </url>
 
   <!-- ========================================== -->
   <!-- 11. ENGINEERING BLOG                       -->

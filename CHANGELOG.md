@@ -12,11 +12,15 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 - Isolate persistent-goal continuations by session, profile, and Space, recover valid continuations after backend restarts, and discard continuations cancelled before delivery.
 - Route balanced Teamwork plans through the configured Ollama Cloud `deepseek-v4.1-flash` model when available and classify Flash models as fast.
 - Extend the isolated desktop smoke flow to verify a real Ollama Cloud chat response and visible partial output without storing credentials in its temporary profile.
+- Invalidate only the affected Ollama Cloud model cache on HTTP 401/403 while keeping its account-scoped live snapshot available during network outages.
+- Return a retryable session error when persistent goal state cannot be read, and resolve goal storage from the loaded session's Space.
+- Limit release signing credentials to signing steps and grant GitHub release write access only to the separate publisher job.
 
 ### Verification
-- Desktop tests: 127 files, 1,111 passed; Store preflight: 27/27; desktop build and Python compile check passed.
-- Sidekick tests: 2,341 passed, 105 skipped.
-- Live Ollama Cloud desktop smoke: 7/7 checks passed, including visible assistant output while the request was still active.
+- Desktop tests: 129 files, 1,127 passed; Store preflight: 27/27; desktop build and Python compile check passed.
+- Sidekick tests: 2,390 passed, 105 skipped.
+- Ollama Cloud account catalog: 17 live models including `deepseek-v4.1-flash`; a previous Smart Track inference returned streamed answer and reasoning deltas.
+- Local 0.1.39 preview installers built; VMP verified, Authenticode unsigned. These are not published release artifacts.
 
 ## [0.1.38] - 2026-09-29
 

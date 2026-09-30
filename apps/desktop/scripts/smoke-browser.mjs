@@ -52,6 +52,28 @@ const SMOKE_DOWNLOAD_NAME = 'lastbrowser-smoke-download.txt';
 const SMOKE_DOWNLOAD_CONTENT = Buffer.from('Lastbrowser isolated download fixture\n', 'utf8');
 const SMOKE_PAGE_TITLE = `Lastbrowser Smoke Page ${process.pid}`;
 const LOCAL_MAIN_ENTRY = path.resolve(import.meta.dirname, '..', 'dist', 'main', 'main.js');
+const OLLAMA_SMOKE_MODEL = 'deepseek-v4.1-flash';
+const OLLAMA_SMOKE_MODEL_QUALIFIED = `@ollama-cloud:${OLLAMA_SMOKE_MODEL}`;
+
+function readOllamaSmokeCredential() {
+  const fromEnvironment = process.env.OLLAMA_API_KEY || process.env.OLLAMA_CLOUD_API_KEY;
+  if (fromEnvironment?.trim()) return fromEnvironment.trim();
+
+  const envFile = process.env.LASTBROWSER_SMOKE_OLLAMA_ENV_FILE
+    || path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Lastbrowser', 'runtime', '.env');
+  try {
+    const line = readFileSync(envFile, 'utf8').split(/\r?\n/)
+      .find((entry) => /^\s*(?:export\s+)?OLLAMA_API_KEY\s*=/.test(entry));
+    if (!line) return '';
+    const value = line.slice(line.indexOf('=') + 1).trim();
+    const unquoted = value.length >= 2 && ['"', "'"].includes(value[0]) && value.at(-1) === value[0]
+      ? value.slice(1, -1)
+      : value;
+    return unquoted.trim();
+  } catch {
+    return '';
+  }
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -331,10 +353,20 @@ async function main() {
     content_scripts: [{ matches: ['https://example.com/*'], js: ['smoke.js'], run_at: 'document_idle' }]
   }, null, 2));
   writeFileSync(path.join(SMOKE_EXTENSION_DIR, 'smoke.js'), `document.documentElement.dataset.lastbrowserSmokeExtension = 'loaded';`);
+  const smokeEnv = { ...process.env, LASTBROWSER_DOWNLOADS_DIR: SMOKE_DOWNLOAD_DIR };
+  if (process.env.LASTBROWSER_SMOKE_OLLAMA === '1') {
+    // The smoke profile has its own Sidekick home. Pass only the Ollama
+    // credential through the child environment so the isolated backend sees
+    // it without copying secrets into the temporary profile or logging them.
+    const ollamaCredential = readOllamaSmokeCredential();
+    if (ollamaCredential) smokeEnv.OLLAMA_API_KEY = ollamaCredential;
+    delete smokeEnv.OLLAMA_CLOUD_API_KEY;
+    console.log(`  Ollama smoke credential: ${ollamaCredential ? 'available' : 'missing'}`);
+  }
   const child = spawn(EXE, launchArgs, {
     detached: true,
     stdio: process.env.LASTBROWSER_SMOKE_LOG === '1' ? 'inherit' : 'ignore',
-    env: { ...process.env, LASTBROWSER_DOWNLOADS_DIR: SMOKE_DOWNLOAD_DIR }
+    env: smokeEnv
   });
   smokeChild = child;
   child.unref();
@@ -426,6 +458,9 @@ async function main() {
   });
   check('browser profiles are absent from both titlebar layouts', topbarProfileSelector.result.value === 0,
     `topbar profile switchers=${topbarProfileSelector.result.value}`);
+
+  const ollamaSmokeOnly = process.env.LASTBROWSER_SMOKE_OLLAMA_ONLY === '1';
+  if (!ollamaSmokeOnly) {
 
   const cursorPosition = await cdp.send('Runtime.evaluate', {
     expression: 'window.lastbrowser?.system?.getCursorPosition?.()',
@@ -2982,6 +3017,199 @@ async function main() {
       imageWidth: loupeRuntime.imageWidth,
       imageHeight: loupeRuntime.imageHeight
     }));
+  }
+
+  if (process.env.LASTBROWSER_SMOKE_OLLAMA === '1') {
+    const switchToNativeChatLayout = await cdp.send('Runtime.evaluate', {
+      expression: `(async () => {
+        let activeSpacePath = '';
+        for (let attempt = 0; attempt < 60; attempt++) {
+          activeSpacePath = localStorage.getItem('lastbrowser.activeSpacePath.v1') || '';
+          if (activeSpacePath) break;
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        if (!activeSpacePath) return { ok: false, reason: 'active Space did not settle' };
+        const selections = JSON.parse(localStorage.getItem('lastbrowser.spaceModels.v1') || '{}');
+        selections[activeSpacePath] = { model: ${JSON.stringify(OLLAMA_SMOKE_MODEL_QUALIFIED)}, provider: 'ollama-cloud' };
+        localStorage.setItem('lastbrowser.spaceModels.v1', JSON.stringify(selections));
+        return { ok: true, spacePathAvailable: true };
+      })()`,
+      awaitPromise: true,
+      returnByValue: true
+    });
+    const openChat = await cdp.send('Runtime.evaluate', {
+      expression: `(async () => {
+        const chatButton = document.querySelector('button[aria-label*="Chat"]');
+        if (chatButton) {
+          chatButton.click();
+          return true;
+        }
+        for (let attempt = 0; attempt < 40; attempt++) {
+          const retry = document.querySelector('button[aria-label*="Chat"]');
+          if (retry) { retry.click(); return true; }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        return { clicked: false, candidates: [...document.querySelectorAll('button,[role="button"],a')]
+          .map((entry) => (entry.innerText || '').trim()).filter(Boolean).slice(0, 30) };
+      })()`,
+      awaitPromise: true,
+      returnByValue: true
+    });
+    let chatReady = false;
+    let createChatRequested = false;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const chatState = await cdp.send('Runtime.evaluate', {
+        expression: `(() => {
+          const main = document.querySelector('.native-chat-main');
+          const composer = main?.querySelector('.composer-input-row textarea');
+          const model = main?.querySelector('.composer-model select');
+          return Boolean(main && composer && model);
+        })()`,
+        returnByValue: true
+      }, 2_000);
+      chatReady = chatState.result.value === true;
+      if (chatReady) break;
+      if (!createChatRequested) {
+        const createChat = await cdp.send('Runtime.evaluate', {
+          expression: `(() => {
+            const main = document.querySelector('.native-chat-main');
+            const create = document.querySelector('.native-chat-main .new-chat-btn, .native-chat-main .chat-empty-state button');
+            if (!create) return false;
+            create.click();
+            return true;
+          })()`,
+          returnByValue: true
+        });
+        createChatRequested = createChat.result.value === true;
+      }
+      await sleep(250);
+    }
+    await cdp.send('Runtime.evaluate', {
+      expression: `(() => {
+        window.__ollamaSmokeStreamEvents = [];
+        window.__ollamaSmokeUnsubscribe?.();
+        window.__ollamaSmokeUnsubscribe = window.lastbrowser.sidekick.onChatStreamEvent((payload) => {
+          const data = payload?.data && typeof payload.data === 'object' ? payload.data : {};
+          const text = typeof data.text === 'string' ? data.text : typeof data.content === 'string' ? data.content : '';
+          window.__ollamaSmokeStreamEvents.push({ streamId: payload?.streamId || '', event: payload?.event || '', textLength: text.length });
+        });
+        return true;
+      })()`,
+      returnByValue: true
+    });
+    const modelChoice = await cdp.send('Runtime.evaluate', {
+      expression: `(() => {
+        const select = document.querySelector('.native-chat-main .composer-model select');
+        const options = [...(select?.options || [])];
+        const normalized = (value) => String(value || '').replace(/^@?ollama-cloud:/i, '');
+        const candidates = options.filter((entry) => normalized(entry.value) === ${JSON.stringify(OLLAMA_SMOKE_MODEL)});
+        const option = candidates.find((entry) => /ollama/i.test(entry.parentElement?.label || ''))
+          || candidates.find((entry) => entry.parentElement?.tagName === 'OPTGROUP')
+          || candidates[0];
+        if (!select || !option) return { available: false, selected: select?.value || '', optionCount: options.length, ollamaOptionCount: 0 };
+        return { available: true, selected: select.value, option: option.value, optionCount: options.length, group: option.parentElement?.label || '' };
+      })()`,
+      returnByValue: true
+    });
+    const liveCatalog = await cdp.send('Runtime.evaluate', {
+      expression: `(async () => {
+        try {
+          const data = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' });
+          const groups = Array.isArray(data?.groups) ? data.groups : [];
+          return JSON.stringify({ groups: groups.map((group) => ({
+            provider: String(group?.provider || ''),
+            providerId: String(group?.provider_id || ''),
+            modelCount: Array.isArray(group?.models) ? group.models.length : 0,
+            sampleIds: Array.isArray(group?.models) ? group.models.slice(0, 2).map((model) => String(model?.id || '')) : []
+          })) });
+        } catch (error) {
+          return JSON.stringify({ error: String(error) });
+        }
+      })()` ,
+      awaitPromise: true,
+      returnByValue: true
+    }, 10_000);
+    const selectedOllamaModelId = modelChoice.result.value?.selected || '';
+    let persistedModel = false;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const persisted = await cdp.send('Runtime.evaluate', {
+        expression: `(() => {
+        const activeSpacePath = localStorage.getItem('lastbrowser.activeSpacePath.v1') || '';
+        const selections = JSON.parse(localStorage.getItem('lastbrowser.spaceModels.v1') || '{}');
+        const selection = selections[activeSpacePath];
+        const select = document.querySelector('.native-chat-main .composer-model select');
+        return Boolean(activeSpacePath && ${JSON.stringify(selectedOllamaModelId)})
+          && selection?.model === ${JSON.stringify(OLLAMA_SMOKE_MODEL_QUALIFIED)}
+          && selection?.provider === 'ollama-cloud'
+          && select?.value === ${JSON.stringify(selectedOllamaModelId)};
+        })()`,
+        returnByValue: true
+      }, 2_000);
+      persistedModel = persisted.result.value === true;
+      if (persistedModel) break;
+      await sleep(250);
+    }
+    const sendPrompt = await cdp.send('Runtime.evaluate', {
+      expression: `(() => {
+        const textarea = document.querySelector('.native-chat-main .composer-input-row textarea');
+        const form = textarea?.closest('form');
+        const select = document.querySelector('.native-chat-main .composer-model select');
+        if (!${JSON.stringify(persistedModel)} || !select || select.value !== ${JSON.stringify(selectedOllamaModelId)}
+          || !textarea || !form || textarea.disabled) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+        const prompt = 'Tell a brief 80-word story about a small robot finding a blue flower. Begin the story immediately with no preamble.';
+        setter?.call(textarea, prompt);
+        textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: prompt }));
+        form.requestSubmit();
+        return true;
+      })()`,
+      returnByValue: true
+    });
+    let ollamaAnswer = '';
+    let ollamaError = '';
+    let streamedWhileRequestActive = false;
+    let streamedAssistantText = '';
+    let streamedAssistantUpdates = 0;
+    for (let attempt = 0; attempt < 600; attempt++) {
+      const response = await cdp.send('Runtime.evaluate', {
+        expression: `(() => {
+          const assistant = [...document.querySelectorAll('.native-chat-main .chat-message.assistant')]
+            .at(-1);
+          const answer = assistant?.querySelector('.message-body')?.innerText || '';
+          return JSON.stringify({
+            answer,
+            pending: assistant?.classList.contains('pending') || false,
+            running: Boolean(document.querySelector('.native-chat-main .composer-send.stop')),
+            streamEventCount: window.__ollamaSmokeStreamEvents?.length || 0,
+            streamEventTypes: [...new Set((window.__ollamaSmokeStreamEvents || []).map((event) => event.event))],
+            streamTextLength: (window.__ollamaSmokeStreamEvents || []).reduce((sum, event) => sum + event.textLength, 0),
+            error: document.querySelector('.native-chat-main .chat-error')?.innerText || ''
+          });
+        })()`,
+        returnByValue: true
+      }, 2_000);
+      const state = JSON.parse(response.result.value || '{}');
+      ollamaAnswer = state.answer || '';
+      ollamaError = state.error || '';
+      if (state.running && !state.pending && ollamaAnswer.trim() && ollamaAnswer !== streamedAssistantText) {
+        streamedWhileRequestActive = true;
+        streamedAssistantText = ollamaAnswer;
+        streamedAssistantUpdates += 1;
+      }
+      streamedAssistantUpdates = Math.max(streamedAssistantUpdates, state.streamTextLength || 0);
+      if (ollamaAnswer.length >= 160 || ollamaError) break;
+      await sleep(50);
+    }
+    check('Ollama Cloud model and provider selection persist in app preferences',
+      switchToNativeChatLayout.result.value?.ok === true && (openChat.result.value === true || openChat.result.value?.clicked === true) && chatReady && modelChoice.result.value?.available === true && modelChoice.result.value?.group?.toLowerCase().includes('ollama') && persistedModel,
+      JSON.stringify({ ollamaSpaceSelectionSeeded: switchToNativeChatLayout.result.value?.ok === true, chatOpened: openChat.result.value, chatReady, modelChoice: modelChoice.result.value, liveCatalog: JSON.parse(liveCatalog.result.value || '{}'), persistedModel }));
+    check('real Ollama Cloud response is rendered through the Lastbrowser chat UI',
+      sendPrompt.result.value === true && ollamaAnswer.length >= 160 && !ollamaError,
+      JSON.stringify({ submitted: sendPrompt.result.value, answer: ollamaAnswer.slice(0, 120), error: ollamaError.slice(0, 160) }));
+    check('Ollama Cloud answer becomes visible while the chat request is still streaming',
+      sendPrompt.result.value === true && streamedWhileRequestActive,
+      JSON.stringify({ submitted: sendPrompt.result.value, visibleWhileRunning: streamedWhileRequestActive, streamTextCharactersObserved: streamedAssistantUpdates, answer: streamedAssistantText.slice(0, 120) }));
+  }
 
   const shellShot = await cdp.send('Page.captureScreenshot', { format: 'png' });
   const shellShotPath = path.join(OUT_DIR, 'shell.png');

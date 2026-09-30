@@ -250,6 +250,7 @@ import { isCurrentSpaceDirectorySnapshot, resolveCanonicalSpacePath, resolveRefr
 import { usePanelStore, type SidebarMode } from './stores/usePanelStore.js';
 import { useChatStore } from './stores/useChatStore.js';
 import { loadSpaceModelSelection, removeSpaceModel, saveSpaceModel } from './space-models.js';
+import { resolvePreferredChatModel } from './provider-model-selection.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { LiveAutomationBanner } from './components/LiveAutomationBanner.js';
 import { detectPageCategory, getQuickActionChips, executeQuickAction, type QuickActionChip } from './quick-actions.js';
@@ -2254,7 +2255,12 @@ function AppContent(): JSX.Element {
    * falls back to polling when the stream cannot be established — e.g. an older
    * sidecar without the SSE route, or a proxy that buffers event streams.
    */
-  async function pollNativeChat(streamId: string, sessionId: string): Promise<void> {
+  async function pollNativeChat(
+    streamId: string,
+    sessionId: string,
+    earlyEvents: Array<{ streamId?: string; event?: string; data?: unknown }> = [],
+    unsubscribeEarly?: () => void
+  ): Promise<void> {
     const deadline = Date.now() + 120000;
     let sawStreamEnd = false;
     let streamFailed = false;
@@ -2266,7 +2272,7 @@ function AppContent(): JSX.Element {
       () => { void window.lastbrowser.sidekick.notifyChatCompleted(true).catch(() => false); }
     );
 
-    const unsubscribe = window.lastbrowser.sidekick.onChatStreamEvent((payload) => {
+    const handleStreamEvent = (payload: unknown): void => {
       const event = payload as { streamId?: string; event?: string; data?: unknown } | null;
       if (!event || event.streamId !== streamId) return;
       if (event.event === 'stream_end') {
@@ -2324,7 +2330,12 @@ function AppContent(): JSX.Element {
       ) {
         if (!hasLiveOutput) void loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
       }
-    });
+    };
+    const unsubscribe = window.lastbrowser.sidekick.onChatStreamEvent(handleStreamEvent);
+    // The backend can start producing output before the startChat IPC promise
+    // resolves. Replay any events caught by the temporary pre-start listener.
+    unsubscribeEarly?.();
+    for (const event of earlyEvents) handleStreamEvent(event);
 
     try {
       await window.lastbrowser.sidekick.subscribeChatStream({ streamId }).catch(() => {
@@ -2402,10 +2413,23 @@ function AppContent(): JSX.Element {
     setSidekickBusy(true);
     setChatRunState('starting');
     setChatError('');
+    // Register before asking Sidekick to start. Fast providers can emit their
+    // first token while startChat is still resolving through IPC.
+    const earlyStreamEvents: Array<{ streamId?: string; event?: string; data?: unknown }> = [];
+    let captureEarlyEvents = true;
+    const unsubscribeEarly = window.lastbrowser.sidekick.onChatStreamEvent((payload) => {
+      if (!captureEarlyEvents || !payload || typeof payload !== 'object') return;
+      earlyStreamEvents.push(payload as { streamId?: string; event?: string; data?: unknown });
+      if (earlyStreamEvents.length > 1000) earlyStreamEvents.shift();
+    });
     try {
       const storedModel = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('lastbrowser.selectedModel.v1') : null;
       const spaceModelSelection = loadSpaceModelSelection(activeSpacePath, window.localStorage);
-      const effectiveSelectedModel = spaceModelSelection?.model || setupState.model || storedModel || undefined;
+      const effectiveSelectedModel = resolvePreferredChatModel(
+        spaceModelSelection?.model,
+        storedModel,
+        setupState.model
+      ) || undefined;
       const chatModelProvider = spaceModelSelection?.provider
         || (effectiveSelectedModel === useChatStore.getState().selectedModel
           ? useChatStore.getState().selectedModelProvider || undefined
@@ -2450,8 +2474,16 @@ function AppContent(): JSX.Element {
       setActiveStreamId(response.streamId);
       setComposerText('');
       setChatRunState('streaming');
-      await window.lastbrowser.sidekick.saveDraft({ sessionId: response.sessionId, text: '', files: [] }).catch(() => null);
-      await pollNativeChat(response.streamId, response.sessionId);
+      // Do not delay the SSE subscription on draft persistence. The draft is
+      // already captured by startChat; clearing it can finish in the background.
+      void window.lastbrowser.sidekick.saveDraft({ sessionId: response.sessionId, text: '', files: [] }).catch(() => null);
+      captureEarlyEvents = false;
+      await pollNativeChat(
+        response.streamId,
+        response.sessionId,
+        earlyStreamEvents,
+        unsubscribeEarly
+      );
       // Show the ACTUAL answer. The pending placeholder used to be replaced with
       // the literal string "Sidekick finished.", so every reply — including
       // errors and full summaries — was hidden behind that text.
@@ -2485,6 +2517,8 @@ function AppContent(): JSX.Element {
 
       void refreshSessions();
     } catch (error) {
+      captureEarlyEvents = false;
+      unsubscribeEarly();
       const messageText = error instanceof Error ? error.message : String(error);
       setChatError(messageText);
       setChatMessages((current) => current.map((item) => (

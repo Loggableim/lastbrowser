@@ -5,6 +5,19 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.39] - 2026-09-30
+
+### Fixes
+- Preserve provider-qualified model selection from the chat composer through Space preferences and Sidekick requests, and stream assistant text into the chat as tokens arrive.
+- Isolate persistent-goal continuations by session, profile, and Space, recover valid continuations after backend restarts, and discard continuations cancelled before delivery.
+- Route balanced Teamwork plans through the configured Ollama Cloud `deepseek-v4.1-flash` model when available and classify Flash models as fast.
+- Extend the isolated desktop smoke flow to verify a real Ollama Cloud chat response and visible partial output without storing credentials in its temporary profile.
+
+### Verification
+- Desktop tests: 127 files, 1,111 passed; Store preflight: 27/27; desktop build and Python compile check passed.
+- Sidekick tests: 2,341 passed, 105 skipped.
+- Live Ollama Cloud desktop smoke: 7/7 checks passed, including visible assistant output while the request was still active.
+
 ## [0.1.38] - 2026-09-29
 
 ### Fixes

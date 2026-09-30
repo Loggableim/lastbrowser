@@ -33,6 +33,9 @@ import {
   buildPromptWithTabContext
 } from '../tab-intelligence.js';
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
+import { useChatStore } from '../stores/useChatStore.js';
+import { loadSpaceModelSelection, saveSpaceModel } from '../space-models.js';
+import { qualifyModelForProvider, resolvePreferredChatModel } from '../provider-model-selection.js';
 import type { NativeChatTurnUsage } from '../chat-usage.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
@@ -97,14 +100,24 @@ export function NativeChatMain({
     () => partitionChatMessages(messages),
     [messages]
   );
-  const model = activeSession?.model || setupModel || 'default';
   const profile = activeSession?.profile || 'default';
   const workspace = activeSession?.workspace || activeSpacePath || 'default';
+  const selectedModel = useChatStore((state) => state.selectedModel);
+  const setSelectedModel = useChatStore((state) => state.setSelectedModel);
+  const setSelectedModelProvider = useChatStore((state) => state.setSelectedModelProvider);
+  const spaceModelSelection = loadSpaceModelSelection(activeSpacePath, window.localStorage);
+  const model = resolvePreferredChatModel(
+    spaceModelSelection?.model,
+    selectedModel,
+    activeSession?.model,
+    setupModel,
+    'default'
+  );
 
   // Models the user can pick for this conversation. The catalog comes from the
   // same /api/models payload the settings panel uses, so the composer offers
   // exactly the providers that are actually connected.
-  const [modelCatalog, setModelCatalog] = useState<Array<{ provider: string; models: Array<{ id: string; label: string }> }>>([]);
+  const [modelCatalog, setModelCatalog] = useState<Array<{ provider: string; providerId: string; models: Array<{ id: string; label: string }> }>>([]);
   useEffect(() => {
     if (!ready) return;
     let alive = true;
@@ -120,6 +133,7 @@ export function NativeChatMain({
             const models = Array.isArray(record.models) ? record.models : [];
             return {
               provider,
+              providerId: String(record.provider_id || record.provider || ''),
               models: models
                 .map((entry) => {
                   const m = (entry || {}) as Record<string, unknown>;
@@ -144,12 +158,21 @@ export function NativeChatMain({
   /** Switch the model for this conversation (persists as the new default). */
   const handleComposerModelChange = useCallback((nextModel: string) => {
     if (!nextModel || nextModel === model) return;
-    void window.lastbrowser.sidekick.setDefaultModel({ model: nextModel })
-      .then(() => setStatusMessage(`Model set to ${nextModel}`))
+    const provider = modelCatalog.find((group) => group.models.some((entry) => entry.id === nextModel))?.providerId || '';
+    const qualifiedModel = qualifyModelForProvider(nextModel, provider);
+    void window.lastbrowser.sidekick.setDefaultModel({ model: qualifiedModel })
+      .then(() => {
+        if (activeSpacePath) {
+          saveSpaceModel(activeSpacePath, nextModel, window.localStorage, provider);
+        }
+        setSelectedModel(nextModel);
+        setSelectedModelProvider(provider);
+        setStatusMessage(`Model set to ${nextModel}`);
+      })
       .catch((error: unknown) => {
         setStatusMessage(`Could not switch model: ${error instanceof Error ? error.message : String(error)}`);
       });
-  }, [model]);
+  }, [activeSpacePath, model, modelCatalog, setSelectedModel, setSelectedModelProvider]);
 
   // Wrap onSend to synthesize @tabs context and enqueue when busy instead of losing the message
   const handleSend = useCallback(async (text: string) => {

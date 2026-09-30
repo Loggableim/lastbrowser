@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isProviderModelSelected, parseProviderModelId } from '../src/renderer/provider-model-selection.js';
+import {
+  isProviderModelSelected,
+  parseProviderModelId,
+  qualifyModelForProvider,
+  resolvePreferredChatModel
+} from '../src/renderer/provider-model-selection.js';
 
 describe('provider-aware model selection', () => {
   it('keeps provider identity separate while parsing qualified backend IDs', () => {
@@ -19,5 +24,19 @@ describe('provider-aware model selection', () => {
     expect(isProviderModelSelected(openRouter, 'shared-model', 'openrouter')).toBe(true);
     expect(isProviderModelSelected(ollama, 'shared-model', 'openrouter')).toBe(false);
     expect(isProviderModelSelected(ollama, 'shared-model', 'ollama-cloud')).toBe(true);
+  });
+
+  it('uses an explicit chat selection before stale setup defaults and preserves Space precedence', () => {
+    expect(resolvePreferredChatModel('space-model', 'chat-choice', 'wizard-model')).toBe('space-model');
+    expect(resolvePreferredChatModel('', 'chat-choice', 'wizard-model')).toBe('chat-choice');
+    expect(resolvePreferredChatModel('', '', 'wizard-model')).toBe('wizard-model');
+    expect(resolvePreferredChatModel('', null, '  ')).toBe('');
+  });
+
+  it('keeps provider identity when saving a bare model and avoids double qualification', () => {
+    expect(qualifyModelForProvider('deepseek-v4.1-flash', 'ollama-cloud'))
+      .toBe('@ollama-cloud:deepseek-v4.1-flash');
+    expect(qualifyModelForProvider('@ollama-cloud:deepseek-v4.1-flash', 'ollama-cloud'))
+      .toBe('@ollama-cloud:deepseek-v4.1-flash');
   });
 });

@@ -158,6 +158,31 @@ def consume_goal_continuation(
         if cancelled is not None and text == cancelled:
             _CANCELLED_CONTINUATIONS.pop(key, None)
             return "cancelled"
+
+        # The pending hand-off itself is process-local, while goal state is
+        # durable. If the backend restarts after emitting goal_continue but
+        # before the renderer POSTs it, recover that exact prompt from the
+        # persisted active goal. Conversely, never let an orphaned internal
+        # continuation fall through as an ordinary user message after pause,
+        # clear, or goal replacement.
+        continuation_prefix = str(CONTINUATION_PROMPT_TEMPLATE or "").split("{goal}", 1)[0]
+        if continuation_prefix and text.startswith(continuation_prefix):
+            try:
+                mgr = _manager(session_id, profile_home=profile_home, space_slug=space_slug)
+            except Exception:
+                # A scope that cannot be resolved is not evidence that this
+                # message belongs to an internal continuation.
+                return "none"
+            try:
+                if (
+                    mgr is not None
+                    and mgr.is_active()
+                    and mgr.next_continuation_prompt() == text
+                ):
+                    return "active"
+            except Exception:
+                pass
+            return "cancelled"
         return "none"
 
 

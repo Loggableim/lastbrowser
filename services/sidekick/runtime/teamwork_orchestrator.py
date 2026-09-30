@@ -160,7 +160,7 @@ def classify_model_tier(model_id: str, provider: str = "") -> str:
     if any(k in mid for k in ("pro", "deepseek-r1", "-r1", "o1", "o3", "claude-3-7", "claude-3-5-sonnet", ":70b", "-70b", "qwq")):
         return "quality"
     # Fast / Cost-optimized models
-    fast_tokens = ("lite", "nano", "mini", "haiku")
+    fast_tokens = ("lite", "nano", "mini", "haiku", "flash")
     if any(k in mid for k in fast_tokens) or re.search(r"(?:^|[:_\-])(?:3|4|7|8)b(?:$|[:_\-])", mid):
         return "fast"
     # Balanced
@@ -266,6 +266,11 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
     fast_models = [m for m in pool if m["tier"] == "fast"]
     balanced_models = [m for m in pool if m["tier"] == "balanced"]
     quality_models = [m for m in pool if m["tier"] == "quality"]
+    ollama_default = next((
+        m for m in pool
+        if m["provider"] == "ollama-cloud"
+        and str(m.get("call_model") or m["id"]).lower() == "deepseek-v4.1-flash"
+    ), None)
 
     # Role resolution: Worker Pool
     selected_workers: List[Dict[str, Any]] = []
@@ -296,8 +301,13 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
             # Prefer quality models, then balanced
             candidates.sort(key=lambda m: (0 if m["tier"] == "quality" else 1 if m["tier"] == "balanced" else 2))
         else:
-            # Balanced: mix of fast and quality/balanced
-            candidates.sort(key=lambda m: (0 if m["tier"] == "balanced" else 1 if m["tier"] == "quality" else 2))
+            # Balanced: include the configured Ollama Cloud default when it is
+            # available, then diversify with balanced/quality models.
+            candidates.sort(key=lambda m: (
+                0 if m is ollama_default else
+                1 if m["tier"] == "balanced" else
+                2 if m["tier"] == "quality" else 3
+            ))
 
         # Try to diversify providers
         providers_seen = set()
@@ -322,7 +332,12 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
     manual_planner = roles_cfg.get("planner")
     planner = next((m for m in pool if m["id"] == manual_planner), None) if manual_planner and manual_planner != "auto" else None
     if planner is None:
-        planner = next((m for m in balanced_models), None) or next((m for m in quality_models), None) or (pool[0] if pool else None)
+        planner = (
+            (ollama_default if strategy == "balanced" else None)
+            or next((m for m in balanced_models), None)
+            or next((m for m in quality_models), None)
+            or (pool[0] if pool else None)
+        )
 
     # Critic & Synthesizer models
     manual_critic = roles_cfg.get("critic")

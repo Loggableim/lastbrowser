@@ -294,6 +294,63 @@ def test_pending_goal_continuations_are_isolated_by_session_profile_and_space(mo
     assert goal_api.consume_goal_continuation("shared-id", prompt_a, profile_home=profile_b, space_slug="alpha") == "none"
 
 
+def test_goal_continuation_recovers_after_backend_restart_from_active_persisted_goal(monkeypatch, tmp_path):
+    from web.api import goals as goal_api
+
+    monkeypatch.setattr(goal_api, "_space_goals_path", lambda *_args, **_kwargs: None)
+    goal_api._DB_CACHE.clear()
+    goal_api._PENDING_CONTINUATIONS.clear()
+    goal_api._CANCELLED_CONTINUATIONS.clear()
+    profile_home = tmp_path / "profile"
+    session_id = "restart-continuation-active"
+
+    created = goal_api.goal_command_payload(
+        session_id, "Finish after restarting", profile_home=profile_home,
+    )
+    assert created["ok"] is True
+    prompt = goal_api.CONTINUATION_PROMPT_TEMPLATE.format(goal="Finish after restarting")
+
+    # Simulate a process restart: the goal DB survives, but pending in-memory
+    # hand-off state is gone before the renderer POST arrives.
+    goal_api._DB_CACHE.clear()
+    goal_api._PENDING_CONTINUATIONS.clear()
+    goal_api._CANCELLED_CONTINUATIONS.clear()
+
+    assert goal_api.consume_goal_continuation(
+        session_id, prompt, profile_home=profile_home,
+    ) == "active"
+
+
+@pytest.mark.parametrize("command", ["pause", "clear"])
+def test_orphaned_goal_continuation_after_restart_is_rejected(monkeypatch, tmp_path, command):
+    from web.api import goals as goal_api
+
+    monkeypatch.setattr(goal_api, "_space_goals_path", lambda *_args, **_kwargs: None)
+    goal_api._DB_CACHE.clear()
+    goal_api._PENDING_CONTINUATIONS.clear()
+    goal_api._CANCELLED_CONTINUATIONS.clear()
+    profile_home = tmp_path / "profile"
+    session_id = f"restart-continuation-{command}"
+    goal = "Stop this continuation"
+
+    assert goal_api.goal_command_payload(
+        session_id, goal, profile_home=profile_home,
+    )["ok"] is True
+    prompt = goal_api.CONTINUATION_PROMPT_TEMPLATE.format(goal=goal)
+    assert goal_api.goal_command_payload(
+        session_id, command, profile_home=profile_home,
+    )["action"] == command
+
+    # Lose the process-local tombstone and reload only the durable state.
+    goal_api._DB_CACHE.clear()
+    goal_api._PENDING_CONTINUATIONS.clear()
+    goal_api._CANCELLED_CONTINUATIONS.clear()
+
+    assert goal_api.consume_goal_continuation(
+        session_id, prompt, profile_home=profile_home,
+    ) == "cancelled"
+
+
 def test_webui_goal_command_passes_custom_and_unlimited_budget(monkeypatch):
     from web.api import goals as goal_api
     from web.api import routes

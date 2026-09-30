@@ -64,7 +64,15 @@ def test_goal_hook_for_orchestrator_turn_persists_decision_and_queues_continuati
         def next_continuation_prompt(self):
             return continuation_prompt
 
-    monkeypatch.setattr(goals_api, "_manager", lambda *_args, **_kwargs: ActiveGoal())
+    monkeypatch.setattr(
+        goals_api,
+        "_manager",
+        lambda session_id, **kwargs: (
+            ActiveGoal()
+            if session_id == "goal-session" and kwargs.get("space_slug") == "research"
+            else None
+        ),
+    )
 
     def evaluate(session_id, response, **kwargs):
         evaluated.update(session_id=session_id, response=response, **kwargs)
@@ -102,13 +110,13 @@ def test_goal_hook_for_orchestrator_turn_persists_decision_and_queues_continuati
         continuation_prompt,
         profile_home="home:profile-a",
         space_slug="research",
-    ) == "none"
+    ) == "cancelled"
     assert goals_api.consume_goal_continuation(
         "goal-session",
         continuation_prompt,
         profile_home="home:profile-a",
         space_slug="other-space",
-    ) == "none"
+    ) == "cancelled"
     assert goals_api.consume_goal_continuation(
         "goal-session",
         continuation_prompt,

@@ -351,6 +351,41 @@ def test_teamwork_model_discovery_preserves_colon_tagged_model_ids():
     assert [model["tier"] for model in models] == ["fast", "quality"]
 
 
+def test_teamwork_balanced_auto_routing_uses_ollama_cloud_default_and_classifies_flash_as_fast():
+    from runtime.teamwork_orchestrator import classify_model_tier
+
+    catalog = {
+        "groups": [
+            {"provider_id": "openai", "provider": "OpenAI", "models": [
+                {"id": "general-balanced-model"},
+            ]},
+            {"provider_id": "ollama-cloud", "provider": "Ollama Cloud", "models": [
+                {"id": "deepseek-v4.1-flash"},
+            ]},
+            {"provider_id": "anthropic", "provider": "Anthropic", "models": [
+                {"id": "claude-3-7-sonnet"},
+            ]},
+        ]
+    }
+
+    with patch("web.api.config.get_available_models", return_value=catalog):
+        pool = get_teamwork_model_pool()
+        plan = resolve_team_plan(
+            "Review this change",
+            config={
+                "strategy": "balanced", "auto_scale": False, "max_subagents": 2,
+                "roles": {"planner": "auto", "worker_pool": "auto", "critic": "auto", "synthesizer": "auto"},
+            },
+        )
+
+    ollama_default = next(model for model in pool if model["provider"] == "ollama-cloud")
+    assert ollama_default["tier"] == "fast"
+    assert classify_model_tier("deepseek-v4.1-flash", "ollama-cloud") == "fast"
+    assert plan["planner"]["id"] == "deepseek-v4.1-flash"
+    assert "deepseek-v4.1-flash" in [worker["model"] for worker in plan["workers"]]
+    assert len(plan["workers"]) == 2
+
+
 def test_teamwork_keeps_provider_qualified_duplicate_and_routes_bare_model_to_provider():
     catalog = {
         "groups": [

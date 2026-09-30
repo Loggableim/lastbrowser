@@ -15,6 +15,17 @@ function cssBlock(css: string, selector: string): string {
 }
 
 describe('browser shell layout', () => {
+  it('routes chat model picker choices into the next Space chat request', () => {
+    const app = readRendererFile('App.tsx');
+    const chatMain = readRendererFile('panels/NativeChatMain.tsx');
+    const composer = readRendererFile('panels/ChatComponents.tsx');
+
+    expect(composer).toContain('onChange={(event) => onModelChange(event.target.value)}');
+    expect(chatMain).toContain('saveSpaceModel(activeSpacePath, nextModel, window.localStorage, provider)');
+    expect(chatMain).toContain('setSelectedModelProvider(provider)');
+    expect(app).toContain('spaceModelSelection?.model,\n        storedModel,\n        setupState.model');
+  });
+
   it('uses the WebUI-style shell grid with expanded CD navigation', () => {
     const css = readRendererFile('styles.css');
     const appShell = cssBlock(css, '.app-shell');

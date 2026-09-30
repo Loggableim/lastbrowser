@@ -2929,15 +2929,20 @@ async function main() {
   check('panel navigation does not trigger a React hook-order error', hookOrderErrors.length === 0,
     hookOrderErrors[0] || 'no React hook-order diagnostics');
 
+  // Activate through the real titlebar control. Mutating localStorage and
+  // reloading here can send an idle smoke profile to the session-lock screen,
+  // which unmounts CursorLoupeHUD and produces a false capture failure.
   const enableLoupe = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
-      const key = 'lastbrowser.a11y.visionImpaired.v2';
-      const current = JSON.parse(localStorage.getItem(key) || '{}');
-      localStorage.setItem(key, JSON.stringify({ ...current, enabled: true, cursorLoupeEnabled: true }));
-      location.reload();
-      return true;
+      const button = document.querySelector('.modern-titlebar .loupe-toggle-btn');
+      if (!button) return { clicked: false, reason: 'loupe toggle not rendered' };
+      button.click();
+      return { clicked: true, pressed: button.getAttribute('aria-pressed') };
     })()`,
     returnByValue: true
+  });
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved', x: 600, y: 450, button: 'none'
   });
   let loupeRuntime = null;
   for (let i = 0; i < 40; i++) {
@@ -2963,7 +2968,8 @@ async function main() {
     }
   }
   check('enabled cursor loupe renders a captured image in the running app',
-    enableLoupe.result.value === true && loupeRuntime?.setting?.enabled === true
+    enableLoupe.result.value?.clicked === true && enableLoupe.result.value?.pressed === 'true'
+    && loupeRuntime?.setting?.enabled === true
     && loupeRuntime?.setting?.cursorLoupeEnabled === true && loupeRuntime?.enabled === 'true'
       && loupeRuntime?.loupe === true && loupeRuntime?.image.startsWith('data:image/')
       && loupeRuntime?.imageWidth > 0 && loupeRuntime?.imageHeight > 0,

@@ -257,7 +257,41 @@ def _active_goal_context(session_id: str) -> dict[str, Any]:
     try:
         from .goals import goal_command_payload
 
-        payload = goal_command_payload(sid, "status")
+        # Resolve the scope from the owning session. Falling back to the
+        # currently selected Space here can expose a different Space's goal
+        # when browser context is requested for a background/older session.
+        profile_home = None
+        space_slug = None
+        try:
+            from .models import get_session
+
+            session = get_session(sid, metadata_only=True)
+            profile = getattr(session, "profile", None)
+            space_slug = str(
+                getattr(session, "workspace_slug", None)
+                or getattr(session, "space_slug", None)
+                or getattr(session, "space", None)
+                or ""
+            ).strip().lower() or None
+            try:
+                from .profiles import get_profile_home
+
+                profile_home = get_profile_home(profile)
+            except Exception:
+                from ._home import get_webui_home
+
+                profile_home = get_webui_home()
+        except Exception:
+            # Some legacy/CLI sessions are not available through the WebUI
+            # session registry. Keep their established default-scope lookup.
+            pass
+
+        payload = goal_command_payload(
+            sid,
+            "status",
+            profile_home=profile_home,
+            space_slug=space_slug,
+        )
         goal = payload.get("goal") if isinstance(payload, dict) else None
         if not isinstance(goal, dict) or not str(goal.get("goal") or "").strip():
             return {
@@ -280,6 +314,7 @@ def _active_goal_context(session_id: str) -> dict[str, Any]:
             "last_reason": goal.get("last_reason"),
             "paused_reason": goal.get("paused_reason"),
             "session_id": str(goal.get("session_id") or sid),
+            "space": str(goal.get("space") or space_slug or ""),
             "message": str(payload.get("message") or "") if isinstance(payload, dict) else "",
         }
     except Exception as exc:

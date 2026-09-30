@@ -8,6 +8,7 @@ Add, remove, or reorder entries here — both `sidekick setup` and
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import urllib.request
 import urllib.error
@@ -2515,7 +2516,7 @@ def fetch_api_models(
 
 # Cache TTL: 1 hour
 _OLLAMA_CLOUD_CACHE_TTL = 3600
-_OLLAMA_CLOUD_CACHE_VERSION = 2
+_OLLAMA_CLOUD_CACHE_VERSION = 3
 
 # Curated subset of Ollama Cloud thinking models shown in the WebUI picker.
 # Keep this aligned with the official thinking catalog and only include
@@ -2583,20 +2584,36 @@ def _valid_ollama_cloud_model_ids(values: Any) -> list[str]:
     return result
 
 
-def _ollama_cloud_cache_path() -> Path:
-    """Return the path for the Ollama Cloud model cache."""
+def _ollama_cloud_cache_path(scope: Optional[str] = None) -> Path:
+    """Return the path for one Ollama Cloud credential's model cache."""
     from runtime._compat.shim_constants import get_sidekick_home
-    return get_sidekick_home() / "ollama_cloud_models_cache.json"
+    path = get_sidekick_home() / "ollama_cloud_models_cache.json"
+    if scope:
+        return path.with_name(f"{path.stem}.{scope}{path.suffix}")
+    return path
 
 
-def _load_ollama_cloud_cache(*, ignore_ttl: bool = False) -> Optional[dict]:
+def _ollama_cloud_cache_scope(api_key: Optional[str], base_url: Optional[str]) -> str:
+    """Return a non-secret cache namespace for one Ollama credential/endpoint.
+
+    Model availability can differ across Ollama accounts. Persisting the raw
+    key is forbidden, so use a one-way digest to prevent one account's catalog
+    from being served to another account while keeping the cache file secret-free.
+    """
+    identity = f"{str(base_url or '').strip().rstrip('/').lower()}\0{str(api_key or '').strip()}"
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+
+def _load_ollama_cloud_cache(
+    *, ignore_ttl: bool = False, scope: Optional[str] = None
+) -> Optional[dict]:
     """Load cached Ollama Cloud models from disk.
 
     Args:
         ignore_ttl: If True, return data even if the TTL has expired (stale fallback).
     """
     try:
-        cache_path = _ollama_cloud_cache_path()
+        cache_path = _ollama_cloud_cache_path(scope)
         if not cache_path.exists():
             return None
         with open(cache_path, encoding="utf-8") as f:
@@ -2605,6 +2622,8 @@ def _load_ollama_cloud_cache(*, ignore_ttl: bool = False) -> Optional[dict]:
             return None
         if data.get("version") != _OLLAMA_CLOUD_CACHE_VERSION:
             return None  # invalidate catalogs created by the previous merge policy
+        if scope is not None and data.get("scope") != scope:
+            return None
         models = _valid_ollama_cloud_model_ids(data.get("models"))
         if not models:
             return None
@@ -2618,11 +2637,11 @@ def _load_ollama_cloud_cache(*, ignore_ttl: bool = False) -> Optional[dict]:
     return None
 
 
-def _save_ollama_cloud_cache(models: list[str]) -> None:
+def _save_ollama_cloud_cache(models: list[str], *, scope: Optional[str] = None) -> None:
     """Persist the available Ollama Cloud model list to disk."""
     try:
         from shared.utils import atomic_json_write
-        cache_path = _ollama_cloud_cache_path()
+        cache_path = _ollama_cloud_cache_path(scope)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         valid_models = _valid_ollama_cloud_model_ids(models)
         if not valid_models:
@@ -2631,6 +2650,7 @@ def _save_ollama_cloud_cache(models: list[str]) -> None:
             "version": _OLLAMA_CLOUD_CACHE_VERSION,
             "models": valid_models,
             "cached_at": time.time(),
+            "scope": scope,
         }, indent=None)
     except Exception:
         pass
@@ -2639,7 +2659,10 @@ def _save_ollama_cloud_cache(models: list[str]) -> None:
 def invalidate_ollama_cloud_models_cache() -> None:
     """Remove the persisted live catalog after Ollama Cloud credentials change."""
     try:
-        _ollama_cloud_cache_path().unlink(missing_ok=True)
+        legacy_path = _ollama_cloud_cache_path()
+        legacy_path.unlink(missing_ok=True)
+        for cache_path in legacy_path.parent.glob(f"{legacy_path.stem}.*{legacy_path.suffix}"):
+            cache_path.unlink(missing_ok=True)
     except OSError:
         # Cache invalidation is best-effort; the cache has a bounded TTL and
         # callers should not fail a credential write because cache cleanup did.
@@ -2666,13 +2689,8 @@ def fetch_ollama_cloud_models(
 
     Returns a list of model IDs (never None — empty list on total failure).
     """
-    # 1. Check disk cache
-    if not force_refresh:
-        cached = _load_ollama_cloud_cache()
-        if cached is not None:
-            return cached["models"]
-
-    # 2. Live API probe
+    # Resolve credentials before looking at the shared disk cache. Otherwise a
+    # catalog discovered with account A could be incorrectly reused by account B.
     if not api_key:
         api_key = os.getenv("OLLAMA_API_KEY", "")
     if not api_key:
@@ -2695,6 +2713,14 @@ def fetch_ollama_cloud_models(
             pass
     if not base_url:
         base_url = "https://ollama.com/v1"
+
+    cache_scope = _ollama_cloud_cache_scope(api_key, base_url)
+
+    # 1. Check the per-credential disk cache.
+    if not force_refresh:
+        cached = _load_ollama_cloud_cache(scope=cache_scope)
+        if cached is not None:
+            return cached["models"]
 
     live_models: list[str] = []
     if api_key and is_official_ollama_cloud_url(base_url):
@@ -2719,7 +2745,7 @@ def fetch_ollama_cloud_models(
         live_models = list(dict.fromkeys(live_models))
         curated = [m for m in live_models if m in OLLAMA_CLOUD_CURATED_MODELS]
         result = curated or live_models
-        _save_ollama_cloud_cache(result)
+        _save_ollama_cloud_cache(result, scope=cache_scope)
         return result
 
     # The external registry is useful only as an outage fallback. Never let
@@ -2730,11 +2756,11 @@ def fetch_ollama_cloud_models(
         curated = [m for m in fallback if m in OLLAMA_CLOUD_CURATED_MODELS]
         result = curated or fallback
         if result:
-            _save_ollama_cloud_cache(result)
+            _save_ollama_cloud_cache(result, scope=cache_scope)
             return result
 
     # Total failure — return stale cache if available (ignore TTL)
-    stale = _load_ollama_cloud_cache(ignore_ttl=True)
+    stale = _load_ollama_cloud_cache(ignore_ttl=True, scope=cache_scope)
     if stale is not None:
         return stale["models"]
 

@@ -52,7 +52,7 @@ describe('GitHub release auto-update flow', () => {
   it('fails before build and publication when Trusted Signing secrets are missing', () => {
     const workflow = readFileSync(releaseWorkflowPath, 'utf8');
     const tagValidationIndex = workflow.indexOf('Require a version-matched release tag');
-    const validationIndex = workflow.indexOf('Require signing credentials before building a release');
+    const validationIndex = workflow.indexOf('Require signing credentials before release setup');
     const pythonDependencyIndex = workflow.indexOf('Install Sidekick backend test dependencies');
     const pythonSyntaxIndex = workflow.indexOf('Check Sidekick Python syntax');
     const backendTestIndex = workflow.indexOf('Test Sidekick backend');
@@ -66,6 +66,7 @@ describe('GitHub release auto-update flow', () => {
 
     expect(tagValidationIndex).toBeGreaterThan(-1);
     expect(tagValidationIndex).toBeLessThan(validationIndex);
+    expect(validationIndex).toBeLessThan(pythonDependencyIndex);
     expect(pythonDependencyIndex).toBeGreaterThan(tagValidationIndex);
     expect(pythonSyntaxIndex).toBeGreaterThan(pythonDependencyIndex);
     expect(backendTestIndex).toBeGreaterThan(pythonSyntaxIndex);

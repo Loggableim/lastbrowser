@@ -82,7 +82,10 @@ def test_build_model_wall():
             }
         ]
     }
-    with patch("web.api.config.get_available_models", return_value=mock_catalog):
+    # This test covers deterministic Gemini tiering; ambient Ollama credentials
+    # must not trigger a live catalog request or change its expected defaults.
+    with patch("web.api.config.get_available_models", return_value=mock_catalog), \
+         patch("cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": ""}):
         wall = build_model_wall()
         assert "low" in wall
         assert "medium" in wall

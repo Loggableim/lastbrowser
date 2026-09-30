@@ -296,7 +296,18 @@ def build_model_wall() -> Dict[str, Any]:
     # Calculate default and intent specialists for each tier
     model_wall = {}
     for tier_key, model_list in tiers.items():
-        default_model = model_list[0]["id"] if model_list else ""
+        preferred_ollama_default = next((
+            model for model in model_list
+            if tier_key == "low"
+            and model.get("provider") == "ollama-cloud"
+            and str(model.get("call_model") or model.get("id") or "").lower()
+            == "deepseek-v4.1-flash"
+        ), None)
+        default_model = (
+            preferred_ollama_default["id"]
+            if preferred_ollama_default
+            else model_list[0]["id"] if model_list else ""
+        )
         coding_model = next((m["id"] for m in model_list if "coding" in m.get("tags", [])), default_model)
         web_model = next((m["id"] for m in model_list if "web" in m.get("tags", [])), default_model)
         reasoning_model = next((m["id"] for m in model_list if "reasoning" in m.get("tags", [])), default_model)

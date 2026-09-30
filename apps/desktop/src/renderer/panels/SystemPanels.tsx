@@ -4331,7 +4331,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     </button>
                     <button type="button" className="secondary-action compact" onClick={() => void disableAuth()} disabled={!ready || !authEnabled || !loggedIn || passwordEnvLocked}>
                       <Trash2 size={15} />
-                      <span>{t(authEnabled ? 'settings.panels.system.disableAuth' : 'settings.panels.system.authDisabled')}</span>
+                      <span>{t(passwordEnvLocked ? 'settings.panels.system.lockedByEnvironment' : authEnabled ? 'settings.panels.system.disableAuth' : 'settings.panels.system.authDisabled')}</span>
                     </button>
                   </div>
                   {authEnabled && !loggedIn && !passwordEnvLocked && (

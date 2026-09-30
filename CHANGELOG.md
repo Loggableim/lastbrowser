@@ -5,6 +5,21 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.41] - 2026-10-01
+
+### Fixes
+- Keep Teamwork hot-swap candidates inside the configured worker pool and partition fallback models across parallel workers to avoid duplicate retry traffic.
+- Reuse a prepared Python runtime across app-version changes; rebuild it only when the Python source or runtime dependency schema changes.
+- Recognize both supported WebUI password environment variables consistently and label the locked authentication action explicitly in Settings.
+
+### Verification
+- Desktop tests: 132 files, 1,153 passed; Store preflight: 27/27; desktop build passed.
+- Sidekick tests: 2,445 passed, 105 skipped; compileall passed. Focused Teamwork tests: 59 passed; access-auth tests: 5 passed.
+- Packaged runtime imports `openai 2.54.0` and `httpx 0.28.1`; setup and portable installers verify with Certum Authenticode plus DigiCert timestamp; Castlabs VMP verification and signed-file metadata refresh passed.
+- Installer SHA-256: setup `0C73F1E266233008F77946FCAD2E3CAE45D2CB5C83DC55731DB2BF2A6E15C53B`; portable `3F4304A5F15BAF94319CD2E4063DD0E4B605CE50D0DC6762D4D7B1D8F5983D06`.
+- A clean runtime preparation still depends on unpinned PyPI dependencies; the authenticated live Ollama API and installed app were not re-tested in this turn.
+- Installer binaries are locally signed and timestamped; the matching verified artifacts are the files published for this release.
+
 ## [0.1.40] - 2026-09-30 (release candidate)
 
 ### Fixes

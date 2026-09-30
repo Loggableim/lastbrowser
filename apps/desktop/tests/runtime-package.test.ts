@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { replaceRuntimeTreeIfUnused } from '../scripts/prepare-python-runtime.mjs';
+import { isPreparedRuntimeCompatible, replaceRuntimeTreeIfUnused } from '../scripts/prepare-python-runtime.mjs';
 
 describe('desktop runtime packaging', () => {
   it('runs the Python runtime preparation before Windows packaging', () => {
@@ -51,8 +51,28 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).toContain('import anthropic');
     expect(prepareScript).toContain("'--no-compile'");
     expect(prepareScript).toContain('runtimeSchema: 6');
+    expect(prepareScript).not.toContain('marker.packageVersion === desired.packageVersion');
     const sidekickPyproject = readFileSync(path.resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'pyproject.toml'), 'utf8');
     expect(sidekickPyproject).toContain('exclude = ["tests", "tests.*"]');
+  });
+
+  it('reuses an unchanged Python runtime across app version bumps', () => {
+    const marker = {
+      sourcePythonHome: 'C:\\Python312',
+      sourceVersion: '3.12.10',
+      packageVersion: '0.1.40',
+      runtimeSchema: 6
+    };
+    const desired = {
+      sourcePythonHome: 'C:\\Python312',
+      sourceVersion: '3.12.10',
+      packageVersion: '0.1.41',
+      runtimeSchema: 6
+    };
+
+    expect(isPreparedRuntimeCompatible(marker, desired, true)).toBe(true);
+    expect(isPreparedRuntimeCompatible(marker, { ...desired, runtimeSchema: 7 }, true)).toBe(false);
+    expect(isPreparedRuntimeCompatible(marker, desired, false)).toBe(false);
   });
 
   it('runs browser smoke against the local source Electron and requires an explicit opt-in for installed builds', () => {

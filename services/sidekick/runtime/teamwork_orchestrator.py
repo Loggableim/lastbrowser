@@ -416,6 +416,7 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
 
     # Role resolution: Worker Pool
     selected_workers: List[Dict[str, Any]] = []
+    eligible_worker_pool = pool
     manual_workers = roles_cfg.get("worker_pool")
     if isinstance(manual_workers, list) and len(manual_workers) > 0 and manual_workers[0] != "auto":
         seen_worker_ids = set()
@@ -433,6 +434,7 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
             # A manually selected pool defines eligible models, not a request
             # to run every selected model at once. Preserve complexity-based
             # auto-scaling while honoring the configured hard cap.
+            eligible_worker_pool = list(selected_workers)
             target_workers = min(len(selected_workers), target_workers, max_sub)
             selected_workers = selected_workers[:target_workers]
 
@@ -527,12 +529,47 @@ def resolve_team_plan(prompt: str, config: Optional[Dict[str, Any]] = None) -> D
         "complexity": complexity,
         "planner": planner,
         "workers": workers_with_perspectives,
+        "worker_pool": eligible_worker_pool,
         "critic": critic_model,
         "critic_provider": critic_provider,
         "synthesizer": synth_model,
         "synthesizer_provider": synth_provider,
         "pool": pool,
     }
+
+
+def _partition_worker_backup_pools(
+    workers: List[Dict[str, Any]],
+    eligible_pool: List[Dict[str, Any]],
+) -> List[List[Dict[str, Any]]]:
+    """Give workers distinct fallback models from their eligible pool.
+
+    Primary worker models are already running in parallel. Reusing one as a
+    fallback duplicates an in-flight request, and giving every worker the
+    full backup list makes them all select the same first fallback after a
+    simultaneous transient failure. Keep hot-swap candidates within the
+    configured worker pool and partition the remaining models deterministically.
+    """
+    if not workers:
+        return []
+
+    primary_ids = {
+        str(worker.get("model") or worker.get("id") or "").strip()
+        for worker in workers
+    }
+    primary_ids.discard("")
+    backups: List[Dict[str, Any]] = []
+    seen_ids = set(primary_ids)
+    for model in eligible_pool:
+        model_id = str(model.get("id") or "").strip()
+        if model_id and model_id not in seen_ids:
+            backups.append(model)
+            seen_ids.add(model_id)
+
+    partitions: List[List[Dict[str, Any]]] = [[] for _ in workers]
+    for index, model in enumerate(backups):
+        partitions[index % len(workers)].append(model)
+    return partitions
 
 
 def _invoke_worker(
@@ -702,6 +739,7 @@ def run_teamwork_turn(
     synth_model = plan["synthesizer"]
     synth_provider = plan.get("synthesizer_provider")
     pool = plan["pool"]
+    eligible_worker_pool = plan.get("worker_pool") or pool
     if not workers or not critic_model or not synth_model:
         raise RuntimeError("Teamwork hat keine aktuell verfügbaren Modelle. Verbinde zuerst mindestens einen Modellanbieter.")
 
@@ -758,6 +796,7 @@ def run_teamwork_turn(
         hot_swap_cfg = {}
     allow_hot_swap = bool(hot_swap_cfg.get("enabled", True))
     executor = ThreadPoolExecutor(max_workers=len(workers))
+    worker_backup_pools = _partition_worker_backup_pools(workers, eligible_worker_pool)
     futures = {}
     cancelled = False
     pending = set()
@@ -765,7 +804,7 @@ def run_teamwork_turn(
         # Reserve global capacity before submitting each task. Waiting here is
         # cancellation-aware, and submitting one at a time avoids deadlocks
         # between concurrent turns that each need more slots than remain free.
-        for worker in workers:
+        for worker_index, worker in enumerate(workers):
             while cancel_event and cancel_event.is_set():
                 cancelled = True
                 raise InterruptedError("Cancelled")
@@ -783,7 +822,7 @@ def run_teamwork_turn(
                     worker,
                     prompt,
                     team_context,
-                    pool,
+                    worker_backup_pools[worker_index],
                     allow_hot_swap=allow_hot_swap,
                 )
             except BaseException:

@@ -5,7 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from runtime.teamwork_orchestrator import _invoke_worker, run_teamwork_turn
+from runtime.teamwork_orchestrator import (
+    _invoke_worker,
+    _partition_worker_backup_pools,
+    run_teamwork_turn,
+)
 
 
 class ProviderError(RuntimeError):
@@ -27,6 +31,97 @@ def _worker(model: str, provider: str, *, call_model: str | None = None) -> dict
         "name": model,
         "role": "Pragmatiker",
         "focus": "direct answer",
+    }
+
+
+def test_worker_backup_pools_are_disjoint_and_exclude_active_workers():
+    workers = [
+        _worker("@ollama-cloud:deepseek-v4.1-flash", "ollama-cloud"),
+        _worker("@openrouter:fast", "openrouter"),
+    ]
+    eligible_pool = [
+        _worker("@ollama-cloud:deepseek-v4.1-flash", "ollama-cloud"),
+        _worker("@openrouter:fast", "openrouter"),
+        _worker("@openrouter:backup-a", "openrouter"),
+        _worker("@openrouter:backup-b", "openrouter"),
+        _worker("@openrouter:backup-c", "openrouter"),
+    ]
+
+    backups = _partition_worker_backup_pools(workers, eligible_pool)
+
+    assert [[model["id"] for model in worker_pool] for worker_pool in backups] == [
+        ["@openrouter:backup-a", "@openrouter:backup-c"],
+        ["@openrouter:backup-b"],
+    ]
+    assert set(model["id"] for pool in backups for model in pool).isdisjoint(
+        {worker["model"] for worker in workers}
+    )
+
+
+def test_worker_backup_pools_do_not_escape_manual_eligibility():
+    workers = [_worker("@ollama-cloud:deepseek-v4.1-flash", "ollama-cloud")]
+    manual_pool = [
+        _worker("@ollama-cloud:deepseek-v4.1-flash", "ollama-cloud"),
+        _worker("@ollama-cloud:backup", "ollama-cloud"),
+    ]
+
+    backups = _partition_worker_backup_pools(workers, manual_pool)
+
+    assert [[model["id"] for model in worker_pool] for worker_pool in backups] == [
+        ["@ollama-cloud:backup"]
+    ]
+
+
+def test_teamwork_run_assigns_disjoint_eligible_backups_to_parallel_workers():
+    first = _worker("@ollama-cloud:deepseek-v4.1-flash", "ollama-cloud")
+    second = _worker("@openrouter:fast", "openrouter")
+    backup_a = _worker("@ollama-cloud:backup-a", "ollama-cloud")
+    backup_b = _worker("@openrouter:backup-b", "openrouter")
+    outside_manual_pool = _worker("@anthropic:outside", "anthropic")
+    plan = {
+        "strategy": "balanced",
+        "planner": None,
+        "workers": [first, second],
+        "worker_pool": [first, second, backup_a, backup_b],
+        "critic": second["model"],
+        "critic_provider": second["provider"],
+        "synthesizer": second["model"],
+        "synthesizer_provider": second["provider"],
+        "pool": [first, second, backup_a, backup_b, outside_manual_pool],
+    }
+    assigned = {}
+
+    def capture_worker_pool(worker, _prompt, _grounding, backups, **_kwargs):
+        assigned[worker["model"]] = [model["id"] for model in backups]
+        from runtime.teamwork_orchestrator import _TEAMWORK_WORKER_SLOTS
+        _TEAMWORK_WORKER_SLOTS.release()
+        return {
+            "model": worker["model"],
+            "provider": worker["provider"],
+            "name": worker["name"],
+            "role": worker["role"],
+            "focus": worker["focus"],
+            "content": "worker draft",
+            "execution_ms": 1,
+            "error": None,
+            "swapped": False,
+        }
+
+    with patch("runtime.teamwork_orchestrator.resolve_team_plan", return_value=plan), \
+         patch("runtime.teamwork_orchestrator._invoke_worker_with_slot", side_effect=capture_worker_pool), \
+         patch("runtime.auxiliary_client.call_llm", return_value=_ok_response("review")), \
+         patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="review"), \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=_fake_stream):
+        result = run_teamwork_turn(
+            MagicMock(messages=[]),
+            "Complete the task.",
+            config={"shared_grounding": False, "hot_swap": {"enabled": True, "fallback_quorum_min": 1}},
+        )
+
+    assert result["content"] == "final answer"
+    assert assigned == {
+        first["model"]: [backup_a["id"]],
+        second["model"]: [backup_b["id"]],
     }
 
 

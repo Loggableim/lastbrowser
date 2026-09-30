@@ -49,7 +49,7 @@ describe('desktop access password lock', () => {
 
   it('shows the disabled auth state after removing the password gate', () => {
     const source = readFileSync(settingsPanelsPath, 'utf8');
-    expect(source).toContain("t(authEnabled ? 'settings.panels.system.disableAuth' : 'settings.panels.system.authDisabled')");
+    expect(source).toContain("t(passwordEnvLocked ? 'settings.panels.system.lockedByEnvironment' : authEnabled ? 'settings.panels.system.disableAuth' : 'settings.panels.system.authDisabled')");
     expect(source).toContain("showToast(t('settings.panels.system.authDisabled'))");
     expect(source).toContain('if (result.auth_enabled !== false)');
     expect(source).toContain("t('settings.panels.system.authDisableNotConfirmed')");

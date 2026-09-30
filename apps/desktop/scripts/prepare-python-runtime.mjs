@@ -17,21 +17,13 @@ function main() {
   const desired = {
     sourcePythonHome,
     sourceVersion: pythonVersion(join(sourcePythonHome, 'python.exe')),
-    packageVersion: readPackageVersion(),
     // Bump when the bundled runtime dependency set changes. In particular,
     // older prepared trees can otherwise pass the cache check without the
     // OpenAI-compatible client needed by Ollama providers.
     runtimeSchema: 6
   };
 
-  if (
-    marker &&
-    marker.sourcePythonHome === desired.sourcePythonHome &&
-    marker.sourceVersion === desired.sourceVersion &&
-    marker.packageVersion === desired.packageVersion &&
-    marker.runtimeSchema === desired.runtimeSchema &&
-    existsSync(join(pythonRuntimeDir, 'python.exe'))
-  ) {
+  if (isPreparedRuntimeCompatible(marker, desired, existsSync(join(pythonRuntimeDir, 'python.exe')))) {
     console.log(`[prepare:python] Runtime already prepared: ${pythonRuntimeDir}`);
     return;
   }
@@ -297,17 +289,23 @@ function listMatching(dir, pattern) {
     .map((entry) => entry.name);
 }
 
-function readPackageVersion() {
-  const raw = readFileSync(join(desktopDir, 'package.json'), 'utf8');
-  return JSON.parse(raw).version;
-}
-
 function readMarker() {
   try {
     return JSON.parse(readFileSync(markerPath, 'utf8'));
   } catch {
     return null;
   }
+}
+
+export function isPreparedRuntimeCompatible(marker, desired, hasPythonExecutable) {
+  return Boolean(
+    hasPythonExecutable &&
+    marker &&
+    desired &&
+    marker.sourcePythonHome === desired.sourcePythonHome &&
+    marker.sourceVersion === desired.sourceVersion &&
+    marker.runtimeSchema === desired.runtimeSchema
+  );
 }
 
 function pythonVersion(pythonExe) {

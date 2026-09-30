@@ -183,6 +183,7 @@ def test_teamwork_plan_deduplicates_manual_workers_and_falls_back_from_removed_r
         })
 
     assert [worker["model"] for worker in plan["workers"]] == ["available-a"]
+    assert [model["id"] for model in plan["worker_pool"]] == ["available-a"]
     assert plan["planner"]["id"] in {"available-a", "available-b"}
     assert plan["critic"] in {"available-a", "available-b"}
     assert plan["critic_provider"] in {"ollama", "openrouter"}

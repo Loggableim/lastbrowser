@@ -4821,7 +4821,7 @@ def handle_get(handler, parsed) -> bool:
         # had no way to know â€” see issue #1139 / #1560.
         settings["password_env_var"] = bool(
             os.getenv("SIDEKICK_WEBUI_PASSWORD", "").strip()
-            or os.getenv("SIDEKICK_WEBUI_PASSWORD", "").strip()
+            or os.getenv("HERMES_WEBUI_PASSWORD", "").strip()
         )
         # Inject the running version so the UI badge stays in sync with git tags
         # without any manual release step.
@@ -8248,12 +8248,12 @@ def handle_post(handler, parsed) -> bool:
         if requested_password or requested_clear_password:
             if (
                 os.getenv("SIDEKICK_WEBUI_PASSWORD", "").strip()
-                or os.getenv("SIDEKICK_WEBUI_PASSWORD", "").strip()
+                or os.getenv("HERMES_WEBUI_PASSWORD", "").strip()
             ):
                 return bad(
                     handler,
-                    "SIDEKICK_WEBUI_PASSWORD is set — it overrides the settings password. "
-                    "Unset the env var and restart the server before changing the password here.",
+                    "A Sidekick WebUI password environment variable is set and overrides the settings password. "
+                    "Unset the environment variable and restart the server before changing the password here.",
                     409,
                 )
 

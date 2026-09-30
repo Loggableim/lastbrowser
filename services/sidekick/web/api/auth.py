@@ -20,7 +20,7 @@ from web.api.config import load_settings
 
 logger = logging.getLogger(__name__)
 
-PASSWORD_ENV_VARS = ("SIDEKICK_WEBUI_PASSWORD",)
+PASSWORD_ENV_VARS = ("SIDEKICK_WEBUI_PASSWORD", "HERMES_WEBUI_PASSWORD")
 SESSION_TTL_ENV_VARS = ("SIDEKICK_WEBUI_SESSION_TTL",)
 
 

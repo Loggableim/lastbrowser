@@ -5195,6 +5195,93 @@ def test_settings_endpoint_exposes_legacy_password_env_var(monkeypatch, tmp_path
     assert payload["password_env_var"] is True
 
 
+def test_settings_endpoint_exposes_hermes_password_env_var(monkeypatch, tmp_path):
+    import io
+    from urllib.parse import urlparse
+
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("SIDEKICK_WEBUI_PASSWORD", raising=False)
+    monkeypatch.setenv("HERMES_WEBUI_PASSWORD", "legacy-alias-password")
+    from web.api import config as cfg
+    from web.api import routes
+
+    monkeypatch.setattr(cfg, "SETTINGS_FILE", tmp_path / "settings.json")
+    cfg.save_settings({})
+
+    class _Handler:
+        headers = {"Host": "127.0.0.1"}
+        client_address = ("127.0.0.1", 12345)
+
+        def __init__(self):
+            self.status_code = None
+            self.response_headers = {}
+            self.rfile = io.BytesIO()
+            self.wfile = io.BytesIO()
+
+        def send_response(self, status):
+            self.status_code = status
+
+        def send_header(self, name, value):
+            self.response_headers[name.lower()] = value
+
+        def end_headers(self):
+            pass
+
+    handler = _Handler()
+    handled = routes.handle_get(handler, urlparse("/api/settings"))
+
+    assert handled is None
+    assert handler.status_code == 200
+    payload = json.loads(handler.wfile.getvalue().decode("utf-8"))
+    assert payload["password_env_var"] is True
+
+
+def test_settings_post_rejects_password_change_when_hermes_password_env_var_set(monkeypatch, tmp_path):
+    import io
+    from urllib.parse import urlparse
+
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("SIDEKICK_WEBUI_PASSWORD", raising=False)
+    monkeypatch.setenv("HERMES_WEBUI_PASSWORD", "legacy-alias-password")
+    from web.api import config as cfg
+    from web.api import routes
+
+    monkeypatch.setattr(cfg, "SETTINGS_FILE", tmp_path / "settings.json")
+    cfg.save_settings({})
+    body = json.dumps({"_clear_password": True}).encode("utf-8")
+
+    class _Handler:
+        headers = {
+            "Content-Length": str(len(body)),
+            "Content-Type": "application/json",
+            "Host": "127.0.0.1",
+        }
+        client_address = ("127.0.0.1", 12345)
+
+        def __init__(self):
+            self.status_code = None
+            self.response_headers = {}
+            self.rfile = io.BytesIO(body)
+            self.wfile = io.BytesIO()
+
+        def send_response(self, status):
+            self.status_code = status
+
+        def send_header(self, name, value):
+            self.response_headers[name.lower()] = value
+
+        def end_headers(self):
+            pass
+
+    handler = _Handler()
+    handled = routes.handle_post(handler, urlparse("/api/settings"))
+
+    assert handled is None
+    assert handler.status_code == 409
+    payload = json.loads(handler.wfile.getvalue().decode("utf-8"))
+    assert "overrides the settings password" in payload["error"]["message"]
+
+
 def test_settings_post_rejects_password_change_when_legacy_password_env_var_set(monkeypatch, tmp_path):
     import io
     from urllib.parse import urlparse

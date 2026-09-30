@@ -5,16 +5,30 @@
     <link>https://lastbrowser.com/changelog/</link>
     <description>Offizieller Release- und Update-Feed für Lastbrowser – Der AI-native Windows-Browser.</description>
     <language>de</language>
-    <lastBuildDate>Tue, 29 Sep 2026 19:11:40 GMT</lastBuildDate>
+    <lastBuildDate>Wed, 30 Sep 2026 23:09:26 GMT</lastBuildDate>
     <atom:link href="https://lastbrowser.com/changelog/feed.xml" rel="self" type="application/rss+xml"/>
     
+    <item>
+      <title>Lastbrowser v0.1.41 Beta – Stability and Teamwork reliability updates</title>
+      <link>https://lastbrowser.com/releases/#v0.1.41</link>
+      <guid isPermaLink="false">lastbrowser-v0.1.41</guid>
+      <pubDate>Wed, 30 Sep 2026 23:09:26 GMT</pubDate>
+      <description><![CDATA[
+        <p>v0.1.41 is the current published Windows release. It includes a Teamwork fallback-pool correction, Python runtime reuse across app-version updates, and clearer access-authentication status.</p>
+        <ul>
+          <li>Setup and portable installers are Authenticode-signed and timestamped.</li>
+          <li>See the <a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.41">published release notes and downloads</a>.</li>
+        </ul>
+      ]]></description>
+    </item>
+
     <item>
       <title>Lastbrowser v0.1.38 Beta – Stability and provider updates</title>
       <link>https://lastbrowser.com/releases/#v0.1.38</link>
       <guid isPermaLink="false">lastbrowser-v0.1.38</guid>
       <pubDate>Tue, 29 Sep 2026 19:11:40 GMT</pubDate>
       <description><![CDATA[
-        <p>v0.1.38 is the current published Windows release, with stability and provider fixes since v0.1.34.</p>
+        <p>v0.1.38 was a previous published Windows release, with stability and provider fixes since v0.1.34.</p>
         <ul>
           <li>The GitHub release includes Windows setup and portable packages.</li>
           <li>See the <a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.38">published release notes</a> for details.</li>

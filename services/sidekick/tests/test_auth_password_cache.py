@@ -56,6 +56,18 @@ def test_removing_env_password_falls_back_to_settings(monkeypatch, tmp_path):
     assert auth.get_password_hash() is None
 
 
+def test_hermes_password_alias_is_recognized_and_can_be_removed(monkeypatch, tmp_path):
+    monkeypatch.delenv("SIDEKICK_WEBUI_PASSWORD", raising=False)
+    monkeypatch.setenv("HERMES_WEBUI_PASSWORD", "legacy-alias-password")
+    auth = _fresh_auth(monkeypatch, tmp_path)
+
+    assert auth.is_auth_enabled() is True
+    assert auth.verify_password("legacy-alias-password") is True
+
+    monkeypatch.delenv("HERMES_WEBUI_PASSWORD", raising=False)
+    assert auth.is_auth_enabled() is False
+
+
 def test_signing_key_is_stable_across_calls(monkeypatch, tmp_path):
     auth = _fresh_auth(monkeypatch, tmp_path)
 

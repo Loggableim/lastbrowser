@@ -5,7 +5,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.1.42] - 2026-10-01 (release candidate)
+## [0.1.42] - 2026-10-01
 
 ### Fixes
 - Keep bounded assistant response evidence with persistent goals, so the goal judge can verify steps completed across separate turns and renderer reloads.

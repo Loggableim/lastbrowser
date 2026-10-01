@@ -5,6 +5,21 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.42] - 2026-10-01 (release candidate)
+
+### Fixes
+- Keep bounded assistant response evidence with persistent goals, so the goal judge can verify steps completed across separate turns and renderer reloads.
+- Bind streamed goal responses to the goal, profile, and Space present before generation. Replacing a goal during generation no longer credits the old response to the new goal.
+- Make `/goal resume` on an already active goal idempotent, preserving its running turn and queued continuation.
+- Stabilize provider setup and model selection, including Alibaba Cloud DashScope workspace endpoints and Ollama Cloud's `deepseek-v4.1-flash` default.
+
+### Verification
+- Source tests: 133 desktop suites and 1,166 tests; Store preflight 27/27; desktop build and Python syntax check passed. Sidekick suite: 2,485 passed, 105 skipped.
+- The signed, unpacked 0.1.42 application passed 21/21 isolated live checks: Ollama token and reasoning streaming, four pinned Teamwork roles, stream cancellation, and a two-turn persistent goal completed after renderer reload.
+- Setup and portable passed Certum Authenticode plus timestamp verification. Packaged browser passed Castlabs VMP verification. Final signed-file metadata and blockmap were regenerated and verified.
+- SHA-256 setup: `018C78449F9F7EC18A517367F07E3DDF8647DB0D63BBC693B886BF40BA5C42A4`; portable: `6433A38507800C0A84B815DD3C85DD9B6C058A42D2078103DB47861B03D83A16`.
+- The installer has not been installed over the user's existing profile. Wider browser UI and provider login flows remain outside this isolated smoke.
+
 ## [0.1.41] - 2026-10-01
 
 ### Fixes

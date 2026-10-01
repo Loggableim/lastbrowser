@@ -23,6 +23,7 @@ export interface SpaceSetupData {
   name: string;
   color: string;
   model: string;
+  modelProvider?: string;
   pinnedApps: { name: string; url: string; color?: string }[];
   startUrl: string;
 }
@@ -204,6 +205,7 @@ export function SpaceSetupModal({
   const [color, setColor] = useState(initialDefaults.color);
   const [customPath, setCustomPath] = useState(initialDefaults.customPath);
   const [model, setModel] = useState(initialDefaults.model);
+  const [modelProvider, setModelProvider] = useState('');
   const [startUrl, setStartUrl] = useState(initialDefaults.startUrl);
   const [selectedApps, setSelectedApps] = useState(initialDefaults.selectedApps);
   const [customAppName, setCustomAppName] = useState('');
@@ -221,6 +223,7 @@ export function SpaceSetupModal({
     setColor(defaults.color);
     setCustomPath(defaults.customPath);
     setModel(defaults.model);
+    setModelProvider('');
     setStartUrl(defaults.startUrl);
     setSelectedApps(defaults.selectedApps);
     setCustomAppName(defaults.customAppName);
@@ -241,6 +244,16 @@ export function SpaceSetupModal({
       .catch(() => { if (active) setAvailableModels([]); });
     return () => { active = false; };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (BUILT_IN_MODEL_IDS.has(model) || availableModels.length === 0) {
+      if (BUILT_IN_MODEL_IDS.has(model)) setModelProvider('');
+      return;
+    }
+    setModelProvider((current) => availableModels.some((entry) => entry.id === model && entry.provider === current)
+      ? current
+      : availableModels.find((entry) => entry.id === model)?.provider || '');
+  }, [model, availableModels]);
 
   const handleSelectPreset = (preset: SpacePreset) => {
     setSelectedPreset(preset);
@@ -301,6 +314,7 @@ export function SpaceSetupModal({
       name: name.trim(),
       color,
       model,
+      modelProvider: modelProvider || undefined,
       pinnedApps: selectedApps,
       startUrl: startUrl.trim() || 'app://browser-home'
     }, onCreateSpace, onClose, t('spaceSetup.createFailed'));
@@ -450,10 +464,11 @@ export function SpaceSetupModal({
                     const nameKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrack' : mode.id === 'teamwork' ? 'teamwork' : 'ollama'}` as DesktopTranslationKey;
                     const descKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrackDescription' : mode.id === 'teamwork' ? 'teamworkDescription' : 'ollamaDescription'}` as DesktopTranslationKey;
                     const badgeKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'adaptive' : mode.id === 'teamwork' ? 'multiAgent' : 'local'}` as DesktopTranslationKey;
-                    return { id: mode.id, name: t(nameKey), desc: t(descKey), badge: t(badgeKey) };
+                    return { id: mode.id, provider: '', name: t(nameKey), desc: t(descKey), badge: t(badgeKey) };
                   }),
                   ...availableModels.map((entry) => ({
                     id: entry.id,
+                    provider: entry.provider || '',
                     name: entry.name || entry.id,
                     desc: t('spaceSetup.model.availableVia', { provider: entry.provider_label || entry.provider || 'Provider' }),
                     badge: entry.provider_label || entry.provider || 'Live'
@@ -461,11 +476,14 @@ export function SpaceSetupModal({
                 ].map((m) => (
                   <div
                     key={m.id}
-                    className={`space-model-item ${model === m.id ? 'active' : ''}`}
-                    onClick={() => setModel(m.id)}
+                    className={`space-model-item ${model === m.id && modelProvider === m.provider ? 'active' : ''}`}
+                    onClick={() => {
+                      setModel(m.id);
+                      setModelProvider(m.provider);
+                    }}
                   >
                     <div className="model-radio-icon">
-                      {model === m.id ? (
+                      {model === m.id && modelProvider === m.provider ? (
                         <div className="radio-dot-checked" style={{ background: color }} />
                       ) : (
                         <div className="radio-dot-empty" />

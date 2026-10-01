@@ -101,6 +101,15 @@ _SUPPORTED_PROVIDER_SETUPS = {
         "models": list(_PROVIDER_MODELS.get("openai", [])),
         "category": "easy_start",
     },
+    "alibaba": {
+        "label": "Alibaba Cloud (DashScope)",
+        "env_var": "DASHSCOPE_API_KEY",
+        "default_model": "qwen-turbo",
+        # Workspace-specific endpoints are entered by the user in provider settings.
+        "requires_base_url": True,
+        "models": [],
+        "category": "cloud",
+    },
     # ── Open / self-hosted ─────────────────────────────────────────────
     "ollama": {
         "label": "Ollama (Lokal)",
@@ -1021,6 +1030,25 @@ def apply_onboarding_setup(body: dict) -> dict:
         parsed = urlparse(base_url)
         if parsed.scheme not in {"http", "https"}:
             raise ValueError("base_url must start with http:// or https://")
+    if provider == "alibaba":
+        try:
+            alibaba_url = urlparse(base_url)
+            alibaba_port = alibaba_url.port
+        except ValueError:
+            alibaba_url = urlparse("")
+            alibaba_port = -1
+        host = (alibaba_url.hostname or "").lower()
+        if (
+            alibaba_url.scheme != "https"
+            or not (host == "dashscope-intl.aliyuncs.com" or host.endswith(".maas.aliyuncs.com"))
+            or alibaba_url.path.rstrip("/") != "/compatible-mode/v1"
+            or alibaba_url.username
+            or alibaba_url.password
+            or alibaba_port not in (None, 443)
+            or alibaba_url.query
+            or alibaba_url.fragment
+        ):
+            raise ValueError("Alibaba requires its HTTPS DashScope workspace URL ending in /compatible-mode/v1")
 
     config_path = _get_config_path()
     # Guard: if config.yaml already exists and the caller did not explicitly

@@ -1259,6 +1259,7 @@ from web.api.config import (
     create_stream_channel,
     get_webui_session_save_mode,
     STREAM_GOAL_RELATED,
+    STREAM_GOAL_CLAIMS,
     DEV_MODE,
 )
 from web.api.helpers import (
@@ -1313,7 +1314,7 @@ def _kanban_unknown_endpoint(handler, parsed, method: str) -> bool:
     ) or True
 
 
-def _clear_stale_stream_state(session) -> bool:
+def _clear_stale_stream_state(session, *, materialize_pending: bool = True) -> bool:
     """Clear persisted streaming flags when the in-memory stream no longer exists.
 
     A server restart or worker crash can leave active_stream_id/pending_* in the
@@ -1385,7 +1386,8 @@ def _clear_stale_stream_state(session) -> bool:
     with _get_session_agent_lock(session.session_id):
         if getattr(session, "active_stream_id", None) != stream_id:
             return False
-        _materialize_pending_user_turn_before_error(session)
+        if materialize_pending:
+            _materialize_pending_user_turn_before_error(session)
         session.active_stream_id = None
         if hasattr(session, "pending_user_message"):
             session.pending_user_message = None
@@ -1621,7 +1623,27 @@ def _clean_session_model_provider(value: str | None) -> str | None:
 def _split_provider_qualified_model(model: str) -> tuple[str, str | None]:
     model = str(model or "").strip()
     if model.startswith("@") and ":" in model:
-        provider_hint, bare_model = model[1:].rsplit(":", 1)
+        qualified = model[1:]
+        first_segment, first_bare = qualified.split(":", 1)
+        # Provider-qualified IDs normally use `@provider:model`. Model IDs
+        # themselves may contain colons (for example `qwen3:32b` or
+        # `model:free`), so prefer a recognized provider boundary and preserve
+        # the complete remainder as the model ID. Keep rsplit for named custom
+        # providers (`@custom:my-key:model`) whose provider ID contains colons.
+        try:
+            from cli.auth import PROVIDER_REGISTRY
+
+            known_providers = set(PROVIDER_REGISTRY)
+        except Exception:
+            known_providers = set()
+        known_providers.update({"ollama", "openrouter"})
+        if first_segment in known_providers:
+            provider = _clean_session_model_provider(first_segment)
+            bare = first_bare.strip()
+            if provider and bare:
+                return bare, provider
+
+        provider_hint, bare_model = qualified.rsplit(":", 1)
         provider = _clean_session_model_provider(provider_hint)
         bare = bare_model.strip()
         if provider and bare:
@@ -5114,6 +5136,10 @@ def handle_get(handler, parsed) -> bool:
             try:
                 from web.api.goals import goal_state_for_session
 
+                goal_stream_id = getattr(s, "active_stream_id", None)
+                with STREAMS_LOCK:
+                    goal_stream_live = bool(goal_stream_id and goal_stream_id in STREAMS)
+
                 goal_state = goal_state_for_session(
                     sid,
                     profile_home=profile_home,
@@ -5126,6 +5152,7 @@ def handle_get(handler, parsed) -> bool:
                         or getattr(s, "space_slug", None)
                         or getattr(s, "space", None)
                     ),
+                    recover_incomplete=not goal_stream_live,
                 )
             except Exception:
                 logger.exception("Could not read persistent goal state for session %s", sid)
@@ -7050,6 +7077,11 @@ def handle_post(handler, parsed) -> bool:
             body.get("model"),
             body.get("model_provider"),
         )
+        workspace_goal_slug = None
+        if body.get("scope_goals_to_workspace") is True and workspace:
+            from web.api.goals import lastbrowser_workspace_goal_slug
+
+            workspace_goal_slug = lastbrowser_workspace_goal_slug(workspace)
         # Use the profile sent by the client tab (if any) so that two tabs on
         # different profiles never clobber each other via the process-level global.
         s = new_session(
@@ -7060,6 +7092,7 @@ def handle_post(handler, parsed) -> bool:
             project_id=body.get("project_id") or None,
             worktree_info=worktree_info,
             agent_slug=body.get("agent") or None,
+            workspace_slug=workspace_goal_slug,
         )
         return j(handler, {"session": s.compact() | {"messages": s.messages}})
 
@@ -7169,10 +7202,13 @@ def handle_post(handler, parsed) -> bool:
         provider_id = (body.get("provider") or "").strip().lower()
         if not provider_id:
             return bad(handler, "provider is required")
+        from web.api.config import _resolve_provider_alias
+        provider_id = _resolve_provider_alias(provider_id)
         has_api_key = "api_key" in body
         has_models = "models" in body
-        if not has_api_key and not has_models:
-            return bad(handler, "api_key or models is required")
+        has_base_url = provider_id == "alibaba" and "base_url" in body
+        if not has_api_key and not has_models and not has_base_url:
+            return bad(handler, "api_key, base_url, or models is required")
         # Validate the allowlist before persisting a key so a malformed model
         # selection cannot leave a partially applied settings update.
         if has_models:
@@ -7181,9 +7217,13 @@ def handle_post(handler, parsed) -> bool:
             except ValueError as exc:
                 return bad(handler, str(exc))
         result = {"ok": True, "provider": provider_id}
-        if has_api_key:
-            api_key = str(body.get("api_key") or "").strip() or None
-            result = set_provider_key(provider_id, api_key)
+        if has_api_key or has_base_url:
+            api_key = str(body.get("api_key") or "").strip() or None if has_api_key else None
+            result = set_provider_key(
+                provider_id,
+                api_key,
+                str(body.get("base_url") or "") if has_base_url else None,
+            )
             if not result.get("ok"):
                 return bad(handler, result.get("error", "Unknown error"))
         if has_models:
@@ -9630,7 +9670,8 @@ def _handle_events_sse(handler, parsed):
 
 def _handle_sse_stream(handler, parsed):
     stream_id = parse_qs(parsed.query).get("stream_id", [""])[0]
-    stream = STREAMS.get(stream_id)
+    from web.api.config import get_chat_stream_channel
+    stream = get_chat_stream_channel(stream_id)
     if stream is None:
         return j(handler, {"error": "stream not found"}, status=404)
     subscriber = stream.subscribe() if hasattr(stream, "subscribe") else stream
@@ -10657,6 +10698,55 @@ def _handle_model_probe(handler, body):
     """
     provider = str(body.get("provider") or "").strip().lower()
     api_key = str(body.get("api_key") or "").strip()
+    if provider in {"alibaba", "alibaba-cloud"}:
+        import urllib.request
+        from urllib.parse import urlsplit
+
+        base_url = str(body.get("base_url") or "").strip().rstrip("/")
+        try:
+            parsed = urlsplit(base_url)
+            parsed_port = parsed.port
+        except ValueError:
+            parsed = urlsplit("")
+            parsed_port = -1
+        host = (parsed.hostname or "").lower()
+        allowed_host = host == "dashscope-intl.aliyuncs.com" or host.endswith(".maas.aliyuncs.com")
+        if (
+            not api_key or len(api_key) > 4096
+            or parsed.scheme != "https" or not allowed_host
+            or parsed.username or parsed.password or parsed_port not in (None, 443)
+            or parsed.query or parsed.fragment
+            or parsed.path.rstrip("/") != "/compatible-mode/v1"
+        ):
+            return j(handler, {"error": "A valid Alibaba DashScope key and HTTPS workspace endpoint are required", "models": []}, status=400)
+
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *_args, **_kwargs):
+                return None
+
+        request = urllib.request.Request(
+            f"{base_url}/models",
+            headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+        )
+        try:
+            opener = urllib.request.build_opener(_NoRedirect())
+            with opener.open(request, timeout=12) as response:
+                payload = json.loads(response.read(4 * 1024 * 1024))
+            data = payload.get("data", []) if isinstance(payload, dict) else []
+            models = []
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        model_id = str(item.get("id") or "").strip()
+                        if model_id:
+                            models.append({"id": model_id, "label": str(item.get("name") or model_id).strip()})
+            models.sort(key=lambda item: item["id"].lower())
+            return j(handler, {"provider": "alibaba", "models": models, "count": len(models)})
+        except urllib.error.HTTPError as exc:
+            return j(handler, {"error": f"Alibaba model catalog returned HTTP {exc.code}", "models": []}, status=exc.code)
+        except Exception as exc:
+            logger.info("Alibaba model catalog probe failed (%s)", type(exc).__name__)
+            return j(handler, {"error": "Alibaba model catalog could not be loaded", "models": []}, status=502)
     endpoints = {
         "openrouter": "https://openrouter.ai/api/v1/models",
         "openai": "https://api.openai.com/v1/models",
@@ -10844,7 +10934,15 @@ def _handle_live_models(handler, parsed):
                             headers={"Authorization": f"Bearer {_api_key}"},
                         )
                         
-                        with urllib.request.urlopen(_req, timeout=8) as _resp:
+                        if provider == "alibaba":
+                            class _NoRedirect(urllib.request.HTTPRedirectHandler):
+                                def redirect_request(self, *_args, **_kwargs):
+                                    return None
+                            _opener = urllib.request.build_opener(_NoRedirect())
+                            _catalog_response = _opener.open(_req, timeout=8)
+                        else:
+                            _catalog_response = urllib.request.urlopen(_req, timeout=8)
+                        with _catalog_response as _resp:
                             _body = json.loads(_resp.read())
                         
                         # Parse response: {"data": [{"id": "model1", ...}, ...]}
@@ -10876,15 +10974,45 @@ def _handle_live_models(handler, parsed):
         #      the background via _fetchLiveModels(), so the user never waits.
         if not ids and provider != "openai":
             _ep = _OPENAI_COMPAT_ENDPOINTS.get(provider)
-            if _ep:
+            if provider == "alibaba":
+                # DashScope workspaces use a user-specific host. Keep this
+                # catalog fetch scoped to the Alibaba credential and URL only.
+                _ep = os.environ.get("DASHSCOPE_BASE_URL", "").strip().rstrip("/") or (
+                    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+                )
+                _alibaba_key = os.environ.get("DASHSCOPE_API_KEY", "").strip()
+                from urllib.parse import urlsplit
+                try:
+                    _alibaba_parts = urlsplit(_ep)
+                    _alibaba_port = _alibaba_parts.port
+                except ValueError:
+                    _alibaba_parts = urlsplit("")
+                    _alibaba_port = -1
+                _alibaba_host = (_alibaba_parts.hostname or "").lower()
+                _valid_alibaba_host = (
+                    _alibaba_host == "dashscope-intl.aliyuncs.com"
+                    or _alibaba_host.endswith(".maas.aliyuncs.com")
+                )
+                if (
+                    not _valid_alibaba_host
+                    or _alibaba_parts.scheme != "https"
+                    or _alibaba_parts.path.rstrip("/") != "/compatible-mode/v1"
+                    or _alibaba_parts.username
+                    or _alibaba_parts.password
+                    or _alibaba_port not in (None, 443)
+                ):
+                    _ep = ""
+            else:
+                _alibaba_key = ""
+            if _ep and (provider != "alibaba" or _alibaba_key):
                 try:
                     import urllib.request
                     _providers_cfg = cfg.get("providers", {})
                     _prov = _providers_cfg.get(provider, {}) if isinstance(_providers_cfg, dict) else {}
                     # Only use provider-scoped key â€” never fall back to a top-level
                     # api_key which may belong to a different provider.
-                    _key = _prov.get("api_key") if isinstance(_prov, dict) else None
-                    if not _key:
+                    _key = _alibaba_key if provider == "alibaba" else (_prov.get("api_key") if isinstance(_prov, dict) else None)
+                    if not _key and provider != "alibaba":
                         _key = cfg.get("model", {}).get("api_key")
                     if _key:
                         _req = urllib.request.Request(
@@ -11749,8 +11877,15 @@ def _start_chat_stream_for_session(
     # Pause/clear can race with delivery of the SSE event, so the goal bridge
     # returns "cancelled" for an already-invalidated prompt and we must not run
     # it as an ordinary chat message.
+    goal_claim_turn = None
+    continuation_profile_home = None
+    continuation_space_slug = None
     try:
-        from web.api.goals import consume_goal_continuation, strip_goal_continuation_marker
+        from web.api.goals import (
+            consume_goal_continuation,
+            goal_continuation_claim_turn,
+            strip_goal_continuation_marker,
+        )
 
         from web.api.profiles import get_profile_home
 
@@ -11775,6 +11910,11 @@ def _start_chat_stream_for_session(
             }
         if continuation_state == "active":
             goal_related = True
+            goal_claim_turn = goal_continuation_claim_turn(
+                s.session_id,
+                profile_home=continuation_profile_home,
+                space_slug=continuation_space_slug,
+            )
             # The run discriminator is transport metadata used to reject stale
             # retries; don't expose it to the model or persist it in the chat.
             msg = strip_goal_continuation_marker(msg)
@@ -11814,63 +11954,112 @@ def _start_chat_stream_for_session(
             }
 
     stream_id = uuid.uuid4().hex
-    session_lock = _get_session_agent_lock(s.session_id)
-    diag.stage("session_lock_wait") if diag else None
-    with session_lock:
-        diag.stage("save_pending_state") if diag else None
-        activate_kanban_orchestration(
-            s,
-            msg,
-            _resolve_cli_toolsets(),
-        )
-        _prepare_chat_start_session_for_stream(
-            s,
-            msg=msg,
-            attachments=attachments,
-            workspace=workspace,
-            model=model,
-            model_provider=model_provider,
-            stream_id=stream_id,
-        )
-    diag.stage("turn_journal_submitted") if diag else None
-    journal_event = {}
+    worker_started = False
     try:
-        from web.api.turn_journal import append_turn_journal_event
-        journal_event = append_turn_journal_event(
-            s.session_id,
-            {
-                "event": "submitted",
-                "stream_id": stream_id,
-                "role": "user",
-                "content": msg,
-                "attachments": attachments,
-                "workspace": workspace,
-                "model": model,
+        session_lock = _get_session_agent_lock(s.session_id)
+        diag.stage("session_lock_wait") if diag else None
+        with session_lock:
+            diag.stage("save_pending_state") if diag else None
+            activate_kanban_orchestration(
+                s,
+                msg,
+                _resolve_cli_toolsets(),
+            )
+            _prepare_chat_start_session_for_stream(
+                s,
+                msg=msg,
+                attachments=attachments,
+                workspace=workspace,
+                model=model,
+                model_provider=model_provider,
+                stream_id=stream_id,
+            )
+        diag.stage("turn_journal_submitted") if diag else None
+        journal_event = {}
+        try:
+            from web.api.turn_journal import append_turn_journal_event
+            journal_event = append_turn_journal_event(
+                s.session_id,
+                {
+                    "event": "submitted",
+                    "stream_id": stream_id,
+                    "role": "user",
+                    "content": msg,
+                    "attachments": attachments,
+                    "workspace": workspace,
+                    "model": model,
+                    "model_provider": model_provider,
+                    "created_at": s.pending_started_at,
+                },
+            )
+        except Exception:
+            logger.warning("Failed to append submitted turn journal event", exc_info=True)
+        diag.stage("set_last_workspace") if diag else None
+        set_last_workspace(workspace)
+        diag.stage("stream_registration") if diag else None
+        stream = create_stream_channel()
+        with STREAMS_LOCK:
+            STREAMS[stream_id] = stream
+        # #1932: mark stream as goal-related so the streaming hook evaluates the goal.
+        if goal_related:
+            STREAM_GOAL_RELATED[stream_id] = True
+        if goal_claim_turn is not None:
+            STREAM_GOAL_CLAIMS[stream_id] = {
+                "session_id": s.session_id,
+                "claim_turn": goal_claim_turn,
+                "profile_home": continuation_profile_home,
+                "space_slug": continuation_space_slug,
+            }
+        diag.stage("worker_thread_start") if diag else None
+        thr = threading.Thread(
+            target=_run_agent_streaming,
+            args=(s.session_id, msg, model, workspace, stream_id, attachments),
+            kwargs={
                 "model_provider": model_provider,
-                "created_at": s.pending_started_at,
+                "google_account_email": google_account_email,
+                "goal_related": goal_related,
+                "goal_claim_turn": goal_claim_turn,
+                "goal_claim_profile_home": continuation_profile_home,
+                "goal_claim_space_slug": continuation_space_slug,
+                "mode": mode,
+                "sandbox_disabled": sandbox_disabled,
+                "grounding_context": grounding_context,
             },
+            daemon=True,
         )
+        thr.start()
+        worker_started = True
     except Exception:
-        logger.warning("Failed to append submitted turn journal event", exc_info=True)
-    diag.stage("set_last_workspace") if diag else None
-    set_last_workspace(workspace)
-    diag.stage("stream_registration") if diag else None
-    stream = create_stream_channel()
-    with STREAMS_LOCK:
-        STREAMS[stream_id] = stream
-    # #1932: mark stream as goal-related so the streaming hook evaluates the goal.
-    if goal_related:
-        STREAM_GOAL_RELATED[stream_id] = True
-    diag.stage("worker_thread_start") if diag else None
-    thr = threading.Thread(
-        target=_run_agent_streaming,
-        args=(s.session_id, msg, model, workspace, stream_id, attachments),
-        kwargs={"model_provider": model_provider, "google_account_email": google_account_email,
-                "goal_related": goal_related, "mode": mode, "sandbox_disabled": sandbox_disabled,
-                "grounding_context": grounding_context},
-        daemon=True,
-    )
-    thr.start()
+        if not worker_started:
+            with STREAMS_LOCK:
+                STREAMS.pop(stream_id, None)
+                STREAM_GOAL_RELATED.pop(stream_id, None)
+                STREAM_GOAL_CLAIMS.pop(stream_id, None)
+            try:
+                if getattr(s, "active_stream_id", None) == stream_id:
+                    _clear_stale_stream_state(
+                        s,
+                        # Goal continuation prompts are internal control
+                        # messages. If startup failed, rearming the claim lets
+                        # the same prompt retry; materializing it here would
+                        # duplicate it in the transcript on that retry.
+                        materialize_pending=goal_claim_turn is None,
+                    )
+            except Exception:
+                logger.warning("Could not roll back failed stream startup for %s", s.session_id, exc_info=True)
+            if goal_claim_turn is not None:
+                try:
+                    from web.api.goals import finish_goal_continuation
+
+                    finish_goal_continuation(
+                        s.session_id,
+                        claim_turn=goal_claim_turn,
+                        profile_home=continuation_profile_home,
+                        space_slug=continuation_space_slug,
+                    )
+                except Exception:
+                    logger.warning("Could not release goal claim after stream startup failure", exc_info=True)
+        raise
     response = {
         "stream_id": stream_id,
         "session_id": s.session_id,
@@ -12074,6 +12263,25 @@ def _handle_goal_command(handler, body):
         or getattr(s, "space", None)
         or ""
     ).strip().lower() or None
+
+    if body.get("scope_goals_to_workspace") is True and body.get("workspace"):
+        try:
+            requested_workspace = str(resolve_trusted_workspace(body.get("workspace")))
+            session_workspace = str(resolve_trusted_workspace(s.workspace)) if getattr(s, "workspace", None) else ""
+        except (TypeError, ValueError) as e:
+            return bad(handler, str(e))
+        if not session_workspace or os.path.normcase(os.path.realpath(requested_workspace)) != os.path.normcase(os.path.realpath(session_workspace)):
+            return bad(handler, "Persistent goals must target the workspace bound to this session.", status=400)
+        from web.api.goals import lastbrowser_workspace_goal_slug
+
+        space_slug = lastbrowser_workspace_goal_slug(requested_workspace)
+        if getattr(s, "workspace_slug", None) != space_slug:
+            s.workspace_slug = space_slug
+            try:
+                s.save()
+            except Exception:
+                logger.error("Could not persist the Lastbrowser workspace goal scope for session %s", s.session_id, exc_info=True)
+                return j(handler, {"ok": False, "error": "goal_state_unavailable", "message": "Could not persist this goal's workspace scope.", "retryable": True}, status=503)
 
     from web.api.goals import _CONTINUATION_LOCK, goal_command_payload, goal_state_snapshot, restore_goal_state
 

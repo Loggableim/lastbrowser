@@ -731,6 +731,14 @@ def run_teamwork_turn(
     if cancel_event and cancel_event.is_set():
         raise InterruptedError("Cancelled")
 
+    hot_swap_cfg = cfg.get("hot_swap", {})
+    if not isinstance(hot_swap_cfg, dict):
+        hot_swap_cfg = {}
+    try:
+        min_quorum = max(1, min(8, int(hot_swap_cfg.get("fallback_quorum_min", 1))))
+    except (TypeError, ValueError):
+        min_quorum = 1
+
     # 2. Phase: Resolve Team Composition
     plan = resolve_team_plan(prompt, cfg)
     workers = plan["workers"]
@@ -742,6 +750,14 @@ def run_teamwork_turn(
     eligible_worker_pool = plan.get("worker_pool") or pool
     if not workers or not critic_model or not synth_model:
         raise RuntimeError("Teamwork hat keine aktuell verfügbaren Modelle. Verbinde zuerst mindestens einen Modellanbieter.")
+    if min_quorum > len(workers):
+        raise RuntimeError(
+            "Teamwork-Mindestquorum ist nicht erreichbar: "
+            f"{min_quorum} erfolgreiche Worker-Entwürfe sind konfiguriert, "
+            f"aber aktuell sind nur {len(workers)} Worker geplant. "
+            "Reduziere das Mindestquorum, erhöhe die maximale Agentenzahl "
+            "oder verbinde weitere Modelle."
+        )
 
     planner_context = ""
     planner_failure = None
@@ -791,9 +807,6 @@ def run_teamwork_turn(
 
     # 3. Phase: Parallele Debatte (ThreadPoolExecutor)
     drafts: List[Dict[str, Any]] = []
-    hot_swap_cfg = cfg.get("hot_swap", {})
-    if not isinstance(hot_swap_cfg, dict):
-        hot_swap_cfg = {}
     allow_hot_swap = bool(hot_swap_cfg.get("enabled", True))
     executor = ThreadPoolExecutor(max_workers=len(workers))
     worker_backup_pools = _partition_worker_backup_pools(workers, eligible_worker_pool)
@@ -888,10 +901,6 @@ def run_teamwork_turn(
 
     # Quorum check
     successful_drafts = [d for d in drafts if not d.get("error") and d.get("content")]
-    try:
-        min_quorum = max(1, min(8, int(hot_swap_cfg.get("fallback_quorum_min", 1))))
-    except (TypeError, ValueError):
-        min_quorum = 1
     if len(successful_drafts) < min_quorum:
         raise RuntimeError(_teamwork_quorum_error(
             [draft for draft in drafts if draft.get("error") or not draft.get("content")],

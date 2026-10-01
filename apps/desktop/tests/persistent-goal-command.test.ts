@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPersistentGoalCommandBody,
   parsePersistentGoalCommand,
+  requestPersistentGoalControlWhileBusy,
   requestPersistentGoalCommand,
+  shouldDispatchPersistentGoalControlWhileBusy,
 } from '../src/renderer/persistent-goal-command.js';
 
 describe('persistent goal chat command bridge', () => {
@@ -13,6 +15,47 @@ describe('persistent goal chat command bridge', () => {
     });
     expect(parsePersistentGoalCommand('/goalkeeper research')).toBeNull();
     expect(parsePersistentGoalCommand('please /goal status')).toBeNull();
+  });
+
+  it('dispatches goal controls while busy without treating resume or goal creation as controls', () => {
+    expect(shouldDispatchPersistentGoalControlWhileBusy('/goal status', true)).toBe(true);
+    expect(shouldDispatchPersistentGoalControlWhileBusy('/goal', true)).toBe(true);
+    expect(shouldDispatchPersistentGoalControlWhileBusy('/goal pause', true)).toBe(true);
+    expect(shouldDispatchPersistentGoalControlWhileBusy('/goal clear', true)).toBe(true);
+    expect(shouldDispatchPersistentGoalControlWhileBusy('/goal resume', true)).toBe(false);
+    expect(shouldDispatchPersistentGoalControlWhileBusy('/goal Ship the feature', true)).toBe(false);
+    expect(shouldDispatchPersistentGoalControlWhileBusy('/goal pause', false)).toBe(false);
+    expect(shouldDispatchPersistentGoalControlWhileBusy('ordinary chat message', true)).toBe(false);
+  });
+
+  it('sends a busy pause to the goal API without requesting a second chat stream', async () => {
+    const calls: unknown[] = [];
+    const response = await requestPersistentGoalControlWhileBusy(async (request) => {
+      calls.push(request);
+      return { message: 'Goal paused.' };
+    }, '/goal pause', true, {
+      sessionId: 'active-session',
+      profileId: 'default',
+      workspace: 'C:/work/space',
+    });
+
+    expect(calls).toEqual([{
+      method: 'POST',
+      path: '/api/goal',
+      body: {
+        session_id: 'active-session',
+        args: 'pause',
+        profile: 'default',
+        workspace: 'C:/work/space',
+        scope_goals_to_workspace: true,
+      },
+    }]);
+    expect(response?.message).toBe('Goal paused.');
+    expect(await requestPersistentGoalControlWhileBusy(async () => ({}), '/goal resume', true, {
+      sessionId: 'active-session',
+      profileId: 'default',
+      workspace: 'C:/work/space',
+    })).toBeNull();
   });
 
   it('binds every request to the active session, profile, Space path, and selected model', () => {
@@ -27,6 +70,7 @@ describe('persistent goal chat command bridge', () => {
       args: 'pause',
       profile: 'work',
       workspace: 'C:/work/space',
+      scope_goals_to_workspace: true,
       model: 'deepseek-v4.1-flash',
       model_provider: 'ollama-cloud',
     });
@@ -59,6 +103,7 @@ describe('persistent goal chat command bridge', () => {
         args: 'pause',
         profile: 'default',
         workspace: '/spaces/research',
+        scope_goals_to_workspace: true,
       },
     }]);
     expect(response.message).toBe('Goal paused.');

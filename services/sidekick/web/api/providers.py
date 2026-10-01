@@ -373,6 +373,7 @@ _PROVIDER_ENV_VAR: dict[str, str] = {
     "openrouter": "OPENROUTER_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
+    "alibaba": "DASHSCOPE_API_KEY",
     "google": "GOOGLE_API_KEY",
     "gemini": "GEMINI_API_KEY",
     "zai": "GLM_API_KEY",
@@ -1582,6 +1583,7 @@ def get_providers() -> dict[str, Any]:
             "oauth_connected": oauth_connected,
             "provider_available": provider_available,
             "legacy_credentials_present": legacy_credentials_present,
+            **({"base_url": os.environ.get("DASHSCOPE_BASE_URL", "").strip()} if pid == "alibaba" else {}),
             "models": models,
             "models_configured": models_configured,
             # models_total reflects the complete catalog size (e.g. 396 for
@@ -1639,7 +1641,7 @@ def get_providers() -> dict[str, Any]:
     }
 
 
-def set_provider_key(provider_id: str, api_key: str | None) -> dict[str, Any]:
+def set_provider_key(provider_id: str, api_key: str | None, base_url: str | None = None) -> dict[str, Any]:
     """Set or update the API key for a provider.
 
     Writes the key to ``~/.sidekick/.env`` using the standard env var name.
@@ -1717,14 +1719,44 @@ def set_provider_key(provider_id: str, api_key: str | None) -> dict[str, Any]:
                      f"This provider does not have a known env var mapping.",
         }
 
+    updates = {env_var: api_key}
+    if provider_id == "alibaba" and base_url is not None:
+        from urllib.parse import urlsplit
+
+        normalized_url = str(base_url).strip().rstrip("/")
+        try:
+            parsed_url = urlsplit(normalized_url)
+            parsed_port = parsed_url.port
+        except ValueError:
+            return {"ok": False, "error": "Alibaba endpoint URL is invalid."}
+        host = (parsed_url.hostname or "").lower()
+        allowed_host = host == "dashscope-intl.aliyuncs.com" or host.endswith(".maas.aliyuncs.com")
+        if (
+            parsed_url.scheme != "https"
+            or not allowed_host
+            or parsed_url.username
+            or parsed_url.password
+            or parsed_port not in (None, 443)
+            or parsed_url.query
+            or parsed_url.fragment
+            or parsed_url.path.rstrip("/") != "/compatible-mode/v1"
+        ):
+            return {"ok": False, "error": "Alibaba endpoint must be HTTPS on DashScope or a workspace maas.aliyuncs.com host and end in /compatible-mode/v1."}
+        # A base-URL-only update preserves the already stored API key.
+        if api_key is None:
+            updates = {}
+        updates["DASHSCOPE_BASE_URL"] = normalized_url
     env_path = _get_sidekick_home() / ".env"
     try:
-        _write_env_file(env_path, {env_var: api_key})
+        _write_env_file(env_path, updates)
         import os
-        if api_key:
-            os.environ[env_var] = api_key
-        else:
-            os.environ.pop(env_var, None)
+        if api_key is not None or provider_id != "alibaba" or base_url is None:
+            if api_key:
+                os.environ[env_var] = api_key
+            else:
+                os.environ.pop(env_var, None)
+        if provider_id == "alibaba" and base_url is not None:
+            os.environ["DASHSCOPE_BASE_URL"] = normalized_url
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
     except Exception as exc:
@@ -1736,12 +1768,18 @@ def set_provider_key(provider_id: str, api_key: str | None) -> dict[str, Any]:
     # disrupting active streaming sessions that may be reading config.cfg.
     invalidate_models_cache()
     _invalidate_ollama_cloud_catalog_if_needed(provider_id)
+    if provider_id == "alibaba":
+        try:
+            from web.api.routes import _clear_live_models_cache
+            _clear_live_models_cache()
+        except Exception:
+            logger.debug("Failed to invalidate Alibaba model catalog cache", exc_info=True)
 
     return {
         "ok": True,
         "provider": provider_id,
         "display_name": _PROVIDER_DISPLAY.get(provider_id, provider_id),
-        "action": "updated" if api_key else "removed",
+        "action": "updated" if api_key or (provider_id == "alibaba" and base_url is not None) else "removed",
     }
 
 
@@ -1775,8 +1813,9 @@ def normalize_provider_model_allowlist(provider_id: str, models: Any) -> list[st
     alphabet deliberately narrow so arbitrary config content cannot be
     injected through the settings endpoint.
     """
-    if str(provider_id or "").strip().lower() != "openrouter":
-        raise ValueError("Model selection is currently supported for OpenRouter only.")
+    provider = str(provider_id or "").strip().lower()
+    if provider not in {"openrouter", "alibaba"}:
+        raise ValueError("Model selection is currently supported for OpenRouter only or Alibaba Cloud.")
     if not isinstance(models, list) or len(models) > 500:
         raise ValueError("models must be a list of at most 500 model IDs.")
     import re
@@ -1797,7 +1836,10 @@ def normalize_provider_model_allowlist(provider_id: str, models: Any) -> list[st
 
 def set_provider_models(provider_id: str, models: Any) -> dict[str, Any]:
     """Persist an explicit provider model allowlist in config.yaml."""
-    normalized = normalize_provider_model_allowlist(provider_id, models)
+    normalized_provider = str(provider_id or "").strip().lower()
+    if normalized_provider == "alibaba-cloud":
+        normalized_provider = "alibaba"
+    normalized = normalize_provider_model_allowlist(normalized_provider, models)
     import web.api.config as config_module
 
     config_path = config_module._get_config_path()
@@ -1806,16 +1848,16 @@ def set_provider_models(provider_id: str, models: Any) -> dict[str, Any]:
         providers_cfg = cfg.get("providers")
         if not isinstance(providers_cfg, dict):
             providers_cfg = {}
-        provider_cfg = providers_cfg.get("openrouter")
+        provider_cfg = providers_cfg.get(normalized_provider)
         if not isinstance(provider_cfg, dict):
             provider_cfg = {}
         provider_cfg["models"] = normalized
-        providers_cfg["openrouter"] = provider_cfg
+        providers_cfg[normalized_provider] = provider_cfg
         cfg["providers"] = providers_cfg
         config_module._save_yaml_config_file(config_path, cfg)
     config_module.reload_config()
     config_module.invalidate_models_cache()
-    return {"ok": True, "provider": "openrouter", "models": normalized}
+    return {"ok": True, "provider": normalized_provider, "models": normalized}
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):

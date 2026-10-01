@@ -61,6 +61,51 @@ def test_unresolvable_explicit_space_does_not_fall_back_to_profile_store(monkeyp
 
     assert response["ok"] is False
     assert response["error"] == "unavailable"
+
+
+def test_lastbrowser_workspace_goal_scope_is_profile_local_and_path_derived(monkeypatch, tmp_path):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+
+    from runtime._compat.shim_state import SessionDB
+    from web.api import goals
+
+    goals._DB_CACHE.clear()
+    profile_home = tmp_path / "home" / "profiles" / "default"
+    profile_home.mkdir(parents=True)
+    workspace = tmp_path / "projects" / "research"
+    workspace.mkdir(parents=True)
+
+    scope = goals.lastbrowser_workspace_goal_slug(workspace)
+    assert scope.startswith("lbws-")
+    assert goals.lastbrowser_workspace_goal_slug(workspace / ".") == scope
+
+    response = goals.goal_command_payload(
+        "desktop-session",
+        "Write a short project summary",
+        profile_home=profile_home,
+        space_slug=scope,
+    )
+
+    assert response["ok"] is True
+    assert response["goal"]["space"] == scope
+    scoped_db = SessionDB(db_path=profile_home / "browser-spaces" / scope / "goals.db")
+    assert json.loads(scoped_db.get_meta("goal:desktop-session"))["goal"] == "Write a short project summary"
+    assert goals.goal_command_payload(
+        "desktop-session", "status", profile_home=profile_home, space_slug=scope,
+    )["goal"]["status"] == "active"
+    assert goals.goal_command_payload(
+        "desktop-session", "pause", profile_home=profile_home, space_slug=scope,
+    )["goal"]["status"] == "paused"
+    assert goals.goal_command_payload(
+        "desktop-session", "resume", profile_home=profile_home, space_slug=scope,
+    )["goal"]["status"] == "active"
+    assert goals.goal_command_payload(
+        "desktop-session", "clear", profile_home=profile_home, space_slug=scope,
+    )["ok"] is True
+    goals._DB_CACHE.clear()
+    assert goals.goal_command_payload(
+        "desktop-session", "status", profile_home=profile_home, space_slug=scope,
+    )["goal"] is None
     assert not (profile_home / "state.db").exists()
 
 

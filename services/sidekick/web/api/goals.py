@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import logging
 import re
@@ -61,6 +62,11 @@ _DB_CACHE: dict[str, Any] = {}
 _CONTINUATION_LOCK = threading.RLock()
 _PENDING_CONTINUATIONS: dict[tuple[str, str, str], str] = {}
 _CANCELLED_CONTINUATIONS: dict[tuple[str, str, str], str] = {}
+# A continuation claim is persisted before its worker is started so duplicate
+# requests cannot launch two turns. Keep a process-local in-flight marker too:
+# session reads must not mistake the short claim→stream-registration window (or
+# a currently running turn) for a crashed worker and rearm it prematurely.
+_IN_FLIGHT_CONTINUATIONS: set[tuple[str, str, str, int]] = set()
 _GOAL_RUN_MARKER_RE = re.compile(r"\n\n<!-- lastbrowser-goal-run:([0-9a-f]{32}:\d+) -->$")
 
 
@@ -96,6 +102,27 @@ def _claim_continuation_once(manager: Any) -> bool:
     # Lightweight manager doubles used by integrations predating durable
     # claims have no persisted state API; production GoalManager always does.
     return bool(claim()) if callable(claim) else True
+
+
+def _in_flight_continuation_key(scope_key: tuple[str, str, str], turn: int) -> tuple[str, str, str, int]:
+    return (*scope_key, int(turn))
+
+
+def goal_continuation_claim_turn(
+    session_id: str,
+    *,
+    profile_home: str | Path | None = None,
+    space_slug: str | None = None,
+) -> int | None:
+    """Return the turn claimed by this process for the current stream start."""
+    key = _continuation_key(session_id, profile_home=profile_home, space_slug=space_slug)
+    with _CONTINUATION_LOCK:
+        mgr = _manager(session_id, profile_home=profile_home, space_slug=space_slug)
+        state = getattr(mgr, "state", None) if mgr is not None else None
+        if state is None:
+            return None
+        turn = int(getattr(state, "turns_used", 0) or 0)
+        return turn if _in_flight_continuation_key(key, turn) in _IN_FLIGHT_CONTINUATIONS else None
 
 
 def queue_goal_continuation(
@@ -177,6 +204,10 @@ def consume_goal_continuation(
                     and mgr.next_continuation_prompt() == pending
                     and _claim_continuation_once(mgr)
                 ):
+                    state = getattr(mgr, "state", None)
+                    _IN_FLIGHT_CONTINUATIONS.add(
+                        _in_flight_continuation_key(key, int(getattr(state, "turns_used", 0) or 0))
+                    )
                     return "active"
             except Exception:
                 pass
@@ -209,6 +240,10 @@ def consume_goal_continuation(
                     and mgr.next_continuation_prompt() == text
                     and _claim_continuation_once(mgr)
                 ):
+                    state = getattr(mgr, "state", None)
+                    _IN_FLIGHT_CONTINUATIONS.add(
+                        _in_flight_continuation_key(key, int(getattr(state, "turns_used", 0) or 0))
+                    )
                     return "active"
             except Exception:
                 pass
@@ -232,6 +267,14 @@ def _default_max_turns() -> int:
 
 def _meta_key(session_id: str) -> str:
     return f"goal:{session_id}"
+
+
+def lastbrowser_workspace_goal_slug(workspace_path: str | Path) -> str:
+    """Return a stable, opaque goal scope for a trusted Lastbrowser workspace path."""
+    import os
+
+    canonical = os.path.normcase(str(Path(workspace_path).expanduser().resolve()))
+    return "lbws-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
 
 
 def _profile_db(profile_home: str | Path, *, space_slug: str | None = None):
@@ -297,11 +340,13 @@ def _space_goals_path(
     """
     profile_module = None
     profile_token = None
+    resolved_profile_home = None
     try:
         if profile_home is not None:
             from web.api import profiles as profile_module
 
             home = Path(profile_home).expanduser().resolve()
+            resolved_profile_home = home
             # Resolve from the current launcher environment as well as the
             # module snapshot. Test runners and embedded Sidekick launchers can
             # set SIDEKICK_HOME after profiles.py was imported.
@@ -327,6 +372,19 @@ def _space_goals_path(
                 # the session's explicit profile home cannot be identified.
                 return None
             profile_token = profile_module.set_request_profile(profile_name)
+
+        # Lastbrowser desktop workspaces are ordinary filesystem projects, not
+        # Sidekick Space Engine entries. Keep their goal state under the owning
+        # profile using a path-derived opaque key instead of falling back to
+        # the profile-wide state.db or creating a visible Sidekick Space.
+        if re.fullmatch(r"lbws-[0-9a-f]{32}", str(space_slug or "")):
+            if resolved_profile_home is None:
+                from web.api._home import get_webui_home
+
+                resolved_profile_home = Path(get_webui_home()).expanduser().resolve()
+            root = resolved_profile_home / "browser-spaces" / str(space_slug)
+            root.mkdir(parents=True, exist_ok=True)
+            return root / "goals.db"
 
         from web.api.space_engine import DEFAULT_SPACE_SLUG, get_workspace, resolve_active_space
 
@@ -666,6 +724,89 @@ def _state_payload(
     }
 
 
+def _save_goal_manager_state(mgr: Any, session_id: str, state: Any) -> None:
+    """Persist a small claim-state repair through either WebUI goal adapter."""
+    if isinstance(mgr, _ProfileGoalManager):
+        mgr._state = state
+        mgr._save(state)
+        return
+    from cli.goals import save_goal  # type: ignore
+
+    save_goal(str(session_id or ""), state)
+
+
+def _rearm_unfinished_continuation_claim(
+    session_id: str,
+    *,
+    profile_home: str | Path | None = None,
+    space_slug: str | None = None,
+) -> bool:
+    """Make an unjudged, claimed continuation eligible for one retry.
+
+    Claims are keyed by ``turns_used``. A completed evaluator advances that
+    counter; an interrupted stream does not. Only the latter may be rearmed.
+    The caller holds ``_CONTINUATION_LOCK``.
+    """
+    mgr = _manager(str(session_id or ""), profile_home=profile_home, space_slug=space_slug)
+    state = getattr(mgr, "state", None) if mgr is not None else None
+    if state is None or str(getattr(state, "status", "") or "").strip() != "active":
+        return False
+    turns_used = int(getattr(state, "turns_used", 0) or 0)
+    consumed_turn = getattr(state, "consumed_continuation_turn", -1)
+    consumed_turn = -1 if consumed_turn is None else int(consumed_turn)
+    if consumed_turn != turns_used:
+        return False
+    state.consumed_continuation_turn = turns_used - 1
+    try:
+        _save_goal_manager_state(mgr, session_id, state)
+    except Exception:
+        state.consumed_continuation_turn = consumed_turn
+        raise
+    return True
+
+
+def finish_goal_continuation(
+    session_id: str,
+    *,
+    claim_turn: int | None = None,
+    profile_home: str | Path | None = None,
+    space_slug: str | None = None,
+) -> bool:
+    """Release the process-local claim after a worker exits.
+
+    If goal evaluation never advanced the turn (cancel, interruption, or an
+    error before the evaluator), rearm the same durable prompt. Successful
+    evaluation advances ``turns_used`` and therefore remains claimed exactly
+    once for the completed turn.
+    """
+    key = _continuation_key(session_id, profile_home=profile_home, space_slug=space_slug)
+    with _CONTINUATION_LOCK:
+        if claim_turn is None:
+            return False
+        claim_key = _in_flight_continuation_key(key, claim_turn)
+        if claim_key not in _IN_FLIGHT_CONTINUATIONS:
+            return False
+        _IN_FLIGHT_CONTINUATIONS.discard(claim_key)
+        try:
+            mgr = _manager(str(session_id or ""), profile_home=profile_home, space_slug=space_slug)
+            state = getattr(mgr, "state", None) if mgr is not None else None
+            consumed_turn = getattr(state, "consumed_continuation_turn", -1) if state is not None else -1
+            consumed_turn = -1 if consumed_turn is None else int(consumed_turn)
+            if (
+                state is None
+                or str(getattr(state, "status", "") or "").strip() != "active"
+                or int(getattr(state, "turns_used", 0) or 0) != int(claim_turn)
+                or consumed_turn != int(claim_turn)
+            ):
+                return False
+            return _rearm_unfinished_continuation_claim(
+                session_id, profile_home=profile_home, space_slug=space_slug,
+            )
+        except Exception:
+            logger.warning("Could not release interrupted continuation for session %s", session_id, exc_info=True)
+            return False
+
+
 def _payload(
     *,
     ok: bool = True,
@@ -876,8 +1017,30 @@ def goal_state_for_session(
     *,
     profile_home: str | Path | None = None,
     space_slug: str | None = None,
+    recover_incomplete: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """Return the persisted goal payload for a session, if any."""
+    """Return the persisted goal payload for a session, if any.
+
+    ``recover_incomplete`` is reserved for session reads that have confirmed
+    there is no live stream for this session. It repairs a durable continuation
+    claim left behind when the backend died after accepting the prompt but
+    before its post-turn evaluator ran.
+    """
+    key = _continuation_key(session_id, profile_home=profile_home, space_slug=space_slug)
+    if recover_incomplete:
+        with _CONTINUATION_LOCK:
+            # A current worker may have claimed the prompt just before its
+            # stream id becomes visible on the session. Never rearm that claim.
+            mgr = _manager(str(session_id or ""), profile_home=profile_home, space_slug=space_slug)
+            state = getattr(mgr, "state", None) if mgr is not None else None
+            current_turn = int(getattr(state, "turns_used", 0) or 0) if state is not None else 0
+            if _in_flight_continuation_key(key, current_turn) not in _IN_FLIGHT_CONTINUATIONS:
+                try:
+                    _rearm_unfinished_continuation_claim(
+                        session_id, profile_home=profile_home, space_slug=space_slug,
+                    )
+                except Exception:
+                    logger.warning("Could not recover interrupted goal continuation for session %s", session_id, exc_info=True)
     mgr = _manager(str(session_id or ""), profile_home=profile_home, space_slug=space_slug)
     if mgr is None:
         return None

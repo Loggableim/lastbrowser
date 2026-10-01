@@ -8,6 +8,7 @@ import {
   readGoalEvaluationError,
   readGoalContinuationPrompt,
   readRestorableGoalContinuation,
+  releaseRestorableGoalContinuationClaim,
   startGoalContinuation
 } from '../src/renderer/goal-continuation.js';
 
@@ -73,6 +74,15 @@ describe('persistent goal continuation handoff', () => {
     }, claims)).toBe(false);
   });
 
+  it('releases a restored prompt after a pre-start failure so it can be retried', () => {
+    const claims = new Set<string>();
+    const prompt = 'Continue the active task from the latest result.';
+    const current = { ...expected };
+    expect(claimRestorableGoalContinuation(prompt, expected, current, claims)).toBe(true);
+    expect(releaseRestorableGoalContinuationClaim(prompt, expected, claims)).toBe(true);
+    expect(claimRestorableGoalContinuation(prompt, expected, current, claims)).toBe(true);
+  });
+
   it('drops a queued continuation when the stream is cancelled', () => {
     const prompt = 'Continue the active task from the latest result.';
     expect(continuationAfterTerminalEvent(prompt, 'cancel')).toBeNull();
@@ -123,6 +133,14 @@ describe('persistent goal continuation handoff', () => {
     expect(started).toBe(true);
     expect(startChat).toHaveBeenCalledOnce();
     expect(startChat).toHaveBeenCalledWith(prompt);
+  });
+
+  it('reports failed chat starts so restored claims can be released', async () => {
+    const current = { ...expected };
+    expect(await startGoalContinuation('Continue', expected, current, async () => false)).toBe(false);
+    expect(await startGoalContinuation('Continue', expected, current, async () => {
+      throw new Error('IPC start failed');
+    })).toBe(false);
   });
 
   it('keeps asynchronous turns bound to their original session, profile, and Space', () => {

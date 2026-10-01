@@ -698,6 +698,68 @@ def test_teamwork_keeps_provider_qualified_duplicate_and_routes_bare_model_to_pr
     assert all(call == ("openrouter", "shared-model") for call in calls)
 
 
+def test_teamwork_explicitly_pins_every_role_to_ollama_cloud():
+    catalog = {
+        "groups": [
+            {"provider_id": "ollama-cloud", "provider": "Ollama Cloud", "models": [
+                {"id": "deepseek-v4.1-flash"},
+                {"id": "qwen3-coder:cloud"},
+            ]},
+            {"provider_id": "openrouter", "provider": "OpenRouter", "models": [
+                {"id": "backup-model"},
+            ]},
+        ]
+    }
+    model_calls = []
+    stream_calls = []
+
+    def fake_call_llm(*, provider, model, **_kwargs):
+        model_calls.append((provider, model))
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        response.choices[0].message.content = "Ollama draft"
+        return response
+
+    def fake_stream_llm(*, provider, model, on_content, **_kwargs):
+        stream_calls.append((provider, model))
+        on_content("Ollama synthesis")
+        return "Ollama synthesis"
+
+    roles = {
+        "planner": "deepseek-v4.1-flash",
+        "worker_pool": ["deepseek-v4.1-flash", "qwen3-coder:cloud"],
+        "critic": "qwen3-coder:cloud",
+        "synthesizer": "deepseek-v4.1-flash",
+    }
+    with patch("web.api.config.get_available_models", return_value=catalog), \
+         patch("cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": "test-key"}), \
+         patch("cli.models.fetch_ollama_cloud_models", return_value=["deepseek-v4.1-flash", "qwen3-coder:cloud"]), \
+         patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
+         patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="Ollama draft"), \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=fake_stream_llm):
+        result = run_teamwork_turn(
+            MagicMock(messages=[]),
+            "Complete the task",
+            config={
+                "strategy": "balanced",
+                "auto_scale": False,
+                "max_subagents": 2,
+                "shared_grounding": False,
+                "roles": roles,
+                "hot_swap": {"enabled": True, "fallback_quorum_min": 1},
+            },
+        )
+
+    assert result["content"] == "Ollama synthesis"
+    assert len(model_calls) == 4  # planner, two parallel workers, and critic
+    assert set(model_calls) == {
+        ("ollama-cloud", "deepseek-v4.1-flash"),
+        ("ollama-cloud", "qwen3-coder:cloud"),
+    }
+    assert stream_calls == [("ollama-cloud", "deepseek-v4.1-flash")]
+    assert all(provider == "ollama-cloud" for provider, _model in model_calls + stream_calls)
+
+
 def test_teamwork_fails_clearly_when_no_models_are_available():
     with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[]), \
          patch("runtime.auxiliary_client.call_llm") as call_llm:
@@ -720,6 +782,29 @@ def test_teamwork_zero_quorum_cannot_succeed_without_any_worker_draft():
                     "hot_swap": {"fallback_quorum_min": 0},
                 },
             )
+
+
+def test_teamwork_rejects_quorum_above_planned_workers_before_provider_calls():
+    model = {"id": "model-a", "name": "A", "provider": "ollama-cloud", "tier": "fast"}
+    with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[model]), \
+         patch("runtime.auxiliary_client.call_llm") as call_llm, \
+         patch("runtime.auxiliary_client.stream_llm") as stream_llm:
+        with pytest.raises(RuntimeError, match=r"Mindestquorum ist nicht erreichbar.*2.*nur 1 Worker geplant"):
+            run_teamwork_turn(
+                MagicMock(messages=[]),
+                "What is 2 + 2?",
+                config={
+                    "enabled": True,
+                    "strategy": "balanced",
+                    "auto_scale": False,
+                    "max_subagents": 1,
+                    "roles": {},
+                    "hot_swap": {"enabled": True, "fallback_quorum_min": 2},
+                },
+            )
+
+    call_llm.assert_not_called()
+    stream_llm.assert_not_called()
 
 
 @pytest.mark.parametrize("shared_grounding", [True, False])
@@ -969,85 +1054,6 @@ def test_singleton_ollama_cloud_quorum_failure_is_actionable_and_does_not_echo_p
     draft_error = next(data["error"] for event, data in events if event == "teamwork_draft")
     assert draft_error == f"HTTP {status_code}"
     assert "private request details" not in draft_error
-
-
-@pytest.mark.parametrize("visible_output", ["content", "reasoning"])
-@pytest.mark.parametrize("failure_mode", ["exception", "empty"])
-def test_teamwork_synthesis_never_replaces_visible_partial_output(visible_output, failure_mode):
-    from types import SimpleNamespace
-
-    model_id = "@ollama-cloud:deepseek-v4.1-flash"
-    model = {
-        "id": model_id,
-        "call_model": "deepseek-v4.1-flash",
-        "name": "DeepSeek V4.1 Flash",
-        "provider": "ollama-cloud",
-        "tier": "fast",
-    }
-    plan = {
-        "strategy": "balanced",
-        "planner": None,
-        "workers": [{
-            "model": model_id,
-            "call_model": model["call_model"],
-            "provider": model["provider"],
-            "name": model["name"],
-            "role": "Pragmatiker",
-            "focus": "direct answer",
-        }],
-        "critic": model_id,
-        "critic_provider": model["provider"],
-        "synthesizer": model_id,
-        "synthesizer_provider": model["provider"],
-        "pool": [model],
-    }
-    worker_result = {
-        "model": model_id,
-        "provider": model["provider"],
-        "name": model["name"],
-        "role": "Pragmatiker",
-        "focus": "direct answer",
-        "content": "worker draft fallback",
-        "execution_ms": 1,
-        "error": None,
-        "swapped": False,
-    }
-    events = []
-
-    def fake_call_llm(**_kwargs):
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="critic result"))])
-
-    def fake_stream_llm(*, on_content, on_reasoning=None, **_kwargs):
-        if visible_output == "content":
-            on_content("partial synthesis")
-        else:
-            on_reasoning("partial synthesis reasoning")
-        if failure_mode == "exception":
-            raise RuntimeError("synthesis stream failed")
-        return ""
-
-    with patch("runtime.teamwork_orchestrator.resolve_team_plan", return_value=plan), \
-         patch("runtime.teamwork_orchestrator._invoke_worker", return_value=worker_result), \
-         patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
-         patch("runtime.auxiliary_client.extract_content_or_reasoning", side_effect=lambda r: r.choices[0].message.content), \
-         patch("runtime.auxiliary_client.stream_llm", side_effect=fake_stream_llm):
-        with pytest.raises(RuntimeError, match="after partial output"):
-            run_teamwork_turn(
-                MagicMock(messages=[]),
-                "Answer a small question using Ollama Cloud.",
-                config={"shared_grounding": False, "hot_swap": {"enabled": False, "fallback_quorum_min": 1}},
-                stream_put=lambda event, data: events.append((event, data)),
-            )
-
-    assert not any(event == "teamwork_complete" for event, _data in events)
-    assert [data["content"] for event, data in events if event == "delta"] == (
-        ["partial synthesis"] if visible_output == "content" else []
-    )
-    assert [data["text"] for event, data in events if event == "reasoning"] == (
-        ["partial synthesis reasoning"] if visible_output == "reasoning" else []
-    )
-
-
 @pytest.mark.parametrize("visible_output", ["content", "reasoning"])
 @pytest.mark.parametrize("failure_mode", ["exception", "empty"])
 def test_teamwork_synthesis_never_replaces_visible_partial_output(visible_output, failure_mode):

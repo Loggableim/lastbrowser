@@ -75,6 +75,17 @@ describe('Space setup validation and model defaults', () => {
     expect(savedData?.model).not.toMatch(/^gemini-2\.5-(?:pro|flash)$/);
   });
 
+  it('preserves the selected provider with a live model through Space creation', async () => {
+    const ollamaSetup: SpaceSetupData = { ...setupData, model: 'deepseek-v4.1-flash', modelProvider: 'ollama-cloud' };
+    let savedData: SpaceSetupData | undefined;
+    expect(await submitSpaceSetup(ollamaSetup, async (data) => { savedData = data; return true; }, () => undefined)).toBeNull();
+    expect(savedData).toMatchObject({ model: 'deepseek-v4.1-flash', modelProvider: 'ollama-cloud' });
+
+    const app = readFileSync(resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+    expect(app).toContain('saveSpaceModel(createdSpacePath, data.model, window.localStorage, data.modelProvider)');
+    expect(app).toContain('setSelectedModelProvider(data.modelProvider || \'\')');
+  });
+
   it('accepts custom HTTP(S) pinned apps and rejects invalid or unsafe URLs', () => {
     expect(normalizePinnedApp('  My Tool ', 'https://example.com/path')).toEqual({
       name: 'My Tool', url: 'https://example.com/path'

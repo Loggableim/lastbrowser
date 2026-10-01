@@ -1442,7 +1442,7 @@ def get_session(sid, metadata_only=False):
         return s
     raise KeyError(sid)
 
-def new_session(workspace=None, model=None, profile=None, model_provider=None, project_id=None, worktree_info=None, agent_slug=None):
+def new_session(workspace=None, model=None, profile=None, model_provider=None, project_id=None, worktree_info=None, agent_slug=None, workspace_slug=None):
     """Create a new in-memory session.
 
     The session lives in the SESSIONS dict only — no disk write happens until
@@ -1486,10 +1486,11 @@ def new_session(workspace=None, model=None, profile=None, model_provider=None, p
     wt = worktree_info if isinstance(worktree_info, dict) else None
     workspace_path = (wt.get('path') if wt and wt.get('path') else workspace) if wt else workspace
     # Stamp the active workspace slug from the current request thread
-    _ws_slug = None
+    _ws_slug = str(workspace_slug or "").strip().lower() or None
     try:
         from web.api.space_engine import get_active_workspace_slug, get_workspace
-        _ws_slug = get_active_workspace_slug()
+        if not _ws_slug:
+            _ws_slug = get_active_workspace_slug()
         # If the active space has a project_dir, use it as the workspace path
         # so the agent's file operations are sandboxed to that directory
         if _ws_slug:
@@ -1498,7 +1499,7 @@ def new_session(workspace=None, model=None, profile=None, model_provider=None, p
                 _pdir = _ws_obj.get_project_dir()
                 if _pdir:
                     workspace_path = _pdir
-                elif _ws_slug != "default":
+                elif _ws_slug != "default" and not workspace_path:
                     # Non-default space with no project_dir → use space root
                     # for isolation.  Never leak a global last-workspace across
                     # space boundaries.

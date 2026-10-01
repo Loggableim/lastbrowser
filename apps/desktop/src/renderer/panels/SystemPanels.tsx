@@ -2194,6 +2194,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const [ollamaKey, setOllamaKey] = useState('');
   const [ollamaTestResult, setOllamaTestResult] = useState('');
   const [openRouterModalOpen, setOpenRouterModalOpen] = useState(false);
+  const [openRouterConfigProvider, setOpenRouterConfigProvider] = useState<'openrouter' | 'alibaba'>('openrouter');
+  const [alibabaBaseUrl, setAlibabaBaseUrl] = useState('');
   const [openRouterKey, setOpenRouterKey] = useState('');
   const [openRouterHasSavedKey, setOpenRouterHasSavedKey] = useState(false);
   const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModelOption[]>([]);
@@ -2523,6 +2525,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       if (confirmedAuth.auth_enabled !== false) {
         throw new Error(t('settings.panels.system.authDisableNotConfirmed'));
       }
+      // Reflect the server-confirmed status immediately. The parallel settings
+      // refresh is best-effort and can fail independently, which previously
+      // left the button showing "Disable authentication" after a successful
+      // password removal.
+      authState.setData(confirmedAuth);
       window.dispatchEvent(new CustomEvent('lastbrowser:settings-changed', { detail: { _clear_password: true } }));
       setPasswordDraft('');
       await refreshSettingsData();
@@ -2664,32 +2671,51 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   async function loadOpenRouterModelCatalog(
     keyToSave = openRouterKey,
     existingKeyAvailable = openRouterHasSavedKey,
-    savedSelection?: { ids: string[]; configured: boolean; defaultModel: string }
+    savedSelection?: { ids: string[]; configured: boolean; defaultModel: string },
+    providerId: 'openrouter' | 'alibaba' = openRouterConfigProvider
   ): Promise<void> {
     setOpenRouterLoading(true);
     setOpenRouterError('');
     try {
+      if (providerId === 'alibaba') {
+        let parsedBaseUrl: URL;
+        try { parsedBaseUrl = new URL(alibabaBaseUrl.trim()); } catch { throw new Error(t('settings.panels.providers.alibabaBaseUrlRequired')); }
+        if (parsedBaseUrl.protocol !== 'https:') throw new Error(t('settings.panels.providers.alibabaHttpsRequired'));
+      }
       const nextKey = keyToSave.trim();
       if (nextKey) {
         await window.lastbrowser.sidekick.requestWebui({
           method: 'POST',
           path: '/api/providers',
-          body: { provider: 'openrouter', api_key: nextKey }
+          body: {
+            provider: providerId,
+            api_key: nextKey,
+            ...(providerId === 'alibaba' && alibabaBaseUrl.trim() ? { base_url: alibabaBaseUrl.trim() } : {})
+          }
         });
         setOpenRouterKey('');
         setOpenRouterHasSavedKey(true);
       } else if (!existingKeyAvailable) {
-        throw new Error(t('settings.panels.providers.openrouterKeyRequired'));
+        throw new Error(t(providerId === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired'));
+      } else if (providerId === 'alibaba') {
+        // Persist a changed workspace endpoint without asking users to re-enter
+        // their already saved API key. The backend treats this as a URL-only
+        // update and preserves the credential.
+        await window.lastbrowser.sidekick.requestWebui({
+          method: 'POST',
+          path: '/api/providers',
+          body: { provider: 'alibaba', base_url: alibabaBaseUrl.trim() }
+        });
       }
 
       const response = await window.lastbrowser.sidekick.requestWebui({
         method: 'GET',
-        path: '/api/models/live?provider=openrouter&catalog=configuration'
+        path: `/api/models/live?provider=${providerId}&catalog=configuration`
       });
       const models = normalizeOpenRouterModels(response.models);
       if (!models.length) {
         setOpenRouterModels([]);
-        throw new Error(t('settings.panels.providers.openrouterNoModels'));
+        throw new Error(t(providerId === 'alibaba' ? 'settings.panels.providers.alibabaNoModels' : 'settings.panels.providers.openrouterNoModels'));
       }
       setOpenRouterModels(models);
       const priorSelection = savedSelection?.ids ?? openRouterSelectedModels;
@@ -2712,7 +2738,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     }
   }
 
-  async function openOpenRouterSettings(): Promise<void> {
+  async function openOpenRouterSettings(providerId: 'openrouter' | 'alibaba' = 'openrouter'): Promise<void> {
+    setOpenRouterConfigProvider(providerId);
     setOpenRouterKey('');
     setOpenRouterModels([]);
     setOpenRouterSelectedModels([]);
@@ -2723,7 +2750,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     try {
       const response = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers' });
       const entries = Array.isArray(response.providers) ? response.providers.filter(isRecord) : [];
-      const provider = entries.find((entry) => settingsText(entry.id).toLowerCase() === 'openrouter');
+      const provider = entries.find((entry) => settingsText(entry.id).toLowerCase() === providerId);
+      if (providerId === 'alibaba') setAlibabaBaseUrl(settingsText(provider?.base_url, ''));
       const configuredModels = normalizeOpenRouterModels(provider?.models).map((model) => model.id);
       const hasConfiguredSelection = Boolean(provider?.models_configured) || configuredModels.length > 0;
       const hasKey = Boolean(provider?.has_key);
@@ -2736,7 +2764,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
           ids: configuredModels,
           configured: hasConfiguredSelection,
           defaultModel: currentDefaultModel
-        });
+        }, providerId);
       }
     } catch (error) {
       setOpenRouterError(error instanceof Error ? error.message : String(error));
@@ -2747,12 +2775,20 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     if (openRouterSaving) return;
     const selectedModels = [...new Set(openRouterSelectedModels)];
     if (!selectedModels.length) {
-      setOpenRouterError(t('settings.panels.providers.openrouterSelectAtLeastOne'));
+      setOpenRouterError(t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaSelectAtLeastOne' : 'settings.panels.providers.openrouterSelectAtLeastOne'));
       return;
     }
     if (!openRouterHasSavedKey && !openRouterKey.trim()) {
-      setOpenRouterError(t('settings.panels.providers.openrouterKeyRequired'));
+      setOpenRouterError(t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired'));
       return;
+    }
+    if (openRouterConfigProvider === 'alibaba') {
+      try {
+        if (new URL(alibabaBaseUrl.trim()).protocol !== 'https:') throw new Error();
+      } catch {
+        setOpenRouterError(t('settings.panels.providers.alibabaBaseUrlRequired'));
+        return;
+      }
     }
     setOpenRouterSaving(true);
     setOpenRouterError('');
@@ -2760,14 +2796,15 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       const selectedDefault = selectedModels.includes(openRouterDefaultModel)
         ? openRouterDefaultModel
         : selectedModels[0];
-      const body: Record<string, unknown> = { provider: 'openrouter', models: selectedModels };
+      const body: Record<string, unknown> = { provider: openRouterConfigProvider, models: selectedModels };
       if (openRouterKey.trim()) body.api_key = openRouterKey.trim();
+      if (openRouterConfigProvider === 'alibaba') body.base_url = alibabaBaseUrl.trim();
       await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/providers', body });
       await window.lastbrowser.sidekick.saveSettings({
         settings: {
           ...cleanSettingsPayload(settings),
-          provider: 'openrouter',
-          base_url: 'https://openrouter.ai/api/v1',
+          provider: openRouterConfigProvider,
+          base_url: openRouterConfigProvider === 'openrouter' ? 'https://openrouter.ai/api/v1' : alibabaBaseUrl.trim(),
           default_model: selectedDefault
         }
       });
@@ -3929,11 +3966,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 )}
                               </div>
                             )}
-                            {option.id === 'openrouter' ? (
+                            {['openrouter', 'alibaba'].includes(option.id) ? (
                               <button
                                 type="button"
                                 className="secondary-action compact"
-                                onClick={() => void openOpenRouterSettings()}
+                                onClick={() => void openOpenRouterSettings(option.id as 'openrouter' | 'alibaba')}
                                 disabled={!ready || saving}
                               >
                                 <Settings size={14} />
@@ -3980,10 +4017,20 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 {openRouterModalOpen && (
                   <div className="settings-modal-overlay" onClick={() => setOpenRouterModalOpen(false)}>
                     <div className="settings-modal-box" onClick={(event) => event.stopPropagation()}>
-                      <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>OpenRouter {t('settings.panels.providers.configure')}</h3>
+                      <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>{openRouterConfigProvider === 'alibaba' ? 'Alibaba Cloud (DashScope)' : 'OpenRouter'} {t('settings.panels.providers.configure')}</h3>
                       <p className="settings-hint" style={{ margin: '0 0 12px' }}>
-                        {t('settings.panels.providers.openrouterKeyHint')}
+                        {t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyHint' : 'settings.panels.providers.openrouterKeyHint')}
                       </p>
+                      {openRouterConfigProvider === 'alibaba' && <>
+                        <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.baseUrl')}</label>
+                        <input
+                          type="url"
+                          value={alibabaBaseUrl}
+                          onChange={(event) => setAlibabaBaseUrl(event.target.value)}
+                          placeholder={t('settings.panels.providers.alibabaBaseUrlPlaceholder')}
+                          style={{ width: '100%', marginBottom: 10 }}
+                        />
+                      </>}
                       <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.apiKey')}</label>
                       <input
                         type="password"
@@ -4012,8 +4059,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       {openRouterLoading && <EmptyState icon={<Loader2 size={15} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
                       {!openRouterLoading && !openRouterError && openRouterModels.length === 0 && (
                         <p className="settings-hint">{openRouterHasSavedKey || openRouterKey.trim()
-                          ? t('settings.panels.providers.openrouterNoModels')
-                          : t('settings.panels.providers.openrouterKeyRequired')}</p>
+                          ? t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaNoModels' : 'settings.panels.providers.openrouterNoModels')
+                          : t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired')}</p>
                       )}
                       {openRouterModels.length > 0 && (
                         <>

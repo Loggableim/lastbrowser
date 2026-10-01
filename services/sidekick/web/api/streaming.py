@@ -23,7 +23,8 @@ from web.api.config import (
     get_config,
     STREAMS, STREAMS_LOCK, CANCEL_FLAGS, AGENT_INSTANCES, STREAM_PARTIAL_TEXT,
     STREAM_REASONING_TEXT, STREAM_LIVE_TOOL_CALLS,
-    STREAM_GOAL_RELATED,
+    STREAM_GOAL_RELATED, STREAM_GOAL_CLAIMS,
+    retain_completed_chat_stream,
     LOCK, SESSIONS, get_session_dir,
     _get_session_agent_lock, _set_thread_env, _clear_thread_env,
     register_active_run, update_active_run, unregister_active_run,
@@ -1545,7 +1546,7 @@ def _is_generic_fallback_title(title: str) -> bool:
 
 
 def _run_background_title_update(session_id: str, user_text: str, assistant_text: str, placeholder_title: str, put_event, agent=None):
-    """Generate and publish a better title after `done`, then end the stream."""
+    """Generate and publish a better title after the chat stream has ended."""
     try:
         try:
             s = get_session(session_id)
@@ -1623,9 +1624,8 @@ def _run_background_title_update(session_id: str, user_text: str, assistant_text
             put_event('title', {'session_id': session_id, 'title': effective_title})
         else:
             _put_title_status(put_event, session_id, 'skipped', source or 'unchanged', effective_title, raw_preview)
-    finally:
-        put_event('stream_end', {'session_id': session_id})
-
+    except Exception:
+        logger.warning("Background title update failed for session %s", session_id, exc_info=True)
 
 def _run_background_title_refresh(session_id: str, user_text: str, assistant_text: str, current_title: str, put_event, agent=None):
     """Refresh an existing LLM-generated title using the latest exchange text.
@@ -2186,7 +2186,9 @@ def _sse(handler, event, data):
         return
 
 
-def _materialize_pending_user_turn_before_error(session) -> bool:
+def _materialize_pending_user_turn_before_error(
+    session, *, internal_goal_continuation: bool = False,
+) -> bool:
     """Persist the pending user prompt before clearing runtime stream state.
 
     Error paths often clear ``pending_user_message`` before appending an assistant
@@ -2195,6 +2197,11 @@ def _materialize_pending_user_turn_before_error(session) -> bool:
     bubble disappear on reload/reconcile. Return True when a recovered user turn
     was appended.
     """
+    if internal_goal_continuation:
+        # This pending text is an internal control prompt whose durable goal
+        # claim will be rearmed after an interrupted turn. Persisting it as a
+        # user message would duplicate it in model context on retry.
+        return False
     pending_text = str(getattr(session, 'pending_user_message', None) or '')
     if not pending_text:
         return False
@@ -2509,6 +2516,9 @@ def _run_agent_streaming(
     model_provider=None,
     google_account_email="",
     goal_related=False,
+    goal_claim_turn=None,
+    goal_claim_profile_home=None,
+    goal_claim_space_slug=None,
     mode="",
     sandbox_disabled=False,
     grounding_context="",
@@ -2520,6 +2530,44 @@ def _run_agent_streaming(
     """
     q = STREAMS.get(stream_id)
     if q is None:
+        # A worker can be scheduled after its channel was removed (or before
+        # channel registration became visible). Do not leave a durable goal
+        # continuation consumed in that case: no model turn can be evaluated.
+        if goal_claim_turn is not None:
+            try:
+                from web.api.goals import finish_goal_continuation
+
+                finish_goal_continuation(
+                    session_id,
+                    claim_turn=goal_claim_turn,
+                    profile_home=goal_claim_profile_home,
+                    space_slug=goal_claim_space_slug,
+                )
+            except Exception:
+                logger.warning(
+                    "Could not release goal claim after missing stream channel for %s",
+                    session_id,
+                    exc_info=True,
+                )
+            try:
+                from web.api.models import get_session as _get_session
+                from web.api.routes import _clear_stale_stream_state
+
+                stale_session = _get_session(session_id, metadata_only=False)
+                if getattr(stale_session, "active_stream_id", None) == stream_id:
+                    _clear_stale_stream_state(
+                        stale_session,
+                        materialize_pending=False,
+                    )
+            except Exception:
+                logger.debug(
+                    "Could not clear stale session stream state for missing channel %s",
+                    session_id,
+                    exc_info=True,
+                )
+        with STREAMS_LOCK:
+            STREAM_GOAL_RELATED.pop(stream_id, None)
+            STREAM_GOAL_CLAIMS.pop(stream_id, None)
         return
     register_active_run(
         stream_id,
@@ -4108,7 +4156,10 @@ def _run_agent_streaming(
                         # Persist the error so it survives page reload.
                         # _error=True ensures _sanitize_messages_for_api excludes it from
                         # subsequent API calls so the LLM never sees its own error as prior context.
-                        _materialize_pending_user_turn_before_error(s)
+                        _materialize_pending_user_turn_before_error(
+                            s,
+                            internal_goal_continuation=goal_claim_turn is not None,
+                        )
                         s.active_stream_id = None
                         s.pending_user_message = None
                         s.pending_attachments = []
@@ -4555,6 +4606,10 @@ def _run_agent_streaming(
             meter_stats.setdefault('estimated', False)
             put('metering', meter_stats)
             if _should_bg_title and _u0 and _a0:
+                # Completing a user-visible answer must not wait for auxiliary
+                # title generation. The Electron SSE reader closes on this
+                # event, so emit it before scheduling title work.
+                put('stream_end', {'session_id': session_id})
                 threading.Thread(
                     target=_run_background_title_update,
                     args=(s.session_id, _u0, _a0, str(s.title or '').strip(), put, agent),
@@ -4740,7 +4795,10 @@ def _run_agent_streaming(
             # API calls so the LLM never sees its own error as prior context on the next turn.
             _lock_ctx = _agent_lock if _agent_lock is not None else contextlib.nullcontext()
             with _lock_ctx:
-                _materialize_pending_user_turn_before_error(s)
+                _materialize_pending_user_turn_before_error(
+                    s,
+                    internal_goal_continuation=goal_claim_turn is not None,
+                )
                 s.active_stream_id = None
                 s.pending_user_message = None
                 s.pending_attachments = []
@@ -4785,7 +4843,31 @@ def _run_agent_streaming(
                 and getattr(s, 'pending_user_message', None)):
             update_active_run(stream_id, phase="finalizing")
             _last_resort_sync_from_core(s, stream_id, _agent_lock)
+        if s is not None and goal_related:
+            try:
+                from web.api.goals import finish_goal_continuation
+                from web.api.profiles import get_profile_home
+
+                finish_goal_continuation(
+                    session_id,
+                    claim_turn=goal_claim_turn,
+                    profile_home=get_profile_home(getattr(s, "profile", None)),
+                    space_slug=(
+                        getattr(s, "workspace_slug", None)
+                        or getattr(s, "space_slug", None)
+                        or getattr(s, "space", None)
+                    ),
+                )
+            except Exception:
+                logger.warning(
+                    "Could not finalize persistent goal continuation for session %s",
+                    session_id,
+                    exc_info=True,
+                )
         _clear_thread_env()  # TD1: always clear thread-local context
+        # Keep the bounded SSE tail accessible briefly: a fast provider can
+        # finish before Electron finishes mounting the renderer subscription.
+        retain_completed_chat_stream(stream_id)
         with STREAMS_LOCK:
             STREAMS.pop(stream_id, None)
             CANCEL_FLAGS.pop(stream_id, None)
@@ -4794,6 +4876,7 @@ def _run_agent_streaming(
             STREAM_REASONING_TEXT.pop(stream_id, None)  # Clean up reasoning trace (#1361 §A)
             STREAM_LIVE_TOOL_CALLS.pop(stream_id, None)  # Clean up tool calls (#1361 §B)
             STREAM_GOAL_RELATED.pop(stream_id, None)  # Clean up goal-related flag (#1932)
+            STREAM_GOAL_CLAIMS.pop(stream_id, None)
             unregister_active_run(stream_id)
 
 # ============================================================
@@ -4902,12 +4985,14 @@ def cancel_stream(stream_id: str) -> bool:
     cancel_flags = CANCEL_FLAGS
     agent_instances = AGENT_INSTANCES
     partial_texts = STREAM_PARTIAL_TEXT
+    goal_claims = STREAM_GOAL_CLAIMS
     streams_lock = STREAMS_LOCK
     if stream_id not in streams and getattr(_live_config, 'STREAMS', streams) is not streams:
         streams = _live_config.STREAMS
         cancel_flags = _live_config.CANCEL_FLAGS
         agent_instances = _live_config.AGENT_INSTANCES
         partial_texts = _live_config.STREAM_PARTIAL_TEXT
+        goal_claims = getattr(_live_config, 'STREAM_GOAL_CLAIMS', goal_claims)
         streams_lock = _live_config.STREAMS_LOCK
 
     with streams_lock:
@@ -4964,6 +5049,7 @@ def cancel_stream(stream_id: str) -> bool:
         streams.pop(stream_id, None)
         cancel_flags.pop(stream_id, None)
         agent_instances.pop(stream_id, None)
+        _cancel_goal_claim = goal_claims.pop(stream_id, None)
         # STREAM_PARTIAL_TEXT is intentionally NOT popped here — the agent thread may
         # still be appending tokens. We capture the snapshot two lines below; the
         # streaming finally block handles the cleanup when the thread exits.
@@ -4975,6 +5061,8 @@ def cancel_stream(stream_id: str) -> bool:
         # get_session() acquires LOCK, and the streaming thread does LOCK first
         # then STREAMS_LOCK, so inverting the order here would cause deadlock.
         _cancel_session_id = getattr(agent, 'session_id', None) if agent else None
+        if not _cancel_session_id and isinstance(_cancel_goal_claim, dict):
+            _cancel_session_id = _cancel_goal_claim.get('session_id')
         _cancel_partial_text = partial_texts.get(stream_id, '')
         # Fallback: check the live config's partial text map if we used an alias
         # and the text wasn't found in the alias (defensive, matches streams fallback above).
@@ -5026,7 +5114,8 @@ def cancel_stream(stream_id: str) -> bool:
                     _pending_atts = list(_pending_atts_raw) if isinstance(_pending_atts_raw, (list, tuple)) else []
                     _pending_started = getattr(_cs, 'pending_started_at', None) or 0
                     _msgs_for_recovery = _cs.messages if isinstance(_cs.messages, list) else None
-                    if _pending_user and _msgs_for_recovery is not None:
+                    _is_goal_continuation = isinstance(_cancel_goal_claim, dict)
+                    if _pending_user and _msgs_for_recovery is not None and not _is_goal_continuation:
                         _last_user = None
                         for _m in reversed(_msgs_for_recovery):
                             if isinstance(_m, dict) and _m.get('role') == 'user':
@@ -5127,12 +5216,13 @@ def cancel_stream(stream_id: str) -> bool:
                 # Cancel marker — flagged _error=True so it is stripped from conversation
                 # history on the next turn (prevents model from seeing "Task cancelled."
                 # as a prior assistant reply).
-                _cs.messages.append({
-                    'role': 'assistant',
-                    'content': '*Task cancelled.*',
-                    '_error': True,
-                    'timestamp': int(time.time()),
-                })
+                if not isinstance(_cancel_goal_claim, dict):
+                    _cs.messages.append({
+                        'role': 'assistant',
+                        'content': '*Task cancelled.*',
+                        '_error': True,
+                        'timestamp': int(time.time()),
+                    })
                 _cs.save()
             except Exception:
                 logger.debug("Failed to clear session state on cancel for %s", _cancel_session_id)

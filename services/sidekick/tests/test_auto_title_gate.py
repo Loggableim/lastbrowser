@@ -89,3 +89,24 @@ def test_no_hardcoded_capital_c_default_remains_in_streaming():
     # The docstring may mention the legacy spelling; comparisons must not.
     assert "s.title == 'New Chat'" not in text
     assert "in ('Untitled', 'New Chat'" not in text
+
+
+def test_background_title_worker_does_not_own_chat_stream_termination(monkeypatch):
+    """A slow or failed title lookup must not hold the finished answer open."""
+    import web.api.streaming as streaming
+
+    def missing_session(_session_id):
+        raise KeyError("missing")
+
+    events = []
+    monkeypatch.setattr(streaming, "get_session", missing_session)
+    streaming._run_background_title_update(
+        "session-1",
+        "user question",
+        "assistant answer",
+        "New chat",
+        lambda event, data: events.append((event, data)),
+    )
+
+    assert any(event == "title_status" for event, _data in events)
+    assert not any(event == "stream_end" for event, _data in events)

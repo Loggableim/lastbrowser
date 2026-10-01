@@ -33,6 +33,7 @@ export type SidekickMessage = {
   content: string;
   reasoning?: string;
   pending?: boolean;
+  streaming?: boolean;
   progress?: string;
 };
 

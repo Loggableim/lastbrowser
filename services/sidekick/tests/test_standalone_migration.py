@@ -125,7 +125,7 @@ class TestMigrateStandaloneInstall:
             "items": {"spaces": True, "supermemory": False, "profiles": False},
         })
 
-        assert report["copied"] == ["spaces"]
+        assert report["copied"] == ["spaces"], report
         # New content in place, old content preserved under .bak
         assert (destination_home / "spaces" / "work" / "note.md").exists()
         assert (destination_home / "spaces.bak" / "old" / "old.txt").read_text(encoding="utf-8") == "old"

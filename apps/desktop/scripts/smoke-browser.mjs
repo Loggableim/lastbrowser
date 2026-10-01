@@ -3020,23 +3020,27 @@ async function main() {
   }
 
   if (process.env.LASTBROWSER_SMOKE_OLLAMA === '1') {
+    let activeSpacePath = '';
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const activeSpaceProbe = await cdp.send('Runtime.evaluate', {
+        expression: "localStorage.getItem('lastbrowser.activeSpacePath.v1') || ''",
+        returnByValue: true
+      }, 2_000);
+      activeSpacePath = activeSpaceProbe.result.value || '';
+      if (activeSpacePath) break;
+      await sleep(200);
+    }
     const switchToNativeChatLayout = await cdp.send('Runtime.evaluate', {
-      expression: `(async () => {
-        let activeSpacePath = '';
-        for (let attempt = 0; attempt < 60; attempt++) {
-          activeSpacePath = localStorage.getItem('lastbrowser.activeSpacePath.v1') || '';
-          if (activeSpacePath) break;
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        }
+      expression: `(() => {
+        const activeSpacePath = ${JSON.stringify(activeSpacePath)};
         if (!activeSpacePath) return { ok: false, reason: 'active Space did not settle' };
         const selections = JSON.parse(localStorage.getItem('lastbrowser.spaceModels.v1') || '{}');
         selections[activeSpacePath] = { model: ${JSON.stringify(OLLAMA_SMOKE_MODEL_QUALIFIED)}, provider: 'ollama-cloud' };
         localStorage.setItem('lastbrowser.spaceModels.v1', JSON.stringify(selections));
         return { ok: true, spacePathAvailable: true };
       })()`,
-      awaitPromise: true,
       returnByValue: true
-    });
+    }, 2_000);
     const openChat = await cdp.send('Runtime.evaluate', {
       expression: `(async () => {
         const chatButton = document.querySelector('button[aria-label*="Chat"]');
@@ -3086,13 +3090,40 @@ async function main() {
     }
     await cdp.send('Runtime.evaluate', {
       expression: `(() => {
+        localStorage.setItem('__lastbrowser_chat_stream_debug', '1');
+        window.__lastbrowserChatStreamDebug = [];
         window.__ollamaSmokeStreamEvents = [];
+        window.__ollamaSmokeDomMutations = [];
+        window.__ollamaSmokeStreamEndAt = null;
         window.__ollamaSmokeUnsubscribe?.();
         window.__ollamaSmokeUnsubscribe = window.lastbrowser.sidekick.onChatStreamEvent((payload) => {
           const data = payload?.data && typeof payload.data === 'object' ? payload.data : {};
           const text = typeof data.text === 'string' ? data.text : typeof data.content === 'string' ? data.content : '';
-          window.__ollamaSmokeStreamEvents.push({ streamId: payload?.streamId || '', event: payload?.event || '', textLength: text.length });
+          const event = String(payload?.event || '');
+          const at = performance.now();
+          if (event === 'stream_end') window.__ollamaSmokeStreamEndAt = at;
+          window.__ollamaSmokeStreamEvents.push({
+            streamId: payload?.streamId || '', event, at,
+            answerTextLength: event === 'token' || event === 'delta' ? text.length : 0,
+            reasoningTextLength: event === 'reasoning' ? text.length : 0
+          });
         });
+        window.__ollamaSmokeObserver?.disconnect();
+        const chat = document.querySelector('.native-chat-main');
+        let previousAnswer = '';
+        window.__ollamaSmokeObserver = new MutationObserver(() => {
+          const assistant = [...document.querySelectorAll('.native-chat-main .chat-message.assistant')].at(-1);
+          const answer = assistant?.querySelector('.message-body')?.innerText || '';
+          const pending = assistant?.classList.contains('pending') || false;
+          if (!answer.trim() || pending || answer === previousAnswer) return;
+          previousAnswer = answer;
+          window.__ollamaSmokeDomMutations.push({
+            at: performance.now(), answerLength: answer.length,
+            running: Boolean(document.querySelector('.native-chat-main .composer-send.stop')),
+            pending
+          });
+        });
+        if (chat) window.__ollamaSmokeObserver.observe(chat, { subtree: true, childList: true, characterData: true });
         return true;
       })()`,
       returnByValue: true
@@ -3169,7 +3200,6 @@ async function main() {
     let ollamaError = '';
     let streamedWhileRequestActive = false;
     let streamedAssistantText = '';
-    let streamedAssistantUpdates = 0;
     for (let attempt = 0; attempt < 600; attempt++) {
       const response = await cdp.send('Runtime.evaluate', {
         expression: `(() => {
@@ -3182,7 +3212,11 @@ async function main() {
             running: Boolean(document.querySelector('.native-chat-main .composer-send.stop')),
             streamEventCount: window.__ollamaSmokeStreamEvents?.length || 0,
             streamEventTypes: [...new Set((window.__ollamaSmokeStreamEvents || []).map((event) => event.event))],
-            streamTextLength: (window.__ollamaSmokeStreamEvents || []).reduce((sum, event) => sum + event.textLength, 0),
+            answerDeltaCharacters: (window.__ollamaSmokeStreamEvents || []).reduce((sum, event) => sum + event.answerTextLength, 0),
+            reasoningCharacters: (window.__ollamaSmokeStreamEvents || []).reduce((sum, event) => sum + event.reasoningTextLength, 0),
+            firstAnswerDeltaAt: window.__ollamaSmokeStreamEvents?.find((event) => event.answerTextLength > 0)?.at ?? null,
+            streamEndAt: window.__ollamaSmokeStreamEndAt,
+            domMutations: window.__ollamaSmokeDomMutations || [],
             error: document.querySelector('.native-chat-main .chat-error')?.innerText || ''
           });
         })()`,
@@ -3191,15 +3225,52 @@ async function main() {
       const state = JSON.parse(response.result.value || '{}');
       ollamaAnswer = state.answer || '';
       ollamaError = state.error || '';
-      if (state.running && !state.pending && ollamaAnswer.trim() && ollamaAnswer !== streamedAssistantText) {
+      const visibleDuringStream = (state.domMutations || []).find((entry) => entry.running && !entry.pending && entry.answerLength > 0
+        && (state.streamEndAt === null || entry.at < state.streamEndAt));
+      if (visibleDuringStream) {
         streamedWhileRequestActive = true;
-        streamedAssistantText = ollamaAnswer;
-        streamedAssistantUpdates += 1;
+        streamedAssistantText = `${visibleDuringStream.answerLength} chars in DOM`;
       }
-      streamedAssistantUpdates = Math.max(streamedAssistantUpdates, state.streamTextLength || 0);
       if (ollamaAnswer.length >= 160 || ollamaError) break;
       await sleep(50);
     }
+    const streamDiagnostics = await cdp.send('Runtime.evaluate', {
+      expression: `JSON.stringify({
+        events: (window.__ollamaSmokeStreamEvents || []).reduce((counts, event) => { counts[event.event] = (counts[event.event] || 0) + 1; return counts; }, {}),
+        answerDeltaCharacters: (window.__ollamaSmokeStreamEvents || []).reduce((sum, event) => sum + event.answerTextLength, 0),
+        reasoningCharacters: (window.__ollamaSmokeStreamEvents || []).reduce((sum, event) => sum + event.reasoningTextLength, 0),
+        firstAnswerDeltaAt: window.__ollamaSmokeStreamEvents?.find((event) => event.answerTextLength > 0)?.at ?? null,
+        streamEndAt: window.__ollamaSmokeStreamEndAt,
+        firstDomAnswer: (window.__ollamaSmokeDomMutations || []).find((event) => event.answerLength > 0 && !event.pending) || null,
+        firstDomAnswerWhileRunning: (window.__ollamaSmokeDomMutations || []).find((event) => event.running && !event.pending && event.answerLength > 0) || null,
+        rendererTrace: (() => {
+          const trace = window.__lastbrowserChatStreamDebug || [];
+          const events = trace.filter((event) => event.phase === 'event');
+          const counts = {};
+          for (const event of events) {
+            const key = event.event || 'unknown';
+            const count = counts[key] || (counts[key] = { total: 0, matching: 0, owned: 0, errors: {} });
+            count.total += 1;
+            if (event.streamMatches) count.matching += 1;
+            if (event.ownsContext) count.owned += 1;
+            if (event.errorKind) count.errors[event.errorKind] = (count.errors[event.errorKind] || 0) + 1;
+          }
+          return {
+            started: trace.find((event) => event.phase === 'chat-started') || null,
+            eventCounts: counts,
+            firstStateUpdate: trace.find((event) => event.phase === 'state-update') || null,
+            lastStateUpdate: trace.filter((event) => event.phase === 'state-update').at(-1) || null
+          };
+        })()
+      })`,
+      returnByValue: true
+    }, 2_000);
+    const parsedStreamDiagnostics = JSON.parse(streamDiagnostics.result.value || '{}');
+    streamedWhileRequestActive = Boolean(parsedStreamDiagnostics.firstDomAnswerWhileRunning
+      && (parsedStreamDiagnostics.streamEndAt === null || parsedStreamDiagnostics.firstDomAnswerWhileRunning.at < parsedStreamDiagnostics.streamEndAt));
+    streamedAssistantText = parsedStreamDiagnostics.firstDomAnswerWhileRunning
+      ? `${parsedStreamDiagnostics.firstDomAnswerWhileRunning.answerLength} chars visible at ${Math.round(parsedStreamDiagnostics.firstDomAnswerWhileRunning.at - (parsedStreamDiagnostics.firstAnswerDeltaAt || 0))}ms after first answer delta`
+      : '';
     check('Ollama Cloud model and provider selection persist in app preferences',
       switchToNativeChatLayout.result.value?.ok === true && (openChat.result.value === true || openChat.result.value?.clicked === true) && chatReady && modelChoice.result.value?.available === true && modelChoice.result.value?.group?.toLowerCase().includes('ollama') && persistedModel,
       JSON.stringify({ ollamaSpaceSelectionSeeded: switchToNativeChatLayout.result.value?.ok === true, chatOpened: openChat.result.value, chatReady, modelChoice: modelChoice.result.value, liveCatalog: JSON.parse(liveCatalog.result.value || '{}'), persistedModel }));
@@ -3208,7 +3279,7 @@ async function main() {
       JSON.stringify({ submitted: sendPrompt.result.value, answer: ollamaAnswer.slice(0, 120), error: ollamaError.slice(0, 160) }));
     check('Ollama Cloud answer becomes visible while the chat request is still streaming',
       sendPrompt.result.value === true && streamedWhileRequestActive,
-      JSON.stringify({ submitted: sendPrompt.result.value, visibleWhileRunning: streamedWhileRequestActive, streamTextCharactersObserved: streamedAssistantUpdates, answer: streamedAssistantText.slice(0, 120) }));
+      JSON.stringify({ submitted: sendPrompt.result.value, visibleWhileRunning: streamedWhileRequestActive, stream: parsedStreamDiagnostics, answer: streamedAssistantText }));
   }
 
   const shellShot = await cdp.send('Page.captureScreenshot', { format: 'png' });

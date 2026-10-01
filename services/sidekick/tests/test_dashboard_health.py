@@ -1641,6 +1641,89 @@ def test_goal_route_uses_workspace_slug_from_request_body(monkeypatch, tmp_path)
     assert payload["space"] == "color"
 
 
+def test_lastbrowser_goal_command_binds_legacy_session_to_workspace_scope(monkeypatch, tmp_path):
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("SIDEKICK_BASE_HOME", str(tmp_path / "home"))
+
+    from web.api import routes, goals
+    from web.api import profiles
+    from web.api.models import Session
+    import io
+
+    monkeypatch.setattr(profiles, "_DEFAULT_SIDEKICK_HOME", profiles._DEFAULT_SIDEKICK_HOME)
+    monkeypatch.setattr(profiles, "_active_profile", profiles._active_profile)
+    profiles.refresh_profile_base_home_from_env()
+
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    session = Session(session_id="desktop-session", profile="default", workspace=str(workspace))
+    session.save = lambda *args, **kwargs: None
+    monkeypatch.setattr("web.api.routes.get_session", lambda _sid: session)
+    monkeypatch.setattr(routes, "resolve_trusted_workspace", lambda value: str(Path(value).resolve()))
+
+    class _FakeHandler:
+        def __init__(self):
+            self.headers = {}
+            self.status = None
+            self.sent_headers = {}
+            self.wfile = io.BytesIO()
+
+        def send_response(self, status):
+            self.status = status
+
+        def send_header(self, key, value):
+            self.sent_headers[key] = value
+
+        def end_headers(self):
+            pass
+
+    handler = _FakeHandler()
+    routes._handle_goal_command(handler, {
+        "session_id": "desktop-session",
+        "args": "status",
+        "profile": "default",
+        "workspace": str(workspace),
+        "scope_goals_to_workspace": True,
+    })
+
+    scope = goals.lastbrowser_workspace_goal_slug(workspace)
+    profile_home = __import__("web.api.profiles", fromlist=["get_profile_home"]).get_profile_home("default")
+    assert handler.status == 200, handler.wfile.getvalue().decode("utf-8", errors="replace")
+    assert session.workspace_slug == scope
+    assert (profile_home / "browser-spaces" / scope / "goals.db").exists()
+    if (profile_home / "state.db").exists():
+        from runtime._compat.shim_state import SessionDB
+        assert SessionDB(db_path=profile_home / "state.db").get_meta("goal:desktop-session") is None
+
+
+def test_new_desktop_session_stamps_the_workspace_goal_scope(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from web.api import goals, routes
+
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    body = {
+        "workspace": str(workspace),
+        "profile": "default",
+        "scope_goals_to_workspace": True,
+    }
+    captured = {}
+    monkeypatch.setattr(routes, "_check_csrf", lambda _handler: True)
+    monkeypatch.setattr(routes, "resolve_trusted_workspace", lambda value: str(Path(value).resolve()))
+    monkeypatch.setattr(routes, "read_body", lambda _handler: body)
+    monkeypatch.setattr(routes, "j", lambda _handler, payload, status=200, extra_headers=None: {"status": status, "payload": payload})
+    monkeypatch.setattr(routes, "new_session", lambda **kwargs: captured.update(kwargs) or SimpleNamespace(compact=lambda: {"session_id": "new-session"}, messages=[]))
+
+    response = routes.handle_post(
+        SimpleNamespace(headers={}),
+        SimpleNamespace(path="/api/session/new", query=""),
+    )
+
+    assert response["status"] == 200
+    assert captured["workspace"] == str(workspace.resolve())
+    assert captured["workspace_slug"] == goals.lastbrowser_workspace_goal_slug(workspace)
+
+
 def test_goal_route_accepts_legacy_space_field_from_request_body(monkeypatch, tmp_path):
     monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
 

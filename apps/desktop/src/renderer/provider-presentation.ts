@@ -46,6 +46,13 @@ const PRESENTATION: Record<string, ProviderPresentation> = {
     mark: '⇄',
     color: '#6366f1'
   },
+  alibaba: {
+    description: 'Alibaba Cloud DashScope workspace and live model catalog.',
+    category: 'cloud',
+    mark: '阿',
+    color: '#ff6a00',
+    keyHint: 'Workspace endpoint and model calls may be billable.'
+  },
   gemini: {
     description: 'Google AI Studio API key for Gemini models.',
     category: 'cloud',
@@ -256,6 +263,19 @@ export const PROVIDER_RECOMMENDATIONS: Record<string, ProviderRecommendation> = 
     ],
     bestFor: 'Wenn du mehrere Anbieter über einen Zugang nutzen willst',
     actionPrompt: 'OpenRouter-Key eingeben'
+  },
+  alibaba: {
+    id: 'alibaba',
+    badge: 'Alibaba Cloud • DashScope',
+    badgeType: 'power',
+    headline: 'Alibaba Cloud DashScope',
+    benefits: [
+      'Workspace-spezifischer OpenAI-kompatibler Modellzugriff',
+      'Live-Modellkatalog aus deinem Alibaba-Cloud-Workspace',
+      'Modell beim Einrichten direkt auswählen'
+    ],
+    bestFor: 'Wenn du Modelle über Alibaba Cloud Model Studio nutzen möchtest',
+    actionPrompt: 'DashScope-Schlüssel eingeben'
   }
 };
 

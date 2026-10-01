@@ -7,6 +7,123 @@ export type LiveChatMessage = {
   progress?: string;
 };
 
+export type RestoredChatStream = {
+  sessionId: string;
+  streamId: string;
+  pendingUserMessage: string;
+};
+
+/** Read the active stream identity needed to reattach after a renderer restart. */
+export function readRestoredChatStream(session: unknown): RestoredChatStream | null {
+  if (!session || typeof session !== 'object' || Array.isArray(session)) return null;
+  const record = session as Record<string, unknown>;
+  const sessionId = typeof record.session_id === 'string' ? record.session_id.trim() : '';
+  const streamId = typeof record.active_stream_id === 'string' ? record.active_stream_id.trim() : '';
+  if (!sessionId || !streamId) return null;
+  return {
+    sessionId,
+    streamId,
+    pendingUserMessage: typeof record.pending_user_message === 'string'
+      ? record.pending_user_message
+      : '',
+  };
+}
+
+/** Claim an active stream once per renderer lifetime, including React StrictMode effects. */
+export function claimRestoredChatStream(
+  sessionId: string,
+  streamId: string,
+  claimed: Set<string>,
+): boolean {
+  const session = String(sessionId || '').trim();
+  const stream = String(streamId || '').trim();
+  if (!session || !stream) return false;
+  const key = JSON.stringify([session, stream]);
+  if (claimed.has(key)) return false;
+  claimed.add(key);
+  // Stream IDs are unique and completed claims only suppress duplicate effects.
+  // Bound growth during very long renderer lifetimes.
+  if (claimed.size > 64) claimed.delete(claimed.values().next().value as string);
+  return true;
+}
+
+/** Rebuild the active user turn and assistant placeholder after renderer reload. */
+export function restorePendingChatTurn<T extends LiveChatMessage>(
+  messages: T[],
+  pendingUserMessage: string,
+): T[] {
+  const prompt = String(pendingUserMessage || '');
+  if (!prompt.trim()) return messages;
+  const normalizedPrompt = prompt.replace(/\s+/g, ' ').trim();
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const candidate = messages[index];
+    if (candidate.role !== 'assistant' || !(candidate.pending || candidate.streaming)) continue;
+    const precedingUser = messages.slice(0, index).reverse().find((message) => message.role === 'user');
+    const normalizedPendingUser = String(precedingUser?.content || '').replace(/\s+/g, ' ').trim();
+    if (normalizedPendingUser === normalizedPrompt) return messages;
+    break;
+  }
+  const lastMessage = messages[messages.length - 1];
+  const normalizedLast = lastMessage?.role === 'user'
+    ? String(lastMessage.content || '').replace(/\s+/g, ' ').trim()
+    : '';
+  const withUser = normalizedLast === normalizedPrompt
+    ? messages
+    : [...messages, { role: 'user', content: prompt } as T];
+  const lastAfterUser = withUser[withUser.length - 1];
+  if (lastAfterUser?.role === 'assistant' && (lastAfterUser.pending || lastAfterUser.streaming)) {
+    return withUser;
+  }
+  return [...withUser, { role: 'assistant', content: 'Working on it...', pending: true } as T];
+}
+
+/**
+ * A session snapshot can race with a newly started local turn. Keep the live
+ * turn when that snapshot has not persisted its pending/streaming assistant
+ * yet, while still accepting snapshots that contain the turn's user message.
+ */
+export function preserveInFlightChatMessages<T extends LiveChatMessage>(
+  snapshot: T[],
+  current: T[],
+): T[] {
+  let pendingIndex = -1;
+  for (let index = current.length - 1; index >= 0; index -= 1) {
+    const message = current[index];
+    if (message.role === 'assistant' && (message.pending || message.streaming)) {
+      pendingIndex = index;
+      break;
+    }
+  }
+  if (pendingIndex < 0) return snapshot;
+
+  const pendingAssistant = current[pendingIndex];
+  let precedingUser: T | undefined;
+  for (let index = pendingIndex - 1; index >= 0; index -= 1) {
+    if (current[index].role === 'user') {
+      precedingUser = current[index];
+      break;
+    }
+  }
+  const userAlreadyPersisted = !precedingUser || snapshot.some((message) =>
+    message.role === 'user' && message.content === precedingUser.content);
+  if (!userAlreadyPersisted) return snapshot;
+
+  let snapshotUserIndex = -1;
+  if (precedingUser) {
+    for (let index = snapshot.length - 1; index >= 0; index -= 1) {
+      if (snapshot[index].role === 'user' && snapshot[index].content === precedingUser.content) {
+        snapshotUserIndex = index;
+        break;
+      }
+    }
+  }
+  const hasSnapshotOutput = snapshot.slice(snapshotUserIndex + 1).some((message) =>
+    message.role === 'assistant'
+      && Boolean(message.content?.trim())
+      && message.content !== 'Working on it...');
+  return hasSnapshotOutput ? snapshot : [...snapshot, pendingAssistant];
+}
+
 /** Attach orchestration activity to the pending bubble without changing answer text. */
 export function applyLiveChatProgress<T extends LiveChatMessage>(messages: T[], progress: string): T[] {
   if (!progress) return messages;

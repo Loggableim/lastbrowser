@@ -9,6 +9,7 @@ export type ApiState = {
   loading: boolean;
   error: string;
   refresh: () => Promise<void>;
+  setData: React.Dispatch<React.SetStateAction<AnyRecord | null>>;
 };
 
 export function useApiState(loader: () => Promise<AnyRecord>, deps: React.DependencyList, enabled = true): ApiState {
@@ -33,7 +34,7 @@ export function useApiState(loader: () => Promise<AnyRecord>, deps: React.Depend
     void refresh();
   }, [refresh]);
 
-  return { data, loading, error, refresh };
+  return { data, loading, error, refresh, setData };
 }
 
 export function isReady(serviceStatus: ServiceStatus | null): boolean {

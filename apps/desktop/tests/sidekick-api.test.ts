@@ -419,12 +419,12 @@ describe('sidekick api client', () => {
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
 
-    await createSidekickSession('http://127.0.0.1:8787', { workspace: 'C:/work' }, fetchImpl);
+    await createSidekickSession('http://127.0.0.1:8787', { workspace: 'C:/work', scopeGoalsToWorkspace: true }, fetchImpl);
     await getDesktopSession('http://127.0.0.1:8787', 's2', fetchImpl);
 
     expect(calls[0].url).toBe('http://127.0.0.1:8787/api/session/new');
     expect(calls[0].init?.method).toBe('POST');
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ workspace: 'C:/work' });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ workspace: 'C:/work', scope_goals_to_workspace: true });
     expect(calls[1].url).toBe('http://127.0.0.1:8787/api/session?session_id=s2&messages=1&resolve_model=0');
   });
 

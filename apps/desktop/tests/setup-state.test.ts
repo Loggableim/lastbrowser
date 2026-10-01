@@ -133,6 +133,7 @@ describe('cloud first-run setup state', () => {
     expect(options.map((option) => option.id)).toEqual([
       'openai-codex',
       'antigravity',
+      'alibaba',
       'openrouter',
       'anthropic',
       'lmstudio',
@@ -176,6 +177,7 @@ describe('cloud first-run setup state', () => {
       'ollama',
       'ollama-cloud',
       'openrouter',
+      'alibaba',
       'openai',
       'anthropic',
       'gemini',
@@ -192,7 +194,7 @@ describe('cloud first-run setup state', () => {
       { id: 'openrouter', label: 'OpenRouter' },
       { id: 'ollama-cloud', label: 'Ollama Cloud' }
     ] } });
-    expect(options.map((option) => option.id)).toEqual(['openai-codex', 'antigravity', 'openrouter', 'ollama-cloud']);
+    expect(options.map((option) => option.id)).toEqual(['openai-codex', 'antigravity', 'alibaba', 'openrouter', 'ollama-cloud']);
     expect(modelsForProvider(null, 'antigravity').map((model) => model.id)).toEqual([
       'gemini-3.1-pro-preview',
       'gemini-3-flash-preview'
@@ -210,6 +212,7 @@ describe('cloud first-run setup state', () => {
     }).map((option) => option.id)).toEqual([
       'openai-codex',
       'antigravity',
+      'alibaba',
       'openrouter',
       'openai'
     ]);
@@ -252,6 +255,17 @@ describe('cloud first-run setup state', () => {
     const openrouter = cloudProviderOptions(null).find((option) => option.id === 'openrouter');
     expect(openrouter?.keyOptional).toBe(false);
     expect(modelsForProvider(null, 'openrouter').length).toBeGreaterThan(0);
+  });
+
+  it('offers Alibaba Cloud as a key-required provider with a workspace endpoint', () => {
+    const alibaba = cloudProviderOptions(null).find((option) => option.id === 'alibaba');
+    expect(alibaba).toMatchObject({
+      label: 'Alibaba Cloud (DashScope)',
+      keyOptional: false,
+      requiresBaseUrl: true
+    });
+    expect(alibaba?.defaultBaseUrl).toBeUndefined();
+    expect(modelsForProvider(null, 'alibaba')).toEqual([]);
   });
 
   it('derives first-run warmup states from service and onboarding readiness', () => {

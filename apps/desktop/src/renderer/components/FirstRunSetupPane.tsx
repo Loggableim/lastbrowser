@@ -232,7 +232,7 @@ export function FirstRunSetupPane({
   }, []);
 
   const loadLiveModels = useCallback(async () => {
-    if (!['openrouter', 'anthropic', 'openai', 'deepseek', 'gemini'].includes(provider)) return;
+    if (!['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek', 'gemini'].includes(provider)) return;
     if (!apiKey.trim()) return;
     setModelProbeLoading(true);
     setModelProbeError('');
@@ -240,7 +240,7 @@ export function FirstRunSetupPane({
       const response = await window.lastbrowser.sidekick.requestWebui({
         method: 'POST',
         path: '/api/models/probe',
-        body: { provider, api_key: apiKey.trim() }
+        body: { provider, api_key: apiKey.trim(), ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}) }
       }) as { models?: Array<Record<string, unknown>>; error?: string };
       const models = (response?.models || []).map((item) => {
         const id = String(item.id || item.name || '').trim();
@@ -257,7 +257,7 @@ export function FirstRunSetupPane({
     } finally {
       setModelProbeLoading(false);
     }
-  }, [apiKey, provider]);
+  }, [apiKey, baseUrl, provider]);
 
   useEffect(() => {
     void loadLiveModels();
@@ -1028,7 +1028,7 @@ export function FirstRunSetupPane({
                       Erhältlich unter <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">openrouter.ai/keys</a>. Ein Key gewährt Zugriff auf über 200 Modelle.
                     </small>
                   )}
-                  {['openrouter', 'anthropic', 'openai', 'deepseek'].includes(provider) && (
+                  {['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider) && (
                     <div className="field-hint" style={{ marginTop: '0.5rem' }}>
                       <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={!apiKey.trim() || modelProbeLoading}>
                         {modelProbeLoading ? 'Modelle werden geladen…' : 'Verfügbare Modelle laden'}
@@ -1044,16 +1044,22 @@ export function FirstRunSetupPane({
                 </label>
                 {(activeProviderOption?.id === 'ollama' || activeProviderOption?.id === 'ollama-cloud' || activeProviderOption?.requiresBaseUrl) && (
                   <label className="input-group" style={{ marginTop: '0.75rem' }}>
-                    <span className="input-label">Server-Adresse / Endpoint (Optional)</span>
+                    <span className="input-label">{provider === 'alibaba'
+                      ? t('settings.panels.providers.alibabaBaseUrlLabel')
+                      : 'Server-Adresse / Endpoint (Optional)'}</span>
                     <input
                       type="text"
                       value={baseUrl}
                       onChange={(e) => setBaseUrl(e.target.value)}
-                      placeholder={activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}
+                      placeholder={provider === 'alibaba'
+                        ? t('settings.panels.providers.alibabaBaseUrlPlaceholder')
+                        : activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}
                       className="key-input"
                     />
                     <small className="field-hint">
-                      Für Standard ({activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}) leer lassen. Für Ollama Cloud oder Remote-Server hier die URL eintragen.
+                      {provider === 'alibaba'
+                        ? t('settings.panels.providers.alibabaBaseUrlHint')
+                        : `Für Standard (${activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}) leer lassen. Für Ollama Cloud oder Remote-Server hier die URL eintragen.`}
                     </small>
                   </label>
                 )}

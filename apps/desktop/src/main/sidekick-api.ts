@@ -139,6 +139,7 @@ export type SpaceSummary = {
 
 export type CreateSessionRequest = {
   workspace?: string;
+  scopeGoalsToWorkspace?: boolean;
   model?: string;
   modelProvider?: string | null;
   profile?: string;
@@ -873,6 +874,7 @@ export function createSidekickSession(
 ): Promise<{ session: SessionShape }> {
   const body: Record<string, unknown> = {};
   if (request.workspace?.trim()) body.workspace = request.workspace.trim();
+  if (request.scopeGoalsToWorkspace === true) body.scope_goals_to_workspace = true;
   if (request.model?.trim()) body.model = request.model.trim();
   if (request.modelProvider !== undefined) body.model_provider = request.modelProvider;
   if (request.profile?.trim()) body.profile = request.profile.trim();

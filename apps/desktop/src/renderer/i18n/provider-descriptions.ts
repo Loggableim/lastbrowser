@@ -1,7 +1,7 @@
 import type { DesktopLocaleId } from './keys.js';
 
 type ProviderDescriptionId =
-  | 'openai-codex' | 'anthropic' | 'google-gemini-cli' | 'antigravity' | 'openai' | 'openrouter' | 'ollama-cloud'
+  | 'openai-codex' | 'anthropic' | 'google-gemini-cli' | 'antigravity' | 'openai' | 'openrouter' | 'alibaba' | 'ollama-cloud'
   | 'gemini' | 'deepseek' | 'mistralai' | 'nvidia' | 'xiaomi' | 'zai' | 'x-ai'
   | 'ollama' | 'lmstudio' | 'custom';
 
@@ -33,6 +33,15 @@ const descriptions: Record<ProviderDescriptionId, Record<DesktopLocaleId, string
   openrouter: {
     en: 'One key for models from many providers.', de: 'Ein Schlüssel für Modelle vieler Anbieter.', es: 'Una clave para modelos de muchos proveedores.', fr: 'Une clé pour des modèles de nombreux fournisseurs.',
     it: 'Una chiave per modelli di molti provider.', 'pt-BR': 'Uma chave para modelos de vários provedores.', ru: 'Один ключ для моделей разных провайдеров.'
+  },
+  alibaba: {
+    en: 'Connect your Alibaba Cloud DashScope workspace and choose from its live model catalog. Usage may be billed.',
+    de: 'Verbinde deinen Alibaba-Cloud-DashScope-Workspace und wähle aus dem Live-Modellkatalog. Die Nutzung kann kostenpflichtig sein.',
+    es: 'Conecta tu espacio de Alibaba Cloud DashScope y elige modelos de su catálogo en vivo. El uso puede tener costo.',
+    fr: 'Connectez votre espace Alibaba Cloud DashScope et choisissez dans son catalogue de modèles en direct. L’utilisation peut être facturée.',
+    it: 'Collega il tuo workspace Alibaba Cloud DashScope e scegli dal catalogo modelli live. L’utilizzo potrebbe essere a pagamento.',
+    'pt-BR': 'Conecte seu workspace do Alibaba Cloud DashScope e escolha no catálogo de modelos ao vivo. O uso pode gerar cobrança.',
+    ru: 'Подключите рабочую область Alibaba Cloud DashScope и выберите модель из актуального каталога. Использование может быть платным.'
   },
   gemini: {
     en: 'Google AI Studio API key for Gemini models.', de: 'Google-AI-Studio-API-Schlüssel für Gemini-Modelle.', es: 'Clave de API de Google AI Studio para modelos Gemini.', fr: 'Clé API Google AI Studio pour les modèles Gemini.',

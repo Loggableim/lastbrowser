@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from '../src/renderer/chat-completion.js';
-import { applyLiveChatDelta, applyLiveChatProgress, finishLiveChatMessage, readLiveChatDelta } from '../src/renderer/chat-live-stream.js';
+import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, preserveInFlightChatMessages, readLiveChatDelta, readRestoredChatStream, restorePendingChatTurn } from '../src/renderer/chat-live-stream.js';
 
 describe('native chat completion signals', () => {
   it('renders each arriving token into the pending assistant message immediately', () => {
@@ -15,6 +15,71 @@ describe('native chat completion signals', () => {
     expect(second[1]).toMatchObject({ content: 'Once upon', pending: false, streaming: true });
     expect(second[0]).toEqual(initial[0]);
     expect(finishLiveChatMessage(second)[1]).toMatchObject({ content: 'Once upon', streaming: false });
+  });
+
+  it('preserves the new in-flight assistant while a stale session snapshot is loading', () => {
+    const live = [
+      { id: 'user-1', role: 'user' as const, content: 'Tell a story' },
+      { id: 'assistant-1', role: 'assistant' as const, content: 'Working on it...', pending: true },
+    ];
+    const staleSnapshot = [{ id: 'user-1', role: 'user' as const, content: 'Tell a story' }];
+
+    expect(preserveInFlightChatMessages(staleSnapshot, live)).toEqual(live);
+    expect(applyLiveChatDelta(preserveInFlightChatMessages(staleSnapshot, live), 'token', 'Once')[1])
+      .toMatchObject({ content: 'Once', streaming: true });
+  });
+
+  it('does not mistake the previous turn answer for output from the pending turn', () => {
+    const live = [
+      { id: 'prior-user', role: 'user' as const, content: 'Earlier question' },
+      { id: 'prior-answer', role: 'assistant' as const, content: 'Earlier answer' },
+      { id: 'user-2', role: 'user' as const, content: 'Tell a story' },
+      { id: 'assistant-2', role: 'assistant' as const, content: 'Working on it...', pending: true },
+    ];
+    const snapshotBeforeAssistantAnswer = live.slice(0, 3);
+
+    expect(preserveInFlightChatMessages(snapshotBeforeAssistantAnswer, live)).toEqual(live);
+  });
+
+  it('does not carry an in-flight turn into a different session transcript', () => {
+    const live = [
+      { id: 'user-1', role: 'user' as const, content: 'Tell a story' },
+      { id: 'assistant-1', role: 'assistant' as const, content: 'Working on it...', pending: true },
+    ];
+    const anotherSession = [{ id: 'other-user', role: 'user' as const, content: 'Different session' }];
+
+    expect(preserveInFlightChatMessages(anotherSession, live)).toEqual(anotherSession);
+  });
+
+  it('restores and claims an active stream exactly once after renderer restart', () => {
+    const restoredSession = {
+      session_id: 'session-restarted',
+      active_stream_id: 'stream-still-running',
+      pending_user_message: 'Continue the project goal',
+    };
+    const claims = new Set<string>();
+    const restored = readRestoredChatStream(restoredSession);
+
+    expect(restored).toEqual({
+      sessionId: 'session-restarted',
+      streamId: 'stream-still-running',
+      pendingUserMessage: 'Continue the project goal',
+    });
+    expect(claimRestoredChatStream(restored!.sessionId, restored!.streamId, claims)).toBe(true);
+    expect(claimRestoredChatStream(restored!.sessionId, restored!.streamId, claims)).toBe(false);
+    expect(readRestoredChatStream({ ...restoredSession, active_stream_id: null })).toBeNull();
+  });
+
+  it('rebuilds the persisted in-flight user turn and stream target without duplicating it', () => {
+    const prior = [{ role: 'assistant' as const, content: 'Previous turn completed.' }];
+    const messages = restorePendingChatTurn(prior, 'Continue the project goal');
+
+    expect(messages).toEqual([
+      ...prior,
+      { role: 'user', content: 'Continue the project goal' },
+      { role: 'assistant', content: 'Working on it...', pending: true },
+    ]);
+    expect(restorePendingChatTurn(messages, 'Continue the project goal')).toEqual(messages);
   });
 
   it('streams reasoning separately from user-visible answer text', () => {

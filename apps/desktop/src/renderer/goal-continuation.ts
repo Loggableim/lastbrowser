@@ -85,6 +85,17 @@ export function claimRestorableGoalContinuation(
   return true;
 }
 
+/** Release a restored prompt when the renderer failed before chat start was accepted. */
+export function releaseRestorableGoalContinuationClaim(
+  prompt: string,
+  expected: { sessionId: string; profileId: string; spacePath: string },
+  claimed: Set<string>
+): boolean {
+  const text = prompt.trim();
+  if (!text) return false;
+  return claimed.delete(JSON.stringify([expected.sessionId, expected.profileId, expected.spacePath, text]));
+}
+
 /** Compare a chat turn's frozen context with the currently selected context. */
 export function isActiveTurnContextCurrent(
   expected: { sessionId: string; profileId: string; spacePath: string },
@@ -116,6 +127,9 @@ export async function startGoalContinuation(
 ): Promise<boolean> {
   const text = prompt.trim();
   if (!text || !isGoalContinuationContextCurrent(expected, current)) return false;
-  await startChat(text);
-  return true;
+  try {
+    return (await startChat(text)) !== false;
+  } catch {
+    return false;
+  }
 }

@@ -787,6 +787,7 @@ _PROVIDER_DISPLAY = {
     "openrouter": "OpenRouter",
     "anthropic": "Anthropic",
     "openai-codex": "OpenAI Codex",
+    "alibaba": "Alibaba Cloud (DashScope)",
     "google-gemini-cli": "Gemini CLI",
     "antigravity": "Antigravity",
     "zai": "Z.AI / GLM",
@@ -4547,13 +4548,55 @@ def create_stream_channel() -> StreamChannel:
 
 STREAMS: dict = {}
 STREAMS_LOCK = threading.Lock()
+# Keep just-finished channels briefly so a desktop renderer that subscribes
+# after a fast provider response can replay its buffered SSE tail.
+RECENT_CHAT_STREAMS: dict[str, tuple[object, float]] = {}
+RECENT_CHAT_STREAM_TTL_SECONDS = 120.0
+RECENT_CHAT_STREAM_MAX_ENTRIES = 128
 CANCEL_FLAGS: dict = {}
 AGENT_INSTANCES: dict = {}  # stream_id -> AIAgent instance for interrupt propagation
 STREAM_PARTIAL_TEXT: dict = {}  # stream_id -> partial assistant text accumulated during streaming
 STREAM_REASONING_TEXT: dict = {}  # stream_id -> reasoning trace accumulated during streaming (#1361 §A)
 STREAM_LIVE_TOOL_CALLS: dict = {}  # stream_id -> live tool calls accumulated during streaming (#1361 §B)
 STREAM_GOAL_RELATED: dict = {}  # stream_id -> bool: only evaluate goal for goal-related turns (#1932)
+STREAM_GOAL_CLAIMS: dict = {}  # stream_id -> claimed continuation scope for cancel cleanup
 PENDING_GOAL_CONTINUATION: set = set()  # session_ids awaiting a goal continuation turn (#1932)
+
+
+def retain_completed_chat_stream(stream_id: str) -> None:
+    """Retain a finished stream's buffered SSE tail for late subscribers."""
+    key = str(stream_id or "").strip()
+    if not key:
+        return
+    now = time.monotonic()
+    with STREAMS_LOCK:
+        channel = STREAMS.get(key)
+        if channel is None or not hasattr(channel, "subscribe"):
+            return
+        for old_key, (_old_channel, expires_at) in list(RECENT_CHAT_STREAMS.items()):
+            if expires_at <= now:
+                RECENT_CHAT_STREAMS.pop(old_key, None)
+        RECENT_CHAT_STREAMS[key] = (channel, now + RECENT_CHAT_STREAM_TTL_SECONDS)
+        while len(RECENT_CHAT_STREAMS) > RECENT_CHAT_STREAM_MAX_ENTRIES:
+            oldest_key = min(RECENT_CHAT_STREAMS, key=lambda item: RECENT_CHAT_STREAMS[item][1])
+            RECENT_CHAT_STREAMS.pop(oldest_key, None)
+
+
+def get_chat_stream_channel(stream_id: str):
+    """Find an active stream or its short-lived completion replay channel."""
+    key = str(stream_id or "").strip()
+    if not key:
+        return None
+    now = time.monotonic()
+    with STREAMS_LOCK:
+        active = STREAMS.get(key)
+        if active is not None:
+            return active
+        for old_key, (_old_channel, expires_at) in list(RECENT_CHAT_STREAMS.items()):
+            if expires_at <= now:
+                RECENT_CHAT_STREAMS.pop(old_key, None)
+        entry = RECENT_CHAT_STREAMS.get(key)
+        return entry[0] if entry else None
 
 
 def _cleanup_stale_streams() -> int:

@@ -59,13 +59,13 @@ import {
 import { hideWebviewScrollbars } from './browser-view.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
-import { applyLiveChatDelta, applyLiveChatProgress, finishLiveChatMessage, finishLiveChatMessageWithError, readLiveChatDelta, readNativeChatStreamError } from './chat-live-stream.js';
+import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, restorePendingChatTurn } from './chat-live-stream.js';
 import { playChatCompletionSound } from './notification-sound.js';
 import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
 import { isNativeChatProgressEvent, isNativeChatStreamWaitExpired } from './chat-stream-timeout.js';
-import { adoptCreatedTurnSession, claimRestorableGoalContinuation, continuationAfterTerminalEvent, isActiveTurnContextCurrent, isGoalContinuationContextCurrent, readGoalContinuationPrompt, readGoalEvaluationError, readRestorableGoalContinuation, startGoalContinuation } from './goal-continuation.js';
-import { parsePersistentGoalCommand, requestPersistentGoalCommand } from './persistent-goal-command.js';
+import { adoptCreatedTurnSession, claimRestorableGoalContinuation, continuationAfterTerminalEvent, isActiveTurnContextCurrent, isGoalContinuationContextCurrent, readGoalContinuationPrompt, readGoalEvaluationError, readRestorableGoalContinuation, releaseRestorableGoalContinuationClaim, startGoalContinuation } from './goal-continuation.js';
+import { parsePersistentGoalCommand, requestPersistentGoalCommand, requestPersistentGoalControlWhileBusy, shouldDispatchPersistentGoalControlWhileBusy } from './persistent-goal-command.js';
 import { readPersistentGoalStateError } from './persistent-goal-state.js';
 import { executeBrowserAction, parseNaturalLanguageBrowserCommand } from './browser-agent-tools.js';
 import {
@@ -1019,6 +1019,7 @@ function AppContent(): JSX.Element {
   const activeProfileIdRef = useRef(activeProfileId);
   const activeSpacePathRef = useRef(activeSpacePath);
   const restoredGoalContinuationClaimsRef = useRef(new Set<string>());
+  const restoredChatStreamClaimsRef = useRef(new Set<string>());
   activeProfileIdRef.current = activeProfileId;
   activeSpacePathRef.current = activeSpacePath;
   const isCreatingSessionRef = useRef(false);
@@ -1613,7 +1614,8 @@ function AppContent(): JSX.Element {
       // Never let a stale response replace the currently visible transcript.
       if (activeSessionIdRef.current !== sessionId) return session;
       setActiveSession(session);
-      setChatMessages(normalizeChatMessages(session.messages));
+      const snapshotMessages = normalizeChatMessages(session.messages);
+      setChatMessages((current) => preserveInFlightChatMessages(snapshotMessages, current));
       setActiveStreamId(session.active_stream_id || null);
       setChatRunState(session.active_stream_id || session.pending_user_message ? 'streaming' : 'idle');
       setChatError(readPersistentGoalStateError(session) || '');
@@ -1658,6 +1660,97 @@ function AppContent(): JSX.Element {
     return undefined;
   }, [activeSessionId, loadActiveSession]);
 
+  // The renderer can restart while the Sidekick worker keeps streaming. Reattach
+  // once to the persisted stream instead of leaving the restored chat stuck in
+  // its loading state. The claim also makes this safe under React StrictMode.
+  useEffect(() => {
+    if (
+      !sidekickApiReady
+      || !activeSession
+      || activeSessionLoading
+      || sidekickBusy
+      || activeSession.session_id !== activeSessionId
+    ) return;
+    const restored = readRestoredChatStream(activeSession);
+    if (!restored) return;
+    const turnContext = {
+      sessionId: restored.sessionId,
+      profileId: activeProfileId,
+      spacePath: activeSpacePath
+    };
+    const current = {
+      sessionId: activeSessionIdRef.current,
+      profileId: activeProfileIdRef.current,
+      spacePath: activeSpacePathRef.current
+    };
+    if (!isActiveTurnContextCurrent(turnContext, current)) return;
+    if (!claimRestoredChatStream(restored.sessionId, restored.streamId, restoredChatStreamClaimsRef.current)) return;
+
+    setActivePanel('chat');
+    setChatMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage));
+    setMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage));
+    setActiveStreamId(restored.streamId);
+    setSidekickBusy(true);
+    setChatRunState('streaming');
+    let failed = false;
+    const isOwningContextCurrent = (): boolean => isActiveTurnContextCurrent(turnContext, {
+      sessionId: activeSessionIdRef.current,
+      profileId: activeProfileIdRef.current,
+      spacePath: activeSpacePathRef.current
+    });
+
+    void (async () => {
+      try {
+        const streamResult = await pollNativeChat(
+          restored.streamId,
+          restored.sessionId,
+          [],
+          undefined,
+          isOwningContextCurrent
+        );
+        const updated = await loadActiveSession(restored.sessionId, { loadDraft: false, showLoading: false });
+        if (!isOwningContextCurrent()) return;
+        const answer = lastAssistantText(updated);
+        if (streamResult.streamError) {
+          failed = true;
+          setChatError(streamResult.streamError);
+          setChatMessages((messages) => finishLiveChatMessageWithError(messages, streamResult.streamError!));
+          setMessages((messages) => finishLiveChatMessageWithError(messages, streamResult.streamError!));
+        } else {
+          setChatMessages((messages) => messages.map((message) => message.pending || message.streaming || message.content === 'Working on it...'
+            ? { ...message, content: answer || (message.content === 'Working on it...' ? 'Sidekick finished.' : message.content || 'Sidekick finished.'), pending: false, streaming: false, progress: undefined }
+            : message));
+          setMessages((messages) => messages.map((message) => message.pending || message.streaming || message.content === 'Working on it...'
+            ? { ...message, content: answer || (message.content === 'Working on it...' ? 'Sidekick finished.' : message.content || 'Sidekick finished.'), pending: false, streaming: false, progress: undefined }
+            : message));
+        }
+        if (streamResult.goalError) setChatError(streamResult.goalError);
+        void refreshSessions();
+        if (streamResult.continuationPrompt && !streamResult.streamError) {
+          await startGoalContinuation(streamResult.continuationPrompt, turnContext, {
+            sessionId: activeSessionIdRef.current,
+            profileId: activeProfileIdRef.current,
+            spacePath: activeSpacePathRef.current
+          }, (prompt) => startNativeChat(prompt, prompt, turnContext));
+        }
+      } catch (error) {
+        failed = true;
+        if (isOwningContextCurrent()) {
+          const message = error instanceof Error ? error.message : String(error);
+          setChatError(message);
+          setChatMessages((messages) => finishLiveChatMessageWithError(messages, message));
+          setMessages((messages) => finishLiveChatMessageWithError(messages, message));
+        }
+      } finally {
+        setSidekickBusy(false);
+        if (isOwningContextCurrent()) {
+          setActiveStreamId(null);
+          setChatRunState(failed ? 'error' : 'idle');
+        }
+      }
+    })();
+  }, [activeSession, activeSessionId, activeSessionLoading, activeProfileId, activeSpacePath, sidekickApiReady, sidekickBusy, loadActiveSession, refreshSessions]);
+
   useEffect(() => {
     if (
       !sidekickApiReady
@@ -1692,7 +1785,15 @@ function AppContent(): JSX.Element {
       expected,
       current,
       (continuationPrompt) => startNativeChat(continuationPrompt, continuationPrompt, expected)
-    );
+    ).then((started) => {
+      if (!started) {
+        releaseRestorableGoalContinuationClaim(
+          prompt,
+          expected,
+          restoredGoalContinuationClaimsRef.current
+        );
+      }
+    });
   }, [activeSession, activeSessionId, activeSessionLoading, activeProfileId, activeSpacePath, sidekickApiReady, sidekickBusy, chatRunState]);
 
   useEffect(() => {
@@ -2220,7 +2321,9 @@ function AppContent(): JSX.Element {
     }
 
     try {
-      const sessionOpts: Record<string, unknown> = activeSpacePath ? { workspace: activeSpacePath } : {};
+      const sessionOpts: Record<string, unknown> = activeSpacePath
+        ? { workspace: activeSpacePath, scopeGoalsToWorkspace: true, profile: activeProfileId }
+        : { profile: activeProfileId };
 
       const result = await window.lastbrowser.sidekick.createSession(sessionOpts);
       const session = result.session;
@@ -2334,7 +2437,8 @@ function AppContent(): JSX.Element {
 
     const handleStreamEvent = (payload: unknown): void => {
       const event = payload as { streamId?: string; event?: string; data?: unknown } | null;
-      if (!event || event.streamId !== streamId) return;
+      if (!event) return;
+      if (event.streamId !== streamId) return;
       if (isNativeChatProgressEvent(event.event)) lastProgressAt = Date.now();
       if (event.event === 'stream_end') {
         if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
@@ -2494,6 +2598,7 @@ function AppContent(): JSX.Element {
       if (!turnContext.sessionId) {
         const created = await window.lastbrowser.sidekick.createSession({
           ...(turnContext.spacePath ? { workspace: turnContext.spacePath } : {}),
+          ...(turnContext.spacePath ? { scopeGoalsToWorkspace: true } : {}),
           profile: turnContext.profileId,
           ...(selectedModel ? { model: selectedModel } : {}),
           ...(selectedProvider ? { modelProvider: selectedProvider } : {})
@@ -2585,13 +2690,60 @@ function AppContent(): JSX.Element {
     }
   }
 
+  /** Dispatch pause/status/clear controls without taking over an active chat stream. */
+  async function runPersistentGoalControlDuringChat(args: string, displayText: string): Promise<void> {
+    const turnContext = {
+      sessionId: activeSessionIdRef.current ?? '',
+      profileId: activeProfileIdRef.current,
+      spacePath: activeSpacePathRef.current
+    };
+    const isOwningContextCurrent = (): boolean => isActiveTurnContextCurrent(turnContext, {
+      sessionId: activeSessionIdRef.current,
+      profileId: activeProfileIdRef.current,
+      spacePath: activeSpacePathRef.current
+    });
+
+    if (!turnContext.sessionId) return;
+    setChatMessages((current) => [...current, { role: 'user', content: displayText }]);
+    setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', content: displayText }]);
+    setComposerText('');
+
+    try {
+      const controlRequest = requestPersistentGoalControlWhileBusy(
+        (request) => window.lastbrowser.sidekick.requestWebui(request),
+        `/goal ${args}`,
+        true,
+        {
+          sessionId: turnContext.sessionId,
+          profileId: turnContext.profileId,
+          workspace: turnContext.spacePath
+        }
+      );
+      if (!controlRequest) return;
+      const response = await controlRequest;
+      if (!isOwningContextCurrent()) return;
+      const reply = typeof response.message === 'string' && response.message.trim()
+        ? response.message.trim()
+        : 'Persistent goal updated.';
+      setChatMessages((current) => [...current, { role: 'assistant', content: reply }]);
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: reply }]);
+      void refreshSessions();
+    } catch (error) {
+      if (!isOwningContextCurrent()) return;
+      const message = error instanceof Error ? error.message : String(error);
+      const reply = `Goal command failed: ${message}`;
+      setChatMessages((current) => [...current, { role: 'assistant', content: reply }]);
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: reply }]);
+    }
+  }
+
   async function startNativeChat(
     message: string,
     displayText = message,
     continuation?: { sessionId: string; profileId: string; spacePath: string }
-  ): Promise<void> {
+  ): Promise<boolean> {
     const trimmed = message.trim();
-    if (!trimmed) return;
+    if (!trimmed) return false;
     let turnContext = continuation ?? {
       sessionId: activeSessionIdRef.current ?? '',
       profileId: activeProfileIdRef.current,
@@ -2602,15 +2754,22 @@ function AppContent(): JSX.Element {
         sessionId: activeSessionIdRef.current,
         profileId: activeProfileIdRef.current,
         spacePath: activeSpacePathRef.current
-      })) return;
-    } else if (sidekickBusy || chatRunState === 'starting' || chatRunState === 'streaming') {
-      return;
+      })) return false;
     }
 
     const persistentGoalCommand = parsePersistentGoalCommand(trimmed);
+    const chatIsBusy = sidekickBusy || chatRunState === 'starting' || chatRunState === 'streaming';
+    if (!continuation && chatIsBusy) {
+      if (persistentGoalCommand && shouldDispatchPersistentGoalControlWhileBusy(trimmed, true)) {
+        await runPersistentGoalControlDuringChat(persistentGoalCommand.args, displayText);
+      } else if (persistentGoalCommand) {
+        setChatError('Wait for the current chat turn to finish, then resend this goal command.');
+      }
+      return false;
+    }
     if (persistentGoalCommand) {
       await runPersistentGoalCommand(persistentGoalCommand.args, displayText);
-      return;
+      return false;
     }
 
     // Fast-path: Check for natural language browser management commands (Phase 10.4)
@@ -2626,7 +2785,7 @@ function AppContent(): JSX.Element {
 
       setChatMessages((current) => [...current, { role: 'assistant', content: assistantReply, pending: false }]);
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: assistantReply, pending: false }]);
-      return;
+      return true;
     }
 
     const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
@@ -2651,6 +2810,7 @@ function AppContent(): JSX.Element {
       });
     };
     let turnFailed = false;
+    let chatStartAccepted = false;
     setChatError('');
     // Register before asking Sidekick to start. Fast providers can emit their
     // first token while startChat is still resolving through IPC.
@@ -2708,6 +2868,8 @@ function AppContent(): JSX.Element {
         workspace: turnContext.spacePath,
         mode: composerMode
       });
+      if (!response?.streamId) throw new Error('Sidekick did not return a chat stream ID.');
+      chatStartAccepted = true;
       const currentTurnContext = adoptCreatedTurnSession(turnContext, {
         sessionId: activeSessionIdRef.current,
         profileId: activeProfileIdRef.current,
@@ -2825,6 +2987,7 @@ function AppContent(): JSX.Element {
         });
       }
     }
+    return chatStartAccepted;
   }
 
   async function stopNativeChat(): Promise<void> {
@@ -3075,8 +3238,9 @@ function AppContent(): JSX.Element {
       if (!created.ok) return created.error;
       const createdSpacePath = created.path;
       if (data.model) {
-        saveSpaceModel(createdSpacePath, data.model, window.localStorage);
+        saveSpaceModel(createdSpacePath, data.model, window.localStorage, data.modelProvider);
         useChatStore.getState().setSelectedModel(data.model);
+        useChatStore.getState().setSelectedModelProvider(data.modelProvider || '');
       }
       if (data.pinnedApps && data.pinnedApps.length > 0) {
         data.pinnedApps.forEach((app) => {

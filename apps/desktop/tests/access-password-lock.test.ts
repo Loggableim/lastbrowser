@@ -59,5 +59,8 @@ describe('desktop access password lock', () => {
     expect(source).toContain('onRefresh={refreshSettingsData}');
     expect(source).toContain('pluginsState.refresh()');
     expect(source).toContain("path: '/api/auth/status' });\n      if (confirmedAuth.auth_enabled !== false)");
+    expect(source).toContain('authState.setData(confirmedAuth)');
+    const shared = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/RestPanelShared.tsx'), 'utf8');
+    expect(shared).toContain('setData: React.Dispatch<React.SetStateAction<AnyRecord | null>>');
   });
 });

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Descargar Lastbrowser – Instalador Oficial para Windows (v0.1.42 Beta)</title>
+<meta name="description" content="Descarga Lastbrowser para Windows 10 y 11 (64-Bit). Versión 0.1.42 Beta: Instalador NSIS y edición Portable. 100% Local-First y compatible con RGPD.">
+<meta property="og:title" content="Descargar Lastbrowser – Compilación Oficial para Windows (v0.1.42)">
+<meta property="og:description" content="Navegador Chromium rápido y privado con Nova AI, Espacios aislados y Castlabs Widevine DRM. Descarga directa para Windows.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/es/download/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/es/download/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/download/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/download/">
+<link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/download/">
+<link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/download/">
+<link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/download/">
+<link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/download/">
+<link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/download/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/download/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<script src="/assets/js/theme.js"></script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Lastbrowser",
+  "operatingSystem": "Windows 10, Windows 11 (x64)",
+  "applicationCategory": "BrowserApplication",
+  "softwareVersion": "0.1.42 Beta",
+  "downloadUrl": "https://github.com/Loggableim/lastbrowser/releases/download/v0.1.42/Lastbrowser-0.1.42-x64-setup.exe",
+  "offers": {
+    "@type": "Offer",
+    "price": "0.00",
+    "priceCurrency": "EUR"
+  }
+}
+</script>
+</head>
+<body>
+<a href="#main" class="skip-link">Saltar al contenido principal</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/es/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>Descargar · v0.1.42</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/es/features/">Funciones</a>
+      <a href="/spaces/">Espacios</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">Hub MCP</a>
+      <a href="/docs/">Documentación</a>
+      <a href="/es/enterprise/">Empresas</a>
+      <a href="/es/download/" class="active">Descargar</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Seleccionar idioma">🇪🇸 ES ▾</button>
+        <div class="lang-menu">
+          <a href="/download/" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/download/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/download/" class="active" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/download/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/download/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/download/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/download/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Cambiar tema">☀️</button>
+      <a href="https://github.com/Loggableim/lastbrowser" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">GitHub</a>
+      <button class="mobile-toggle" aria-label="Abrir menú">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/es/features/">Funciones</a>
+  <a href="/spaces/">Espacios</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">Hub MCP</a>
+  <a href="/docs/">Documentación</a>
+  <a href="/es/enterprise/">Empresas</a>
+  <a href="/es/download/">Descargar</a>
+  <a href="/es/imprint/">Aviso Legal</a>
+</div>
+
+<main id="main">
+  <section class="hero">
+    <div class="container">
+      <div class="pill-badge">Compilación Oficial para Windows · v0.1.42 Beta</div>
+      <h1>Obtén el <span class="grad">Navegador AI-Nativo para Windows</span></h1>
+      <p class="lead">Lastbrowser combina la máxima velocidad de Chromium con Nova AI, terminal ConPTY, Widevine DRM L3 y Espacios aislados. 100% Local-First en tu PC.</p>
+      
+      <div class="cta-group">
+        <a id="main-download-btn" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.42/Lastbrowser-0.1.42-x64-setup.exe" class="btn btn-primary btn-lg">
+          ⬇️ Descargar Instalador (.exe)
+        </a>
+        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.42/Lastbrowser-0.1.42-x64-portable.exe" class="btn btn-ghost btn-lg">
+          📦 Versión Portable (.exe)
+        </a>
+      </div>
+      
+      <div style="margin-top:16px;display:flex;gap:16px;justify-content:center;align-items:center;flex-wrap:wrap;">
+        <span class="sub-cta-note">Windows 10 y 11 (x64) · 100% Gratuito y Open Source · Cero Telemetría</span>
+        <button onclick="openSmartScreenModal()" class="btn btn-ghost btn-sm" style="font-size:12px;padding:4px 10px;border-radius:20px;">🛡️ ¿Aviso de Windows SmartScreen?</button>
+      </div>
+
+      <!-- Trust Badges -->
+      <div style="display:flex;gap:20px;justify-content:center;margin-top:28px;flex-wrap:wrap;">
+        <div class="badge badge-green">✓ Firma digital verificada</div>
+        <div class="badge badge-cyan">✓ Cifrado Local DPAPI</div>
+        <div class="badge badge-purple">✓ Sin Registro Obligatorio</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Setup vs Portable Comparison -->
+  <section class="container" style="padding: 40px 0 60px;">
+    <div class="section-header">
+      <h2>Elige tu Formato de Instalación</h2>
+      <p>Ambas ediciones incluyen el motor completo de Chromium, Nova AI y el terminal ConPTY.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="feature-card" style="border:1px solid var(--accent);background:linear-gradient(180deg, rgba(0,229,255,0.04) 0%, transparent 100%);">
+        <div class="badge badge-cyan" style="margin-bottom:12px;">Recomendado para la Mayoría</div>
+        <h3>Instalador Estándar (Setup .exe)</h3>
+        <p>Instalador NSIS optimizado para integración fluida en Windows 10 y 11.</p>
+        <ul class="docs-checklist" style="margin:20px 0;">
+          <li>✓ Registro con un clic como navegador predeterminado de Windows</li>
+          <li>✓ Accesos directos automáticos en el menú Inicio y Escritorio</li>
+          <li>✓ Actualizaciones en segundo plano seguras</li>
+          <li>✓ Soporte para instalación desatendida mediante flag <code>/S</code></li>
+        </ul>
+        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.42/Lastbrowser-0.1.42-x64-setup.exe" class="btn btn-primary btn-sm" style="width:100%;justify-content:center;">
+          Descargar Lastbrowser-0.1.42-x64-setup.exe (150 MB)
+        </a>
+      </div>
+
+      <div class="feature-card">
+        <div class="badge badge-purple" style="margin-bottom:12px;">Sin Instalación · Zero-Registry</div>
+        <h3>Edición Portable (.exe)</h3>
+        <p>Ejecución directa desde cualquier carpeta o unidad USB sin tocar el registro de Windows.</p>
+        <ul class="docs-checklist" style="margin:20px 0;">
+          <li>✓ No requiere permisos de administrador</li>
+          <li>✓ No modifica claves de registro del sistema</li>
+          <li>✓ Almacena perfiles junto al ejecutable o en <code>%APPDATA%</code></li>
+          <li>✓ Ideal para entornos corporativos o pruebas rápidas</li>
+        </ul>
+        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.42/Lastbrowser-0.1.42-x64-portable.exe" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;">
+          Descargar Lastbrowser-0.1.42-x64-portable.exe (150 MB)
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3-Step Onboarding Preview -->
+  <section class="container" style="padding: 20px 0 60px;">
+    <div class="section-header">
+      <h2>Ponte en Marcha en 3 Pasos</h2>
+      <p>Desde la descarga hasta tu primer flujo de trabajo asistido por IA en menos de dos minutos.</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="fc-icon blue">1</div>
+        <h3>Ejecuta el Instalador</h3>
+        <p>Abre el archivo descargado. La instalación se completa en pocos segundos sin bloatware ni componentes secundarios no deseados.</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon purple">2</div>
+        <h3>Selecciona tu Mentalidad de IA</h3>
+        <p>Configura Nova AI según tu estilo: Pragmatismo Técnico, Investigación Exhaustiva o Asistencia Creativa con total control de prompts.</p>
+      </div>
+      <div class="feature-card">
+        <div class="fc-icon green">3</div>
+        <h3>Navega con Superpoderes</h3>
+        <p>Abre la barra lateral Zen con <code>Ctrl+B</code> o lanza tu terminal ConPTY con <code>Ctrl+\`</code> para comenzar a programar de inmediato.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Checksum & Verification -->
+  <section class="container" style="padding: 20px 0 60px;">
+    <div class="feature-card">
+      <h3>Verificación Criptográfica de Integridad (SHA-256)</h3>
+      <p>Comprueba la autenticidad del binario descargado antes de ejecutarlo:</p>
+      <div class="code-block" style="margin-top:14px;">
+        <button class="copy-btn" onclick="copyCode(this)">Copiar</button>
+        <pre><code># Verificación con PowerShell en Windows:
+Get-FileHash -Algorithm SHA256 .\Lastbrowser-0.1.42-x64-setup.exe
+
+# Suma SHA-256 oficial para v0.1.42 Beta (Setup):
+018C78449F9F7EC18A517367F07E3DDF8647DB0D63BBC693B886BF40BA5C42A4
+
+# Suma SHA-256 oficial para v0.1.42 Beta (Portable):
+6433A38507800C0A84B815DD3C85DD9B6C058A42D2078103DB47861B03D83A16</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Troubleshooting FAQ -->
+  <section class="container" style="padding: 20px 0 80px;">
+    <div class="section-header">
+      <h2>Preguntas Frecuentes sobre la Descarga</h2>
+      <p>Respuestas claras a las dudas técnicas más comunes durante la instalación.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="feature-card">
+        <h4>¿Por qué aparece el aviso de Windows SmartScreen?</h4>
+        <p>Como nuevo binario de código abierto publicado recientemente, el archivo aún acumula reputación en los servidores de Microsoft. Puedes hacer clic de forma segura en "Más información" y luego en "Ejecutar de todas formas".</p>
+      </div>
+      <div class="feature-card">
+        <h4>¿Es posible realizar un despliegue masivo silencioso?</h4>
+        <p>Sí, el instalador soporta el modificador <code>/S</code> para despliegues desatendidos vía SCCM, Intune o scripts de PowerShell empresariales.</p>
+      </div>
+      <div class="feature-card">
+        <h4>¿Cómo se desinstala Lastbrowser por completo?</h4>
+        <p>Desde la Configuración de Windows > Aplicaciones instaladas, o ejecutando directamente el desinstalador en tu carpeta de programa. Los datos de <code>%APPDATA%\Lastbrowser</code> se eliminan limpiamente si así lo seleccionas.</p>
+      </div>
+      <div class="feature-card">
+        <h4>¿Existen versiones para macOS o Linux?</h4>
+        <p>Lastbrowser está actualmente optimizado al 100% para la arquitectura nativa de Windows (ConPTY, DirectWrite, DPAPI). Las versiones para Linux y macOS están en nuestra hoja de ruta técnica.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Floating Sticky Download Bar -->
+<div class="floating-download-bar">
+  <div class="float-info">
+    <img src="/assets/app-icons/nav-icon.ico" alt="Icono" width="28" height="28">
+    <div><strong>Lastbrowser</strong> <span>v0.1.42 Beta para Windows 10 &amp; 11</span></div>
+  </div>
+  <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.42/Lastbrowser-0.1.42-x64-setup.exe" class="btn btn-primary btn-sm">
+    ⬇️ Descargar (.exe)
+  </a>
+</div>
+
+<!-- SmartScreen Modal -->
+<div class="modal-backdrop" id="smartscreen-modal" onclick="if(event.target===this)closeSmartScreenModal()">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Cómo pasar el aviso de Windows SmartScreen</h3>
+      <button class="modal-close" onclick="closeSmartScreenModal()">✕</button>
+    </div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:16px;">
+      Al tratarse de una versión reciente de código abierto sin telemetría de telemetría masiva en la nube, Windows SmartScreen puede mostrar una advertencia azul preventiva:
+    </p>
+    <div style="background:rgba(255,255,255,0.03);padding:16px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
+      <p style="font-weight:600;margin-bottom:8px;">Paso 1: Haz clic en el enlace <span style="text-decoration:underline;">"Más información"</span> en el diálogo azul.</p>
+      <p style="font-weight:600;color:var(--accent);">Paso 2: Haz clic en el botón <span style="text-decoration:underline;">"Ejecutar de todas formas"</span> que aparecerá abajo.</p>
+    </div>
+    <p style="font-size:13px;color:var(--muted);">
+      Puedes verificar el hash SHA-256 y la firma digital del archivo descargado.
+    </p>
+    <div style="margin-top:20px;text-align:right;">
+      <button class="btn btn-primary btn-sm" onclick="closeSmartScreenModal()">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<!-- Non-Windows Waitlist Modal -->
+<div class="modal-backdrop" id="waitlist-modal" onclick="if(event.target===this)closeWaitlistModal()">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Lastbrowser para macOS y Linux</h3>
+      <button class="modal-close" onclick="closeWaitlistModal()">✕</button>
+    </div>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:16px;">
+      Lastbrowser está desarrollado nativamente para Windows 10 y 11. ¿Te gustaría recibir un aviso cuando publiquemos para tu sistema operativo?
+    </p>
+    <form onsubmit="event.preventDefault();alert('¡Gracias! Te avisaremos en cuanto esté disponible.');closeWaitlistModal();">
+      <input type="email" placeholder="tu-correo@ejemplo.com" required style="width:100%;padding:12px 14px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:#fff;margin-bottom:14px;">
+      <button type="submit" class="btn btn-primary" style="width:100%;">Unirme a la Lista de Espera</button>
+    </form>
+  </div>
+</div>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>Navegador AI-Nativo</span></div>
+      </div>
+      <p>El navegador Chromium moderno para Windows 10 y 11 con IA nativa, 48 flujos de trabajo y terminal ConPTY. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Licenciamiento Comercial: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Producto</h4>
+      <ul>
+        <li><a href="/es/features/">Funciones y Matriz</a></li>
+        <li><a href="/spaces/">Espacios y Aislamiento</a></li>
+        <li><a href="/docs/terminal/">Terminal ConPTY</a></li>
+        <li><a href="/hub/">Hub de Extensiones y MCP</a></li>
+        <li><a href="/es/download/">Descargar para Windows</a></li>
+        <li><a href="/roadmap/">Hoja de Ruta</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Comparativas (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Recursos</h4>
+      <ul>
+        <li><a href="/docs/">Documentación</a></li>
+        <li><a href="/shortcuts/">Atajos de Teclado</a></li>
+        <li><a href="/blog/">Blog de Ingeniería</a></li>
+        <li><a href="/security/">Seguridad y DPAPI</a></li>
+        <li><a href="/releases/">Archivo de Versiones</a></li>
+        <li><a href="/press/">Kit de Prensa</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Legal y Contacto</h4>
+      <ul>
+        <li><a href="/es/imprint/">Aviso Legal (§ 5 DDG)</a></li>
+        <li><a href="/es/privacy/">Política de Privacidad</a></li>
+        <li><a href="/es/enterprise/">Licencias Enterprise</a></li>
+        <li><a href="/es/support/">Portal de Soporte</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Proyecto Lastbrowser. Todos los derechos reservados. Cero Telemetría Involuntaria.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 y 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">Canal RSS</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

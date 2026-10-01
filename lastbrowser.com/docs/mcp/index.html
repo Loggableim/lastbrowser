@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Model Context Protocol (MCP) – Lastbrowser Dokumentation</title>
+<meta name="description" content="Konfiguration von Model Context Protocol (MCP) Servern in Lastbrowser: mcp_servers.json Syntax, externe Tools und Datenbankanbindung.">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/docs/mcp/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/docs/mcp/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/docs/mcp/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/docs/mcp/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<script src="/assets/js/theme.js"></script>
+</head>
+<body>
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>Dokumentation</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/" class="active">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/docs/mcp/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/docs/mcp/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/docs/mcp/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/docs/mcp/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/docs/mcp/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/docs/mcp/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/docs/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<main id="main" class="container docs-layout">
+  <aside class="docs-sidebar">
+    <h4>Grundlagen</h4>
+    <ul>
+      <li><a href="/docs/">Überblick</a></li>
+      <li><a href="/docs/getting-started/">Schnellstart &amp; Installation</a></li>
+      <li><a href="/shortcuts/">Tastenkürzel</a></li>
+    </ul>
+
+    <h4>Architektur</h4>
+    <ul>
+      <li><a href="/docs/spaces/">Spaces &amp; Session-Isolation</a></li>
+      <li><a href="/docs/terminal/">ConPTY PowerShell Terminal</a></li>
+      <li><a href="/docs/mcp/" class="active">Model Context Protocol (MCP)</a></li>
+      <li><a href="/docs/extensions/">Chrome MV3 Erweiterungen</a></li>
+    </ul>
+
+    <h4>Sicherheit &amp; Trust</h4>
+    <ul>
+      <li><a href="/security/">Security &amp; DPAPI Whitepaper</a></li>
+      <li><a href="/privacy/">Datenschutzerklärung</a></li>
+      <li><a href="/enterprise/">Enterprise Deployment</a></li>
+    </ul>
+  </aside>
+
+  <article class="docs-content">
+    <div class="breadcrumbs">
+      <a href="/">Home</a> <span>/</span> <a href="/docs/">Dokumentation</a> <span>/</span> <span class="current">Model Context Protocol</span>
+    </div>
+
+    <h1>Model Context Protocol <span class="grad">(MCP) in Lastbrowser</span></h1>
+    <p>
+      Das Model Context Protocol (MCP) ist ein offener Standard, der es KI-Assistenten erlaubt, sicher mit externen Datenquellen, Dateisystemen und Entwickler-Tools zu interagieren. Lastbrowser unterstützt MCP nativ im Sidekick-Engine-Kern.
+    </p>
+
+    <h2>Konfigurationsdatei: mcp_servers.json</h2>
+    <p>
+      MCP-Server werden in der Datei <code>%APPDATA%\Lastbrowser\mcp_servers.json</code> definiert. Jedes Tool, das über stdio oder SSE kommuniziert, kann angebunden werden:
+    </p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span>mcp_servers.json</span>
+        <button class="copy-btn" data-copy='{ "mcpServers": { "postgres": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"] }, "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "DEIN_TOKEN" } } } }'>Kopieren</button>
+      </div>
+      <pre><code>{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "DEIN_TOKEN"
+      }
+    }
+  }
+}</code></pre>
+    </div>
+
+    <h2>Wie Nova AI mit MCP-Tools interagiert</h2>
+    <ol>
+      <li><strong>Tool Discovery:</strong> Beim Start fragt die Sidekick-Engine die verfügbaren Fähigkeiten des MCP-Servers ab (<code>tools/list</code>).</li>
+      <li><strong>Kontextuelle Auswahl:</strong> Wenn Sie Nova eine Frage stellen (z. B. „Zeige mir die letzten 5 Commits im Repo“), wählt Nova das entsprechende GitHub-Tool automatisch aus.</li>
+      <li><strong>Menschliche Bestätigung:</strong> Sensible Aktionen (Schreibvorgänge auf die Festplatte oder SQL-Updates) fordern vor Ausführung eine Nutzerbestätigung im Chat.</li>
+    </ol>
+
+    <h2>Katalog vordefinierter MCP-Server</h2>
+    <p>
+      Besuchen Sie unseren <a href="/hub/">MCP &amp; Extension Hub</a>, um kuratierte Server-Definitionen mit 1-Klick-Import zu entdecken.
+    </p>
+  </article>
+
+  <aside class="docs-toc">
+    <h4>Auf dieser Seite</h4>
+    <ul>
+      <li><a href="#mcp_servers">mcp_servers.json</a></li>
+      <li><a href="#interaktion">Wie Nova MCP nutzt</a></li>
+      <li><a href="#katalog">Katalog</a></li>
+    </ul>
+  </aside>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

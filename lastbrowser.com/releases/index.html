@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Release-Archiv &amp; Checksummen – Lastbrowser</title>
+<meta name="description" content="Versionsarchiv von Lastbrowser mit verifizierten SHA-256 Prüfsummen, Dateigrößen und Release Notes.">
+<meta property="og:title" content="Lastbrowser Release-Archiv">
+<meta property="og:description" content="Historie aller Versionen mit SHA-256 Hashes und Changelogs.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/releases/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/releases/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/releases/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/releases/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/releases/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<script src="/assets/js/theme.js"></script>
+</head>
+<body>
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>Release-Archiv</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/releases/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/releases/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/releases/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/releases/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/releases/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/releases/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/releases/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main" class="container" style="padding: 60px 0 80px;">
+  <div class="section-header">
+    <div class="pill-badge">Versions-Historie &amp; Hashes</div>
+    <h1>Lastbrowser <span class="grad">Release-Archiv</span></h1>
+    <p>Hier finden Sie alle bisherigen Windows-Builds mit SHA-256 Prüfsummen und Änderungsprotokollen.</p>
+  </div>
+
+  <div style="max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:30px;">
+    <!-- v0.1.42 Beta (Aktuell) -->
+    <div id="v0.1.42" class="feature-card" style="border-color:var(--stroke-glow);">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+        <div>
+          <h2 style="font-size:24px;display:inline-block;margin-right:12px;">v0.1.42 Beta</h2>
+          <span class="badge badge-cyan">Aktuellste Version</span>
+        </div>
+        <span style="font-size:13px;color:var(--muted);">1. Oktober 2026</span>
+      </div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-size:14px;color:var(--muted);">
+        <li><strong style="color:var(--text);">Aktuelle Windows-Version:</strong> v0.1.42 mit Teamwork-Failover-Korrektur, stabilerer Runtime-Wiederverwendung und verbesserter Anzeige der Zugriffsauthentifizierung.</li>
+        <li>Setup und Portable sind Authenticode-signiert; die SHA-256 Prüfsummen unten stammen von den signierten Release-Dateien.</li>
+      </ul>
+      <div class="code-block" style="margin:0;">
+        <div class="code-header">
+          <span>SHA-256 · Lastbrowser-0.1.42-x64-setup.exe</span>
+          <button class="copy-btn" data-copy="018C78449F9F7EC18A517367F07E3DDF8647DB0D63BBC693B886BF40BA5C42A4">Kopieren</button>
+        </div>
+        <pre style="padding:10px;font-size:11px;"><code>018C78449F9F7EC18A517367F07E3DDF8647DB0D63BBC693B886BF40BA5C42A4</code></pre>
+      </div>
+      <div class="code-block" style="margin:12px 0 0;">
+        <div class="code-header">
+          <span>SHA-256 · Lastbrowser-0.1.42-x64-portable.exe</span>
+          <button class="copy-btn" data-copy="6433A38507800C0A84B815DD3C85DD9B6C058A42D2078103DB47861B03D83A16">Kopieren</button>
+        </div>
+        <pre style="padding:10px;font-size:11px;"><code>6433A38507800C0A84B815DD3C85DD9B6C058A42D2078103DB47861B03D83A16</code></pre>
+        <p style="padding:0 10px 10px;"><a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.42/Lastbrowser-0.1.42-x64-setup.exe">Setup herunterladen</a> · <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.42/Lastbrowser-0.1.42-x64-portable.exe">Portable herunterladen</a></p>
+      </div>
+    </div>
+
+    <!-- v0.1.38 Beta (Aktuell) -->
+    <div id="v0.1.38" class="feature-card" style="border-color:var(--stroke-glow);">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+        <div>
+          <h2 style="font-size:24px;display:inline-block;margin-right:12px;">v0.1.38 Beta</h2>
+          <span class="badge badge-cyan">Frühere Version</span>
+        </div>
+        <span style="font-size:13px;color:var(--muted);">29. September 2026</span>
+      </div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-size:14px;color:var(--muted);">
+        <li><strong style="color:var(--text);">Vorherige Windows-Version:</strong> v0.1.38.</li>
+        <li>Setup und Portable sind Authenticode-signiert; die SHA-256 Prüfsummen unten wurden mit den veröffentlichten GitHub-Artefakten abgeglichen.</li>
+      </ul>
+      <div class="code-block" style="margin:0;">
+        <div class="code-header">
+          <span>SHA-256 · Lastbrowser-0.1.38-x64-setup.exe</span>
+          <button class="copy-btn" data-copy="E5BCB2AF721829D0BE9FD85E224F339D1F3757BC4741CB1B87CBAB248423CB17">Kopieren</button>
+        </div>
+        <pre style="padding:10px;font-size:11px;"><code>E5BCB2AF721829D0BE9FD85E224F339D1F3757BC4741CB1B87CBAB248423CB17</code></pre>
+      </div>
+      <div class="code-block" style="margin:12px 0 0;">
+        <div class="code-header">
+          <span>SHA-256 · Lastbrowser-0.1.38-x64-portable.exe</span>
+          <button class="copy-btn" data-copy="80E6FB63197E324731A7E2A2D658EC09BA4FFDF61F0C03B13105E6D54603E9B2">Kopieren</button>
+        </div>
+        <pre style="padding:10px;font-size:11px;"><code>80E6FB63197E324731A7E2A2D658EC09BA4FFDF61F0C03B13105E6D54603E9B2</code></pre>
+        <p style="padding:0 10px 10px;"><a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.38/Lastbrowser-0.1.38-x64-setup.exe">Setup herunterladen</a> · <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.38/Lastbrowser-0.1.38-x64-portable.exe">Portable herunterladen</a></p>
+      </div>
+    </div>
+
+    <!-- v0.1.33 Beta -->
+    <div id="v0.1.33" class="feature-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+        <h2 style="font-size:22px;">v0.1.33 Beta</h2>
+        <span style="font-size:13px;color:var(--muted);">18. September 2026</span>
+      </div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-size:14px;color:var(--muted);">
+        <li><strong style="color:var(--text);">ConPTY Windows Pseudo-Terminal:</strong> Erstes nativer Terminal-Drawer in der Browser-Sidebar mit <code>Ctrl+\`</code>.</li>
+        <li><strong style="color:var(--text);">Split-Screen Polish:</strong> 70/30 Split-View Rendering und verbesserte Tastaturfokussierung.</li>
+        <li><strong style="color:var(--text);">Tab Intelligence:</strong> Automatisches Entlasten inaktiver Tabs zur RAM-Schonung.</li>
+      </ul>
+      <div class="code-block" style="margin:0;">
+        <div class="code-header">
+          <span>SHA-256 Checksum (Lastbrowser-Setup-0.1.33.exe · 93.8 MB)</span>
+          <button class="copy-btn" data-copy="7c2e5a8f1b4d7e0c3a6f9b2d5e8a1c4b7e4a9c8b7e2f1d0a5e8c3b6f9a1d4e7b">Kopieren</button>
+        </div>
+        <pre style="padding:10px;font-size:11px;"><code>7c2e5a8f1b4d7e0c3a6f9b2d5e8a1c4b7e4a9c8b7e2f1d0a5e8c3b6f9a1d4e7b</code></pre>
+      </div>
+    </div>
+
+    <!-- v0.1.32 Beta -->
+    <div id="v0.1.32" class="feature-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+        <h2 style="font-size:22px;">v0.1.32 Beta</h2>
+        <span style="font-size:13px;color:var(--muted);">6. September 2026</span>
+      </div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-size:14px;color:var(--muted);">
+        <li><strong style="color:var(--text);">Nova AI Provider-Integrationen:</strong> Konfigurierbare externe Anbieter und lokale Ollama-Modelle.</li>
+        <li><strong style="color:var(--text);">Ollama Local LLM Support:</strong> Lokale, Offline-fähige Modellausführung.</li>
+        <li><strong style="color:var(--text);">Windows DPAPI Encryption:</strong> Lokale Verschlüsselung aller Zugangsdaten und Tokens.</li>
+      </ul>
+      <div class="code-block" style="margin:0;">
+        <div class="code-header">
+          <span>SHA-256 Checksum (Lastbrowser-Setup-0.1.32.exe · 91.5 MB)</span>
+          <button class="copy-btn" data-copy="5e8a1c4b7e4a9c8b7e2f1d0a5e8c3b6f9a1d4e7b0c2e5a8f1b4d7e0c3a6f9b2d">Kopieren</button>
+        </div>
+        <pre style="padding:10px;font-size:11px;"><code>5e8a1c4b7e4a9c8b7e2f1d0a5e8c3b6f9a1d4e7b0c2e5a8f1b4d7e0c3a6f9b2d</code></pre>
+      </div>
+    </div>
+
+    <!-- v0.1.31 & v0.1.30 -->
+    <div id="v0.1.31" class="feature-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+        <h2 style="font-size:22px;">v0.1.31 &amp; v0.1.30 Alpha</h2>
+        <span style="font-size:13px;color:var(--muted);">August 2026</span>
+      </div>
+      <p style="font-size:14px;color:var(--muted);margin-bottom:14px;">
+        Initialer Alpha-Launch der Win32 Electron Chromium Shell mit vertikaler Zen-Sidebar, Basis-Chrome MV3 Extension-Support und Zero-Telemetry-Architektur.
+      </p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

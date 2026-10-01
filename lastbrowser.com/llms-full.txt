@@ -1,0 +1,51 @@
+# Lastbrowser - Comprehensive Technical Architecture & LLM Guide
+
+## 1. Overview
+Lastbrowser is an AI-native Windows web browser engineered for power users, developers, and knowledge workers. It combines a high-performance Chromium rendering engine (via Electron) with a local in-tree Python agent runtime (Sidekick) and an embedded ConPTY Windows terminal.
+
+## 2. Technical Stack & Architecture
+- **Desktop Shell:** Electron 34+ with TypeScript, React 19, and Vite.
+- **Sidekick Backend Engine:** Native Python 3.12+ runtime serving a local FastAPI / Uvicorn API on `127.0.0.1:8765`.
+- **Terminal Engine:** Windows ConPTY pseudo-console (`node-pty`) embedded in a sidebar drawer with complete PowerShell and CMD support.
+- **DRM Engine:** Castlabs Electron Widevine DRM L3 CDM integration via `components.whenReady()`, enabling Widevine-protected playback on Spotify, Netflix, and Disney+.
+- **Browser Automation & CDP:** Direct Chrome DevTools Protocol integration for page analysis, accessibility audits, and DOM extraction.
+
+## 3. Core Features
+### 3.1 Spaces & Partition Isolation
+Unlike traditional browsers that share cookies across windows, Lastbrowser isolates browser contexts using custom partition IDs: `persist:profile:<spaceId>`. Each Space maintains its own:
+- Cookie jar
+- LocalStorage and IndexedDB
+- HTTP disk cache
+- Web session state
+This allows simultaneous multi-account management (e.g. personal and work accounts) in the same window without session bleed.
+
+### 3.2 ConPTY PowerShell Terminal
+A native terminal lives directly in the browser shell:
+- Responds to `Ctrl+\``
+- Full Windows pseudo-console compatibility
+- Supports CLI tools, Git, SSH, npm, Python, Docker, and Ollama
+- Built-in "Terminal Doctor" automated diagnostics
+
+### 3.3 Nova AI Copilot & 48 Agentic Workflows
+Nova AI operates in a 70/30 split view alongside web content:
+- **AI providers:** Configure available providers in the app settings or use local Ollama models. Availability and costs depend on the selected service.
+- **Agentic Skills Catalog:** 48 curated skills categorised into:
+  1. Research (Academic paper summarizer, competitive analysis, fact checker)
+  2. Content (Social thread generator, translation, markdown exporter)
+  3. Code (OpenAPI extractor, regex debugger, PR review helper)
+  4. Data (JSON transformer, CSV statistical analysis, SQL generator)
+- **Model Context Protocol (MCP):** Connects external MCP servers (PostgreSQL, Filesystem, Google Maps, GitHub) with 1-click JSON configs.
+
+### 3.4 Castlabs Electron Widevine DRM L3
+Lastbrowser integrates Castlabs Electron to support Widevine CDM v4.10+ on Windows 10 & 11, passing DRM verification for streaming platforms.
+
+## 4. Privacy, Security & Local-First Guarantees
+- **Data Location:** Stored exclusively in `%APPDATA%\Lastbrowser`.
+- **Credential Storage:** Windows Data Protection API (DPAPI) encrypts tokens and API keys locally.
+- **Zero Involuntary Telemetry:** No tracking pixels, Google Analytics, or involuntary diagnostic reporting.
+- **Store Compliance:** Certified for Microsoft Store submission under Policy 10.2 (AI response reporting & user feedback mechanisms).
+
+## 5. Licensing Model
+- **Personal, Academic & Open Source:** 100% Free of charge.
+- **Enterprise & Commercial Deployment:** Fleet management, group policy (GPO/registry) configuration, centralized MCP server orchestration, custom whitelabeling, and SLA support require a commercial license.
+- **Contact:** Business licensing inquiries are handled directly via `rainer@dominik.in`.

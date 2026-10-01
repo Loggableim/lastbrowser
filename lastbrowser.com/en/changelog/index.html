@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Changelog &amp; Roadmap – Lastbrowser</title>
-<meta name="description" content="Release history and roadmap of Lastbrowser: All updates from v0.1.32 Public Beta to previous milestones and upcoming features.">
+<meta name="description" content="Release history and roadmap of Lastbrowser: Public versions and upcoming release candidates.">
 <meta property="og:title" content="Changelog &amp; Roadmap – Lastbrowser">
 <meta property="og:description" content="Explore release notes, bug fixes, and development roadmap for Lastbrowser.">
 <meta property="og:type" content="website">
@@ -14,9 +14,27 @@
 <link rel="canonical" href="https://lastbrowser.com/en/changelog/">
 <link rel="alternate" hreflang="de" href="https://lastbrowser.com/changelog/">
 <link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/changelog/">
+<link rel="alternate" hreflang="es" href="https://lastbrowser.com/es/changelog/">
+<link rel="alternate" hreflang="fr" href="https://lastbrowser.com/fr/changelog/">
+<link rel="alternate" hreflang="it" href="https://lastbrowser.com/it/changelog/">
+<link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/changelog/">
+<link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/changelog/">
 <link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/changelog/">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/assets/fonts/inter-var.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('/assets/fonts/outfit-var.woff2') format('woff2');
+}
 
 :root {
   --nearBlack:#070A12; --midnight:#07111F; --surface:#101827; --panel:#0E1628; --stroke:#2A3550;
@@ -111,7 +129,7 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
   <div class="container inner">
     <a href="/en/" class="logo">
       <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser">
-      <div><strong>Lastbrowser</strong><span>v0.1.32 Beta · AI-Native</span></div>
+      <div><strong>Lastbrowser</strong><span>v0.1.42 Beta · AI-Native</span></div>
     </a>
     <div class="links">
       <a href="/en/">Home</a>
@@ -137,27 +155,104 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
 
   <div class="timeline">
 
-    <!-- v0.1.32 -->
+    <!-- v0.1.42 published release -->
+    <div class="release-entry">
+      <div class="release-bullet highlight"></div>
+      <article class="release-card">
+        <div class="release-header">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="release-tag">v0.1.42</span>
+            <span class="badge-now">Current release</span>
+          </div>
+          <span class="release-date">October 1, 2026</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;font-weight:600">Persistent goals retain earlier steps. Ollama Cloud, Teamwork, and streaming were checked in the packaged app.</p>
+        <ul class="release-list">
+          <li><a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.42">GitHub v0.1.42</a></li>
+        </ul>
+      </article>
+    </div>
+
+    <!-- v0.1.41 published release -->
+    <div class="release-entry">
+      <div class="release-bullet highlight"></div>
+      <article class="release-card">
+        <div class="release-header">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="release-tag">v0.1.41</span>
+            <span class="badge-now">Previous release</span>
+          </div>
+          <span class="release-date">October 1, 2026</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;font-weight:600">Stability and reliability update with corrected Teamwork model selection and clearer authentication status.</p>
+        <ul class="release-list">
+          <li>Windows setup and portable downloads are available on the download page.</li>
+          <li>Release notes and files on GitHub. <a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.41">GitHub</a>.</li>
+        </ul>
+      </article>
+    </div>
+
+    <!-- v0.1.38 published release -->
     <div class="release-entry">
       <div class="release-bullet highlight"></div>
       <article class="release-card current">
         <div class="release-header">
           <div style="display:flex;align-items:center;gap:12px">
-            <span class="release-tag">v0.1.32</span>
-            <span class="badge-now">Current Beta Release</span>
+            <span class="release-tag">v0.1.38</span>
+            <span class="badge-now">Previous release</span>
+          </div>
+          <span class="release-date">September 29, 2026</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;font-weight:600">
+          Stability and provider fixes since v0.1.34. This previous Windows release remains available on GitHub.
+        </p>
+        <ul class="release-list">
+          <li>Windows setup and portable builds are available on the <a href="/en/download/">download page</a>.</li>
+          <li>Release notes and assets are listed on <a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.38">GitHub</a>.</li>
+        </ul>
+      </article>
+    </div>
+
+    <!-- v0.1.33 -->
+    <div class="release-entry">
+      <div class="release-bullet"></div>
+      <article class="release-card">
+        <div class="release-header">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="release-tag">v0.1.33</span>
           </div>
           <span class="release-date">September 25, 2026</span>
         </div>
         <p style="color:var(--text);font-size:14px;font-weight:600">
-          Major Milestone: 100% Space Session Isolation, Space Hub Start Page, Castlabs Widevine VMP Signing &amp; EV Authenticode.
+          Feature &amp; Stability Update: Teamwork and Smart Track configuration, Zen Hover Reveal, Space Setup Assistant, and Dock Fisheye Animation.
         </p>
         <ul class="release-list">
-          <li><strong>100% Space Session Isolation:</strong> Each Space now maintains an independent partition key (<code>persist:profile:space</code>). Logins for Google, Disney+, or GitHub are strictly isolated between Spaces with zero session spillover.</li>
+          <li><strong>Teamwork &amp; Smart Track Orchestrator:</strong> Multi-model collaborative agent team (Lead, Researcher, Analyst, Critic) and single-lane token-efficient Smart Track mode with adaptive effort tiers (Low, Medium, High).</li>
+          <li><strong>Zen Mode Hover Reveal:</strong> 8px left edge hover zone smoothly slides the sidebar into view as a floating overlay without displacing web page layout.</li>
+          <li><strong>Dock Fisheye &amp; Hover Titles:</strong> Fluid macOS-inspired dock fisheye effect with dynamic scaling and progressive dimming of adjacent icons in slim dock mode.</li>
+          <li><strong>Space Setup Assistant:</strong> 3-step creation wizard for new spaces with presets (Coding, Research, Media, Blank), accent colors, and custom AI model routing.</li>
+          <li><strong>Downloads Overlay &amp; Floating Dock:</strong> Detachable downloads panel with persistent screen positioning, pill minimization, and multiple docking slots.</li>
+          <li><strong>Instant Live Auto-Save:</strong> Theme, font size, page zoom, and notification preferences now persist instantly with zero delay without a separate save button.</li>
+        </ul>
+      </article>
+    </div>
+
+    <!-- v0.1.32 -->
+    <div class="release-entry">
+      <div class="release-bullet"></div>
+      <article class="release-card">
+        <div class="release-header">
+          <span class="release-tag">v0.1.32</span>
+          <span class="release-date">September 25, 2026</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;font-weight:600">
+          Major Milestone: Space Session Isolation, Space Hub Start Page, and Castlabs Widevine integration.
+        </p>
+        <ul class="release-list">
+          <li><strong>Space Session Isolation:</strong> Spaces use separate persistent partitions (<code>persist:profile:space</code>) for browser session data.</li>
           <li><strong>Space Hub Dashboard:</strong> New Space section on the start page displaying active Spaces, live tab counters, quick switching, and an inline "+ New Space" creation modal.</li>
-          <li><strong>Castlabs Widevine DRM:</strong> Complete integration with Castlabs Electron and Video Multi-Part Protection (VMP) code signing. Netflix, Disney+, Spotify, and Prime Video stream reliably with full hardware acceleration.</li>
+          <li><strong>Castlabs Widevine DRM:</strong> Integration of the Castlabs Electron build for Widevine-protected media. Playback still depends on the requirements of each streaming service.</li>
           <li><strong>Split-View Rendering Fixes:</strong> Smooth tab switching between dual-tab split-view and standard tabs without stuck rendering states.</li>
-          <li><strong>Extended Validation (EV) Code Signing:</strong> All release binaries (NSIS Setup &amp; Portable) are officially signed and timestamped under Dominik Rainer (Certum CA).</li>
-          <li><strong>Complete Test Verification:</strong> 71 Vitest suites with 625 tests passing; 27/27 Microsoft Store preflight checks green.</li>
         </ul>
       </article>
     </div>
@@ -187,7 +282,7 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
           <span class="release-date">September 22, 2026</span>
         </div>
         <ul class="release-list">
-          <li><strong>Multi-Account Gemini CLI:</strong> Cyclic load balancing and automatic failover on quota limits (HTTP 429) with real-time status badges.</li>
+          <li><strong>AI provider integrations:</strong> Connect configurable providers for Nova AI.</li>
           <li><strong>ConPTY PowerShell Terminal:</strong> Full Windows PowerShell terminal inside the browser sidebar with interactive agent TUI and <code>doctor</code> self-repair command.</li>
           <li><strong>Smart Tab Discarding:</strong> Automated tab hibernation to dramatically reduce RAM and power usage.</li>
         </ul>

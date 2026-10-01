@@ -1,5 +1,23 @@
 User-agent: *
 Allow: /
-Disallow: /downloads/
+Disallow: /functions/
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
 
 Sitemap: https://lastbrowser.com/sitemap.xml
+# LLM Knowledge graph:
+# https://lastbrowser.com/llms.txt
+# https://lastbrowser.com/llms-full.txt

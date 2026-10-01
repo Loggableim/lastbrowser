@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lastbrowser für Multi-Account – Echte Session-Isolation in Spaces</title>
+<meta name="description" content="Der Browser für Agenturen &amp; Social-Media-Manager: Mehrere Konten auf derselben Website parallel nutzen ohne Fensterwechsel dank echter Cookie-Isolation in Spaces.">
+<meta property="og:title" content="Lastbrowser für Multi-Account Management">
+<meta property="og:description" content="Mehrere Logins parallel verwalten: 100% isolierte Spaces, keine vermischten Cookies und schnelles Umschalten im selben Browserfenster.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lastbrowser.com/for/multi-account/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/for/multi-account/">
+<link rel="alternate" hreflang="de" href="https://lastbrowser.com/for/multi-account/">
+<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/for/multi-account/">
+<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/for/multi-account/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<script src="/assets/js/theme.js"></script>
+</head>
+<body>
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>für Multi-Account</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/for/multi-account/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/for/multi-account/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/for/multi-account/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/for/multi-account/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/for/multi-account/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/for/multi-account/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/for/multi-account/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main">
+  <section class="hero">
+    <div class="container">
+      <div class="pill-badge">For Agencies, SMMs &amp; Consultants</div>
+      <h1>Alle Kunden-Accounts parallel <span class="grad">in einem Fenster</span></h1>
+      <p class="lead">Vergessen Sie zeitraubende Profil-Fenster oder ständiges Ein- und Ausloggen. In Lastbrowser besitzt jeder Space eine eigene, isolierte Partition für Cookies, Caches und Logins.</p>
+      
+      <div class="cta-group">
+        <a href="/download/" class="btn btn-primary btn-lg">Lastbrowser für Windows herunterladen</a>
+        <a href="/spaces/" class="btn btn-ghost btn-lg">Spaces-Architektur ansehen</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="container" style="padding: 20px 0 60px;">
+    <div class="grid-3">
+      <div class="feature-card">
+        <div class="fc-icon blue">🪐</div>
+        <h3>Echte Session-Partitionierung</h3>
+        <p>Jeder Space nutzt eine eigene Partition: <code>persist:profile:&lt;spaceId&gt;</code>. Logins auf Google, AWS, GitHub oder LinkedIn sind strikt voneinander getrennt.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon purple">🎯</div>
+        <h3>Kein Profil-Fenster-Chaos</h3>
+        <p>Wechseln Sie blitzschnell zwischen Mandanten, Kunden oder Projekten in der Zen-Sidebar, ohne ein Dutzend getrennte Desktop-Fenster offen halten zu müssen.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon green">🔒</div>
+        <h3>Zero Cookie-Bleed</h3>
+        <p>Ausgeschlossen: Versehentliches Posten im falschen Kunden-Account. Session-Daten können systembedingt nicht in andere Spaces überschwappen.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon yellow">🎨</div>
+        <h3>Farbkodierung &amp; Icons</h3>
+        <p>Jeder Space kann individuell mit eigenem Namen, Farbakzent und Icon belegt werden, sodass Sie immer sofort erkennen, in welchem Kundenkontext Sie arbeiten.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon pink">⚡</div>
+        <h3>Memory Discarding</h3>
+        <p>Inaktive Spaces geben ihren Arbeitsspeicher automatisch frei. Selbst mit 10 aktiven Kunden-Spaces bleibt Ihr PC flüssig und reaktionsschnell.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="fc-icon blue">🛡️</div>
+        <h3>Datenschutz für Mandanten</h3>
+        <p>Alle Kunden-Zugangsdaten verbleiben verschlüsselt auf Ihrer lokalen Festplatte unter <code>%APPDATA%\Lastbrowser</code> und werden niemals getrackt.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js"></script>
+</body>
+</html>

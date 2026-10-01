@@ -244,6 +244,43 @@ try {
     `provider=${finalState?.provider} model=${finalState?.model}`,
   );
 
+  if (process.env.OLLAMA_CANCEL_SMOKE === '1') {
+    const cancelSession = await evaluate(`window.lastbrowser.sidekick.createSession({ model: 'deepseek-v4.1-flash', modelProvider: 'ollama-cloud', profile: 'default' })`, true);
+    const cancelSessionId = String(cancelSession?.session?.session_id || '');
+    if (!cancelSessionId) throw new Error('Could not create cancellation session');
+    const cancelStarted = await evaluate(`(async () => {
+      const result = await window.lastbrowser.sidekick.startChat({
+        sessionId: ${JSON.stringify(cancelSessionId)},
+        message: 'Write a long original story in 100 numbered paragraphs. Start the story immediately.',
+        model: 'deepseek-v4.1-flash', modelProvider: 'ollama-cloud',
+        profile: 'default', mode: 'action', chatMode: 'chat',
+      });
+      await window.lastbrowser.sidekick.subscribeChatStream({ streamId: result.streamId });
+      return { streamId: result.streamId };
+    })()`, true, 60_000);
+    const cancelStreamId = String(cancelStarted?.streamId || '');
+    if (!cancelStreamId) throw new Error('Cancellation chat did not return a stream ID');
+    let streaming = false;
+    const cancelDeadline = Date.now() + 90_000;
+    while (Date.now() < cancelDeadline) {
+      streaming = await evaluate(`window.__ollamaSmoke.events.some((event) => event.streamId === ${JSON.stringify(cancelStreamId)} && ['token', 'delta', 'reasoning'].includes(event.event) && Boolean(event.data?.text || event.data?.content))`);
+      if (streaming) break;
+      await wait(300);
+    }
+    check('cancellation request reaches a live Ollama generation', streaming);
+    await evaluate(`window.lastbrowser.sidekick.cancelStream(${JSON.stringify(cancelStreamId)})`, true);
+    let stopped = false;
+    const stopDeadline = Date.now() + 30_000;
+    while (Date.now() < stopDeadline) {
+      const status = await evaluate(`window.lastbrowser.sidekick.getStreamStatus(${JSON.stringify(cancelStreamId)})`, true);
+      if (status?.active === false) { stopped = true; break; }
+      await wait(300);
+    }
+    check('cancelled Ollama stream becomes inactive within 30 seconds', stopped);
+    if (!stopped) throw new Error('Cancelled stream remained active');
+    await evaluate(`window.lastbrowser.sidekick.deleteSession({ sessionId: ${JSON.stringify(cancelSessionId)} })`, true);
+  }
+
   if (process.env.OLLAMA_TEAMWORK_SMOKE === '1') {
     const teamworkStatus = await evaluate(`window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/status' })`, true);
     const ollamaModel = Array.isArray(teamworkStatus?.models)
@@ -345,7 +382,7 @@ try {
         path: '/api/goal',
         body: {
           session_id: ${JSON.stringify(goalSessionId)},
-          args: 'This task must use at least two assistant turns. In the first assistant turn, output exactly "STEP 1: READY" and do not claim completion. On a later continuation turn, report: "The earlier turn completed STEP 1: READY. PERSISTED GOAL DONE." The goal is complete only when the latest assistant turn confirms the earlier step and contains the exact final marker.',
+          args: 'This task must use at least two assistant turns. In the first assistant turn, output exactly "STEP 1: READY" and nothing else. On the next continuation turn, output exactly "PERSISTED GOAL DONE" and nothing else. The goal is complete only after both markers have actually appeared in separate assistant turns, in that order. Do not repeat the first marker or describe earlier turns in the final response.',
           profile: 'default',
           model: 'deepseek-v4.1-flash',
           model_provider: 'ollama-cloud',

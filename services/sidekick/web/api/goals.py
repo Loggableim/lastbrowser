@@ -22,6 +22,7 @@ try:  # Exposed as a module attribute so tests can monkeypatch it directly.
         DEFAULT_MAX_TURNS,
         GoalManager as _NativeGoalManager,
         GoalState,
+        bounded_goal_evidence,
         format_goal_turn_budget,
         judge_goal,
         normalize_goal_turn_budget,
@@ -531,6 +532,8 @@ class _ProfileGoalManager:
     def resume(self, *, reset_budget: bool = False):
         if not self._state:
             return None
+        if self._state.status == "active" and not reset_budget:
+            return self._state
         exhausted = (
             self._state.max_turns is not None
             and int(self._state.turns_used or 0) >= int(self._state.max_turns or 0)
@@ -582,7 +585,13 @@ class _ProfileGoalManager:
         elif judge_goal is None:
             verdict, reason, parse_failed = "continue", "goal judge unavailable", False
         else:
-            verdict, reason, parse_failed = judge_goal(state.goal, str(last_response or ""))
+            verdict, reason, parse_failed = judge_goal(
+                state.goal, str(last_response or ""),
+                prior_responses=state.recent_assistant_responses,
+            )
+        state.recent_assistant_responses = bounded_goal_evidence(
+            [*state.recent_assistant_responses, str(last_response or "")]
+        )
         state.last_verdict = verdict
         state.last_reason = reason
         if parse_failed:
@@ -1147,6 +1156,12 @@ def goal_command_payload(
     if lower == "resume":
         try:
             with _CONTINUATION_LOCK:
+                state = getattr(mgr, "state", None)
+                if state is not None and state.status == "active":
+                    return _payload(
+                        action="status", state=state, session_id=sid, space_slug=space_slug,
+                        **_goal_status_payload(state),
+                    )
                 cancel_goal_continuation(sid, profile_home=profile_home, space_slug=space_slug)
                 state = mgr.resume()
         except Exception as exc:
@@ -1270,6 +1285,9 @@ def has_active_goal(
         raise RuntimeError("Persistent goal state is unavailable") from exc
 
 
+_UNSPECIFIED_GOAL_SNAPSHOT = object()
+
+
 def evaluate_goal_after_turn(
     session_id: str,
     last_response: str,
@@ -1277,6 +1295,7 @@ def evaluate_goal_after_turn(
     user_initiated: bool = True,
     profile_home: str | Path | None = None,
     space_slug: str | None = None,
+    expected_goal_state: Any = _UNSPECIFIED_GOAL_SNAPSHOT,
 ) -> Dict[str, Any]:
     """Evaluate a completed turn without overwriting concurrent user changes."""
     sid = str(session_id or "").strip()
@@ -1306,6 +1325,19 @@ def evaluate_goal_after_turn(
                     "message": "",
                 }
             expected_state = copy.deepcopy(getattr(mgr, "state", None))
+            if expected_goal_state is not _UNSPECIFIED_GOAL_SNAPSHOT and (
+                expected_state != expected_goal_state
+                or getattr(expected_state, "_goal_run_id", None)
+                != getattr(expected_goal_state, "_goal_run_id", None)
+            ):
+                return {
+                    "status": getattr(expected_state, "status", None),
+                    "should_continue": False,
+                    "continuation_prompt": None,
+                    "verdict": "stale",
+                    "reason": "goal changed while response was generated",
+                    "message": "",
+                }
             if not expected_state or str(getattr(expected_state, "status", "") or "") != "active":
                 return {
                     "status": getattr(expected_state, "status", None),
@@ -1319,7 +1351,10 @@ def evaluate_goal_after_turn(
         judged_result = (
             ("continue", "goal judge unavailable", False)
             if judge_goal is None
-            else judge_goal(expected_state.goal, str(last_response or ""))
+            else judge_goal(
+                expected_state.goal, str(last_response or ""),
+                prior_responses=expected_state.recent_assistant_responses,
+            )
         )
 
         # Commit the judge result only if the state still matches the snapshot.
@@ -1327,7 +1362,9 @@ def evaluate_goal_after_turn(
         with _CONTINUATION_LOCK:
             commit_mgr = _manager(sid, profile_home=profile_home, space_slug=space_slug)
             current_state = copy.deepcopy(getattr(commit_mgr, "state", None)) if commit_mgr else None
-            if current_state != expected_state or str(getattr(current_state, "status", "") or "") != "active":
+            if (current_state != expected_state
+                or getattr(current_state, "_goal_run_id", None) != getattr(expected_state, "_goal_run_id", None)
+                or str(getattr(current_state, "status", "") or "") != "active"):
                 return {
                     "status": getattr(current_state, "status", None),
                     "should_continue": False,

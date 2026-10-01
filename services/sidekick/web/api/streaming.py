@@ -2398,7 +2398,35 @@ def _report_goal_progress_unverified(session, session_id, put):
     return message
 
 
-def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
+_UNSCOPED_GOAL_TURN = object()
+
+
+def _capture_goal_turn_context(session, session_id):
+    """Bind generated evidence to the goal and profile present before generation."""
+    try:
+        from web.api.goals import goal_state_snapshot
+        from web.api.profiles import get_profile_home
+
+        profile_home = get_profile_home(getattr(session, "profile", None))
+        space_slug = str(
+            getattr(session, "workspace_slug", "")
+            or getattr(session, "space_slug", "")
+            or getattr(session, "space", "") or ""
+        ).strip().lower() or None
+        state = goal_state_snapshot(session_id, profile_home=profile_home, space_slug=space_slug)
+        return {
+            "profile_home": profile_home,
+            "space_slug": space_slug,
+            "expected_goal_state": state,
+        }
+    except Exception:
+        logger.warning("Could not bind goal evidence before generation", exc_info=True)
+        return None
+
+
+def _evaluate_goal_after_stream_turn(
+    session, session_id, goal_related, put, *, goal_turn_context=_UNSCOPED_GOAL_TURN,
+):
     """Run the persistent-goal judge and publish the usual SSE continuation events.
 
     Orchestrator modes return before the normal agent completion path, so they
@@ -2407,6 +2435,9 @@ def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
     """
     if not goal_related:
         return {}
+    if goal_turn_context is None:
+        _report_goal_progress_unverified(session, session_id, put)
+        return {"verdict": "error", "should_continue": False}
     try:
         from web.api.goals import (
             evaluate_goal_after_turn,
@@ -2426,6 +2457,11 @@ def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
             or getattr(session, "space", "")
             or ""
         ).strip().lower() or None
+        evaluation_scope = {}
+        if goal_turn_context is not _UNSCOPED_GOAL_TURN:
+            profile_home = goal_turn_context["profile_home"]
+            space_slug = goal_turn_context["space_slug"]
+            evaluation_scope["expected_goal_state"] = goal_turn_context["expected_goal_state"]
 
         if not has_active_goal(session_id, profile_home=profile_home, space_slug=space_slug):
             return {}
@@ -2459,6 +2495,7 @@ def _evaluate_goal_after_stream_turn(session, session_id, goal_related, put):
             user_initiated=True,
             profile_home=profile_home,
             space_slug=space_slug,
+            **evaluation_scope,
         ) or {}
         if str(decision.get("verdict") or "").strip().lower() == "error":
             _report_goal_progress_unverified(session, session_id, put)
@@ -2781,6 +2818,7 @@ def _run_agent_streaming(
     _agent_lock = None
     try:
         s = get_session(session_id)
+        goal_turn_context = _capture_goal_turn_context(s, session_id) if goal_related else None
         update_active_run(stream_id, phase="running", session_id=session_id)
         try:
             from web.api.kanban_orchestration import (
@@ -2854,7 +2892,7 @@ def _run_agent_streaming(
                     stream_put=put,
                     cancel_event=cancel_event,
                 )
-                _evaluate_goal_after_stream_turn(s, session_id, goal_related, put)
+                _evaluate_goal_after_stream_turn(s, session_id, goal_related, put, goal_turn_context=goal_turn_context)
                 _clear_orchestration_pending_state(s, session_id, stream_id)
                 put('stream_end', {'session_id': session_id, 'stream_id': stream_id})
                 return
@@ -2888,7 +2926,7 @@ def _run_agent_streaming(
                     stream_put=put,
                     cancel_event=cancel_event,
                 )
-                _evaluate_goal_after_stream_turn(s, session_id, goal_related, put)
+                _evaluate_goal_after_stream_turn(s, session_id, goal_related, put, goal_turn_context=goal_turn_context)
                 _clear_orchestration_pending_state(s, session_id, stream_id)
                 put('stream_end', {'session_id': session_id, 'stream_id': stream_id})
                 return
@@ -4596,7 +4634,7 @@ def _run_agent_streaming(
             except Exception:
                 logger.debug("Failed to drain pending steer for session %s", session_id)
             # Run the same persistent-goal hook used by orchestration streams.
-            _evaluate_goal_after_stream_turn(s, session_id, goal_related, put)
+            _evaluate_goal_after_stream_turn(s, session_id, goal_related, put, goal_turn_context=goal_turn_context)
             raw_session = s.compact() | {'messages': s.messages, 'tool_calls': tool_calls}
             put('done', {'session': redact_session_data(raw_session), 'usage': usage})
             # Emit one last metering packet for the live message-header TPS label.

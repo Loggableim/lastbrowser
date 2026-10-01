@@ -384,6 +384,8 @@ def test_enabled_orchestration_stream_runs_persistent_goal_hook(
         session.messages.append({"role": "assistant", "content": "Team answer"})
 
     monkeypatch.setattr(orchestrator_module, runner_name, run_turn)
+    goal_snapshot = SimpleNamespace(goal="Keep working", status="active", _goal_run_id="original")
+    monkeypatch.setattr(goals_api, "goal_state_snapshot", lambda *_a, **_k: goal_snapshot)
     monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _profile: tmp_path / "profile")
     monkeypatch.setattr(goals_api, "has_active_goal", lambda *_a, **_k: True)
     evaluation = Mock(return_value={
@@ -409,6 +411,7 @@ def test_enabled_orchestration_stream_runs_persistent_goal_hook(
             user_initiated=True,
             profile_home=tmp_path / "profile",
             space_slug=None,
+            expected_goal_state=goal_snapshot,
         )
         assert session.active_stream_id is None
         assert session.pending_user_message is None

@@ -40,7 +40,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 
-from cli.config import get_sidekick_home, get_config_path, read_raw_config
+from cli.config import get_sidekick_home, get_config_path, get_env_value, read_raw_config
 from runtime._compat.shim_constants import OPENROUTER_BASE_URL
 from shared.utils import atomic_replace, atomic_yaml_write, base_url_host_matches, is_truthy_value
 
@@ -2914,7 +2914,7 @@ def get_api_key_provider_status(provider_id: str) -> Dict[str, Any]:
 
     env_url = ""
     if pconfig.base_url_env_var:
-        env_url = os.getenv(pconfig.base_url_env_var, "").strip()
+        env_url = str(get_env_value(pconfig.base_url_env_var) or "").strip()
 
     if provider_id in {"kimi-coding", "kimi-coding-cn"}:
         base_url = _resolve_kimi_base_url(api_key, pconfig.inference_base_url, env_url)
@@ -3021,7 +3021,7 @@ def resolve_api_key_provider_credentials(provider_id: str) -> Dict[str, Any]:
 
     env_url = ""
     if pconfig.base_url_env_var:
-        env_url = os.getenv(pconfig.base_url_env_var, "").strip()
+        env_url = str(get_env_value(pconfig.base_url_env_var) or "").strip()
 
     if provider_id in {"kimi-coding", "kimi-coding-cn"}:
         base_url = _resolve_kimi_base_url(api_key, pconfig.inference_base_url, env_url)

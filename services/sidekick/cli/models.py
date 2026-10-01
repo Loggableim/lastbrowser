@@ -1518,6 +1518,67 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
                     return live
         except Exception:
             pass
+    if normalized == "alibaba":
+        # DashScope workspace keys are scoped to their workspace host. The
+        # OpenAI-compatible endpoint is for inference; catalog discovery uses
+        # the native DashScope /api/v1/models endpoint on that same host.
+        try:
+            from cli.auth import resolve_api_key_provider_credentials
+
+            creds = resolve_api_key_provider_credentials("alibaba")
+            api_key = str(creds.get("api_key") or "").strip()
+            base_url = str(creds.get("base_url") or "").strip()
+            from urllib.parse import urlsplit
+
+            parsed = urlsplit(base_url)
+            host = (parsed.hostname or "").lower()
+            port = parsed.port
+            if (
+                api_key
+                and parsed.scheme == "https"
+                and (host == "dashscope-intl.aliyuncs.com" or host.endswith(".maas.aliyuncs.com"))
+                and parsed.path.rstrip("/") == "/compatible-mode/v1"
+                and not parsed.username
+                and not parsed.password
+                and not parsed.query
+                and not parsed.fragment
+                and port in (None, 443)
+            ):
+                import urllib.request
+
+                class _NoRedirectAlibaba(urllib.request.HTTPRedirectHandler):
+                    def redirect_request(self, *_args, **_kwargs):
+                        return None
+
+                opener = urllib.request.build_opener(_NoRedirectAlibaba())
+                model_id_set: set[str] = set()
+                # DashScope returns at most 100 catalog entries per page.
+                # Cap traversal so a malformed/huge provider response cannot
+                # stall model selection indefinitely.
+                for page in range(1, 11):
+                    catalog_url = f"{parsed.scheme}://{parsed.netloc}/api/v1/models?capabilities=TG&page_no={page}&page_size=100"
+                    request = urllib.request.Request(
+                        catalog_url,
+                        headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+                    )
+                    with opener.open(request, timeout=5) as response:
+                        payload = json.loads(response.read(4 * 1024 * 1024).decode("utf-8"))
+                    output = payload.get("output", {}) if isinstance(payload, dict) else {}
+                    models = output.get("models", []) if isinstance(output, dict) else []
+                    if not isinstance(models, list) or not models:
+                        break
+                    for item in models:
+                        if isinstance(item, dict):
+                            model_id = str(item.get("model") or "").strip()
+                            if model_id:
+                                model_id_set.add(model_id)
+                    if len(models) < 100:
+                        break
+                model_ids = sorted(model_id_set, key=str.lower)
+                if model_ids:
+                    return model_ids
+        except Exception:
+            pass
     if normalized == "custom":
         base_url = _get_custom_base_url()
         if base_url:

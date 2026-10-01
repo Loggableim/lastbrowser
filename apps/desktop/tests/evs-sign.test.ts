@@ -64,12 +64,12 @@ describe('Castlabs EVS Windows afterSign hook', () => {
     expect(log).toHaveBeenCalledWith('[EVS/VMP] Widevine VMP package signing and verification succeeded.');
   });
 
-  it('fails closed when release-mode EVS credentials are missing', async () => {
+  it('requires explicit credentials only when that separate policy is enabled', async () => {
     const spawnSync = vi.fn(() => ({ status: 0 }));
     const hook = createEvsSigningHook({
       spawnSync,
       existsSync: vi.fn(() => true),
-      env: { EVS_REQUIRED: '1', EVS_NO_ASK: '1' },
+      env: { EVS_REQUIRE_EXPLICIT_CREDENTIALS: '1', EVS_NO_ASK: '1' },
       log: vi.fn(),
       warn: vi.fn()
     });
@@ -138,14 +138,14 @@ describe('Castlabs EVS Windows afterSign hook', () => {
     await expect(hook(context)).rejects.toThrow('VMP signing step failed (process launch failed)');
   });
 
-  it('tries the cached Castlabs session for local builds without explicit credentials', async () => {
+  it('allows release-mode VMP signing through the cached Castlabs session without explicit credentials', async () => {
     const spawnSync = vi.fn().mockReturnValueOnce({ status: 0 }).mockReturnValueOnce({ status: 0 });
     const warn = vi.fn();
     const log = vi.fn();
     const hook = createEvsSigningHook({
       spawnSync,
       existsSync: vi.fn(() => true),
-      env: { EVS_NO_ASK: '1' },
+      env: { EVS_REQUIRED: '1', EVS_NO_ASK: '1' },
       log,
       warn
     });
@@ -187,6 +187,20 @@ describe('Castlabs EVS Windows afterSign hook', () => {
     expect(spawnSync).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('VMP signing failed (exit code 12)'));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('local test build without a verified VMP signature; do not release'));
+  });
+
+  it('fails release mode when cached-session VMP signing fails without explicit credentials', async () => {
+    const spawnSync = vi.fn(() => ({ status: 12 }));
+    const hook = createEvsSigningHook({
+      spawnSync,
+      existsSync: vi.fn(() => true),
+      env: { EVS_REQUIRED: '1', EVS_NO_ASK: '1' },
+      log: vi.fn(),
+      warn: vi.fn()
+    });
+
+    await expect(hook(context)).rejects.toThrow('VMP signing failed (exit code 12)');
+    expect(spawnSync).toHaveBeenCalledTimes(1);
   });
 
   it('allows a local test build when VMP verification fails but warns', async () => {

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   isProviderModelSelected,
   parseProviderModelId,
@@ -39,6 +41,31 @@ describe('provider-aware model selection', () => {
       .toBe('@ollama-cloud:deepseek-v4.1-flash');
     expect(qualifyModelForProvider('@ollama-cloud:deepseek-v4.1-flash', 'ollama-cloud'))
       .toBe('@ollama-cloud:deepseek-v4.1-flash');
+  });
+
+  it('keeps an Alibaba chat selection distinct when another provider has the same model ID', () => {
+    const options = [
+      { id: 'qwen-plus', providerId: 'openrouter' },
+      { id: 'qwen-plus', providerId: 'alibaba' }
+    ];
+    const optionValues = options.map((option) => qualifyModelForProvider(option.id, option.providerId));
+    const selectedValue = qualifyModelForProvider(options[1].id, options[1].providerId);
+    const selection = parseProviderModelId(selectedValue);
+
+    expect(optionValues).toEqual(['@openrouter:qwen-plus', '@alibaba:qwen-plus']);
+    expect(selectedValue).toBe('@alibaba:qwen-plus');
+    expect(selection).toEqual({ provider: 'alibaba', model: 'qwen-plus' });
+    expect(qualifyModelForProvider(selection.model, selection.provider)).toBe('@alibaba:qwen-plus');
+  });
+
+  it('wires qualified provider IDs through the visible chat model picker', () => {
+    const composer = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/ChatComponents.tsx'), 'utf8');
+    const chat = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8');
+    expect(composer).toContain('value={qualifyModelForProvider(model, modelProvider)}');
+    expect(composer).toContain('value={qualifyModelForProvider(m.id, group.providerId)}');
+    expect(composer).toContain('key={`${group.providerId || group.provider}:${m.id}`}');
+    expect(chat).toContain('const parsed = parseProviderModelId(selection);');
+    expect(chat).toContain('modelProvider={modelProvider}');
   });
 
   it('maps a provider-qualified configured default to the bare picker ID', () => {

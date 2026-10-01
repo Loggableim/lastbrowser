@@ -37,6 +37,7 @@ import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import type { DesktopChatMessage, DesktopSessionDetail, ChatRunState } from '../shell-state.js';
 import { shouldShowNativeTurnUsage, type NativeChatTurnUsage } from '../chat-usage.js';
 import { useDesktopI18n } from '../i18n.js';
+import { qualifyModelForProvider } from '../provider-model-selection.js';
 import { toBionicSegments } from '../utils/bionic-reading.js';
 import { usePanelStore } from '../stores/usePanelStore.js';
 
@@ -349,7 +350,8 @@ export type ChatComposerProps = {
   mode: ComposerMode;
   model: string;
   /** Selectable models, grouped by provider. Empty hides the picker. */
-  modelOptions: Array<{ provider: string; models: Array<{ id: string; label: string }> }>;
+  modelOptions: Array<{ provider: string; providerId?: string; models: Array<{ id: string; label: string }> }>;
+  modelProvider?: string;
   profile: string;
   ready: boolean;
   runState: ChatRunState;
@@ -391,6 +393,7 @@ export function ChatComposer({
   busy,
   mode,
   model,
+  modelProvider,
   modelOptions,
   profile,
   ready,
@@ -523,22 +526,22 @@ export function ChatComposer({
           <label className="composer-model" title="Model for this conversation">
             <Cpu size={13} />
             <select
-              value={model}
+              value={qualifyModelForProvider(model, modelProvider)}
               disabled={!ready || running}
               onChange={(event) => onModelChange(event.target.value)}
               style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}
             >
               {/* Keep the current model visible even when the catalog has not
                   loaded yet or the model is no longer offered. */}
-              {!modelOptions.some((group) => group.models.some((m) => m.id === model)) && (
-                <option value={model} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+              {!modelOptions.some((group) => group.models.some((m) => m.id === model && (!modelProvider || group.providerId === modelProvider))) && (
+                <option value={qualifyModelForProvider(model, modelProvider)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
                   {model || 'default'}
                 </option>
               )}
               {modelOptions.map((group) => (
-                <optgroup key={group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
+                <optgroup key={group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
                   {group.models.map((m) => (
-                    <option key={m.id} value={m.id} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
                       {m.label}
                     </option>
                   ))}

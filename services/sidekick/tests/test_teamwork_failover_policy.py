@@ -125,7 +125,7 @@ def test_teamwork_run_assigns_disjoint_eligible_backups_to_parallel_workers():
     }
 
 
-@pytest.mark.parametrize("status_code", [401, 429])
+@pytest.mark.parametrize("status_code", [401, 403, 429])
 def test_worker_does_not_hot_swap_after_auth_or_quota_failure(status_code):
     primary = _worker("@ollama-cloud:deepseek-v4.1-flash", "ollama-cloud", call_model="deepseek-v4.1-flash")
     backup = _worker("@openrouter:paid-model", "openrouter", call_model="paid-model")
@@ -140,10 +140,12 @@ def test_worker_does_not_hot_swap_after_auth_or_quota_failure(status_code):
 
     assert calls == [("ollama-cloud", "deepseek-v4.1-flash")]
     assert result["http_status"] == status_code
-    assert result["error"] == (
-        "HTTP 401: authentication failed" if status_code == 401
-        else "HTTP 429: rate limit or quota reached"
-    )
+    expected_error = {
+        401: "HTTP 401: authentication failed",
+        403: "HTTP 403: provider access forbidden",
+        429: "HTTP 429: rate limit or quota reached",
+    }
+    assert result["error"] == expected_error[status_code]
     assert "provider.invalid" not in result["error"]
     assert result["swapped"] is False
 
@@ -173,7 +175,7 @@ def test_worker_still_hot_swaps_after_transient_provider_failure():
     assert result["swapped"] is True
 
 
-@pytest.mark.parametrize("status_code", [401, 429])
+@pytest.mark.parametrize("status_code", [401, 403, 429])
 def test_teamwork_emits_sanitized_auth_and_quota_failures_without_cross_provider_call(status_code):
     primary = _worker("@ollama-cloud:deepseek-v4.1-flash", "ollama-cloud", call_model="deepseek-v4.1-flash")
     backup = _worker("@openrouter:paid-model", "openrouter", call_model="paid-model")

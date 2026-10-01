@@ -340,7 +340,7 @@ def _provider_failure_kind(error: Any) -> Optional[int]:
             return status
     # Some SDK wrappers expose only a formatted exception string. Match the
     # status token, but never forward that string because it may include data.
-    match = re.search(r"\bHTTP\s*(401|429)\b|\b(401|429)\b", str(error), re.IGNORECASE)
+    match = re.search(r"\bHTTP\s*(401|403|429)\b|\b(401|403|429)\b", str(error), re.IGNORECASE)
     if match:
         return int(match.group(1) or match.group(2))
     return None
@@ -351,6 +351,8 @@ def _safe_provider_failure(error: Any) -> str:
     status = _provider_failure_kind(error)
     if status == 401:
         return "HTTP 401: authentication failed"
+    if status == 403:
+        return "HTTP 403: provider access forbidden"
     if status == 429:
         return "HTTP 429: rate limit or quota reached"
     if status is not None:
@@ -369,6 +371,11 @@ def _teamwork_quorum_error(failed_drafts: List[Dict[str, Any]], required: int) -
         return (
             "Teamwork konnte keinen Lösungsentwurf erzeugen: Der Anbieter hat die "
             "Anmeldung abgelehnt (HTTP 401). Prüfe die gespeicherten Zugangsdaten."
+        )
+    if 403 in statuses:
+        return (
+            "Teamwork konnte keinen Lösungsentwurf erzeugen: Der Anbieter hat "
+            "den Zugriff verweigert (HTTP 403). Prüfe Zugangsdaten und Anbieterberechtigungen."
         )
     if 429 in statuses:
         return (
@@ -640,7 +647,7 @@ def _invoke_worker(
             failure_status = _provider_failure_kind(e)
             safe_failure = _safe_provider_failure(e)
             logger.warning("Worker %s failed: %s", current_worker["model"], safe_failure)
-            if not allow_hot_swap or failure_status in {401, 429}:
+            if not allow_hot_swap or failure_status in {401, 403, 429}:
                 elapsed_ms = int((time.time() - start_t) * 1000)
                 return {
                     "model": current_worker["model"],
@@ -876,7 +883,7 @@ def run_teamwork_turn(
                             # details, or credential fragments. Only expose a
                             # normalized status category in the UI event.
                             "error": (
-                                f"HTTP {status}" if status in (401, 429)
+                                f"HTTP {status}" if status in (401, 403, 429)
                                 else "Anbieteraufruf fehlgeschlagen"
                             ),
                             "skipped": True,

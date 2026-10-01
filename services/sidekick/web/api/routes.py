@@ -10724,23 +10724,28 @@ def _handle_model_probe(handler, body):
             def redirect_request(self, *_args, **_kwargs):
                 return None
 
-        request = urllib.request.Request(
-            f"{base_url}/models",
-            headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
-        )
         try:
             opener = urllib.request.build_opener(_NoRedirect())
-            with opener.open(request, timeout=12) as response:
-                payload = json.loads(response.read(4 * 1024 * 1024))
-            data = payload.get("data", []) if isinstance(payload, dict) else []
-            models = []
-            if isinstance(data, list):
+            models_by_id = {}
+            for page in range(1, 11):
+                request = urllib.request.Request(
+                    f"{parsed.scheme}://{parsed.netloc}/api/v1/models?capabilities=TG&page_no={page}&page_size=100",
+                    headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+                )
+                with opener.open(request, timeout=8) as response:
+                    payload = json.loads(response.read(4 * 1024 * 1024))
+                output = payload.get("output", {}) if isinstance(payload, dict) else {}
+                data = output.get("models", []) if isinstance(output, dict) else []
+                if not isinstance(data, list) or not data:
+                    break
                 for item in data:
                     if isinstance(item, dict):
-                        model_id = str(item.get("id") or "").strip()
+                        model_id = str(item.get("model") or "").strip()
                         if model_id:
-                            models.append({"id": model_id, "label": str(item.get("name") or model_id).strip()})
-            models.sort(key=lambda item: item["id"].lower())
+                            models_by_id[model_id] = {"id": model_id, "label": str(item.get("name") or model_id).strip()}
+                if len(data) < 100:
+                    break
+            models = sorted(models_by_id.values(), key=lambda item: item["id"].lower())
             return j(handler, {"provider": "alibaba", "models": models, "count": len(models)})
         except urllib.error.HTTPError as exc:
             return j(handler, {"error": f"Alibaba model catalog returned HTTP {exc.code}", "models": []}, status=exc.code)
@@ -10975,12 +10980,12 @@ def _handle_live_models(handler, parsed):
         if not ids and provider != "openai":
             _ep = _OPENAI_COMPAT_ENDPOINTS.get(provider)
             if provider == "alibaba":
-                # DashScope workspaces use a user-specific host. Keep this
-                # catalog fetch scoped to the Alibaba credential and URL only.
-                _ep = os.environ.get("DASHSCOPE_BASE_URL", "").strip().rstrip("/") or (
-                    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
-                )
-                _alibaba_key = os.environ.get("DASHSCOPE_API_KEY", "").strip()
+                # DashScope workspaces use a user-specific host. Runtime
+                # credentials read the profile .env as well as process env.
+                from cli.auth import resolve_api_key_provider_credentials
+                _alibaba_creds = resolve_api_key_provider_credentials("alibaba")
+                _ep = str(_alibaba_creds.get("base_url") or "").strip().rstrip("/")
+                _alibaba_key = str(_alibaba_creds.get("api_key") or "").strip()
                 from urllib.parse import urlsplit
                 try:
                     _alibaba_parts = urlsplit(_ep)
@@ -11002,6 +11007,8 @@ def _handle_live_models(handler, parsed):
                     or _alibaba_port not in (None, 443)
                 ):
                     _ep = ""
+                elif _ep:
+                    _ep = f"{_alibaba_parts.scheme}://{_alibaba_parts.netloc}/api/v1/models?capabilities=TG&page_no=1&page_size=100"
             else:
                 _alibaba_key = ""
             if _ep and (provider != "alibaba" or _alibaba_key):
@@ -11016,12 +11023,24 @@ def _handle_live_models(handler, parsed):
                         _key = cfg.get("model", {}).get("api_key")
                     if _key:
                         _req = urllib.request.Request(
-                            f"{_ep}/models",
+                            _ep if provider == "alibaba" else f"{_ep}/models",
                             headers={"Authorization": f"Bearer {_key}"},
                         )
-                        with urllib.request.urlopen(_req, timeout=8) as _resp:
+                        if provider == "alibaba":
+                            class _AlibabaNoRedirect(urllib.request.HTTPRedirectHandler):
+                                def redirect_request(self, *_args, **_kwargs):
+                                    return None
+                            _response_context = urllib.request.build_opener(_AlibabaNoRedirect()).open(_req, timeout=8)
+                        else:
+                            _response_context = urllib.request.urlopen(_req, timeout=8)
+                        with _response_context as _resp:
                             _body = json.loads(_resp.read())
-                        ids = [m.get("id", "") for m in _body.get("data", []) if m.get("id")]
+                        if provider == "alibaba":
+                            _output = _body.get("output", {}) if isinstance(_body, dict) else {}
+                            _models = _output.get("models", []) if isinstance(_output, dict) else []
+                            ids = [m.get("model", "") for m in _models if isinstance(m, dict) and m.get("model")]
+                        else:
+                            ids = [m.get("id", "") for m in _body.get("data", []) if m.get("id")]
                         logger.debug("Live-fetched %d models from %s /v1/models", len(ids), provider)
                 except Exception as _fetch_err:
                     logger.debug("Live fetch from %s failed: %s", provider, _fetch_err)

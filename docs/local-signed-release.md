@@ -62,9 +62,13 @@ $releaseConfig.win | Add-Member -NotePropertyName signtoolOptions -NotePropertyV
 }) -Force
 $releaseConfig | ConvertTo-Json -Depth 40 | Set-Content -LiteralPath $releaseConfigPath -Encoding utf8
 
-# The cached Castlabs account path requires EVS_REQUIRED to be unset.
-# Its hook warns on failure, so the independent VMP check below is mandatory.
-Remove-Item Env:EVS_REQUIRED -ErrorAction SilentlyContinue
+# EVS_REQUIRED makes VMP signing and verification failures abort packaging.
+# Explicit credentials are optional here: the hook uses the cached Castlabs
+# session when EVS_ACCOUNT_NAME / EVS_PASSWD are absent. Set
+# EVS_REQUIRE_EXPLICIT_CREDENTIALS=1 only when a CI policy requires them.
+$env:EVS_REQUIRED = '1'
+$env:EVS_NO_ASK = '1'
+Remove-Item Env:EVS_REQUIRE_EXPLICIT_CREDENTIALS -ErrorAction SilentlyContinue
 Remove-Item Env:ELECTRON_BUILDER_OFFLINE -ErrorAction SilentlyContinue
 npm --workspace apps/desktop run prepare:python
 Assert-Exit 'Python runtime preparation'
@@ -77,7 +81,7 @@ try {
 } finally { Pop-Location }
 ```
 
-electron-builder signs `win-unpacked/Lastbrowser.exe` before emitting `afterSign`; the existing hook then calls `castlabs_evs.vmp -n sign-pkg` and `verify-pkg`. Its NSIS target subsequently signs the setup, portable launcher, and uninstaller through the same signing configuration. Do not apply another Authenticode signature to the unpacked application after VMP signing: changing its PE header can invalidate VMP. Do not accept an EVS warning as a release success.
+electron-builder signs `win-unpacked/Lastbrowser.exe` before emitting `afterSign`; the hook then calls `castlabs_evs.vmp -n sign-pkg` and `verify-pkg`. `EVS_REQUIRED=1` makes either failure abort packaging while still allowing Castlabs’ cached local session. Explicit credentials are a separate opt-in policy (`EVS_REQUIRE_EXPLICIT_CREDENTIALS=1`) and are normally supplied by CI. Its NSIS target subsequently signs the setup, portable launcher, and uninstaller through the same signing configuration. Do not apply another Authenticode signature to the unpacked application after VMP signing: changing its PE header can invalidate VMP. Do not accept an EVS warning as a release success.
 
 ## Validate the exact final files
 

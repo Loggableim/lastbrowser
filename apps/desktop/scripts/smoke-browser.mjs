@@ -141,10 +141,30 @@ class CDP {
     this.ws = new WebSocket(wsUrl);
     this.id = 0;
     this.pending = new Map();
+    let rejectReady;
+    this.opened = false;
     this.ready = new Promise((resolve, reject) => {
-      this.ws.onopen = () => resolve();
-      this.ws.onerror = () => reject(new Error('CDP websocket error'));
+      rejectReady = reject;
+      this.ws.onopen = () => {
+        this.opened = true;
+        resolve();
+      };
     });
+    const failPending = (error) => {
+      for (const { reject } of this.pending.values()) reject(error);
+      this.pending.clear();
+    };
+    this.ws.onerror = () => {
+      const error = new Error('CDP websocket error');
+      if (!this.opened) rejectReady(error);
+      failPending(error);
+    };
+    this.ws.onclose = (event) => {
+      const detail = `code=${event.code}${event.reason ? ` reason=${event.reason}` : ''}${event.wasClean ? ' clean' : ''}`;
+      const error = new Error(`CDP websocket closed (${detail})`);
+      if (!this.opened) rejectReady(error);
+      failPending(error);
+    };
     this.ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
       if (msg.method === 'Runtime.exceptionThrown') {
@@ -3021,15 +3041,28 @@ async function main() {
 
   if (process.env.LASTBROWSER_SMOKE_OLLAMA === '1') {
     let activeSpacePath = '';
-    for (let attempt = 0; attempt < 60; attempt++) {
-      const activeSpaceProbe = await cdp.send('Runtime.evaluate', {
-        expression: "localStorage.getItem('lastbrowser.activeSpacePath.v1') || ''",
-        returnByValue: true
-      }, 2_000);
-      activeSpacePath = activeSpaceProbe.result.value || '';
-      if (activeSpacePath) break;
-      await sleep(200);
+    let activeSpaceProbeError = '';
+    const activeSpaceDeadline = Date.now() + 15_000;
+    // This read is idempotent. The preceding loupe test requests an OS/guest
+    // screenshot and can briefly load the renderer; tolerate a short CDP
+    // evaluation timeout instead of aborting the entire live-provider smoke.
+    while (!activeSpacePath && Date.now() < activeSpaceDeadline) {
+      try {
+        const activeSpaceProbe = await cdp.send('Runtime.evaluate', {
+          expression: "localStorage.getItem('lastbrowser.activeSpacePath.v1') || ''",
+          returnByValue: true
+        }, 2_000);
+        activeSpacePath = activeSpaceProbe.result.value || '';
+      } catch (error) {
+        activeSpaceProbeError = error instanceof Error ? error.message : String(error);
+      }
+      if (!activeSpacePath) await sleep(200);
     }
+    if (!activeSpacePath) {
+      throw new Error(`Could not read active Space after the cursor-loupe check${activeSpaceProbeError ? ` (${activeSpaceProbeError})` : ''}`);
+    }
+    console.log('  INFO Ollama smoke: active Space read');
+    console.log('  INFO Ollama smoke: applying isolated Space model selection');
     const switchToNativeChatLayout = await cdp.send('Runtime.evaluate', {
       expression: `(() => {
         const activeSpacePath = ${JSON.stringify(activeSpacePath)};
@@ -3041,27 +3074,61 @@ async function main() {
       })()`,
       returnByValue: true
     }, 2_000);
+    console.log('  INFO Ollama smoke: Space model selection applied');
+    console.log('  INFO Ollama smoke: opening chat panel');
     const openChat = await cdp.send('Runtime.evaluate', {
-      expression: `(async () => {
-        const chatButton = document.querySelector('button[aria-label*="Chat"]');
-        if (chatButton) {
-          chatButton.click();
-          return true;
+      expression: `(() => {
+        const dockSelector = '[data-testid="nova-dock-chat"], .nova-dock-btn[aria-label$=" Chat"]';
+        const dockButton = document.querySelector(dockSelector);
+        if (dockButton) {
+          dockButton.click();
+          return { clicked: true, source: 'nova-dock', label: dockButton.getAttribute('aria-label') };
         }
-        for (let attempt = 0; attempt < 40; attempt++) {
-          const retry = document.querySelector('button[aria-label*="Chat"]');
-          if (retry) { retry.click(); return true; }
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-        return { clicked: false, candidates: [...document.querySelectorAll('button,[role="button"],a')]
-          .map((entry) => (entry.innerText || '').trim()).filter(Boolean).slice(0, 30) };
+        // In expanded mode the dock does not exist. Open the AI drawer by its
+        // stable tab position (Tabs, AI, Flows, Tools), then click its first
+        // explicit AI panel card (aiDrawerItems starts with Chat).
+        const aiTab = document.querySelectorAll('.sidebar-drawer-tabs > button.drawer-tab-btn[role="tab"]')[1];
+        if (!aiTab) return { clicked: false, source: 'sidebar', reason: 'AI drawer tab is absent', candidates: [...document.querySelectorAll('button,[role="button"],a')]
+          .map((entry) => (entry.getAttribute('aria-label') || entry.innerText || '').trim()).filter(Boolean).slice(0, 30) };
+        aiTab.click();
+        return { clicked: true, source: 'sidebar-ai-drawer', label: (aiTab.innerText || '').trim() };
       })()`,
-      awaitPromise: true,
       returnByValue: true
-    });
+    }, 2_000);
+    console.log('  INFO Ollama smoke: chat panel open request completed');
+    if (!openChat.result.value?.clicked) {
+      throw new Error(`Could not find a Chat panel control: ${JSON.stringify(openChat.result.value)}`);
+    }
+    if (openChat.result.value.source === 'sidebar-ai-drawer') {
+      let sidebarChatOpened = false;
+      let sidebarChatDetails = null;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const sidebarChat = await cdp.send('Runtime.evaluate', {
+          expression: `(() => {
+            const card = document.querySelector('.sidebar-drawer-content[role="region"] .drawer-cards-list > button.sidebar-drawer-card');
+            if (!card) return null;
+            const title = card.querySelector('.drawer-card-title')?.textContent?.trim() || '';
+            card.click();
+            return { clicked: true, title };
+          })()`,
+          returnByValue: true
+        }, 2_000);
+        sidebarChatDetails = sidebarChat.result.value;
+        if (sidebarChatDetails?.clicked) {
+          sidebarChatOpened = true;
+          break;
+        }
+        await sleep(100);
+      }
+      if (!sidebarChatOpened) {
+        throw new Error(`Could not open the Chat panel from the AI drawer: ${JSON.stringify(sidebarChatDetails)}`);
+      }
+      console.log(`  INFO Ollama smoke: sidebar Chat card selected (${sidebarChatDetails.title || 'first AI panel card'})`);
+    }
     let chatReady = false;
     let createChatRequested = false;
     for (let attempt = 0; attempt < 40; attempt++) {
+      if (!chatReady && attempt === 0) console.log('  INFO Ollama smoke: waiting for chat composer');
       const chatState = await cdp.send('Runtime.evaluate', {
         expression: `(() => {
           const main = document.querySelector('.native-chat-main');

@@ -344,6 +344,32 @@ def _check_gateway_service_linger(issues: list[str]) -> None:
 _APIKEY_PROVIDERS_CACHE: list | None = None
 
 
+def _alibaba_doctor_catalog_url(base_url: str, default_url: str) -> str | None:
+    """Resolve the DashScope native catalog endpoint without cross-host routing."""
+    from urllib.parse import urlsplit
+
+    if not base_url:
+        return default_url
+    parsed = urlsplit(base_url.strip())
+    host = (parsed.hostname or "").lower()
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or not (host == "dashscope-intl.aliyuncs.com" or host.endswith(".maas.aliyuncs.com"))
+        or parsed.path.rstrip("/") != "/compatible-mode/v1"
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or port not in (None, 443)
+    ):
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}/api/v1/models"
+
+
 def _build_apikey_providers_list() -> list:
     """Build the API-key provider health-check list once and cache it.
 
@@ -361,7 +387,9 @@ def _build_apikey_providers_list() -> list:
         ("DeepSeek",         ("DEEPSEEK_API_KEY",),                          "https://api.deepseek.com/v1/models",  "DEEPSEEK_BASE_URL", True),
         ("Hugging Face",     ("HF_TOKEN",),                                  "https://router.huggingface.co/v1/models", "HF_BASE_URL", True),
         ("NVIDIA NIM",       ("NVIDIA_API_KEY",),                            "https://integrate.api.nvidia.com/v1/models", "NVIDIA_BASE_URL", True),
-        ("Alibaba/DashScope", ("DASHSCOPE_API_KEY",),                        "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/models", "DASHSCOPE_BASE_URL", True),
+        # DashScope's native catalog is /api/v1/models on the workspace host;
+        # /compatible-mode/v1/models is not the catalog endpoint.
+        ("Alibaba/DashScope", ("DASHSCOPE_API_KEY",),                        "https://dashscope-intl.aliyuncs.com/api/v1/models", "DASHSCOPE_BASE_URL", True),
         # MiniMax global: /v1 endpoint supports /models.
         ("MiniMax",          ("MINIMAX_API_KEY",),                           "https://api.minimax.io/v1/models",    "MINIMAX_BASE_URL", True),
         # MiniMax CN: /v1 endpoint does NOT support /models (returns 404).
@@ -1672,6 +1700,14 @@ def run_doctor(args):
     def _probe_apikey_provider(pname, env_vars, default_url, base_env,
                                supports_health_check, key_override="") -> _ConnectivityResult:
         key = key_override or ""
+        if pname == "Alibaba/DashScope":
+            # Doctor can run as a fresh process, where provider settings saved
+            # in the profile .env are not yet present in os.environ.
+            try:
+                from cli.config import get_env_value
+                key = key or str(get_env_value("DASHSCOPE_API_KEY") or "").strip()
+            except Exception:
+                pass
         if not key:
             for ev in env_vars:
                 key = os.getenv(ev, "")
@@ -1690,6 +1726,26 @@ def run_doctor(args):
         try:
             import httpx
             base = os.getenv(base_env, "") if base_env else ""
+            if pname == "Alibaba/DashScope" and not base:
+                try:
+                    from cli.config import get_env_value
+                    base = str(get_env_value("DASHSCOPE_BASE_URL") or "").strip()
+                except Exception:
+                    pass
+            if pname == "Alibaba/DashScope":
+                url = _alibaba_doctor_catalog_url(base, default_url)
+                if not url:
+                    return _ConnectivityResult(
+                        pname,
+                        [(color("⚠", Colors.YELLOW), label, color("(invalid DashScope workspace endpoint)", Colors.DIM))],
+                        [],
+                    )
+                r = httpx.get(url, headers={"Authorization": f"Bearer {key}", "User-Agent": _SIDEKICK_USER_AGENT}, timeout=10, follow_redirects=False)
+                if r.status_code == 200:
+                    return _ConnectivityResult(pname, [(color("✓", Colors.GREEN), label, "")], [])
+                if r.status_code == 401:
+                    return _ConnectivityResult(pname, [(color("✗", Colors.RED), label, color("(invalid API key)", Colors.DIM))], [f"Check {env_vars[0]} in .env"])
+                return _ConnectivityResult(pname, [(color("⚠", Colors.YELLOW), label, color(f"(HTTP {r.status_code})", Colors.DIM))], [])
             # Auto-detect Kimi Code keys (sk-kimi-) → api.kimi.com/coding/v1
             # (OpenAI-compat surface, which exposes /models for health check).
             if not base and key.startswith("sk-kimi-"):

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePanelStore } from '../stores/usePanelStore.js';
 import type { LoupePosition } from '../stores/a11y-config.js';
-import { getLoupeCaptureRect, getLoupePosition, getWebviewLoupeCaptureRect, isCursorShake } from '../utils/cursor-loupe.js';
+import { getLoupeCaptureRect, getLoupePosition, getWebviewLoupeCaptureRect, hasLoupePointerMoved, isCursorShake } from '../utils/cursor-loupe.js';
 
 /**
  * Maus-Begleitlupe & Shake-to-Locate Radar (docs/visionimpaired.md §4.2/§4.3).
@@ -120,9 +120,13 @@ export function CursorLoupeHUD(): React.JSX.Element | null {
         if (!loupePosition) return;
         loupeEl.style.transform = `translate3d(${loupePosition.x}px, ${loupePosition.y}px, 0)`;
 
+        const moved = hasLoupePointerMoved(point, previousPoint);
+        if (!moved) return;
+
         const target = document.elementFromPoint(point.x, point.y) as HTMLElement | null;
         const webview = target?.tagName === 'WEBVIEW' ? target as Electron.WebviewTag : null;
         if (captureUnavailable) {
+          previousPoint = point;
           const text = webview
             ? await readWebviewTextUnderPointer(webview, point.x, point.y)
             : readTextUnderPointer(point.x, point.y);
@@ -130,8 +134,6 @@ export function CursorLoupeHUD(): React.JSX.Element | null {
           return;
         }
 
-        const moved = Math.abs(point.x - previousPoint.x) + Math.abs(point.y - previousPoint.y) >= 3;
-        if (!moved && loupeImageRef.current) return;
         const now = performance.now();
         if (now - lastCaptureAt < 125 || captureInFlight) return;
         const rect = getLoupeCaptureRect(

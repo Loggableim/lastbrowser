@@ -98,6 +98,15 @@ describe('resolveConfiguredModel', () => {
     expect(selection).toEqual({ model: 'deepseek-v4.1-flash', provider: 'ollama-cloud' });
   });
 
+  it('resolves an Alibaba configured default to its bare model and Alibaba chat route', async () => {
+    const selection = await resolveConfiguredModelSelection(bridge({
+      default_model: '@alibaba:qwen-max',
+      active_provider: 'alibaba',
+      groups: [{ provider: 'Alibaba Cloud (DashScope)', provider_id: 'alibaba', models: [{ id: 'qwen-max' }] }]
+    }));
+    expect(selection).toEqual({ model: 'qwen-max', provider: 'alibaba' });
+  });
+
   it('resolves the provider from the group when the configured model is unqualified', async () => {
     const selection = await resolveConfiguredModelSelection(bridge({
       default_model: 'deepseek-v4.1-flash',

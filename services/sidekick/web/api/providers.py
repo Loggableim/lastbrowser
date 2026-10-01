@@ -1330,6 +1330,11 @@ def get_providers() -> dict[str, Any]:
     - ``models``: list of known model IDs for this provider
     """
     providers = []
+    try:
+        from cli.config import get_env_value
+        alibaba_base_url = str(get_env_value("DASHSCOPE_BASE_URL") or "").strip()
+    except Exception:
+        alibaba_base_url = os.environ.get("DASHSCOPE_BASE_URL", "").strip()
 
     # Collect all known provider IDs from multiple sources
     known_ids = set(_PROVIDER_DISPLAY.keys()) | set(_PROVIDER_MODELS.keys())
@@ -1583,7 +1588,7 @@ def get_providers() -> dict[str, Any]:
             "oauth_connected": oauth_connected,
             "provider_available": provider_available,
             "legacy_credentials_present": legacy_credentials_present,
-            **({"base_url": os.environ.get("DASHSCOPE_BASE_URL", "").strip()} if pid == "alibaba" else {}),
+            **({"base_url": alibaba_base_url} if pid == "alibaba" else {}),
             "models": models,
             "models_configured": models_configured,
             # models_total reflects the complete catalog size (e.g. 396 for
@@ -1720,6 +1725,9 @@ def set_provider_key(provider_id: str, api_key: str | None, base_url: str | None
         }
 
     updates = {env_var: api_key}
+    if provider_id == "alibaba" and api_key is None and base_url is None:
+        # Removing the provider removes its workspace routing metadata too.
+        updates["DASHSCOPE_BASE_URL"] = None
     if provider_id == "alibaba" and base_url is not None:
         from urllib.parse import urlsplit
 
@@ -1757,6 +1765,8 @@ def set_provider_key(provider_id: str, api_key: str | None, base_url: str | None
                 os.environ.pop(env_var, None)
         if provider_id == "alibaba" and base_url is not None:
             os.environ["DASHSCOPE_BASE_URL"] = normalized_url
+        elif provider_id == "alibaba" and api_key is None:
+            os.environ.pop("DASHSCOPE_BASE_URL", None)
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
     except Exception as exc:

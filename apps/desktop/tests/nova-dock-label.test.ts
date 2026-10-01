@@ -13,4 +13,12 @@ describe('Nova Dock pinned app labels', () => {
     expect(source).toContain('style={getLabelStyle(index)}');
     expect(source).not.toContain('getLabelStyle(pinnedIndexes[index])');
   });
+
+  it('exposes a unique selector for the Chat panel button', () => {
+    const source = readFileSync(
+      resolve(__dirname, '../src/renderer/components/NovaDock.tsx'),
+      'utf8'
+    );
+    expect(source).toContain('data-testid="nova-dock-chat"');
+  });
 });

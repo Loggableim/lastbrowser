@@ -377,6 +377,7 @@ export function NovaDock({
             className={`nova-dock-btn ${activePanel === 'chat' ? 'is-active' : ''}`}
             onClick={() => onSelectPanel?.('chat')}
             aria-label={`${botName} Chat`}
+            data-testid="nova-dock-chat"
           >
             <img src={brandAssets.sidebarIcons.chat} alt="Chat" className="dock-mini-icon" />
           </button>

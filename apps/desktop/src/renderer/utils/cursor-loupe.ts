@@ -2,6 +2,17 @@ export type LoupeCaptureRect = { x: number; y: number; width: number; height: nu
 export type LoupeViewportBounds = { x: number; y: number; width: number; height: number };
 export type CursorShakeSample = { t: number; x: number };
 
+/** Avoid repeating an expensive capture until the pointer moves after the last attempt. */
+export function hasLoupePointerMoved(
+  point: { x: number; y: number },
+  previousPoint: { x: number; y: number },
+  threshold = 3
+): boolean {
+  if (![point.x, point.y].every(Number.isFinite)) return false;
+  if (![previousPoint.x, previousPoint.y].every(Number.isFinite)) return true;
+  return Math.abs(point.x - previousPoint.x) + Math.abs(point.y - previousPoint.y) >= threshold;
+}
+
 /** Require a sustained, alternating horizontal shake; one fast sweep is not a shake. */
 export function isCursorShake(samples: readonly CursorShakeSample[]): boolean {
   if (samples.length < 4) return false;

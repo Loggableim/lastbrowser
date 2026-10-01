@@ -39,6 +39,7 @@ import { TeamworkSettingsPanel } from './TeamworkSettingsPanel.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { cloudProviderOptions, openProviderOAuthUrl, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
 import { providerPresentation } from '../provider-presentation.js';
+import { requestProviderModelCatalog } from '../provider-settings.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
 import { clearBrowserDataWithFeedback } from '../utils/clear-browser-data.js';
@@ -2672,47 +2673,24 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     keyToSave = openRouterKey,
     existingKeyAvailable = openRouterHasSavedKey,
     savedSelection?: { ids: string[]; configured: boolean; defaultModel: string },
-    providerId: 'openrouter' | 'alibaba' = openRouterConfigProvider
+    providerId: 'openrouter' | 'alibaba' = openRouterConfigProvider,
+    baseUrl = alibabaBaseUrl
   ): Promise<void> {
     setOpenRouterLoading(true);
     setOpenRouterError('');
     try {
-      if (providerId === 'alibaba') {
-        let parsedBaseUrl: URL;
-        try { parsedBaseUrl = new URL(alibabaBaseUrl.trim()); } catch { throw new Error(t('settings.panels.providers.alibabaBaseUrlRequired')); }
-        if (parsedBaseUrl.protocol !== 'https:') throw new Error(t('settings.panels.providers.alibabaHttpsRequired'));
-      }
       const nextKey = keyToSave.trim();
+      const catalog = await requestProviderModelCatalog({
+        providerId,
+        apiKey: nextKey,
+        hasSavedKey: existingKeyAvailable,
+        baseUrl
+      }, (request) => window.lastbrowser.sidekick.requestWebui(request));
       if (nextKey) {
-        await window.lastbrowser.sidekick.requestWebui({
-          method: 'POST',
-          path: '/api/providers',
-          body: {
-            provider: providerId,
-            api_key: nextKey,
-            ...(providerId === 'alibaba' && alibabaBaseUrl.trim() ? { base_url: alibabaBaseUrl.trim() } : {})
-          }
-        });
         setOpenRouterKey('');
         setOpenRouterHasSavedKey(true);
-      } else if (!existingKeyAvailable) {
-        throw new Error(t(providerId === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired'));
-      } else if (providerId === 'alibaba') {
-        // Persist a changed workspace endpoint without asking users to re-enter
-        // their already saved API key. The backend treats this as a URL-only
-        // update and preserves the credential.
-        await window.lastbrowser.sidekick.requestWebui({
-          method: 'POST',
-          path: '/api/providers',
-          body: { provider: 'alibaba', base_url: alibabaBaseUrl.trim() }
-        });
       }
-
-      const response = await window.lastbrowser.sidekick.requestWebui({
-        method: 'GET',
-        path: `/api/models/live?provider=${providerId}&catalog=configuration`
-      });
-      const models = normalizeOpenRouterModels(response.models);
+      const models = normalizeOpenRouterModels(catalog);
       if (!models.length) {
         setOpenRouterModels([]);
         throw new Error(t(providerId === 'alibaba' ? 'settings.panels.providers.alibabaNoModels' : 'settings.panels.providers.openrouterNoModels'));
@@ -2732,7 +2710,15 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
           : availableDefault || nextSelection[0] || ''
       );
     } catch (error) {
-      setOpenRouterError(error instanceof Error ? error.message : String(error));
+      const code = error instanceof Error ? error.message : String(error);
+      const message = code === 'alibaba-base-url-required'
+        ? t('settings.panels.providers.alibabaBaseUrlRequired')
+        : code === 'alibaba-https-required'
+          ? t('settings.panels.providers.alibabaHttpsRequired')
+          : code === 'provider-key-required'
+            ? t(providerId === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired')
+            : code;
+      setOpenRouterError(message);
     } finally {
       setOpenRouterLoading(false);
     }
@@ -2751,7 +2737,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       const response = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers' });
       const entries = Array.isArray(response.providers) ? response.providers.filter(isRecord) : [];
       const provider = entries.find((entry) => settingsText(entry.id).toLowerCase() === providerId);
-      if (providerId === 'alibaba') setAlibabaBaseUrl(settingsText(provider?.base_url, ''));
+      const providerBaseUrl = settingsText(provider?.base_url, '');
+      if (providerId === 'alibaba') setAlibabaBaseUrl(providerBaseUrl);
       const configuredModels = normalizeOpenRouterModels(provider?.models).map((model) => model.id);
       const hasConfiguredSelection = Boolean(provider?.models_configured) || configuredModels.length > 0;
       const hasKey = Boolean(provider?.has_key);
@@ -2764,7 +2751,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
           ids: configuredModels,
           configured: hasConfiguredSelection,
           defaultModel: currentDefaultModel
-        }, providerId);
+        }, providerId, providerId === 'alibaba' ? providerBaseUrl : alibabaBaseUrl);
       }
     } catch (error) {
       setOpenRouterError(error instanceof Error ? error.message : String(error));

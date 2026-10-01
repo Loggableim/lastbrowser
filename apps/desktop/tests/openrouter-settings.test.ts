@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { requestProviderModelCatalog } from '../src/renderer/provider-settings.js';
 
 describe('OpenRouter provider settings flow', () => {
   // Normalize CRLF so line-ending churn in the working tree cannot break
@@ -13,9 +14,7 @@ describe('OpenRouter provider settings flow', () => {
   });
 
   it('saves provider-scoped key and loads the live OpenRouter catalog', () => {
-    expect(source).toContain("path: '/api/providers'");
-    expect(source).toContain("provider: providerId,");
-    expect(source).toContain("path: `/api/models/live?provider=${providerId}&catalog=configuration`");
+    expect(source).toContain('requestProviderModelCatalog');
     expect(source).toContain('openrouterNoModels');
   });
 
@@ -28,9 +27,54 @@ describe('OpenRouter provider settings flow', () => {
   });
 
   it('requires an HTTPS workspace endpoint before scanning and saving Alibaba credentials', () => {
-    expect(source).toContain("parsedBaseUrl.protocol !== 'https:'");
     expect(source).toContain("if (openRouterConfigProvider === 'alibaba') body.base_url = alibabaBaseUrl.trim()");
     expect(source).toContain("t('settings.panels.providers.alibabaBaseUrlPlaceholder')");
-    expect(source).toContain("body: { provider: 'alibaba', base_url: alibabaBaseUrl.trim() }");
+    expect(source).toContain("new URL(alibabaBaseUrl.trim()).protocol !== 'https:'");
+  });
+
+  it('scans a saved Alibaba credential with the just-loaded endpoint before React state updates', () => {
+    expect(source).toContain("baseUrl = alibabaBaseUrl");
+    expect(source).toContain("const providerBaseUrl = settingsText(provider?.base_url, '');");
+    expect(source).toContain("providerId === 'alibaba' ? providerBaseUrl : alibabaBaseUrl");
+  });
+
+  it('updates only the saved Alibaba endpoint, then scans the full returned catalog', async () => {
+    const requests: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
+    const requestWebui = async (request: { method: 'GET' | 'POST'; path: string; body?: Record<string, unknown> }) => {
+      requests.push(request);
+      if (request.method === 'GET') return { models: [
+        { id: 'qwen-plus', label: 'Qwen Plus' },
+        { id: 'qwen-max', label: 'Qwen Max' }
+      ] };
+      return { ok: true };
+    };
+
+    const models = await requestProviderModelCatalog({
+      providerId: 'alibaba',
+      apiKey: '',
+      hasSavedKey: true,
+      baseUrl: 'https://workspace.example/v1'
+    }, requestWebui);
+
+    expect(requests).toEqual([
+      {
+        method: 'POST',
+        path: '/api/providers',
+        body: { provider: 'alibaba', base_url: 'https://workspace.example/v1' }
+      },
+      { method: 'GET', path: '/api/models/live?provider=alibaba&catalog=configuration' }
+    ]);
+    expect(requests[0].body).not.toHaveProperty('api_key');
+    expect(models).toEqual([
+      { id: 'qwen-plus', label: 'Qwen Plus' },
+      { id: 'qwen-max', label: 'Qwen Max' }
+    ]);
+  });
+
+  it('rejects a non-HTTPS Alibaba endpoint before making requests', async () => {
+    const requestWebui = async () => { throw new Error('request should not run'); };
+    await expect(requestProviderModelCatalog({
+      providerId: 'alibaba', apiKey: '', hasSavedKey: true, baseUrl: 'http://workspace.example/v1'
+    }, requestWebui)).rejects.toThrow('alibaba-https-required');
   });
 });

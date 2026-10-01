@@ -24,10 +24,10 @@ function createEvsSigningHook(overrides = {}) {
     }
 
     const appOutDir = context.appOutDir;
-    const required = deps.env.EVS_REQUIRED === '1';
+    const failOnVmpError = deps.env.EVS_REQUIRED === '1';
     const failOrWarn = (message) => {
       const diagnostic = `[EVS/VMP] ${message}`;
-      if (required) {
+      if (failOnVmpError) {
         throw new Error(diagnostic);
       }
       deps.warn(`${diagnostic} Continuing only as a local test build without a verified VMP signature; do not release this artifact.`);
@@ -36,9 +36,9 @@ function createEvsSigningHook(overrides = {}) {
     deps.log(`\n[EVS/VMP] Executing afterSign hook: Widevine VMP signing for ${appOutDir}`);
 
     const explicitCredentials = Boolean(deps.env.EVS_ACCOUNT_NAME?.trim() && deps.env.EVS_PASSWD?.trim());
-    if (required && !explicitCredentials) {
-      failOrWarn('Required EVS account credentials are missing.');
-      return;
+    const requireExplicitCredentials = deps.env.EVS_REQUIRE_EXPLICIT_CREDENTIALS === '1';
+    if (requireExplicitCredentials && !explicitCredentials) {
+      throw new Error('[EVS/VMP] Required EVS account credentials are missing.');
     }
 
     if (!explicitCredentials) {

@@ -57,6 +57,29 @@ def test_alibaba_workspace_url_can_be_changed_without_removing_existing_key(monk
     assert f"DASHSCOPE_BASE_URL={url}" in saved
 
 
+def test_alibaba_remove_clears_saved_workspace_url(monkeypatch, tmp_path):
+    from web.api import providers
+
+    monkeypatch.setattr(providers, "_get_sidekick_home", lambda: tmp_path)
+    monkeypatch.setattr(providers, "invalidate_models_cache", lambda: None)
+    monkeypatch.setattr(providers, "_invalidate_ollama_cloud_catalog_if_needed", lambda _provider: None)
+    monkeypatch.setattr(providers, "_clean_provider_key_from_config", lambda _provider: None)
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "unit-test-alibaba-key")
+    monkeypatch.setenv("DASHSCOPE_BASE_URL", "https://workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1")
+    (tmp_path / ".env").write_text(
+        "DASHSCOPE_API_KEY=unit-test-alibaba-key\n"
+        "DASHSCOPE_BASE_URL=https://workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1\n",
+        encoding="utf-8",
+    )
+
+    result = providers.remove_provider_key("alibaba")
+    saved = (tmp_path / ".env").read_text(encoding="utf-8")
+
+    assert result["ok"] is True
+    assert "DASHSCOPE_API_KEY=" not in saved
+    assert "DASHSCOPE_BASE_URL=" not in saved
+
+
 def test_alibaba_workspace_endpoint_accepts_international_dashscope_compatible_url():
     from web.api.onboarding import _SUPPORTED_PROVIDER_SETUPS
     from cli.auth import PROVIDER_REGISTRY
@@ -97,7 +120,7 @@ def test_alibaba_model_probe_uses_workspace_catalog_and_does_not_return_key(monk
         def __exit__(self, *_args):
             return False
         def read(self, _limit):
-            return json.dumps({"data": [{"id": "qwen-plus", "name": "Qwen Plus"}]}).encode()
+            return json.dumps({"output": {"models": [{"model": "qwen-plus", "name": "Qwen Plus"}]}}).encode()
 
     class Opener:
         def open(self, request, timeout):
@@ -130,10 +153,102 @@ def test_alibaba_model_probe_uses_workspace_catalog_and_does_not_return_key(monk
     assert payload["models"] == [{"id": "qwen-plus", "label": "Qwen Plus"}]
     assert key not in json.dumps(payload)
     assert observed == {
-        "url": f"{url}/models",
+        "url": "https://workspace.ap-southeast-1.maas.aliyuncs.com/api/v1/models?capabilities=TG&page_no=1&page_size=100",
         "authorization": f"Bearer {key}",
-        "timeout": 12,
+        "timeout": 8,
     }
+
+
+def test_alibaba_runtime_uses_workspace_base_url_saved_in_profile_env(monkeypatch, tmp_path):
+    from cli import auth, config
+
+    endpoint = "https://workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"DASHSCOPE_BASE_URL={endpoint}\n", encoding="utf-8")
+    monkeypatch.setattr(config, "get_env_path", lambda: env_file)
+    monkeypatch.delenv("DASHSCOPE_BASE_URL", raising=False)
+    monkeypatch.setattr(auth, "_resolve_api_key_provider_secret", lambda *_args: ("unit-test-alibaba-key", "DASHSCOPE_API_KEY"))
+
+    credentials = auth.resolve_api_key_provider_credentials("alibaba")
+
+    assert credentials["base_url"] == endpoint
+    assert credentials["api_key"] == "unit-test-alibaba-key"
+
+
+def test_alibaba_live_catalog_uses_profile_credentials_and_native_response(monkeypatch):
+    import json
+    from cli import models
+
+    endpoint = "https://workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
+    monkeypatch.setattr(models, "normalize_provider", lambda _provider: "alibaba")
+    monkeypatch.setattr(
+        "cli.auth.resolve_api_key_provider_credentials",
+        lambda _provider: {"api_key": "unit-test-alibaba-key", "base_url": endpoint},
+    )
+    seen = {}
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self, _limit):
+            return json.dumps({"output": {"models": [{"model": "qwen-plus"}, {"model": "qwen-turbo"}]}}).encode()
+
+    class Opener:
+        def open(self, request, timeout):
+            seen["url"] = request.full_url
+            seen["authorization"] = request.get_header("Authorization")
+            seen["timeout"] = timeout
+            return Response()
+
+    monkeypatch.setattr("urllib.request.build_opener", lambda *_handlers: Opener())
+
+    assert models.provider_model_ids("alibaba", force_refresh=True) == ["qwen-plus", "qwen-turbo"]
+    assert seen == {
+        "url": "https://workspace.ap-southeast-1.maas.aliyuncs.com/api/v1/models?capabilities=TG&page_no=1&page_size=100",
+        "authorization": "Bearer unit-test-alibaba-key",
+        "timeout": 5,
+    }
+
+
+def test_alibaba_and_coding_plan_resolve_distinct_base_urls(monkeypatch):
+    from cli import auth
+
+    monkeypatch.setattr(auth, "_resolve_api_key_provider_secret", lambda provider, _cfg: ("unit-test-provider-key", provider))
+    monkeypatch.setattr(
+        auth,
+        "get_env_value",
+        lambda name: {
+            "DASHSCOPE_BASE_URL": "https://workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+            "ALIBABA_CODING_PLAN_BASE_URL": "https://coding-intl.dashscope.aliyuncs.com/v1",
+        }.get(name),
+    )
+
+    workspace = auth.resolve_api_key_provider_credentials("alibaba")
+    coding_plan = auth.resolve_api_key_provider_credentials("alibaba-coding-plan")
+
+    assert workspace["base_url"].startswith("https://workspace.")
+    assert coding_plan["base_url"] == "https://coding-intl.dashscope.aliyuncs.com/v1"
+
+
+def test_doctor_uses_workspace_native_catalog_and_intl_default():
+    from cli.doctor import _alibaba_doctor_catalog_url
+
+    assert _alibaba_doctor_catalog_url(
+        "https://workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+        "https://dashscope-intl.aliyuncs.com/api/v1/models",
+    ) == "https://workspace.ap-southeast-1.maas.aliyuncs.com/api/v1/models"
+    assert _alibaba_doctor_catalog_url(
+        "", "https://dashscope-intl.aliyuncs.com/api/v1/models"
+    ) == "https://dashscope-intl.aliyuncs.com/api/v1/models"
+    assert _alibaba_doctor_catalog_url(
+        "https://example.com/compatible-mode/v1",
+        "https://dashscope-intl.aliyuncs.com/api/v1/models",
+    ) is None
+    assert _alibaba_doctor_catalog_url(
+        "https://workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1?redirect=elsewhere",
+        "https://dashscope-intl.aliyuncs.com/api/v1/models",
+    ) is None
 
 
 def test_alibaba_model_probe_rejects_untrusted_endpoint_before_network(monkeypatch):

@@ -5,6 +5,22 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.43] - 2026-10-01
+
+### Fixes
+- Restore Alibaba Cloud workspace URL after Sidekick restarts and discover the workspace's text-generation models through DashScope's native catalog. Provider-scoped model selection now keeps identical model IDs from different providers distinct.
+- Make saved-key Alibaba configuration rescan the current workspace endpoint without re-entering the key. Keep provider removal and Doctor checks consistent with the saved workspace URL.
+- Stop repeated cursor-loupe capture attempts while the pointer is still, and make desktop browser smoke controls target Chat explicitly in either sidebar mode.
+- Report Teamwork HTTP 403 as an access error without retrying another paid provider. Make local Castlabs VMP signing failures fatal for release packaging.
+
+### Verification
+- Source checks: 134 desktop suites and 1,178 tests; Store preflight 27/27; Main and Renderer build; Python syntax; Sidekick suite 2,493 passed, 105 skipped.
+- Live Alibaba workspace check: 89 text-generation models discovered; `qwen3.8-flash` completed a minimal chat request with HTTP 200. The supplied key was used transiently and was not stored by these tests.
+- Source-built desktop Ollama Cloud smoke: 10/10 checks, including streamed first token and thinking events for `deepseek-v4.1-flash`.
+- Setup, portable, and unpacked app passed Certum Authenticode and timestamp checks; the unpacked browser passed Castlabs VMP verification. Signed-file metadata and blockmap were regenerated from the final files.
+- SHA-256 setup: `FF5A8C6C9986BC34D8D781686644974F41624FDE1D24C4C0A8D1F5C872F1DE62`; portable: `DD94C2BFB654F840CE2EFA1FDF166399463892401BB3DF07D5B538A4139AFD56`.
+- Packaged Sidekick source hashes match the tested in-tree files and its provider modules import. An Alibaba live call from the packaged application and installation over an existing user profile remain unverified.
+
 ## [0.1.42] - 2026-10-01
 
 ### Fixes

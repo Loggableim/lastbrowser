@@ -114,6 +114,22 @@ The metadata script regenerates the setup blockmap, calculates SHA-512 and byte 
 
 Publish only the verified setup, setup blockmap, portable, and `latest.yml` from this unique folder. Confirm the approved version is absent on GitHub and the version/tag points to the exact source used for this build. The existing tag-triggered GitHub workflow uses Azure and requires its own signing secrets; a local Certum signature does not satisfy those CI credentials. Coordinate the chosen local upload versus CI route before pushing a tag so two release producers cannot compete. After upload, download the published artifacts and compare their hashes; update the website to that verified version and verify its download URLs. Never replace assets of an existing public version with a different build.
 
+## Website deployment
+
+Update the localized download pages, release history, RSS feed, and `lastbrowser.com/functions/downloads/[file].js` with the verified public version and hashes. Preserve historical release entries. Commit the website changes before deployment.
+
+Run Wrangler from the website directory so it compiles the adjacent `functions/` directory. Deploying `lastbrowser.com` from the repository root uploads static assets but does not include this function; `/downloads/latest.yml` can then return the HTML fallback with HTTP 200.
+
+```powershell
+Push-Location lastbrowser.com
+try {
+    wrangler pages deploy . --project-name lastbrowser-website --branch main
+    Assert-Exit 'Website production deployment'
+} finally { Pop-Location }
+```
+
+Require `Compiled Worker successfully` and `Uploading Functions bundle` in the deployment output. Verify each localized download page, the setup and portable proxy response filenames, and the bytes of `/downloads/latest.yml` against the signed release metadata. HTTP 200 alone is insufficient.
+
 ## Local implementation references
 
 - `node_modules/app-builder-lib/out/options/winOptions.d.ts`: nested signtool options, SHA-256 algorithms and timestamp URL.

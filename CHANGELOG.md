@@ -17,6 +17,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 - Source checks: 134 desktop suites and 1,178 tests; Store preflight 27/27; Main and Renderer build; Python syntax; Sidekick suite 2,493 passed, 105 skipped.
 - Live Alibaba workspace check: 89 text-generation models discovered; `qwen3.8-flash` completed a minimal chat request with HTTP 200. The supplied key was used transiently and was not stored by these tests.
 - Source-built desktop Ollama Cloud smoke: 10/10 checks, including streamed first token and thinking events for `deepseek-v4.1-flash`.
+- The signed, unpacked v0.1.43 app passed 21/21 isolated live checks for Ollama streaming and reasoning, cancellation, four pinned Teamwork roles, and a two-turn persistent goal completed after renderer reload.
 - Setup, portable, and unpacked app passed Certum Authenticode and timestamp checks; the unpacked browser passed Castlabs VMP verification. Signed-file metadata and blockmap were regenerated from the final files.
 - SHA-256 setup: `FF5A8C6C9986BC34D8D781686644974F41624FDE1D24C4C0A8D1F5C872F1DE62`; portable: `DD94C2BFB654F840CE2EFA1FDF166399463892401BB3DF07D5B538A4139AFD56`.
 - Packaged Sidekick source hashes match the tested in-tree files and its provider modules import. An Alibaba live call from the packaged application and installation over an existing user profile remain unverified.

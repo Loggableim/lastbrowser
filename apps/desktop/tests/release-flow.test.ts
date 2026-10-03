@@ -39,7 +39,7 @@ describe('GitHub release auto-update flow', () => {
 
   it('builds and publishes Windows updater artifacts from version tags', () => {
     expect(existsSync(releaseWorkflowPath)).toBe(true);
-    const workflow = readFileSync(releaseWorkflowPath, 'utf8');
+    const workflow = readFileSync(releaseWorkflowPath, 'utf8').replace(/\r\n/g, '\n');
 
     expect(workflow).toContain("tags: ['v*']");
     expect(workflow).not.toContain('workflow_dispatch:');

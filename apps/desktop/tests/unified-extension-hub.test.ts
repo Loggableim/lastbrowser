@@ -124,16 +124,16 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
       expect(MCP_PERMISSION_LABELS.agent_autonomy.level).toBe('warn');
     });
 
-    it('implements Pillar 2 UI with MCP servers config, search, and sandboxing toggles', () => {
+    it('shows MCP server configuration and distinguishes unsupported trust controls', () => {
       const source = readRendererFile('components/UnifiedExtensionHub.tsx');
 
       expect(source).toContain('Nova AI Skills & Tools (MCP)');
       expect(source).toContain('mcp_servers.json');
       expect(source).toContain('mcp-json-editor');
-      expect(source).toContain('Granulares Sandboxing & Berechtigungsmanagement');
+      expect(source).toContain('MCP-Server und native Fähigkeiten');
       expect(source).toContain('auto-approve-toggle');
-      expect(source).toContain('Interaktiv bestätigen');
-      expect(source).toContain('Immer vertrauen (Auto-Approve)');
+      expect(source).toContain('Vertrauensschalter nicht verfügbar');
+      expect(source).toContain('werden von dieser Anbindung nicht unterstützt');
       expect(source).toContain('skills-scope-chips');
     });
 
@@ -148,8 +148,9 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
       const source = readRendererFile('components/UnifiedExtensionHub.tsx');
       expect(source).toContain('handleApplyMcpConfig');
       expect(source).toContain('lastbrowser.mcp_config.v1');
-      expect(source).toContain('JSON.parse(mcpConfigJson)');
-      expect(source).toContain('Ungültiges JSON-Format');
+      expect(source).toContain('mcpModel.save()');
+      expect(source).toContain('mcpModel.toggle(');
+      expect(source).not.toContain("localStorage.setItem('lastbrowser.mcp_config.v1'");
       expect(source).toContain('mcp-ext-');
     });
   });

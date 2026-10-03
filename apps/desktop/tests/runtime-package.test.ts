@@ -50,9 +50,11 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).toContain("'anthropic>=0.39.0'");
     expect(prepareScript).toContain('import anthropic');
     expect(prepareScript).toContain("'--no-compile'");
-    expect(prepareScript).toContain('runtimeSchema: 6');
+    expect(prepareScript).toContain('runtimeSchema: 7');
+    expect(prepareScript).toContain('from mcp import ClientSession, StdioServerParameters');
     expect(prepareScript).not.toContain('marker.packageVersion === desired.packageVersion');
     const sidekickPyproject = readFileSync(path.resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'pyproject.toml'), 'utf8');
+    expect(sidekickPyproject).toContain('"mcp==1.26.0"');
     expect(sidekickPyproject).toContain('exclude = ["tests", "tests.*"]');
   });
 

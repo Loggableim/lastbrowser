@@ -11467,77 +11467,51 @@ def _handle_supermemory_dump(handler):
         return bad(handler, f"Supermemory dump failed: {e}")
 
 
-def _handle_mcp_servers_list(handler):
-    """GET /api/mcp/servers"""
-    try:
-        from runtime.mcp_client import get_mcp_manager, resolve_default_mcp_config_path
-        from dataclasses import asdict
-        mgr = get_mcp_manager()
-        servers = {}
-        for name, cfg in mgr.configs.items():
-            servers[name] = asdict(cfg)
-        return j(handler, {
-            "ok": True,
-            "servers": servers,
-            "config_path": str(resolve_default_mcp_config_path()),
-            "count": len(servers),
-        })
-    except Exception as e:
-        logger.exception("MCP servers list failed")
-        return bad(handler, f"MCP servers list failed: {e}")
-
-
 def _handle_mcp_servers_save(handler, body):
     """POST /api/mcp/servers"""
     try:
-        from runtime.mcp_client import get_mcp_manager, resolve_default_mcp_config_path
-        cfg_path = resolve_default_mcp_config_path()
-        cfg_path.parent.mkdir(parents=True, exist_ok=True)
-        raw_config = body.get("mcpServers") or body.get("servers") or body
-        cfg_data = {"mcpServers": raw_config} if not ("mcpServers" in body or "servers" in body) else body
-        cfg_path.write_text(json.dumps(cfg_data, indent=2), encoding="utf-8")
-        mgr = get_mcp_manager()
-        mgr.load_config(cfg_path)
-        return j(handler, {"ok": True, "config_path": str(cfg_path), "server_count": len(mgr.configs)})
+        import copy
+        from web.api.mcp_config_contract import normalize_mcp_config
+        cfg_data = copy.deepcopy(get_config())
+        existing = cfg_data.get("mcp_servers", {})
+        servers = normalize_mcp_config(body, existing if isinstance(existing, dict) else {}, _MASKED_PLACEHOLDER)
+        cfg_data["mcp_servers"] = servers
+        _save_yaml_config_file(_get_config_path(), cfg_data)
+        reload_config()
+        return j(handler, {"ok": True, "server_count": len(servers), "reload_required": True})
     except Exception as e:
         logger.exception("MCP servers save failed")
         return bad(handler, f"MCP servers save failed: {e}")
 
 
-def _handle_mcp_tools_list(handler):
-    """GET /api/mcp/tools"""
-    import asyncio
-    try:
-        from runtime.mcp_client import get_mcp_manager
-        mgr = get_mcp_manager()
-        loop = asyncio.new_event_loop()
-        try:
-            tools = loop.run_until_complete(mgr.list_nova_tools())
-        finally:
-            loop.close()
-        return j(handler, {"ok": True, "tools": tools, "count": len(tools)})
-    except Exception as e:
-        logger.exception("MCP tools list failed")
-        return bad(handler, f"MCP tools list failed: {e}")
-
-
 def _handle_mcp_tool_call(handler, body):
     """POST /api/mcp/tools/call"""
-    import asyncio
-    server_name = (body.get("server") or body.get("server_name") or "").strip()
-    tool_name = (body.get("tool") or body.get("tool_name") or "").strip()
-    arguments = body.get("arguments") or body.get("args") or {}
-    if not server_name or not tool_name:
+    if not isinstance(body, dict):
+        return bad(handler, "tool request must be an object")
+    server_name = body.get("server") or body.get("server_name")
+    tool_name = body.get("tool") or body.get("tool_name")
+    arguments = body.get("arguments", body.get("args", {}))
+    if not isinstance(server_name, str) or not server_name.strip() or not isinstance(tool_name, str) or not tool_name.strip():
         return bad(handler, "server and tool are required")
-
+    if not isinstance(arguments, dict):
+        return bad(handler, "arguments must be an object")
+    server_name, tool_name = server_name.strip(), tool_name.strip()
     try:
-        from runtime.mcp_client import get_mcp_manager
-        mgr = get_mcp_manager()
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(mgr.call_tool(server_name, tool_name, arguments))
-        finally:
-            loop.close()
+        from tools.registry import registry
+        servers = get_config().get("mcp_servers", {})
+        config = servers.get(server_name) if isinstance(servers, dict) else None
+        if not isinstance(config, dict) or not _parse_mcp_enabled(config.get("enabled", True)):
+            return bad(handler, "MCP server is not configured or is disabled")
+        entry = registry.get_entry(tool_name)
+        if entry is None or entry.toolset != f"mcp-{server_name}":
+            return bad(handler, "MCP tool is not registered for this server; use a name from the tool inventory")
+        if entry.check_fn and not entry.check_fn():
+            return bad(handler, "MCP server is not connected; restart Nova after configuration changes")
+        result = registry.dispatch(tool_name, arguments)
+        if isinstance(result, str):
+            result = json.loads(result)
+        if isinstance(result, dict) and result.get("error"):
+            return bad(handler, str(result["error"]))
         return j(handler, {"ok": True, "result": result})
     except Exception as e:
         logger.exception("MCP tool call failed")
@@ -15613,6 +15587,11 @@ def _handle_mcp_tools_list(handler):
 
 def _handle_mcp_servers_list(handler):
     """List configured MCP servers with safe, read-only runtime visibility."""
+    try:
+        from tools.mcp_tool import _MCP_AVAILABLE
+        runtime_available = bool(_MCP_AVAILABLE)
+    except ImportError:
+        runtime_available = False
     cfg = get_config()
     servers = cfg.get("mcp_servers", {})
     if not isinstance(servers, dict):
@@ -15624,8 +15603,10 @@ def _handle_mcp_servers_list(handler):
     ]
     return j(handler, {
         "servers": result,
+        "config": {"mcpServers": _mask_secrets(servers)},
+        "runtime_available": runtime_available,
         "toggle_supported": True,
-        "reload_required": False,
+        "reload_required": True,
     })
 
 
@@ -15635,7 +15616,8 @@ def _handle_mcp_server_delete(handler, name):
     name = unquote(name)
     if not name:
         return bad(handler, "name is required")
-    cfg = get_config()
+    import copy
+    cfg = copy.deepcopy(get_config())
     servers = cfg.get("mcp_servers", {})
     if not isinstance(servers, dict):
         servers = {}
@@ -15645,7 +15627,7 @@ def _handle_mcp_server_delete(handler, name):
     cfg["mcp_servers"] = servers
     _save_yaml_config_file(_get_config_path(), cfg)
     reload_config()
-    return j(handler, {"ok": True, "deleted": name})
+    return j(handler, {"ok": True, "deleted": name, "reload_required": True})
 
 
 _MASKED_PLACEHOLDER = "â€¢â€¢â€¢â€¢â€¢â€¢"
@@ -15674,41 +15656,34 @@ def _handle_mcp_server_update(handler, name, body):
     name = unquote(name)
     if not name:
         return bad(handler, "name is required")
-    # Validate: must have url (http) or command (stdio)
-    cfg = get_config()
+    import copy
+    from web.api.mcp_config_contract import normalize_mcp_config
+    if not isinstance(body, dict):
+        return bad(handler, "server configuration must be an object")
+    if body.get("url") and body.get("command"):
+        return bad(handler, "provide either command or url")
+    cfg = copy.deepcopy(get_config())
     servers = cfg.get("mcp_servers", {})
     if not isinstance(servers, dict):
         servers = {}
     existing_cfg = servers.get(name, {})
     server_cfg = dict(existing_cfg) if isinstance(existing_cfg, dict) else {}
-    if body.get("url"):
-        server_cfg["url"] = body["url"].strip()
+    server_cfg.update(body)
+    if "url" in body:
         server_cfg.pop("command", None)
         server_cfg.pop("args", None)
         server_cfg.pop("env", None)
-        if body.get("headers"):
-            server_cfg["headers"] = _strip_masked_values(body["headers"], existing_cfg.get("headers", {}))
-    elif body.get("command"):
-        server_cfg["command"] = body["command"].strip()
+    elif "command" in body:
         server_cfg.pop("url", None)
         server_cfg.pop("headers", None)
-        if body.get("args"):
-            server_cfg["args"] = body["args"] if isinstance(body["args"], list) else [body["args"]]
-        if body.get("env"):
-            server_cfg["env"] = _strip_masked_values(body["env"], existing_cfg.get("env", {}))
-    elif not existing_cfg:
-        return bad(handler, "url or command is required")
-    if "enabled" in body:
-        server_cfg["enabled"] = _parse_mcp_enabled(body["enabled"])
-    if body.get("timeout") is not None:
-        try:
-            server_cfg["timeout"] = int(body["timeout"])
-        except (ValueError, TypeError):
-            pass
+    try:
+        server_cfg = normalize_mcp_config({name: server_cfg}, servers, _MASKED_PLACEHOLDER)[name]
+    except ValueError as error:
+        return bad(handler, str(error))
     servers[name] = server_cfg
     cfg["mcp_servers"] = servers
     _save_yaml_config_file(_get_config_path(), cfg)
     reload_config()
-    return j(handler, {"ok": True, "server": _server_summary(name, server_cfg)})
+    return j(handler, {"ok": True, "server": _server_summary(name, server_cfg), "reload_required": True})
 
 

@@ -33,6 +33,7 @@ import { prepareSnapTabDrag } from '../types/snap-layouts.js';
 import { brandAssets } from '../brand.js';
 import { PinnedAppGrid, type PinnedApp } from './PinnedAppGrid.js';
 import { NovaDock } from './NovaDock.js';
+import { SidebarDrawerNavigation } from './SidebarDrawerNavigation.js';
 import { type SidebarDrawerTab, type SidebarMode, type ZenExitDefaultMode, usePanelStore } from '../stores/usePanelStore.js';
 import type { DesktopSessionSummary } from '../shell-state.js';
 import { useDesktopI18n } from '../i18n.js';
@@ -356,11 +357,13 @@ export function SidekickSidebar({
           </div>
 
           {/* Variante B: Segmented Multi-Tier Drawer Tabs */}
-          <div className="sidebar-drawer-tabs" role="tablist" aria-label={t('sidebar.drawer.sections')}>
+          <SidebarDrawerNavigation className="sidebar-drawer-tabs" label={t('sidebar.drawer.sections')} selected={currentDrawerTab}
+            previousLabel={t('common.back')} nextLabel={t('common.next')}>
             <button
               type="button"
               role="tab"
               aria-selected={currentDrawerTab === 'tabs'}
+              tabIndex={currentDrawerTab === 'tabs' ? 0 : -1}
               className={`drawer-tab-btn ${currentDrawerTab === 'tabs' ? 'active' : ''}`}
               onClick={() => handleDrawerTabChange('tabs')}
               title={t('sidebar.drawer.tabsTitle')}
@@ -372,6 +375,7 @@ export function SidekickSidebar({
               type="button"
               role="tab"
               aria-selected={currentDrawerTab === 'ai'}
+              tabIndex={currentDrawerTab === 'ai' ? 0 : -1}
               className={`drawer-tab-btn ${currentDrawerTab === 'ai' ? 'active' : ''}`}
               onClick={() => handleDrawerTabChange('ai')}
               title={t('sidebar.drawer.aiTitle')}
@@ -383,6 +387,7 @@ export function SidekickSidebar({
               type="button"
               role="tab"
               aria-selected={currentDrawerTab === 'workflows'}
+              tabIndex={currentDrawerTab === 'workflows' ? 0 : -1}
               className={`drawer-tab-btn ${currentDrawerTab === 'workflows' ? 'active' : ''}`}
               onClick={() => handleDrawerTabChange('workflows')}
               title={t('sidebar.drawer.flowsTitle')}
@@ -394,6 +399,7 @@ export function SidekickSidebar({
               type="button"
               role="tab"
               aria-selected={currentDrawerTab === 'tools'}
+              tabIndex={currentDrawerTab === 'tools' ? 0 : -1}
               className={`drawer-tab-btn ${currentDrawerTab === 'tools' ? 'active' : ''}`}
               onClick={() => handleDrawerTabChange('tools')}
               title={t('sidebar.drawer.toolsTitle')}
@@ -401,7 +407,7 @@ export function SidekickSidebar({
               <Wrench size={13} />
               <span>{t('sidebar.drawer.tools')}</span>
             </button>
-          </div>
+          </SidebarDrawerNavigation>
 
           {/* Drawer Body depending on active drawer tab */}
           {currentDrawerTab === 'tabs' && (

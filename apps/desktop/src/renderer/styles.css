@@ -15195,22 +15195,73 @@ html[data-message-layout="expanded"] .copilot-bubble.user {
    ========================================================================== */
 
 /* Multi-Tier Drawer Tabs in Sidekick Sidebar */
-.sidebar-drawer-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.sidebar-drawer-navigation {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
   padding: 6px 10px;
   background: rgba(13, 20, 36, 0.7);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.sidebar-drawer-navigation.is-overflowing {
+  padding-inline: 26px;
+}
+
+.drawer-nav-viewport {
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.drawer-nav-viewport::-webkit-scrollbar { display: none; }
+.sidebar-drawer-navigation.has-left .drawer-nav-viewport {
+  mask-image: linear-gradient(to right, transparent, black 10px);
+}
+.sidebar-drawer-navigation.has-right .drawer-nav-viewport {
+  mask-image: linear-gradient(to left, transparent, black 10px);
+}
+.sidebar-drawer-navigation.has-left.has-right .drawer-nav-viewport {
+  mask-image: linear-gradient(to right, transparent, black 10px, black calc(100% - 10px), transparent);
+}
+
+.drawer-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: #eaf4ff;
+  cursor: pointer;
+}
+.drawer-edge-left { left: 0; }
+.drawer-edge-right { right: 0; }
+.drawer-edge:disabled { visibility: hidden; }
+.drawer-edge:hover { background: rgba(255, 255, 255, 0.08); }
+.drawer-edge:focus-visible,
+.drawer-tab-btn:focus-visible { outline: 2px solid #00e5ff; outline-offset: -2px; }
+
+.sidebar-drawer-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  min-width: 100%;
+}
+
 .drawer-tab-btn {
-  flex: 1;
+  flex: 1 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  padding: 6px 4px;
+  padding: 7px 8px;
+  white-space: nowrap;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 7px;
@@ -15235,6 +15286,7 @@ html[data-message-layout="expanded"] .copilot-bubble.user {
 
 .sidebar-drawer-content {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 10px 10px;

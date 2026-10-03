@@ -104,3 +104,34 @@ describe('session auto-titling derivation', () => {
   });
 });
 
+
+
+describe('chat Markdown formatting', () => {
+  it('renders headings, emphasis, lists, links and tables in one answer', () => {
+    const { html } = processRichText('## Zusammenfassung\n\n**Kernaussagen** mit *Details*.\n\n- Python\n- Java\n\n| Repo | Stars |\n| --- | --- |\n| SDK | 85 |\n\n[Quelle](https://example.com)');
+    expect(html).toContain('<h2>Zusammenfassung</h2>');
+    expect(html).toContain('<strong>Kernaussagen</strong>');
+    expect(html).toContain('<em>Details</em>');
+    expect(html).toContain('<ul>');
+    expect(html).toContain('<table>');
+    expect(html).toContain('<td>85</td>');
+    expect(html).toContain('href="https://example.com"');
+  });
+
+  it('escapes HTML and rejects executable links without interpreting code contents', () => {
+    const { html } = processRichText('<img src=x onerror=alert(1)>\n\n[bad](javascript:alert(1))\n\n```js\n**literal** [Tab 1] $x$ <script>\n```');
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('href="javascript:');
+    expect(html).toContain('&lt;img');
+    expect(html).toContain('**literal** [Tab 1] $x$ &lt;script&gt;');
+    expect(html).not.toContain('class="tab-citation-pill"');
+  });
+
+  it('keeps unfinished streamed Markdown readable and preserves fenced code copy buttons', () => {
+    const { html } = processRichText('## Antwort\n\n**noch offen\n\n```python\nprint("Hallo")');
+    expect(html).toContain('<h2>Antwort</h2>');
+    expect(html).toContain('noch offen');
+    expect(html).toContain('rich-code-copy');
+    expect(html).toContain('print(&quot;Hallo&quot;)');
+  });
+});

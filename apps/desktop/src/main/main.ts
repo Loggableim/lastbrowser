@@ -326,6 +326,7 @@ async function promptForWebsiteNotifications(contents: Electron.WebContents, req
 }
 let currentAssistantName = 'Nova';
 let currentLocale = 'en';
+let currentSearchEngineId = 'google';
 const activeSessions = new Set<Session>();
 const extensionManager = new ExtensionManager(app.getPath('userData'), () => Array.from(activeSessions));
 
@@ -460,6 +461,11 @@ function registerIpc(): void {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window || !shouldNotifyChatCompletion(enabled, window.isFocused()) || !Notification.isSupported()) return false;
     new Notification(getChatCompletionNotification(currentLocale)).show();
+    return true;
+  });
+  ipcMain.handle('lastbrowser:browser:setSearchEngine', (event, id: unknown) => {
+    if (event.sender !== mainWindow?.webContents) return false;
+    if (typeof id === 'string') currentSearchEngineId = id;
     return true;
   });
   ipcMain.handle('lastbrowser:i18n:setLocale', (_event, locale: unknown) => {
@@ -1234,7 +1240,8 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     shell,
     getWindow: () => mainWindow,
     getAssistantName: () => currentAssistantName,
-    getLocale: () => currentLocale
+    getLocale: () => currentLocale,
+    getSearchEngineId: () => currentSearchEngineId
   });
   registerBrowserShortcuts({
     app,

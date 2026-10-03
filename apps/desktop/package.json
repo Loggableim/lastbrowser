@@ -11,7 +11,6 @@
     "start": "electron dist/main/main.js",
     "start:dev": "node electron-dev.mjs",
     "prepare:python": "node scripts/prepare-python-runtime.mjs",
-    "build:installer-assets": "python scripts/generate-installer-assets.py",
     "build": "npm run build:main && npm run build:renderer",
     "build:main": "tsc -p tsconfig.main.json && node scripts/build-preload.mjs",
     "build:renderer": "npm run typecheck:renderer && vite build",
@@ -21,8 +20,8 @@
     "smoke:browser": "node scripts/smoke-browser.mjs",
     "sync:sidekick": "node -e \"console.log('[sync:sidekick] Sidekick is integrated directly in-tree.')\"",
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
-    "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
-    "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never"
+    "package:win": "npm run prepare:python && npm run build && electron-builder --win nsis portable",
+    "package:win:publish": "npm run prepare:python && npm run build && electron-builder --win nsis portable --publish never"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",
@@ -139,15 +138,18 @@
     "nsis": {
       "artifactName": "Lastbrowser-${version}-${arch}-setup.${ext}",
       "include": "build/installer.nsh",
-      "installerHeader": "build/installerHeader.bmp",
-      "installerSidebar": "build/installerSidebar.bmp",
-      "uninstallerSidebar": "build/installerSidebar.bmp",
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Lastbrowser"
+      "shortcutName": "Lastbrowser",
+      "runAfterFinish": true,
+      "installerHeaderIcon": "build/icon.ico",
+      "installerLanguages": [
+        "en_US",
+        "de_DE"
+      ],
+      "language": "1033"
     },
     "portable": {
       "artifactName": "Lastbrowser-${version}-${arch}-portable.${ext}"

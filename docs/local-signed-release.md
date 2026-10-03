@@ -72,8 +72,6 @@ Remove-Item Env:EVS_REQUIRE_EXPLICIT_CREDENTIALS -ErrorAction SilentlyContinue
 Remove-Item Env:ELECTRON_BUILDER_OFFLINE -ErrorAction SilentlyContinue
 npm --workspace apps/desktop run prepare:python
 Assert-Exit 'Python runtime preparation'
-npm --workspace apps/desktop run build:installer-assets
-Assert-Exit 'Installer artwork'
 Push-Location apps/desktop
 try {
     & "$releaseRoot/node_modules/.bin/electron-builder.cmd" --win nsis portable --x64 --publish never --config $releaseConfigPath

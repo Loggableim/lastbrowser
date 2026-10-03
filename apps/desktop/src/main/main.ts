@@ -970,7 +970,7 @@ function registerIpc(): void {
       return [];
     }
   });
-  registerUpdateIpc(() => mainWindow);
+  registerUpdateIpc(() => mainWindow, () => getTerminalIds().length > 0 || agentWorkspaceStreams.size > 0, () => currentLocale);
   ipcMain.handle('lastbrowser:adblock:status', () => adblock.getStatus());
   ipcMain.handle('lastbrowser:adblock:setEnabled', (_event, enabled: unknown) => {
     adblock.setEnabled(enabled !== false);

@@ -14,7 +14,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AdblockShield } from './AdblockShield.js';
 import {
   Bug,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -53,7 +52,7 @@ import { type SpaceSummary, spaceDisplayName } from '../shell-state.js';
 import type { BrowserTab } from '../tabs.js';
 import { prepareSnapTabDrag } from '../types/snap-layouts.js';
 import { useDesktopI18n } from '../i18n.js';
-import type { DesktopTranslationKey } from '../i18n/keys.js';
+import { shouldShowStartupUpdateNotice, setStartupUpdateNoticeHidden } from '../update-notice.js';
 
 export type UpdateStatus = Awaited<ReturnType<typeof window.lastbrowser.updates.status>>;
 
@@ -186,58 +185,88 @@ export function BookmarkBar({
 
 // ─── UpdatePill ─────────────────────────────────────────────────────────────
 
-export function updateLabel(status: UpdateStatus, translate?: (key: DesktopTranslationKey, params?: Record<string, unknown>) => string): string {
-  const t = translate ?? ((key: DesktopTranslationKey, params?: Record<string, unknown>) => {
-    if (key === 'browser.chrome.updateChecking') return 'checking updates';
-    if (key === 'browser.chrome.updateAvailable') return 'update available';
-    if (key === 'browser.chrome.updateDownloading') return `downloading update: ${String(params?.percent ?? 0)}%`;
-    if (key === 'browser.chrome.restartToUpdate') return 'restart to update';
-    return 'updates';
-  });
-  if (status.state === 'checking') return t('browser.chrome.updateChecking');
-  if (status.state === 'available') return status.availableVersion ? `${t('browser.chrome.updateAvailable')} ${status.availableVersion}` : t('browser.chrome.updateAvailable');
-  if (status.state === 'downloading') return t('browser.chrome.updateDownloading', { percent: status.percent ?? 0 });
-  if (status.state === 'downloaded') return t('browser.chrome.restartToUpdate');
-  if (status.state === 'error') return t('browser.chrome.updateRetry');
-  return t('browser.chrome.updates');
-}
-
-export function UpdatePill({ status }: { status: UpdateStatus | null }): React.JSX.Element | null {
+export function UpdatePill({ status, busy = false }: { status: UpdateStatus | null; busy?: boolean }): React.JSX.Element | null {
   const { t } = useDesktopI18n();
-  if (!status || status.state === 'disabled') return null;
-  const visibleStates: UpdateStatus['state'][] = ['checking', 'available', 'downloading', 'downloaded', 'error'];
-  if (!visibleStates.includes(status.state)) return null;
-
-  const label = updateLabel(status, (key, params) => t(key, params));
-  const handleClick = () => {
-    if (status.state === 'downloaded') {
-      void window.lastbrowser.updates.install();
-      return;
-    }
-    if (status.state === 'available') {
-      void window.lastbrowser.updates.download();
-      return;
-    }
-    if (status.state === 'error') {
-      void window.lastbrowser.updates.check();
+  const [open, setOpen] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [startupPrompt, setStartupPrompt] = useState(false);
+  const [hideStartup, setHideStartup] = useState(false);
+  const startupNoticeHandled = useRef(false);
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!status?.startupCheck || startupNoticeHandled.current) return;
+    if (!['available', 'downloading', 'downloaded'].includes(status.state)) return;
+    startupNoticeHandled.current = true;
+    if (!shouldShowStartupUpdateNotice(window.localStorage)) return;
+    setStartupPrompt(true);
+    setOpen(true);
+  }, [status?.state, status?.startupCheck]);
+  useEffect(() => {
+    if (!open) return;
+    container.current?.querySelector<HTMLButtonElement>('.update-popover button:not(:disabled)')?.focus();
+    const outside = (event: PointerEvent) => {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open]);
+  if (!status || (status.state !== 'downloaded' && !(open && startupPrompt))) return null;
+  const ready = status.state === 'downloaded';
+  const label = ready ? t('browser.chrome.updateReady', { version: status.availableVersion ?? '' })
+    : `${t('browser.chrome.updateAvailable')} ${status.availableVersion ?? ''}`;
+  const install = async () => {
+    if (!ready || busy || installing) return;
+    setInstalling(true);
+    setError(null);
+    try {
+      const result = await window.lastbrowser.updates.install();
+      // The process normally exits. A returned message may describe a failed launch.
+      if (result.message && result.message !== status.message) setError(result.message);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setInstalling(false);
     }
   };
 
   return (
-    <button
-      type="button"
-      className={`update-pill ${status.state}`}
-      onClick={handleClick}
-      disabled={status.state === 'checking' || status.state === 'downloading'}
-      title={status.message || label}
-    >
-      {status.state === 'checking' || status.state === 'downloading'
-        ? <Loader2 size={14} className="spin" />
-        : status.state === 'downloaded'
-          ? <CheckCircle2 size={14} />
-          : <RefreshCw size={14} />}
-      <span>{label}</span>
-    </button>
+    <div className="update-control" ref={container}>
+      {ready && <button
+        type="button"
+        className={`update-pill ${status.state}`}
+        onClick={() => { setStartupPrompt(false); setOpen((value) => !value); }}
+        title={label}
+        aria-label={label}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+      >
+        <RefreshCw size={16} />
+      </button>}
+      {open && <div className="update-popover" role="dialog" aria-label={t('browser.chrome.updates')}>
+        <strong>{label}</strong>
+        <p>{t(ready ? 'browser.chrome.updateRestartNotice' : 'browser.chrome.updateBackgroundDownload')}</p>
+        {busy && <p role="status">{t('browser.chrome.updateWaitForTasks')}</p>}
+        {(error || status.installError) && <p role="alert">{error || status.installError}</p>}
+        {ready && <button type="button" className="primary-action" disabled={busy || installing} onClick={() => void install()}>
+          {installing ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}
+          {t('browser.chrome.restartToUpdate')}
+        </button>}
+        {startupPrompt && <label className="update-notice-preference"><input type="checkbox" checked={hideStartup} onChange={(event) => {
+          const hidden = event.target.checked;
+          if (setStartupUpdateNoticeHidden(window.localStorage, hidden)) setHideStartup(hidden);
+          else setError(t('browser.chrome.updateNoticeSaveError'));
+        }} />{t('browser.chrome.updateDontShowAgain')}</label>}
+        <button type="button" className="secondary-action" onClick={() => setOpen(false)}>{t('browser.chrome.updateLater')}</button>
+      </div>}
+    </div>
   );
 }
 

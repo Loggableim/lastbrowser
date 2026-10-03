@@ -41,9 +41,8 @@ describe('brand assets', () => {
     }
   });
 
-  it('keeps generated NSIS bitmap assets in the desktop build resources', () => {
-    expect(existsSync(path.resolve(process.cwd(), 'build/installerHeader.bmp'))).toBe(true);
-    expect(existsSync(path.resolve(process.cwd(), 'build/installerSidebar.bmp'))).toBe(true);
+  it('keeps the one-click installer icon and cleanup include in-tree', () => {
+    expect(existsSync(path.resolve(process.cwd(), 'build/icon.ico'))).toBe(true);
     expect(existsSync(path.resolve(process.cwd(), 'build/installer.nsh'))).toBe(true);
   });
 

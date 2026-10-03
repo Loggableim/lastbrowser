@@ -17,6 +17,8 @@ export type LastbrowserUpdateStatus = {
   percent: number | null;
   lastCheckedAt: string | null;
   message: string | null;
+  startupCheck?: boolean;
+  installError?: string | null;
 };
 
 type UpdateInfoLike = {
@@ -35,8 +37,7 @@ export type UpdaterLike = EventEmitter & {
   checkForUpdates: () => Promise<unknown>;
   downloadUpdate: () => Promise<unknown>;
   /**
-   * `isSilent` skips the NSIS wizard (required — the installer is built with
-   * `oneClick: false`, so a non-silent call blocks on user clicks).
+   * `isSilent` keeps updates invisible even with the one-click installer.
    * `isForceRunAfter` relaunches the app once the install completes.
    */
   quitAndInstall: (isSilent?: boolean, isForceRunAfter?: boolean) => void;
@@ -44,7 +45,7 @@ export type UpdaterLike = EventEmitter & {
 
 export type UpdateController = {
   getStatus: () => LastbrowserUpdateStatus;
-  checkForUpdates: () => Promise<LastbrowserUpdateStatus>;
+  checkForUpdates: (startupCheck?: boolean) => Promise<LastbrowserUpdateStatus>;
   downloadUpdate: () => Promise<LastbrowserUpdateStatus>;
   quitAndInstall: () => LastbrowserUpdateStatus;
 };
@@ -55,19 +56,23 @@ export type UpdateControllerOptions = {
   currentVersion: string;
   forceDevUpdates?: boolean;
   allowPrerelease?: boolean;
+  unsupportedReason?: string;
   onStatusChange?: (status: LastbrowserUpdateStatus) => void;
 };
 
 export function createUpdateController(options: UpdateControllerOptions): UpdateController {
   const { updater } = options;
-  const enabled = options.isPackaged || options.forceDevUpdates === true;
+  const enabled = !options.unsupportedReason && (options.isPackaged || options.forceDevUpdates === true);
+  let checkInFlight: Promise<unknown> | null = null;
+  let downloadStarted = false;
+  let installing = false;
   let status: LastbrowserUpdateStatus = {
     state: enabled ? 'idle' : 'disabled',
     currentVersion: options.currentVersion,
     availableVersion: null,
     percent: null,
     lastCheckedAt: null,
-    message: enabled ? null : 'Auto updates are available only in packaged Lastbrowser builds.'
+    message: enabled ? null : options.unsupportedReason || 'Auto updates are available only in packaged Lastbrowser builds.'
   };
 
   updater.autoDownload = true;
@@ -80,7 +85,12 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     return { ...status };
   }
 
+  function hasPendingUpdate(): boolean {
+    return status.state === 'available' || status.state === 'downloading' || status.state === 'downloaded';
+  }
+
   updater.on('checking-for-update', () => {
+    if (!enabled || hasPendingUpdate()) return;
     publish({
       state: 'checking',
       percent: null,
@@ -88,6 +98,8 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     });
   });
   updater.on('update-available', (info: UpdateInfoLike) => {
+    if (!enabled || status.state === 'downloaded' || status.state === 'downloading') return;
+    downloadStarted = true; // electron-updater starts this download automatically.
     publish({
       state: 'available',
       availableVersion: info.version || null,
@@ -96,6 +108,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     });
   });
   updater.on('update-not-available', () => {
+    if (!enabled || hasPendingUpdate()) return;
     publish({
       state: 'not-available',
       availableVersion: null,
@@ -104,6 +117,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     });
   });
   updater.on('download-progress', (progress: ProgressLike) => {
+    if (!enabled || status.state === 'downloaded') return;
     publish({
       state: 'downloading',
       percent: clampPercent(progress.percent),
@@ -111,6 +125,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     });
   });
   updater.on('update-downloaded', (info: UpdateInfoLike) => {
+    if (!enabled) return;
     publish({
       state: 'downloaded',
       availableVersion: info.version || status.availableVersion,
@@ -119,6 +134,13 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     });
   });
   updater.on('error', (error: unknown) => {
+    if (!enabled) return;
+    downloadStarted = false;
+    installing = false;
+    if (status.state === 'downloaded') {
+      publish({ message: error instanceof Error ? error.message : String(error), installError: error instanceof Error ? error.message : String(error) });
+      return;
+    }
     publish({
       state: 'error',
       percent: null,
@@ -128,31 +150,41 @@ export function createUpdateController(options: UpdateControllerOptions): Update
 
   return {
     getStatus: () => ({ ...status }),
-    async checkForUpdates(): Promise<LastbrowserUpdateStatus> {
-      if (!enabled) return { ...status };
+    async checkForUpdates(startupCheck = false): Promise<LastbrowserUpdateStatus> {
+      if (!enabled || hasPendingUpdate()) return { ...status };
+      if (checkInFlight) {
+        await checkInFlight;
+        return { ...status };
+      }
       publish({
         state: 'checking',
+        startupCheck,
         lastCheckedAt: new Date().toISOString(),
         message: 'Checking for Lastbrowser updates.'
       });
       try {
-        await updater.checkForUpdates();
+        checkInFlight = updater.checkForUpdates();
+        await checkInFlight;
       } catch (error) {
-        publish({
+        if (status.state !== 'downloaded') publish({
           state: 'error',
           percent: null,
           message: error instanceof Error ? error.message : String(error)
         });
+      } finally {
+        checkInFlight = null;
       }
       return { ...status };
     },
     async downloadUpdate(): Promise<LastbrowserUpdateStatus> {
       if (!enabled) return { ...status };
-      if (status.state !== 'available') return { ...status };
+      if (status.state !== 'available' || downloadStarted) return { ...status };
+      downloadStarted = true;
       publish({ state: 'downloading', percent: 0, message: 'Downloading update.' });
       try {
         await updater.downloadUpdate();
       } catch (error) {
+        downloadStarted = false;
         publish({
           state: 'error',
           percent: null,
@@ -162,14 +194,15 @@ export function createUpdateController(options: UpdateControllerOptions): Update
       return { ...status };
     },
     quitAndInstall(): LastbrowserUpdateStatus {
-      if (status.state !== 'downloaded') return { ...status };
-      // `isSilent = true` is required: the NSIS installer is built with
-      // `oneClick: false`, so a non-silent quitAndInstall shows the full setup
-      // wizard and BLOCKS waiting for clicks. An auto-update must run without
-      // user interaction — verified: without this the installer sat on
-      // "Installation von Lastbrowser" indefinitely.
-      // `isForceRunAfter = true` relaunches the app when the install finishes.
-      updater.quitAndInstall(true, true);
+      if (!enabled || status.state !== 'downloaded' || installing) return { ...status };
+      installing = true;
+      publish({ installError: null });
+      try {
+        updater.quitAndInstall(true, true);
+      } catch (error) {
+        installing = false;
+        publish({ message: error instanceof Error ? error.message : String(error), installError: error instanceof Error ? error.message : String(error) });
+      }
       return { ...status };
     }
   };

@@ -2185,6 +2185,7 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
   const authState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/auth/status' }), [ready], ready);
   const pluginsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/plugins' }), [ready], ready);
   const updatesState = useApiState(() => window.lastbrowser.updates.status(), [], true);
+  useEffect(() => window.lastbrowser.updates.onStatus((next) => updatesState.setData(next)), [updatesState.setData]);
   const [section, setSection] = useState<SettingsSectionId>('conversation');
   const [draft, setDraft] = useState<AnyRecord>({});
   const draftRef = useRef<AnyRecord>({});
@@ -2332,7 +2333,6 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
     void settingsState.refresh();
   }, [desktopSettings, settingsState.error, settingsState.refresh]);
 
-  const autoUpdateChecksEnabled = settingsBoolean(draft.check_for_updates ?? settings.check_for_updates, true);
   const authEnabled = settingsBoolean(authState.data?.auth_enabled, false);
   const loggedIn = settingsBoolean(authState.data?.logged_in, false);
   const passwordEnvLocked = settingsBoolean(settings.password_env_var, false);
@@ -2413,7 +2413,7 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
       payload.show_thinking = settingsBoolean(payload.show_thinking, false);
       payload.show_cli_sessions = settingsBoolean(payload.show_cli_sessions, false);
       payload.sync_to_insights = settingsBoolean(payload.sync_to_insights, false);
-      payload.check_for_updates = settingsBoolean(payload.check_for_updates, true);
+      payload.check_for_updates = true;
 
       // Instant local storage fast-path for appearance
       try {
@@ -2488,7 +2488,7 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
       payload.show_tps = settingsBoolean(payload.show_tps, false);
       payload.show_cli_sessions = settingsBoolean(payload.show_cli_sessions, false);
       payload.sync_to_insights = settingsBoolean(payload.sync_to_insights, false);
-      payload.check_for_updates = settingsBoolean(payload.check_for_updates, true);
+      payload.check_for_updates = true;
       payload.sound_enabled = settingsBoolean(payload.sound_enabled, true);
       payload.notifications_enabled = settingsBoolean(payload.notifications_enabled, true);
       payload.simplified_tool_calling = settingsBoolean(payload.simplified_tool_calling, true);
@@ -2900,7 +2900,7 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
   }
 
   const sectionList = Object.entries(SETTINGS_SECTIONS) as Array<[SettingsSectionId, SettingsSectionMeta]>;
-  const updateAvailable = updateState === 'available';
+  const updateAvailable = ['available', 'downloading', 'downloaded'].includes(updateState);
 
   return (
     <section className="browser-main native-rest-main settings-main">
@@ -3825,9 +3825,10 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
                     />
                     <SettingsToggle
                       label={t('settings.panels.notifications.updates')}
-                      description={t('settings.panels.notifications.updatesDescription')}
-                      checked={autoUpdateChecksEnabled}
-                      onChange={(value) => updateDraftToggle('check_for_updates', value)}
+                      description={t('browser.chrome.updateAlwaysEnabled')}
+                      checked
+                      disabled
+                      onChange={() => void 0}
                     />
                   </div>
                 </SettingsCard>
@@ -4361,7 +4362,7 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
                     </div>
                   )}
                   <div className="settings-system-actions">
-                    <button type="button" className="secondary-action compact" onClick={() => void checkUpdates()} disabled={!ready || updatesState.loading}>
+                    <button type="button" className="secondary-action compact" onClick={() => void checkUpdates()} disabled={updatesState.loading || updateState === 'disabled'}>
                       {updatesState.loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
                       <span>{t('settings.panels.system.checkUpdates')}</span>
                     </button>
@@ -4381,6 +4382,7 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
                     <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>{t('settings.panels.system.updateState', { state: updateState })}</span>
                     {updateCurrentVersion && <span className="settings-badge">{t('settings.panels.system.currentVersion', { version: updateCurrentVersion })}</span>}
                     {updateAvailableVersion && <span className="settings-badge">{t('settings.panels.system.availableVersion', { version: updateAvailableVersion })}</span>}
+                    {updateState === 'downloading' && <span className="settings-badge">{t('browser.chrome.updateDownloading', { percent: updatesState.data?.percent ?? 0 })}</span>}
                     {updateMessage && <span className="settings-badge">{updateMessage}</span>}
                   </div>
                 </SettingsCard>

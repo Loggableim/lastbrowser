@@ -51,7 +51,7 @@ describe('GitHub release auto-update flow', () => {
     expect(workflow).toContain('actions/download-artifact@v4');
     expect(workflow).toContain('token: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain('npm --workspace apps/desktop run prepare:python');
-    expect(workflow).toContain('npm --workspace apps/desktop run build:installer-assets');
+    expect(workflow).not.toContain('build:installer-assets');
     expect(workflow).toContain('npm --workspace apps/desktop run build');
     expect(workflow).toContain('npm --workspace apps/desktop exec -- electron-builder --win nsis portable --publish never');
     expect(workflow).toContain('apps/desktop/release/*.blockmap');
@@ -62,7 +62,6 @@ describe('GitHub release auto-update flow', () => {
     const workflow = readFileSync(releaseWorkflowPath, 'utf8');
     const setupIndex = workflow.indexOf('- name: Setup Node');
     const runtimeIndex = workflow.indexOf('- name: Prepare Python runtime');
-    const installerAssetsIndex = workflow.indexOf('- name: Build installer assets');
     const desktopBuildIndex = workflow.indexOf('- name: Build desktop application');
     const buildIndex = workflow.indexOf('- name: Package Windows installers with VMP signing');
     const inventoryIndex = workflow.indexOf('- name: Require exactly the expected Windows executables');
@@ -72,8 +71,7 @@ describe('GitHub release auto-update flow', () => {
 
     expect(setupIndex).toBeGreaterThan(-1);
     expect(runtimeIndex).toBeGreaterThan(setupIndex);
-    expect(installerAssetsIndex).toBeGreaterThan(runtimeIndex);
-    expect(desktopBuildIndex).toBeGreaterThan(installerAssetsIndex);
+    expect(desktopBuildIndex).toBeGreaterThan(runtimeIndex);
     expect(buildIndex).toBeGreaterThan(desktopBuildIndex);
     expect(inventoryIndex).toBeGreaterThan(buildIndex);
     expect(signingIndex).toBeGreaterThan(inventoryIndex);
@@ -119,7 +117,6 @@ describe('GitHub release auto-update flow', () => {
     const pythonSyntaxIndex = workflow.indexOf('Check Sidekick Python syntax');
     const backendTestIndex = workflow.indexOf('Test Sidekick backend');
     const runtimeIndex = workflow.indexOf('Prepare Python runtime');
-    const installerAssetsIndex = workflow.indexOf('Build installer assets');
     const desktopBuildIndex = workflow.indexOf('Build desktop application');
     const buildIndex = workflow.indexOf('Package Windows installers with VMP signing');
     const signingIndex = workflow.indexOf('Sign binaries with Azure Trusted Signing');
@@ -137,8 +134,7 @@ describe('GitHub release auto-update flow', () => {
     expect(backendTestIndex).toBeGreaterThan(pythonSyntaxIndex);
     expect(backendTestIndex).toBeLessThan(buildIndex);
     expect(runtimeIndex).toBeGreaterThan(backendTestIndex);
-    expect(installerAssetsIndex).toBeGreaterThan(runtimeIndex);
-    expect(desktopBuildIndex).toBeGreaterThan(installerAssetsIndex);
+    expect(desktopBuildIndex).toBeGreaterThan(runtimeIndex);
     expect(buildIndex).toBeGreaterThan(desktopBuildIndex);
     expect(backendTestIndex).toBeLessThan(signingIndex);
     expect(backendTestIndex).toBeLessThan(publishIndex);

@@ -454,13 +454,13 @@ declare global {
         onStatus: (callback: (status: LastbrowserUpdateStatus) => void) => () => void;
       };
       terminal: {
-        start: (request: string | { cwd?: string; mode?: 'shell' | 'tui'; cols?: number; rows?: number }) =>
+        start: (request: string | { cwd?: string; mode?: 'shell' | 'tui'; cols?: number; rows?: number; sessionId?: string }) =>
           Promise<{ id: string; error?: string }>;
         write: (request: { id: string; data: string }) => Promise<{ ok: boolean; error?: string }>;
         resize?: (request: { id: string; cols: number; rows: number }) => Promise<{ ok: boolean; error?: string }>;
         close: (id: string) => Promise<{ ok: boolean; error?: string }>;
         list: () => Promise<string[]>;
-        onData: (callback: (event: { id: string; data: string }) => void) => () => void;
+        onData: (callback: (event: { id: string; data?: string; exitCode?: number }) => void) => () => void;
       };
       gateway: {
         status: () => Promise<{

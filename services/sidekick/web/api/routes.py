@@ -6237,7 +6237,7 @@ def handle_get(handler, parsed) -> bool:
             _teardown_workspace_context()
 
     # â”€â”€ Gmail API (GET) â”€â”€
-    if parsed.path.startswith("/api/gmail/"):
+    if parsed.path.startswith(("/api/gmail/", "/api/mail/")):
         from web.api.gmail_tools import handle_gmail_get
         _setup_workspace_from_request(handler, parsed)
         try:
@@ -6263,7 +6263,7 @@ def handle_get(handler, parsed) -> bool:
         return handle_evey_get(handler, parsed)
 
     # â”€â”€ Gmail API (GET) â”€â”€
-    if parsed.path.startswith("/api/gmail/"):
+    if parsed.path.startswith(("/api/gmail/", "/api/mail/")):
         from web.api.gmail_tools import handle_gmail_get
         _setup_workspace_from_request(handler, parsed)
         try:
@@ -8869,7 +8869,7 @@ def handle_post(handler, parsed) -> bool:
             _teardown_workspace_context()
 
     # â”€â”€ Gmail API (POST) â”€â”€
-    if parsed.path.startswith("/api/gmail/"):
+    if parsed.path.startswith(("/api/gmail/", "/api/mail/")):
         from web.api.gmail_tools import handle_gmail_post
         return handle_gmail_post(handler, parsed, body)
 
@@ -8908,7 +8908,7 @@ def handle_post(handler, parsed) -> bool:
         return handle_evey_post(handler, parsed, body)
 
     # â”€â”€ Gmail API (POST) â”€â”€
-    if parsed.path.startswith("/api/gmail/"):
+    if parsed.path.startswith(("/api/gmail/", "/api/mail/")):
         from web.api.gmail_tools import handle_gmail_post
         return handle_gmail_post(handler, parsed, body)
 

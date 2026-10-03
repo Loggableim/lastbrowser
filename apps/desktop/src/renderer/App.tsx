@@ -208,6 +208,7 @@ import {
 } from './panels/NativeRestPanels.js';
 import { NativeTasksMain, NativeKanbanMain, NativeTodosMain } from './panels/TaskPanels.js';
 import { NativeTerminalMain } from './panels/NativeTerminalMain.js';
+import { NativeMailMain } from './panels/NativeMailMain.js';
 import { ControlCenter } from './NativeControlCenter.js';
 import { ApprovalPollManager, ApprovalCard } from './NativeApproval.js';
 import { DownloadsPanel } from './NativeDownloads.js';
@@ -4636,6 +4637,13 @@ function AppContent(): JSX.Element {
           existingSpaceNames={spaces.map(spaceDisplayName)}
         />
         <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />
+        <PermissionsPanel open={usePanelStore.getState().permissionsOpen} onClose={() => usePanelStore.getState().setPermissionsOpen(false)} />
+        <HistoryPanel open={usePanelStore.getState().historyOpen} visits={visitedSites}
+          onClose={() => usePanelStore.getState().setHistoryOpen(false)}
+          onOpen={(url) => { setActivePanel('browser'); navigate(url); }}
+          onRemove={removeHistoryEntry} onClear={clearHistory} />
+        <UnifiedExtensionHub open={usePanelStore.getState().extensionHubOpen}
+          onClose={() => usePanelStore.getState().setExtensionHubOpen(false)} activeSpace={activeSpacePath} />
         <CommandPalette onToggleTabPinned={toggleTabPinned} onToggleTabMute={toggleTabMute} />
 
     </div>
@@ -5511,7 +5519,7 @@ function BrowserMain({
       case 'logs':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeLogsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'gmail':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeGmailMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeMailMain workspace={activeSpacePath} activeContextItem={activeContextItem} ready={canCallSidekickApi(serviceStatus)} /></PanelErrorBoundary>;
       case 'discord':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeDiscordMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'appstore':
@@ -5526,7 +5534,7 @@ function BrowserMain({
           </PanelErrorBoundary>
         );
       case 'settings':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} profiles={profiles} activeProfileId={activeProfileId} onSelectProfile={onSelectProfile} onCreateProfile={onCreateProfile} onRenameProfile={onRenameProfile} onDeleteProfile={onDeleteProfile} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain workspacePath={activeSpacePath} activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} profiles={profiles} activeProfileId={activeProfileId} onSelectProfile={onSelectProfile} onCreateProfile={onCreateProfile} onRenameProfile={onRenameProfile} onDeleteProfile={onDeleteProfile} /></PanelErrorBoundary>;
       case 'terminal':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:
@@ -5589,20 +5597,6 @@ function BrowserMain({
           </button>
         </div>
       )}
-      <PermissionsPanel open={permissionsOpen} onClose={() => setPermissionsOpen(false)} />
-      <HistoryPanel
-        open={historyOpen}
-        visits={visitedSites}
-        onClose={() => setHistoryOpen(false)}
-        onOpen={(url) => onNavigate(url)}
-        onRemove={(url) => onRemoveVisit(url)}
-        onClear={() => onClearHistory()}
-      />
-      <UnifiedExtensionHub
-        open={extensionHubOpen}
-        onClose={() => setExtensionHubOpen(false)}
-        activeSpace={activeSpacePath}
-      />
       <div className="browser-webview-frame" ref={browserFrameRef}>
         <LiveAutomationBanner webview={webviewRef.current} />
         {findOpen && (

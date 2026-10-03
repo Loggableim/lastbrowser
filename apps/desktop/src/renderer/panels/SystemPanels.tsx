@@ -35,6 +35,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { GeminiAccountsPanel } from './GeminiAccountsPanel.js';
+import { MailPluginSettings } from './MailPluginSettings.js';
 import { TeamworkSettingsPanel } from './TeamworkSettingsPanel.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { cloudProviderOptions, openProviderOAuthUrl, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
@@ -663,7 +664,7 @@ export function NativeLogsMain({ serviceStatus, activeContextItem }: { serviceSt
   const [auto, setAuto] = useState(false);
   const [section, setSection] = useState(activeContextItem || 'Agent');
   const logs = useApiState(() => window.lastbrowser.sidekick.getLogs({ file, tail }), [ready, file, tail], ready);
-  const lines = text(logs.data?.text || logs.data?.logs || logs.data?.content).split(/\r?\n/).filter((line) => !severity || line.toLowerCase().includes(severity.toLowerCase()));
+  const lines = (Array.isArray(logs.data?.lines) ? logs.data.lines.map(String) : text(logs.data?.text || logs.data?.logs || logs.data?.content).split(/\r?\n/)).filter((line) => !severity || line.toLowerCase().includes(severity.toLowerCase()));
   const logSections = [
     { id: 'Agent', label: t('logs.agent') },
     { id: 'WebUI', label: t('logs.webUi') },
@@ -2176,7 +2177,7 @@ export function createReadinessAwareSettingsWriter<T>(write: (value: T) => Promi
   };
 }
 
-export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void }): JSX.Element {
+export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile }: { workspacePath?: string; serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
@@ -4272,14 +4273,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             {section === 'plugins' && (
               <>
                 <ExtensionsSettingsSection />
+                <MailPluginSettings workspace={workspacePath} ready={ready} />
                 <SettingsCard title={t('settings.panels.plugins.connectedApps')} description={t('settings.panels.plugins.connectedAppsDescription')}>
                   <div className="settings-field-grid">
-                    <SettingsToggle
-                      label={t('settings.panels.plugins.gmailVisible')}
-                      description={t('settings.panels.plugins.appstoreOnly')}
-                      checked={settingsBoolean(draft.gmail ?? settings.gmail, false)}
-                      onChange={(value) => updateDraftToggle('gmail', value)}
-                    />
                     <SettingsToggle
                       label={t('settings.panels.plugins.discordVisible')}
                       description={t('settings.panels.plugins.appstoreOnly')}

@@ -2,6 +2,10 @@ import type { DesktopCatalog, DesktopTranslationKey } from '../keys.js';
 
 const translations: DesktopCatalog = {
   'app.title': 'Lastbrowser',
+  'copilot.quickChat': 'Быстрый чат',
+  'copilot.newQuickChat': 'Новый быстрый чат',
+  'copilot.openFullChat': 'Открыть в разделе ИИ',
+  'copilot.quickChatDescription': 'Отдельный разговор для помощи при просмотре страниц. Он сохраняется при закрытии. Начните заново кнопкой «Новый быстрый чат».',
   'common.add': 'Добавить',
   'common.added': 'Добавлено',
   'common.back': 'Назад',

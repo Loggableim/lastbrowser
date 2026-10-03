@@ -124,6 +124,10 @@ export interface CopilotSplitViewProps {
   activeSessionId?: string | null;
   onSelectSession?: (sessionId: string) => void;
   onOpenSettings?: (section?: string) => void;
+  onOpenFullChat?: () => void;
+  draftText?: string;
+  onDraftChange?: (text: string) => void;
+  chatError?: string;
 }
 
 export function CopilotSplitView({
@@ -146,10 +150,16 @@ export function CopilotSplitView({
   sessions = [],
   activeSessionId = null,
   onSelectSession,
-  onOpenSettings
+  onOpenSettings,
+  onOpenFullChat,
+  draftText,
+  onDraftChange,
+  chatError
 }: CopilotSplitViewProps): React.JSX.Element | null {
   const { t } = useDesktopI18n();
-  const [inputText, setInputText] = useState('');
+  const [localInputText, setLocalInputText] = useState('');
+  const inputText = draftText ?? localInputText;
+  const setInputText = onDraftChange ?? setLocalInputText;
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [workflowsMenuOpen, setWorkflowsMenuOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
@@ -637,14 +647,14 @@ export function CopilotSplitView({
   }
 
   return (
-    <aside className="copilot-split-panel" aria-label={`${botName} AI Workspace`}>
+    <aside className="copilot-split-panel" aria-label={`${botName} ${t('copilot.quickChat')}`}>
       {/* Top Header */}
       <div className="copilot-header">
         <div className="copilot-header-brand">
           <div className="copilot-logo-circle">
             <img src={brandAssets.sidekickAvatar} alt="" className="copilot-header-avatar" draggable={false} />
           </div>
-          <span className="copilot-header-title">{botName} AI</span>
+          <span className="copilot-header-title">{botName} · {t('copilot.quickChat')}</span>
         </div>
         <div className="copilot-header-actions">
           {/* Universal Model Picker in Header */}
@@ -789,11 +799,12 @@ export function CopilotSplitView({
             <button
               type="button"
               className="copilot-action-btn copilot-new-chat-btn"
-              title={t('sidebar.drawer.newChat')}
+              title={t('copilot.newQuickChat')}
+              aria-label={t('copilot.newQuickChat')}
+              disabled={busy}
               onClick={onNewChat}
             >
               <Plus size={13} />
-              <span>{t('common.add')}</span>
             </button>
           )}
 
@@ -884,6 +895,12 @@ export function CopilotSplitView({
             </div>
           )}
 
+          {onOpenFullChat && (
+            <button type="button" className="copilot-action-btn" onClick={onOpenFullChat}
+              title={t('copilot.openFullChat')} aria-label={t('copilot.openFullChat')} disabled={busy}>
+              <FileText size={14} />
+            </button>
+          )}
           {onMinimize && (
             <button
               type="button"
@@ -906,6 +923,7 @@ export function CopilotSplitView({
       </div>
 
       {/* Messages Stream */}
+      {chatError && <p role="alert" className="copilot-text-p">{chatError}</p>}
       <div className="copilot-messages-container" ref={scrollRef}>
         {messages.length === 0 ? (
           <div className="copilot-empty-state">
@@ -913,7 +931,7 @@ export function CopilotSplitView({
               <img src={brandAssets.sidekickAvatar} alt={botName} className="copilot-empty-avatar" draggable={false} />
             </div>
             <h4>{t('copilot.emptyTitle', { botName })}</h4>
-            <p>{t('copilot.emptyDescription')}</p>
+            <p>{t('copilot.quickChatDescription')}</p>
 
             {quickActions && quickActions.length > 0 && (
               <div className="copilot-starter-chips">

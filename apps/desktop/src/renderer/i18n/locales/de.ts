@@ -2,6 +2,10 @@ import type { DesktopCatalog } from '../keys.js';
 
 export const desktopDeOverrides = {
   'app.title': 'Lastbrowser',
+  'copilot.quickChat': 'Schnellchat',
+  'copilot.newQuickChat': 'Neuer Schnellchat',
+  'copilot.openFullChat': 'Im KI-Bereich öffnen',
+  'copilot.quickChatDescription': 'Eigenes Gespräch für Hilfe beim Browsen. Es bleibt beim Schließen erhalten. Mit „Neuer Schnellchat“ beginnst du von vorn.',
   'common.add': 'Hinzufügen',
   'common.added': 'Hinzugefügt',
   'common.back': 'Zurück',

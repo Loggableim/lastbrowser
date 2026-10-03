@@ -2,6 +2,10 @@ import type { DesktopCatalog } from '../keys.js';
 
 export const desktopItOverrides = {
   'app.title': 'Lastbrowser',
+  'copilot.quickChat': 'Chat rapido',
+  'copilot.newQuickChat': 'Nuova chat rapida',
+  'copilot.openFullChat': 'Apri nell’area IA',
+  'copilot.quickChatDescription': 'Una conversazione separata per aiutarti durante la navigazione. Si conserva alla chiusura. Ricomincia con Nuova chat rapida.',
   'common.add': 'Aggiungi',
   'common.added': 'Aggiunto',
   'common.back': 'Indietro',

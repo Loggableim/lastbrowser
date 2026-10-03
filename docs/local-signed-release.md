@@ -31,6 +31,24 @@ try {
 
 The signing service and timestamp server require network access; local packaging does not require cloning another Sidekick repository.
 
+## Provision offline Python inputs
+
+Before the build, provision `apps/desktop/runtime/wheelhouse` separately using the
+Windows Python 3.12 installation. The checked-in lock contains exact direct and
+transitive versions with SHA-256 wheel hashes, including MCP 1.26.0. This input
+provisioning step needs network access; the packaging step never downloads Python
+dependencies or external backend source. A missing wheel or wrong hash fails the
+build. `LASTBROWSER_WHEELHOUSE` may point to an existing local cache.
+
+```powershell
+& "$env:LOCALAPPDATA/Programs/Python/Python312/python.exe" -m pip download --only-binary=:all: --require-hashes --dest apps/desktop/runtime/wheelhouse -r apps/desktop/scripts/requirements-runtime.txt
+Assert-Exit 'Provision pinned runtime wheels'
+```
+
+Runtime cache schema 8 includes the requirements lock digest; changing this lock
+invalidates an older prepared runtime. Sidekick itself is installed directly from
+the tracked monorepo with dependency resolution and build isolation disabled.
+
 ## Configure and build
 
 The supported option is **`win.signtoolOptions.certificateSha1`**, not a top-level `win.certificateSha1`. `win.azureSignOptions` must be absent. `forceCodeSigning` makes missing Authenticode signing fatal. A unique output folder avoids stale assets. This configuration copies the current package configuration, preserving resources, installer design, and the `afterSign` hook.

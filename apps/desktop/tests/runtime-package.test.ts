@@ -46,11 +46,11 @@ describe('desktop runtime packaging', () => {
 
   it('invalidates pre-OpenAI bundled runtimes when preparing the Python runtime', () => {
     const prepareScript = readFileSync(path.resolve(process.cwd(), 'scripts/prepare-python-runtime.mjs'), 'utf8');
-    expect(prepareScript).toContain("'openai>=1.0,<3'");
-    expect(prepareScript).toContain("'anthropic>=0.39.0'");
+    expect(prepareScript).toContain("'--require-hashes'");
+    expect(prepareScript).toContain("'--no-index'");
     expect(prepareScript).toContain('import anthropic');
     expect(prepareScript).toContain("'--no-compile'");
-    expect(prepareScript).toContain('runtimeSchema: 7');
+    expect(prepareScript).toContain('runtimeSchema: 8');
     expect(prepareScript).toContain('from mcp import ClientSession, StdioServerParameters');
     expect(prepareScript).not.toContain('marker.packageVersion === desired.packageVersion');
     const sidekickPyproject = readFileSync(path.resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'pyproject.toml'), 'utf8');
@@ -75,6 +75,13 @@ describe('desktop runtime packaging', () => {
     expect(isPreparedRuntimeCompatible(marker, desired, true)).toBe(true);
     expect(isPreparedRuntimeCompatible(marker, { ...desired, runtimeSchema: 7 }, true)).toBe(false);
     expect(isPreparedRuntimeCompatible(marker, desired, false)).toBe(false);
+  });
+
+  it('invalidates prepared runtimes when the pinned wheel lock changes', () => {
+    const desired = { sourcePythonHome: 'C:/Python312', sourceVersion: '3.12.10', runtimeSchema: 8, requirementsSha256: 'current-lock' };
+    expect(isPreparedRuntimeCompatible({ ...desired }, desired, true)).toBe(true);
+    expect(isPreparedRuntimeCompatible({ ...desired, requirementsSha256: 'old-lock' }, desired, true)).toBe(false);
+    expect(isPreparedRuntimeCompatible({ ...desired, requirementsSha256: undefined }, desired, true)).toBe(false);
   });
 
   it('runs browser smoke against the local source Electron and requires an explicit opt-in for installed builds', () => {

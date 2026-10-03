@@ -197,7 +197,7 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
       expect(source).toContain('onSelectModel');
 
       // Re-branding
-      expect(source).toContain('{botName} AI');
+      expect(source).toContain("{botName} · {t('copilot.quickChat')}");
 
       // Workflows category tabs and search
       expect(source).toContain('workflow-search-box');

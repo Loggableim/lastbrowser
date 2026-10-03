@@ -230,6 +230,7 @@ import {
 } from './components/HeaderComponents.js';
 import { SidekickSidebar } from './components/SidekickSidebar.js';
 import { NovaDock } from './components/NovaDock.js';
+import { useQuickChat } from './useQuickChat.js';
 import { InPageActionBar } from './components/InPageActionBar.js';
 import { PinnedAppModal } from './components/PinnedAppModal.js';
 import { SpaceSetupModal, type SpaceSetupData } from './components/SpaceSetupModal.js';
@@ -2507,16 +2508,21 @@ function AppContent(): JSX.Element {
     }
   }
 
-  function handleNewChat(): void {
-    isCreatingSessionRef.current = true;
-    setChatMessages([]);
-    setMessages([]);
-    setActiveSessionId(null);
-    activeSessionIdRef.current = null;
-    setComposerText('');
-    setChatError('');
-    void createNativeSession();
-  }
+  const quickChat = useQuickChat(activeProfileId, activeSpacePath);
+  const startQuickChat = useCallback((message: string, reasoningEffort?: string) => {
+    return quickChat.send(message, async () => {
+      const storedModel = window.localStorage.getItem('lastbrowser.selectedModel.v1');
+      const spaceSelection = loadSpaceModelSelection(activeSpacePath, window.localStorage);
+      const configuredSelection = resolvePreferredChatModel(spaceSelection?.model, storedModel, setupState.model)
+        ? null : await resolveConfiguredModelSelection((request) => window.lastbrowser.sidekick.requestWebui(request));
+      const selection = resolvePreferredChatModelSelection({
+        spaceSelection, selectedModel: storedModel,
+        selectedModelProvider: useChatStore.getState().selectedModelProvider,
+        setupModel: setupState.model, setupProvider: setupState.provider, configuredSelection
+      });
+      return { model: selection.model || undefined, modelProvider: selection.provider || undefined, reasoningEffort };
+    });
+  }, [quickChat.send, activeSpacePath, setupState.model, setupState.provider]);
 
   function pinNativeSession(session: DesktopSessionSummary): void {
     void window.lastbrowser.sidekick
@@ -3325,14 +3331,14 @@ function AppContent(): JSX.Element {
       const custom = event as CustomEvent<{ prompt?: string }>;
       if (custom.detail?.prompt) {
         setCopilotOpen(true);
-        void startNativeChat(custom.detail.prompt);
+        void startQuickChat(custom.detail.prompt);
       }
     };
     window.addEventListener('lastbrowser:workflow:send', handleWorkflowSend);
     return () => {
       window.removeEventListener('lastbrowser:workflow:send', handleWorkflowSend);
     };
-  }, [setCopilotOpen]);
+  }, [setCopilotOpen, startQuickChat]);
 
   async function renameNativeSession(session: DesktopSessionSummary): Promise<void> {
     const nextTitle = window.prompt('Rename chat', sessionTitle(session));
@@ -3749,9 +3755,9 @@ function AppContent(): JSX.Element {
   const handleExecuteQuickAction = useCallback((chip: QuickActionChip) => {
     setCopilotOpen(true);
     void executeQuickAction(chip, activeTab, (prompt) => {
-      void startNativeChat(prompt);
+      void startQuickChat(prompt);
     });
-  }, [activeTab, setCopilotOpen, startNativeChat]);
+  }, [activeTab, setCopilotOpen, startQuickChat]);
 
   const isModernBrowser = layoutMode === 'modern';
   const copilotModelSelection = resolvePreferredChatModelSelection({
@@ -4223,6 +4229,7 @@ function AppContent(): JSX.Element {
                   onRenameSpace={(space) => void renameSpaceNative(space)}
                   onSelectSpace={handleSpaceSelect}
                   onSendChat={(message, effort) => void startNativeChat(message, message, undefined, effort)}
+                  onSendQuickChat={(message) => void startQuickChat(message)}
                   onStopChat={() => void stopNativeChat()}
                   onClearBrowserError={() => setBrowserLoadError('')}
                   onSetBrowserError={setBrowserLoadError}
@@ -4243,21 +4250,27 @@ function AppContent(): JSX.Element {
                   botName={setupState.botName || 'Nova'}
                   modelName={copilotModelSelection.model}
                   modelProvider={copilotModelSelection.provider || onboardingStatus?.system?.current_provider || setupState.provider}
-                  messages={chatMessages}
-                  busy={sidekickBusy}
-                  onSendMessage={(msg) => void startNativeChat(msg)}
-                  onStopChat={() => void stopNativeChat()}
+                  messages={quickChat.messages}
+                  busy={quickChat.busy}
+                  draftText={quickChat.draft}
+                  onDraftChange={quickChat.setDraft}
+                  chatError={quickChat.error}
+                  onSendMessage={(msg, effort) => void startQuickChat(msg, effort)}
+                  onStopChat={() => void quickChat.stop()}
                   activeUrl={activeTab.url}
                   activeTitle={activeTab.title}
                   quickActions={quickActions}
                   onExecuteQuickAction={handleExecuteQuickAction}
-                  onNewChat={handleNewChat}
-                  sessions={sessions}
-                  activeSessionId={activeSessionId}
-                  onSelectSession={(sid) => {
-                    setActiveSessionId(sid);
-                    void loadActiveSession(sid);
-                  }}
+                  onNewChat={quickChat.reset}
+                  activeSessionId={quickChat.sessionId}
+                  onOpenFullChat={quickChat.sessionId && !quickChat.busy ? () => {
+                    activeSessionIdRef.current = quickChat.sessionId;
+                    setActiveSessionId(quickChat.sessionId);
+                    setActivePanel('chat');
+                    setCopilotOpen(false);
+                    quickChat.reset();
+                    void refreshSessions();
+                  } : undefined}
                   onSelectModel={(modelId, providerId) => {
                     useChatStore.getState().setSelectedModelProvider(providerId || '');
                     saveSpaceModel(activeSpacePath, modelId, window.localStorage, providerId);
@@ -4546,6 +4559,7 @@ function AppContent(): JSX.Element {
               onRenameSpace={(space) => void renameSpaceNative(space)}
               onSelectSpace={handleSpaceSelect}
               onSendChat={(message, effort) => void startNativeChat(message, message, undefined, effort)}
+              onSendQuickChat={(message) => void startQuickChat(message)}
               onStopChat={() => void stopNativeChat()}
               onClearBrowserError={() => setBrowserLoadError('')}
               onSetBrowserError={setBrowserLoadError}
@@ -4682,6 +4696,7 @@ function BrowserMain({
   onRenameSpace,
   onSelectSpace,
   onSendChat,
+  onSendQuickChat,
   onStopChat,
   onClearBrowserError,
   onSetBrowserError,
@@ -4761,6 +4776,7 @@ function BrowserMain({
   onRenameSpace: (space: SpaceSummary) => void;
   onSelectSpace: (path: string) => void;
   onSendChat: (message: string, reasoningEffort?: string) => void;
+  onSendQuickChat: (message: string) => void;
   onStopChat: () => void;
   onClearBrowserError: () => void;
   onSetBrowserError: (error: string) => void;
@@ -5418,7 +5434,7 @@ function BrowserMain({
         onAskAi={(prompt) => {
           activatePane();
           usePanelStore.getState().setCopilotOpen(true);
-          void onSendChat(prompt);
+          onSendQuickChat(prompt);
         }}
         onOpenCommandPalette={() => { activatePane(); usePanelStore.getState().setCommandPaletteOpen(true); }}
       />

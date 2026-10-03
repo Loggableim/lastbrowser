@@ -1049,8 +1049,9 @@ export function ModernTitlebar({
         <button
           type="button"
           className={`titlebar-tool-btn copilot-toggle-btn ${copilotOpen ? 'active' : ''}`}
-          title={t('browser.chrome.toggleAssistant', { botName })}
-          aria-label={t('browser.chrome.toggleAssistant', { botName })}
+          title={`${botName} · ${t('copilot.quickChat')}`}
+          aria-label={`${botName} · ${t('copilot.quickChat')}`}
+          aria-pressed={copilotOpen}
           onClick={onToggleCopilot}
         >
           <img src={brandAssets.sidekickAvatar} alt="" className="copilot-btn-avatar" draggable={false} />

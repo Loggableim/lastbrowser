@@ -2,6 +2,10 @@ import type { DesktopCatalog } from '../keys.js';
 
 export const desktopEnOverrides = {
   'app.title': 'Lastbrowser',
+  'copilot.quickChat': 'Quick chat',
+  'copilot.newQuickChat': 'New quick chat',
+  'copilot.openFullChat': 'Open in AI area',
+  'copilot.quickChatDescription': 'A separate conversation for help while browsing. Closing keeps it available. Start over with New quick chat.',
   'common.add': 'Add',
   'common.added': 'Added',
   'common.back': 'Back',

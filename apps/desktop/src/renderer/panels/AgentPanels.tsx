@@ -1,4 +1,4 @@
-import React, { FormEvent, useCallback, useEffect, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   Bot,
   Brain,
@@ -19,6 +19,7 @@ import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { extractLinkedFiles, normalizeSkillCategories, normalizeSkillCategory } from './skill-categories.js';
+import { MemoryPanelStateModel, memoryDocumentId, type MemorySection } from './memory-panel-state.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -683,161 +684,130 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
 export function NativeMemoryMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
   const { t } = useDesktopI18n();
   const ready = isReady(serviceStatus);
-  const memoryState = useApiState(() => window.lastbrowser.sidekick.getMemory(), [ready], ready);
-  const superState = useApiState(() => window.lastbrowser.sidekick.getSupermemoryStatus(), [ready], ready);
-  const docsState = useApiState(() => window.lastbrowser.sidekick.listSupermemoryDocuments(), [ready], ready);
-  const [section, setSection] = useState((activeContextItem || 'Core memory').toLowerCase().includes('user') ? 'user' : 'memory');
+  const [model] = useState(() => new MemoryPanelStateModel(window.lastbrowser.sidekick));
+  const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
+  const [section, setSection] = useState<MemorySection>('memory');
   const [focus, setFocus] = useState(activeContextItem || 'Core memory');
-  const [draft, setDraft] = useState('');
   const [search, setSearch] = useState('');
-  const [results, setResults] = useState<AnyRecord[]>([]);
-  const [selectedDocument, setSelectedDocument] = useState<AnyRecord | null>(null);
-  const [documentDetail, setDocumentDetail] = useState<AnyRecord | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [documentTitle, setDocumentTitle] = useState('');
+  const [documentContent, setDocumentContent] = useState('');
 
+  useEffect(() => {
+    model.activate();
+    if (ready) void model.refresh();
+    return model.dispose;
+  }, [model, ready]);
   useEffect(() => {
     setFocus(activeContextItem || 'Core memory');
-    setSection((activeContextItem || 'Core memory').toLowerCase().includes('user') ? 'user' : 'memory');
-  }, [activeContextItem]);
+    if (activeContextItem === 'User facts') setSection('user');
+    else if (activeContextItem === 'Core memory') setSection('memory');
+    model.clearSearch();
+  }, [activeContextItem, model]);
 
-  useEffect(() => {
-    if (!memoryState.data) return;
-    const value = memoryState.data[section] || (isRecord(memoryState.data.memory) ? memoryState.data.memory[section] : '');
-    setDraft(typeof value === 'string' ? value : jsonPreview(value));
-  }, [memoryState.data, section]);
-
-  async function save(): Promise<void> {
-    await window.lastbrowser.sidekick.writeMemory({ section, content: draft });
-    await memoryState.refresh();
+  function selectFocus(item: string): void {
+    setFocus(item);
+    if (item === 'User facts' || item === 'Core memory') setSection(item === 'User facts' ? 'user' : 'memory');
+    model.clearSearch();
   }
-
-  async function runSearch(kind: 'super' | 'hybrid'): Promise<void> {
-    if (!search.trim()) return;
-    const payload = kind === 'super'
-      ? await window.lastbrowser.sidekick.searchSupermemory({ query: search.trim(), limit: 20 })
-      : await window.lastbrowser.sidekick.hybridMemorySearch({ query: search.trim(), limit: 20 });
-    setResults(arrayFrom(payload, ['results', 'documents', 'items']));
+  async function addDocument(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    if (await model.add(documentTitle, documentContent)) {
+      setAdding(false);
+      setDocumentTitle('');
+      setDocumentContent('');
+    }
   }
-
-  async function addDocument(): Promise<void> {
-    const title = window.prompt(t('agentPanels.documentTitlePrompt'), t('memory.title'));
-    if (!title?.trim()) return;
-    const content = window.prompt(t('agentPanels.documentContentPrompt'), '') || '';
-    await window.lastbrowser.sidekick.addSupermemoryDocument({ title: title.trim(), content });
-    await docsState.refresh();
+  function forgetDocument(): void {
+    if (!state.selected || !memoryDocumentId(state.selected)) return;
+    if (window.confirm(t('agentPanels.forgetDocumentConfirm', { name: titleOf(state.selected) }))) void model.forget();
   }
-
-  async function openDocument(item: AnyRecord): Promise<void> {
-    setSelectedDocument(item);
-    const payload = await window.lastbrowser.sidekick.getSupermemoryDocument({ id: idOf(item) });
-    setDocumentDetail(payload);
-  }
-
-  async function forgetDocument(): Promise<void> {
-    if (!selectedDocument || !window.confirm(t('agentPanels.forgetDocumentConfirm', { name: titleOf(selectedDocument) }))) return;
-    await window.lastbrowser.sidekick.forgetSupermemoryDocument({ id: idOf(selectedDocument) });
-    setSelectedDocument(null);
-    setDocumentDetail(null);
-    await docsState.refresh();
-  }
-
+  const items = state.searched ? state.results : state.documents;
+  const documentCount = typeof state.status?.document_count === 'number' ? state.status.document_count : state.documents.length;
+  const storageReady = state.status?.configured === true && state.status?.connected !== false;
+  const mode = state.status?.tier === 'local_bm25' ? t('memory.keywordSearch') : text(state.status?.model || state.status?.tier);
+  const canForget = !!memoryDocumentId(state.selected) && !!state.detail && !state.documentBusy;
   return (
     <section className="browser-main native-rest-main memory-main">
-      <NativeHeader icon={<Brain size={21} />} title={t('memory.title')} kicker={t('memory.kicker')} detail={t('memory.detail')} loading={memoryState.loading} ready={ready} onRefresh={memoryState.refresh} />
+      <NativeHeader icon={<Brain size={21} />} title={t('memory.title')} kicker={t('memory.localStorage')}
+        detail={t('memory.detail')} loading={state.loading} ready={ready} onRefresh={model.refresh} />
       <AdvancedWebUiTools panel="memory" serviceStatus={serviceStatus} compact />
-      <ErrorLine
-        error={[memoryState.error, superState.error, docsState.error]
-          .filter((err): err is string => Boolean(err && !err.toLowerCase().includes('not configured')))
-          .join(' | ')}
-      />
-      <div className="native-card-actions insights-tabs">
+      <div aria-live="polite"><ErrorLine error={state.error} /></div>
+      <div className="native-card-actions insights-tabs" role="tablist" aria-label={t('memory.title')}>
         {[
-          ['Core memory', t('memory.coreMemory')],
-          ['User facts', t('memory.userFacts')],
-          ['Supermemory', t('memory.supermemory')],
-          ['Hybrid search', t('memory.hybridSearch')]
+          ['Core memory', t('memory.coreMemory')], ['User facts', t('memory.userFacts')],
+          ['Supermemory', t('memory.supermemory')], ['Hybrid search', t('memory.hybridSearch')]
         ].map(([item, label]) => (
-          <button
-            key={item}
-            type="button"
-            className={item === focus ? 'active' : ''}
-            onClick={() => {
-              setFocus(item);
-              setSection(item === 'User facts' ? 'user' : 'memory');
-            }}
-          >
-            {label}
-          </button>
+          <button key={item} type="button" role="tab" aria-selected={item === focus} className={item === focus ? 'active' : ''}
+            onClick={() => selectFocus(item)}>{label}</button>
         ))}
       </div>
       <div className="memory-grid">
-        {(focus === 'Supermemory' || focus === 'Hybrid search') && (
-          <section className="native-work-card memory-super">
-            <header>
-              <strong>{focus === 'Supermemory' ? t('memory.supermemory') : t('memory.hybridSearch')}</strong>
-              <div className="native-card-actions">
-                <button type="button" onClick={() => void addDocument()} disabled={!ready}><Plus size={13} />{t('memory.add')}</button>
-                <button type="button" className="danger" onClick={() => void forgetDocument()} disabled={!ready || !selectedDocument}><Trash2 size={13} />{t('memory.forget')}</button>
-              </div>
-            </header>
-            {superState.data?.configured === false ? (
-              <div className="memory-unconfigured-note">
-                <Brain size={16} />
-                <span>{t('agentPanels.supermemoryNotConfigured')}</span>
-              </div>
-            ) : (
-              <div className="memory-status-badge">
-                <span className="online-dot" />
-                <span>{t('agentPanels.supermemoryConnected', { count: arrayFrom(docsState.data, ['results', 'documents', 'items']).length })}</span>
-              </div>
-            )}
-            <div className="native-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('agentPanels.memorySearchPlaceholder')} /></div>
-            <div className="native-card-actions">
-              <button type="button" onClick={() => void runSearch('super')} disabled={!ready || !search.trim()}><Search size={13} /><span>{t('memory.supermemory')} {t('memory.search')}</span></button>
-              <button type="button" onClick={() => void runSearch('hybrid')} disabled={!ready || !search.trim()}><Sparkles size={13} /><span>{t('memory.hybridSearch')}</span></button>
-            </div>
-            <div className="compact-list">
-              {[...results, ...arrayFrom(docsState.data, ['results', 'documents', 'items']).slice(0, results.length ? 0 : 8)].map((item) => (
-                <article key={idOf(item)} className={idOf(item) === idOf(selectedDocument || {}) ? 'active' : ''} onClick={() => void openDocument(item)}><strong>{titleOf(item)}</strong><span>{text(item.content || item.text || item.id)}</span></article>
-              ))}
-            </div>
-            <pre>{documentDetail ? jsonPreview(documentDetail) : t('agentPanels.supermemorySelectDocument')}</pre>
-          </section>
-        )}
         <section className="native-work-card memory-editor">
           <header>
             <div className="settings-section-nav">
-              {[
-                ['memory', t('memory.coreMemory')],
-                ['user', t('memory.userFacts')]
-              ].map(([item, label]) => <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{label}</button>)}
+              {(['memory', 'user'] as const).map((item) => <button key={item} type="button"
+                className={item === section ? 'active' : ''} aria-pressed={item === section}
+                onClick={() => { setSection(item); setFocus(item === 'user' ? 'User facts' : 'Core memory'); }}>
+                {t(item === 'user' ? 'memory.userFacts' : 'memory.coreMemory')}
+              </button>)}
             </div>
-            <button type="button" onClick={() => void save()} disabled={!ready}><Save size={13} />{t('common.save')}</button>
+            <button type="button" onClick={() => void model.save(section)} disabled={!ready || !state.loaded || state.saving || !model.isDirty(section)}>
+              <Save size={13} />{state.saving ? t('common.loading') : t('common.save')}
+            </button>
           </header>
-          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} />
+          <label className="memory-section-label" htmlFor="memory-note-editor">{t(section === 'user' ? 'memory.userFacts' : 'memory.coreMemory')}</label>
+          <textarea id="memory-note-editor" value={state.drafts[section]} disabled={!ready || !state.loaded}
+            onChange={(event) => model.setDraft(section, event.target.value)} />
+          <p className="memory-edit-status" role="status">{model.isDirty(section) ? t('memory.unsavedChanges') : state.loaded ? t('memory.saved') : t('common.loading')}</p>
+          {state.paths[section] && <code className="memory-storage-path">{state.paths[section]}</code>}
         </section>
-        {!(focus === 'Supermemory' || focus === 'Hybrid search') && (
-          <section className="native-work-card memory-super">
-            <header>
-              <strong>{t('memory.supermemory')}</strong>
-              <div className="native-card-actions">
-                <button type="button" onClick={() => void addDocument()} disabled={!ready}><Plus size={13} />{t('memory.add')}</button>
-                <button type="button" className="danger" onClick={() => void forgetDocument()} disabled={!ready || !selectedDocument}><Trash2 size={13} />{t('memory.forget')}</button>
-              </div>
-            </header>
-            <pre>{jsonPreview(superState.data || {})}</pre>
-            <div className="native-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('agentPanels.memorySearchPlaceholder')} /></div>
+        <section className="native-work-card memory-super">
+          <header>
+            <strong>{focus === 'Hybrid search' ? t('memory.hybridSearch') : t('memory.supermemory')}</strong>
             <div className="native-card-actions">
-              <button type="button" onClick={() => void runSearch('super')} disabled={!ready || !search.trim()}><Search size={13} /><span>{t('memory.supermemory')} {t('memory.search')}</span></button>
-              <button type="button" onClick={() => void runSearch('hybrid')} disabled={!ready || !search.trim()}><Sparkles size={13} /><span>{t('memory.hybridSearch')}</span></button>
+              <button type="button" onClick={() => setAdding((value) => !value)} disabled={!ready || state.documentBusy}><Plus size={13} />{t('memory.add')}</button>
+              <button type="button" className="danger" onClick={forgetDocument} disabled={!ready || !canForget}><Trash2 size={13} />{t('memory.forget')}</button>
             </div>
-            <div className="compact-list">
-              {[...results, ...arrayFrom(docsState.data, ['results', 'documents', 'items']).slice(0, results.length ? 0 : 8)].map((item) => (
-                <article key={idOf(item)} className={idOf(item) === idOf(selectedDocument || {}) ? 'active' : ''} onClick={() => void openDocument(item)}><strong>{titleOf(item)}</strong><span>{text(item.content || item.text || item.id)}</span></article>
-              ))}
+          </header>
+          <p className="memory-storage-status" role="status">
+            {state.loading && !state.status ? t('common.loading') : storageReady
+              ? t('memory.documentCount', { count: documentCount }) : t('memory.storageUnavailable')}
+          </p>
+          {storageReady && mode && <p className="memory-edit-status">{t('memory.searchMode', { mode })}</p>}
+          {adding && <form className="memory-document-form" onSubmit={(event) => void addDocument(event)}>
+            <label>{t('memory.documentTitle')}<input value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} required disabled={state.documentBusy} /></label>
+            <label>{t('memory.documentContent')}<textarea value={documentContent} onChange={(event) => setDocumentContent(event.target.value)} required disabled={state.documentBusy} /></label>
+            <div className="native-card-actions">
+              <button type="submit" disabled={!ready || state.documentBusy || !documentTitle.trim() || !documentContent.trim()}>{t('common.save')}</button>
+              <button type="button" onClick={() => setAdding(false)} disabled={state.documentBusy}>{t('common.cancel')}</button>
             </div>
-            <pre>{documentDetail ? jsonPreview(documentDetail) : t('agentPanels.supermemorySelectDocument')}</pre>
+          </form>}
+          <form onSubmit={(event) => { event.preventDefault(); void model.search(search, focus === 'Hybrid search'); }}>
+            <label className="native-search"><Search size={14} /><input value={search} aria-label={t('agentPanels.memorySearchPlaceholder')}
+              onChange={(event) => { setSearch(event.target.value); model.clearSearch(); }} placeholder={t('agentPanels.memorySearchPlaceholder')} /></label>
+            <div className="native-card-actions">
+              <button type="submit" disabled={!ready || state.searching || !search.trim()}><Search size={13} />{t('memory.search')}</button>
+              {state.searched && <button type="button" onClick={() => { setSearch(''); model.clearSearch(); }}>{t('memory.clearSearch')}</button>}
+            </div>
+          </form>
+          <strong>{state.searched ? t('memory.searchResults') : t('memory.documentLibrary')}</strong>
+          <div className="compact-list memory-document-list" aria-live="polite">
+            {state.searching ? <p>{t('common.loading')}</p> : items.length ? items.map((item, index) =>
+              <button key={String(item.source || 'supermemory') + ':' + String(item.id || index)} type="button"
+                className={state.selected === item ? 'active' : ''} onClick={() => void model.open(item)} disabled={state.documentBusy}>
+                <strong>{titleOf(item)}</strong><small>{item.source === 'local' ? t('memory.localHit') : t('memory.documentHit')}</small>
+                <span>{text(item.content || item.text).slice(0, 180)}</span>
+              </button>) : <p>{t(state.searched ? 'memory.noResults' : 'memory.noDocuments')}</p>}
+          </div>
+          <section className="memory-document-detail" aria-live="polite">
+            {state.documentBusy ? <p>{t('common.loading')}</p> : state.detail ? <>
+              <strong>{titleOf(state.detail)}</strong>
+              {state.detail.source === 'local' && <p>{t('memory.localHit')}</p>}
+              <pre>{text(state.detail.content || state.detail.text)}</pre>
+            </> : <p>{t('agentPanels.supermemorySelectDocument')}</p>}
           </section>
-        )}
+        </section>
       </div>
     </section>
   );

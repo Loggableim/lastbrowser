@@ -3753,6 +3753,81 @@ html.theme-light select optgroup {
   grid-template-columns: minmax(0, 1fr) 360px;
 }
 
+.memory-main .memory-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 1;
+  overflow: auto;
+}
+
+.memory-main .memory-editor,
+.memory-main .memory-super {
+  min-height: 320px;
+  overflow: auto;
+}
+
+.memory-main .memory-editor > header,
+.memory-main .memory-super > header {
+  flex-wrap: wrap;
+}
+
+.memory-main .memory-super > *,
+.memory-main .memory-document-detail > * { flex-shrink: 0; }
+.memory-main .memory-super strong { white-space: normal; overflow-wrap: anywhere; }
+.memory-main .memory-editor .settings-section-nav { display: flex; flex-wrap: wrap; padding: 0; }
+
+.memory-main .memory-editor textarea {
+  min-height: 220px;
+  resize: vertical;
+}
+
+.memory-storage-path,
+.memory-edit-status,
+.memory-storage-status {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--lb-text-muted, #94a3b8);
+  margin: 0;
+}
+
+.memory-document-form,
+.memory-document-form label,
+.memory-document-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-document-form input,
+.memory-document-form textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--lb-border, #334155);
+  border-radius: 8px;
+  color: var(--lb-text, #eef6ff);
+  background: var(--lb-surface, #0f172a);
+}
+
+.memory-document-form textarea { min-height: 110px; }
+.memory-main .memory-document-list { flex-shrink: 0; max-height: 300px; overflow: auto; }
+.memory-main .memory-document-list > button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+  padding: 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.memory-document-list > button.active { outline: 1px solid var(--lb-accent, #00d9ff); }
+.memory-document-list > button span { font-size: 12px; }
+.memory-document-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; flex-shrink: 0; }
+@media (max-width: 1100px) {
+  .memory-main .memory-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 .discord-grid {
   grid-template-columns: 250px minmax(0, 1fr) 300px;
 }

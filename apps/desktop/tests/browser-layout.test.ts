@@ -320,6 +320,7 @@ describe('browser shell layout', () => {
     const source = readRendererFile('App.tsx');
     const restPanels = [
       readRendererFile('panels/AgentPanels.tsx'),
+      readRendererFile('panels/memory-panel-state.ts'),
       readRendererFile('panels/IntegrationPanels.tsx'),
       readRendererFile('panels/SystemPanels.tsx')
     ].join('\n');

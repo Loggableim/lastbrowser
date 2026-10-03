@@ -11835,6 +11835,7 @@ def _start_chat_stream_for_session(
     grounding_context: str = "",
     reasoning_effort: str | None = None,
     supported_reasoning_efforts: list[str] | None = None,
+    local_fallback_allowed: bool = False,
 ):
     """Persist pending state, register an SSE channel, and start an agent turn."""
     attachments = attachments or []
@@ -12013,6 +12014,7 @@ def _start_chat_stream_for_session(
                 "grounding_context": grounding_context,
                 "reasoning_effort": reasoning_effort,
                 "supported_reasoning_efforts": supported_reasoning_efforts,
+                "local_fallback_allowed": local_fallback_allowed,
             },
             daemon=True,
         )
@@ -12655,6 +12657,7 @@ def _handle_chat_start(handler, body, diag=None):
             grounding_context=grounding_context,
             reasoning_effort=reasoning_effort,
             supported_reasoning_efforts=supported_reasoning_efforts,
+            local_fallback_allowed=body.get('local_fallback_allowed') is True,
         )
         status = int(response.pop("_status", 200) or 200)
         diag.stage("response_write") if diag else None

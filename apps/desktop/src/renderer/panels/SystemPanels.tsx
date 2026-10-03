@@ -1,4 +1,5 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LocalAiSetup } from '../components/LocalAiSetup.js';
 import '../appearance.css';
 import {
   AlertTriangle,
@@ -3898,6 +3899,7 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
 
             {section === 'providers' && (
               <>
+                <LocalAiSetup workspace={workspacePath} />
                 <SettingsCard
                   title={t('settings.panels.providers.title')}
                   description={t('settings.panels.providers.description')}

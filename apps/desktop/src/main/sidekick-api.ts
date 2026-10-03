@@ -50,6 +50,8 @@ export type SidekickMessageRequest = {
   message: string;
   model?: string;
   modelProvider?: string | null;
+  useSpaceDefault?: boolean;
+  localFallbackAllowed?: boolean;
   /** Optional per-turn override; omitted requests retain the profile setting. */
   reasoningEffort?: string | null;
   providerAccountEmail?: string | null;
@@ -2275,6 +2277,7 @@ async function startChat(webuiUrl: string, session: SessionShape, request: Sidek
     sandbox_disabled: request.sandboxDisabled ?? false
   };
   if (request.providerAccountEmail?.trim()) body.provider_account_email = request.providerAccountEmail.trim().toLowerCase();
+  if (request.localFallbackAllowed !== undefined) body.local_fallback_allowed = request.localFallbackAllowed === true;
   if (request.reasoningEffort?.trim()) body.reasoning_effort = request.reasoningEffort.trim();
   if (request.groundingContext && typeof request.groundingContext === 'object') {
     body.grounding_context = {

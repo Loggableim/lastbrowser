@@ -12,6 +12,8 @@ import { isCdpEnabled, resolveCdpPort, setPersistedCdpEnabled } from './cdp.js';
 import { loadCdpPreference, saveCdpPreference } from './cdp-settings.js';
 import { moduleDirname } from './module-path.js';
 import { SidecarServices, appResourcesDir, resolveServiceLayout, buildSidecarEnvironment } from './services.js';
+import { createLocalAi, registerLocalAi } from './local-ai-ipc.js';
+import type { LocalAiManager } from './local-ai.js';
 import { loadSetupState, saveSetupState } from './setup-store.js';
 import {
   addSupermemoryDocument,
@@ -265,6 +267,7 @@ async function restoreDetachedNavigationHistory(
 }
 
 let services: SidecarServices | null = null;
+let localAi: LocalAiManager | null = null;
 let appTray: TrayController | null = null;
 let isQuitting = false;
 const adblock = createAdblockController();
@@ -551,7 +554,35 @@ function registerIpc(): void {
     return getSessionDraft(requireWebuiUrl(), request || { sessionId: '' });
   });
   ipcMain.handle('lastbrowser:sidekick:saveDraft', (_event, request) => saveSessionDraft(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:startChat', (_event, request) => startSidekickChat(requireWebuiUrl(), request));
+  ipcMain.handle('lastbrowser:sidekick:startChat', async (_event, request) => {
+    const scope = localAi?.status(String(request?.workspace || '')).scope;
+    if (scope?.useAsDefault && scope.modelId && request?.useSpaceDefault !== false) request = { ...request, model: scope.modelId, modelProvider: 'lastbrowser-local' };
+    if (request?.modelProvider === 'lastbrowser-local' || scope?.allowFallback) {
+      const id = request?.modelProvider === 'lastbrowser-local' ? String(request.model) : scope?.modelId;
+      try {
+        if (id && localAi && (localAi.status().phase !== 'ready' || localAi.status().modelId !== id)) await localAi.start(id);
+      } catch (error) { if (request?.modelProvider === 'lastbrowser-local') throw error; }
+      if (request?.modelProvider === 'lastbrowser-local' && localAi?.status().phase !== 'ready') throw new Error(localAi?.status().error || 'Local AI unavailable.');
+    }
+    let release: (() => void) | null = null;
+    if ((request?.modelProvider === 'lastbrowser-local' || scope?.allowFallback) && localAi?.status().phase === 'ready') {
+      try { release = localAi.acquireChat(); } catch (error) { if (request?.modelProvider === 'lastbrowser-local') throw error; }
+    }
+    request = { ...request, localFallbackAllowed: Boolean(release && scope?.allowFallback) };
+    try {
+      const result = await startSidekickChat(requireWebuiUrl(), request);
+      if (release) {
+        // Poll run ownership rather than consuming the backend's SSE queue twice.
+        const timer = setInterval(() => {
+          void getChatStreamStatus(requireWebuiUrl(), result.streamId).then((status) => {
+            if (status.active === false) { clearInterval(timer); release?.(); }
+          }).catch(() => { /* Keep ownership on an uncertain backend outcome. */ });
+        }, 2000);
+        timer.unref();
+      }
+      return result;
+    } catch (error) { release?.(); throw error; }
+  });
   ipcMain.handle('lastbrowser:sidekick:getStreamStatus', (_event, streamId) => getChatStreamStatus(requireWebuiUrl(), String(streamId || '')));
   // Live chat stream: subscribe over SSE and push each event to the renderer.
   // Polling `/api/chat/stream/status` on a timer costs a round-trip per tick and
@@ -1247,6 +1278,8 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     app,
     getWindow: () => mainWindow
   });
+  localAi = createLocalAi(app.isPackaged ? path.join(process.resourcesPath, 'local-ai') : path.resolve(mainDir, '../../vendor/local-ai'));
+  registerLocalAi(localAi);
   services = new SidecarServices(resolveServiceLayout(appResourcesDir()));
   void services.start().then(() => ensureSidecarAuth());
   registerIpc();
@@ -1382,6 +1415,7 @@ app.on('session-created', (sess) => {
 });
 
 function cleanupServices(): void {
+  void localAi?.stop(true);
   try {
     for (const controller of agentWorkspaceStreams.values()) controller.abort();
     agentWorkspaceStreams.clear();

@@ -2,6 +2,18 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { isTrustedPreloadDocumentUrl } from './preload-origin.js';
 
 if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMainWorld('lastbrowser', {
+  localAi: {
+    status: (workspace: string) => ipcRenderer.invoke('lastbrowser:localAi:status', workspace),
+    scan: () => ipcRenderer.invoke('lastbrowser:localAi:scan'),
+    download: (id: string) => ipcRenderer.invoke('lastbrowser:localAi:download', id),
+    cancel: () => ipcRenderer.invoke('lastbrowser:localAi:cancel'),
+    start: (id: string, backend: string) => ipcRenderer.invoke('lastbrowser:localAi:start', id, backend),
+    stop: () => ipcRenderer.invoke('lastbrowser:localAi:stop'),
+    remove: (id: string) => ipcRenderer.invoke('lastbrowser:localAi:remove', id),
+    clearSpace: (workspace: string) => ipcRenderer.invoke('lastbrowser:localAi:clearSpace', workspace),
+    import: (id: string) => ipcRenderer.invoke('lastbrowser:localAi:import', id),
+    configure: (workspace: string, id: string, fallback: boolean, primary: boolean) => ipcRenderer.invoke('lastbrowser:localAi:configure', workspace, id, fallback, primary)
+  },
   services: {
     status: () => ipcRenderer.invoke('lastbrowser:services:status'),
     start: () => ipcRenderer.invoke('lastbrowser:services:start'),

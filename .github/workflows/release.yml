@@ -101,6 +101,45 @@ jobs:
       - name: Build desktop application
         run: npm --workspace apps/desktop run build
 
+      - name: Select bundled local AI signing targets
+        id: local-ai-signing
+        shell: pwsh
+        run: |
+          $files = foreach ($backend in @('cpu', 'vulkan')) {
+            $dir = Join-Path 'apps/desktop/vendor/local-ai' $backend
+            (Get-Item -LiteralPath (Join-Path $dir 'llama-server.exe') -ErrorAction Stop).FullName
+            Get-ChildItem -LiteralPath $dir -File -Filter '*.dll' | ForEach-Object { $_.FullName }
+          }
+          "files<<LOCAL_AI_SIGNING_FILES" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $files | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "LOCAL_AI_SIGNING_FILES" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Sign bundled local AI runtime before packaging
+        uses: Azure/trusted-signing-action@v0.5.1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT || 'https://weu.codesigning.azure.net/' }}
+          trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE }}
+          files: ${{ steps.local-ai-signing.outputs.files }}
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Verify bundled local AI signatures
+        shell: pwsh
+        run: |
+          foreach ($backend in @('cpu', 'vulkan')) {
+            $dir = Join-Path 'apps/desktop/vendor/local-ai' $backend
+            $files = @(Get-Item -LiteralPath (Join-Path $dir 'llama-server.exe')) + @(Get-ChildItem -LiteralPath $dir -File -Filter '*.dll')
+            foreach ($file in $files) {
+              & signtool.exe verify /pa /v $file.FullName
+              if ($LASTEXITCODE -ne 0) { throw "Local AI signature verification failed: $($file.Name)" }
+            }
+          }
+
       - name: Package Windows installers with VMP signing
         run: npm --workspace apps/desktop exec -- electron-builder --win nsis portable --publish never
         env:

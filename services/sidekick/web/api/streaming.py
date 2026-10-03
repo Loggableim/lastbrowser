@@ -2587,6 +2587,7 @@ def _run_agent_streaming(
     grounding_context="",
     reasoning_effort=None,
     supported_reasoning_efforts=None,
+    local_fallback_allowed=False,
 ):
     """Run agent in background thread, writing SSE events to STREAMS[stream_id].
 
@@ -3469,6 +3470,8 @@ def _run_agent_streaming(
 
             # Resolve API key via Sidekick runtime provider (matches gateway behaviour).
             # Pass the resolved provider so non-default providers get their own credentials.
+            from web.api.local_inference import fallback_for_space
+            _local_fallback = fallback_for_space(str(s.workspace or workspace or '')) if local_fallback_allowed else None
             resolved_api_key = None
             try:
                 from web.api.oauth import resolve_runtime_provider_with_anthropic_env_lock
@@ -3484,11 +3487,13 @@ def _run_agent_streaming(
                 if _rt_provider and (
                     not resolved_provider
                     or _rt_provider in {"opencode-zen", "opencode-go"}
+                    or resolved_provider == "lastbrowser-local"
                 ):
                     resolved_provider = _rt_provider
                 if _rt_base_url and (
                     not resolved_base_url
                     or _rt_provider in {"opencode-zen", "opencode-go"}
+                    or _rt.get("source") == "lastbrowser-local"
                 ):
                     resolved_base_url = _rt_base_url
             except Exception as _e:
@@ -3496,7 +3501,14 @@ def _run_agent_streaming(
                 # A user-selected API-key provider must fail at configuration
                 # time. Continuing with an empty key obscures the real cause
                 # and may route a request using stale/default credentials.
-                if _should_fail_fast_on_provider_resolution_error(_e, resolved_provider):
+                if _local_fallback and resolved_provider != 'lastbrowser-local':
+                    resolved_model = _local_fallback['model']
+                    resolved_provider = 'custom'
+                    resolved_base_url = _local_fallback['base_url']
+                    resolved_api_key = _local_fallback['api_key']
+                    _rt = {'api_mode': 'chat_completions'}
+                    _agent_status_callback('info', 'Provider unavailable. Using the local Space fallback (limited tools).')
+                elif resolved_provider == 'lastbrowser-local' or _should_fail_fast_on_provider_resolution_error(_e, resolved_provider):
                     raise
 
             # Named custom providers (custom:slug) may not be resolvable by
@@ -3570,6 +3582,8 @@ def _run_agent_streaming(
                         'base_url': _fb_entry.get('base_url'),
                     }
 
+            if _local_fallback and resolved_base_url != _local_fallback['base_url']:
+                _fallback_resolved = _local_fallback
             # Build kwargs defensively — guard newer params so the WebUI
             # degrades gracefully when run against an older sidekick-agent build.
             # (fixes: TypeError: AIAgent.__init__() got an unexpected keyword
@@ -3697,6 +3711,11 @@ def _run_agent_streaming(
             # ── Agent cache: reuse across messages in the same session ──
             # Mirrors gateway _agent_cache.  Keeps _user_turn_count alive so
             # injectionFrequency: "first-turn" actually suppresses after turn 1.
+            if resolved_base_url == 'http://127.0.0.1:11435/v1':
+                _agent_kwargs['max_iterations'] = 6
+                _agent_kwargs['max_tokens'] = 512
+                _agent_kwargs['request_overrides'] = {'extra_body': {'chat_template_kwargs': {'enable_thinking': False}}}
+                _agent_kwargs['enabled_toolsets'] = ['file', 'clarify', 'browser']
             if ephemeral:
                 agent = _AIAgent(**_agent_kwargs)
                 logger.debug('[webui] Created ephemeral agent for session %s', session_id)
@@ -3791,6 +3810,13 @@ def _run_agent_streaming(
                                 pass
                             logger.debug('[webui] Evicted LRU agent from cache: %s', evicted_sid)
                     logger.debug('[webui] Created new agent for session %s', session_id)
+
+            if resolved_base_url == 'http://127.0.0.1:11435/v1':
+                agent.tools = [tool for tool in agent.tools if tool.get('function', {}).get('name') in {'read_file', 'search_files', 'clarify', 'browser_snapshot'}]
+                agent.valid_tool_names = {tool['function']['name'] for tool in agent.tools}
+                agent._config_context_length = 8192
+                agent.context_compressor.update_model(model=resolved_model, context_length=8192, base_url=resolved_base_url, api_key=resolved_api_key, provider=resolved_provider)
+                _agent_status_callback('info', 'Local AI: limited read-only tools, six steps, 8192-token context.')
 
             # Store agent instance for cancel/interrupt propagation
             with STREAMS_LOCK:

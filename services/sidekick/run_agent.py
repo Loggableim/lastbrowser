@@ -2231,6 +2231,10 @@ class AIAgent:
 
         # Persist for reuse on switch_model / fallback activation. Must come
         # AFTER the custom_providers branch so per-model overrides aren't lost.
+        from web.api.local_inference import is_owned_runtime
+        self._lastbrowser_local = is_owned_runtime(self.model, self.base_url, self.api_key)
+        if self._lastbrowser_local:
+            _config_context_length = 8192
         self._config_context_length = _config_context_length
 
         self._ensure_lmstudio_runtime_loaded(_config_context_length)
@@ -2317,7 +2321,7 @@ class AIAgent:
         # for reliable tool-calling workflows (64K tokens).
         from runtime.model_metadata import MINIMUM_CONTEXT_LENGTH
         _ctx = getattr(self.context_compressor, "context_length", 0)
-        if _ctx and _ctx < MINIMUM_CONTEXT_LENGTH:
+        if _ctx and _ctx < MINIMUM_CONTEXT_LENGTH and not self._lastbrowser_local:
             raise ValueError(
                 f"Model {self.model} has a context window of {_ctx:,} tokens, "
                 f"which is below the minimum {MINIMUM_CONTEXT_LENGTH:,} required "
@@ -2351,6 +2355,14 @@ class AIAgent:
                     self.valid_tool_names.add(_tname)
                     self._context_engine_tool_names.add(_tname)
                     _existing_tool_names.add(_tname)
+
+        if self._lastbrowser_local:
+            self.max_iterations = min(self.max_iterations, 6)
+            self.max_tokens = 512
+            self.compression_enabled = False
+            self.tools = [tool for tool in self.tools if tool.get('function', {}).get('name') in {'read_file', 'search_files', 'clarify', 'browser_snapshot'}]
+            self.valid_tool_names = {tool['function']['name'] for tool in self.tools}
+            self.request_overrides = {'extra_body': {'chat_template_kwargs': {'enable_thinking': False}}}
 
         # Notify context engine of session start
         if hasattr(self, "context_compressor") and self.context_compressor:
@@ -7592,6 +7604,7 @@ class AIAgent:
                 text = text.lstrip("\n")
         if not text:
             return
+        self._local_fallback_response_started = True
         callbacks = [cb for cb in (self.stream_delta_callback, self._stream_callback) if cb is not None]
         delivered = False
         for cb in callbacks:
@@ -8586,6 +8599,9 @@ class AIAgent:
 
         fb = self._fallback_chain[self._fallback_index]
         self._fallback_index += 1
+        if fb.get('safe_before_tools') and (getattr(self, '_local_fallback_tools_started', False) or getattr(self, '_local_fallback_response_started', False)):
+            self._emit_status('Local fallback skipped: this turn already produced output or started a tool. No action is replayed.')
+            return False
         fb_provider = (fb.get("provider") or "").strip().lower()
         fb_model = (fb.get("model") or "").strip()
         if not fb_provider or not fb_model:
@@ -8687,7 +8703,7 @@ class AIAgent:
             # Clear the per-config context_length override so the fallback
             # model's actual context window is resolved instead of inheriting
             # the stale value from the previous model.  See #22387.
-            self._config_context_length = None
+            self._config_context_length = fb.get('context_length')
             self.model = fb_model
             self.provider = fb_provider
             self.base_url = fb_base_url
@@ -8695,6 +8711,14 @@ class AIAgent:
             if hasattr(self, "_transport_cache"):
                 self._transport_cache.clear()
             self._fallback_activated = True
+            if fb.get('safe_before_tools'):
+                self._lastbrowser_local = True
+                self.compression_enabled = False
+                self.max_iterations = min(self.max_iterations, 6)
+                self.max_tokens = 512
+                self.tools = [tool for tool in self.tools if tool.get('function', {}).get('name') in {'read_file', 'search_files', 'clarify', 'browser_snapshot'}]
+                self.valid_tool_names = {tool['function']['name'] for tool in self.tools}
+                self.request_overrides = {'extra_body': {'chat_template_kwargs': {'enable_thinking': False}}}
 
             # Honor per-provider / per-model request_timeout_seconds for the
             # fallback target (same knob the primary client uses).  None = use
@@ -10428,6 +10452,8 @@ class AIAgent:
         file reads/writes may do so only when their target paths do not overlap.
         """
         tool_calls = assistant_message.tool_calls
+        if tool_calls:
+            self._local_fallback_tools_started = True
 
         # Allow _vprint during tool execution even with stream consumers
         self._executing_tools = True
@@ -11653,6 +11679,9 @@ class AIAgent:
         _install_safe_stdio()
 
         self._ensure_db_session()
+
+        self._local_fallback_tools_started = False
+        self._local_fallback_response_started = False
 
         # Tell auxiliary_client what the live main provider/model are for
         # this turn. Used by tools whose behaviour depends on the active

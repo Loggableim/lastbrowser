@@ -63,6 +63,8 @@ describe('GitHub release auto-update flow', () => {
     const setupIndex = workflow.indexOf('- name: Setup Node');
     const runtimeIndex = workflow.indexOf('- name: Prepare Python runtime');
     const desktopBuildIndex = workflow.indexOf('- name: Build desktop application');
+    const runtimeSigningIndex = workflow.indexOf('- name: Sign bundled local AI runtime before packaging');
+    const runtimeVerifyIndex = workflow.indexOf('- name: Verify bundled local AI signatures');
     const buildIndex = workflow.indexOf('- name: Package Windows installers with VMP signing');
     const inventoryIndex = workflow.indexOf('- name: Require exactly the expected Windows executables');
     const signingIndex = workflow.indexOf('- name: Sign binaries with Azure Trusted Signing');
@@ -73,6 +75,9 @@ describe('GitHub release auto-update flow', () => {
     expect(runtimeIndex).toBeGreaterThan(setupIndex);
     expect(desktopBuildIndex).toBeGreaterThan(runtimeIndex);
     expect(buildIndex).toBeGreaterThan(desktopBuildIndex);
+    expect(runtimeSigningIndex).toBeGreaterThan(desktopBuildIndex);
+    expect(runtimeVerifyIndex).toBeGreaterThan(runtimeSigningIndex);
+    expect(buildIndex).toBeGreaterThan(runtimeVerifyIndex);
     expect(inventoryIndex).toBeGreaterThan(buildIndex);
     expect(signingIndex).toBeGreaterThan(inventoryIndex);
     expect(metadataIndex).toBeGreaterThan(signingIndex);
@@ -82,9 +87,13 @@ describe('GitHub release auto-update flow', () => {
     expect(workflow).not.toMatch(/^    env:/m);
     expect(workflow).toContain('persist-credentials: false');
 
-    const dependencyAndTestSteps = workflow.slice(setupIndex, buildIndex);
+    const dependencyAndTestSteps = workflow.slice(setupIndex, runtimeSigningIndex);
     expect(dependencyAndTestSteps).not.toContain('secrets.');
     expect(dependencyAndTestSteps).not.toMatch(/\b(?:AZURE_|EVS_)[A-Z_]+\b/);
+    const runtimeSigningStep = workflow.slice(runtimeSigningIndex, runtimeVerifyIndex);
+    expect(runtimeSigningStep).toContain('Azure/trusted-signing-action@v0.5.1');
+    expect(runtimeSigningStep).toContain('files: ${{ steps.local-ai-signing.outputs.files }}');
+    expect(workflow.slice(runtimeVerifyIndex, buildIndex)).not.toContain('secrets.');
     const buildJob = workflow.slice(workflow.indexOf('\n  windows:'), publishJobIndex);
     expect(buildJob).toContain('contents: read');
     expect(buildJob).not.toContain('contents: write');

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { Marked, Renderer } from 'marked';
 import { switchTabByIndex } from './tab-intelligence.js';
 
 // Lightweight Mermaid/KaTeX renderer for chat content.
@@ -111,52 +112,57 @@ function renderKatexInElement(el: HTMLElement): void {
 
 // ── Pre-process text: extract mermaid / math blocks ──────────
 
+// All model-provided HTML is escaped. Only our Markdown renderer emits tags.
+const chatMarkdown = new Marked({
+  gfm: true,
+  breaks: true,
+  renderer: {
+    html({ text }) { return escapeHtml(text); },
+    link({ href, title, tokens }) {
+      const label = this.parser.parseInline(tokens);
+      // Absolute web/mail links only; never execute model-provided protocols.
+      if (!/^(https?:\/\/|mailto:)/i.test(href)) return label;
+      return `<a href="${escapeHtml(href)}"${title ? ` title="${escapeHtml(title)}"` : ''} target="_blank" rel="noopener noreferrer">${label}</a>`;
+    },
+    image({ text }) { return escapeHtml(text); },
+    code({ text, lang }) {
+      if (lang?.trim() === 'mermaid') return `<pre class="mermaid-block">${escapeHtml(text.trim())}</pre>`;
+      return `<div class="rich-code-block"><div class="rich-code-header"><span>${escapeHtml(lang || 'code')}</span><button type="button" class="rich-code-copy" title="Copy code" aria-label="Copy code">Copy</button></div><pre><code${lang ? ` data-lang="${escapeHtml(lang)}"` : ''}>${escapeHtml(text)}</code></pre></div>`;
+    },
+    table(token) { return `<div class="rich-table-scroll">${Renderer.prototype.table.call(this, token)}</div>`; }
+  },
+  extensions: [{
+    name: 'chatMath',
+    level: 'inline',
+    start(src) { return src.indexOf('$'); },
+    tokenizer(src) {
+      const match = /^(\$\$)([\s\S]+?)\$\$|^\$([^\n$]{1,200}?)\$(?!\$)/.exec(src);
+      if (match) return { type: 'chatMath', raw: match[0], text: match[2] ?? match[3], display: Boolean(match[1]) };
+    },
+    renderer(token) { return `<span class="${token.display ? 'katex-block' : 'katex-inline'}">${escapeHtml(token.text.trim())}</span>`; }
+  }, {
+    name: 'chatTabCitation',
+    level: 'inline',
+    start(src) { return src.search(/\[Tab\s+\d+/i); },
+    tokenizer(src) {
+      const match = /^\[Tab\s+(\d+)(?::\s*([^\]]+))?\](?!\()/i.exec(src);
+      if (match) return { type: 'chatTabCitation', raw: match[0], index: match[1], snippet: (match[2] || '').trim() };
+    },
+    renderer(token) {
+      const index = escapeHtml(token.index);
+      const snippet = escapeHtml(token.snippet);
+      return `<button type="button" class="tab-citation-pill" data-tab-index="${index}" data-snippet="${snippet}" title="Zu Tab ${index} wechseln"><span>🔖</span> <strong>Tab ${index}${snippet ? `: ${snippet}` : ''}</strong></button>`;
+    }
+  }]
+});
+
 export function processRichText(text?: string | null): { html: string } {
   if (!text) return { html: '' };
   try {
-    let html = String(text);
-
-    // 1. Mermaid fenced blocks
-    html = html.replace(
-      /```mermaid\s*([\s\S]*?)```/g,
-      (_, code: string) => `<pre class="mermaid-block">${escapeHtml((code || '').trim())}</pre>`
-    );
-
-    // 2. Display math: $$...$$
-    html = html.replace(
-      /\$\$([\s\S]*?)\$\$/g,
-      (_, tex: string) => `<span class="katex-block">${escapeHtml((tex || '').trim())}</span>`
-    );
-
-    // 3. Inline math: $...$ (but not $$)
-    html = html.replace(
-      /(?<!\$)\$([^\n$]{1,200}?)\$(?!\$)/g,
-      (_, tex: string) => `<span class="katex-inline">${escapeHtml((tex || '').trim())}</span>`
-    );
-
-    // 4. Simple code blocks — wrap with copy button
-    html = html.replace(
-      /```(\w*)\n([\s\S]*?)```/g,
-      (_, lang: string, code: string) => {
-        const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : '';
-        return `<div class="rich-code-block"><div class="rich-code-header"><span>${escapeHtml(lang || 'code')}</span><button type="button" class="rich-code-copy" title="Copy code" aria-label="Copy code">Copy</button></div><pre><code${langAttr}>${escapeHtml((code || '').trimEnd())}</code></pre></div>`;
-      }
-    );
-
-    // 5. Tab Citations: [Tab 1: ...] or [Tab 2]
-    html = html.replace(
-      /\[Tab\s+(\d+)(?::\s*([^\]]+))?\]/gi,
-      (_, tabNum: string, label: string) => {
-        const snippet = label ? label.trim() : '';
-        const displayLabel = snippet ? `Tab ${tabNum}: ${escapeHtml(snippet)}` : `Tab ${tabNum}`;
-        return `<button type="button" class="tab-citation-pill" data-tab-index="${escapeHtml(tabNum || '')}" data-snippet="${escapeHtml(snippet)}" title="Zu Tab ${escapeHtml(tabNum || '')} wechseln und Stelle hervorheben" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; padding: 1px 7px; border-radius: 12px; font-size: 11px; cursor: pointer; vertical-align: baseline; margin: 0 2px;"><span>🔖</span> <strong>${displayLabel}</strong></button>`;
-      }
-    );
-
-    return { html };
+    return { html: chatMarkdown.parse(String(text), { async: false }) };
   } catch (err) {
     console.warn('[processRichText] error processing rich text:', err);
-    return { html: escapeHtml(String(text || '')) };
+    return { html: escapeHtml(String(text)) };
   }
 }
 

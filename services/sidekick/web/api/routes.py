@@ -11546,89 +11546,37 @@ def _handle_mcp_tool_call(handler, body):
 
 
 def _handle_hybrid_search(handler, body):
-    """POST /api/memory/hybrid/search â€” hybrid search across local + supermemory"""
-    import uuid
+    """Search active local notes and the document engine used by Supermemory."""
+    from web.api.memory_search import search_local_notes, merge_memory_hits
 
-    q = body.get("q", "").strip()
-    limit = int(body.get("limit", 15))
-    if not q:
-        return bad(handler, "Query 'q' is required")
-
-    results = []
-
-    # 1. Local search: search the active space's MEMORY.md notes
+    q = body.get("q") or body.get("query") or ""
+    if not isinstance(q, str) or not q.strip():
+        return bad(handler, "Query 'q' or 'query' is required")
+    q = q.strip()
+    try:
+        limit = max(1, min(100, int(body.get("limit", 15))))
+    except (TypeError, ValueError):
+        return bad(handler, "limit must be an integer")
     try:
         from web.api.space_engine import resolve_active_space
-        memory_file = resolve_active_space().memory_dir / "MEMORY.md"
+        mem_dir = resolve_active_space().memory_dir
     except Exception:
         try:
             from web.api.profiles import get_active_profile_home
-            home = get_active_profile_home()
+            mem_dir = get_active_profile_home() / "memories"
         except Exception:
-            home = get_webui_home()
-        memory_file = home / "MEMORY.md"
-    if memory_file.exists():
-        try:
-            text = memory_file.read_text(encoding="utf-8")
-            lines = text.split("\n")
-            for line in lines:
-                if q.lower() in line.lower():
-                    # Extract category tag if present
-                    tag = "Allgemein"
-                    import re as _re
-                    m = _re.search(r"#tag:\s*([\w\-]+)", line, _re.IGNORECASE)
-                    if m:
-                        tag = m.group(1)
-                    results.append({
-                        "id": f"local-{uuid.uuid4().hex[:8]}",
-                        "source": "local",
-                        "score": 9.0,
-                        "category": tag,
-                        "content": line.strip(),
-                    })
-        except Exception:
-            logger.exception("Local memory search failed")
-
-    # 2. Supermemory search
-    client = _get_supermemory_client()
-    if client is not None:
-        try:
-            sm_result = client.search.memories(q=q, limit=limit)
-            if hasattr(sm_result, "model_dump"):
-                sm_data = sm_result.model_dump()
-            elif hasattr(sm_result, "dict"):
-                sm_data = sm_result.dict()
-            else:
-                sm_data = sm_result
-
-            # Navigate to the actual items
-            raw_items = sm_data.get("data", sm_data.get("memories", sm_data.get("results", [])))
-            if isinstance(raw_items, list):
-                for item in raw_items:
-                    content = item.get("content") or item.get("text") or item.get("snippet", "")
-                    score = item.get("score") or item.get("relevance") or 0.5
-                    tags = item.get("metadata", {}).get("tags", [])
-                    category = tags[0] if isinstance(tags, list) and tags else "Allgemein"
-                    item_id = item.get("id") or item.get("_id") or uuid.uuid4().hex[:8]
-                    results.append({
-                        "id": f"sm-{str(item_id)[:8]}",
-                        "source": "supermemory",
-                        "score": float(score) if score else 0.5,
-                        "category": category,
-                        "content": content,
-                    })
-        except Exception:
-            logger.exception("Hybrid: Supermemory search failed")
-
-    # Deduplicate by content, sort by score desc
-    seen = {}
-    for r in results:
-        key = r["content"][:100]  # compare first 100 chars
-        if key not in seen or r["score"] > seen[key]["score"]:
-            seen[key] = r
-    sorted_results = sorted(seen.values(), key=lambda x: x["score"], reverse=True)[:limit]
-
-    return j(handler, {"hits": sorted_results})
+            mem_dir = get_webui_home() / "memories"
+    try:
+        from runtime.supermemory_engine import get_supermemory_engine
+        local = search_local_notes(mem_dir, q)
+        documents = get_supermemory_engine().search(q, limit=limit)
+        hits = merge_memory_hits(local, documents, limit)
+        hits = [{**item, "content": _redact_text(item.get("content", ""))}
+                if item.get("source") == "local" else item for item in hits]
+        return j(handler, {"hits": hits, "results": hits, "ok": True})
+    except Exception as error:
+        logger.exception("Hybrid memory search failed")
+        return bad(handler, f"Hybrid memory search failed: {error}")
 def _handle_supermemory_list(handler, parsed):
     """GET /api/memory/supermemory/list"""
     from urllib.parse import parse_qs
@@ -15067,9 +15015,11 @@ def _handle_skill_disable(handler, body):
 
 def _handle_memory_write(handler, body):
     try:
-        require(body, "section", "content")
+        require(body, "section")
     except ValueError as e:
         return bad(handler, str(e))
+    if not isinstance(body.get("content"), str):
+        return bad(handler, "content must be a string")
     try:
         from web.api.space_engine import resolve_active_space
 

@@ -991,6 +991,10 @@ def resolve_runtime_provider(
     """
     requested_provider = resolve_requested_provider(requested)
 
+    if requested_provider == "lastbrowser-local":
+        from web.api.local_inference import connection
+        return connection(target_model)
+
     if requested_provider in {"google-gemini-cli", "gemini-cli", "gemini-oauth"}:
         raise auth_mod._google_gemini_cli_unavailable()
 

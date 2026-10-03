@@ -175,6 +175,18 @@ declare global {
 declare global {
   interface Window {
     lastbrowser: {
+      localAi: {
+        status: (workspace: string) => Promise<import('../main/local-ai-contract.js').LocalAiState>;
+        scan: () => Promise<import('../main/local-ai-contract.js').HardwareReport>;
+        download: (id: string) => Promise<void>;
+        cancel: () => Promise<void>;
+        start: (id: string, backend: 'cpu' | 'vulkan') => Promise<void>;
+        stop: () => Promise<void>;
+        remove: (id: string) => Promise<void>;
+        clearSpace: (workspace: string) => Promise<void>;
+        import: (id: string) => Promise<void>;
+        configure: (workspace: string, id: string, fallback: boolean, primary: boolean) => Promise<{ provider: string; model: string; baseUrl: string; apiKey: string }>;
+      };
       services: {
         status: () => Promise<{
           sidekick: 'starting' | 'ready' | 'stopped' | 'missing' | 'error';
@@ -267,6 +279,7 @@ declare global {
         getDraft: (request: string | { sessionId: string; profile?: string; workspacePath?: string }) => Promise<{ draft?: ComposerDraft; [key: string]: unknown }>;
         saveDraft: (request: { sessionId: string; text?: string; files?: unknown[]; profile?: string; workspacePath?: string }) => Promise<{ draft?: ComposerDraft; [key: string]: unknown }>;
         startChat: (request: {
+          useSpaceDefault?: boolean;
           sessionId?: string | null;
           message: string;
           model?: string;

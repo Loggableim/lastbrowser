@@ -10,6 +10,7 @@
  */
 
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LocalAiSetup } from './LocalAiSetup.js';
 import {
   ArrowRight,
   Bookmark,
@@ -93,6 +94,7 @@ type CodexOAuthState = {
 };
 
 export type FirstRunSetupPaneProps = {
+  workspace?: string;
   status: ServiceStatus | null;
   onboardingStatus: OnboardingStatus | null;
   setupLoading: boolean;
@@ -106,6 +108,7 @@ export type FirstRunSetupPaneProps = {
 const idleCodexOAuth: CodexOAuthState = { status: 'idle' };
 
 export function FirstRunSetupPane({
+  workspace = '.',
   status,
   onboardingStatus,
   setupLoading,
@@ -644,6 +647,7 @@ export function FirstRunSetupPane({
           </div>
         )}
 
+        <LocalAiSetup workspace={workspace} onActivated={(model) => onSubmit({ provider: 'lastbrowser-local', model, apiKey: '', baseUrl: 'http://127.0.0.1:11435/v1', botName, personality })} />
         {/* Form container */}
         <form className="setup-fullscreen-form" onSubmit={submit}>
           {/* ── SECTION 1: IDENTITY & PERSONALITY ── */}

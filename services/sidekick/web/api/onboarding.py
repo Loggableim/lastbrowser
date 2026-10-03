@@ -43,6 +43,16 @@ def _skip_onboarding_env() -> str:
 
 
 _SUPPORTED_PROVIDER_SETUPS = {
+    "lastbrowser-local": {
+        "label": "Lastbrowser Local AI",
+        "env_var": "LASTBROWSER_LOCAL_AI_KEY",
+        "default_model": "lfm-small",
+        "default_base_url": "http://127.0.0.1:11435/v1",
+        "requires_base_url": False,
+        "key_optional": True,
+        "models": [{"id": "lfm-small", "label": "LFM2.5 1.2B"}, {"id": "qwen-balanced", "label": "Qwen3 1.7B"}],
+        "category": "self_hosted",
+    },
     # ── Easy start ──────────────────────────────────────────────────────
     "openrouter": {
         "label": "OpenRouter",
@@ -729,7 +739,17 @@ def _status_from_runtime(cfg: dict, imports_ok: bool) -> dict:
             # for lmstudio, equivalent paths for ollama / custom).  See #1499
             # third sub-bug from #1420.
             if meta.get("key_optional"):
-                if meta.get("requires_base_url"):
+                if provider == 'lastbrowser-local':
+                    try:
+                        import urllib.request
+                        from web.api.local_inference import connection, BASE_URL
+                        runtime = connection(model)
+                        request = urllib.request.Request(BASE_URL + '/models', headers={'Authorization': 'Bearer ' + runtime['api_key']})
+                        with urllib.request.urlopen(request, timeout=2) as response:
+                            provider_ready = response.status == 200
+                    except (OSError, ValueError):
+                        provider_ready = False
+                elif meta.get("requires_base_url"):
                     provider_ready = bool(base_url)
                 else:
                     provider_ready = True
@@ -1021,6 +1041,17 @@ def apply_onboarding_setup(body: dict) -> dict:
         raise ValueError("model is required")
 
     provider_meta = _SUPPORTED_PROVIDER_SETUPS[provider]
+    if provider == 'lastbrowser-local':
+        import urllib.request
+        from web.api.local_inference import connection, BASE_URL
+        runtime = connection(model)
+        request = urllib.request.Request(BASE_URL + '/models', headers={'Authorization': 'Bearer ' + runtime['api_key']})
+        with urllib.request.urlopen(request, timeout=2) as response:
+            installed = json.load(response)
+        if not any(item.get('id') == model for item in installed.get('data', [])):
+            raise ValueError('Load and test the local model first.')
+        base_url = BASE_URL
+        api_key = ''
     if not base_url and provider_meta.get("default_base_url"):
         base_url = _normalize_base_url(provider_meta["default_base_url"])
 

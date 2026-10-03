@@ -12,7 +12,7 @@
     "start:dev": "node electron-dev.mjs",
     "prepare:python": "node scripts/prepare-python-runtime.mjs",
     "build": "npm run build:main && npm run build:renderer",
-    "build:main": "tsc -p tsconfig.main.json && node scripts/build-preload.mjs",
+    "build:main": "node scripts/prepare-local-ai.mjs && tsc -p tsconfig.main.json && node scripts/build-preload.mjs",
     "build:renderer": "npm run typecheck:renderer && vite build",
     "typecheck:renderer": "tsc --noEmit -p tsconfig.renderer.json",
     "test": "vitest",
@@ -55,6 +55,7 @@
       "mirror": "https://github.com/castlabs/electron-releases/releases/download/v"
     },
     "afterSign": "scripts/evs-sign.cjs",
+    "afterPack": "scripts/verify-local-ai-signatures.cjs",
     "directories": {
       "output": "release"
     },
@@ -68,6 +69,11 @@
       "node_modules/node-pty/**/*"
     ],
     "extraResources": [
+      {
+        "from": "vendor/local-ai",
+        "to": "local-ai",
+        "filter": ["cpu/llama-server.exe", "cpu/*.dll", "cpu/LICENSE*", "vulkan/llama-server.exe", "vulkan/*.dll", "vulkan/LICENSE*", "models.json", "runtime-lock.json", "LICENSE*"]
+      },
       {
         "from": "../../services",
         "to": "services",

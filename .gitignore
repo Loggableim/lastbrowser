@@ -1,4 +1,7 @@
 node_modules/
+/.worktrees/
+/output/local-ai-evaluation/
+/output/local-ai-pr-body.md
 dist/
 out/
 release/

@@ -3124,6 +3124,7 @@ function AppContent(): JSX.Element {
       }
 
       const response = await window.lastbrowser.sidekick.startChat({
+        useSpaceDefault: !useChatStore.getState().selectedModel,
         sessionId: turnContext.sessionId || null,
         message: trimmed,
         // Resolve the model explicitly. The setup state is often empty (the
@@ -4598,6 +4599,7 @@ function AppContent(): JSX.Element {
       )}
         {setupRequired && (
           <FirstRunSetupPane
+            workspace={activeSpacePath}
             status={status}
             onboardingStatus={onboardingStatus}
             setupLoading={setupLoading}

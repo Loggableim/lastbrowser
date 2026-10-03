@@ -134,3 +134,20 @@ def is_container() -> bool:
 def apply_ipv4_preference() -> None:
     if os.getenv("SIDEKICK_PREFER_IPV4", "").strip().lower() in {"1", "true", "yes"}:
         os.environ.setdefault("RES_OPTIONS", "single-request-reopen")
+
+
+def is_lastbrowser_integrated() -> bool:
+    """Keep bundled Lastbrowser on its in-tree backend and update path."""
+    explicit = os.getenv("LASTBROWSER_INTEGRATED")
+    if explicit is not None:
+        return explicit.strip().lower() in {"1", "true", "yes"}
+    if any(os.getenv(name) for name in (
+        "LASTBROWSER_HOME", "LASTBROWSER_WEBUI_AGENT_DIR",
+        "LASTBROWSER_BRIDGE_TOKEN", "LASTBROWSER_SIDEKICK_DIR",
+        "LASTBROWSER_WEBUI_PORT",
+    )):
+        return True
+    # The integration manifest is shipped beside sidekick in both the
+    # repository and the Electron resources tree. Standalone installs
+    # without that manifest retain their existing behavior.
+    return (Path(__file__).resolve().parents[2] / "sidekick-source.json").is_file()

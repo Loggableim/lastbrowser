@@ -2,6 +2,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync,
 import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const desktopDir = resolve(scriptDir, '..');
@@ -9,6 +10,8 @@ const repoRoot = resolve(desktopDir, '..', '..');
 const runtimeDir = resolve(desktopDir, 'runtime');
 const pythonRuntimeDir = resolve(runtimeDir, 'python');
 const markerPath = join(pythonRuntimeDir, '.lastbrowser-runtime.json');
+const requirementsPath = join(scriptDir, 'requirements-runtime.txt');
+const wheelhouseDir = resolve(process.env.LASTBROWSER_WHEELHOUSE || join(runtimeDir, 'wheelhouse'));
 
 function main() {
   assertInside(desktopDir, pythonRuntimeDir);
@@ -20,12 +23,17 @@ function main() {
     // Bump when the bundled runtime dependency set changes. In particular,
     // older prepared trees can otherwise pass the cache check without the
     // OpenAI-compatible client needed by Ollama providers.
-    runtimeSchema: 7
+    runtimeSchema: 8,
+    requirementsSha256: createHash('sha256').update(readFileSync(requirementsPath)).digest('hex')
   };
 
   if (isPreparedRuntimeCompatible(marker, desired, existsSync(join(pythonRuntimeDir, 'python.exe')))) {
     console.log(`[prepare:python] Runtime already prepared: ${pythonRuntimeDir}`);
     return;
+  }
+
+  if (!existsSync(wheelhouseDir) || !readdirSync(wheelhouseDir).some((file) => file.endsWith('.whl'))) {
+    throw new Error(`Offline runtime wheels missing: ${wheelhouseDir}. Provision the pinned requirements separately before packaging.`);
   }
 
   console.log(`[prepare:python] Preparing Python runtime from ${sourcePythonHome}`);
@@ -44,25 +52,15 @@ function main() {
   copyPythonHome(sourcePythonHome, pythonRuntimeDir);
 
   run(join(pythonRuntimeDir, 'python.exe'), ['-m', 'ensurepip', '--upgrade']);
-  // The bundled Sidekick runtime is the live monorepo, whose web UI runs on
-  // FastAPI/uvicorn (cli/web_server.py) and whose agent tools import requests
-  // and httpx. Those must be present in the packaged Python or the sidecar
-  // starts with a degraded tool set ("No module named 'requests'").
+  // Build inputs are provisioned separately. Packaging never resolves or
+  // downloads Python dependencies from the network.
   run(join(pythonRuntimeDir, 'python.exe'), [
-    '-m',
-    'pip',
-    'install',
-    '--no-cache-dir',
-    '--no-compile',
-    '--upgrade',
-    'fastapi>=0.104,<1',
-    'uvicorn[standard]>=0.24,<1',
-    'requests>=2.31',
-    'httpx>=0.27',
-    'pyyaml>=6.0',
-    'openai>=1.0,<3',
-    'anthropic>=0.39.0',
-    resolve(repoRoot, 'services', 'sidekick')
+    '-m', 'pip', 'install', '--no-index', '--no-compile', '--require-hashes',
+    '--find-links', wheelhouseDir, '-r', requirementsPath
+  ]);
+  run(join(pythonRuntimeDir, 'python.exe'), [
+    '-m', 'pip', 'install', '--no-index', '--no-compile', '--no-deps',
+    '--no-build-isolation', resolve(repoRoot, 'services', 'sidekick')
   ]);
 
   run(join(pythonRuntimeDir, 'python.exe'), [
@@ -304,7 +302,8 @@ export function isPreparedRuntimeCompatible(marker, desired, hasPythonExecutable
     desired &&
     marker.sourcePythonHome === desired.sourcePythonHome &&
     marker.sourceVersion === desired.sourceVersion &&
-    marker.runtimeSchema === desired.runtimeSchema
+    marker.runtimeSchema === desired.runtimeSchema &&
+    marker.requirementsSha256 === desired.requirementsSha256
   );
 }
 

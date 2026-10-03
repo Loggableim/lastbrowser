@@ -1,27 +1,9 @@
-!macro customWelcomePage
-  !define MUI_WELCOMEPAGE_TITLE "Install Lastbrowser"
-  !define MUI_WELCOMEPAGE_TEXT "Lastbrowser in wenigen Augenblicken installieren.$\r$\n$\r$\nDer Browser ist sofort bereit. Optionale KI-Funktionen kannst du später in den Einstellungen verbinden."
-  !insertmacro MUI_PAGE_WELCOME
-!macroend
-
-!macro customFinishPage
-  !ifndef HIDE_RUN_AFTER_FINISH
-    Function StartApp
-      ${if} ${isUpdated}
-        StrCpy $1 "--updated"
-      ${else}
-        StrCpy $1 ""
-      ${endif}
-      ${StdUtils.ExecShellAsUser} $0 "$launchLink" "open" "$1"
-    FunctionEnd
-
-    !define MUI_FINISHPAGE_RUN
-    !define MUI_FINISHPAGE_RUN_FUNCTION "StartApp"
-  !endif
-
-  !define MUI_FINISHPAGE_TITLE "Lastbrowser is ready"
-  !define MUI_FINISHPAGE_TEXT "Lastbrowser ist installiert und startklar. Optionale KI-Anbieter kannst du jederzeit in den Einstellungen verbinden."
-  !insertmacro MUI_PAGE_FINISH
+; One-click pages, progress banner and automatic launch are provided by electron-builder.
+; Keep upgrades and silent Store uninstallations free of interactive cleanup prompts.
+!macro customInstall
+  ; Launch the installed executable directly. A Start Menu shortcut may be
+  ; unavailable during upgrade/cleanup or blocked by shell policy.
+  StrCpy $launchLink "$appExe"
 !macroend
 
 !macro customUnInstall

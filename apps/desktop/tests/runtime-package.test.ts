@@ -131,14 +131,23 @@ describe('desktop runtime packaging', () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
-  it('uses branded NSIS resources for the assisted installer', () => {
+  it('uses an offline one-click installer with automatic launch and in-tree branding', () => {
     const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
 
     expect(packageJson.build.nsis).toMatchObject({
-      installerHeader: 'build/installerHeader.bmp',
-      installerSidebar: 'build/installerSidebar.bmp',
-      uninstallerSidebar: 'build/installerSidebar.bmp',
+      oneClick: true,
+      perMachine: false,
+      runAfterFinish: true,
+      installerHeaderIcon: 'build/icon.ico',
       include: 'build/installer.nsh'
     });
+    const include = readFileSync(path.resolve(process.cwd(), 'build/installer.nsh'), 'utf8');
+    expect(include).not.toContain('MUI_PAGE_WELCOME');
+    expect(include).not.toContain('MUI_PAGE_FINISH');
+    expect(packageJson.scripts['package:win']).toContain('--win nsis portable');
+    const alternateConfig = readFileSync(path.resolve(process.cwd(), 'build/lastbrowser-builder-config.yml'), 'utf8');
+    expect(alternateConfig).toContain('oneClick: true');
+    expect(alternateConfig).toContain('runAfterFinish: true');
+    expect(alternateConfig).toContain('installerHeaderIcon: build/icon.ico');
   });
 });

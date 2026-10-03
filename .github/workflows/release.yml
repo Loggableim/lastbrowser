@@ -98,9 +98,6 @@ jobs:
       - name: Prepare Python runtime
         run: npm --workspace apps/desktop run prepare:python
 
-      - name: Build installer assets
-        run: npm --workspace apps/desktop run build:installer-assets
-
       - name: Build desktop application
         run: npm --workspace apps/desktop run build
 

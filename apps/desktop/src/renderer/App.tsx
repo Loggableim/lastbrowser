@@ -5505,7 +5505,7 @@ function BrowserMain({
       case 'profiles':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeProfilesMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'memory':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeMemoryMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeMemoryMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} key={`${activeProfile.id}:${activeSpacePath}`} /></PanelErrorBoundary>;
       case 'insights':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeInsightsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'logs':

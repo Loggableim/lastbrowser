@@ -24,6 +24,11 @@ import { visionImpairedTranslations } from './i18n/vision-impaired-translations.
 import { splitMagnifierTranslations } from './i18n/split-magnifier-translations.js';
 import { sidekickUxTranslations } from './i18n/sidekick-ux-translations.js';
 import { agentPanelsTranslations } from './i18n/agent-panels-translations.js';
+import { memoryPanelTranslations } from './i18n/memory-panel-translations.js';
+
+for (const locale of desktopLocaleIds) {
+  Object.assign(agentPanelsTranslations[locale], memoryPanelTranslations[locale]);
+}
 
 for (const locale of desktopLocaleIds) {
   Object.assign(visionImpairedTranslations[locale], splitMagnifierTranslations[locale]);

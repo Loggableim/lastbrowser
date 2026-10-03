@@ -270,7 +270,6 @@ import { SnapBarFlyout } from './components/SnapBarFlyout.js';
 import { MultiviewGridContainer } from './components/MultiviewGridContainer.js';
 import { buildSnapGroupAfterDrop, isPointInsideSnapFlyout } from './snap-drop.js';
 import { snapLayoutLabelKey, snapSlotNameKey } from './snap-i18n.js';
-import { resolveAutoUpdateCheckPreference } from './update-preference.js';
 import {
   SNAP_LAYOUT_DEFINITIONS,
   type SnapLayoutType,
@@ -1226,14 +1225,6 @@ function AppContent(): JSX.Element {
   useEffect(() => {
     applyDesktopAppearance(desktopSettings);
   }, [desktopSettings]);
-
-  useEffect(() => {
-    const enabled = resolveAutoUpdateCheckPreference(desktopSettings, desktopSettingsHydrated);
-    if (enabled === null) return;
-    void window.lastbrowser.updates.setAutoCheckEnabled(enabled).catch((error) => {
-      console.warn('[App] Could not apply automatic update-check preference:', error);
-    });
-  }, [desktopSettingsHydrated, desktopSettings !== null, desktopSettings?.check_for_updates]);
 
   useEffect(() => watchSystemThemeChanges(desktopSettings), [desktopSettings]);
 
@@ -4416,7 +4407,7 @@ function AppContent(): JSX.Element {
                 <span className="status-dot" />
                 <span>{status?.sidekick === 'ready' ? 'sidekick online' : 'sidekick starting'}</span>
               </div>
-              <UpdatePill status={updateStatus} />
+              <UpdatePill status={updateStatus} busy={sidekickBusy || chatRunState === 'starting' || chatRunState === 'streaming'} />
             </header>
             <BookmarkBar
               activeBookmarkable={activeBookmarkable}

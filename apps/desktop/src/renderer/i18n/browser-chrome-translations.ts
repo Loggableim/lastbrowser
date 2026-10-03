@@ -531,3 +531,95 @@ const snapTranslations: Record<DesktopLocaleId, Partial<DesktopCatalog>> = {
 for (const locale of Object.keys(snapTranslations) as DesktopLocaleId[]) {
   Object.assign(browserChromeTranslations[locale], snapTranslations[locale]);
 }
+
+const updateMenuCopy: Record<string, Partial<DesktopCatalog>> = {
+  "en": {
+    "browser.chrome.updateReady": "Version {version} is ready",
+    "browser.chrome.updateRestartNotice": "Restart installs the update and restores your tabs. Running AI tasks and terminals will close.",
+    "browser.chrome.updateWaitForTasks": "Wait for the current AI task to finish before restarting."
+  },
+  "de": {
+    "browser.chrome.updateReady": "Version {version} ist bereit",
+    "browser.chrome.updateRestartNotice": "Der Neustart installiert das Update und stellt deine Tabs wieder her. Laufende KI-Aufgaben und Terminals werden beendet.",
+    "browser.chrome.updateWaitForTasks": "Warte vor dem Neustart, bis die aktuelle KI-Aufgabe abgeschlossen ist."
+  },
+  "es": {
+    "browser.chrome.updateReady": "La versión {version} está lista",
+    "browser.chrome.updateRestartNotice": "Al reiniciar se instala la actualización y se restauran las pestañas. Las tareas de IA y los terminales abiertos se cerrarán.",
+    "browser.chrome.updateWaitForTasks": "Espera a que termine la tarea de IA antes de reiniciar."
+  },
+  "fr": {
+    "browser.chrome.updateReady": "La version {version} est prête",
+    "browser.chrome.updateRestartNotice": "Le redémarrage installe la mise à jour et restaure les onglets. Les tâches IA et les terminaux ouverts seront arrêtés.",
+    "browser.chrome.updateWaitForTasks": "Attendez la fin de la tâche IA avant de redémarrer."
+  },
+  "it": {
+    "browser.chrome.updateReady": "La versione {version} è pronta",
+    "browser.chrome.updateRestartNotice": "Il riavvio installa l’aggiornamento e ripristina le schede. Le attività IA e i terminali aperti verranno chiusi.",
+    "browser.chrome.updateWaitForTasks": "Attendi la fine dell’attività IA prima di riavviare."
+  },
+  "pt-BR": {
+    "browser.chrome.updateReady": "A versão {version} está pronta",
+    "browser.chrome.updateRestartNotice": "Reiniciar instala a atualização e restaura as abas. As tarefas de IA e os terminais abertos serão encerrados.",
+    "browser.chrome.updateWaitForTasks": "Aguarde a conclusão da tarefa de IA antes de reiniciar."
+  },
+  "ru": {
+    "browser.chrome.updateReady": "Версия {version} готова",
+    "browser.chrome.updateRestartNotice": "Перезапуск установит обновление и восстановит вкладки. Задачи ИИ и открытые терминалы будут остановлены.",
+    "browser.chrome.updateWaitForTasks": "Дождитесь завершения задачи ИИ перед перезапуском."
+  }
+};
+for (const locale of Object.keys(updateMenuCopy)) Object.assign(browserChromeTranslations[locale], updateMenuCopy[locale]);
+
+const startupUpdateCopy: Record<string, Partial<DesktopCatalog>> = {
+  "en": {
+    "browser.chrome.updateAlwaysEnabled": "Automatic checks and background downloads are always enabled. Installation starts when you choose to restart.",
+    "browser.chrome.updateBackgroundDownload": "The update downloads automatically in the background. You can continue browsing.",
+    "browser.chrome.updateDontShowAgain": "Do not show again",
+    "browser.chrome.updateLater": "Later",
+    "browser.chrome.updateNoticeSaveError": "Could not save this preference."
+  },
+  "de": {
+    "browser.chrome.updateAlwaysEnabled": "Automatische Suche und Hintergrunddownloads sind immer aktiv. Du bestimmst, wann der Browser zur Installation neu startet.",
+    "browser.chrome.updateBackgroundDownload": "Das Update wird automatisch im Hintergrund geladen. Du kannst weiter browsen.",
+    "browser.chrome.updateDontShowAgain": "Nicht mehr anzeigen",
+    "browser.chrome.updateLater": "Später",
+    "browser.chrome.updateNoticeSaveError": "Die Einstellung konnte nicht gespeichert werden."
+  },
+  "es": {
+    "browser.chrome.updateAlwaysEnabled": "La búsqueda y descarga automática siempre están activas. Tú decides cuándo reiniciar para instalar.",
+    "browser.chrome.updateBackgroundDownload": "La actualización se descarga en segundo plano. Puedes seguir navegando.",
+    "browser.chrome.updateDontShowAgain": "No volver a mostrar",
+    "browser.chrome.updateLater": "Más tarde",
+    "browser.chrome.updateNoticeSaveError": "No se pudo guardar la preferencia."
+  },
+  "fr": {
+    "browser.chrome.updateAlwaysEnabled": "La recherche et le téléchargement automatiques restent actifs. Vous choisissez quand redémarrer pour installer.",
+    "browser.chrome.updateBackgroundDownload": "La mise à jour se télécharge en arrière-plan. Vous pouvez continuer à naviguer.",
+    "browser.chrome.updateDontShowAgain": "Ne plus afficher",
+    "browser.chrome.updateLater": "Plus tard",
+    "browser.chrome.updateNoticeSaveError": "Impossible d’enregistrer cette préférence."
+  },
+  "it": {
+    "browser.chrome.updateAlwaysEnabled": "Ricerca e download automatici sono sempre attivi. Scegli tu quando riavviare per installare.",
+    "browser.chrome.updateBackgroundDownload": "L’aggiornamento viene scaricato in background. Puoi continuare a navigare.",
+    "browser.chrome.updateDontShowAgain": "Non mostrare più",
+    "browser.chrome.updateLater": "Più tardi",
+    "browser.chrome.updateNoticeSaveError": "Impossibile salvare la preferenza."
+  },
+  "pt-BR": {
+    "browser.chrome.updateAlwaysEnabled": "A busca e o download automáticos estão sempre ativos. Você escolhe quando reiniciar para instalar.",
+    "browser.chrome.updateBackgroundDownload": "A atualização é baixada em segundo plano. Você pode continuar navegando.",
+    "browser.chrome.updateDontShowAgain": "Não mostrar novamente",
+    "browser.chrome.updateLater": "Mais tarde",
+    "browser.chrome.updateNoticeSaveError": "Não foi possível salvar a preferência."
+  },
+  "ru": {
+    "browser.chrome.updateAlwaysEnabled": "Автоматическая проверка и загрузка всегда включены. Вы выбираете время перезапуска для установки.",
+    "browser.chrome.updateBackgroundDownload": "Обновление загружается в фоне. Вы можете продолжать пользоваться браузером.",
+    "browser.chrome.updateDontShowAgain": "Больше не показывать",
+    "browser.chrome.updateLater": "Позже",
+    "browser.chrome.updateNoticeSaveError": "Не удалось сохранить настройку."
+  }
+};
+for (const locale of Object.keys(startupUpdateCopy)) Object.assign(browserChromeTranslations[locale], startupUpdateCopy[locale]);

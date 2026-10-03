@@ -98,6 +98,8 @@ type KanbanBoardResponse = {
 };
 
 type LastbrowserUpdateStatus = {
+  startupCheck?: boolean;
+  installError?: string | null;
   state: 'idle' | 'disabled' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
   currentVersion: string;
   availableVersion: string | null;

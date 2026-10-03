@@ -975,9 +975,9 @@ button:disabled {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-width: 128px;
+  width: 32px;
   height: 32px;
-  padding: 0 11px;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, .1);
   border-radius: 11px;
   color: rgba(232, 242, 255, .82);
@@ -988,22 +988,38 @@ button:disabled {
   cursor: pointer;
 }
 
-.update-pill.available,
-.update-pill.downloading {
-  border-color: rgba(0, 217, 255, .32);
-  box-shadow: 0 0 18px rgba(0, 217, 255, .12);
-}
-
 .update-pill.downloaded {
-  border-color: rgba(168, 255, 62, .32);
-  color: #a8ff3e;
-  box-shadow: 0 0 18px rgba(168, 255, 62, .12);
+  border-color: rgba(0, 217, 255, .25);
+  color: var(--accent, #00d9ff);
+  background: rgba(0, 217, 255, .06);
 }
 
-.update-pill.error {
-  border-color: rgba(255, 47, 178, .32);
-  color: #ff8ac9;
+.update-control { position: relative; }
+.update-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(310px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--lb-border);
+  border-radius: 14px;
+  color: var(--lb-text);
+  background: var(--lb-surface-strong);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .2);
+  white-space: normal;
+  z-index: 1000;
 }
+.update-popover p { margin: 10px 0 14px; font-size: 12px; line-height: 1.5; opacity: .8; }
+.update-popover button { display: flex; align-items: center; gap: 8px; width: 100%; }
+.update-popover button + button { margin-top: 8px; }
+.update-popover .secondary-action {
+  color: var(--lb-text);
+  background: var(--lb-bg-alt);
+  border: 1px solid var(--lb-border);
+}
+.update-notice-preference { display: flex; align-items: center; gap: 8px; margin: 14px 0; font-size: 12px; }
+
+
 
 .workspace {
   position: relative;

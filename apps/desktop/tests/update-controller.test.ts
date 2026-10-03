@@ -106,12 +106,63 @@ describe('update controller', () => {
     updater.emit('update-downloaded', { version: '0.1.4' });
     controller.quitAndInstall();
 
-    // The installer is built with `oneClick: false`, so a non-silent
-    // quitAndInstall shows the setup wizard and waits for clicks forever.
-    // Verified against the real installer: it sat on "Installation von
-    // Lastbrowser" until killed.
+    // Updates stay invisible and relaunch after installation.
     expect(updater.quitArgs[0]).toBe(true);
     expect(updater.quitArgs[1]).toBe(true);
+  });
+
+  it('coalesces checks and never replaces a ready update with a later check result', async () => {
+    const updater = fakeUpdater();
+    let finish!: () => void;
+    updater.checkForUpdates = () => {
+      updater.checkCalls++;
+      return new Promise<void>((resolve) => { finish = resolve; });
+    };
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '1.0.0' });
+    const first = controller.checkForUpdates();
+    const second = controller.checkForUpdates();
+    expect(updater.checkCalls).toBe(1);
+    updater.emit('update-downloaded', { version: '1.1.0' });
+    finish();
+    await Promise.all([first, second]);
+    await controller.checkForUpdates();
+    updater.emit('checking-for-update');
+    updater.emit('update-not-available');
+    updater.emit('error', new Error('Temporary network failure'));
+    expect(controller.getStatus()).toMatchObject({ state: 'downloaded', availableVersion: '1.1.0', percent: 100 });
+    expect(updater.checkCalls).toBe(1);
+  });
+
+  it('does not start a second download while autoDownload owns the update', async () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '1.0.0' });
+    updater.emit('update-available', { version: '1.1.0' });
+    await controller.checkForUpdates();
+    await controller.downloadUpdate();
+    expect(updater.checkCalls).toBe(0);
+    expect(updater.downloadCalls).toBe(0);
+  });
+
+  it('retains the downloaded update after an install failure and permits a retry', () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '1.0.0' });
+    updater.emit('update-downloaded', { version: '1.1.0' });
+    updater.quitAndInstall = () => { throw new Error('Installer could not start'); };
+    expect(controller.quitAndInstall()).toMatchObject({ state: 'downloaded', message: 'Installer could not start' });
+    updater.quitAndInstall = () => { updater.quitCalls++; };
+    controller.quitAndInstall();
+    controller.quitAndInstall();
+    expect(updater.quitCalls).toBe(1);
+  });
+
+  it('never uses the EXE updater for unsupported distribution channels', async () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '1.0.0', unsupportedReason: 'Updated by Microsoft Store' });
+    updater.emit('update-downloaded', { version: '1.1.0' });
+    await controller.checkForUpdates();
+    controller.quitAndInstall();
+    expect(controller.getStatus().state).toBe('disabled');
+    expect(updater.checkCalls + updater.quitCalls).toBe(0);
   });
 
   it('surfaces updater errors as status instead of throwing into the app shell', async () => {

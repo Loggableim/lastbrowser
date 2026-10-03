@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { setAccessAuthRequiredHandler } from '../src/main/sidekick-api.js';
 import { drainSseBuffer, parseSseFrame, subscribeChatStream } from '../src/main/chat-stream.js';
 
@@ -71,6 +71,37 @@ describe('drainSseBuffer', () => {
 });
 
 describe('chat stream access auth', () => {
+  it('emits opt-in transport counters without logging stream contents', async () => {
+    vi.stubEnv('LASTBROWSER_DEBUG_CHAT_TRANSPORT', '1');
+    const log = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    try {
+      vi.resetModules();
+      const { subscribeChatStream: subscribeWithTrace } = await import('../src/main/chat-stream.js');
+      let requestInit: RequestInit | undefined;
+      const fetchImpl: typeof fetch = async (_input, init) => {
+        requestInit = init;
+        return new Response('event: stream_end\ndata: {"text":"private payload"}\n\n', {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      };
+      const stream = subscribeWithTrace('http://127.0.0.1:8787', 'ignored-stream-id', null, () => undefined, fetchImpl);
+      await stream.done;
+
+      expect(new Headers(requestInit?.headers).get('x-lastbrowser-chat-transport-trace')).toMatch(/^\d+$/);
+      const output = log.mock.calls.map((call) => call.map(String).join(' ')).join('\n');
+      expect(output).toContain('reader_chunk');
+      expect(output).toContain('stream_end');
+      expect(output).toContain('"state":"terminal_stream_end"');
+      expect(output).not.toContain('private payload');
+      expect(output).not.toContain('ignored-stream-id');
+    } finally {
+      log.mockRestore();
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+
   it('sends the auth cookie and broadcasts a protected-route 401', async () => {
     let locked = 0;
     let requestInit: RequestInit | undefined;
@@ -121,5 +152,46 @@ describe('chat stream access auth', () => {
       data: { message: 'HTTP 429: quota exhausted' },
       raw: '{"message":"HTTP 429: quota exhausted"}',
     }]);
+  });
+
+  it('reports a sanitized transport error when SSE closes without a terminal event', async () => {
+    const events: Array<{ event: string; data: unknown; raw: string }> = [];
+    const fetchImpl: typeof fetch = async () => new Response(
+      'event: heartbeat\ndata: {"active":true}\n\n',
+      { status: 200, headers: { 'content-type': 'text/event-stream' } },
+    );
+
+    const stream = subscribeChatStream(
+      'http://127.0.0.1:8787',
+      'stream-truncated',
+      null,
+      (event) => events.push(event),
+      fetchImpl,
+    );
+    await stream.done;
+
+    expect(events).toEqual([
+      { event: 'heartbeat', data: { active: true }, raw: '{"active":true}' },
+      { event: 'error', data: { error: 'Chat stream closed before completion.' }, raw: '' },
+    ]);
+  });
+
+  it('does not report an error after an explicit terminal event', async () => {
+    const events: Array<{ event: string; data: unknown; raw: string }> = [];
+    const fetchImpl: typeof fetch = async () => new Response(
+      'event: stream_end\ndata: {}\n\n',
+      { status: 200, headers: { 'content-type': 'text/event-stream' } },
+    );
+
+    const stream = subscribeChatStream(
+      'http://127.0.0.1:8787',
+      'stream-complete',
+      null,
+      (event) => events.push(event),
+      fetchImpl,
+    );
+    await stream.done;
+
+    expect(events).toEqual([{ event: 'stream_end', data: {}, raw: '{}' }]);
   });
 });

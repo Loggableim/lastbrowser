@@ -38,6 +38,7 @@ import type { DesktopChatMessage, DesktopSessionDetail, ChatRunState } from '../
 import { shouldShowNativeTurnUsage, type NativeChatTurnUsage } from '../chat-usage.js';
 import { useDesktopI18n } from '../i18n.js';
 import { qualifyModelForProvider } from '../provider-model-selection.js';
+import { ReasoningEffortPicker } from '../components/ReasoningEffortPicker.js';
 import { toBionicSegments } from '../utils/bionic-reading.js';
 import { usePanelStore } from '../stores/usePanelStore.js';
 
@@ -85,6 +86,19 @@ export function ChatTranscript({
 }: ChatTranscriptProps): React.JSX.Element {
   const { locale, t } = useDesktopI18n();
   const numberFormat = new Intl.NumberFormat(locale);
+  const normalizedPendingUserMessage = pendingUserMessage.replace(/\s+/g, ' ').trim();
+  let lastUserMessageIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === 'user') {
+      lastUserMessageIndex = index;
+      break;
+    }
+  }
+  const pendingUserMessageAlreadyInTranscript = Boolean(normalizedPendingUserMessage)
+    && lastUserMessageIndex >= 0
+    && String(messages[lastUserMessageIndex].content || '').replace(/\s+/g, ' ').trim() === normalizedPendingUserMessage
+    && messages.slice(lastUserMessageIndex + 1).some((message) =>
+      message.role === 'assistant' && (message.pending || message.streaming));
   if (loading) {
     return (
       <div className="chat-transcript chat-state">
@@ -164,7 +178,7 @@ export function ChatTranscript({
         </article>
         );
       })}
-      {pendingUserMessage && (
+      {pendingUserMessage && !pendingUserMessageAlreadyInTranscript && (
         <article className="chat-message user pending">
           <div className="message-avatar"><UserCircle size={17} /></div>
           <div className="message-body">
@@ -349,9 +363,11 @@ export type ChatComposerProps = {
   busy: boolean;
   mode: ComposerMode;
   model: string;
-  /** Selectable models, grouped by provider. Empty hides the picker. */
+  /** Selectable models, grouped by provider. The current model remains visible when empty. */
   modelOptions: Array<{ provider: string; providerId?: string; models: Array<{ id: string; label: string }> }>;
   modelProvider?: string;
+  reasoningEffort: string;
+  reasoningEfforts: string[];
   profile: string;
   ready: boolean;
   runState: ChatRunState;
@@ -359,7 +375,8 @@ export type ChatComposerProps = {
   workspace: string;
   onMode: (mode: ComposerMode) => void;
   onModelChange: (model: string) => void;
-  onSend: (message: string) => void;
+  onReasoningEffort: (effort: string) => void;
+  onSend: (message: string, reasoningEffort?: string) => void;
   onStop: () => void;
   onText: (text: string) => void;
 };
@@ -394,6 +411,8 @@ export function ChatComposer({
   mode,
   model,
   modelProvider,
+  reasoningEffort,
+  reasoningEfforts,
   modelOptions,
   profile,
   ready,
@@ -402,6 +421,7 @@ export function ChatComposer({
   workspace,
   onMode,
   onModelChange,
+  onReasoningEffort,
   onSend,
   onStop,
   onText
@@ -458,7 +478,7 @@ export function ChatComposer({
     }
     // For API commands, send as message to agent
     onText('/' + name);
-    onSend('/' + name);
+    onSend('/' + name, reasoningEffort || undefined);
   }
 
   function handleComposerChange(value: string): void {
@@ -475,7 +495,7 @@ export function ChatComposer({
     event?.preventDefault();
     if (!canSend) return;
     setShowSlashDropdown(false);
-    onSend(text);
+    onSend(text, reasoningEffort || undefined);
   }
 
   const isTabsActive = /@tabs\b/i.test(text);
@@ -522,8 +542,7 @@ export function ChatComposer({
           <Layers size={13} />
           <span>@tabs</span>
         </button>
-        {modelOptions.length > 0 && (
-          <label className="composer-model" title="Model for this conversation">
+        <label className="composer-model" title="Model for this conversation">
             <Cpu size={13} />
             <select
               value={qualifyModelForProvider(model, modelProvider)}
@@ -548,8 +567,13 @@ export function ChatComposer({
                 </optgroup>
               ))}
             </select>
-          </label>
-        )}
+        </label>
+        <ReasoningEffortPicker
+          value={reasoningEffort}
+          efforts={reasoningEfforts}
+          disabled={!ready || running}
+          onChange={onReasoningEffort}
+        />
       </div>
       <div className="composer-input-row" ref={slashRef}>
         {showSlashDropdown && filteredSlashCommands.length > 0 && (

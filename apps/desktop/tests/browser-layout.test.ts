@@ -23,7 +23,9 @@ describe('browser shell layout', () => {
     expect(composer).toContain('onChange={(event) => onModelChange(event.target.value)}');
     expect(chatMain).toContain('saveSpaceModel(activeSpacePath, nextModel, window.localStorage, provider)');
     expect(chatMain).toContain('setSelectedModelProvider(provider)');
-    expect(app).toContain('spaceModelSelection?.model,\n        storedModel,\n        setupState.model');
+    expect(app).toContain('spaceSelection: spaceModelSelection');
+    expect(app).toContain('model: configuredChatModel');
+    expect(app).toContain('modelProvider: chatModelProvider');
   });
 
   it('uses the WebUI-style shell grid with expanded CD navigation', () => {

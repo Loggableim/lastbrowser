@@ -15,8 +15,8 @@ Design notes / invariants:
 - The continuation prompt is just a normal user message appended to the
   session via ``run_conversation``. No system-prompt mutation, no toolset
   swap — prompt caching stays intact.
-- Judge failures are fail-OPEN: ``continue``. A broken judge must not wedge
-  progress; the turn budget is the backstop.
+- Judge provider failures are recoverable: bounded retries are followed by
+  a paused evaluation that stores the response until the user resumes.
 - When a real user message arrives mid-loop it preempts the continuation
   prompt and also pauses the goal loop for that turn (we still re-judge
   after, so if the user's message happens to complete the goal the judge
@@ -74,6 +74,8 @@ def bounded_goal_evidence(responses) -> list[str]:
 # exhausted with every reply shaped like `judge returned empty response` or
 # `judge reply was not JSON`.
 DEFAULT_MAX_CONSECUTIVE_PARSE_FAILURES = 3
+DEFAULT_JUDGE_MAX_ATTEMPTS = 2
+_JUDGE_RETRY_DELAY = 0.2
 
 
 CONTINUATION_PROMPT_TEMPLATE = (
@@ -136,6 +138,8 @@ class GoalState:
     consecutive_parse_failures: int = 0       # judge-output parse failures in a row
     consumed_continuation_turn: int = -1       # idempotency marker for continuation delivery
     recent_assistant_responses: list[str] = field(default_factory=list)
+    pending_judge_response: Optional[str] = None
+    pending_judge_user_initiated: bool = True
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -166,6 +170,12 @@ class GoalState:
             consecutive_parse_failures=int(data.get("consecutive_parse_failures", 0) or 0),
             consumed_continuation_turn=int(data.get("consumed_continuation_turn", -1)),
             recent_assistant_responses=bounded_goal_evidence(data.get("recent_assistant_responses", [])),
+            pending_judge_response=(
+                data.get("pending_judge_response")[:_JUDGE_RESPONSE_SNIPPET_CHARS]
+                if isinstance(data.get("pending_judge_response"), str)
+                else None
+            ),
+            pending_judge_user_initiated=bool(data.get("pending_judge_user_initiated", True)),
         )
 
 
@@ -303,6 +313,36 @@ def _truncate(text: str, limit: int) -> str:
 _JSON_OBJECT_RE = re.compile(r"\{.*?\}", re.DOTALL)
 
 
+def _retryable_judge_error(exc: Exception) -> bool:
+    """Avoid pointless retries for permanent auth/configuration failures."""
+    status = (
+        getattr(exc, "status_code", None)
+        or getattr(exc, "status", None)
+        or getattr(exc, "code", None)
+    )
+    try:
+        status_code = int(status)
+    except (TypeError, ValueError):
+        status_code = None
+    if status_code is None:
+        return True  # transport/DNS/timeout style exception
+    return status_code in {408, 425, 429} or 500 <= status_code <= 599
+
+
+def _call_judge_with_retry(call):
+    """Make a small bounded retry for transient judge-provider failures."""
+    last_error = None
+    for attempt in range(DEFAULT_JUDGE_MAX_ATTEMPTS):
+        try:
+            return call()
+        except Exception as exc:
+            last_error = exc
+            if attempt + 1 >= DEFAULT_JUDGE_MAX_ATTEMPTS or not _retryable_judge_error(exc):
+                raise
+            time.sleep(_JUDGE_RETRY_DELAY * (attempt + 1))
+    raise last_error  # pragma: no cover - loop always returns or raises
+
+
 def _parse_judge_response(raw: str) -> Tuple[bool, str, bool]:
     """Parse the judge's reply. Fail-open to ``(False, "<reason>", parse_failed)``.
 
@@ -362,17 +402,18 @@ def judge_goal(
     """Ask the auxiliary model whether the goal is satisfied.
 
     Returns ``(verdict, reason, parse_failed)`` where verdict is ``"done"``,
-    ``"continue"``, or ``"skipped"`` (when the judge couldn't be reached).
+    ``"continue"``, ``"skipped"`` (empty goal), or ``"unavailable"`` when
+    the judge could not be reached after bounded retries.
 
     ``parse_failed`` is True only when the judge call succeeded but its output
-    was unusable (empty or non-JSON). API/transport errors return False — they
-    are transient and should fail-open silently. Callers use this flag to
+    was unusable (empty or non-JSON). API/transport errors return False and
+    produce the distinct ``unavailable`` verdict after bounded retries. Callers use this flag to
     auto-pause after N consecutive parse failures (see
     ``DEFAULT_MAX_CONSECUTIVE_PARSE_FAILURES``).
 
-    This is deliberately fail-open: any error returns ``("continue", "...", False)``
-    so a broken judge doesn't wedge progress — the turn budget and the
-    consecutive-parse-failures auto-pause are the backstops.
+    Provider outages never imply either completion or continuation. The goal
+    manager saves the response and pauses so a later explicit resume can retry
+    the evaluation without first generating another answer.
     """
     if not goal.strip():
         return "skipped", "empty goal", False
@@ -397,11 +438,11 @@ def judge_goal(
         try:
             from runtime.auxiliary_client import call_llm
         except Exception as exc:
-            logger.debug("goal judge: remote fallback import failed: %s", exc)
-            return "continue", "auxiliary client unavailable", False
+            logger.debug("goal judge: remote fallback import failed (%s)", type(exc).__name__)
+            return "unavailable", "auxiliary client unavailable", False
 
         try:
-            resp = call_llm(
+            resp = _call_judge_with_retry(lambda: call_llm(
                 provider="ollama-cloud",
                 model="deepseek-v4.1-flash",
                 messages=[
@@ -409,18 +450,16 @@ def judge_goal(
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0,
-                # Reasoning models can spend the previous 200-token budget
-                # before producing the required JSON verdict. Keep enough
-                # room for both reasoning and the compact final response.
+                # Reasoning models need room for reasoning and a compact verdict.
                 max_tokens=768,
                 timeout=timeout,
-            )
+            ))
         except Exception as exc:
             logger.info(
-                "goal judge: Game Mode remote call failed (%s) — falling through to continue",
-                exc,
+                "goal judge: Game Mode remote call unavailable after bounded retry (%s)",
+                type(exc).__name__,
             )
-            return "continue", f"judge error: {type(exc).__name__}", False
+            return "unavailable", f"judge unavailable: {type(exc).__name__}", False
         raw = ""
         try:
             raw = resp.choices[0].message.content or ""
@@ -434,20 +473,20 @@ def judge_goal(
     try:
         from runtime.auxiliary_client import get_text_auxiliary_client
     except Exception as exc:
-        logger.debug("goal judge: auxiliary client import failed: %s", exc)
-        return "continue", "auxiliary client unavailable", False
+        logger.debug("goal judge: auxiliary client import failed (%s)", type(exc).__name__)
+        return "unavailable", "auxiliary client unavailable", False
 
     try:
         client, model = get_text_auxiliary_client("goal_judge")
     except Exception as exc:
-        logger.debug("goal judge: get_text_auxiliary_client failed: %s", exc)
-        return "continue", "auxiliary client unavailable", False
+        logger.debug("goal judge: get_text_auxiliary_client failed (%s)", type(exc).__name__)
+        return "unavailable", "auxiliary client unavailable", False
 
     if client is None or not model:
-        return "continue", "no auxiliary client configured", False
+        return "unavailable", "no auxiliary client configured", False
 
     try:
-        resp = client.chat.completions.create(
+        resp = _call_judge_with_retry(lambda: client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
@@ -456,10 +495,10 @@ def judge_goal(
             temperature=0,
             max_tokens=768,
             timeout=timeout,
-        )
+        ))
     except Exception as exc:
-        logger.info("goal judge: API call failed (%s) — falling through to continue", exc)
-        return "continue", f"judge error: {type(exc).__name__}", False
+        logger.info("goal judge: API call unavailable after bounded retry (%s)", type(exc).__name__)
+        return "unavailable", f"judge unavailable: {type(exc).__name__}", False
 
     try:
         raw = resp.choices[0].message.content or ""
@@ -497,6 +536,7 @@ class GoalManager:
     def __init__(self, session_id: str, *, default_max_turns: int = DEFAULT_MAX_TURNS):
         self.session_id = session_id
         self.default_max_turns = int(default_max_turns or DEFAULT_MAX_TURNS)
+        self._resume_stale = False
         self._state: Optional[GoalState] = load_goal(session_id)
 
     # --- introspection ------------------------------------------------
@@ -537,6 +577,7 @@ class GoalManager:
         goal = (goal or "").strip()
         if not goal:
             raise ValueError("goal text is empty")
+        self._resume_stale = False
         state = GoalState(
             goal=goal,
             status="active",
@@ -562,9 +603,53 @@ class GoalManager:
         return self._state
 
     def resume(self, *, reset_budget: bool = False) -> Optional[GoalState]:
+        self._resume_stale = False
         if not self._state:
             return None
         if self._state.status == "active" and not reset_budget:
+            return self._state
+        pending_response = self._state.pending_judge_response
+        if pending_response is not None and not reset_budget:
+            # Retry only the saved evaluation before launching any new model
+            # generation. A persistent judge outage leaves the goal paused and
+            # the response durable for the next explicit resume.
+            expected_state = self._state
+            expected_json = expected_state.to_json()
+            pending_user_initiated = expected_state.pending_judge_user_initiated
+            verdict, reason, parse_failed = judge_goal(
+                expected_state.goal,
+                pending_response,
+                prior_responses=expected_state.recent_assistant_responses,
+            )
+            latest_state = load_goal(self.session_id)
+            if (
+                self._state is not expected_state
+                or self._state.to_json() != expected_json
+                or latest_state is None
+                or latest_state.to_json() != expected_json
+            ):
+                # Goal commands can run on separate manager instances (the
+                # gateway creates one per command). A replacement made by
+                # another instance does not mutate this manager's in-memory
+                # state, so compare with the persisted snapshot before applying
+                # a verdict from the blocking judge call.
+                self._state = latest_state
+                self._resume_stale = True
+                return self._state
+            if verdict == "unavailable":
+                self._state.last_verdict = verdict
+                self._state.last_reason = reason
+                self._state.paused_reason = "goal judge unavailable; retry /goal resume after restoring the judge provider"
+                save_goal(self.session_id, self._state)
+                return self._state
+            self._state.status = "active"
+            self._state.paused_reason = None
+            self._state.pending_judge_response = None
+            self.evaluate_after_turn(
+                pending_response,
+                user_initiated=pending_user_initiated,
+                judged_result=(verdict, reason, parse_failed),
+            )
             return self._state
         exhausted = (
             self._state.max_turns is not None
@@ -579,6 +664,12 @@ class GoalManager:
         self._state.consumed_continuation_turn = -1
         if reset_budget:
             self._state.turns_used = 0
+            if self._state.pending_judge_response is not None:
+                self._state.recent_assistant_responses = bounded_goal_evidence(
+                    [*self._state.recent_assistant_responses, self._state.pending_judge_response]
+                )
+                self._state.pending_judge_response = None
+                self._state.pending_judge_user_initiated = True
         self._state.consecutive_parse_failures = 0
         save_goal(self.session_id, self._state)
         return self._state
@@ -617,10 +708,11 @@ class GoalManager:
           - ``status``: current goal status after update
           - ``should_continue``: bool — caller should fire another turn
           - ``continuation_prompt``: str or None
-          - ``verdict``: "done" | "continue" | "skipped" | "inactive"
+          - ``verdict``: "done" | "continue" | "skipped" | "unavailable" | "inactive"
           - ``reason``: str
           - ``message``: user-visible one-liner to print/send
         """
+        self._resume_stale = False
         state = self._state
         if state is None or state.status != "active":
             return {
@@ -632,15 +724,64 @@ class GoalManager:
                 "message": "",
             }
 
-        # Count the turn that just finished.
-        state.turns_used += 1
-        state.last_turn_at = time.time()
-
+        expected_state = state
+        expected_json = state.to_json()
         verdict, reason, parse_failed = (
             judged_result if judged_result is not None else judge_goal(
                 state.goal, last_response, prior_responses=state.recent_assistant_responses,
             )
         )
+        latest_state = load_goal(self.session_id)
+        if (
+            self._state is not expected_state
+            or self._state is None
+            or self._state.to_json() != expected_json
+            or (latest_state is not None and latest_state.to_json() != expected_json)
+        ):
+            # Pause/clear/replacement commands may run through a fresh manager
+            # while the judge is blocked. Never let that stale verdict write
+            # over the newer persisted state or enqueue a continuation.
+            if latest_state is not None:
+                self._state = latest_state
+            self._resume_stale = True
+            return {
+                "status": self._state.status if self._state else None,
+                "should_continue": False,
+                "continuation_prompt": None,
+                "verdict": "stale",
+                "reason": "goal changed during evaluation",
+                "message": "",
+            }
+        if verdict == "unavailable":
+            # The assistant response is durable evidence waiting for a judge.
+            # Do not consume goal budget or launch another generation until a
+            # later explicit resume obtains a valid verdict.
+            state.pending_judge_response = _truncate(last_response, _JUDGE_RESPONSE_SNIPPET_CHARS)
+            state.pending_judge_user_initiated = bool(user_initiated)
+            state.last_turn_at = time.time()
+            state.last_verdict = verdict
+            state.last_reason = reason
+            state.status = "paused"
+            state.paused_reason = "goal judge unavailable; retry /goal resume after restoring the judge provider"
+            save_goal(self.session_id, state)
+            return {
+                "status": "paused",
+                "should_continue": False,
+                "continuation_prompt": None,
+                "verdict": "unavailable",
+                "reason": reason,
+                "message": (
+                    "⏸ Goal paused because its judge could not evaluate the last response after a bounded retry. "
+                    "The response was saved for re-evaluation; no completion was assumed and no new generation was started. "
+                    "Restore the judge provider, then use /goal resume."
+                ),
+            }
+
+        # Count only turns that received a usable completion verdict.
+        state.turns_used += 1
+        state.last_turn_at = time.time()
+        state.pending_judge_response = None
+        state.pending_judge_user_initiated = True
         state.recent_assistant_responses = bounded_goal_evidence(
             [*state.recent_assistant_responses, last_response]
         )
@@ -648,8 +789,8 @@ class GoalManager:
         state.last_reason = reason
 
         # Track consecutive judge parse failures. Reset on any usable reply,
-        # including API / transport errors (parse_failed=False) so a flaky
-        # network doesn't trip the auto-pause meant for bad judge models.
+        # including successfully parsed replies, so only malformed output
+        # trips the auto-pause meant for bad judge models.
         if parse_failed:
             state.consecutive_parse_failures += 1
         else:
@@ -726,7 +867,7 @@ class GoalManager:
         }
 
     def next_continuation_prompt(self) -> Optional[str]:
-        if not self._state or self._state.status != "active":
+        if self._resume_stale or not self._state or self._state.status != "active":
             return None
         return CONTINUATION_PROMPT_TEMPLATE.format(goal=self._state.goal)
 

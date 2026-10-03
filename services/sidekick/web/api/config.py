@@ -152,32 +152,36 @@ def _discover_agent_dir() -> Path:
     # 2. Monorepo — ourselves
     candidates.append(Path(__file__).resolve().parent.parent.parent)
 
-    # 3. Sidekick home directory (Sidekick install default)
-    candidates.append(HOME / ".sidekick" / "sidekick-agent")
+    # In Lastbrowser integration, only the in-tree / bundled copy is permitted.
+    # External checkouts and user-data overlays must never be loaded.
+    from shared.constants import is_lastbrowser_integrated
+    if not is_lastbrowser_integrated():
+        # 3. Sidekick home directory (Sidekick install default)
+        candidates.append(HOME / ".sidekick" / "sidekick-agent")
 
-    # 4. Sidekick home (legacy fallback)
-    candidates.append(HOME / ".sidekick" / "sidekick-agent")
+        # 4. Sidekick home (legacy fallback)
+        candidates.append(HOME / ".sidekick" / "sidekick-agent")
 
-    # 5. ~/sidekick-agent (direct checkout)
-    candidates.append(HOME / "sidekick-agent")
+        # 5. ~/sidekick-agent (direct checkout)
+        candidates.append(HOME / "sidekick-agent")
 
-    # 6. ~/sidekick-agent (legacy fallback)
-    candidates.append(HOME / "sidekick-agent")
+        # 6. ~/sidekick-agent (legacy fallback)
+        candidates.append(HOME / "sidekick-agent")
 
-    # 7. XDG_DATA_HOME / sidekick-agent
-    xdg_data = Path(os.getenv("XDG_DATA_HOME", str(HOME / ".local" / "share")))
-    candidates.append(xdg_data.expanduser() / "sidekick-agent")
-    candidates.append(xdg_data.expanduser() / "sidekick-agent")  # legacy fallback
+        # 7. XDG_DATA_HOME / sidekick-agent
+        xdg_data = Path(os.getenv("XDG_DATA_HOME", str(HOME / ".local" / "share")))
+        candidates.append(xdg_data.expanduser() / "sidekick-agent")
+        candidates.append(xdg_data.expanduser() / "sidekick-agent")  # legacy fallback
 
-    # 8. Windows: LOCALAPPDATA\\sidekick\\sidekick-agent (Sidekick installer default)
-    local_appdata = os.getenv("LOCALAPPDATA")
-    if local_appdata:
-        candidates.append(Path(local_appdata) / "sidekick" / "sidekick-agent")
-        candidates.append(Path(local_appdata) / "sidekick" / "sidekick-agent")
+        # 8. Windows: LOCALAPPDATA\\sidekick\\sidekick-agent (Sidekick installer default)
+        local_appdata = os.getenv("LOCALAPPDATA")
+        if local_appdata:
+            candidates.append(Path(local_appdata) / "sidekick" / "sidekick-agent")
+            candidates.append(Path(local_appdata) / "sidekick" / "sidekick-agent")
 
-    # 9. System-wide install paths (e.g. /opt/sidekick-agent, /usr/local/sidekick-agent)
-    for sys_prefix in ("/opt", "/usr/local", "/usr/local/share"):
-        candidates.append(Path(sys_prefix) / "sidekick-agent")
+        # 9. System-wide install paths (e.g. /opt/sidekick-agent, /usr/local/sidekick-agent)
+        for sys_prefix in ("/opt", "/usr/local", "/usr/local/share"):
+            candidates.append(Path(sys_prefix) / "sidekick-agent")
 
     for path in candidates:
         if path.exists() and (path / "run_agent.py").exists():
@@ -566,18 +570,26 @@ def print_startup_config() -> None:
     print("\n".join(lines), flush=True)
 
     if not _SIDEKICK_FOUND:
-        print(
-            f"{err}  Could not find the Nova agent directory.\n"
-            "      The server will start but agent features will not work.\n"
-            "\n"
-            "      To fix, set one of:\n"
-            "        export SIDEKICK_WEBUI_AGENT_DIR=/path/to/sidekick-agent\n"
-            "        export SIDEKICK_HOME=/path/to/.sidekick\n"
-            "\n"
-            "      Or clone sidekick-agent as a sibling of this repo:\n"
-            "        git clone <sidekick-agent-repo> ../sidekick-agent\n",
-            flush=True,
-        )
+        from shared.constants import is_lastbrowser_integrated
+        if is_lastbrowser_integrated():
+            print(
+                f"{err}  Could not find the internal Sidekick backend directory.\n"
+                "      Ensure services/sidekick exists within the Lastbrowser repository or package.",
+                flush=True,
+            )
+        else:
+            print(
+                f"{err}  Could not find the Nova agent directory.\n"
+                "      The server will start but agent features will not work.\n"
+                "\n"
+                "      To fix, set one of:\n"
+                "        export SIDEKICK_WEBUI_AGENT_DIR=/path/to/sidekick-agent\n"
+                "        export SIDEKICK_HOME=/path/to/.sidekick\n"
+                "\n"
+                "      Or clone sidekick-agent as a sibling of this repo:\n"
+                "        git clone <sidekick-agent-repo> ../sidekick-agent\n",
+                flush=True,
+            )
 
 
 def verify_sidekick_imports() -> tuple:
@@ -1960,13 +1972,12 @@ def get_effective_default_model(config_data: dict | None = None) -> str:
 # Mirrors sidekick_constants.parse_reasoning_effort so WebUI can validate without
 # importing from the agent tree (which may not be installed).  Any drift here
 # will show up in the shared test suite since both sides accept the same set.
-VALID_REASONING_EFFORTS = ("minimal", "low", "medium", "high", "xhigh")
+VALID_REASONING_EFFORTS = ("minimal", "low", "medium", "high", "xhigh", "max")
+
 
 
 def _normalize_reasoning_effort_value(effort):
     eff = str(effort or "").strip().lower()
-    if eff == "max":
-        return "xhigh"
     return eff
 
 
@@ -1980,9 +1991,12 @@ def _normalize_reasoning_provider(value):
 
 
 def _reasoning_allowed_efforts_for_model(model_id=None, model_provider=None):
-    allowed = list(dict.fromkeys(("none",) + VALID_REASONING_EFFORTS))
     provider = _normalize_reasoning_provider(model_provider)
-    model = str(model_id or "").strip()
+    model = str(model_id or "").strip().lower()
+    if provider in {"openai-codex", "copilot", "github", "github-copilot", "github-models"}:
+        return _known_reasoning_efforts_for_model(model, provider)
+
+    allowed = list(dict.fromkeys(("none",) + VALID_REASONING_EFFORTS))
     if provider == "ollama-cloud" and model:
         try:
             from cli.models import ollama_cloud_model_reasoning_efforts
@@ -1997,6 +2011,62 @@ def _reasoning_allowed_efforts_for_model(model_id=None, model_provider=None):
         if model_efforts:
             allowed = list(dict.fromkeys(("none",) + tuple(model_efforts)))
     return allowed
+
+
+def _known_reasoning_efforts_for_model(model_id=None, model_provider=None):
+    """Return only capability sets known for this specific model/provider."""
+    provider = _normalize_reasoning_provider(model_provider)
+    model = str(model_id or "").strip().lower()
+    if provider in {"copilot", "github", "github-copilot", "github-models"} and model:
+        try:
+            from cli.models import github_model_reasoning_efforts
+
+            api_values = {"minimal", "low", "medium", "high", "xhigh", "max"}
+            efforts = [
+                str(effort).strip().lower()
+                for effort in github_model_reasoning_efforts(model)
+                if str(effort).strip().lower() in api_values
+            ]
+            return list(dict.fromkeys(efforts))
+        except Exception:
+            return []
+    if provider == "openai-codex" and model:
+        try:
+            from cli.codex_models import get_codex_model_reasoning_efforts
+
+            return get_codex_model_reasoning_efforts(model)
+        except Exception:
+            return []
+    if provider == "ollama-cloud" and model:
+        try:
+            from cli.models import ollama_cloud_model_reasoning_efforts
+
+            return list(dict.fromkeys(ollama_cloud_model_reasoning_efforts(model)))
+        except Exception:
+            return []
+    return []
+
+
+def _annotate_model_reasoning_efforts(groups):
+    """Attach known, per-model reasoning choices to model catalog entries."""
+    if not isinstance(groups, list):
+        return
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        provider = group.get("provider_id") or group.get("provider")
+        for bucket in ("models", "extra_models"):
+            entries = group.get(bucket)
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                model_id = entry.get("id")
+                entry["reasoning_efforts"] = _known_reasoning_efforts_for_model(
+                    model_id,
+                    provider,
+                )
 
 
 _WEB_BACKEND_VALUES = ("parallel", "firecrawl", "tavily", "exa", "searxng", "brave-free", "ddgs")
@@ -2019,10 +2089,11 @@ def parse_reasoning_effort(effort):
     """Parse an effort level into the dict the agent expects.
 
     Returns None when *effort* is empty or unrecognised (caller interprets as
-    "use default"), ``{"enabled": False}`` for ``"none"``, and
+    "use default"), ``{"enabled": False}`` for ``"none"`` (omit an explicit
+    effort and let the provider choose its default), and
     ``{"enabled": True, "effort": <level>}`` for any of
-    ``VALID_REASONING_EFFORTS``. ``max`` is accepted as an alias for
-    ``xhigh`` for Ollama parity.
+    ``VALID_REASONING_EFFORTS``. ``xhigh`` and ``max`` stay distinct so a
+    Responses model can receive the exact level advertised in its catalog.
     """
     eff = _normalize_reasoning_effort_value(effort)
     if not eff:
@@ -2032,6 +2103,19 @@ def parse_reasoning_effort(effort):
     if eff in VALID_REASONING_EFFORTS:
         return {"enabled": True, "effort": eff}
     return None
+
+
+def resolve_reasoning_config(effort, supported_efforts=None):
+    """Parse an effort and fail back to provider defaults if unsupported."""
+    config = parse_reasoning_effort(effort)
+    if (
+        isinstance(config, dict)
+        and config.get("enabled") is not False
+        and supported_efforts is not None
+        and config.get("effort") not in supported_efforts
+    ):
+        return None
+    return config
 
 
 def get_reasoning_status(model_id=None, model_provider=None) -> dict:
@@ -2131,14 +2215,18 @@ def set_reasoning_effort(effort: str, model_id=None, model_provider=None) -> dic
 
     Mirrors CLI ``/reasoning <level>``: same key, same valid values
     (``none`` | ``minimal`` | ``low`` | ``medium`` | ``high`` | ``xhigh``),
-    plus ``max`` as an alias for ``xhigh``.
+    with ``xhigh`` and ``max`` preserved as distinct levels.
     Raises ``ValueError`` on an unrecognised level so callers can return 400.
     """
     raw = _normalize_reasoning_effort_value(effort)
     if not raw:
         raise ValueError("effort is required")
     allowed_efforts = _reasoning_allowed_efforts_for_model(model_id, model_provider)
-    if raw != "none" and raw not in allowed_efforts:
+    none_is_legacy_default = raw == "none" and not (
+        str(model_id or "").strip()
+        and _normalize_reasoning_provider(model_provider) == "openai-codex"
+    )
+    if not none_is_legacy_default and raw not in allowed_efforts:
         model_name = str(model_id or "").strip() or "current model"
         provider_name = _normalize_reasoning_provider(model_provider)
         provider_hint = f" ({provider_name})" if provider_name else ""
@@ -2291,6 +2379,15 @@ _AVAILABLE_MODELS_CACHE_TTL: float = 86400.0  # 24 hours
 _available_models_cache_lock = threading.RLock()  # must be RLock: cold path refactoring moved slow work inside this lock, requiring re-entry
 _cache_build_cv = threading.Condition(_available_models_cache_lock)  # shares underlying RLock so notify_all() is safe inside with _available_models_cache_lock
 _cache_build_in_progress = False  # True while a cold path is actively building
+_MODELS_CACHE_BUILD_WAIT_TIMEOUT: float = 60.0
+
+
+def _wait_for_models_cache_build() -> bool:
+    """Wait until the current cold build finishes, even if it failed."""
+    return _cache_build_cv.wait_for(
+        lambda: not _cache_build_in_progress,
+        timeout=_MODELS_CACHE_BUILD_WAIT_TIMEOUT,
+    )
 
 # Cache for credential pool results -- calling load_pool() per-provider per-server
 # session is expensive (~10s for zai due to endpoint probing).  The credential pool
@@ -2553,12 +2650,40 @@ def _models_cache_source_fingerprint() -> dict:
         "config_yaml": _models_cache_file_fingerprint(_get_config_path()),
         "auth_json": _models_cache_file_fingerprint(_get_auth_store_path()),
     }
-    # Also track settings.json so the OpenRouter free/paid toggle invalidates
-    # the models cache automatically when the user saves it from the UI.
+    # Catalog construction only reads show_openrouter_paid from settings.json.
+    # Fingerprint that effective value rather than the whole file's mtime so
+    # appearance, accessibility, and other unrelated settings don't trigger a
+    # cold provider scan. Preserve the path in the key for profile isolation.
+    settings_path = Path(SETTINGS_FILE).expanduser()
+    settings_fp: dict[str, object] = {"path": str(settings_path)}
     try:
-        fp["settings_json"] = _models_cache_file_fingerprint(SETTINGS_FILE)
-    except Exception:
-        pass
+        settings_stat = settings_path.stat()
+    except FileNotFoundError:
+        settings_fp["show_openrouter_paid"] = False
+    except OSError as exc:
+        # An unreadable settings file has unknown effective contents. Include
+        # its metadata so a later repair/edit conservatively invalidates.
+        settings_fp.update({
+            "read_error": type(exc).__name__,
+            **_models_cache_file_fingerprint(settings_path),
+        })
+    else:
+        try:
+            loaded_settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            # Malformed JSON also has unknown effective contents; metadata
+            # changes ensure the cache is retried after the file is repaired.
+            settings_fp.update({
+                "read_error": type(exc).__name__,
+                "mtime_ns": settings_stat.st_mtime_ns,
+                "size": settings_stat.st_size,
+            })
+        else:
+            effective_settings = loaded_settings if isinstance(loaded_settings, dict) else {}
+            settings_fp["show_openrouter_paid"] = bool(
+                effective_settings.get("show_openrouter_paid", False)
+            )
+    fp["settings_openrouter_paid"] = settings_fp
     return fp
 
 
@@ -4376,6 +4501,8 @@ def get_available_models() -> dict:
             or (g.get("provider_id") or "").startswith("custom:")
         ]
 
+        _annotate_model_reasoning_efforts(groups)
+
         thinking_models = []
         seen_thinking_models = set()
         for group in groups:
@@ -4421,12 +4548,13 @@ def get_available_models() -> dict:
         # If another thread is already building, wait for its result instead
         # of re-entering the cold path (avoids duplicate 10s zai load_pool calls).
         if should_wait:
-            _cache_build_cv.wait_for(
-                lambda: not _cache_build_in_progress and _available_models_cache is not None,
-                timeout=60
-            )
+            # A failed builder also notifies waiters, but cannot populate the
+            # cache. Wake on the build flag alone so the waiter can make one
+            # fresh attempt instead of sleeping until the full timeout.
+            _wait_for_models_cache_build()
             cached = _get_fresh_memory_models_cache(time.monotonic())
             if cached is not None:
+                _annotate_model_reasoning_efforts(cached.get("groups"))
                 return cached
 
         # Reload config if changed
@@ -4441,10 +4569,12 @@ def get_available_models() -> dict:
         now = time.monotonic()
         cached = _get_fresh_memory_models_cache(now)
         if cached is not None:
+            _annotate_model_reasoning_efforts(cached.get("groups"))
             return cached
 
         # Cold path: disk cache hit — use it (fast, no lock contention)
         if disk_groups is not None:
+            _annotate_model_reasoning_efforts(disk_groups.get("groups"))
             _available_models_cache = disk_groups
             _available_models_cache_ts = now
             _available_models_cache_source_fingerprint = _models_cache_source_fingerprint()
@@ -4495,6 +4625,7 @@ class StreamChannel:
         self._max_backlog = 100
         self._subscribers: list[queue.Queue] = []
         self._offline_buffer: list[tuple[str, object]] = []
+        self._terminal_event: tuple[str, object] | None = None
 
     def subscribe(self) -> queue.Queue:
         q: queue.Queue = queue.Queue(maxsize=self._max_backlog)
@@ -4504,7 +4635,14 @@ class StreamChannel:
             # finish replaying the older buffered tail. Replay only the bounded
             # tail; otherwise a long disconnected stream can overflow the new
             # subscriber queue and turn reconnects into HTTP 500s.
-            for item in self._offline_buffer[-self._max_backlog:]:
+            replay = self._offline_buffer[-self._max_backlog:]
+            terminal = self._terminal_event
+            if terminal is not None and terminal not in replay:
+                # A connected subscriber clears the offline tail after each
+                # broadcast, but completed streams must still be reconnectable.
+                prior_capacity = max(0, self._max_backlog - 1)
+                replay = (replay[-prior_capacity:] if prior_capacity else []) + [terminal]
+            for item in replay:
                 try:
                     q.put_nowait(item)
                 except queue.Full:
@@ -4521,6 +4659,10 @@ class StreamChannel:
 
     def put_nowait(self, item: tuple[str, object]) -> None:
         with self._lock:
+            if item[0] in ("stream_end", "error", "apperror", "cancel"):
+                # Keep just the terminal frame separately from the bounded
+                # backlog so any late/reconnected subscriber can finish.
+                self._terminal_event = item
             subscribers = list(self._subscribers)
             if not subscribers:
                 self._offline_buffer.append(item)

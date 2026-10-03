@@ -12,7 +12,10 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import io
+import json
+import os
 import queue
+import sys
 import threading
 import traceback
 from email.message import Message
@@ -28,6 +31,21 @@ _END = object()
 _HEADER_WAIT_SECONDS = 20.0
 _RUNTIME_INIT_LOCK = threading.Lock()
 _RUNTIME_STATE_DIR: str | None = None
+
+
+def _chat_transport_trace(trace: int | None, stage: str, **fields: int | str | bool) -> None:
+    if trace is None or os.environ.get("LASTBROWSER_DEBUG_CHAT_TRANSPORT") != "1":
+        return
+    # This opt-in diagnostic deliberately accepts only counters and static
+    # labels. Never include request targets, identifiers, or stream payloads.
+    print(
+        "[CHAT-TRANSPORT] " + json.dumps(
+            {"layer": "backend", "trace": trace, "stage": stage, **fields},
+            separators=(",", ":"),
+        ),
+        file=sys.stderr,
+        flush=True,
+    )
 
 # Bounded worker pool for the legacy route bridge.
 #
@@ -192,16 +210,52 @@ def _prepare_webui_runtime() -> None:
 class _ResponseWriter:
     """Thread-safe byte stream that becomes an ASGI response body."""
 
-    def __init__(self) -> None:
+    def __init__(self, chat_trace: int | None = None) -> None:
         self._chunks: queue.Queue[bytes | object] = queue.Queue()
         self._closed = threading.Event()
+        self._wake_lock = threading.Lock()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._wake_event: asyncio.Event | None = None
+        self._chat_trace = chat_trace
+        self._write_count = 0
+        self._write_bytes = 0
+        self._yield_count = 0
+        self._yield_bytes = 0
+
+    @staticmethod
+    def _sample(count: int) -> bool:
+        return count <= 8 or count % 32 == 0
+
+    def _wake_stream(self) -> None:
+        """Wake the ASGI-side reader without blocking an executor thread."""
+        with self._wake_lock:
+            loop = self._loop
+            wake_event = self._wake_event
+        if loop is None or wake_event is None or loop.is_closed():
+            return
+        try:
+            loop.call_soon_threadsafe(wake_event.set)
+        except RuntimeError:
+            # The ASGI loop may have shut down between is_closed() and scheduling.
+            pass
 
     def write(self, payload: bytes | bytearray | memoryview) -> int:
         if self._closed.is_set():
             raise BrokenPipeError("client disconnected")
         data = bytes(payload)
         if data:
+            self._write_count += 1
+            self._write_bytes += len(data)
+            if self._sample(self._write_count):
+                _chat_transport_trace(
+                    self._chat_trace,
+                    "writer_write",
+                    count=self._write_count,
+                    bytes=len(data),
+                    total_bytes=self._write_bytes,
+                )
             self._chunks.put(data)
+            self._wake_stream()
         return len(data)
 
     def flush(self) -> None:
@@ -209,6 +263,7 @@ class _ResponseWriter:
 
     def close(self) -> None:
         self._closed.set()
+        self._wake_stream()
 
     def is_closed(self) -> bool:
         """Expose ASGI disconnect state to long-lived compatibility routes."""
@@ -216,34 +271,63 @@ class _ResponseWriter:
 
     def finish(self) -> None:
         self._chunks.put(_END)
+        self._wake_stream()
 
     async def stream(self) -> AsyncIterator[bytes]:
-        """Yield queued chunks, draining whatever is already buffered.
+        """Yield queued chunks without parking an executor thread per stream.
 
-        Each ``asyncio.to_thread`` call occupies a thread from anyio's default
-        limiter (40 threads), so one call per chunk lets a busy stream consume
-        the whole limiter. After the first blocking ``get`` we drain the queue
-        without blocking and yield the batch as one item, so a burst of chunks
-        costs a single thread hop.
+        Writers run on legacy-route threads while this iterator runs on the
+        ASGI loop. A thread-safe queue plus a loop event bridges the two sides;
+        clearing the event before checking the queue prevents lost wakeups.
         """
+        loop = asyncio.get_running_loop()
+        wake_event = asyncio.Event()
+        with self._wake_lock:
+            self._loop = loop
+            self._wake_event = wake_event
         try:
             while True:
-                item = await asyncio.to_thread(self._chunks.get)
-                if item is _END:
-                    break
-                batch = bytearray(item)
+                batch = bytearray()
+                finished = False
                 while True:
                     try:
-                        nxt = self._chunks.get_nowait()
+                        item = self._chunks.get_nowait()
                     except queue.Empty:
                         break
-                    if nxt is _END:
-                        self._chunks.put(_END)  # keep the sentinel for the next loop
+                    if item is _END:
+                        finished = True
                         break
-                    batch.extend(nxt)
-                yield bytes(batch)
+                    batch.extend(item)
+                if batch:
+                    chunk = bytes(batch)
+                    self._yield_count += 1
+                    self._yield_bytes += len(chunk)
+                    if self._sample(self._yield_count):
+                        _chat_transport_trace(
+                            self._chat_trace,
+                            "asgi_yield",
+                            count=self._yield_count,
+                            bytes=len(chunk),
+                            total_bytes=self._yield_bytes,
+                        )
+                    yield chunk
+                if finished or self._closed.is_set():
+                    break
+
+                wake_event.clear()
+                # A producer can enqueue after the drain and before clear. The
+                # queue check closes that race; a later producer schedules set().
+                if not self._chunks.empty():
+                    continue
+                if self._closed.is_set():
+                    break
+                await wake_event.wait()
         finally:
             self.close()
+            with self._wake_lock:
+                if self._loop is loop and self._wake_event is wake_event:
+                    self._loop = None
+                    self._wake_event = None
 
 
 class _RouteHandler:
@@ -261,9 +345,19 @@ class _RouteHandler:
 
         self.headers = headers
         self.rfile = io.BytesIO(body)
-        self.wfile = _ResponseWriter()
         self.command = request.method
         self.path = request.url.path
+        chat_trace: int | None = None
+        if (
+            os.environ.get("LASTBROWSER_DEBUG_CHAT_TRANSPORT") == "1"
+            and request.method.upper() == "GET"
+            and request.url.path == "/api/chat/stream"
+        ):
+            raw_trace = headers.get("x-lastbrowser-chat-transport-trace", "")
+            if raw_trace.isascii() and raw_trace.isdecimal() and len(raw_trace) <= 9:
+                chat_trace = int(raw_trace)
+        self.chat_transport_trace = chat_trace
+        self.wfile = _ResponseWriter(chat_trace)
         if request.url.query:
             self.path += "?" + request.url.query
         client = request.client

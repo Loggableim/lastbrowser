@@ -5148,7 +5148,8 @@ def handle_get(handler, parsed) -> bool:
                         # request query parameter may help locate a session,
                         # but must never redirect its goal lookup into another
                         # Space's goals.db.
-                        getattr(s, "workspace_slug", None)
+                        getattr(s, "goal_space_slug", None)
+                        or getattr(s, "workspace_slug", None)
                         or getattr(s, "space_slug", None)
                         or getattr(s, "space", None)
                     ),
@@ -7078,10 +7079,16 @@ def handle_post(handler, parsed) -> bool:
             body.get("model_provider"),
         )
         workspace_goal_slug = None
+        session_storage_slug = None
         if body.get("scope_goals_to_workspace") is True and workspace:
             from web.api.goals import lastbrowser_workspace_goal_slug
+            from web.api.space_engine import DEFAULT_SPACE_SLUG
 
             workspace_goal_slug = lastbrowser_workspace_goal_slug(workspace)
+            # Browser workspaces are filesystem paths, not native Space
+            # slugs. Keep the session in this profile's default native Space
+            # while storing the path and goal namespace independently.
+            session_storage_slug = DEFAULT_SPACE_SLUG
         # Use the profile sent by the client tab (if any) so that two tabs on
         # different profiles never clobber each other via the process-level global.
         s = new_session(
@@ -7092,7 +7099,8 @@ def handle_post(handler, parsed) -> bool:
             project_id=body.get("project_id") or None,
             worktree_info=worktree_info,
             agent_slug=body.get("agent") or None,
-            workspace_slug=workspace_goal_slug,
+            workspace_slug=session_storage_slug,
+            goal_space_slug=workspace_goal_slug,
         )
         return j(handler, {"session": s.compact() | {"messages": s.messages}})
 
@@ -7142,6 +7150,7 @@ def handle_post(handler, parsed) -> bool:
                 context_length=getattr(session, "context_length", None),
                 threshold_tokens=getattr(session, "threshold_tokens", None),
                 workspace_slug=getattr(session, "workspace_slug", None),
+                goal_space_slug=getattr(session, "goal_space_slug", None),
                 created_at=time.time(),
                 updated_at=time.time(),
             )
@@ -7552,7 +7561,8 @@ def handle_post(handler, parsed) -> bool:
 
                 goal_profile_home = get_profile_home(getattr(goal_session, "profile", None))
                 goal_space_slug = (
-                    getattr(goal_session, "workspace_slug", None)
+                    getattr(goal_session, "goal_space_slug", None)
+                    or getattr(goal_session, "workspace_slug", None)
                     or getattr(goal_session, "space_slug", None)
                     or getattr(goal_session, "space", None)
                 )
@@ -7760,6 +7770,7 @@ def handle_post(handler, parsed) -> bool:
             # workspace sidebar. Without workspace_slug, a forked session
             # is invisible when the sidebar filters by workspace (#465 fix).
             workspace_slug=getattr(source, 'workspace_slug', None),
+            goal_space_slug=getattr(source, 'goal_space_slug', None),
             agent_slug=getattr(source, 'agent_slug', None),
             raw_source=getattr(source, 'raw_source', None),
             source_tag=getattr(source, 'source_tag', None),
@@ -9675,6 +9686,34 @@ def _handle_sse_stream(handler, parsed):
     if stream is None:
         return j(handler, {"error": "stream not found"}, status=404)
     subscriber = stream.subscribe() if hasattr(stream, "subscribe") else stream
+    chat_trace = getattr(handler, "chat_transport_trace", None)
+    if os.environ.get("LASTBROWSER_DEBUG_CHAT_TRANSPORT") != "1":
+        chat_trace = None
+    subscriber_events = 0
+
+    def _trace_subscriber(stage, kind):
+        nonlocal subscriber_events
+        if chat_trace is None:
+            return
+        subscriber_events += 1
+        if subscriber_events <= 8 or subscriber_events % 32 == 0:
+            # Fixed event-name allowlist; payload contents are never inspected.
+            allowed = {
+                "heartbeat", "delta", "token", "reasoning", "message", "tool",
+                "tool_complete", "metering", "stream_end", "error", "apperror",
+                "cancel", "goal", "goal_continue",
+            }
+            safe_kind = kind if kind in allowed else "unknown"
+            print(
+                "[CHAT-TRANSPORT] " + json.dumps(
+                    {"layer": "backend", "trace": chat_trace, "stage": stage,
+                     "count": subscriber_events, "kind": safe_kind},
+                    separators=(",", ":"),
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+
     handler.send_response(200)
     handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
     handler.send_header("Cache-Control", "no-cache")
@@ -9699,6 +9738,7 @@ def _handle_sse_stream(handler, parsed):
         return payload
 
     try:
+        _trace_subscriber("subscriber_event", "heartbeat")
         _sse(handler, "heartbeat", _heartbeat_payload())
     except _CLIENT_DISCONNECT_ERRORS:
         return True
@@ -9708,12 +9748,14 @@ def _handle_sse_stream(handler, parsed):
                 event, data = subscriber.get(timeout=_SSE_HEARTBEAT_INTERVAL_SECONDS)
             except queue.Empty:
                 try:
+                    _trace_subscriber("subscriber_event", "heartbeat")
                     _sse(handler, "heartbeat", _heartbeat_payload())
                 except _CLIENT_DISCONNECT_ERRORS:
                     break
                 continue
+            _trace_subscriber("subscriber_event", event)
             _sse(handler, event, data)
-            if event in ("stream_end", "error", "cancel"):
+            if event in ("stream_end", "error", "apperror", "cancel"):
                 break
     except _CLIENT_DISCONNECT_ERRORS:
         pass
@@ -11869,6 +11911,8 @@ def _start_chat_stream_for_session(
     mode: str = "",
     sandbox_disabled: bool = False,
     grounding_context: str = "",
+    reasoning_effort: str | None = None,
+    supported_reasoning_efforts: list[str] | None = None,
 ):
     """Persist pending state, register an SSE channel, and start an agent turn."""
     attachments = attachments or []
@@ -11910,7 +11954,8 @@ def _start_chat_stream_for_session(
 
         continuation_profile_home = get_profile_home(getattr(s, "profile", None))
         continuation_space_slug = str(
-            getattr(s, "workspace_slug", None)
+            getattr(s, "goal_space_slug", None)
+            or getattr(s, "workspace_slug", None)
             or getattr(s, "space_slug", None)
             or getattr(s, "space", None)
             or ""
@@ -11953,7 +11998,8 @@ def _start_chat_stream_for_session(
 
             profile_home = get_profile_home(getattr(s, "profile", None))
             goal_space_slug = str(
-                getattr(s, "workspace_slug", None)
+                getattr(s, "goal_space_slug", None)
+                or getattr(s, "workspace_slug", None)
                 or getattr(s, "space_slug", None)
                 or getattr(s, "space", None)
                 or ""
@@ -12043,6 +12089,8 @@ def _start_chat_stream_for_session(
                 "mode": mode,
                 "sandbox_disabled": sandbox_disabled,
                 "grounding_context": grounding_context,
+                "reasoning_effort": reasoning_effort,
+                "supported_reasoning_efforts": supported_reasoning_efforts,
             },
             daemon=True,
         )
@@ -12274,9 +12322,10 @@ def _handle_goal_command(handler, body):
             status=503,
         )
     space_slug = str(
-        body.get("workspace_slug")
+            body.get("workspace_slug")
         or body.get("space_slug")
         or body.get("space")
+        or getattr(s, "goal_space_slug", None)
         or getattr(s, "workspace_slug", None)
         or getattr(s, "space_slug", None)
         or getattr(s, "space", None)
@@ -12294,8 +12343,8 @@ def _handle_goal_command(handler, body):
         from web.api.goals import lastbrowser_workspace_goal_slug
 
         space_slug = lastbrowser_workspace_goal_slug(requested_workspace)
-        if getattr(s, "workspace_slug", None) != space_slug:
-            s.workspace_slug = space_slug
+        if getattr(s, "goal_space_slug", None) != space_slug:
+            s.goal_space_slug = space_slug
             try:
                 s.save()
             except Exception:
@@ -12496,6 +12545,7 @@ def _handle_chat_start(handler, body, diag=None):
             body.get("workspace_slug")
             or body.get("space_slug")
             or body.get("space")
+            or getattr(s, "goal_space_slug", None)
             or getattr(s, "workspace_slug", None)
             or getattr(s, "space_slug", None)
             or getattr(s, "space", None)
@@ -12592,6 +12642,35 @@ def _handle_chat_start(handler, body, diag=None):
         )
         if game_mode_payload:
             return j(handler, game_mode_payload, status=409)
+        reasoning_effort = None
+        supported_reasoning_efforts = None
+        if str(model_provider or "").strip().lower() == "openai-codex":
+            try:
+                from web.api.config import _known_reasoning_efforts_for_model
+
+                supported_reasoning_efforts = _known_reasoning_efforts_for_model(
+                    model,
+                    model_provider,
+                )
+            except Exception:
+                supported_reasoning_efforts = []
+        if "reasoning_effort" in body:
+            requested_effort = str(body.get("reasoning_effort") or "").strip().lower()
+            if not requested_effort:
+                return bad(handler, "reasoning_effort must be a supported non-empty value")
+            try:
+                from web.api.config import _known_reasoning_efforts_for_model
+
+                supported_efforts = _known_reasoning_efforts_for_model(model, model_provider)
+            except Exception:
+                supported_efforts = []
+            if requested_effort not in supported_efforts:
+                return bad(
+                    handler,
+                    "reasoning_effort is not supported by the selected model",
+                    status=400,
+                )
+            reasoning_effort = requested_effort
         is_google_cli_provider = str(model_provider or "").strip().lower() in {
             "google-gemini-cli", "gemini-cli", "gemini-oauth",
         }
@@ -12652,6 +12731,8 @@ def _handle_chat_start(handler, body, diag=None):
             mode=mode,
             sandbox_disabled=sandbox_disabled,
             grounding_context=grounding_context,
+            reasoning_effort=reasoning_effort,
+            supported_reasoning_efforts=supported_reasoning_efforts,
         )
         status = int(response.pop("_status", 200) or 200)
         diag.stage("response_write") if diag else None
@@ -12695,7 +12776,8 @@ def _handle_plan_accept(handler, body):
         model,
         model_provider,
         space_slug=str(
-            getattr(s, "workspace_slug", None)
+            getattr(s, "goal_space_slug", None)
+            or getattr(s, "workspace_slug", None)
             or getattr(s, "space_slug", None)
             or getattr(s, "space", None)
             or ""
@@ -12756,7 +12838,8 @@ def _handle_plan_revise(handler, body):
         model,
         model_provider,
         space_slug=str(
-            getattr(s, "workspace_slug", None)
+            getattr(s, "goal_space_slug", None)
+            or getattr(s, "workspace_slug", None)
             or getattr(s, "space_slug", None)
             or getattr(s, "space", None)
             or ""

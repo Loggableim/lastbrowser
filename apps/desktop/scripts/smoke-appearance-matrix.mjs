@@ -12,6 +12,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const results = [];
 let child;
 let cdp;
+let fatalError = false;
 function check(name, ok, detail = '') { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`); }
 async function freePort() {
   return new Promise((resolve, reject) => {
@@ -83,11 +84,11 @@ try {
   // Draft-backed appearance fields auto-save a complete settings snapshot.
   // Wait for each backend readback before setting the next field so the test
   // observes the final queued snapshot rather than a transient write.
-  const themeClick = await evaluate(`(() => { const b=[...document.querySelectorAll('.settings-theme-grid .settings-theme-btn')].find(x=>/oled/i.test(x.innerText||'')); if (!b) return false; b.click(); return b.classList.contains('active'); })()`);
+  const themeClick = await evaluate(`(() => { const b=[...document.querySelectorAll('.settings-theme-grid .settings-theme-btn')].find(x=>/oled/i.test(x.innerText||'')); if (!b) return false; b.click(); return true; })()`);
   await wait(1200);
   const oledEvent = await evaluate(`JSON.stringify({events:window.__appearanceSettingsEvents||[],theme:localStorage.getItem('lastbrowser.theme')})`);
-  const fontClick = await evaluate(`(() => { const f=document.querySelectorAll('.settings-size-grid .settings-size-btn')[3]; if (!f) return false; f.click(); return f.classList.contains('active'); })()`);
-  const fontSavedBackend = await wait(350);
+  const fontClick = await evaluate(`(() => { const f=document.querySelectorAll('.settings-size-grid .settings-size-btn')[3]; if (!f) return false; f.click(); return true; })()`);
+  await wait(350);
   const zoomFocus = await evaluate(`(() => { const r=document.querySelector('.settings-panel-scroll input[type="range"][min="80"]'); r?.focus(); return JSON.stringify({zoom:!!r,value:r?.value}); })()`);
   for (let index = 0; index < 5; index++) {
     await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39 });
@@ -103,7 +104,14 @@ try {
   const savedBackend = await evaluate(`JSON.stringify({theme:localStorage.getItem('lastbrowser.theme'),font:localStorage.getItem('lastbrowser.font_size'),zoom:document.querySelector('.settings-panel-scroll input[type="range"][min="80"]')?.value,events:window.__appearanceSettingsEvents||[]})`);
   const saved = JSON.parse(await evaluate(`JSON.stringify({theme:localStorage.getItem('lastbrowser.theme'),font:localStorage.getItem('lastbrowser.font_size'),zoom:document.querySelector('.settings-panel-scroll input[type="range"][min="80"]')?.value})`));
   const savedLocal = await evaluate(`JSON.stringify({theme:localStorage.getItem('lastbrowser.theme'),font:localStorage.getItem('lastbrowser.font_size')})`);
-  check('OLED, font size, and zoom save in settings', saved.theme === 'oled' && Number(saved.zoom) === 125 && JSON.parse(savedLocal).theme === 'oled' && JSON.parse(savedLocal).font === 'xlarge', `settingsPanel=${savedBackend}; UI=${JSON.stringify(saved)}; local=${savedLocal}`);
+  let persistedSettings;
+  const persistenceDeadline = Date.now() + 10_000;
+  do {
+    persistedSettings = await evaluate(`(async () => { const response=await window.lastbrowser.sidekick.getSettings(); const settings=response?.settings||response||{}; return {theme:settings.theme,font:settings.font_size,zoom:settings.default_zoom}; })()`, true);
+    if (persistedSettings.theme === 'oled' && persistedSettings.font === 'xlarge' && Number(persistedSettings.zoom) === 125) break;
+    await wait(250);
+  } while (Date.now() < persistenceDeadline);
+  check('OLED, font size, and zoom save in backend settings', saved.theme === 'oled' && Number(saved.zoom) === 125 && JSON.parse(savedLocal).theme === 'oled' && JSON.parse(savedLocal).font === 'xlarge' && persistedSettings.theme === 'oled' && persistedSettings.font === 'xlarge' && Number(persistedSettings.zoom) === 125, `settingsPanel=${savedBackend}; UI=${JSON.stringify(saved)}; backend=${JSON.stringify(persistedSettings)}; local=${savedLocal}`);
 
   // System mode is auto-saved. Its App-level watcher is attached once the
   // persisted settings reach the shell; capture the save/hydration race too.
@@ -122,7 +130,7 @@ try {
   // Wait for the backend readback before changing the emulated OS preference.
   // This avoids testing the interval in which the local live preview has
   // changed but the App-level System watcher is still subscribed to old settings.
-  const systemBackendBeforeFlip = await waitFor(`JSON.parse(localStorage.getItem('lastbrowser.theme')||'null')==='system'`, true);
+  const systemBackendBeforeFlip = await waitFor(`localStorage.getItem('lastbrowser.theme')==='system'`, true);
   await wait(300);
   await evaluate(`(() => { window.__appearanceMediaEvents=[]; matchMedia('(prefers-color-scheme: light)').addEventListener('change',e=>window.__appearanceMediaEvents.push(e.matches)); return true; })()`);
   await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
@@ -138,10 +146,11 @@ try {
   const lightState = JSON.parse(afterLight || '{}');
   const darkState = JSON.parse(afterDark || '{}');
   check('System preference is stored before CDP media emulation', choseSystem && systemSelected && systemLocal === 'system' && systemBackendBeforeFlip, `clicked=${choseSystemProbe}, selected=${systemSelected}, saveClicked=${saveSystem}, local=${systemLocal}, persisted=${systemBackendBeforeFlip}, diagnostics=${systemDiagnostics}`);
-  // Chromium's Emulation.setEmulatedMedia changes matchMedia.matches but does
-  // not dispatch MediaQueryList change events. Treat this as an emulation
-  // limitation instead of asserting that the app ignored an actual OS event.
-  check('CDP media emulation updates matchMedia', lightState.matches && darkState.matches, `light=${afterLight}; dark=${afterDark}; CDP-emulated events=${mediaEvents}`);
+  // Some Chromium versions dispatch the media event under CDP emulation;
+  // require the live theme to follow it when observed. Reload hydration below
+  // also verifies resolution on versions without an emulated change event.
+  check('CDP media emulation updates matchMedia', lightState.matches === true && darkState.matches === true, `light=${afterLight}; dark=${afterDark}; CDP-emulated events=${mediaEvents}`);
+  check('System theme follows observed media changes', mediaEventList.length === 0 || (lightState.mode === 'system' && lightState.theme === 'light' && darkState.mode === 'system' && darkState.theme === 'dark'), `events=${mediaEvents}; light=${afterLight}; dark=${afterDark}`);
 
   // Verify true persisted store values after a renderer reload without closing the app.
   await cdp.send('Page.reload', { ignoreCache: true });
@@ -155,6 +164,7 @@ try {
   check('Hydrated System theme resolves from the current emulated preference on reload', hydratedDark, `dark=${hydratedDark}`);
   cdp.close();
 } catch (error) {
+  fatalError = true;
   console.error('FATAL', error?.stack || error);
 } finally {
   if (child?.pid) spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
@@ -165,4 +175,4 @@ try {
 }
 const passed = results.filter((x) => x.ok).length;
 console.log(`Result: ${passed}/${results.length} checks passed`);
-process.exitCode = passed === results.length && results.length > 0 ? 0 : 1;
+process.exitCode = !fatalError && passed === results.length && results.length > 0 ? 0 : 1;

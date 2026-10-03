@@ -42,6 +42,7 @@ import { providerPresentation } from '../provider-presentation.js';
 import { requestProviderModelCatalog } from '../provider-settings.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
+import { getProviderChatEvidence } from '../provider-chat-evidence.js';
 import { clearBrowserDataWithFeedback } from '../utils/clear-browser-data.js';
 import { copyDoctorOutput, runDoctorExclusively } from '../utils/doctor-dashboard.js';
 import { searchEngines } from '../tabs.js';
@@ -3906,7 +3907,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     <div className="provider-status-list">
                       {providerOptions.map((option) => {
                         const meta = providerPresentation(option.id);
-                        const verification = providerVerification(option.id);
+                        const chatEvidence = getProviderChatEvidence(option.id, window.localStorage);
+                        // Catalog groups can contain static/offline fallback
+                        // models. Their presence is not a successful provider probe.
+                        const verification = providerVerification(option.id, {
+                          successfulChat: Boolean(chatEvidence),
+                          modelId: chatEvidence?.modelId,
+                        });
                         const isActive = option.id === activeProvider;
                         return (
                           <div key={option.id} className={`provider-status-row ${isActive ? 'active' : ''}`}>
@@ -3917,6 +3924,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                               <small className={`provider-verification-note ${verification.verified ? 'verified' : 'untested'}`}>
                                 {t(verification.statusKey)}
                               </small>
+                              {verification.modelId && (
+                                <small className="provider-verification-evidence">{verification.modelId}</small>
+                              )}
                               {verification.evidenceKey && (
                                 <small className="provider-verification-evidence">{t(verification.evidenceKey)}</small>
                               )}

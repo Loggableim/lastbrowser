@@ -35,8 +35,10 @@ import {
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
 import { loadSpaceModelSelection, saveSpaceModel } from '../space-models.js';
-import { parseProviderModelId, qualifyModelForProvider, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
+import { qualifyModelForProvider, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
 import type { NativeChatTurnUsage } from '../chat-usage.js';
+import { useDesktopI18n } from '../i18n.js';
+import { loadChatReasoningEffort, normalizeReasoningEfforts, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 export type ComposerMode = 'action' | 'plan';
@@ -62,7 +64,7 @@ export type NativeChatMainProps = {
   onComposerMode: (mode: ComposerMode) => void;
   onComposerText: (text: string) => void;
   onCreateSession: () => void;
-  onSend: (message: string) => void;
+  onSend: (message: string, reasoningEffort?: string) => void;
   onStop: () => void;
 };
 
@@ -90,6 +92,7 @@ export function NativeChatMain({
   onSend,
   onStop
 }: NativeChatMainProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
   const ready = canCallSidekickApi(serviceStatus);
   const [showDeveloperTools, setShowDeveloperTools] = useState(false);
@@ -116,19 +119,28 @@ export function NativeChatMain({
     catalogDefaultModel,
     'default'
   );
+  const reasoningPreferenceKey = activeSessionId || `draft:${profile}:${workspace}`;
+  const [reasoningEffort, setReasoningEffort] = useState(() => loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage));
+  useEffect(() => {
+    setReasoningEffort(loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage));
+  }, [activeSessionId, reasoningPreferenceKey]);
 
   // Models the user can pick for this conversation. The catalog comes from the
   // same /api/models payload the settings panel uses, so the composer offers
   // exactly the providers that are actually connected.
-  const [modelCatalog, setModelCatalog] = useState<Array<{ provider: string; providerId: string; models: Array<{ id: string; label: string }> }>>([]);
+  const [modelCatalog, setModelCatalog] = useState<Array<{ provider: string; providerId: string; models: Array<{ id: string; label: string; reasoningEfforts: string[] }> }>>([]);
+  const [modelCatalogLoaded, setModelCatalogLoaded] = useState(false);
+  const [modelCatalogError, setModelCatalogError] = useState(false);
+  const [modelCatalogRetry, setModelCatalogRetry] = useState(0);
   const modelProvider = spaceModelSelection?.provider
     || selectedModelProvider
-    || parseProviderModelId(activeSession?.model || model).provider
+    || resolveCatalogModelSelection(activeSession?.model || model, modelCatalog).provider
     || modelCatalog.find((group) => group.models.some((entry) => entry.id === model))?.providerId
     || '';
   useEffect(() => {
     if (!ready) return;
     let alive = true;
+    setModelCatalogError(false);
     const load = async () => {
       try {
         const data = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' });
@@ -146,7 +158,11 @@ export function NativeChatMain({
                 .map((entry) => {
                   const m = (entry || {}) as Record<string, unknown>;
                   const id = String(m.id || m.name || m.label || '');
-                  return { id, label: String(m.label || m.name || m.id || id) };
+              return {
+                id,
+                label: String(m.label || m.name || m.id || id),
+                reasoningEfforts: normalizeReasoningEfforts(m.reasoning_efforts),
+              };
                 })
                 .filter((m) => m.id)
             };
@@ -162,19 +178,24 @@ export function NativeChatMain({
         }
         const hasCli = rawParsed.some((g) => g.provider.toLowerCase().includes('gemini'));
         setModelCatalog(rawParsed);
+        setModelCatalogLoaded(true);
       } catch {
-        setCatalogDefaultModel('');
-        setModelCatalog([]);
+        if (alive) {
+          setCatalogDefaultModel('');
+          setModelCatalog([]);
+          setModelCatalogLoaded(false);
+          setModelCatalogError(true);
+        }
       }
     };
     void load();
     return () => { alive = false; };
-  }, [ready, activeSpacePath, activeSession?.model, setupModel]);
+  }, [ready, activeSpacePath, activeSession?.model, setupModel, modelCatalogRetry]);
 
   /** Switch the model for this conversation (persists as the new default). */
   const handleComposerModelChange = useCallback((selection: string) => {
     if (!selection) return;
-    const parsed = parseProviderModelId(selection);
+    const parsed = resolveCatalogModelSelection(selection, modelCatalog);
     const nextModel = parsed.model;
     const provider = parsed.provider || modelCatalog.find((group) => group.models.some((entry) => entry.id === nextModel))?.providerId || '';
     if (nextModel === model && provider === modelProvider) return;
@@ -193,8 +214,29 @@ export function NativeChatMain({
       });
   }, [activeSpacePath, model, modelCatalog, modelProvider, setSelectedModel, setSelectedModelProvider]);
 
+  const catalogSelection = resolveCatalogModelSelection(model, modelCatalog);
+  const selectedCatalogGroup = modelCatalog.find((group) =>
+    group.models.some((entry) => entry.id === catalogSelection.model)
+    && (!(catalogSelection.provider || modelProvider)
+      || group.providerId.toLowerCase() === String(catalogSelection.provider || modelProvider).toLowerCase())
+  );
+  const modelReasoningEfforts = selectedCatalogGroup?.models.find((entry) => entry.id === catalogSelection.model)?.reasoningEfforts || [];
+  const effectiveReasoningEffort = modelReasoningEfforts.includes(reasoningEffort) ? reasoningEffort : '';
+  useEffect(() => {
+    if (modelCatalogLoaded && reasoningEffort && !modelReasoningEfforts.includes(reasoningEffort)) {
+      setReasoningEffort('');
+      saveChatReasoningEffort(reasoningPreferenceKey, '', window.localStorage);
+    }
+  }, [modelCatalogLoaded, modelReasoningEfforts, reasoningEffort, reasoningPreferenceKey]);
+  const handleReasoningEffortChange = useCallback((effort: string) => {
+    setReasoningEffort(effort);
+    saveChatReasoningEffort(reasoningPreferenceKey, effort, window.localStorage);
+  }, [reasoningPreferenceKey]);
+
   // Wrap onSend to synthesize @tabs context and enqueue when busy instead of losing the message
-  const handleSend = useCallback(async (text: string) => {
+  const handleSend = useCallback(async (text: string, queuedEffort?: string) => {
+    const requestedEffort = queuedEffort === undefined ? effectiveReasoningEffort : queuedEffort;
+    const sendEffort = modelReasoningEfforts.includes(requestedEffort) ? requestedEffort : '';
     if (text.trim().toLowerCase() === '/gquota') {
       onComposerText('');
       setStatusMessage('Checking quota for connected Antigravity accounts…');
@@ -238,12 +280,12 @@ export function NativeChatMain({
     }
 
     if (running) {
-      enqueue({ text: messageToSend, model, profile });
+      enqueue({ text: messageToSend, model, profile, reasoningEffort: sendEffort });
       setStatusMessage(`Queued: "${text.slice(0, 40)}${text.length > 40 ? '…' : ''}"`);
       return;
     }
-    onSend(messageToSend);
-  }, [running, enqueue, model, profile, onSend, onComposerText]);
+    onSend(messageToSend, sendEffort || undefined);
+  }, [running, enqueue, model, profile, onSend, onComposerText, effectiveReasoningEffort, modelReasoningEfforts]);
 
   return (
     <section className="browser-main native-chat-main">
@@ -268,8 +310,8 @@ export function NativeChatMain({
           <CompressButton activeSessionId={activeSessionId} ready={ready} onResult={setStatusMessage} />
           <QueueIndicator queue={queue} onDrain={() => {
             if (running) { setStatusMessage('Wait for current turn to finish first.'); return; }
-            const msg = dequeue();
-            if (msg) handleSend(msg.text);
+              const msg = dequeue();
+              if (msg) handleSend(msg.text, msg.reasoningEffort);
           }} onClear={clearQueue} onRemoveAt={removeAt} busy={running} />
           <button
             type="button"
@@ -300,7 +342,7 @@ export function NativeChatMain({
         developerMessages={developerMessages}
         loading={sessionLoading}
         messages={visibleMessages}
-        pendingUserMessage={activeSession?.pending_user_message || ''}
+        pendingUserMessage={activeSession?.active_stream_id?.trim() ? activeSession.pending_user_message || '' : ''}
         ready={ready}
         showDeveloperTools={showDeveloperTools}
         showTokenUsage={showTokenUsage}
@@ -326,6 +368,8 @@ export function NativeChatMain({
         model={model}
         modelProvider={modelProvider}
         modelOptions={modelCatalog}
+        reasoningEffort={effectiveReasoningEffort}
+        reasoningEfforts={modelReasoningEfforts}
         profile={profile}
         ready={ready}
         runState={runState}
@@ -333,11 +377,18 @@ export function NativeChatMain({
         workspace={workspace}
         onMode={onComposerMode}
         onModelChange={handleComposerModelChange}
+        onReasoningEffort={handleReasoningEffortChange}
         onSend={handleSend}
         onStop={onStop}
         onText={onComposerText}
       />
             {statusMessage && <div className="chat-status-message" onClick={() => setStatusMessage('')}>{statusMessage}</div>}
+            {modelCatalogError && (
+              <div className="chat-status-message" role="alert">
+                <span>{t('chat.modelCatalogUnavailable')}</span>
+                <button type="button" className="secondary-action compact" onClick={() => setModelCatalogRetry((value) => value + 1)}>{t('chat.retryModels')}</button>
+              </div>
+            )}
             <ContextUsageIndicator activeSessionId={activeSessionId} ready={ready} />
             </div>
       </>

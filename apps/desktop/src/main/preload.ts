@@ -64,7 +64,7 @@ if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMai
     pollOAuth: (flowId: string) => ipcRenderer.invoke('lastbrowser:sidekick:pollOAuth', flowId),
     cancelOAuth: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:cancelOAuth', request),
     requestWebui: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:requestWebui', request),
-    listSessions: () => ipcRenderer.invoke('lastbrowser:sidekick:listSessions'),
+    listSessions: (request?: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:listSessions', request),
     listSpaces: () => ipcRenderer.invoke('lastbrowser:sidekick:listSpaces'),
     createSession: (request?: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:createSession', request),
     getSession: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:getSession', request),

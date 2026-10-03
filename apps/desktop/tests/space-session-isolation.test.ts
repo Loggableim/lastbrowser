@@ -28,6 +28,34 @@ const tab = (id: string, url = 'https://example.com'): BrowserTab => ({
 });
 
 describe('Space Session & Partition Isolation', () => {
+  it('starts chat requests in the active profile and Space scope', () => {
+    const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+    const startChatRequest = appTsx.slice(appTsx.indexOf('window.lastbrowser.sidekick.startChat({'));
+    const requestBody = startChatRequest.slice(0, startChatRequest.indexOf('\n      });'));
+
+    expect(requestBody).toContain('profile: turnContext.profileId');
+    expect(requestBody).toContain('workspace: turnContext.spacePath');
+  });
+
+  it('refreshes the session list in the active profile and Space scope', () => {
+    const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+
+    expect(appTsx).toContain('const requestedScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath };');
+    expect(appTsx).toContain('sidekick.listSessions(requestedScope)');
+    expect(appTsx).toContain('}, [activeProfileId, activeSpacePath, sidekickApiReady]);');
+    expect(appTsx).toContain('!sessionId || activeSessionIdRef.current !== sessionId');
+    expect(appTsx).toMatch(/sidekick\.getSession\(\{[\s\S]*?profile:\s*activeProfileIdRef\.current,[\s\S]*?workspacePath:\s*activeSpacePathRef\.current\s*\}\)/);
+    expect(appTsx).toContain('const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath };');
+    expect(appTsx).toContain('workspacePath: turnContext.spacePath');
+    expect(appTsx).toContain('window.lastbrowser.sidekick.renameSession({');
+    expect(appTsx).toContain('const isRequestScopeCurrent = (): boolean => sessionListResponseMatchesScope(requestedScope, {');
+    expect(appTsx).toContain('mergeSessionListSnapshot(');
+    expect(appTsx).toContain('activeSessionListScopeRef.current = nextScope;');
+    expect(appTsx).toContain('chatUiOwnershipRef.current.releaseUiOwner();');
+    expect(appTsx).toContain('chatUiOwnershipRef.current.ownerForStream(restored.streamId)');
+    expect(appTsx).toContain('chatUiOwnershipRef.current.reactivate(localOwnerId, restored.sessionId)');
+  });
+
   describe('computeSpaceSessionKey', () => {
     it('normalizes empty, null and undefined spacePath to home', () => {
       expect(computeSpaceSessionKey('default')).toBe('default::home');

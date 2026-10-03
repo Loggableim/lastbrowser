@@ -5,6 +5,7 @@ import {
   continuationAfterTerminalEvent,
   isActiveTurnContextCurrent,
   isGoalContinuationContextCurrent,
+  readGoalEvaluationMessageKey,
   readGoalEvaluationError,
   readGoalContinuationPrompt,
   readRestorableGoalContinuation,
@@ -109,6 +110,17 @@ describe('persistent goal continuation handoff', () => {
     expect(readGoalEvaluationError({ ...event, data: { ...event.data, session_id: 'other-session' } }, 'stream-1', expected.sessionId)).toBeNull();
     expect(readGoalEvaluationError({ ...event, data: { ...event.data, state: 'complete' } }, 'stream-1', expected.sessionId)).toBeNull();
     expect(readGoalEvaluationError({ ...event, data: { session_id: expected.sessionId, state: 'error' } }, 'stream-1', expected.sessionId)).toBe('Goal evaluation failed.');
+  });
+
+  it('accepts the localized judge-unavailable notice only from its owning goal stream', () => {
+    const event = {
+      streamId: 'stream-1',
+      event: 'goal',
+      data: { session_id: expected.sessionId, state: 'idle', message_key: 'goal_judge_unavailable' },
+    };
+    expect(readGoalEvaluationMessageKey(event, 'stream-1', expected.sessionId)).toBe('goal_judge_unavailable');
+    expect(readGoalEvaluationMessageKey({ ...event, streamId: 'old-stream' }, 'stream-1', expected.sessionId)).toBeNull();
+    expect(readGoalEvaluationMessageKey({ ...event, data: { ...event.data, session_id: 'other-session' } }, 'stream-1', expected.sessionId)).toBeNull();
   });
 
   it('rejects unrelated, stale, malformed, and mismatched continuation events', () => {

@@ -9,6 +9,21 @@
   --lb-border: rgba(255, 255, 255, .08);
   --lb-text: #f8fbff;
   --lb-muted: rgba(232, 242, 255, .68);
+  --lb-chat-message-bg: rgba(255, 255, 255, .055);
+  --lb-chat-message-border: rgba(255, 255, 255, .09);
+  --lb-chat-user-message-bg: rgba(0, 217, 255, .075);
+  --lb-chat-user-message-border: rgba(0, 217, 255, .18);
+  --lb-chat-message-text: rgba(248, 251, 255, .9);
+  --lb-chat-message-meta: rgba(232, 242, 255, .62);
+  --lb-chat-message-label: #ffffff;
+  --lb-chat-structured-bg: rgba(7, 17, 31, .46);
+  --lb-chat-structured-raw-bg: rgba(7, 17, 31, .38);
+  --lb-chat-structured-border: rgba(255, 255, 255, .08);
+  --lb-chat-link-text: #4fd4ff;
+  --lb-chat-chip-bg: rgba(0, 217, 255, .08);
+  --lb-chat-chip-border: rgba(0, 217, 255, .18);
+  --lb-chat-chip-text: rgba(232, 242, 255, .9);
+  --lb-chat-code-text: #f8fbff;
   background: var(--lb-bg);
   color: var(--lb-text);
 }
@@ -23,6 +38,21 @@ html.theme-light {
   --lb-border: rgba(7, 17, 31, .10);
   --lb-text: #0c1624;
   --lb-muted: rgba(12, 22, 36, .64);
+  --lb-chat-message-bg: rgba(255, 255, 255, .94);
+  --lb-chat-message-border: rgba(7, 17, 31, .10);
+  --lb-chat-user-message-bg: #e1f4ff;
+  --lb-chat-user-message-border: rgba(14, 165, 233, .28);
+  --lb-chat-message-text: #0c1624;
+  --lb-chat-message-meta: rgba(12, 22, 36, .68);
+  --lb-chat-message-label: #0c1624;
+  --lb-chat-structured-bg: rgba(237, 243, 251, .72);
+  --lb-chat-structured-raw-bg: rgba(237, 243, 251, .5);
+  --lb-chat-structured-border: rgba(7, 17, 31, .12);
+  --lb-chat-link-text: #0369a1;
+  --lb-chat-chip-bg: rgba(14, 165, 233, .12);
+  --lb-chat-chip-border: rgba(14, 165, 233, .25);
+  --lb-chat-chip-text: #0c1624;
+  --lb-chat-code-text: #f8fbff;
   background: var(--lb-bg);
   color: var(--lb-text);
 }
@@ -126,6 +156,21 @@ html.theme-oled {
   --lb-border: rgba(255, 255, 255, .12);
   --lb-text: #ffffff;
   --lb-muted: rgba(255, 255, 255, .64);
+  --lb-chat-message-bg: #0f131a;
+  --lb-chat-message-border: rgba(255, 255, 255, .12);
+  --lb-chat-user-message-bg: rgba(0, 217, 255, .12);
+  --lb-chat-user-message-border: rgba(0, 217, 255, .24);
+  --lb-chat-message-text: #ffffff;
+  --lb-chat-message-meta: rgba(255, 255, 255, .68);
+  --lb-chat-message-label: #ffffff;
+  --lb-chat-structured-bg: #090c12;
+  --lb-chat-structured-raw-bg: #07090e;
+  --lb-chat-structured-border: rgba(255, 255, 255, .14);
+  --lb-chat-link-text: #4fd4ff;
+  --lb-chat-chip-bg: rgba(0, 217, 255, .08);
+  --lb-chat-chip-border: rgba(0, 217, 255, .22);
+  --lb-chat-chip-text: rgba(232, 242, 255, .9);
+  --lb-chat-code-text: #f8fbff;
   background: #000000;
   color: #ffffff;
 }
@@ -1563,15 +1608,16 @@ body.sidebar-resizing * {
   gap: 10px;
   min-width: 0;
   padding: 13px 15px;
-  border: 1px solid rgba(255, 255, 255, .09);
+  border: 1px solid var(--lb-chat-message-border);
   border-radius: 14px;
-  background: rgba(255, 255, 255, .055);
+  background: var(--lb-chat-message-bg);
+  color: var(--lb-chat-message-text);
   box-shadow: 0 18px 44px rgba(0, 0, 0, .18);
 }
 
 .chat-message.user .message-body {
-  border-color: rgba(0, 217, 255, .18);
-  background: rgba(0, 217, 255, .075);
+  border-color: var(--lb-chat-user-message-border);
+  background: var(--lb-chat-user-message-bg);
 }
 
 .message-meta {
@@ -1579,17 +1625,115 @@ body.sidebar-resizing * {
   align-items: center;
   gap: 7px;
   margin-bottom: 7px;
-  color: rgba(232, 242, 255, .62);
+  color: var(--lb-chat-message-meta);
   font-size: 11px;
 }
 
 .message-meta strong {
-  color: #ffffff;
+  color: var(--lb-chat-message-label);
+}
+
+.message-body .rich-text-renderer {
+  color: var(--lb-chat-message-text);
+}
+
+.message-body .rich-text-renderer a {
+  color: var(--lb-chat-link-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.message-body .tab-citation-pill {
+  color: var(--lb-chat-link-text) !important;
+  background: var(--lb-chat-chip-bg) !important;
+  border-color: var(--lb-chat-chip-border) !important;
+}
+
+.message-body .rich-code-block pre {
+  background: #07111f;
+}
+
+.message-body .rich-code-block code,
+.message-body .rich-code-header {
+  color: var(--lb-chat-code-text);
+}
+
+.message-body .rich-code-header {
+  background: #07111f;
+}
+
+.message-body .rich-code-header .rich-code-copy {
+  color: var(--lb-chat-code-text);
+}
+
+.message-body .chat-reasoning-details {
+  color: var(--lb-chat-message-text);
+}
+
+.message-body .chat-activity-details,
+.message-body .chat-tool-call-details {
+  border-color: var(--lb-chat-structured-border);
+  background: var(--lb-chat-structured-bg);
+  color: var(--lb-chat-message-text);
+}
+
+.message-body .chat-turn-usage {
+  color: var(--lb-chat-message-meta);
+}
+
+.message-body .chat-reasoning-details > summary,
+.message-body .chat-activity-details > summary,
+.message-body .chat-tool-call-details > summary {
+  color: var(--lb-chat-message-meta);
+}
+
+.message-body .chat-tool-call-details pre {
+  border-color: var(--lb-chat-structured-border);
+  color: var(--lb-chat-message-text);
+}
+
+.message-body .chat-structured-header strong,
+.message-body .chat-result-card-head strong,
+.message-body .chat-next-steps strong {
+  color: var(--lb-chat-message-label);
+}
+
+.message-body .chat-structured-header span,
+.message-body .chat-result-card-head span,
+.message-body .chat-json-grid dt,
+.message-body .chat-structured-raw summary {
+  color: var(--lb-chat-message-meta);
+}
+
+.message-body .chat-result-card {
+  border-color: var(--lb-chat-structured-border);
+  background: var(--lb-chat-structured-bg);
+}
+
+/* Code/HTML previews intentionally retain their dark surface in light theme. */
+.message-body .chat-html-preview {
+  color: var(--lb-chat-code-text);
+}
+
+.message-body .chat-structured-raw {
+  border-color: var(--lb-chat-structured-border);
+  background: var(--lb-chat-structured-raw-bg);
+}
+
+.message-body .chat-result-card a {
+  color: var(--lb-chat-link-text);
+}
+
+.message-body .chat-result-card p,
+.message-body .chat-next-steps li,
+.message-body .chat-json-grid dd,
+.message-body .chat-structured-raw pre {
+  color: var(--lb-chat-message-text);
 }
 
 .message-body p {
   margin: 0;
-  color: rgba(248, 251, 255, .9);
+  color: var(--lb-chat-message-text);
   font-size: 14px;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -1629,10 +1773,10 @@ body.sidebar-resizing * {
 
 .chat-chip-row span {
   padding: 5px 9px;
-  border: 1px solid rgba(0, 217, 255, .18);
+  border: 1px solid var(--lb-chat-chip-border);
   border-radius: 999px;
-  background: rgba(0, 217, 255, .08);
-  color: rgba(232, 242, 255, .9);
+  background: var(--lb-chat-chip-bg);
+  color: var(--lb-chat-chip-text);
   font-size: 11px;
 }
 
@@ -1890,6 +2034,19 @@ body.sidebar-resizing * {
 .composer-model select:disabled {
   opacity: .55;
   cursor: not-allowed;
+}
+
+.composer-reasoning-effort {
+  flex-shrink: 0;
+}
+
+.composer-reasoning-effort > span {
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.composer-reasoning-effort select {
+  max-width: 160px;
 }
 
 /* Global select option styling to prevent white-on-white text in Chromium dropdowns */
@@ -13410,6 +13567,28 @@ html.theme-light .browser-start-search input {
   border-bottom-left-radius: 2px;
 }
 
+.copilot-bubble .rich-text-renderer a {
+  color: #4fd4ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* The Copilot split panel stays dark in every app theme. Keep its message text
+   paired with dark bubbles when shared layout rules select a light surface. */
+html[data-message-layout="bubbles"] .copilot-bubble.assistant,
+html[data-message-layout="expanded"] .copilot-bubble.assistant {
+  background: rgba(16, 24, 48, 0.85);
+  border-color: rgba(255, 255, 255, 0.07);
+  color: rgba(232, 242, 255, 0.9);
+}
+
+html[data-message-layout="bubbles"] .copilot-bubble.user,
+html[data-message-layout="expanded"] .copilot-bubble.user {
+  background: rgba(14, 165, 233, 0.14);
+  border-color: rgba(14, 165, 233, 0.28);
+  color: #ffffff;
+}
+
 .copilot-text-p {
   margin: 0 0 6px 0;
 }
@@ -13477,6 +13656,15 @@ html.theme-light .browser-start-search input {
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
+}
+
+.copilot-model-row .composer-reasoning-effort {
+  margin-left: auto;
+  max-width: 48%;
+}
+
+.copilot-model-row .composer-reasoning-effort select {
+  max-width: 100px;
 }
 
 .copilot-model-label {

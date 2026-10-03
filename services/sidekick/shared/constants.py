@@ -5,7 +5,7 @@ from pathlib import Path
 
 from shared.paths import sidekick_home
 
-VALID_REASONING_EFFORTS = ("minimal", "low", "medium", "high", "xhigh")
+VALID_REASONING_EFFORTS = ("minimal", "low", "medium", "high", "xhigh", "max")
 
 _profile_fallback_warned = False
 
@@ -85,8 +85,6 @@ def parse_reasoning_effort(effort: str) -> dict[str, object] | None:
     if not effort or not effort.strip():
         return None
     effort = effort.strip().lower()
-    if effort == "max":
-        effort = "xhigh"
     if effort == "none":
         return {"enabled": False}
     if effort in VALID_REASONING_EFFORTS:

@@ -16,7 +16,7 @@
  * Exits 0 on success, 1 on failure. Screenshots land in ./smoke-output/.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import net from 'node:net';
@@ -40,6 +40,9 @@ let CDP_PORT = REQUESTED_CDP_PORT;
 let smokeChild = null;
 let smokeDownloadServer = null;
 let smokeDownloadRequestCount = 0;
+let smokeLastDownloadRequest = null;
+let smokeCdp = null;
+let smokeShellTarget = null;
 const rendererDiagnostics = [];
 const addressEntryTrace = [];
 const TEST_URL = process.env.LASTBROWSER_SMOKE_URL || 'example.com';
@@ -54,6 +57,7 @@ const SMOKE_PAGE_TITLE = `Lastbrowser Smoke Page ${process.pid}`;
 const LOCAL_MAIN_ENTRY = path.resolve(import.meta.dirname, '..', 'dist', 'main', 'main.js');
 const OLLAMA_SMOKE_MODEL = 'deepseek-v4.1-flash';
 const OLLAMA_SMOKE_MODEL_QUALIFIED = `@ollama-cloud:${OLLAMA_SMOKE_MODEL}`;
+const QUAD_POINTER_TRACE_ONLY = process.env.LASTBROWSER_SMOKE_QUAD_POINTER_TRACE === '1';
 
 function readOllamaSmokeCredential() {
   const fromEnvironment = process.env.OLLAMA_API_KEY || process.env.OLLAMA_CLOUD_API_KEY;
@@ -214,11 +218,22 @@ async function startSmokeDownloadFixture() {
       response.end(`<!doctype html><html><head><title>${SMOKE_PAGE_TITLE}</title></head><body><main>${SMOKE_PAGE_TITLE}</main></body></html>`);
       return;
     }
-    smokeDownloadRequestCount += 1;
-    if (request.url !== '/download') {
+    const splitFixtureId = request.url?.split('?')[0]?.match(/^\/split-pane\/([abc])$/i)?.[1]?.toUpperCase();
+    if (splitFixtureId) {
+      const title = `Lastbrowser Split Smoke ${splitFixtureId} ${process.pid}`;
+      response.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store'
+      });
+      response.end(`<!doctype html><html><head><title>${title}</title></head><body><main data-smoke-pane="${splitFixtureId}">${title}</main></body></html>`);
+      return;
+    }
+    if (request.url !== '/download' || request.method !== 'GET') {
       response.writeHead(404).end();
       return;
     }
+    smokeDownloadRequestCount += 1;
+    smokeLastDownloadRequest = { method: request.method, path: request.url };
     response.writeHead(200, {
       'Content-Type': 'text/plain; charset=utf-8',
       'Content-Disposition': `attachment; filename="${SMOKE_DOWNLOAD_NAME}"`,
@@ -385,10 +400,40 @@ async function main() {
   }
   const child = spawn(EXE, launchArgs, {
     detached: true,
-    stdio: process.env.LASTBROWSER_SMOKE_LOG === '1' ? 'inherit' : 'ignore',
+    stdio: process.env.LASTBROWSER_SMOKE_DIAGNOSTICS === '1' ? ['ignore', 'pipe', 'pipe']
+      : process.env.LASTBROWSER_SMOKE_LOG === '1' ? 'inherit' : 'ignore',
     env: smokeEnv
   });
   smokeChild = child;
+  if (process.env.LASTBROWSER_SMOKE_DIAGNOSTICS === '1') {
+    // Keep only traceback locations and exception classes. Backend request
+    // logs can contain auth query parameters; never forward their raw text.
+    for (const output of [child.stdout, child.stderr]) {
+      let remainder = '';
+      output?.on('data', (chunk) => {
+        const lines = (remainder + chunk.toString()).split(/\r?\n/);
+        remainder = lines.pop() || '';
+        for (const line of lines) {
+          const frame = line.match(/^\s*File "([^"\r\n]+)", line (\d+), in ([\w<>]+)/);
+          const exception = line.match(/^([\w.]+(?:Error|Exception)):/);
+          const transport = line.match(/^(?:\[sidekick\] )?\[CHAT-TRANSPORT\] (\{.*\})$/);
+          if (transport) {
+            try {
+              const raw = JSON.parse(transport[1]);
+              const safe = {};
+              for (const [key, value] of Object.entries(raw)) {
+                if (/^(trace|count|bytes|total_bytes|chunks|frames|status)$/.test(key) && Number.isFinite(value)) safe[key] = value;
+                else if (/^(layer|stage|state|kind)$/.test(key) && typeof value === 'string' && /^[a-z_]+$/.test(value)) safe[key] = value;
+              }
+              console.log(`  TRACE transport ${JSON.stringify(safe)}`);
+            } catch { /* Ignore malformed diagnostics rather than printing raw logs. */ }
+          }
+          else if (frame) console.log(`  TRACE backend ${path.basename(frame[1])}:${frame[2]} ${frame[3]}`);
+          else if (exception) console.log(`  TRACE backend exception class: ${exception[1]}`);
+        }
+      });
+    }
+  }
   child.unref();
   console.log(`[1] launched (pid ${child.pid})`);
   if (Number.isFinite(INTERACTIVE_PAUSE_MS) && INTERACTIVE_PAUSE_MS > 0) {
@@ -419,7 +464,9 @@ async function main() {
   check('shell renderer present', Boolean(shell), shell ? shell.url.split('/').pop() : 'not found');
   if (!shell) finish(child);
 
+  smokeShellTarget = { id: shell.id, url: shell.url };
   const cdp = new CDP(shell.webSocketDebuggerUrl);
+  smokeCdp = cdp;
   await cdp.send('Runtime.enable');
 
   // Electron can expose the CDP target before React has mounted. Wait for
@@ -1366,6 +1413,10 @@ async function main() {
       // profile so no file can land in the user's Downloads folder.
       webviewSmokePhase = 'local file download and UI completion';
       const downloadRequestCountBefore = smokeDownloadRequestCount;
+      const downloadPartition = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const view=[...document.querySelectorAll('webview.browser-view')].find((entry)=>entry.getClientRects().length); return view?.getAttribute('partition') || ''; })()`,
+        returnByValue: true
+      });
       const downloadNavigation = await enterAddressThroughKeyboard(cdp, downloadFixtureUrl);
       let downloadRequestObserved = false;
       for (let attempt = 0; attempt < 30; attempt++) {
@@ -1425,6 +1476,12 @@ async function main() {
         if (!state.result.value) { downloadCleared = true; break; }
         await sleep(100);
       }
+      console.log('  INFO download fixture:', JSON.stringify({
+        partition: downloadPartition.result.value,
+        request: smokeLastDownloadRequest,
+        completed: Boolean(completedDownload),
+        files: readdirSync(SMOKE_DOWNLOAD_DIR),
+      }));
       check('local browser download completes, saves the expected file and clears from the panel',
         Boolean(downloadNavigation?.submitted) && downloadRequestObserved && downloadUiRow?.name === SMOKE_DOWNLOAD_NAME
           && completedDownload?.state === 'completed' && downloadApiEntryAfterPanel?.state === 'completed'
@@ -2423,12 +2480,17 @@ async function main() {
     await pressMouse(cdp, flyoutGeometry.from);
     await moveHeldMouse(cdp, flyoutGeometry.from, flyoutGeometry.to);
   }
-  await sleep(150);
-  const flyoutStateResult = await cdp.send('Runtime.evaluate', {
-    expression: `JSON.stringify({ visible: Boolean(document.querySelector('.snap-bar-flyout.is-visible')), cards: document.querySelectorAll('.snap-bar-card').length, quadSlot: Boolean(document.querySelector('.snap-bar-flyout .snap-card-preview.layout-quad-grid button.snap-card-slot')) })`,
-    returnByValue: true
-  });
-  const flyoutState = JSON.parse(flyoutStateResult.result.value);
+  let flyoutState = { visible: false, cards: 0, quadSlot: false };
+  const flyoutDeadline = Date.now() + 2_000;
+  do {
+    const flyoutStateResult = await cdp.send('Runtime.evaluate', {
+      expression: `JSON.stringify({ visible: Boolean(document.querySelector('.snap-bar-flyout.is-visible')), cards: document.querySelectorAll('.snap-bar-card').length, quadSlot: Boolean(document.querySelector('.snap-bar-flyout .snap-card-preview.layout-quad-grid button.snap-card-slot')) })`,
+      returnByValue: true
+    });
+    flyoutState = JSON.parse(flyoutStateResult.result.value);
+    if (flyoutState.visible && flyoutState.cards >= 8 && flyoutState.quadSlot) break;
+    await sleep(50);
+  } while (Date.now() < flyoutDeadline);
   check('real mouse drag opens the snap flyout with selectable layouts', hasFlyoutGeometry && flyoutState.visible && flyoutState.cards >= 8 && flyoutState.quadSlot, `visible=${flyoutState.visible}, cards=${flyoutState.cards}`);
   const quadSlotGeometry = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
@@ -2499,8 +2561,53 @@ async function main() {
     returnByValue: true
   });
   const resizeXGeometry = resizeXGeometryResult.result.value;
+  if (QUAD_POINTER_TRACE_ONLY) {
+    await cdp.send('Runtime.evaluate', {
+      expression: `(() => {
+        const grid = document.querySelector('.multiview-grid-container');
+        const ratio = () => document.querySelector('.multiview-pane-chrome')?.style.width || '';
+        const trace = [];
+        const captureOwner = (pointerId) => {
+          for (const divider of document.querySelectorAll('.multiview-divider-vertical, .multiview-divider-horizontal')) {
+            try { if (divider.hasPointerCapture(pointerId)) return divider.className; } catch {}
+          }
+          return '';
+        };
+        const onPointer = (event) => {
+          if (trace.length >= 96) return;
+          const target = event.target instanceof Element ? event.target : null;
+          const entry = {
+            type: event.type,
+            pointerId: event.pointerId,
+            pointerType: event.pointerType || '',
+            isPrimary: Boolean(event.isPrimary),
+            button: Number.isFinite(event.button) ? event.button : -1,
+            buttons: Number.isFinite(event.buttons) ? event.buttons : 0,
+            x: Math.round(event.clientX * 100) / 100,
+            y: Math.round(event.clientY * 100) / 100,
+            targetClass: typeof target?.className === 'string' ? target.className.trim().replace(/\\s+/g, ' ').slice(0, 96) : '',
+            captureOwner: captureOwner(event.pointerId),
+            hasCapture: Boolean(target && typeof target.hasPointerCapture === 'function' && target.hasPointerCapture(event.pointerId)),
+            xRatio: ratio()
+          };
+          trace.push(entry);
+          requestAnimationFrame(() => {
+            entry.xRatioAfterFrame = ratio();
+            entry.captureOwnerAfterFrame = captureOwner(event.pointerId);
+          });
+        };
+        for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'gotpointercapture', 'lostpointercapture']) {
+          window.addEventListener(type, onPointer, true);
+        }
+        window.__lastbrowserQuadPointerDebug = { beforeRatio: ratio(), beforeDividerLeft: grid?.querySelector('.multiview-divider-vertical')?.style.left || '', trace };
+        return true;
+      })()`,
+      returnByValue: true
+    });
+  }
   if (resizeXGeometry) {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const resizeAttempts = QUAD_POINTER_TRACE_ONLY ? 1 : 3;
+    for (let attempt = 0; attempt < resizeAttempts; attempt++) {
       const current = attempt === 0 ? resizeXGeometry : (await cdp.send('Runtime.evaluate', {
         expression: `(() => { const divider = document.querySelector('.multiview-divider-vertical'); const container = document.querySelector('.multiview-grid-container'); if (!divider || !container) return null; const handle = divider.getBoundingClientRect(), rect = container.getBoundingClientRect(), y = rect.top + rect.height * 0.25; return { from: { x: handle.left + handle.width / 2, y }, to: { x: rect.left + rect.width * 0.65, y } }; })()`,
         returnByValue: true
@@ -2516,6 +2623,32 @@ async function main() {
       });
       if (String(split.result.value).includes('66.67%')) break;
     }
+  }
+  if (QUAD_POINTER_TRACE_ONLY) {
+    await sleep(150);
+    const pointerTraceResult = await cdp.send('Runtime.evaluate', {
+      expression: `(() => {
+        const state = window.__lastbrowserQuadPointerDebug || { beforeRatio: '', trace: [] };
+        return {
+          beforeRatio: state.beforeRatio,
+          afterRatio: document.querySelector('.multiview-pane-chrome')?.style.width || '',
+          beforeDividerLeft: state.beforeDividerLeft,
+          afterDividerLeft: document.querySelector('.multiview-divider-vertical')?.style.left || '',
+          dividerTargetClass: ${JSON.stringify(resizeXGeometry?.fromHit || '')},
+          geometry: ${JSON.stringify(resizeXGeometry || null)},
+          trace: state.trace
+        };
+      })()`,
+      returnByValue: true
+    });
+    const trace = pointerTraceResult.result.value;
+    console.log(`[QUAD-POINTER-TRACE] ${JSON.stringify(trace)}`);
+    const types = new Set((trace?.trace || []).map((entry) => entry.type));
+    check('focused quad X repro captured pointerdown, move and up',
+      Boolean(resizeXGeometry && types.has('pointerdown') && types.has('pointermove') && types.has('pointerup')),
+      `events=${[...types].join(',')}, before=${trace?.beforeRatio || ''}, after=${trace?.afterRatio || ''}`);
+    cdp.close();
+    finish(child);
   }
   await sleep(150);
   const resizeYGeometryResult = await cdp.send('Runtime.evaluate', {
@@ -2787,6 +2920,140 @@ async function main() {
   check('Trio smoke cleanup restores the original tab count for following checks', trioCleanup,
     `maximize=${maximizeTrio.result.value}, tabs=${trioState?.tabCount}->${trioTabCount.result.value}, cleaned=${trioCleanup}`);
 
+  // Regress the separate user path: add a third tab to an already populated
+  // dual split through the sidebar's real split action. The explicit empty
+  // slot snap check above exercises setSnapGroup; this one exercises
+  // addSplitTab plus the mounted BrowserMain/multiview render path.
+  const addThirdSplitBaseline = await cdp.send('Runtime.evaluate', {
+    expression: `document.querySelectorAll('.vertical-tab-item').length`,
+    returnByValue: true
+  });
+  const addThirdSplitUrls = ['A', 'B', 'C'].map((id) => downloadFixtureUrl.replace(/\/download$/, `/split-pane/${id}`));
+  const addThirdSplitSeeds = [];
+  for (let index = 0; index < addThirdSplitUrls.length; index++) {
+    const create = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { const button = document.querySelector('.vertical-new-tab-btn'); if (!button) return false; button.click(); return true; })()`,
+      returnByValue: true
+    });
+    let created = false;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const count = await cdp.send('Runtime.evaluate', {
+        expression: `document.querySelectorAll('.vertical-tab-item').length`,
+        returnByValue: true
+      });
+      if (create.result.value && count.result.value === addThirdSplitBaseline.result.value + index + 1) { created = true; break; }
+      await sleep(100);
+    }
+    const navigation = created ? await enterAddressThroughKeyboard(cdp, addThirdSplitUrls[index]) : null;
+    let loaded = false;
+    for (let attempt = 0; attempt < 60 && navigation?.submitted; attempt++) {
+      const state = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view'); return { url: view?.getURL?.() || '', title: view?.getTitle?.() || '', loading: view?.isLoading?.() || false }; })()`,
+        returnByValue: true
+      });
+      if (state.result.value?.url === addThirdSplitUrls[index]
+        && state.result.value.title === `Lastbrowser Split Smoke ${String.fromCharCode(65 + index)} ${process.pid}`
+        && !state.result.value.loading) {
+        loaded = true;
+        break;
+      }
+      await sleep(100);
+    }
+    addThirdSplitSeeds.push({ created, submitted: Boolean(navigation?.submitted), loaded });
+  }
+
+  const activateSplitSeed = async (id, action) => cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const row = [...document.querySelectorAll('.vertical-tab-item')].find((item) => item.querySelector('.vtab-title')?.textContent?.trim() === 'Lastbrowser Split Smoke ${id} ${process.pid}');
+      if (!row) return false;
+      if (${JSON.stringify(action)} === 'activate') { row.click(); return true; }
+      const button = row.querySelector('.vtab-split-btn');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`,
+    returnByValue: true
+  });
+  const activateFirstSplitSeed = await activateSplitSeed('A', 'activate');
+  const addSecondSplitSeed = await activateSplitSeed('B', 'split');
+  let dualSplitReady = false;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', {
+      expression: `JSON.stringify({ layout: document.querySelector('.multiview-grid-container')?.className || '', occupied: document.querySelectorAll('.multiview-pane-chrome.occupied').length, titles: [...document.querySelectorAll('.multiview-pane-title')].map((item) => item.textContent?.trim() || '') })`,
+      returnByValue: true
+    });
+    const value = JSON.parse(state.result.value || '{}');
+    if (value.layout && value.occupied === 2 && value.titles.includes(`Lastbrowser Split Smoke A ${process.pid}`) && value.titles.includes(`Lastbrowser Split Smoke B ${process.pid}`)) {
+      dualSplitReady = true;
+      break;
+    }
+    await sleep(100);
+  }
+  const addThirdSplitSeed = dualSplitReady ? await activateSplitSeed('C', 'split') : { result: { value: false } };
+  let addThirdSplitState = { layout: '', occupied: 0, empty: 0, paneTitles: [], views: [] };
+  let thirdSplitReady = false;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const state = await cdp.send('Runtime.evaluate', {
+      expression: `JSON.stringify((() => {
+        const panes = [...document.querySelectorAll('.multiview-pane-chrome')];
+        const views = [...document.querySelectorAll('.browser-tab-pane')].map((pane) => {
+          const view = pane.querySelector('webview.browser-view');
+          return { tabId: view?.getAttribute('data-tab-id') || '', url: view?.getURL?.() || '', title: view?.getTitle?.() || '', visible: pane.style.visibility === 'visible' };
+        }).filter((view) => view.tabId && view.url.includes('/split-pane/'));
+        return {
+          layout: document.querySelector('.multiview-grid-container')?.className || '',
+          occupied: panes.filter((pane) => pane.classList.contains('occupied')).length,
+          empty: panes.filter((pane) => pane.classList.contains('empty')).length,
+          paneTitles: [...document.querySelectorAll('.multiview-pane-title')].map((item) => item.textContent?.trim() || ''),
+          views
+        };
+      })())`,
+      returnByValue: true
+    });
+    addThirdSplitState = JSON.parse(state.result.value || '{}');
+    const expectedTitles = ['A', 'B', 'C'].map((id) => `Lastbrowser Split Smoke ${id} ${process.pid}`);
+    const expectedUrlsPresent = addThirdSplitUrls.every((url) => addThirdSplitState.views.some((view) => view.url === url && view.visible));
+    if (addThirdSplitSeed.result.value && addThirdSplitState.layout.includes('layout-trio-columns')
+      && addThirdSplitState.occupied === 3 && addThirdSplitState.empty === 0
+      && expectedTitles.every((title) => addThirdSplitState.paneTitles.includes(title))
+      && new Set(addThirdSplitState.views.map((view) => view.tabId)).size === 3 && expectedUrlsPresent) {
+      thirdSplitReady = true;
+      break;
+    }
+    await sleep(100);
+  }
+  check('adding a third tab through the sidebar to an existing dual fills all three Trio panes',
+    addThirdSplitSeeds.length === 3 && addThirdSplitSeeds.every((seed) => seed.created && seed.submitted && seed.loaded)
+      && activateFirstSplitSeed.result.value && addSecondSplitSeed.result.value && dualSplitReady && thirdSplitReady,
+    `seeds=${JSON.stringify(addThirdSplitSeeds)}, dual=${dualSplitReady}, addThird=${addThirdSplitSeed.result.value}, state=${JSON.stringify(addThirdSplitState)}`);
+
+  // Restore the baseline tab count even when the assertion fails.
+  const maximizeAddedThird = await cdp.send('Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('.multiview-pane-chrome.active-pane .multiview-pane-controls .multiview-pane-btn:nth-child(2)'); if (!button) return false; button.click(); return true; })()`,
+    returnByValue: true
+  });
+  let addThirdCleanup = false;
+  if (maximizeAddedThird.result.value && await waitForUi('.multiview-grid-container', false)) {
+    for (let index = 0; index < 3; index++) {
+      const close = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const row = [...document.querySelectorAll('.vertical-tab-item')].find((item) => item.querySelector('.vtab-title')?.textContent?.trim().startsWith('Lastbrowser Split Smoke ')); const button = row?.querySelector('.vtab-close-btn'); if (!button) return false; button.click(); return true; })()`,
+        returnByValue: true
+      });
+      if (!close.result.value) break;
+      await sleep(150);
+    }
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const count = await cdp.send('Runtime.evaluate', {
+        expression: `document.querySelectorAll('.vertical-tab-item').length`,
+        returnByValue: true
+      });
+      if (count.result.value === addThirdSplitBaseline.result.value) { addThirdCleanup = true; break; }
+      await sleep(100);
+    }
+  }
+  check('third-pane smoke cleanup restores the original tab count', addThirdCleanup,
+    `maximize=${maximizeAddedThird.result.value}, tabs=${addThirdSplitState.views.length}->${addThirdSplitBaseline.result.value}, cleaned=${addThirdCleanup}`);
+
   const waitForActiveGuestUrl = async (host) => {
     for (let attempt = 0; attempt < 60; attempt++) {
       const current = await cdp.send('Runtime.evaluate', {
@@ -2977,6 +3244,9 @@ async function main() {
     detachedHistoryRoundTrip.backUrl.includes('example.com') && detachedHistoryRoundTrip.forwardUrl.includes('iana.org'),
     JSON.stringify(detachedHistoryRoundTrip));
   detachedCdp?.close();
+  // Detaching activates the new window. Resume the remaining user actions in
+  // the original shell rather than a background renderer with paused frames.
+  await cdp.send('Page.bringToFront');
 
   const hookOrderErrors = rendererDiagnostics.filter((message) =>
     /Rendered fewer hooks than expected|Minified React error #300|Rendered more hooks than during the previous render/i.test(message)
@@ -3024,6 +3294,20 @@ async function main() {
       // Wait for the shell renderer to finish reloading, bounded by the loop.
     }
   }
+  const loupePointer = await cdp.send('Runtime.evaluate', {
+    expression: `(async () => {
+      const point = await window.lastbrowser.system.getCursorPosition();
+      return { inside: point.x >= 0 && point.y >= 0 && point.x < innerWidth && point.y < innerHeight };
+    })()`,
+    awaitPromise: true,
+    returnByValue: true
+  });
+  // CDP pointer events do not move the OS cursor polled by CursorLoupeHUD.
+  // An outside cursor cannot yield a visible window crop; retain that boundary
+  // explicitly instead of treating a synthetic move as a native capture test.
+  if (loupePointer.result.value?.inside === false) {
+    skip('cursor loupe capture requires the OS pointer inside the test window', 'OS cursor outside window; CDP mouse movement does not change it');
+  } else {
   check('enabled cursor loupe renders a captured image in the running app',
     enableLoupe.result.value?.clicked === true
     && loupeRuntime?.setting?.enabled === true
@@ -3037,6 +3321,7 @@ async function main() {
       imageWidth: loupeRuntime.imageWidth,
       imageHeight: loupeRuntime.imageHeight
     }));
+  }
   }
 
   if (process.env.LASTBROWSER_SMOKE_OLLAMA === '1') {
@@ -3133,14 +3418,14 @@ async function main() {
         expression: `(() => {
           const main = document.querySelector('.native-chat-main');
           const composer = main?.querySelector('.composer-input-row textarea');
-          const model = main?.querySelector('.composer-model select');
-          return Boolean(main && composer && model);
+          return Boolean(main && composer);
         })()`,
         returnByValue: true
       }, 2_000);
       chatReady = chatState.result.value === true;
       if (chatReady) break;
       if (!createChatRequested) {
+        console.log('  INFO Ollama smoke: requesting a new Chat session');
         const createChat = await cdp.send('Runtime.evaluate', {
           expression: `(() => {
             const main = document.querySelector('.native-chat-main');
@@ -3152,9 +3437,13 @@ async function main() {
           returnByValue: true
         });
         createChatRequested = createChat.result.value === true;
+        console.log(`  INFO Ollama smoke: new Chat request completed (clicked=${createChatRequested})`);
       }
       await sleep(250);
     }
+    console.log(`  INFO Ollama smoke: composer readiness completed (ready=${chatReady}, createChatRequested=${createChatRequested})`);
+    if (!chatReady) throw new Error('Chat composer did not become ready within the bounded UI wait');
+    console.log('  INFO Ollama smoke: installing stream observers');
     await cdp.send('Runtime.evaluate', {
       expression: `(() => {
         localStorage.setItem('__lastbrowser_chat_stream_debug', '1');
@@ -3177,10 +3466,16 @@ async function main() {
         });
         window.__ollamaSmokeObserver?.disconnect();
         const chat = document.querySelector('.native-chat-main');
+        window.__ollamaSmokeReadAnswer = (assistant) => {
+          const body = assistant?.querySelector('.message-body');
+          return [...(body?.children || [])]
+            .filter((child) => child.matches('.rich-text-renderer, .bionic-text'))
+            .map((child) => child.innerText || '').join('\\n').trim();
+        };
         let previousAnswer = '';
         window.__ollamaSmokeObserver = new MutationObserver(() => {
           const assistant = [...document.querySelectorAll('.native-chat-main .chat-message.assistant')].at(-1);
-          const answer = assistant?.querySelector('.message-body')?.innerText || '';
+          const answer = window.__ollamaSmokeReadAnswer(assistant);
           const pending = assistant?.classList.contains('pending') || false;
           if (!answer.trim() || pending || answer === previousAnswer) return;
           previousAnswer = answer;
@@ -3195,7 +3490,9 @@ async function main() {
       })()`,
       returnByValue: true
     });
-    const modelChoice = await cdp.send('Runtime.evaluate', {
+    console.log('  INFO Ollama smoke: stream observers installed');
+    console.log('  INFO Ollama smoke: checking selected Ollama model option');
+    const probeModelChoice = () => cdp.send('Runtime.evaluate', {
       expression: `(() => {
         const select = document.querySelector('.native-chat-main .composer-model select');
         const options = [...(select?.options || [])];
@@ -3209,7 +3506,11 @@ async function main() {
       })()`,
       returnByValue: true
     });
-    const liveCatalog = await cdp.send('Runtime.evaluate', {
+    console.log('  INFO Ollama smoke: requesting /api/models catalog; Sidekick IPC request deadline is 30 seconds');
+    const liveCatalogStartedAt = Date.now();
+    let liveCatalog;
+    try {
+      liveCatalog = await cdp.send('Runtime.evaluate', {
       expression: `(async () => {
         try {
           const data = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' });
@@ -3226,7 +3527,26 @@ async function main() {
       })()` ,
       awaitPromise: true,
       returnByValue: true
-    }, 10_000);
+      }, 32_000);
+    } catch (error) {
+      console.error(`  INFO Ollama smoke: catalog evaluation failed after ${Date.now() - liveCatalogStartedAt}ms`);
+      throw error;
+    }
+    console.log(`  INFO Ollama smoke: /api/models catalog returned in ${Date.now() - liveCatalogStartedAt}ms`);
+    // Composer readiness and asynchronous provider-catalog readiness are
+    // separate requirements. A saved model can be usable before its group is
+    // loaded; still require the actual Ollama group before the live send.
+    let modelChoice;
+    const modelChoiceDeadline = Date.now() + 12_000;
+    do {
+      modelChoice = await probeModelChoice();
+      if (/ollama/i.test(modelChoice.result.value?.group || '')) break;
+      await sleep(250);
+    } while (Date.now() < modelChoiceDeadline);
+    console.log(`  INFO Ollama smoke: model option check completed (available=${Boolean(modelChoice.result.value?.available)}, group=${modelChoice.result.value?.group || 'missing'})`);
+    if (!modelChoice.result.value?.available || !/ollama/i.test(modelChoice.result.value?.group || '')) {
+      throw new Error(`Ollama model group did not load: ${JSON.stringify({ choice: modelChoice.result.value, catalog: liveCatalog.result.value })}`);
+    }
     const selectedOllamaModelId = modelChoice.result.value?.selected || '';
     let persistedModel = false;
     for (let attempt = 0; attempt < 40; attempt++) {
@@ -3247,7 +3567,7 @@ async function main() {
       if (persistedModel) break;
       await sleep(250);
     }
-    const sendPrompt = await cdp.send('Runtime.evaluate', {
+    const preparedPrompt = await cdp.send('Runtime.evaluate', {
       expression: `(() => {
         const textarea = document.querySelector('.native-chat-main .composer-input-row textarea');
         const form = textarea?.closest('form');
@@ -3258,6 +3578,24 @@ async function main() {
         const prompt = 'Tell a brief 80-word story about a small robot finding a blue flower. Begin the story immediately with no preamble.';
         setter?.call(textarea, prompt);
         textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: prompt }));
+        return true;
+      })()`,
+      returnByValue: true
+    });
+    // Let React commit the controlled input before submitting. Submitting in
+    // the input event's task can still read the previous (empty) composer state.
+    await cdp.send('Runtime.evaluate', {
+      expression: `new Promise((resolve) => setTimeout(resolve, 0))`,
+      awaitPromise: true,
+      returnByValue: true
+    });
+    const sendPrompt = await cdp.send('Runtime.evaluate', {
+      expression: `(() => {
+        const textarea = document.querySelector('.native-chat-main .composer-input-row textarea');
+        const form = textarea?.closest('form');
+        const button = form?.querySelector('.composer-send');
+        if (!${JSON.stringify(preparedPrompt.result.value)} || !textarea?.value.trim()
+          || !form || !button || button.disabled || textarea.disabled) return false;
         form.requestSubmit();
         return true;
       })()`,
@@ -3267,14 +3605,28 @@ async function main() {
     let ollamaError = '';
     let streamedWhileRequestActive = false;
     let streamedAssistantText = '';
-    for (let attempt = 0; attempt < 600; attempt++) {
+    let reasoningVisibleWhileRunning = false;
+    let ollamaCompleted = false;
+    const answerDeadline = Date.now() + 120_000;
+    while (Date.now() < answerDeadline) {
       const response = await cdp.send('Runtime.evaluate', {
         expression: `(() => {
           const assistant = [...document.querySelectorAll('.native-chat-main .chat-message.assistant')]
             .at(-1);
-          const answer = assistant?.querySelector('.message-body')?.innerText || '';
+          const reasoning = assistant?.querySelector('.chat-reasoning-details');
+          if (reasoning && !reasoning.open) reasoning.querySelector('summary')?.click();
+          const reasoningContent = reasoning?.querySelector('.chat-reasoning-content');
+          const visible = (element) => {
+            if (!element) return false;
+            const bounds = element.getBoundingClientRect(), style = getComputedStyle(element);
+            return bounds.width > 0 && bounds.height > 0 && style.display !== 'none'
+              && style.visibility !== 'hidden' && Number(style.opacity) > 0;
+          };
+          const answer = window.__ollamaSmokeReadAnswer(assistant);
           return JSON.stringify({
             answer,
+            visibleReasoningCharacters: reasoning?.open && visible(reasoningContent)
+              && visible(document.querySelector('.native-chat-main')) ? (reasoningContent.innerText || '').trim().length : 0,
             pending: assistant?.classList.contains('pending') || false,
             running: Boolean(document.querySelector('.native-chat-main .composer-send.stop')),
             streamEventCount: window.__ollamaSmokeStreamEvents?.length || 0,
@@ -3289,17 +3641,22 @@ async function main() {
         })()`,
         returnByValue: true
       }, 2_000);
+      if (response.exceptionDetails || typeof response.result?.value !== 'string') {
+        throw new Error('Ollama answer DOM probe failed');
+      }
       const state = JSON.parse(response.result.value || '{}');
       ollamaAnswer = state.answer || '';
       ollamaError = state.error || '';
+      reasoningVisibleWhileRunning ||= Boolean(state.running && state.visibleReasoningCharacters > 0);
       const visibleDuringStream = (state.domMutations || []).find((entry) => entry.running && !entry.pending && entry.answerLength > 0
         && (state.streamEndAt === null || entry.at < state.streamEndAt));
       if (visibleDuringStream) {
         streamedWhileRequestActive = true;
         streamedAssistantText = `${visibleDuringStream.answerLength} chars in DOM`;
       }
-      if (ollamaAnswer.length >= 160 || ollamaError) break;
-      await sleep(50);
+      ollamaCompleted = state.streamEndAt != null && !state.running && !state.pending;
+      if (ollamaCompleted || ollamaError) break;
+      await sleep(250);
     }
     const streamDiagnostics = await cdp.send('Runtime.evaluate', {
       expression: `JSON.stringify({
@@ -3324,6 +3681,7 @@ async function main() {
           }
           return {
             started: trace.find((event) => event.phase === 'chat-started') || null,
+            lifecycle: trace.filter((event) => event.phase !== 'event' && event.phase !== 'state-update').slice(-24),
             eventCounts: counts,
             firstStateUpdate: trace.find((event) => event.phase === 'state-update') || null,
             lastStateUpdate: trace.filter((event) => event.phase === 'state-update').at(-1) || null
@@ -3333,6 +3691,33 @@ async function main() {
       returnByValue: true
     }, 2_000);
     const parsedStreamDiagnostics = JSON.parse(streamDiagnostics.result.value || '{}');
+    if (!ollamaCompleted) {
+      // Retain transport evidence for a timed-out combined workflow. Report
+      // only activity/counts, never session IDs, credentials or message text.
+      const transport = await cdp.send('Runtime.evaluate', {
+        expression: `(async () => {
+          const streamId = window.__ollamaSmokeStreamEvents?.at(-1)?.streamId;
+          const outcome = await Promise.race([
+            streamId ? window.lastbrowser.sidekick.getStreamStatus(streamId)
+              .then((status) => ({ reachable: true, active: status?.active,
+                statusKeys: Object.keys(status || {}).filter((key) => !/id|token|key/i.test(key)) }))
+              .catch(() => ({ reachable: false })) : Promise.resolve({ missingStream: true }),
+            new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 2500))
+          ]);
+          return outcome;
+        })()`, awaitPromise: true, returnByValue: true
+      }, 3_500);
+      console.log('  INFO Ollama transport status:', JSON.stringify(transport.result?.value || { probeFailed: true }));
+      const runtime = await cdp.send('Runtime.evaluate', {
+        expression: 'window.lastbrowser.services.status()', awaitPromise: true, returnByValue: true
+      }, 3_000);
+      if (runtime.result?.value?.webuiUrl) {
+        try {
+          const health = await fetch(new URL('/health', runtime.result.value.webuiUrl), { signal: AbortSignal.timeout(2_000) });
+          console.log('  INFO Ollama direct health status:', health.status);
+        } catch { console.log('  INFO Ollama direct health status: unreachable'); }
+      }
+    }
     streamedWhileRequestActive = Boolean(parsedStreamDiagnostics.firstDomAnswerWhileRunning
       && (parsedStreamDiagnostics.streamEndAt === null || parsedStreamDiagnostics.firstDomAnswerWhileRunning.at < parsedStreamDiagnostics.streamEndAt));
     streamedAssistantText = parsedStreamDiagnostics.firstDomAnswerWhileRunning
@@ -3341,14 +3726,41 @@ async function main() {
     check('Ollama Cloud model and provider selection persist in app preferences',
       switchToNativeChatLayout.result.value?.ok === true && (openChat.result.value === true || openChat.result.value?.clicked === true) && chatReady && modelChoice.result.value?.available === true && modelChoice.result.value?.group?.toLowerCase().includes('ollama') && persistedModel,
       JSON.stringify({ ollamaSpaceSelectionSeeded: switchToNativeChatLayout.result.value?.ok === true, chatOpened: openChat.result.value, chatReady, modelChoice: modelChoice.result.value, liveCatalog: JSON.parse(liveCatalog.result.value || '{}'), persistedModel }));
-    check('real Ollama Cloud response is rendered through the Lastbrowser chat UI',
-      sendPrompt.result.value === true && ollamaAnswer.length >= 160 && !ollamaError,
-      JSON.stringify({ submitted: sendPrompt.result.value, answer: ollamaAnswer.slice(0, 120), error: ollamaError.slice(0, 160) }));
+    check('real Ollama Cloud response completes and is rendered through the Lastbrowser chat UI',
+      sendPrompt.result.value === true && ollamaCompleted && ollamaAnswer.length >= 160 && !ollamaError,
+      JSON.stringify({ submitted: sendPrompt.result.value, completed: ollamaCompleted, answer: ollamaAnswer.slice(0, 120), error: ollamaError.slice(0, 160) }));
     check('Ollama Cloud answer becomes visible while the chat request is still streaming',
       sendPrompt.result.value === true && streamedWhileRequestActive,
       JSON.stringify({ submitted: sendPrompt.result.value, visibleWhileRunning: streamedWhileRequestActive, stream: parsedStreamDiagnostics, answer: streamedAssistantText }));
+    check('Ollama Cloud thinking text is visible while the chat request is still streaming',
+      sendPrompt.result.value === true && reasoningVisibleWhileRunning,
+      JSON.stringify({ visibleWhileRunning: reasoningVisibleWhileRunning, reasoningCharacters: parsedStreamDiagnostics.reasoningCharacters }));
+    if (!ollamaSmokeOnly) {
+      const rendererTargets = (await cdpList()).filter((target) => target.type === 'page' && /index\.html/.test(target.url));
+      const completions = [];
+      for (const target of rendererTargets) {
+        const observer = new CDP(target.webSocketDebuggerUrl);
+        try {
+          const result = await observer.send('Runtime.evaluate', {
+            expression: `(() => {
+              const trace = window.__lastbrowserChatStreamDebug || [];
+              return { completedByEvent: trace.some(item => item.phase === 'completion-return' && item.path === 'stream-event' && item.ownsContext),
+                ownedTerminal: trace.some(item => item.phase === 'event' && item.event === 'stream_end' && item.streamMatches && item.ownsContext) };
+            })()`, returnByValue: true
+          }, 2_000);
+          completions.push(result.result?.value || {});
+        } finally { observer.close(); }
+      }
+      check('concurrent browser windows receive chat completion without replacing the original subscription',
+        rendererTargets.length >= 2 && completions.every(item => item.completedByEvent && item.ownedTerminal),
+        JSON.stringify({ windows: rendererTargets.length, completions }));
+    }
   }
 
+  // A detached browser window may own the foreground compositor. Bring the
+  // original shell forward before requesting its screenshot.
+  await cdp.send('Page.bringToFront');
+  await sleep(150);
   const shellShot = await cdp.send('Page.captureScreenshot', { format: 'png' });
   const shellShotPath = path.join(OUT_DIR, 'shell.png');
   writeFileSync(shellShotPath, Buffer.from(shellShot.data, 'base64'));
@@ -3400,8 +3812,61 @@ function stopSmokeApp(child) {
   }
 }
 
-main().catch((e) => {
-  console.error('FATAL:', e);
+async function captureFailureDiagnostics(error) {
+  console.error('FATAL:', error);
+  if (smokeCdp) {
+    try {
+      const state = await smokeCdp.send('Runtime.evaluate', {
+        expression: `JSON.stringify((() => {
+          const visible = (element) => Boolean(element && element.getClientRects().length);
+          const composer = [...document.querySelectorAll('.native-chat-main textarea, .native-chat-main input, .native-chat-main [contenteditable="true"]')];
+          return {
+            page: { url: location.href, title: document.title, readyState: document.readyState, visibility: document.visibilityState },
+            shell: { tabs: document.querySelectorAll('.vertical-tab-item').length, webviews: document.querySelectorAll('webview.browser-view').length, multiview: Boolean(document.querySelector('.multiview-grid-container')) },
+            panels: [...document.querySelectorAll('.sidebar-drawer-tabs > button.drawer-tab-btn[role="tab"]')].map((tab) => ({ selected: tab.getAttribute('aria-selected'), active: tab.classList.contains('active') })),
+            chat: {
+              roots: document.querySelectorAll('.native-chat-main').length,
+              visibleRoots: [...document.querySelectorAll('.native-chat-main')].filter(visible).length,
+              composers: composer.map((element) => ({ tag: element.tagName.toLowerCase(), visible: visible(element), disabled: Boolean(element.disabled), hasValue: Boolean(element.value || element.textContent), aria: Boolean(element.getAttribute('aria-label')), placeholder: Boolean(element.getAttribute('placeholder')) })),
+              sendButtons: [...document.querySelectorAll('.native-chat-main button')].filter((button) => /send|senden/i.test(button.getAttribute('aria-label') || button.title || '')).map((button) => ({ visible: visible(button), disabled: button.disabled })),
+              errorNodes: document.querySelectorAll('.native-chat-main .chat-error').length
+            }
+          };
+        })())`,
+        returnByValue: true
+      }, 2_000);
+      console.error('FAILURE UI SNAPSHOT:', JSON.stringify({ target: smokeShellTarget, state: state.result?.value || '[empty]' }));
+      const status = await smokeCdp.send('Runtime.evaluate', {
+        expression: 'window.lastbrowser.services.status()',
+        awaitPromise: true,
+        returnByValue: true
+      }, 2_000);
+      const runtime = status.result?.value || {};
+      console.error('FAILURE SERVICE STATUS:', JSON.stringify({ sidekick: runtime.sidekick, webuiHealth: runtime.webuiHealth, port: runtime.port, hasError: Boolean(runtime.lastError) }));
+      if (runtime.webuiUrl) {
+        const health = await fetch(new URL('/health', runtime.webuiUrl), { signal: AbortSignal.timeout(2_000) });
+        console.error('FAILURE DIRECT HEALTH:', health.status);
+      }
+    } catch (diagnosticError) {
+      console.error('FAILURE UI SNAPSHOT unavailable:', diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError));
+    }
+  }
+  if (rendererDiagnostics.length) {
+    const sanitizedDiagnostics = rendererDiagnostics.slice(-10).map((message) => String(message).slice(0, 300)
+      .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+      .replace(/(api[_-]?key|token)(["'=:\s]+)[^\s,}"]+/gi, '$1$2[redacted]'));
+    console.error('RECENT RENDERER DIAGNOSTICS:', JSON.stringify(sanitizedDiagnostics));
+  }
+  try {
+    const targets = await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`, { signal: AbortSignal.timeout(2_000) }).then((response) => response.json());
+    console.error('CDP TARGETS:', JSON.stringify(targets.map((target) => ({ id: target.id, type: target.type, title: target.title, url: target.url }))));
+  } catch (diagnosticError) {
+    console.error('CDP TARGET LIST unavailable:', diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError));
+  }
+}
+
+main().catch(async (e) => {
+  await captureFailureDiagnostics(e);
   stopSmokeApp(smokeChild);
   process.exit(1);
 });

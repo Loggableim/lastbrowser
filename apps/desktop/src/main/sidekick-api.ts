@@ -13,6 +13,8 @@ export type WebuiRequest = {
   headers?: Record<string, string>;
 };
 
+export const WEBUI_REQUEST_TIMEOUT_MS = 30_000;
+
 export type CloudSetupRequest = {
   provider: string;
   model: string;
@@ -48,6 +50,8 @@ export type SidekickMessageRequest = {
   message: string;
   model?: string;
   modelProvider?: string | null;
+  /** Optional per-turn override; omitted requests retain the profile setting. */
+  reasoningEffort?: string | null;
   providerAccountEmail?: string | null;
   profile?: string;
   workspace?: string;
@@ -471,19 +475,32 @@ export type GetSessionRequest = {
   sessionId: string;
   messages?: boolean;
   msgLimit?: number;
+  profile?: string;
+  workspacePath?: string;
 };
 
 export type RenameSessionRequest = {
   sessionId: string;
   title: string;
+  profile?: string;
+  workspacePath?: string;
+};
+
+export type SessionListRequest = {
+  profile?: string;
+  workspacePath?: string;
 };
 
 export type SessionIdRequest = {
   sessionId: string;
+  profile?: string;
+  workspacePath?: string;
 };
 
 export type SaveDraftRequest = {
   sessionId: string;
+  profile?: string;
+  workspacePath?: string;
   text?: string;
   files?: unknown[];
 };
@@ -544,12 +561,17 @@ async function sendJson(
 ): Promise<Response> {
   const request = () => fetchImpl(urlFor(webuiUrl, path), {
     ...init,
-    headers: {
+    headers: (() => {
+      const scopedCookie = (init.headers as Record<string, string> | undefined)?.cookie;
+      const cookies = [_sidekickAuthCookie, scopedCookie]
+        .filter((value): value is string => Boolean(value));
+      return {
       'content-type': 'application/json',
       ...authHeader(),
-      ...(_sidekickAuthCookie ? { cookie: _sidekickAuthCookie } : {}),
-      ...(init.headers || {})
-    }
+      ...(init.headers || {}),
+      ...(cookies.length ? { cookie: cookies.join('; ') } : {})
+      };
+    })()
   });
   const response = await request();
   captureSidekickAuthCookie(response);
@@ -563,6 +585,15 @@ async function sendJson(
   captureSidekickAuthCookie(retried);
   await signalAccessAuthRequired(retried);
   return retried;
+}
+
+function profileScopeHeaders(profile?: string): Record<string, string> {
+  const normalized = String(profile || '').trim();
+  if (!normalized) return {};
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(normalized)) {
+    throw new Error('Invalid Sidekick profile identifier.');
+  }
+  return { cookie: `sidekick_profile=${encodeURIComponent(normalized)}` };
 }
 
 /**
@@ -647,12 +678,15 @@ export async function ensureWebuiAuth(
  */
 export async function refreshWebuiAuth(
   webuiUrl: string,
-  fetchImpl: FetchLike = fetch
+  fetchImpl: FetchLike = fetch,
+  signal?: AbortSignal
 ): Promise<boolean> {
   try {
-    const response = await fetchImpl(urlFor(webuiUrl, '/'));
+    const response = await fetchImpl(urlFor(webuiUrl, '/'), signal ? { signal } : undefined);
+    if (signal?.aborted) return false;
     if (!response.ok) return false;
     const html = await response.text();
+    if (signal?.aborted) return false;
     const match = html.match(/__SIDEKICK_SESSION_TOKEN__\s*=\s*["']([^"']+)["']/);
     if (match?.[1]) {
       _sessionToken = match[1];
@@ -704,28 +738,80 @@ export async function requestWebui(
     init.body = typeof request.body === 'string' ? request.body : JSON.stringify(request.body);
   }
 
-  let response = await fetchImpl(url.toString(), init);
-  if (response.status === 401) {
-    // The session token is regenerated on every sidecar start; refresh once.
-    const refreshed = await refreshWebuiAuth(webuiUrl, fetchImpl);
-    if (refreshed) {
-      headers[SESSION_HEADER] = _sessionToken as string;
-      response = await fetchImpl(url.toString(), init);
+  const timeoutMs = WEBUI_REQUEST_TIMEOUT_MS;
+  const controller = new AbortController();
+  init.signal = controller.signal;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutError = () => new Error(`Sidekick API request timed out after ${timeoutMs} ms.`);
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeoutHandle = setTimeout(() => {
+      const error = timeoutError();
+      controller.abort();
+      reject(error);
+    }, timeoutMs);
+  });
+
+  const operation = (async () => {
+    const fetchSafely = async (requestUrl: string, requestInit?: RequestInit): Promise<Response> => {
+      try {
+        const result = await fetchImpl(requestUrl, requestInit);
+        if (controller.signal.aborted) throw timeoutError();
+        return result;
+      } catch (error) {
+        if (controller.signal.aborted) throw timeoutError();
+        // Native fetch errors can include request URLs. Keep bridge failures
+        // useful without reflecting potentially sensitive query details.
+        if (error instanceof TypeError || (error instanceof Error && error.name === 'AbortError')) {
+          throw new Error('Sidekick API request failed.');
+        }
+        throw error;
+      }
+    };
+
+    let response = await fetchSafely(url.toString(), init);
+    if (response.status === 401) {
+      // The session token is regenerated on every sidecar start; refresh once.
+      const refreshed = await refreshWebuiAuth(webuiUrl, fetchImpl, controller.signal);
+      if (controller.signal.aborted) throw timeoutError();
+      if (refreshed) {
+        headers[SESSION_HEADER] = _sessionToken as string;
+        response = await fetchSafely(url.toString(), init);
+      }
     }
-  }
-  await signalAccessAuthRequired(response);
-  const raw = await response.text();
-  let payload: Record<string, unknown>;
+    if (controller.signal.aborted) throw timeoutError();
+    await signalAccessAuthRequired(response);
+    let raw: string;
+    try {
+      raw = await response.text();
+    } catch (error) {
+      if (controller.signal.aborted) throw timeoutError();
+      if (error instanceof TypeError || (error instanceof Error && error.name === 'AbortError')) {
+        throw new Error('Sidekick API request failed.');
+      }
+      throw error;
+    }
+    if (controller.signal.aborted) throw timeoutError();
+    let payload: Record<string, unknown>;
+    try {
+      payload = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+    } catch {
+      payload = { text: raw };
+    }
+    if (!response.ok) {
+      throw new Error(String(payload.error || payload.message || `HTTP ${response.status}`));
+    }
+    if (path === '/api/auth/logout') _sidekickAuthCookie = null;
+    return payload;
+  })();
+
   try {
-    payload = raw ? JSON.parse(raw) as Record<string, unknown> : {};
-  } catch {
-    payload = { text: raw };
+    return await Promise.race([operation, deadline]);
+  } catch (error) {
+    if (controller.signal.aborted) throw timeoutError();
+    throw error;
+  } finally {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
   }
-  if (!response.ok) {
-    throw new Error(String(payload.error || payload.message || `HTTP ${response.status}`));
-  }
-  if (path === '/api/auth/logout') _sidekickAuthCookie = null;
-  return payload;
 }
 
 export async function getAccessAuthStatus(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<{ auth_enabled: boolean; logged_in: boolean }> {
@@ -855,9 +941,17 @@ export function cancelOnboardingOAuth(
 
 export function listSessions(
   webuiUrl: string,
+  requestOrFetch: SessionListRequest | FetchLike = {},
   fetchImpl: FetchLike = fetch
 ): Promise<{ sessions: DesktopSessionSummary[]; [key: string]: unknown }> {
-  return jsonRequest(webuiUrl, '/api/sessions', {}, fetchImpl);
+  const request = typeof requestOrFetch === 'function' ? {} : requestOrFetch;
+  const selectedFetch = typeof requestOrFetch === 'function' ? requestOrFetch : fetchImpl;
+  const params = new URLSearchParams();
+  if (request.workspacePath?.trim()) params.set('workspace_path', request.workspacePath.trim());
+  const query = params.size ? `?${params.toString()}` : '';
+  return jsonRequest(webuiUrl, `/api/sessions${query}`, {
+    headers: profileScopeHeaders(request.profile)
+  }, selectedFetch);
 }
 
 export function listSpaces(
@@ -881,6 +975,7 @@ export function createSidekickSession(
 
   return jsonRequest(webuiUrl, '/api/session/new', {
     method: 'POST',
+    headers: profileScopeHeaders(request.profile),
     body: JSON.stringify(body)
   }, fetchImpl);
 }
@@ -900,10 +995,13 @@ export function getDesktopSession(
   if (typeof request !== 'string' && request.msgLimit !== undefined) {
     params.set('msg_limit', String(request.msgLimit));
   }
+  if (typeof request !== 'string' && request.workspacePath?.trim()) {
+    params.set('workspace_path', request.workspacePath.trim());
+  }
   return jsonRequest(
     webuiUrl,
     `/api/session?${params.toString()}`,
-    {},
+    { headers: typeof request === 'string' ? {} : profileScopeHeaders(request.profile) },
     fetchImpl
   );
 }
@@ -913,8 +1011,12 @@ export function renameSession(
   request: RenameSessionRequest,
   fetchImpl: FetchLike = fetch
 ): Promise<{ session?: DesktopSessionDetail; [key: string]: unknown }> {
-  return jsonRequest(webuiUrl, '/api/session/rename', {
+  const params = new URLSearchParams();
+  if (request.workspacePath?.trim()) params.set('workspace_path', request.workspacePath.trim());
+  const query = params.size ? `?${params.toString()}` : '';
+  return jsonRequest(webuiUrl, `/api/session/rename${query}`, {
     method: 'POST',
+    headers: profileScopeHeaders(request.profile),
     body: JSON.stringify({
       session_id: request.sessionId,
       title: request.title
@@ -929,6 +1031,7 @@ export function deleteSession(
 ): Promise<Record<string, unknown>> {
   return jsonRequest(webuiUrl, '/api/session/delete', {
     method: 'POST',
+    headers: profileScopeHeaders(request.profile),
     body: JSON.stringify({ session_id: request.sessionId })
   }, fetchImpl);
 }
@@ -940,19 +1043,21 @@ export function duplicateSession(
 ): Promise<{ session?: DesktopSessionDetail; [key: string]: unknown }> {
   return jsonRequest(webuiUrl, '/api/session/duplicate', {
     method: 'POST',
+    headers: profileScopeHeaders(request.profile),
     body: JSON.stringify({ session_id: request.sessionId })
   }, fetchImpl);
 }
 
 export function getSessionDraft(
   webuiUrl: string,
-  sessionId: string,
+  requestOrId: string | SessionIdRequest,
   fetchImpl: FetchLike = fetch
 ): Promise<{ draft?: ComposerDraft; [key: string]: unknown }> {
+  const request = typeof requestOrId === 'string' ? { sessionId: requestOrId } : requestOrId;
   return jsonRequest(
     webuiUrl,
-    `/api/session/draft?session_id=${encodeURIComponent(sessionId)}`,
-    {},
+    `/api/session/draft?session_id=${encodeURIComponent(request.sessionId)}`,
+    { headers: profileScopeHeaders(request.profile) },
     fetchImpl
   );
 }
@@ -964,6 +1069,7 @@ export function saveSessionDraft(
 ): Promise<{ draft?: ComposerDraft; [key: string]: unknown }> {
   return jsonRequest(webuiUrl, '/api/session/draft', {
     method: 'POST',
+    headers: profileScopeHeaders(request.profile),
     body: JSON.stringify({
       session_id: request.sessionId,
       text: request.text || '',
@@ -2115,20 +2221,38 @@ export function configureDiscord(webuiUrl: string, request: DiscordConfigRequest
   }, fetchImpl);
 }
 
-async function createSession(webuiUrl: string, fetchImpl: FetchLike): Promise<SessionShape> {
-  const response = await jsonRequest<{ session?: SessionShape }>(webuiUrl, '/api/session/new', {
-    method: 'POST',
-    body: '{}'
-  }, fetchImpl);
+function sessionCreationScope(request: SidekickMessageRequest): CreateSessionRequest {
+  const workspace = request.workspace?.trim() || '';
+  return {
+    ...(workspace ? { workspace, scopeGoalsToWorkspace: true } : {}),
+    ...(request.model?.trim() ? { model: request.model.trim() } : {}),
+    ...(request.modelProvider !== undefined ? { modelProvider: request.modelProvider } : {}),
+    ...(request.profile?.trim() ? { profile: request.profile.trim() } : {}),
+  };
+}
+
+async function createSession(
+  webuiUrl: string,
+  request: CreateSessionRequest,
+  fetchImpl: FetchLike
+): Promise<SessionShape> {
+  const response = await createSidekickSession(webuiUrl, request, fetchImpl);
   if (!response.session?.session_id) throw new Error('Sidekick could not create a chat session.');
   return response.session;
 }
 
-async function getSession(webuiUrl: string, sessionId: string, fetchImpl: FetchLike): Promise<SessionShape> {
+async function getSession(
+  webuiUrl: string,
+  sessionId: string,
+  scope: Pick<SidekickMessageRequest, 'profile' | 'workspace'>,
+  fetchImpl: FetchLike
+): Promise<SessionShape> {
+  const params = new URLSearchParams({ session_id: sessionId });
+  if (scope.workspace?.trim()) params.set('workspace_path', scope.workspace.trim());
   const response = await jsonRequest<{ session?: SessionShape }>(
     webuiUrl,
-    `/api/session?session_id=${encodeURIComponent(sessionId)}`,
-    {},
+    `/api/session?${params.toString()}`,
+    { headers: profileScopeHeaders(scope.profile) },
     fetchImpl
   );
   if (!response.session?.session_id) throw new Error('Sidekick session was not found.');
@@ -2151,6 +2275,7 @@ async function startChat(webuiUrl: string, session: SessionShape, request: Sidek
     sandbox_disabled: request.sandboxDisabled ?? false
   };
   if (request.providerAccountEmail?.trim()) body.provider_account_email = request.providerAccountEmail.trim().toLowerCase();
+  if (request.reasoningEffort?.trim()) body.reasoning_effort = request.reasoningEffort.trim();
   if (request.groundingContext && typeof request.groundingContext === 'object') {
     body.grounding_context = {
       url: request.groundingContext.url || '',
@@ -2161,6 +2286,7 @@ async function startChat(webuiUrl: string, session: SessionShape, request: Sidek
   if (resolvedModel) body.model = resolvedModel;
   return jsonRequest(webuiUrl, '/api/chat/start', {
     method: 'POST',
+    headers: profileScopeHeaders(request.profile),
     body: JSON.stringify(body)
   }, fetchImpl);
 }
@@ -2179,7 +2305,7 @@ export async function startSidekickChat(
       model_provider: request.modelProvider,
       workspace: request.workspace
     }
-    : await createSession(webuiUrl, fetchImpl);
+    : await createSession(webuiUrl, sessionCreationScope(request), fetchImpl);
   const started = await startChat(webuiUrl, session, { ...request, message }, fetchImpl);
   const sessionId = String(started.session_id || session.session_id || request.sessionId || '');
   if (!sessionId || !started.stream_id) throw new Error('Sidekick did not return a chat stream.');
@@ -2229,8 +2355,8 @@ export async function sendSidekickMessage(
   if (!message) throw new Error('Sidekick needs a message before it can respond.');
 
   const session = request.sessionId
-    ? await getSession(webuiUrl, request.sessionId, fetchImpl)
-    : await createSession(webuiUrl, fetchImpl);
+    ? await getSession(webuiUrl, request.sessionId, request, fetchImpl)
+    : await createSession(webuiUrl, sessionCreationScope(request), fetchImpl);
 
   const started = await startChat(webuiUrl, session, { ...request, message }, fetchImpl);
   const intervalMs = poll.intervalMs ?? 1000;
@@ -2239,7 +2365,7 @@ export async function sendSidekickMessage(
 
   while (Date.now() < deadline) {
     await delay(intervalMs);
-    const latest = await getSession(webuiUrl, String(session.session_id), fetchImpl);
+    const latest = await getSession(webuiUrl, String(session.session_id), request, fetchImpl);
     if (!latest.active_stream_id && !latest.pending_user_message) {
       return {
         sessionId: String(latest.session_id),

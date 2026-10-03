@@ -419,6 +419,7 @@ class _ProfileGoalManager:
         self.profile_home = Path(profile_home).expanduser().resolve()
         self.space_slug = str(space_slug or "").strip().lower() or None
         self.default_max_turns = int(default_max_turns or DEFAULT_MAX_TURNS or 20)
+        self._resume_stale = False
         if _profile_db(self.profile_home, space_slug=self.space_slug) is None:
             raise RuntimeError("Persistent goal store unavailable for the requested profile or Space")
         self._state = self._load()
@@ -530,9 +531,46 @@ class _ProfileGoalManager:
         return self._state
 
     def resume(self, *, reset_budget: bool = False):
+        self._resume_stale = False
         if not self._state:
             return None
         if self._state.status == "active" and not reset_budget:
+            return self._state
+        pending_response = getattr(self._state, "pending_judge_response", None)
+        if pending_response is not None and not reset_budget:
+            expected_state = copy.deepcopy(self._state)
+            expected_run_id = self._run_id()
+            pending_user_initiated = bool(getattr(self._state, "pending_judge_user_initiated", True))
+            if judge_goal is None:
+                verdict, reason, parse_failed = "unavailable", "goal judge unavailable", False
+            else:
+                verdict, reason, parse_failed = judge_goal(
+                    expected_state.goal,
+                    pending_response,
+                    prior_responses=expected_state.recent_assistant_responses,
+                )
+            # The provider call runs without the goal lock. Reload before
+            # applying its result so a concurrent clear/replacement always wins.
+            latest_state = self._load()
+            latest_run_id = str(getattr(latest_state, "_goal_run_id", "") or "") if latest_state else None
+            if latest_state != expected_state or latest_run_id != expected_run_id:
+                self._state = latest_state
+                self._resume_stale = True
+                return self._state
+            if verdict == "unavailable":
+                self._state.last_verdict = verdict
+                self._state.last_reason = reason
+                self._state.paused_reason = "goal judge unavailable; retry /goal resume after restoring the judge provider"
+                self._save(self._state)
+                return self._state
+            self._state.status = "active"
+            self._state.paused_reason = None
+            self._state.pending_judge_response = None
+            self.evaluate_after_turn(
+                pending_response,
+                user_initiated=pending_user_initiated,
+                judged_result=(verdict, reason, parse_failed),
+            )
             return self._state
         exhausted = (
             self._state.max_turns is not None
@@ -548,6 +586,12 @@ class _ProfileGoalManager:
         self._state.consumed_continuation_turn = -1
         if reset_budget:
             self._state.turns_used = 0
+            if getattr(self._state, "pending_judge_response", None) is not None:
+                self._state.recent_assistant_responses = bounded_goal_evidence(
+                    [*self._state.recent_assistant_responses, self._state.pending_judge_response]
+                )
+                self._state.pending_judge_response = None
+                self._state.pending_judge_user_initiated = True
         self._state.consecutive_parse_failures = 0
         self._save(self._state)
         return self._state
@@ -577,18 +621,41 @@ class _ProfileGoalManager:
                 "message": "",
             }
 
-        state.turns_used += 1
-        state.last_turn_at = time.time()
-
         if judged_result is not None:
             verdict, reason, parse_failed = judged_result
         elif judge_goal is None:
-            verdict, reason, parse_failed = "continue", "goal judge unavailable", False
+            verdict, reason, parse_failed = "unavailable", "goal judge unavailable", False
         else:
             verdict, reason, parse_failed = judge_goal(
                 state.goal, str(last_response or ""),
                 prior_responses=state.recent_assistant_responses,
             )
+        if verdict == "unavailable":
+            state.pending_judge_response = str(last_response or "")[:4000]
+            state.pending_judge_user_initiated = bool(user_initiated)
+            state.last_turn_at = time.time()
+            state.last_verdict = verdict
+            state.last_reason = reason
+            state.status = "paused"
+            state.paused_reason = "goal judge unavailable; retry /goal resume after restoring the judge provider"
+            self._save(state)
+            return {
+                "status": "paused",
+                "should_continue": False,
+                "continuation_prompt": None,
+                "verdict": "unavailable",
+                "reason": reason,
+                "message": (
+                    "⏸ Goal paused because its judge could not evaluate the last response after a bounded retry. "
+                    "The response was saved for re-evaluation; no completion was assumed and no new generation was started. "
+                    "Restore the judge provider, then use /goal resume."
+                ),
+            }
+
+        state.turns_used += 1
+        state.last_turn_at = time.time()
+        state.pending_judge_response = None
+        state.pending_judge_user_initiated = True
         state.recent_assistant_responses = bounded_goal_evidence(
             [*state.recent_assistant_responses, str(last_response or "")]
         )
@@ -728,6 +795,7 @@ def _state_payload(
         "last_verdict": getattr(state, "last_verdict", None),
         "last_reason": getattr(state, "last_reason", None),
         "paused_reason": getattr(state, "paused_reason", None),
+        "pending_judge": getattr(state, "pending_judge_response", None) is not None,
         "session_id": str(session_id).strip() if session_id else "",
         **({"space": space} if space else {}),
     }
@@ -873,6 +941,15 @@ def _goal_status_payload(state: Any, *, default_message: str | None = None) -> D
         }
     if status == "paused":
         reason = str(getattr(state, "paused_reason", "") or "")
+        if "judge unavailable" in reason.lower():
+            return {
+                "message": (
+                    "⏸ Goal evaluation is waiting for the judge provider. The last response is saved for re-evaluation. "
+                    "Restore the provider, then use /goal resume."
+                ),
+                "message_key": "goal_judge_unavailable",
+                "message_args": [],
+            }
         exhausted = (
             max_turns is not None
             and turns_used >= int(max_turns)
@@ -940,6 +1017,15 @@ def _goal_decision_payload(
             "message_args": [reason],
         }
     if status == "paused":
+        paused_reason = str(getattr(state, "paused_reason", "") or "").strip().lower()
+        if "judge unavailable" in paused_reason:
+            return {
+                **decision,
+                "turns_used": turns_used,
+                "max_turns": max_turns,
+                "message_key": "goal_judge_unavailable",
+                "message_args": [],
+            }
         return {
             **decision,
             "turns_used": turns_used,
@@ -1163,7 +1249,25 @@ def goal_command_payload(
                         **_goal_status_payload(state),
                     )
                 cancel_goal_continuation(sid, profile_home=profile_home, space_slug=space_slug)
+                has_pending_judge = getattr(state, "pending_judge_response", None) is not None
+                if not has_pending_judge:
+                    state = mgr.resume()
+            if has_pending_judge:
+                # Retrying a provider-backed judge can block. Keep pause/clear/
+                # replacement responsive; the profile manager reloads and
+                # verifies the saved goal identity before committing the result.
                 state = mgr.resume()
+                if getattr(mgr, "_resume_stale", False):
+                    state_payload = _goal_status_payload(state, default_message="Goal changed during judge retry.")
+                    return _payload(
+                        action="status",
+                        message=state_payload["message"],
+                        message_key=state_payload.get("message_key"),
+                        message_args=state_payload.get("message_args"),
+                        state=state,
+                        session_id=sid,
+                        space_slug=space_slug,
+                    )
         except Exception as exc:
             logger.warning("Could not persist goal resume for session %s: %s", sid, exc)
             return _payload(ok=False, action="resume", error="persistence_failed", message="Goal state could not be saved.", retryable=True, session_id=sid, space_slug=space_slug)
@@ -1349,7 +1453,7 @@ def evaluate_goal_after_turn(
                 }
 
         judged_result = (
-            ("continue", "goal judge unavailable", False)
+            ("unavailable", "goal judge unavailable", False)
             if judge_goal is None
             else judge_goal(
                 expected_state.goal, str(last_response or ""),

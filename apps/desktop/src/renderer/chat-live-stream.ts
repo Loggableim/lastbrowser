@@ -13,6 +13,59 @@ export type RestoredChatStream = {
   pendingUserMessage: string;
 };
 
+export type RestoredChatTurnState = {
+  activeStreamId: string | null;
+  pendingUserMessage: string;
+  orphanedPendingTurn: boolean;
+  preserveLocalTurn: boolean;
+  runState: 'idle' | 'streaming' | 'error';
+};
+
+export function isLocalChatTurnForSession(
+  sessionId: string,
+  localTurnSessionId: string | null,
+  localTurnInFlight: boolean,
+): boolean {
+  return localTurnInFlight && Boolean(sessionId) && localTurnSessionId === sessionId;
+}
+
+/** Preserve transcript state only while its own session's active stream still matches the snapshot. */
+export function isMatchingLocalChatStreamSnapshot(
+  sessionId: string,
+  localTurnSessionId: string | null,
+  localTurnInFlight: boolean,
+  snapshotStreamId: string | null,
+  localStreamId: string | null,
+): boolean {
+  return isLocalChatTurnForSession(sessionId, localTurnSessionId, localTurnInFlight)
+    && Boolean(snapshotStreamId)
+    && snapshotStreamId === localStreamId;
+}
+
+/** Resolve reload UI state without orphaning a newer turn started after the session snapshot was fetched. */
+export function readRestoredChatTurnState(session: unknown, localTurnInFlight = false): RestoredChatTurnState {
+  if (!session || typeof session !== 'object' || Array.isArray(session)) {
+    return { activeStreamId: null, pendingUserMessage: '', orphanedPendingTurn: false, preserveLocalTurn: localTurnInFlight, runState: 'idle' };
+  }
+  const record = session as Record<string, unknown>;
+  const activeStreamId = typeof record.active_stream_id === 'string' && record.active_stream_id.trim()
+    ? record.active_stream_id.trim()
+    : null;
+  const pendingUserMessage = typeof record.pending_user_message === 'string'
+    ? record.pending_user_message
+    : '';
+  const hasOrphanedPendingTurn = !activeStreamId && Boolean(pendingUserMessage.trim());
+  const preserveLocalTurn = localTurnInFlight && hasOrphanedPendingTurn;
+  const orphanedPendingTurn = hasOrphanedPendingTurn && !preserveLocalTurn;
+  return {
+    activeStreamId,
+    pendingUserMessage,
+    orphanedPendingTurn,
+    preserveLocalTurn,
+    runState: activeStreamId ? 'streaming' : orphanedPendingTurn ? 'error' : 'idle',
+  };
+}
+
 /** Read the active stream identity needed to reattach after a renderer restart. */
 export function readRestoredChatStream(session: unknown): RestoredChatStream | null {
   if (!session || typeof session !== 'object' || Array.isArray(session)) return null;
@@ -77,6 +130,18 @@ export function restorePendingChatTurn<T extends LiveChatMessage>(
   return [...withUser, { role: 'assistant', content: 'Working on it...', pending: true } as T];
 }
 
+/** Preserve an unfinished user turn but release its pending UI state when the backend has no stream to resume. */
+export function finishOrphanedChatTurn<T extends LiveChatMessage>(
+  messages: T[],
+  pendingUserMessage: string,
+  error: string,
+): T[] {
+  return finishLiveChatMessageWithError(
+    restorePendingChatTurn(messages, pendingUserMessage),
+    error,
+  );
+}
+
 /**
  * A session snapshot can race with a newly started local turn. Keep the live
  * turn when that snapshot has not persisted its pending/streaming assistant
@@ -85,6 +150,7 @@ export function restorePendingChatTurn<T extends LiveChatMessage>(
 export function preserveInFlightChatMessages<T extends LiveChatMessage>(
   snapshot: T[],
   current: T[],
+  preserveWhenUserMissing = false,
 ): T[] {
   let pendingIndex = -1;
   for (let index = current.length - 1; index >= 0; index -= 1) {
@@ -106,7 +172,28 @@ export function preserveInFlightChatMessages<T extends LiveChatMessage>(
   }
   const userAlreadyPersisted = !precedingUser || snapshot.some((message) =>
     message.role === 'user' && message.content === precedingUser.content);
-  if (!userAlreadyPersisted) return snapshot;
+  if (!userAlreadyPersisted) {
+    if (!preserveWhenUserMissing || !precedingUser) return snapshot;
+    const restoredTurn = restorePendingChatTurn(snapshot, precedingUser.content || '');
+    let pendingAssistantIndex = -1;
+    for (let index = restoredTurn.length - 1; index >= 0; index -= 1) {
+      const message = restoredTurn[index];
+      if (message.role === 'assistant' && (message.pending || message.streaming)) {
+        pendingAssistantIndex = index;
+        break;
+      }
+    }
+    if (pendingAssistantIndex < 0) return restoredTurn;
+    const withLocalAssistant = [...restoredTurn];
+    for (let index = pendingAssistantIndex - 1; index >= 0; index -= 1) {
+      if (withLocalAssistant[index].role === 'user') {
+        withLocalAssistant[index] = precedingUser;
+        break;
+      }
+    }
+    withLocalAssistant[pendingAssistantIndex] = pendingAssistant;
+    return withLocalAssistant;
+  }
 
   let snapshotUserIndex = -1;
   if (precedingUser) {

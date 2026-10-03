@@ -2494,6 +2494,34 @@ def _workspace_slug_from_request(request: Request) -> str:
     return str(value).strip().lower()
 
 
+def _workspace_path_from_request(request: Request) -> Path | None:
+    """Return a validated browser workspace path used only as a session filter.
+
+    Browser Spaces are filesystem workspaces, not Sidekick Space slugs.  Keep
+    this query separate from ``workspace`` so it cannot redirect session
+    storage or goal state into a fabricated native Space.
+    """
+    value = str(request.query_params.get("workspace_path") or "").strip()
+    if not value:
+        return None
+    from web.api.workspace import resolve_trusted_workspace_read_only
+
+    try:
+        return Path(resolve_trusted_workspace_read_only(value)).expanduser().resolve()
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _workspace_path_matches(session: dict[str, Any], workspace_path: Path) -> bool:
+    value = session.get("workspace")
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        return Path(value).expanduser().resolve() == workspace_path
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
+
+
 def _get_space_workspace(slug: str):
     from web.api.space_engine import DEFAULT_SPACE_SLUG, get_workspace
 
@@ -2534,6 +2562,10 @@ def _load_space_sessions(slug: str) -> list[dict[str, Any]]:
     for row in raw:
         if not isinstance(row, dict):
             continue
+        legacy_goal_slug = str(row.get("workspace_slug") or "").strip().lower()
+        if legacy_goal_slug.startswith("lbws-") and not row.get("goal_space_slug"):
+            row["goal_space_slug"] = legacy_goal_slug
+            index_changed = True
         if not row.get("active_stream_id"):
             continue
         # Never strip markers for a stream that is still alive in this
@@ -2693,10 +2725,15 @@ def _normalize_space_session_slug(session: dict[str, Any], slug: str) -> bool:
     normalized = str(slug or "").strip().lower()
     if not normalized:
         return False
-    if session.get("workspace_slug") == normalized:
-        return False
-    session["workspace_slug"] = normalized
-    return True
+    changed = False
+    legacy_goal_slug = str(session.get("workspace_slug") or "").strip().lower()
+    if legacy_goal_slug.startswith("lbws-") and not session.get("goal_space_slug"):
+        session["goal_space_slug"] = legacy_goal_slug
+        changed = True
+    if session.get("workspace_slug") != normalized:
+        session["workspace_slug"] = normalized
+        changed = True
+    return changed
 
 
 def _repair_space_session_slug(session: dict[str, Any], slug: str, path: Path | None = None) -> bool:
@@ -3136,13 +3173,19 @@ def _load_space_session_tail(path: Path, *, limit: int) -> dict[str, Any] | None
 async def get_space_session_detail(request: Request):
     t0 = time.perf_counter()
     workspace_slug = _workspace_slug_from_request(request)
-    if not workspace_slug:
+    workspace_path = _workspace_path_from_request(request)
+    if not workspace_slug and workspace_path is None:
         return await dispatch_route(request)
 
     sid = str(request.query_params.get("session_id") or "").strip()
     if not sid:
         return JSONResponse({"error": "session_id is required"}, status_code=400)
-    path, slug = _space_session_path(workspace_slug, sid)
+    if workspace_path is not None:
+        from web.api.space_engine import DEFAULT_SPACE_SLUG
+
+        path, slug = _space_session_path(DEFAULT_SPACE_SLUG, sid)
+    else:
+        path, slug = _space_session_path(workspace_slug, sid)
     t_path = time.perf_counter()
     if not path or not path.exists():
         raise HTTPException(status_code=404, detail="Session not found")
@@ -3183,6 +3226,8 @@ async def get_space_session_detail(request: Request):
             raise HTTPException(status_code=500, detail=f"Failed to load session: {exc}") from exc
     if not isinstance(session, dict):
         raise HTTPException(status_code=500, detail="Invalid session file")
+    if workspace_path is not None and not _workspace_path_matches(session, workspace_path):
+        raise HTTPException(status_code=404, detail="Session not found")
     t_load = time.perf_counter()
 
     # A truncated tail cannot safely be repaired or written back. If it still
@@ -3252,7 +3297,14 @@ async def get_space_session_detail(request: Request):
     try:
         from web.api.goals import goal_state_for_session
 
-        payload["goal"] = goal_state_for_session(sid, space_slug=slug or payload.get("workspace_slug") or payload.get("space_slug") or payload.get("space"))
+        payload["goal"] = goal_state_for_session(
+            sid,
+            space_slug=(
+                payload.get("goal_space_slug")
+                or (payload.get("workspace_slug") if str(payload.get("workspace_slug") or "").startswith("lbws-") else None)
+                or slug or payload.get("space_slug") or payload.get("space")
+            ),
+        )
     except Exception:
         payload["goal"] = None
     return {"session": payload}
@@ -3264,12 +3316,34 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
         include_archived_raw = str(request.query_params.get("include_archived") or "").strip().lower()
         include_archived = include_archived_raw in {"1", "true", "yes", "on"}
         workspace_slug = _workspace_slug_from_request(request)
+        workspace_path = _workspace_path_from_request(request)
         defer_cli = str(request.query_params.get("defer_cli") or "").strip().lower() in {"1", "true", "yes", "on"}
         startup_fallback = (
             not workspace_slug
             and str(request.query_params.get("startup") or "").strip().lower()
             in {"1", "true", "yes", "on"}
         )
+        if workspace_path is not None:
+            from web.api.space_engine import DEFAULT_SPACE_SLUG
+
+            sessions = [
+                row for row in _load_space_sessions(DEFAULT_SPACE_SLUG)
+                if _workspace_path_matches(row, workspace_path)
+            ]
+            archived_count = sum(1 for s in sessions if s.get("archived"))
+            visible_sessions = sessions if include_archived else [s for s in sessions if not s.get("archived")]
+            total = len(visible_sessions)
+            page = visible_sessions[offset:offset + limit]
+            now = time.time()
+            for s in page:
+                s["is_active"] = (
+                    s.get("ended_at") is None
+                    and (now - s.get("last_active", s.get("started_at", s.get("updated_at", 0)))) < 300
+                )
+            return _sessions_json_response(
+                request,
+                {"sessions": page, "total": total, "archived_count": archived_count, "limit": limit, "offset": offset},
+            )
         if workspace_slug:
             sessions = _load_space_sessions(workspace_slug)
             archived_count = sum(1 for s in sessions if s.get("archived"))
@@ -3345,6 +3419,8 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
             )
         finally:
             db.close()
+    except HTTPException:
+        raise
     except Exception as exc:
         _log.exception("GET /api/sessions failed")
         raise HTTPException(status_code=500, detail="Internal server error") from exc
@@ -7706,7 +7782,12 @@ _mount_plugin_api_routes()
 @app.get("/api/onboarding/status")
 async def onboarding_status():
     """Return the current onboarding/provisioning status."""
-    return get_onboarding_status()
+    # Status assembly performs synchronous filesystem, credential, and model
+    # catalog discovery. Keep that work off the ASGI event loop so health and
+    # other native endpoints remain responsive during a cold catalog build.
+    # asyncio.to_thread copies the request ContextVars, including the selected
+    # profile set by profile_context_middleware.
+    return await asyncio.to_thread(get_onboarding_status)
 
 
 @app.get("/api/onboarding/oauth/poll")
@@ -7747,7 +7828,7 @@ async def onboarding_setup(body: dict | None = None):
     """Apply onboarding setup (provider, model, API keys)."""
     body = body or {}
     try:
-        return apply_onboarding_setup(body)
+        return await asyncio.to_thread(apply_onboarding_setup, body)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
@@ -7757,7 +7838,7 @@ async def onboarding_setup(body: dict | None = None):
 @app.post("/api/onboarding/complete")
 async def onboarding_complete():
     """Mark onboarding as complete."""
-    return complete_onboarding()
+    return await asyncio.to_thread(complete_onboarding)
 
 
 @app.post("/api/onboarding/probe")
@@ -7768,7 +7849,9 @@ async def onboarding_probe(body: dict | None = None):
     base_url = str(body.get("base_url") or "")
     api_key = str(body.get("api_key") or "").strip() or None
     try:
-        return probe_provider_endpoint(provider, base_url, api_key)
+        return await asyncio.to_thread(
+            probe_provider_endpoint, provider, base_url, api_key
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"probe failed: {e}") from e
 

@@ -6,7 +6,8 @@ import {
   parseProviderModelId,
   qualifyModelForProvider,
   resolveCatalogModelSelection,
-  resolvePreferredChatModel
+  resolvePreferredChatModel,
+  resolvePreferredChatModelSelection
 } from '../src/renderer/provider-model-selection.js';
 
 describe('provider-aware model selection', () => {
@@ -18,6 +19,134 @@ describe('provider-aware model selection', () => {
     expect(parseProviderModelId('vendor/model:free', 'openrouter')).toEqual({
       provider: 'openrouter',
       model: 'vendor/model:free'
+    });
+    expect(parseProviderModelId('@openrouter:vendor/model:free', 'openrouter')).toEqual({
+      provider: 'openrouter',
+      model: 'vendor/model:free'
+    });
+  });
+
+  it('round-trips namespaced custom provider IDs with a matching provider hint', () => {
+    const qualified = qualifyModelForProvider('GLM-5', 'custom:jingdong');
+    expect(qualified).toBe('@custom:jingdong:GLM-5');
+    expect(parseProviderModelId(qualified, 'custom:jingdong')).toEqual({
+      provider: 'custom:jingdong',
+      model: 'GLM-5'
+    });
+    expect(resolvePreferredChatModelSelection({
+      spaceSelection: { model: qualified, provider: 'custom:jingdong' },
+      selectedModel: 'gemini-2.5-pro',
+      selectedModelProvider: 'google-gemini-cli',
+    })).toEqual({ provider: 'custom:jingdong', model: 'GLM-5' });
+  });
+
+  it('keeps generic custom model colons intact and leaves an unhinted ambiguous ID unchanged', () => {
+    const qualified = qualifyModelForProvider('gemma4:31b', 'custom');
+    expect(qualified).toBe('@custom:gemma4:31b');
+    expect(parseProviderModelId(qualified, 'custom')).toEqual({
+      provider: 'custom',
+      model: 'gemma4:31b'
+    });
+    expect(parseProviderModelId('@custom:gemma4:31b')).toEqual({
+      provider: 'custom',
+      model: 'gemma4:31b'
+    });
+  });
+
+  it('uses the longest catalog provider prefix when parsing qualified custom defaults', () => {
+    const groups = [
+      { providerId: 'custom', models: [{ id: 'gemma4:31b' }, { id: 'jingdong:GLM-5' }] },
+      { providerId: 'custom:jingdong', models: [{ id: 'GLM-5' }] },
+    ];
+    expect(resolveCatalogModelSelection('@custom:jingdong:GLM-5', groups)).toEqual({
+      provider: 'custom:jingdong',
+      model: 'GLM-5'
+    });
+    expect(resolveCatalogModelSelection('@custom:gemma4:31b', groups)).toEqual({
+      provider: 'custom',
+      model: 'gemma4:31b'
+    });
+  });
+
+  it('matches backend catalog entries that are already provider-qualified', () => {
+    const groups = [{
+      providerId: 'custom:jingdong',
+      models: [{ id: '@custom:jingdong:GLM-5' }],
+    }];
+    expect(resolveCatalogModelSelection('@custom:jingdong:GLM-5', groups)).toEqual({
+      provider: 'custom:jingdong',
+      model: 'GLM-5'
+    });
+  });
+
+  it('normalizes qualified catalog entries for bare defaults and empty-default fallback', () => {
+    const qualifiedGroups = [
+      { providerId: 'other-provider', models: [{ id: '@other-provider:deepseek-v4.1-flash' }] },
+      { providerId: 'ollama-cloud', models: [{ id: '@ollama-cloud:deepseek-v4.1-flash' }] },
+    ];
+    expect(resolveCatalogModelSelection('deepseek-v4.1-flash', qualifiedGroups, 'ollama-cloud')).toEqual({
+      model: 'deepseek-v4.1-flash',
+      provider: 'ollama-cloud'
+    });
+    expect(resolveCatalogModelSelection('', qualifiedGroups, 'ollama-cloud')).toEqual({
+      model: 'deepseek-v4.1-flash',
+      provider: 'ollama-cloud'
+    });
+
+    const rawGroups = [
+      { providerId: 'other-provider', models: [{ id: 'deepseek-v4.1-flash' }] },
+      { providerId: 'ollama-cloud', models: [{ id: 'deepseek-v4.1-flash' }] },
+    ];
+    expect(resolveCatalogModelSelection('deepseek-v4.1-flash', rawGroups, 'ollama-cloud')).toEqual({
+      model: 'deepseek-v4.1-flash',
+      provider: 'ollama-cloud'
+    });
+    expect(resolveCatalogModelSelection('', rawGroups, 'ollama-cloud')).toEqual({
+      model: 'deepseek-v4.1-flash',
+      provider: 'ollama-cloud'
+    });
+  });
+
+  it('rejects a qualified model entry that belongs to a different provider group', () => {
+    const groups = [
+      { providerId: 'ollama-cloud', models: [{ id: '@openrouter:vendor/model:free' }] },
+      { providerId: 'openrouter', models: [{ id: '@openrouter:vendor/model:free' }] },
+    ];
+    expect(resolveCatalogModelSelection('vendor/model:free', groups, 'ollama-cloud')).toEqual({
+      model: 'vendor/model:free',
+      provider: 'openrouter'
+    });
+    expect(resolveCatalogModelSelection('', groups, 'ollama-cloud')).toEqual({ model: '' });
+  });
+
+  it('uses active provider to disambiguate a duplicate bare catalog model ID', () => {
+    const groups = [
+      { providerId: 'custom', models: [{ id: 'GLM-5' }, { id: 'gemma4:31b' }] },
+      { providerId: 'custom:jingdong', models: [{ id: 'GLM-5' }] },
+      { providerId: 'openrouter', models: [{ id: 'GLM-5' }] },
+    ];
+    expect(resolveCatalogModelSelection('GLM-5', groups, 'custom:jingdong')).toEqual({
+      model: 'GLM-5',
+      provider: 'custom:jingdong'
+    });
+    expect(resolveCatalogModelSelection('GLM-5', groups, 'openrouter')).toEqual({
+      model: 'GLM-5',
+      provider: 'openrouter'
+    });
+    expect(resolveCatalogModelSelection('GLM-5', groups)).toEqual({
+      model: 'GLM-5',
+      provider: 'custom'
+    });
+  });
+
+  it('keeps a qualified provider ahead of an unrelated active provider hint', () => {
+    const groups = [
+      { providerId: 'custom', models: [{ id: 'gemma4:31b' }] },
+      { providerId: 'openrouter', models: [{ id: 'vendor/model:free' }] },
+    ];
+    expect(resolveCatalogModelSelection('@openrouter:vendor/model:free', groups, 'custom')).toEqual({
+      model: 'vendor/model:free',
+      provider: 'openrouter'
     });
   });
 
@@ -34,6 +163,28 @@ describe('provider-aware model selection', () => {
     expect(resolvePreferredChatModel('', 'chat-choice', 'wizard-model')).toBe('chat-choice');
     expect(resolvePreferredChatModel('', '', 'wizard-model')).toBe('wizard-model');
     expect(resolvePreferredChatModel('', null, '  ')).toBe('');
+  });
+
+  it('uses the same Space-qualified model/provider pair for the chat route and Copilot header', () => {
+    const selection = resolvePreferredChatModelSelection({
+      spaceSelection: { model: '@ollama-cloud:deepseek-v4.1-flash', provider: 'stale-provider' },
+      selectedModel: 'gemini-2.5-pro',
+      selectedModelProvider: 'google-gemini-cli',
+      setupModel: 'gemini-2.5-pro',
+      setupProvider: 'google-gemini-cli',
+    });
+
+    expect(selection).toEqual({ model: 'deepseek-v4.1-flash', provider: 'ollama-cloud' });
+    expect(resolvePreferredChatModelSelection({
+      spaceSelection: { model: '', provider: 'ollama-cloud' },
+      selectedModel: 'gemini-2.5-pro',
+      selectedModelProvider: 'google-gemini-cli',
+    })).toEqual({ model: 'gemini-2.5-pro', provider: 'google-gemini-cli' });
+    expect(resolvePreferredChatModelSelection({
+      spaceSelection: { model: 'qwen-plus', provider: 'alibaba' },
+      selectedModel: 'qwen-plus',
+      selectedModelProvider: 'openrouter',
+    })).toEqual({ model: 'qwen-plus', provider: 'alibaba' });
   });
 
   it('keeps provider identity when saving a bare model and avoids double qualification', () => {
@@ -61,11 +212,20 @@ describe('provider-aware model selection', () => {
   it('wires qualified provider IDs through the visible chat model picker', () => {
     const composer = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/ChatComponents.tsx'), 'utf8');
     const chat = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8');
+    const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
+    const copilot = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8');
     expect(composer).toContain('value={qualifyModelForProvider(model, modelProvider)}');
+    expect(composer).toContain('<label className="composer-model"');
+    expect(composer).not.toContain('{modelOptions.length > 0 && (');
     expect(composer).toContain('value={qualifyModelForProvider(m.id, group.providerId)}');
     expect(composer).toContain('key={`${group.providerId || group.provider}:${m.id}`}');
-    expect(chat).toContain('const parsed = parseProviderModelId(selection);');
+    expect(chat).toContain('const parsed = resolveCatalogModelSelection(selection, modelCatalog);');
     expect(chat).toContain('modelProvider={modelProvider}');
+    expect(app).toContain('const chatModelSelection = resolvePreferredChatModelSelection({');
+    expect(app).toContain('const copilotModelSelection = resolvePreferredChatModelSelection({');
+    expect(copilot).toContain('const activeModelId = modelName || selectedModel;');
+    expect(chat).toContain('setModelCatalogError(true)');
+    expect(chat).toContain("t('chat.retryModels')");
   });
 
   it('maps a provider-qualified configured default to the bare picker ID', () => {

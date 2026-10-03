@@ -2,6 +2,19 @@ export type LoupeCaptureRect = { x: number; y: number; width: number; height: nu
 export type LoupeViewportBounds = { x: number; y: number; width: number; height: number };
 export type CursorShakeSample = { t: number; x: number };
 
+export type LoupeCaptureRetryState = { point: { x: number; y: number } | null; attempts: number };
+
+/** Retry transient empty captures a few times, including without pointer movement. */
+export function nextLoupeCaptureRetry(
+  point: { x: number; y: number },
+  previous: LoupeCaptureRetryState,
+  maxAttempts = 3
+): LoupeCaptureRetryState & { exhausted: boolean } {
+  const moved = previous.point !== null && hasLoupePointerMoved(point, previous.point);
+  const attempts = moved || previous.point === null ? 1 : previous.attempts + 1;
+  return { point, attempts, exhausted: attempts >= maxAttempts };
+}
+
 /** Avoid repeating an expensive capture until the pointer moves after the last attempt. */
 export function hasLoupePointerMoved(
   point: { x: number; y: number },

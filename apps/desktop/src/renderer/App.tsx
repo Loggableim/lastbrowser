@@ -59,12 +59,13 @@ import {
 import { hideWebviewScrollbars } from './browser-view.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
-import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, restorePendingChatTurn } from './chat-live-stream.js';
+import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
+import { ChatUiOwnership } from './chat-ui-ownership.js';
 import { playChatCompletionSound } from './notification-sound.js';
 import { normalizeNativeChatTurnUsage, type NativeChatTurnUsage } from './chat-usage.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
 import { isNativeChatProgressEvent, isNativeChatStreamWaitExpired } from './chat-stream-timeout.js';
-import { adoptCreatedTurnSession, claimRestorableGoalContinuation, continuationAfterTerminalEvent, isActiveTurnContextCurrent, isGoalContinuationContextCurrent, readGoalContinuationPrompt, readGoalEvaluationError, readRestorableGoalContinuation, releaseRestorableGoalContinuationClaim, startGoalContinuation } from './goal-continuation.js';
+import { adoptCreatedTurnSession, claimRestorableGoalContinuation, continuationAfterTerminalEvent, isActiveTurnContextCurrent, isGoalContinuationContextCurrent, readGoalContinuationPrompt, readGoalEvaluationError, readGoalEvaluationMessageKey, readRestorableGoalContinuation, releaseRestorableGoalContinuationClaim, startGoalContinuation } from './goal-continuation.js';
 import { parsePersistentGoalCommand, requestPersistentGoalCommand, requestPersistentGoalControlWhileBusy, shouldDispatchPersistentGoalControlWhileBusy } from './persistent-goal-command.js';
 import { readPersistentGoalStateError } from './persistent-goal-state.js';
 import { executeBrowserAction, parseNaturalLanguageBrowserCommand } from './browser-agent-tools.js';
@@ -252,10 +253,13 @@ import { AddressBar } from './components/AddressBar.js';
 import { useTabStore, type SplitLayoutMode } from './stores/useTabStore.js';
 import { mergeSpaceAudioTabs, subscribeToWebviewMediaState, type SpaceAudioKeepaliveEntry } from './space-audio-keepalive.js';
 import { isCurrentSpaceDirectorySnapshot, resolveCanonicalSpacePath, resolveRefreshedActiveSpacePath } from './space-paths.js';
+import { mergeSessionListSnapshot, resolveSessionListSelection, sessionListResponseMatchesScope, sameSessionListScope, type SessionListScope } from './session-list-scope.js';
 import { usePanelStore, type SidebarMode } from './stores/usePanelStore.js';
 import { useChatStore } from './stores/useChatStore.js';
+import { recordCompletedChatEvidence } from './provider-chat-evidence.js';
+import { saveChatReasoningEffort } from './chat-reasoning-effort.js';
 import { loadSpaceModelSelection, removeSpaceModel, saveSpaceModel } from './space-models.js';
-import { resolvePreferredChatModel } from './provider-model-selection.js';
+import { resolvePreferredChatModel, resolvePreferredChatModelSelection } from './provider-model-selection.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { LiveAutomationBanner } from './components/LiveAutomationBanner.js';
 import { detectPageCategory, getQuickActionChips, executeQuickAction, type QuickActionChip } from './quick-actions.js';
@@ -684,6 +688,45 @@ const panelIcons: Record<LastbrowserPanelId, React.ComponentType<{ size?: number
   terminal: Terminal
 };
 
+type RendererChatTraceEntry = Record<string, string | number | boolean | null>;
+
+/** Opt-in renderer diagnostics for isolated smoke profiles. Never record prompt, answer, or identifiers. */
+function traceRendererChat(phase: string, fields: RendererChatTraceEntry = {}): void {
+  try {
+    if (window.localStorage.getItem('__lastbrowser_chat_stream_debug') !== '1') return;
+    const target = window as Window & { __lastbrowserChatStreamDebug?: RendererChatTraceEntry[] };
+    const entries = target.__lastbrowserChatStreamDebug ?? (target.__lastbrowserChatStreamDebug = []);
+    entries.push({ phase, at: performance.now(), ...fields });
+    if (entries.length > 256) entries.splice(0, entries.length - 256);
+  } catch {
+    // Diagnostics must never affect chat behavior (for example, when storage is unavailable).
+  }
+}
+
+function getRendererChatSnapshotTrace(
+  streamStatus: { active?: boolean } | null,
+  session: DesktopSessionDetail | null,
+  expectedStreamId: string
+): RendererChatTraceEntry {
+  const activeStreamId = session?.active_stream_id;
+  return {
+    streamActive: typeof streamStatus?.active === 'boolean' ? streamStatus.active : null,
+    snapshotPresent: session !== null,
+    pending: Boolean(session?.pending_user_message),
+    messageCount: Array.isArray(session?.messages) ? session.messages.length : null,
+    streamMatches: typeof activeStreamId === 'string' && activeStreamId === expectedStreamId
+  };
+}
+
+function classifyRendererChatError(message: string): string {
+  const lower = message.toLowerCase();
+  if (/auth|credential|unauthor/.test(lower)) return 'authentication';
+  if (/quota|rate.?limit|capacity/.test(lower)) return 'capacity';
+  if (/timeout|timed out|deadline/.test(lower)) return 'timeout';
+  if (/cancel|abort/.test(lower)) return 'cancelled';
+  return 'provider';
+}
+
 export function App(): JSX.Element {
   return (
     <DesktopI18nProvider>
@@ -694,6 +737,8 @@ export function App(): JSX.Element {
 
 function AppContent(): JSX.Element {
   const { t } = useDesktopI18n();
+  const selectedChatModel = useChatStore((state) => state.selectedModel);
+  const selectedChatModelProvider = useChatStore((state) => state.selectedModelProvider);
   const {
     tabs,
     setTabs,
@@ -894,6 +939,8 @@ function AppContent(): JSX.Element {
     }, 350);
   }, []);
   const [sessions, setSessions] = useState<DesktopSessionSummary[]>([]);
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
   const [sessionSearch, setSessionSearch] = useState('');
   const [sessionError, setSessionError] = useState('');
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -904,6 +951,11 @@ function AppContent(): JSX.Element {
   const [chatError, setChatError] = useState('');
   const [chatRunState, setChatRunState] = useState<ChatRunState>('idle');
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
+  const activeStreamIdRef = useRef(activeStreamId);
+  const updateActiveStreamId = (streamId: string | null): void => {
+    activeStreamIdRef.current = streamId;
+    setActiveStreamId(streamId);
+  };
   const [composerText, setComposerText] = useState('');
   const [composerMode, setComposerMode] = useState<ComposerMode>('action');
   const [spaces, setSpaces] = useState<SpaceSummary[]>([]);
@@ -963,6 +1015,21 @@ function AppContent(): JSX.Element {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [hasActiveDownloads, setHasActiveDownloads] = useState(false);
   const [sidekickBusy, setSidekickBusy] = useState(false);
+  const chatUiOwnershipRef = useRef(new ChatUiOwnership());
+  const beginChatUiTurn = (sessionId?: string | null): number => {
+    const ownerId = chatUiOwnershipRef.current.begin(sessionId);
+    setSidekickBusy(true);
+    return ownerId;
+  };
+  const bindChatUiTurnSession = (ownerId: number, sessionId: string): void => {
+    chatUiOwnershipRef.current.bindSession(ownerId, sessionId);
+  };
+  const registerChatUiStream = (ownerId: number, streamId: string, sessionId: string): void => {
+    chatUiOwnershipRef.current.registerStream(ownerId, streamId, sessionId);
+  };
+  const finishChatUiTurn = (ownerId: number): void => {
+    if (chatUiOwnershipRef.current.finish(ownerId)) setSidekickBusy(false);
+  };
   const [pinnedModalOpen, setPinnedModalOpen] = useState(false);
   const [pinnedEditApp, setPinnedEditApp] = useState<PinnedApp | null>(null);
   const [messages, setMessages] = useState<SidekickMessage[]>(() => [
@@ -1018,6 +1085,8 @@ function AppContent(): JSX.Element {
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
   const activeProfileIdRef = useRef(activeProfileId);
   const activeSpacePathRef = useRef(activeSpacePath);
+  const activeSessionListScopeRef = useRef<SessionListScope>({ profile: activeProfileId, workspacePath: activeSpacePath });
+  const appliedSessionListScopeRef = useRef<SessionListScope | null>(null);
   const restoredGoalContinuationClaimsRef = useRef(new Set<string>());
   const restoredChatStreamClaimsRef = useRef(new Set<string>());
   activeProfileIdRef.current = activeProfileId;
@@ -1543,34 +1612,39 @@ function AppContent(): JSX.Element {
 
   const refreshSessions = useCallback(async (): Promise<void> => {
     if (!sidekickApiReady) return;
+    const requestedScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath };
+    const isRequestScopeCurrent = (): boolean => sessionListResponseMatchesScope(requestedScope, {
+      profile: activeProfileIdRef.current,
+      workspacePath: activeSpacePathRef.current
+    });
     try {
-      const result = await window.lastbrowser.sidekick.listSessions();
+      const result = await window.lastbrowser.sidekick.listSessions(requestedScope);
       const nextSessions = Array.isArray(result.sessions) ? result.sessions : [];
-      setSessions((prevSessions) => {
-        const currentId = activeSessionIdRef.current;
-        const currentActive = currentId ? prevSessions.find((s) => s.session_id === currentId) : null;
-        if (currentActive && !nextSessions.some((s) => s.session_id === currentId)) {
-          return [currentActive, ...nextSessions];
-        }
-        return nextSessions;
-      });
+      if (!isRequestScopeCurrent()) return;
+      const snapshot = mergeSessionListSnapshot(
+        appliedSessionListScopeRef.current,
+        requestedScope,
+        sessionsRef.current,
+        nextSessions,
+        activeSessionIdRef.current
+      );
+      appliedSessionListScopeRef.current = requestedScope;
+      setSessions(snapshot.sessions);
       setSessionError('');
+      setActiveSessionId((current) => isRequestScopeCurrent()
+        ? resolveSessionListSelection(current, nextSessions, snapshot.scopeChanged, isCreatingSessionRef.current)
+        : current);
       // Fetch projects
       try {
         const projData = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/projects' });
         if (Array.isArray(projData?.projects)) setProjects(projData.projects);
       } catch { /* ignore */ }
-      setActiveSessionId((current) => {
-        // Wenn aktuell eine Session aktiv ist, behalte sie UNBEDINGT bei! Niemals zurück auf nextSessions[0] springen!
-        if (current) return current;
-        if (isCreatingSessionRef.current) return null;
-        return nextSessions[0]?.session_id || null;
-      });
     } catch (error) {
+      if (!isRequestScopeCurrent()) return;
       const message = error instanceof Error ? error.message : String(error);
       setSessionError(isTransientSidekickFetchError(message) ? '' : message);
     }
-  }, [sidekickApiReady]);
+  }, [activeProfileId, activeSpacePath, sidekickApiReady]);
 
   const refreshSpaces = useCallback(async (): Promise<void> => {
     if (!sidekickApiReady) return;
@@ -1599,40 +1673,109 @@ function AppContent(): JSX.Element {
     sessionId: string,
     options: { loadDraft?: boolean; showLoading?: boolean } = {}
   ): Promise<DesktopSessionDetail | null> => {
-    if (!sidekickApiReady || !sessionId) return null;
+    if (!sidekickApiReady || !sessionId || activeSessionIdRef.current !== sessionId) return null;
+    const sessionScope: SessionListScope = {
+      profile: activeProfileIdRef.current,
+      workspacePath: activeSpacePathRef.current
+    };
     if (options.showLoading !== false) setActiveSessionLoading(true);
     try {
       const [sessionResult, draftResult] = await Promise.all([
-        window.lastbrowser.sidekick.getSession({ sessionId, messages: true, msgLimit: 80 }),
+        window.lastbrowser.sidekick.getSession({
+          sessionId,
+          messages: true,
+          msgLimit: 80,
+          ...sessionScope
+        }),
         options.loadDraft === false
           ? Promise.resolve(null)
-          : window.lastbrowser.sidekick.getDraft(sessionId).catch(() => null)
+          : window.lastbrowser.sidekick.getDraft({ sessionId, ...sessionScope }).catch(() => null)
       ]);
       const session = sessionResult.session || null;
       if (!session) throw new Error('Sidekick session was not found.');
       // Session fetches can resolve after the user has selected another chat.
       // Never let a stale response replace the currently visible transcript.
-      if (activeSessionIdRef.current !== sessionId) return session;
+      if (activeSessionIdRef.current !== sessionId || !sessionListResponseMatchesScope(sessionScope, {
+        profile: activeProfileIdRef.current,
+        workspacePath: activeSpacePathRef.current
+      })) return session;
+      const localTurnForThisSession = isLocalChatTurnForSession(
+        sessionId,
+        sessionId,
+        chatUiOwnershipRef.current.isLocalTurn(sessionId),
+      );
+      const restoredTurn = readRestoredChatTurnState(session, localTurnForThisSession);
+      // A session snapshot can predate a just-started local turn. Keep that
+      // turn intact until its accepted stream ID is visible in a fresh snapshot.
+      if (restoredTurn.preserveLocalTurn) return session;
       setActiveSession(session);
       const snapshotMessages = normalizeChatMessages(session.messages);
-      setChatMessages((current) => preserveInFlightChatMessages(snapshotMessages, current));
-      setActiveStreamId(session.active_stream_id || null);
-      setChatRunState(session.active_stream_id || session.pending_user_message ? 'streaming' : 'idle');
-      setChatError(readPersistentGoalStateError(session) || '');
+      const interruptedTurnMessage = t('chat.interruptedPendingTurn');
+      if (restoredTurn.orphanedPendingTurn) {
+        setChatMessages(finishOrphanedChatTurn(snapshotMessages, restoredTurn.pendingUserMessage, interruptedTurnMessage));
+        const legacySnapshotMessages: SidekickMessage[] = snapshotMessages.flatMap((message) => {
+          if (message.role !== 'assistant' && message.role !== 'user' && message.role !== 'system') return [];
+          return [{ ...message, role: message.role, content: message.content || '', id: crypto.randomUUID() }];
+        });
+        setMessages(finishOrphanedChatTurn(legacySnapshotMessages, restoredTurn.pendingUserMessage, interruptedTurnMessage));
+      } else {
+        const preserveMatchingLocalStream = isMatchingLocalChatStreamSnapshot(
+          sessionId,
+          sessionId,
+          chatUiOwnershipRef.current.isLocalTurn(sessionId),
+          restoredTurn.activeStreamId,
+          activeStreamIdRef.current,
+        );
+        setChatMessages((current) => preserveInFlightChatMessages(
+          snapshotMessages,
+          current,
+          preserveMatchingLocalStream,
+        ));
+      }
+      updateActiveStreamId(restoredTurn.activeStreamId);
+      setChatRunState(restoredTurn.runState);
+      setChatError(readPersistentGoalStateError(session) || (restoredTurn.orphanedPendingTurn ? interruptedTurnMessage : ''));
       if (draftResult?.draft && options.loadDraft !== false) {
         setComposerText(String(draftResult.draft.text || ''));
       }
       return session;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (activeSessionIdRef.current === sessionId) {
+      if (activeSessionIdRef.current === sessionId && sessionListResponseMatchesScope(sessionScope, {
+        profile: activeProfileIdRef.current,
+        workspacePath: activeSpacePathRef.current
+      })) {
         setChatError(isTransientSidekickFetchError(message) ? '' : message);
       }
       return null;
     } finally {
-      if (options.showLoading !== false && activeSessionIdRef.current === sessionId) setActiveSessionLoading(false);
+      if (options.showLoading !== false && activeSessionIdRef.current === sessionId && sessionListResponseMatchesScope(sessionScope, {
+        profile: activeProfileIdRef.current,
+        workspacePath: activeSpacePathRef.current
+      })) setActiveSessionLoading(false);
     }
-  }, [sidekickApiReady]);
+  }, [sidekickApiReady, t]);
+
+  useEffect(() => {
+    const nextScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath };
+    if (sameSessionListScope(activeSessionListScopeRef.current, nextScope)) return;
+    activeSessionListScopeRef.current = nextScope;
+    // A session from another profile/Space must not remain selected while the
+    // scoped list is loading. Keep an already-running backend turn alive; its
+    // owner checks will ignore late UI updates until that session is selected again.
+    activeSessionIdRef.current = null;
+    setActiveSessionId(null);
+    setActiveSession(null);
+    setSessions([]);
+    setChatMessages([]);
+    setMessages([]);
+    setActiveSessionLoading(false);
+    chatUiOwnershipRef.current.releaseUiOwner();
+    setSidekickBusy(false);
+    updateActiveStreamId(null);
+    setChatRunState('idle');
+    setChatError('');
+  }, [activeProfileId, activeSpacePath]);
 
   useEffect(() => {
     if (!sidekickApiReady) return undefined;
@@ -1651,7 +1794,7 @@ function AppContent(): JSX.Element {
       setActiveSession(null);
       setChatMessages([]);
       setComposerText('');
-      setActiveStreamId(null);
+      updateActiveStreamId(null);
       setChatRunState('idle');
       return undefined;
     }
@@ -1668,7 +1811,6 @@ function AppContent(): JSX.Element {
       !sidekickApiReady
       || !activeSession
       || activeSessionLoading
-      || sidekickBusy
       || activeSession.session_id !== activeSessionId
     ) return;
     const restored = readRestoredChatStream(activeSession);
@@ -1684,13 +1826,28 @@ function AppContent(): JSX.Element {
       spacePath: activeSpacePathRef.current
     };
     if (!isActiveTurnContextCurrent(turnContext, current)) return;
+    const localOwnerId = chatUiOwnershipRef.current.ownerForStream(restored.streamId);
+    if (localOwnerId !== null) {
+      if (sidekickBusy && chatUiOwnershipRef.current.activeSessionId !== restored.sessionId) return;
+      if (chatUiOwnershipRef.current.reactivate(localOwnerId, restored.sessionId)) {
+        setActivePanel('chat');
+        setChatMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage));
+        setMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage));
+        updateActiveStreamId(restored.streamId);
+        setSidekickBusy(true);
+        setChatRunState('streaming');
+      }
+      return;
+    }
+    if (sidekickBusy) return;
     if (!claimRestoredChatStream(restored.sessionId, restored.streamId, restoredChatStreamClaimsRef.current)) return;
 
     setActivePanel('chat');
     setChatMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage));
     setMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage));
-    setActiveStreamId(restored.streamId);
-    setSidekickBusy(true);
+    updateActiveStreamId(restored.streamId);
+    const uiTurnOwner = beginChatUiTurn(restored.sessionId);
+    registerChatUiStream(uiTurnOwner, restored.streamId, restored.sessionId);
     setChatRunState('streaming');
     let failed = false;
     const isOwningContextCurrent = (): boolean => isActiveTurnContextCurrent(turnContext, {
@@ -1742,9 +1899,9 @@ function AppContent(): JSX.Element {
           setMessages((messages) => finishLiveChatMessageWithError(messages, message));
         }
       } finally {
-        setSidekickBusy(false);
+        finishChatUiTurn(uiTurnOwner);
         if (isOwningContextCurrent()) {
-          setActiveStreamId(null);
+          updateActiveStreamId(null);
           setChatRunState(failed ? 'error' : 'idle');
         }
       }
@@ -1799,10 +1956,16 @@ function AppContent(): JSX.Element {
   useEffect(() => {
     if (!activeSessionId || !sidekickApiReady) return undefined;
     const timer = window.setTimeout(() => {
-      void window.lastbrowser.sidekick.saveDraft({ sessionId: activeSessionId, text: composerText, files: [] }).catch(() => null);
+      void window.lastbrowser.sidekick.saveDraft({
+        sessionId: activeSessionId,
+        text: composerText,
+        files: [],
+        profile: activeProfileId,
+        workspacePath: activeSpacePath
+      }).catch(() => null);
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [activeSessionId, composerText, sidekickApiReady]);
+  }, [activeProfileId, activeSpacePath, activeSessionId, composerText, sidekickApiReady]);
 
   const refreshWorkspace = useCallback(async (pathOverride?: string): Promise<void> => {
     if (status?.sidekick !== 'ready' || !activeSessionId || workspacePanelCollapsed) return;
@@ -2419,12 +2582,21 @@ function AppContent(): JSX.Element {
     earlyEvents: Array<{ streamId?: string; event?: string; data?: unknown }> = [],
     unsubscribeEarly?: () => void,
     isOwningContextCurrent: () => boolean = () => activeSessionIdRef.current === sessionId
-  ): Promise<{ continuationPrompt: string | null; goalError: string | null; streamError: string | null }> {
+  ): Promise<{
+    continuationPrompt: string | null;
+    goalError: string | null;
+    streamError: string | null;
+    completed: boolean;
+    cancelled: boolean;
+    providerEvidence: { provider_id?: string; model_id?: string; successful_chat?: boolean } | null;
+  }> {
     const streamStartedAt = Date.now();
     let lastProgressAt = streamStartedAt;
     let sawStreamEnd = false;
     let streamFailed = false;
     let streamError: string | null = null;
+    let cancelled = false;
+    let providerEvidence: { provider_id?: string; model_id?: string; successful_chat?: boolean } | null = null;
     let hasLiveOutput = false;
     let goalContinuationPrompt: string | null = null;
     let goalEvaluationError: string | null = null;
@@ -2438,7 +2610,18 @@ function AppContent(): JSX.Element {
     const handleStreamEvent = (payload: unknown): void => {
       const event = payload as { streamId?: string; event?: string; data?: unknown } | null;
       if (!event) return;
-      if (event.streamId !== streamId) return;
+      const streamMatches = event.streamId === streamId;
+      const ownsContext = isOwningContextCurrent();
+      const eventError = event.event === 'error' || event.event === 'apperror'
+        ? readNativeChatStreamError(event.data)
+        : null;
+      traceRendererChat('event', {
+        event: event.event ?? 'unknown',
+        streamMatches,
+        ownsContext,
+        ...(eventError ? { errorKind: classifyRendererChatError(eventError) } : {})
+      });
+      if (!streamMatches) return;
       if (isNativeChatProgressEvent(event.event)) lastProgressAt = Date.now();
       if (event.event === 'stream_end') {
         if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
@@ -2452,10 +2635,17 @@ function AppContent(): JSX.Element {
       if (event.event === 'done') {
         const payload = isRecord(event.data) ? event.data : {};
         const usage = normalizeNativeChatTurnUsage(payload.usage);
+        const proof = isRecord(payload.provider_evidence) ? payload.provider_evidence : null;
+        providerEvidence = proof ? {
+          provider_id: typeof proof.provider_id === 'string' ? proof.provider_id : undefined,
+          model_id: typeof proof.model_id === 'string' ? proof.model_id : undefined,
+          successful_chat: proof.successful_chat === true,
+        } : null;
         if (usage && isOwningContextCurrent()) setLastChatTurnUsage({ sessionId, usage });
         return;
       }
       if (event.event === 'cancel') {
+        cancelled = true;
         goalContinuationPrompt = continuationAfterTerminalEvent(goalContinuationPrompt, 'cancel');
         sawStreamEnd = true;
         if (isOwningContextCurrent()) {
@@ -2466,7 +2656,7 @@ function AppContent(): JSX.Element {
       }
       if (event.event === 'error' || event.event === 'apperror') {
         goalContinuationPrompt = continuationAfterTerminalEvent(goalContinuationPrompt, 'error');
-        streamError = readNativeChatStreamError(event.data);
+        streamError = eventError ?? readNativeChatStreamError(event.data);
         streamFailed = true;
         sawStreamEnd = true;
         if (isOwningContextCurrent()) {
@@ -2480,13 +2670,28 @@ function AppContent(): JSX.Element {
         goalContinuationPrompt = readGoalContinuationPrompt(event, streamId, sessionId);
       }
       if (!goalEvaluationError) {
-        goalEvaluationError = readGoalEvaluationError(event, streamId, sessionId);
+        const goalMessageKey = readGoalEvaluationMessageKey(event, streamId, sessionId);
+        goalEvaluationError = goalMessageKey === 'goal_judge_unavailable'
+          ? t('goal.judgeUnavailable')
+          : readGoalEvaluationError(event, streamId, sessionId);
       }
       if (event.event === 'token' || event.event === 'delta' || event.event === 'reasoning') {
         const delta = readLiveChatDelta(event.event, event.data);
         if (delta && isOwningContextCurrent()) {
           hasLiveOutput = true;
-          setChatMessages((current) => applyLiveChatDelta(current, delta.kind, delta.text));
+          setChatMessages((current) => {
+            const updated = applyLiveChatDelta(current, delta.kind, delta.text);
+            const assistant = [...updated].reverse().find((item) => item.role === 'assistant');
+            traceRendererChat('state-update', {
+              source: 'delta',
+              messageCount: updated.length,
+              deltaLength: delta.text.length,
+              contentLength: assistant?.content?.length ?? 0,
+              pending: assistant?.pending === true,
+              streaming: assistant?.streaming === true
+            });
+            return updated;
+          });
           setMessages((current) => applyLiveChatDelta(current, delta.kind, delta.text));
         }
         return;
@@ -2518,13 +2723,24 @@ function AppContent(): JSX.Element {
     for (const event of earlyEvents) handleStreamEvent(event);
 
     try {
-      await window.lastbrowser.sidekick.subscribeChatStream({ streamId }).catch(() => {
+      traceRendererChat('stream-subscribe-start', { ownsContext: isOwningContextCurrent() });
+      await window.lastbrowser.sidekick.subscribeChatStream({ streamId }).then(() => {
+        traceRendererChat('stream-subscribe-complete', { ownsContext: isOwningContextCurrent() });
+      }).catch((error: unknown) => {
         streamFailed = true;
+        const message = error instanceof Error ? error.message : String(error);
+        traceRendererChat('stream-subscribe-failed', {
+          errorKind: classifyRendererChatError(message),
+          ownsContext: isOwningContextCurrent()
+        });
       });
 
       while (!sawStreamEnd && !isNativeChatStreamWaitExpired(streamStartedAt, lastProgressAt, Date.now())) {
         await delay(600);
-        if (sawStreamEnd) return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError };
+        if (sawStreamEnd) {
+          traceRendererChat('completion-return', { path: 'stream-event', ownsContext: isOwningContextCurrent() });
+          return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError, completed: true, cancelled, providerEvidence };
+        }
         if (streamFailed) break;
         // The stream is the fast path, but a dropped connection must not hang
         // the turn: poll occasionally as a safety net.
@@ -2532,15 +2748,28 @@ function AppContent(): JSX.Element {
           const streamStatus = await window.lastbrowser.sidekick.getStreamStatus(streamId).catch(() => null);
           if (!hasLiveOutput || streamStatus?.active === false) {
             const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
+            traceRendererChat('stream-status-poll', {
+              stage: 'stream',
+              ...getRendererChatSnapshotTrace(streamStatus, latest, streamId)
+            });
             if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
               if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
-              return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError };
+              traceRendererChat('completion-return', { path: 'stream-status', ownsContext: isOwningContextCurrent() });
+              return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError, completed: true, cancelled, providerEvidence };
             }
           }
         }
       }
-      if (sawStreamEnd) return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError };
+      if (sawStreamEnd) {
+        traceRendererChat('completion-return', { path: 'stream-event', ownsContext: isOwningContextCurrent() });
+        return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError, completed: !cancelled && !streamFailed, cancelled, providerEvidence };
+      }
     } finally {
+      traceRendererChat('stream-unsubscribe', {
+        sawStreamEnd,
+        streamFailed,
+        ownsContext: isOwningContextCurrent()
+      });
       unsubscribe();
       void window.lastbrowser.sidekick.unsubscribeChatStream({ streamId }).catch(() => null);
     }
@@ -2550,9 +2779,14 @@ function AppContent(): JSX.Element {
       await delay(1200);
       const streamStatus = await window.lastbrowser.sidekick.getStreamStatus(streamId).catch(() => null);
       const latest = await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
+      traceRendererChat('stream-status-poll', {
+        stage: 'fallback',
+        ...getRendererChatSnapshotTrace(streamStatus, latest, streamId)
+      });
       if (isChatCompletionConfirmed({ streamActive: streamStatus?.active, session: latest })) {
         if (!goalContinuationPrompt && isOwningContextCurrent()) notifyCompletion();
-        return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError };
+        traceRendererChat('completion-return', { path: 'fallback-status', ownsContext: isOwningContextCurrent() });
+        return { continuationPrompt: goalContinuationPrompt, goalError: goalEvaluationError, streamError, completed: true, cancelled, providerEvidence };
       }
     }
     throw new Error('Sidekick is still working. Try again in a moment.');
@@ -2574,26 +2808,33 @@ function AppContent(): JSX.Element {
     setChatMessages((current) => [...current, { role: 'user', content: displayText }, { role: 'assistant', content: 'Updating persistent goal…', pending: true }]);
     setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', content: displayText }, { id: crypto.randomUUID(), role: 'assistant', content: 'Updating persistent goal…', pending: true }]);
     setComposerText('');
-    setSidekickBusy(true);
-    setChatRunState('starting');
+    const uiTurnOwner = beginChatUiTurn(turnContext.sessionId || null);
+    if (turnContext.sessionId) bindChatUiTurnSession(uiTurnOwner, turnContext.sessionId);
+    if (isOwningContextCurrent()) setChatRunState('starting');
     setChatError('');
     let failed = false;
 
     try {
       const storedModel = window.localStorage.getItem('lastbrowser.selectedModel.v1');
       const spaceModelSelection = loadSpaceModelSelection(turnContext.spacePath, window.localStorage);
-      const selectedModel = resolvePreferredChatModel(
+      const hasSelectedModel = resolvePreferredChatModel(
         spaceModelSelection?.model,
         storedModel,
         setupState.model
-      ) || undefined;
-      const configuredSelection = selectedModel
+      );
+      const configuredSelection = hasSelectedModel
         ? null
         : await resolveConfiguredModelSelection((request) => window.lastbrowser.sidekick.requestWebui(request));
-      const selectedProvider = spaceModelSelection?.provider
-        || (selectedModel === useChatStore.getState().selectedModel
-        ? useChatStore.getState().selectedModelProvider || undefined
-        : selectedModel === setupState.model ? setupState.provider || undefined : configuredSelection?.provider || undefined);
+      const modelSelection = resolvePreferredChatModelSelection({
+        spaceSelection: spaceModelSelection,
+        selectedModel: storedModel,
+        selectedModelProvider: useChatStore.getState().selectedModelProvider,
+        setupModel: setupState.model,
+        setupProvider: setupState.provider,
+        configuredSelection,
+      });
+      const selectedModel = modelSelection.model || undefined;
+      const selectedProvider = modelSelection.provider || undefined;
 
       if (!turnContext.sessionId) {
         const created = await window.lastbrowser.sidekick.createSession({
@@ -2607,11 +2848,18 @@ function AppContent(): JSX.Element {
         if (!sessionId) throw new Error('Sidekick could not create a session for this goal.');
         if (!isOwningContextCurrent()) return;
         turnContext = { ...turnContext, sessionId };
+        bindChatUiTurnSession(uiTurnOwner, sessionId);
         activeSessionIdRef.current = sessionId;
         setActiveSessionId(sessionId);
         setSessions((current) => [created.session!, ...current.filter((item) => item.session_id !== sessionId)]);
       }
-      void window.lastbrowser.sidekick.saveDraft({ sessionId: turnContext.sessionId, text: '', files: [] }).catch(() => null);
+      void window.lastbrowser.sidekick.saveDraft({
+        sessionId: turnContext.sessionId,
+        text: '',
+        files: [],
+        profile: turnContext.profileId,
+        workspacePath: turnContext.spacePath
+      }).catch(() => null);
 
       const response = await requestPersistentGoalCommand(
         (request) => window.lastbrowser.sidekick.requestWebui(request),
@@ -2624,17 +2872,30 @@ function AppContent(): JSX.Element {
           modelProvider: selectedProvider
         }
       );
-      let reply = typeof response.message === 'string' ? response.message.trim() : '';
+      let reply = response.message_key === 'goal_judge_unavailable'
+        ? t('goal.judgeUnavailable')
+        : typeof response.message === 'string' ? response.message.trim() : '';
       const streamId = typeof response.stream_id === 'string' ? response.stream_id.trim() : '';
       const responseSessionId = typeof response.session_id === 'string' && response.session_id.trim()
         ? response.session_id.trim()
         : turnContext.sessionId;
-      let streamResult: { continuationPrompt: string | null; goalError: string | null; streamError: string | null } | null = null;
+      let streamResult: {
+        continuationPrompt: string | null;
+        goalError: string | null;
+        streamError: string | null;
+        completed: boolean;
+        cancelled: boolean;
+        providerEvidence: { provider_id?: string; model_id?: string; successful_chat?: boolean } | null;
+      } | null = null;
 
       if (streamId) {
         turnContext = { ...turnContext, sessionId: responseSessionId };
-        setActiveStreamId(streamId);
-        setChatRunState('streaming');
+        bindChatUiTurnSession(uiTurnOwner, responseSessionId);
+        registerChatUiStream(uiTurnOwner, streamId, responseSessionId);
+        if (isOwningContextCurrent()) {
+          updateActiveStreamId(streamId);
+          setChatRunState('streaming');
+        }
         streamResult = await pollNativeChat(streamId, responseSessionId, [], undefined, isOwningContextCurrent);
         const updated = await loadActiveSession(responseSessionId, { loadDraft: false, showLoading: false });
         const answer = lastAssistantText(updated);
@@ -2682,9 +2943,10 @@ function AppContent(): JSX.Element {
         )));
       }
     } finally {
-      setSidekickBusy(false);
+      const turnReleasedUi = chatUiOwnershipRef.current.finish(uiTurnOwner);
+      if (turnReleasedUi) setSidekickBusy(false);
       if (isOwningContextCurrent()) {
-        setActiveStreamId(null);
+        updateActiveStreamId(null);
         setChatRunState(failed ? 'error' : 'idle');
       }
     }
@@ -2722,9 +2984,11 @@ function AppContent(): JSX.Element {
       if (!controlRequest) return;
       const response = await controlRequest;
       if (!isOwningContextCurrent()) return;
-      const reply = typeof response.message === 'string' && response.message.trim()
-        ? response.message.trim()
-        : 'Persistent goal updated.';
+      const reply = response.message_key === 'goal_judge_unavailable'
+        ? t('goal.judgeUnavailable')
+        : typeof response.message === 'string' && response.message.trim()
+          ? response.message.trim()
+          : 'Persistent goal updated.';
       setChatMessages((current) => [...current, { role: 'assistant', content: reply }]);
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: reply }]);
       void refreshSessions();
@@ -2740,7 +3004,8 @@ function AppContent(): JSX.Element {
   async function startNativeChat(
     message: string,
     displayText = message,
-    continuation?: { sessionId: string; profileId: string; spacePath: string }
+    continuation?: { sessionId: string; profileId: string; spacePath: string },
+    reasoningEffort?: string
   ): Promise<boolean> {
     const trimmed = message.trim();
     if (!trimmed) return false;
@@ -2800,7 +3065,8 @@ function AppContent(): JSX.Element {
       { id: crypto.randomUUID(), role: 'user', content: displayText },
       { id: crypto.randomUUID(), role: 'assistant', content: 'Working on it...', pending: true }
     ]);
-    setSidekickBusy(true);
+    const uiTurnOwner = beginChatUiTurn(turnContext.sessionId || null);
+    if (turnContext.sessionId) bindChatUiTurnSession(uiTurnOwner, turnContext.sessionId);
     setChatRunState('starting');
     const activeTurnIsCurrent = (): boolean => {
       return isActiveTurnContextCurrent(turnContext, {
@@ -2824,21 +3090,24 @@ function AppContent(): JSX.Element {
     try {
       const storedModel = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('lastbrowser.selectedModel.v1') : null;
       const spaceModelSelection = loadSpaceModelSelection(turnContext.spacePath, window.localStorage);
-      const effectiveSelectedModel = resolvePreferredChatModel(
+      const hasSelectedModel = resolvePreferredChatModel(
         spaceModelSelection?.model,
         storedModel,
         setupState.model
-      ) || undefined;
-      const configuredSelection = effectiveSelectedModel
+      );
+      const configuredSelection = hasSelectedModel
         ? null
         : await resolveConfiguredModelSelection((request) => window.lastbrowser.sidekick.requestWebui(request));
-      const chatModelProvider = spaceModelSelection?.provider
-        || (effectiveSelectedModel === useChatStore.getState().selectedModel
-          ? useChatStore.getState().selectedModelProvider || undefined
-          : effectiveSelectedModel === setupState.model ? setupState.provider || undefined : configuredSelection?.provider || undefined);
-      const configuredChatModel = effectiveSelectedModel
-        || configuredSelection?.model
-        || undefined;
+      const chatModelSelection = resolvePreferredChatModelSelection({
+        spaceSelection: spaceModelSelection,
+        selectedModel: storedModel,
+        selectedModelProvider: useChatStore.getState().selectedModelProvider,
+        setupModel: setupState.model,
+        setupProvider: setupState.provider,
+        configuredSelection,
+      });
+      const chatModelProvider = chatModelSelection.provider || undefined;
+      const configuredChatModel = chatModelSelection.model || undefined;
       let teamworkGroundingContext;
       if (configuredChatModel === 'teamwork') {
         try {
@@ -2865,32 +3134,50 @@ function AppContent(): JSX.Element {
         model: configuredChatModel,
         modelProvider: chatModelProvider,
         groundingContext: teamworkGroundingContext,
+        profile: turnContext.profileId,
         workspace: turnContext.spacePath,
-        mode: composerMode
+        mode: composerMode,
+        ...(reasoningEffort ? { reasoningEffort } : {})
       });
       if (!response?.streamId) throw new Error('Sidekick did not return a chat stream ID.');
       chatStartAccepted = true;
+      if (reasoningEffort) saveChatReasoningEffort(response.sessionId, reasoningEffort, window.localStorage);
       const currentTurnContext = adoptCreatedTurnSession(turnContext, {
         sessionId: activeSessionIdRef.current,
         profileId: activeProfileIdRef.current,
         spacePath: activeSpacePathRef.current
       }, response.sessionId);
       const turnContextStillCurrentAfterStream = currentTurnContext !== null;
+      traceRendererChat('chat-started', {
+        hasStreamId: true,
+        ownsContext: turnContextStillCurrentAfterStream
+      });
       // When a fresh conversation is created implicitly by startChat, the
       // selected account could not be bound before the backend returned its
       // session ID. Bind it now so follow-up messages stay on this account in
       // per-session round-robin mode.
       if (currentTurnContext) {
         turnContext = currentTurnContext;
+        bindChatUiTurnSession(uiTurnOwner, turnContext.sessionId);
         setActiveSessionId(response.sessionId);
         activeSessionIdRef.current = response.sessionId;
       }
-      setActiveStreamId(response.streamId);
-      setComposerText('');
-      setChatRunState('streaming');
+      bindChatUiTurnSession(uiTurnOwner, response.sessionId);
+      registerChatUiStream(uiTurnOwner, response.streamId, response.sessionId);
+      if (turnContextStillCurrentAfterStream) {
+        updateActiveStreamId(response.streamId);
+        setComposerText('');
+        setChatRunState('streaming');
+      }
       // Do not delay the SSE subscription on draft persistence. The draft is
       // already captured by startChat; clearing it can finish in the background.
-      void window.lastbrowser.sidekick.saveDraft({ sessionId: response.sessionId, text: '', files: [] }).catch(() => null);
+      void window.lastbrowser.sidekick.saveDraft({
+        sessionId: response.sessionId,
+        text: '',
+        files: [],
+        profile: turnContext.profileId,
+        workspacePath: turnContext.spacePath
+      }).catch(() => null);
       captureEarlyEvents = false;
       const streamResult = await pollNativeChat(
         response.streamId,
@@ -2905,6 +3192,13 @@ function AppContent(): JSX.Element {
       // errors and full summaries — was hidden behind that text.
       const finished = await loadActiveSession(response.sessionId, { loadDraft: false, showLoading: false });
       const answer = lastAssistantText(finished);
+      recordCompletedChatEvidence({
+        startAccepted: chatStartAccepted,
+        completed: streamResult.completed,
+        cancelled: streamResult.cancelled,
+        streamError: streamResult.streamError,
+        providerEvidence: streamResult.providerEvidence,
+      }, window.localStorage);
       if (turnContextStillCurrent) {
         if (streamResult.streamError) {
           turnFailed = true;
@@ -2938,8 +3232,14 @@ function AppContent(): JSX.Element {
         const autoTitle = cleanPrompt.length > 36 ? `${cleanPrompt.slice(0, 36)}…` : cleanPrompt;
         void window.lastbrowser.sidekick.renameSession({
           sessionId: response.sessionId,
-          title: autoTitle
+          title: autoTitle,
+          profile: turnContext.profileId,
+          workspacePath: turnContext.spacePath
         }).then(() => {
+          if (!sessionListResponseMatchesScope({ profile: turnContext.profileId, workspacePath: turnContext.spacePath }, {
+            profile: activeProfileIdRef.current,
+            workspacePath: activeSpacePathRef.current
+          })) return;
           setSessions((current) =>
             current.map((s) => (s.session_id === response.sessionId ? { ...s, title: autoTitle } : s))
           );
@@ -2960,6 +3260,10 @@ function AppContent(): JSX.Element {
       unsubscribeEarly();
       const messageText = error instanceof Error ? error.message : String(error);
       turnFailed = true;
+      traceRendererChat('chat-failed', {
+        errorKind: classifyRendererChatError(messageText),
+        ownsContext: activeTurnIsCurrent()
+      });
       if (activeTurnIsCurrent()) {
         setChatError(messageText);
         setChatMessages((current) => current.map((item) => (
@@ -2972,11 +3276,10 @@ function AppContent(): JSX.Element {
       }
     } finally {
       const turnIsCurrentAfterCompletion = activeTurnIsCurrent();
-      // The composer has one in-flight turn at a time even when its session is
-      // no longer selected. Always release the global busy lock when it ends.
-      setSidekickBusy(false);
+      traceRendererChat('chat-finished', { ownsContext: turnIsCurrentAfterCompletion, failed: turnFailed });
+      if (chatUiOwnershipRef.current.finish(uiTurnOwner)) setSidekickBusy(false);
       if (turnIsCurrentAfterCompletion) {
-        setActiveStreamId(null);
+        updateActiveStreamId(null);
         setChatRunState((current) => {
           // Vision-Impaired Feature 36: soft audio gong when Nova finishes.
           const vision = usePanelStore.getState().visionImpaired;
@@ -2992,16 +3295,28 @@ function AppContent(): JSX.Element {
 
   async function stopNativeChat(): Promise<void> {
     if (!activeStreamId) return;
+    const streamId = activeStreamId;
+    const sessionId = activeSessionId;
+    const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath };
+    const uiTurnOwner = chatUiOwnershipRef.current.ownerForStream(streamId);
     setChatRunState('cancelling');
     try {
-      await window.lastbrowser.sidekick.cancelStream(activeStreamId);
-      if (activeSessionId) await loadActiveSession(activeSessionId, { loadDraft: false, showLoading: false });
+      await window.lastbrowser.sidekick.cancelStream(streamId);
+      if (sessionId) await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : String(error));
+      if (sessionListResponseMatchesScope(sessionScope, {
+        profile: activeProfileIdRef.current,
+        workspacePath: activeSpacePathRef.current
+      })) setChatError(error instanceof Error ? error.message : String(error));
     } finally {
-      setSidekickBusy(false);
-      setActiveStreamId(null);
-      setChatRunState('idle');
+      if (uiTurnOwner !== null && chatUiOwnershipRef.current.finish(uiTurnOwner)) setSidekickBusy(false);
+      if (activeSessionIdRef.current === sessionId && sessionListResponseMatchesScope(sessionScope, {
+        profile: activeProfileIdRef.current,
+        workspacePath: activeSpacePathRef.current
+      })) {
+        updateActiveStreamId(null);
+        setChatRunState('idle');
+      }
     }
   }
 
@@ -3022,8 +3337,17 @@ function AppContent(): JSX.Element {
   async function renameNativeSession(session: DesktopSessionSummary): Promise<void> {
     const nextTitle = window.prompt('Rename chat', sessionTitle(session));
     if (!nextTitle?.trim()) return;
+    const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath };
     try {
-      const result = await window.lastbrowser.sidekick.renameSession({ sessionId: session.session_id, title: nextTitle.trim() });
+      const result = await window.lastbrowser.sidekick.renameSession({
+        sessionId: session.session_id,
+        title: nextTitle.trim(),
+        ...sessionScope
+      });
+      if (!sessionListResponseMatchesScope(sessionScope, {
+        profile: activeProfileIdRef.current,
+        workspacePath: activeSpacePathRef.current
+      })) return;
       const updated = result.session || { ...session, title: nextTitle.trim() };
       setSessions((current) => current.map((item) => (item.session_id === session.session_id ? { ...item, ...updated } : item)));
       if (activeSessionId === session.session_id) {
@@ -3037,8 +3361,13 @@ function AppContent(): JSX.Element {
 
   async function deleteNativeSession(session: DesktopSessionSummary): Promise<void> {
     if (!window.confirm(`Delete "${sessionTitle(session)}"?`)) return;
+    const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath };
     try {
-      await window.lastbrowser.sidekick.deleteSession({ sessionId: session.session_id });
+      await window.lastbrowser.sidekick.deleteSession({ sessionId: session.session_id, ...sessionScope });
+      if (!sessionListResponseMatchesScope(sessionScope, {
+        profile: activeProfileIdRef.current,
+        workspacePath: activeSpacePathRef.current
+      })) return;
       setSessions((current) => {
         const next = current.filter((item) => item.session_id !== session.session_id);
         if (activeSessionId === session.session_id) {
@@ -3055,8 +3384,13 @@ function AppContent(): JSX.Element {
   }
 
   async function duplicateNativeSession(session: DesktopSessionSummary): Promise<void> {
+    const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath };
     try {
-      const result = await window.lastbrowser.sidekick.duplicateSession({ sessionId: session.session_id });
+      const result = await window.lastbrowser.sidekick.duplicateSession({ sessionId: session.session_id, ...sessionScope });
+      if (!sessionListResponseMatchesScope(sessionScope, {
+        profile: activeProfileIdRef.current,
+        workspacePath: activeSpacePathRef.current
+      })) return;
       const duplicated = result.session;
       if (duplicated?.session_id) {
         setSessions((current) => [
@@ -3420,6 +3754,13 @@ function AppContent(): JSX.Element {
   }, [activeTab, setCopilotOpen, startNativeChat]);
 
   const isModernBrowser = layoutMode === 'modern';
+  const copilotModelSelection = resolvePreferredChatModelSelection({
+    spaceSelection: loadSpaceModelSelection(activeSpacePath, window.localStorage),
+    selectedModel: selectedChatModel,
+    selectedModelProvider: selectedChatModelProvider,
+    setupModel: setupState.model,
+    setupProvider: setupState.provider,
+  });
 
   if (!canRenderBrowserForAccessAuth(accessAuthChecked, {
     auth_enabled: accessAuthRequired || !accessAuthChecked,
@@ -3881,7 +4222,7 @@ function AppContent(): JSX.Element {
                   onRemoveSpace={(space) => void removeSpaceNative(space)}
                   onRenameSpace={(space) => void renameSpaceNative(space)}
                   onSelectSpace={handleSpaceSelect}
-                  onSendChat={(message) => void startNativeChat(message)}
+                  onSendChat={(message, effort) => void startNativeChat(message, message, undefined, effort)}
                   onStopChat={() => void stopNativeChat()}
                   onClearBrowserError={() => setBrowserLoadError('')}
                   onSetBrowserError={setBrowserLoadError}
@@ -3900,8 +4241,8 @@ function AppContent(): JSX.Element {
                   onClose={() => setCopilotOpen(false)}
                   onMinimize={() => setCopilotOpen(false)}
                   botName={setupState.botName || 'Nova'}
-                  modelName={setupState.model || 'Google Gemini'}
-                  modelProvider={onboardingStatus?.system?.current_provider || setupState.provider}
+                  modelName={copilotModelSelection.model}
+                  modelProvider={copilotModelSelection.provider || onboardingStatus?.system?.current_provider || setupState.provider}
                   messages={chatMessages}
                   busy={sidekickBusy}
                   onSendMessage={(msg) => void startNativeChat(msg)}
@@ -4204,7 +4545,7 @@ function AppContent(): JSX.Element {
               onRemoveSpace={(space) => void removeSpaceNative(space)}
               onRenameSpace={(space) => void renameSpaceNative(space)}
               onSelectSpace={handleSpaceSelect}
-              onSendChat={(message) => void startNativeChat(message)}
+              onSendChat={(message, effort) => void startNativeChat(message, message, undefined, effort)}
               onStopChat={() => void stopNativeChat()}
               onClearBrowserError={() => setBrowserLoadError('')}
               onSetBrowserError={setBrowserLoadError}
@@ -4419,7 +4760,7 @@ function BrowserMain({
   onRemoveSpace: (space: SpaceSummary) => void;
   onRenameSpace: (space: SpaceSummary) => void;
   onSelectSpace: (path: string) => void;
-  onSendChat: (message: string) => void;
+  onSendChat: (message: string, reasoningEffort?: string) => void;
   onStopChat: () => void;
   onClearBrowserError: () => void;
   onSetBrowserError: (error: string) => void;

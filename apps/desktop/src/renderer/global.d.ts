@@ -247,21 +247,22 @@ declare global {
           error?: string;
         }>;
         requestWebui: (request: WebuiBridgeRequest) => Promise<Record<string, unknown>>;
-        listSessions: () => Promise<{ sessions: DesktopSessionSummary[]; [key: string]: unknown }>;
+        listSessions: (request?: { profile?: string; workspacePath?: string }) => Promise<{ sessions: DesktopSessionSummary[]; [key: string]: unknown }>;
         listSpaces: () => Promise<{ workspaces: SpaceSummary[]; last?: string; [key: string]: unknown }>;
         createSession: (request?: {
           workspace?: string;
+          scopeGoalsToWorkspace?: boolean;
           model?: string;
           modelProvider?: string | null;
           providerAccountEmail?: string | null;
           profile?: string;
         }) => Promise<{ session?: DesktopSessionSummary & Record<string, unknown> }>;
-        getSession: (request: string | { sessionId: string; messages?: boolean; msgLimit?: number }) => Promise<{ session?: DesktopSessionDetail }>;
-        renameSession: (request: { sessionId: string; title: string }) => Promise<{ session?: DesktopSessionDetail; [key: string]: unknown }>;
-        deleteSession: (request: { sessionId: string }) => Promise<Record<string, unknown>>;
-        duplicateSession: (request: { sessionId: string }) => Promise<{ session?: DesktopSessionDetail; [key: string]: unknown }>;
-        getDraft: (sessionId: string) => Promise<{ draft?: ComposerDraft; [key: string]: unknown }>;
-        saveDraft: (request: { sessionId: string; text?: string; files?: unknown[] }) => Promise<{ draft?: ComposerDraft; [key: string]: unknown }>;
+        getSession: (request: string | { sessionId: string; messages?: boolean; msgLimit?: number; profile?: string; workspacePath?: string }) => Promise<{ session?: DesktopSessionDetail }>;
+        renameSession: (request: { sessionId: string; title: string; profile?: string; workspacePath?: string }) => Promise<{ session?: DesktopSessionDetail; [key: string]: unknown }>;
+        deleteSession: (request: { sessionId: string; profile?: string; workspacePath?: string }) => Promise<Record<string, unknown>>;
+        duplicateSession: (request: { sessionId: string; profile?: string; workspacePath?: string }) => Promise<{ session?: DesktopSessionDetail; [key: string]: unknown }>;
+        getDraft: (request: string | { sessionId: string; profile?: string; workspacePath?: string }) => Promise<{ draft?: ComposerDraft; [key: string]: unknown }>;
+        saveDraft: (request: { sessionId: string; text?: string; files?: unknown[]; profile?: string; workspacePath?: string }) => Promise<{ draft?: ComposerDraft; [key: string]: unknown }>;
         startChat: (request: {
           sessionId?: string | null;
           message: string;
@@ -272,6 +273,7 @@ declare global {
           mode?: 'action' | 'plan';
           chatMode?: string;
           sandboxDisabled?: boolean;
+          reasoningEffort?: string;
           groundingContext?: { url?: string; title?: string; snippet?: string } | null;
         }) => Promise<{ sessionId: string; streamId: string }>;
         getStreamStatus: (streamId: string) => Promise<{ active?: boolean; [key: string]: unknown }>;

@@ -61,6 +61,6 @@ describe('resolveCanonicalSpacePath', () => {
     expect(app).toContain('saveSpaceModel(createdSpacePath, data.model');
     expect(app).toContain('spacePath: createdSpacePath');
     expect(app).toContain('isCurrentSpaceDirectorySnapshot(directoryRevisionAtRequest, spaceDirectoryRevisionRef.current)');
-    expect(app).toContain('selectionRevisionAtRequest,\n        currentSelectionRevision: activeSpaceSelectionRevisionRef.current');
+    expect(app).toMatch(/selectionRevisionAtRequest,\s*currentSelectionRevision:\s*activeSpaceSelectionRevisionRef\.current/);
   });
 });

@@ -229,7 +229,7 @@ try {
   check('stream terminates successfully without provider error or cancellation', ended);
 
   const finalState = await evaluate(`(async () => {
-    const result = await window.lastbrowser.sidekick.getSession({ sessionId: ${JSON.stringify(sessionId)}, messages: true });
+    const result = await window.lastbrowser.sidekick.getSession({ sessionId: ${JSON.stringify(sessionId)}, messages: true, profile: 'default' });
     const messages = result?.session?.messages || [];
     const assistant = [...messages].reverse().find((message) => message?.role === 'assistant');
     const content = typeof assistant?.content === 'string' ? assistant.content : '';
@@ -278,7 +278,7 @@ try {
     }
     check('cancelled Ollama stream becomes inactive within 30 seconds', stopped);
     if (!stopped) throw new Error('Cancelled stream remained active');
-    await evaluate(`window.lastbrowser.sidekick.deleteSession({ sessionId: ${JSON.stringify(cancelSessionId)} })`, true);
+    await evaluate(`window.lastbrowser.sidekick.deleteSession({ sessionId: ${JSON.stringify(cancelSessionId)}, profile: 'default' })`, true);
   }
 
   if (process.env.OLLAMA_TEAMWORK_SMOKE === '1') {
@@ -354,7 +354,7 @@ try {
       const events = window.__teamworkSmokeEvents.filter((event) => event.streamId === ${JSON.stringify(teamworkStreamId)});
       const complete = events.find((event) => event.event === 'teamwork_complete')?.data;
       const usedModels = Array.isArray(complete?.models_used) ? complete.models_used.map((model) => String(model)) : [];
-      const session = await window.lastbrowser.sidekick.getSession({ sessionId: ${JSON.stringify(teamworkSessionId)}, messages: true });
+      const session = await window.lastbrowser.sidekick.getSession({ sessionId: ${JSON.stringify(teamworkSessionId)}, messages: true, profile: 'default' });
       const messages = session?.session?.messages || [];
       const answer = [...messages].reverse().find((message) => message?.role === 'assistant' && !message?._error)?.content;
       return { complete: Boolean(complete), usedModels, allRolesOllama: usedModels.length >= 4 && usedModels.every((model) => model.toLowerCase().includes('deepseek-v4.1-flash')), answer: typeof answer === 'string' && answer.trim().length > 0, events: [...new Set(events.map((event) => event.event))] };
@@ -364,13 +364,74 @@ try {
       && teamworkResult?.allRolesOllama === true
       && teamworkResult?.answer === true,
     `models=${teamworkResult?.usedModels?.length || 0} events=${teamworkResult?.events?.join(',') || ''}`);
-    await evaluate(`window.lastbrowser.sidekick.deleteSession({ sessionId: ${JSON.stringify(teamworkSessionId)} })`, true);
+    await evaluate(`window.lastbrowser.sidekick.deleteSession({ sessionId: ${JSON.stringify(teamworkSessionId)}, profile: 'default' })`, true);
   }
 
   if (process.env.OLLAMA_GOAL_SMOKE === '1') {
-    const goalSessionResult = await evaluate(`window.lastbrowser.sidekick.createSession({ model: 'deepseek-v4.1-flash', modelProvider: 'ollama-cloud', profile: 'default' })`, true);
+    if (!await waitFor("Boolean(localStorage.getItem('lastbrowser.activeSpacePath.v1'))", 30_000)) {
+      throw new Error('Goal fixture active Space did not settle');
+    }
+    const goalSessionResult = await evaluate(`window.lastbrowser.sidekick.createSession({
+      model: 'deepseek-v4.1-flash', modelProvider: 'ollama-cloud', profile: 'default',
+      workspace: localStorage.getItem('lastbrowser.activeSpacePath.v1'), scopeGoalsToWorkspace: true
+    })`, true);
     const goalSessionId = String(goalSessionResult?.session?.session_id || '');
     if (!goalSessionId) throw new Error('Could not create the isolated persistent-goal session');
+    const goalSessionTitle = 'Persistent goal reload smoke';
+    await evaluate(`window.lastbrowser.sidekick.renameSession({
+      sessionId: ${JSON.stringify(goalSessionId)}, title: ${JSON.stringify(goalSessionTitle)},
+      profile: 'default', workspacePath: localStorage.getItem('lastbrowser.activeSpacePath.v1')
+    })`, true);
+    const goalFixtureListed = await evaluate(`(async () => {
+      const result = await window.lastbrowser.sidekick.listSessions({
+        profile: 'default', workspacePath: localStorage.getItem('lastbrowser.activeSpacePath.v1')
+      });
+      return Boolean(result?.sessions?.some(session => session.session_id === ${JSON.stringify(goalSessionId)}
+        && session.title === ${JSON.stringify(goalSessionTitle)}));
+    })()`, true);
+    check('persistent goal fixture is listed in its owning profile and Space', goalFixtureListed === true);
+    if (!goalFixtureListed) throw new Error('Goal fixture scoped API list omits the created session');
+    // Creating an IPC session does not select it in the renderer. Refresh the
+    // real session list, then activate the owning chat before testing recovery.
+    await cdp.send('Page.reload', { ignoreCache: true });
+    if (!await waitFor("Boolean(document.querySelector('.shell-rail, .sidekick-sidebar'))", 45_000)) {
+      throw new Error('Goal fixture renderer did not return');
+    }
+    await evaluate(`(() => {
+      if (!document.querySelector('.expanded-workspace-pill')) {
+        document.querySelector('.nova-dock .toggle-expand-btn, .modern-titlebar .sidebar-toggle')?.click();
+      }
+      return true;
+    })()`);
+    if (!await waitFor("Boolean(document.querySelectorAll('.sidebar-drawer-tabs > button.drawer-tab-btn[role=tab]')[1])", 15_000)) {
+      throw new Error('Goal fixture AI drawer is unavailable');
+    }
+    await evaluate(`document.querySelectorAll('.sidebar-drawer-tabs > button.drawer-tab-btn[role=tab]')[1].click()`);
+    const goalButtonExpression = `[...document.querySelectorAll('.sidebar-session-item')].find(button => button.title === ${JSON.stringify(goalSessionTitle)})`;
+    if (!await waitFor(`Boolean(${goalButtonExpression})`, 30_000)) {
+      const fixtureDiagnostic = await evaluate(`(async () => {
+        const result = await window.lastbrowser.sidekick.listSessions({
+          profile: 'default', workspacePath: localStorage.getItem('lastbrowser.activeSpacePath.v1')
+        });
+        const sessions = Array.isArray(result?.sessions) ? result.sessions : [];
+        const fixture = sessions.find(session => session.session_id === ${JSON.stringify(goalSessionId)});
+        return {
+          sessionCount: sessions.length, fixtureListed: Boolean(fixture),
+          titleMatches: fixture?.title === ${JSON.stringify(goalSessionTitle)},
+          fixtureIndex: sessions.findIndex(session => session.session_id === ${JSON.stringify(goalSessionId)}),
+          sidebarSessionCount: document.querySelectorAll('.sidebar-session-item').length,
+          contextSessionCount: document.querySelectorAll('.session-item').length,
+          drawerTab: document.querySelector('.drawer-tab-btn[aria-selected=true]')?.textContent || '',
+          shellClass: document.querySelector('.app-shell')?.className || ''
+        };
+      })()`, true);
+      throw new Error('Goal fixture is absent from the renderer session list: ' + JSON.stringify(fixtureDiagnostic));
+    }
+    await evaluate(`(${goalButtonExpression}).click()`);
+    const goalFixtureActive = await waitFor(`Boolean((${goalButtonExpression})?.classList.contains('is-active'))
+      && document.querySelector('.native-chat-main h1')?.textContent === ${JSON.stringify(goalSessionTitle)}`, 20_000);
+    check('persistent goal fixture is selected in its owning renderer chat', goalFixtureActive);
+    if (!goalFixtureActive) throw new Error('Goal fixture was not activated in the renderer');
 
     const goalStart = await evaluate(`(async () => {
       window.__goalSmokeEvents = [];
@@ -393,7 +454,10 @@ try {
     const goalStreamId = String(goalStart?.stream_id || '');
     check('persistent goal stores its request and starts an Ollama Cloud stream', goalStart?.ok === true && Boolean(goalStreamId));
     if (!goalStreamId) throw new Error('Persistent-goal kickoff did not return a stream ID');
-    const goalSessionBeforeReload = await evaluate(`window.lastbrowser.sidekick.getSession({ sessionId: ${JSON.stringify(goalSessionId)}, messages: false })`, true, 60_000);
+    const goalSessionBeforeReload = await evaluate(`window.lastbrowser.sidekick.getSession({
+      sessionId: ${JSON.stringify(goalSessionId)}, messages: false,
+      profile: 'default', workspacePath: localStorage.getItem('lastbrowser.activeSpacePath.v1')
+    })`, true, 60_000);
     const goalTurnsBeforeReload = Number(goalSessionBeforeReload?.session?.goal?.turns_used || 0);
     check('goal session persists its active stream before reload', goalSessionBeforeReload?.session?.active_stream_id === goalStreamId);
 
@@ -425,7 +489,10 @@ try {
     let observedContinuation = false;
     while (Date.now() < goalDeadline) {
       goalSnapshot = await evaluate(`(async () => {
-        const result = await window.lastbrowser.sidekick.getSession({ sessionId: ${JSON.stringify(goalSessionId)}, messages: true });
+        const result = await window.lastbrowser.sidekick.getSession({
+          sessionId: ${JSON.stringify(goalSessionId)}, messages: true,
+          profile: 'default', workspacePath: localStorage.getItem('lastbrowser.activeSpacePath.v1')
+        });
         const session = result?.session || {};
         const goal = session.goal || null;
         const messages = Array.isArray(session.messages) ? session.messages : [];
@@ -471,11 +538,11 @@ try {
 
     await evaluate(`(async () => {
       window.__goalSmokeUnsubscribe?.();
-      return window.lastbrowser.sidekick.deleteSession({ sessionId: ${JSON.stringify(goalSessionId)} });
+      return window.lastbrowser.sidekick.deleteSession({ sessionId: ${JSON.stringify(goalSessionId)}, profile: 'default', workspacePath: localStorage.getItem('lastbrowser.activeSpacePath.v1') });
     })()`, true, 60_000);
   }
 
-  const deleted = await evaluate(`window.lastbrowser.sidekick.deleteSession({ sessionId: ${JSON.stringify(sessionId)} })`, true);
+  const deleted = await evaluate(`window.lastbrowser.sidekick.deleteSession({ sessionId: ${JSON.stringify(sessionId)}, profile: 'default' })`, true);
   sessionId = '';
   check('temporary chat session is deleted', deleted?.ok === true || deleted?.deleted === true);
 

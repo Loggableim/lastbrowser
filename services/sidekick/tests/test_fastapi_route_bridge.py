@@ -1,6 +1,10 @@
 import hashlib
 import hmac
+import http.client
 import json
+import queue
+import socket
+import threading
 import time
 from pathlib import Path
 
@@ -106,6 +110,100 @@ def test_unmatched_sse_route_streams_from_fastapi_bridge(monkeypatch):
     assert response.status_code == 200
     assert response.headers["content-type"] == "text/event-stream"
     assert "event: ping" in response.text
+
+
+def test_chat_sse_heartbeat_crosses_loopback_tcp_after_five_idle_seconds(monkeypatch):
+    """Exercise the real TCP/ASGI/legacy bridge path during an idle SSE gap."""
+    import asyncio
+    import uvicorn
+
+    from cli import web_server
+    from web.api import fastapi_bridge, routes
+
+    class Subscriber:
+        calls = 0
+
+        def get(self, timeout):
+            self.calls += 1
+            if self.calls == 1:
+                time.sleep(timeout)
+                raise queue.Empty
+            return "stream_end", {"ok": True}
+
+    class Channel:
+        def __init__(self):
+            self.subscriber = Subscriber()
+
+        def subscribe(self):
+            return self.subscriber
+
+        def unsubscribe(self, _subscriber):
+            pass
+
+    channel = Channel()
+    monkeypatch.setattr(fastapi_bridge, "_prepare_webui_runtime", lambda: None)
+    monkeypatch.setattr(routes, "_setup_workspace_from_request", lambda *_: None)
+    monkeypatch.setattr(routes, "_teardown_workspace_context", lambda: None)
+    monkeypatch.setattr(
+        routes,
+        "handle_get",
+        lambda handler, parsed: routes._handle_sse_stream(handler, parsed),
+    )
+    monkeypatch.setattr(
+        "web.api.config.get_chat_stream_channel", lambda _stream_id: channel
+    )
+
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(128)
+    port = listener.getsockname()[1]
+    server = uvicorn.Server(
+        uvicorn.Config(
+            web_server.app,
+            log_level="critical",
+            access_log=False,
+            lifespan="off",
+        )
+    )
+    server_thread = threading.Thread(
+        target=lambda: asyncio.run(server.serve(sockets=[listener])),
+        daemon=True,
+    )
+    server_thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=8)
+    try:
+        started_deadline = time.monotonic() + 5
+        while not server.started and time.monotonic() < started_deadline:
+            time.sleep(0.01)
+        assert server.started, "uvicorn did not start the loopback listener"
+
+        connection.request(
+            "GET",
+            "/api/chat/stream?stream_id=tcp-heartbeat-regression",
+            headers=_headers(web_server),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+
+        def read_event_name():
+            while True:
+                line = response.readline().decode("utf-8", errors="replace")
+                if not line:
+                    return None
+                if line.startswith("event:"):
+                    return line.partition(":")[2].strip()
+
+        assert read_event_name() == "heartbeat"
+        heartbeat_started = time.monotonic()
+        assert read_event_name() == "heartbeat"
+        heartbeat_elapsed = time.monotonic() - heartbeat_started
+        assert 4.5 <= heartbeat_elapsed <= 7.5
+        assert read_event_name() == "stream_end"
+    finally:
+        connection.close()
+        server.should_exit = True
+        server_thread.join(timeout=5)
 
 
 def test_swarm_get_skips_workspace_setup_in_fastapi_bridge(monkeypatch):

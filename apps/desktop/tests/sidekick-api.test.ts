@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   addSupermemoryDocument,
   activateAgent,
@@ -6,6 +6,7 @@ import {
   applyCloudSetup,
   banDiscordMember,
   cancelChatStream,
+  WEBUI_REQUEST_TIMEOUT_MS,
   cancelOnboardingOAuth,
   addSpace,
   completeAgentSplash,
@@ -108,6 +109,7 @@ import {
   sendAgentWorkspaceCommand,
   sendDiscordMessage,
   sendGmailMessage,
+  sendSidekickMessage,
   setCurrentAgent,
   setDefaultModel,
   startAgentChat,
@@ -392,6 +394,53 @@ describe('sidekick api client', () => {
     expect(calls[0].init?.method).toBeUndefined();
   });
 
+  it('scopes browser sessions by profile and filesystem workspace path', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ sessions: [], session: { session_id: 's1' }, ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    };
+
+    await listSessions('http://127.0.0.1:8787', {
+      profile: 'work', workspacePath: 'C:/Browser Spaces/alpha'
+    }, fetchImpl);
+    await getDesktopSession('http://127.0.0.1:8787', {
+      sessionId: 's1', profile: 'work', workspacePath: 'C:/Browser Spaces/alpha'
+    }, fetchImpl);
+    await renameSession('http://127.0.0.1:8787', {
+      sessionId: 's1', title: 'Alpha', profile: 'work', workspacePath: 'C:/Browser Spaces/alpha'
+    }, fetchImpl);
+    await createSidekickSession('http://127.0.0.1:8787', {
+      workspace: 'C:/Browser Spaces/alpha', scopeGoalsToWorkspace: true, profile: 'work'
+    }, fetchImpl);
+    await deleteSession('http://127.0.0.1:8787', { sessionId: 's1', profile: 'work' }, fetchImpl);
+    await duplicateSession('http://127.0.0.1:8787', { sessionId: 's1', profile: 'work' }, fetchImpl);
+    await getSessionDraft('http://127.0.0.1:8787', { sessionId: 's1', profile: 'work' }, fetchImpl);
+    await saveSessionDraft('http://127.0.0.1:8787', {
+      sessionId: 's1', profile: 'work', text: 'draft', files: []
+    }, fetchImpl);
+
+    expect(calls.map((call) => call.url)).toEqual([
+      'http://127.0.0.1:8787/api/sessions?workspace_path=C%3A%2FBrowser+Spaces%2Falpha',
+      'http://127.0.0.1:8787/api/session?session_id=s1&messages=1&resolve_model=0&workspace_path=C%3A%2FBrowser+Spaces%2Falpha',
+      'http://127.0.0.1:8787/api/session/rename?workspace_path=C%3A%2FBrowser+Spaces%2Falpha',
+      'http://127.0.0.1:8787/api/session/new',
+      'http://127.0.0.1:8787/api/session/delete',
+      'http://127.0.0.1:8787/api/session/duplicate',
+      'http://127.0.0.1:8787/api/session/draft?session_id=s1',
+      'http://127.0.0.1:8787/api/session/draft'
+    ]);
+    for (const call of calls) {
+      expect((call.init?.headers as Record<string, string>).cookie).toContain('sidekick_profile=work');
+    }
+    expect(JSON.parse(String(calls[3].init?.body))).toEqual({
+      workspace: 'C:/Browser Spaces/alpha', scope_goals_to_workspace: true, profile: 'work'
+    });
+  });
+
   it('lists spaces through the existing WebUI workspaces endpoint', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = async (url: string | URL, init?: RequestInit) => {
@@ -660,6 +709,7 @@ describe('sidekick api client', () => {
       modelProvider: 'google-gemini-cli',
       providerAccountEmail: 'DOMINIKRNR@GMAIL.COM',
       workspace: 'C:/work',
+      profile: 'work-profile',
       groundingContext: {
         url: 'https://example.test/path',
         title: 'Example',
@@ -679,14 +729,110 @@ describe('sidekick api client', () => {
       model_provider: 'google-gemini-cli',
       provider_account_email: 'dominikrnr@gmail.com',
       workspace: 'C:/work',
+      profile: 'work-profile',
       grounding_context: {
         url: 'https://example.test/path',
         title: 'Example',
         snippet: 'visible excerpt',
       }
     });
+    expect(new Headers(calls[0].init?.headers).get('cookie')).toBe('sidekick_profile=work-profile');
     expect(calls[1].url).toBe('http://127.0.0.1:8787/api/chat/stream/status?stream_id=stream-1');
     expect(calls[2].url).toBe('http://127.0.0.1:8787/api/chat/cancel?stream_id=stream-1');
+  });
+
+  it('creates a first native chat session in the requested profile and workspace', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      const payload = calls.length === 1
+        ? { session: { session_id: 'first-chat', workspace: 'C:/Browser Spaces/alpha' } }
+        : { stream_id: 'first-stream', session_id: 'first-chat' };
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    };
+
+    await startSidekickChat('http://127.0.0.1:8787', {
+      message: 'Start scoped chat',
+      profile: 'work',
+      workspace: 'C:/Browser Spaces/alpha',
+      model: 'provider/scoped-model',
+      modelProvider: 'provider'
+    }, fetchImpl);
+
+    expect(calls.map((call) => call.url)).toEqual([
+      'http://127.0.0.1:8787/api/session/new',
+      'http://127.0.0.1:8787/api/chat/start'
+    ]);
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      workspace: 'C:/Browser Spaces/alpha',
+      scope_goals_to_workspace: true,
+      model: 'provider/scoped-model',
+      model_provider: 'provider',
+      profile: 'work'
+    });
+    expect(JSON.parse(String(calls[1].init?.body))).toMatchObject({
+      session_id: 'first-chat',
+      workspace: 'C:/Browser Spaces/alpha',
+      profile: 'work',
+      model: 'provider/scoped-model',
+      model_provider: 'provider'
+    });
+    for (const call of calls) {
+      expect(new Headers(call.init?.headers).get('cookie')).toBe('sidekick_profile=work');
+    }
+  });
+
+  it('keeps compatibility chat creation and polling requests in the requested scope', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      const payload = calls.length === 1
+        ? { session: { session_id: 'compat-chat', workspace: 'C:/Browser Spaces/alpha' } }
+        : calls.length === 2
+          ? { stream_id: 'compat-stream', session_id: 'compat-chat' }
+          : {
+            session: {
+              session_id: 'compat-chat',
+              active_stream_id: null,
+              pending_user_message: null,
+              messages: [
+                { role: 'user', content: 'Scoped compatibility message' },
+                { role: 'assistant', content: 'Scoped answer' }
+              ]
+            }
+          };
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    };
+
+    const result = await sendSidekickMessage('http://127.0.0.1:8787', {
+      message: 'Scoped compatibility message',
+      profile: 'work',
+      workspace: 'C:/Browser Spaces/alpha'
+    }, fetchImpl, { intervalMs: 0, timeoutMs: 100 });
+
+    expect(result.assistantMessage).toBe('Scoped answer');
+    expect(calls.map((call) => new URL(call.url).pathname)).toEqual([
+      '/api/session/new',
+      '/api/chat/start',
+      '/api/session'
+    ]);
+    expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({
+      workspace: 'C:/Browser Spaces/alpha',
+      scope_goals_to_workspace: true,
+      profile: 'work'
+    });
+    const pollUrl = new URL(calls[2].url);
+    expect(pollUrl.searchParams.get('session_id')).toBe('compat-chat');
+    expect(pollUrl.searchParams.get('workspace_path')).toBe('C:/Browser Spaces/alpha');
+    for (const call of calls) {
+      expect(new Headers(call.init?.headers).get('cookie')).toBe('sidekick_profile=work');
+    }
   });
 
   it('uses skills and profile APIs for native editor panels', async () => {
@@ -1032,6 +1178,58 @@ describe('sidekick api client', () => {
       .rejects.toThrow('Only local WebUI API paths are allowed');
     await expect(requestWebui('http://127.0.0.1:8787', { path: '/admin' }, fetchImpl))
       .rejects.toThrow('Only local WebUI API paths are allowed');
+  });
+
+  it('aborts a hung WebUI request at its overall deadline with a sanitized error', async () => {
+    vi.useFakeTimers();
+    let requestSignal: AbortSignal | undefined;
+    const fetchImpl = async (_url: string | URL, init?: RequestInit): Promise<Response> => {
+      requestSignal = init?.signal as AbortSignal | undefined;
+      return new Promise<Response>(() => {});
+    };
+
+    try {
+      const request = requestWebui('http://127.0.0.1:8787', {
+        method: 'GET',
+        path: '/api/models',
+        query: { api_key: 'private-query-value' }
+      }, fetchImpl);
+      const rejection = expect(request).rejects.toThrow(
+        `Sidekick API request timed out after ${WEBUI_REQUEST_TIMEOUT_MS} ms.`
+      );
+      await vi.advanceTimersByTimeAsync(WEBUI_REQUEST_TIMEOUT_MS);
+      await rejection;
+
+      expect(requestSignal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses one deadline across an authentication refresh and retry', async () => {
+    const signals: AbortSignal[] = [];
+    let calls = 0;
+    const fetchImpl = async (url: string | URL, init?: RequestInit): Promise<Response> => {
+      const parsed = new URL(String(url));
+      if (init?.signal) signals.push(init.signal as AbortSignal);
+      calls += 1;
+      if (parsed.pathname === '/api/session/export' && calls === 1) {
+        return new Response('{}', { status: 401 });
+      }
+      if (parsed.pathname === '/') {
+        return new Response('window.__SIDEKICK_SESSION_TOKEN__ = "fresh-token";', { status: 200 });
+      }
+      return new Response('{"ok":true}', { status: 200 });
+    };
+
+    await expect(requestWebui('http://127.0.0.1:8787', {
+      method: 'GET',
+      path: '/api/session/export'
+    }, fetchImpl)).resolves.toEqual({ ok: true });
+    expect(calls).toBe(3);
+    expect(signals).toHaveLength(3);
+    expect(new Set(signals).size).toBe(1);
+    expect(signals[0].aborted).toBe(false);
   });
 });
 

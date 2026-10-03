@@ -7,6 +7,7 @@ type QueueMessage = {
   text: string;
   model?: string;
   profile?: string;
+  reasoningEffort?: string;
 };
 
 const QUEUE_STORAGE_KEY = 'lastbrowser.chatQueue.v1';

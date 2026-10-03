@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePanelStore } from '../stores/usePanelStore.js';
 import type { LoupePosition } from '../stores/a11y-config.js';
-import { getLoupeCaptureRect, getLoupePosition, getWebviewLoupeCaptureRect, hasLoupePointerMoved, isCursorShake } from '../utils/cursor-loupe.js';
+import { getLoupeCaptureRect, getLoupePosition, getWebviewLoupeCaptureRect, hasLoupePointerMoved, isCursorShake, nextLoupeCaptureRetry, type LoupeCaptureRetryState } from '../utils/cursor-loupe.js';
 
 /**
  * Maus-Begleitlupe & Shake-to-Locate Radar (docs/visionimpaired.md §4.2/§4.3).
@@ -103,6 +103,7 @@ export function CursorLoupeHUD(): React.JSX.Element | null {
     let captureUnavailable = false;
     let lastCaptureAt = 0;
     let previousPoint = { x: Number.NaN, y: Number.NaN };
+    let failedCapture: LoupeCaptureRetryState = { point: null, attempts: 0 };
     const onPointerMove = (event: PointerEvent) => {
       pointerRef.current = { x: event.clientX, y: event.clientY };
     };
@@ -145,7 +146,6 @@ export function CursorLoupeHUD(): React.JSX.Element | null {
           factor
         );
         if (!rect) return;
-        previousPoint = point;
         lastCaptureAt = now;
         captureInFlight = true;
         try {
@@ -169,16 +169,23 @@ export function CursorLoupeHUD(): React.JSX.Element | null {
           if (!dataUrl) dataUrl = await window.lastbrowser?.system?.captureWindowRect?.(rect);
           if (cancelled) return;
           if (dataUrl) {
+            previousPoint = point;
+            failedCapture = { point: null, attempts: 0 };
             loupeImageRef.current = dataUrl;
             setLoupeText('');
             setLoupeImage(dataUrl);
           } else {
-            loupeImageRef.current = '';
-            setLoupeImage('');
-            const text = webview
-              ? await readWebviewTextUnderPointer(webview, point.x, point.y)
-              : readTextUnderPointer(point.x, point.y);
-            if (!cancelled) setLoupeText(text);
+            const retry = nextLoupeCaptureRetry(point, failedCapture);
+            failedCapture = { point: retry.point, attempts: retry.attempts };
+            if (retry.exhausted) {
+              previousPoint = point;
+              loupeImageRef.current = '';
+              setLoupeImage('');
+              const text = webview
+                ? await readWebviewTextUnderPointer(webview, point.x, point.y)
+                : readTextUnderPointer(point.x, point.y);
+              if (!cancelled) setLoupeText(text);
+            }
           }
         } catch {
           captureUnavailable = true;

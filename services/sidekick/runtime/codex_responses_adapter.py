@@ -808,9 +808,16 @@ def _extract_responses_message_text(item: Any) -> str:
     chunks: List[str] = []
     for part in content:
         ptype = getattr(part, "type", None)
-        if ptype not in {"output_text", "text"}:
+        if ptype in {"output_text", "text"}:
+            text = getattr(part, "text", None)
+        elif ptype == "refusal":
+            # Responses API refusals are structured content parts rather than
+            # output_text. Preserve their user-facing text as the assistant's
+            # final answer so validation/normalization does not mistake a
+            # legitimate refusal for an empty provider response.
+            text = getattr(part, "refusal", None) or getattr(part, "text", None)
+        else:
             continue
-        text = getattr(part, "text", None)
         if isinstance(text, str) and text:
             chunks.append(text)
     return "".join(chunks).strip()

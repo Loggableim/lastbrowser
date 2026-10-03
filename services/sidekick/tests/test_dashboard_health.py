@@ -1689,7 +1689,8 @@ def test_lastbrowser_goal_command_binds_legacy_session_to_workspace_scope(monkey
     scope = goals.lastbrowser_workspace_goal_slug(workspace)
     profile_home = __import__("web.api.profiles", fromlist=["get_profile_home"]).get_profile_home("default")
     assert handler.status == 200, handler.wfile.getvalue().decode("utf-8", errors="replace")
-    assert session.workspace_slug == scope
+    assert session.goal_space_slug == scope
+    assert session.workspace_slug is None
     assert (profile_home / "browser-spaces" / scope / "goals.db").exists()
     if (profile_home / "state.db").exists():
         from runtime._compat.shim_state import SessionDB
@@ -1721,7 +1722,8 @@ def test_new_desktop_session_stamps_the_workspace_goal_scope(monkeypatch, tmp_pa
 
     assert response["status"] == 200
     assert captured["workspace"] == str(workspace.resolve())
-    assert captured["workspace_slug"] == goals.lastbrowser_workspace_goal_slug(workspace)
+    assert captured["workspace_slug"] == "nova"
+    assert captured["goal_space_slug"] == goals.lastbrowser_workspace_goal_slug(workspace)
 
 
 def test_goal_route_accepts_legacy_space_field_from_request_body(monkeypatch, tmp_path):

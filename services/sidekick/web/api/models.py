@@ -765,6 +765,17 @@ class Session:
         self.enabled_toolsets = enabled_toolsets  # List[str] or None — per-session toolset override
         self.composer_draft = composer_draft if isinstance(composer_draft, dict) else {}
         self.workspace_slug = kwargs.get('workspace_slug') or None
+        # Goal namespaces for Browser filesystem workspaces are opaque IDs and
+        # must not be used as native Space storage owners.
+        self.goal_space_slug = kwargs.get('goal_space_slug') or None
+        if (
+            not self.goal_space_slug
+            and isinstance(self.workspace_slug, str)
+            and self.workspace_slug.startswith('lbws-')
+        ):
+            # Migrate the old overloaded field on read while leaving the
+            # persisted storage owner untouched until a normal save path.
+            self.goal_space_slug = self.workspace_slug
         self.agent_slug = kwargs.get('agent_slug') or None
         self._metadata_message_count = None
 
@@ -862,6 +873,25 @@ class Session:
                 f"Reload with metadata_only=False before mutating state. "
                 f"See #1558."
             )
+        # Older Browser sessions overloaded workspace_slug with the opaque
+        # goal database namespace. Preserve that namespace on the dedicated
+        # field and recover the native storage owner from the current session
+        # directory before applying the Space redirect below.
+        _legacy_goal_slug = str(getattr(self, 'workspace_slug', '') or '').strip().lower()
+        if _legacy_goal_slug.startswith('lbws-'):
+            self.goal_space_slug = self.goal_space_slug or _legacy_goal_slug
+            try:
+                from web.api.space_engine import get_all_workspaces
+
+                _current_session_dir = get_session_dir().expanduser().resolve()
+                for _candidate in get_all_workspaces():
+                    if _candidate.sessions_dir.expanduser().resolve() == _current_session_dir:
+                        self.workspace_slug = _candidate.slug
+                        break
+            except Exception:
+                # The existing session directory remains authoritative; if
+                # profile metadata is unavailable, do not guess a new owner.
+                pass
         # ── Space isolation redirect ──────────────────────────────────
         # Save the session to its own space's directory, not the current
         # request thread's space. When a session belongs to space X (has
@@ -907,6 +937,7 @@ class Session:
             'is_cli_session', 'source_tag', 'raw_source', 'session_source', 'source_label',
             'enabled_toolsets', 'composer_draft',
             'workspace_slug',
+            'goal_space_slug',
             'agent_slug',
         ]
         meta = {k: getattr(self, k, None) for k in METADATA_FIELDS}
@@ -1138,6 +1169,7 @@ class Session:
             'session_source': self.session_source,
             'source_label': self.source_label,
             'workspace_slug': self.workspace_slug,
+            'goal_space_slug': self.goal_space_slug,
             'agent_slug': self.agent_slug,
             'enabled_toolsets': self.enabled_toolsets,
             'composer_draft': self.composer_draft if isinstance(self.composer_draft, dict) else {},
@@ -1442,7 +1474,7 @@ def get_session(sid, metadata_only=False):
         return s
     raise KeyError(sid)
 
-def new_session(workspace=None, model=None, profile=None, model_provider=None, project_id=None, worktree_info=None, agent_slug=None, workspace_slug=None):
+def new_session(workspace=None, model=None, profile=None, model_provider=None, project_id=None, worktree_info=None, agent_slug=None, workspace_slug=None, goal_space_slug=None):
     """Create a new in-memory session.
 
     The session lives in the SESSIONS dict only — no disk write happens until
@@ -1493,7 +1525,7 @@ def new_session(workspace=None, model=None, profile=None, model_provider=None, p
             _ws_slug = get_active_workspace_slug()
         # If the active space has a project_dir, use it as the workspace path
         # so the agent's file operations are sandboxed to that directory
-        if _ws_slug:
+        if _ws_slug and not goal_space_slug:
             _ws_obj = get_workspace(_ws_slug)
             if _ws_obj:
                 _pdir = _ws_obj.get_project_dir()
@@ -1517,6 +1549,7 @@ def new_session(workspace=None, model=None, profile=None, model_provider=None, p
         worktree_repo_root=wt.get('repo_root') if wt else None,
         worktree_created_at=wt.get('created_at') if wt else None,
         workspace_slug=_ws_slug,
+        goal_space_slug=goal_space_slug,
         agent_slug=agent_slug,
     )
     with LOCK:

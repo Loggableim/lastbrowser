@@ -16,14 +16,13 @@ from typing import Any, Dict
 COMPUTER_USE_SCHEMA: Dict[str, Any] = {
     "name": "computer_use",
     "description": (
-        "Drive the macOS desktop in the background — screenshots, mouse, "
-        "keyboard, scroll, drag — without stealing the user's cursor, "
-        "keyboard focus, or Space. Preferred workflow: call with "
-        "action='capture' (mode='som' gives numbered element overlays), "
-        "then click by `element` index for reliability. Pixel coordinates "
-        "are supported for models trained on them. Works on any window — "
-        "hidden, minimized, on another Space, or behind another app. "
-        "macOS only; requires cua-driver to be installed."
+        "Interact with the desktop (Windows UI Automation / macOS CUA) — "
+        "screenshots, UIA semantic patterns (invoke, set_value, scroll), mouse, "
+        "keyboard, and guarded physical input. Preferred workflow: call with "
+        "action='capture' (mode='som' gives numbered element overlays and snapshot_id), "
+        "then interact via semantic patterns `invoke` or `set_value` by `element` index. "
+        "Windows mutations require an explicit snapshot_id and approval by the host. "
+        "Do not invent approval IDs. Physical input may require foreground focus."
     ),
     "parameters": {
         "type": "object",
@@ -41,16 +40,18 @@ COMPUTER_USE_SCHEMA: Dict[str, Any] = {
                     "type",
                     "key",
                     "set_value",
+                    "invoke",
+                    "physical_input",
+                    "emergency_stop",
                     "wait",
                     "list_apps",
                     "focus_app",
                 ],
                 "description": (
-                    "Which action to perform. `capture` is free (no side "
-                    "effects). All other actions require approval unless "
-                    "auto-approved. Use `set_value` for select/popup elements "
-                    "and sliders — it selects the matching option directly "
-                    "without opening the native menu (no focus steal)."
+                    "Which action to perform. `capture`, `wait`, `list_apps`, and `emergency_stop` "
+                    "are read-only or safety controls. All mutating actions require approval. "
+                    "Use semantic `invoke` and `set_value` where possible; use `physical_input` "
+                    "only when native UI Automation patterns are unsupported."
                 ),
             },
             # ── capture ────────────────────────────────────────────
@@ -84,14 +85,52 @@ COMPUTER_USE_SCHEMA: Dict[str, Any] = {
                     "raw coordinates."
                 ),
             },
+            "element_ref": {
+                "type": "integer",
+                "description": "Alias for `element` (1-based index).",
+            },
+            "snapshot_id": {
+                "type": "string",
+                "description": (
+                    "Temporal snapshot ID returned by capture. Required for "
+                    "`invoke`, `set_value`, and `physical_input` to ensure "
+                    "actions target a validated, unexpired desktop state."
+                ),
+            },
+            "actions": {
+                "type": "array",
+                "description": (
+                    "Sequence of low-level input steps for action='physical_input'. "
+                    "Supported Windows step types: 'click' and 'type'. Other "
+                    "steps fail closed. Coordinates use physical screen pixels."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": ["click", "type"],
+                        },
+                        "x": {"type": "integer"},
+                        "y": {"type": "integer"},
+                        "button": {"type": "string", "enum": ["left", "right", "middle"]},
+                        "text": {"type": "string"},
+                        "keys": {"type": "string"},
+                        "seconds": {"type": "number"},
+                        "direction": {"type": "string", "enum": ["up", "down", "left", "right"]},
+                        "amount": {"type": "integer"},
+                    },
+                    "required": ["type"],
+                },
+            },
             "coordinate": {
                 "type": "array",
                 "items": {"type": "integer"},
                 "minItems": 2,
                 "maxItems": 2,
                 "description": (
-                    "Pixel coordinates [x, y] in logical screen space (as "
-                    "returned by capture width/height). Only use this if "
+                    "Pixel coordinates [x, y]; consult capture metadata for "
+                    "origin and coordinate units. Only use this if "
                     "no element index is available."
                 ),
             },
@@ -167,8 +206,8 @@ COMPUTER_USE_SCHEMA: Dict[str, Any] = {
                 "description": (
                     "Only for action='focus_app'. If true, brings the "
                     "window to front (DISRUPTS the user). Default false "
-                    "— input is routed to the app without raising, "
-                    "matching the background co-work model."
+                    "— bind the target without requesting foreground focus. "
+                    "This does not guarantee focus-free execution of actions."
                 ),
             },
             # ── return shape ───────────────────────────────────────

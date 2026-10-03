@@ -236,7 +236,28 @@ class ToolCallGuardrailController:
         return self._halt_decision
 
     def before_call(self, tool_name: str, args: Mapping[str, Any] | None) -> ToolGuardrailDecision:
-        signature = ToolCallSignature.from_call(tool_name, _coerce_args(args))
+        call_args = _coerce_args(args)
+        signature = ToolCallSignature.from_call(tool_name, call_args)
+        # This is a narrow, unconditional tripwire for well-known computer-use
+        # escape routes. Approval remains enforced by the computer-use host
+        # authority; loop guardrails are not an authorization mechanism.
+        if tool_name in {"computer_use", "terminal", "execute_code", "browser_cdp"}:
+            try:
+                from tools.computer_use.approval import classify_computer_use_escape, classify_desktop_automation_bypass
+
+                reason = (classify_computer_use_escape(str(call_args.get("action") or ""), call_args)
+                          if tool_name == "computer_use" else classify_desktop_automation_bypass(tool_name, call_args))
+            except Exception:
+                # Fail closed if the security classifier cannot be loaded.
+                reason = "computer-use escape classifier unavailable"
+            if reason:
+                return ToolGuardrailDecision(
+                    action="block",
+                    code="computer_use_escape_block",
+                    message=f"Blocked computer_use call: {reason}.",
+                    tool_name=tool_name,
+                    signature=signature,
+                )
         if not self.config.hard_stop_enabled:
             return ToolGuardrailDecision(tool_name=tool_name, signature=signature)
 

@@ -44,6 +44,8 @@ import { useChatStore } from '../stores/useChatStore.js';
 import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
+import { loadChatReasoningEffort, normalizeReasoningEfforts, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
+import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
 
 export interface AvailableModelItem {
   id: string;
@@ -53,6 +55,7 @@ export interface AvailableModelItem {
   category: 'gemini' | 'claude' | 'openai' | 'local' | 'teamwork' | 'other';
   badge: string;
   badgeClass: string;
+  reasoningEfforts?: string[];
   isDefault?: boolean;
   remainingPercent?: number;
   remainingFraction?: number;
@@ -109,7 +112,7 @@ export interface CopilotSplitViewProps {
   modelProvider?: string;
   messages: DesktopChatMessage[];
   busy: boolean;
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, reasoningEffort?: string) => void;
   onStopChat?: () => void;
   activeUrl?: string;
   activeTitle?: string;
@@ -166,6 +169,7 @@ export function CopilotSplitView({
 
   // Provider models are selectable only after the live backend catalog returns them.
   const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS);
+  const [modelCapabilitiesLoaded, setModelCapabilitiesLoaded] = useState(false);
   const [teamworkEnabled, setTeamworkEnabled] = useState(true);
   const [smartTrackEnabled, setSmartTrackEnabled] = useState(true);
 
@@ -213,6 +217,7 @@ export function CopilotSplitView({
         if (!alive) return;
         if (!res || !Array.isArray(res.groups)) {
           setModelList(AVAILABLE_MODELS);
+          setModelCapabilitiesLoaded(false);
           return;
         }
 
@@ -275,6 +280,7 @@ export function CopilotSplitView({
               badgeClass,
               remainingPercent: pct,
               remainingFraction: frac,
+              reasoningEfforts: normalizeReasoningEfforts(m.reasoning_efforts),
               account,
               isDefault: false
             });
@@ -285,7 +291,7 @@ export function CopilotSplitView({
           ...dynamicModels,
           ...AVAILABLE_MODELS.filter((item) => !dynamicModels.some((model) => model.id === item.id && model.providerId === item.providerId))
         ];
-        const selectedProvider = String(selectedModelProviderRef.current || modelProvider || '').trim().toLowerCase();
+        const selectedProvider = String(modelProvider || selectedModelProviderRef.current || '').trim().toLowerCase();
         if (['google-gemini-cli', 'gemini-cli', 'gemini-oauth'].includes(selectedProvider)) {
           const replacement = dynamicModels.find((item) => item.providerId === 'antigravity')
             || dynamicModels.find((item) => item.category === 'gemini');
@@ -296,10 +302,14 @@ export function CopilotSplitView({
           }
         }
         setModelList(nextModelList);
+        setModelCapabilitiesLoaded(true);
       } catch {
         // On discovery failure, retain only built-in orchestrators; cached model IDs
         // must not imply that a provider is configured or currently available.
-        if (alive) setModelList(AVAILABLE_MODELS);
+        if (alive) {
+          setModelList(AVAILABLE_MODELS);
+          setModelCapabilitiesLoaded(false);
+        }
       }
     }
     void loadLiveModels();
@@ -320,14 +330,20 @@ export function CopilotSplitView({
   const footerModelRef = useRef<HTMLDivElement | null>(null);
   const historyDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const activeModelId = selectedModel || modelName;
+  const activeModelId = modelName || selectedModel;
+  const activeModelProvider = modelProvider || selectedModelProvider;
+  const reasoningPreferenceKey = activeSessionId || `draft:${activeModelProvider}:${activeModelId}`;
+  const [reasoningEffort, setReasoningEffort] = useState(() => loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage));
+  useEffect(() => {
+    setReasoningEffort(loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage));
+  }, [activeSessionId, reasoningPreferenceKey]);
   const activeModelItem = useMemo(() => {
     return (
       visibleModelList.find(
         (m) =>
-          isProviderModelSelected(m, activeModelId, selectedModelProvider) ||
-          (m.label.toLowerCase() === activeModelId.toLowerCase() && (!selectedModelProvider || m.providerId === selectedModelProvider)) ||
-          (!selectedModelProvider && activeModelId.toLowerCase().includes(m.id.toLowerCase()))
+          isProviderModelSelected(m, activeModelId, activeModelProvider) ||
+          (m.label.toLowerCase() === activeModelId.toLowerCase() && (!activeModelProvider || m.providerId === activeModelProvider)) ||
+          (!activeModelProvider && activeModelId.toLowerCase().includes(m.id.toLowerCase()))
       ) || {
         id: activeModelId || 'default',
         label: activeModelId || 'Modell wird geladen',
@@ -337,18 +353,31 @@ export function CopilotSplitView({
         badgeClass: 'other'
       }
     );
-  }, [activeModelId, selectedModelProvider, visibleModelList]);
+  }, [activeModelId, activeModelProvider, visibleModelList]);
+  const reasoningEfforts = activeModelItem.reasoningEfforts || [];
+  const effectiveReasoningEffort = reasoningEfforts.includes(reasoningEffort) ? reasoningEffort : '';
+  useEffect(() => {
+    if (modelCapabilitiesLoaded && reasoningEffort && !reasoningEfforts.includes(reasoningEffort)) {
+      setReasoningEffort('');
+      saveChatReasoningEffort(reasoningPreferenceKey, '', window.localStorage);
+    }
+  }, [modelCapabilitiesLoaded, reasoningEffort, reasoningEfforts, reasoningPreferenceKey]);
+
+  function handleReasoningEffortChange(effort: string): void {
+    setReasoningEffort(effort);
+    saveChatReasoningEffort(reasoningPreferenceKey, effort, window.localStorage);
+  }
 
   useEffect(() => {
-    const orchestrationDisabled = (selectedModel === 'teamwork' && !teamworkEnabled)
-      || (selectedModel.startsWith('smart-track') && !smartTrackEnabled);
+    const orchestrationDisabled = (activeModelId === 'teamwork' && !teamworkEnabled)
+      || (activeModelId.startsWith('smart-track') && !smartTrackEnabled);
     if (!orchestrationDisabled) return;
     const fallback = visibleModelList.find((model) => model.category !== 'teamwork');
     if (!fallback) return;
     setSelectedModel(fallback.id);
     setSelectedModelProvider(fallback.providerId || '');
     onSelectModel?.(fallback.id, fallback.providerId);
-  }, [onSelectModel, selectedModel, setSelectedModel, smartTrackEnabled, teamworkEnabled, visibleModelList]);
+  }, [activeModelId, onSelectModel, setSelectedModel, smartTrackEnabled, teamworkEnabled, visibleModelList]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -429,7 +458,7 @@ export function CopilotSplitView({
   }
 
   function renderModelItem(m: AvailableModelItem) {
-    const isSelected = isProviderModelSelected(m, activeModelItem?.id || '', selectedModelProvider);
+    const isSelected = isProviderModelSelected(m, activeModelItem?.id || '', activeModelProvider);
 
     const quotaBadge =
       m.remainingPercent !== undefined ? (
@@ -545,7 +574,7 @@ export function CopilotSplitView({
     event.preventDefault();
     const trimmed = inputText.trim();
     if (!trimmed || busy) return;
-    onSendMessage(trimmed);
+    onSendMessage(trimmed, effectiveReasoningEffort || undefined);
     setInputText('');
   }
 
@@ -1030,6 +1059,12 @@ export function CopilotSplitView({
 
           {/* Model Selector Dropdown */}
           {modelPickerOpen && renderModelDropdown('footer')}
+          <ReasoningEffortPicker
+            value={effectiveReasoningEffort}
+            efforts={reasoningEfforts}
+            disabled={busy}
+            onChange={handleReasoningEffortChange}
+          />
         </div>
 
         <form className="copilot-input-container" onSubmit={handleSubmit}>

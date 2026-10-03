@@ -282,6 +282,13 @@ class ChatCompletionsTransport:
 class AnthropicMessagesTransport:
     """Builds and normalizes native Anthropic Messages-compatible requests."""
 
+    def validate_response(self, response: Any) -> bool:
+        """Return True when Anthropic returned at least one content block."""
+        if response is None:
+            return False
+        content = getattr(response, "content", None)
+        return isinstance(content, (list, tuple)) and bool(content)
+
     def build_kwargs(
         self,
         *,
@@ -406,6 +413,23 @@ class BedrockConverseTransport(ChatCompletionsTransport):
 class CodexResponsesTransport:
     """Builds and normalizes Responses API requests used by Codex-compatible backends."""
 
+    def validate_response(self, response: Any) -> bool:
+        """Reject terminal failures and accept usable Responses output.
+
+        Some Codex-compatible servers populate ``output_text`` without an
+        ``output`` list, so mirror the normalizer's supported fallback here.
+        """
+        if response is None:
+            return False
+        status = str(getattr(response, "status", "") or "").strip().lower()
+        if status in {"failed", "cancelled"}:
+            return False
+        output = getattr(response, "output", None)
+        if isinstance(output, list) and bool(output):
+            return True
+        output_text = getattr(response, "output_text", None)
+        return isinstance(output_text, str) and bool(output_text.strip())
+
     def build_kwargs(
         self,
         *,
@@ -447,8 +471,10 @@ class CodexResponsesTransport:
 
         if max_tokens:
             kwargs["max_output_tokens"] = int(max_tokens)
-        if reasoning_config:
-            kwargs["reasoning"] = reasoning_config
+        if isinstance(reasoning_config, dict) and reasoning_config.get("enabled") is not False:
+            effort = str(reasoning_config.get("effort") or "").strip().lower()
+            if effort:
+                kwargs["reasoning"] = {"effort": effort}
         if github_reasoning_extra:
             kwargs.setdefault("reasoning", {}).update(github_reasoning_extra)
 

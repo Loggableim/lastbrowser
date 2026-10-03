@@ -11,6 +11,54 @@ import os
 
 logger = logging.getLogger(__name__)
 
+_SUPPORTED_API_REASONING_EFFORTS = {"minimal", "low", "medium", "high", "xhigh", "max"}
+_MODEL_REASONING_EFFORTS: dict[str, list[str]] = {}
+
+
+def _read_supported_reasoning_levels(item: dict) -> list[str]:
+    levels = item.get("supported_reasoning_levels")
+    if not isinstance(levels, list):
+        return []
+    result = []
+    for level in levels:
+        effort = level.get("effort") if isinstance(level, dict) else level
+        normalized = str(effort or "").strip().lower()
+        if normalized in _SUPPORTED_API_REASONING_EFFORTS and normalized not in result:
+            result.append(normalized)
+    return result
+
+
+def get_codex_model_reasoning_efforts(model_id: str) -> list[str]:
+    """Return cached, model-specific API effort levels without network access."""
+    model = str(model_id or "").strip().lower().rsplit("/", 1)[-1]
+    if not model:
+        return []
+    cached = _MODEL_REASONING_EFFORTS.get(model)
+    if cached is not None:
+        return list(cached)
+
+    codex_home_str = os.getenv("CODEX_HOME", "").strip() or str(Path.home() / ".codex")
+    cache_path = Path(codex_home_str).expanduser() / "models_cache.json"
+    try:
+        raw = json.loads(cache_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    entries = raw.get("models") if isinstance(raw, dict) else None
+    if not isinstance(entries, list):
+        return []
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        slug = str(item.get("slug") or "").strip().lower()
+        if not slug:
+            continue
+        efforts = _read_supported_reasoning_levels(item)
+        # A missing/synthetic model may trigger this local fallback after a
+        # live catalog was read. Preserve authoritative live entries, including
+        # explicit empty capability sets, while filling local-only entries.
+        _MODEL_REASONING_EFFORTS.setdefault(slug, efforts)
+    return list(_MODEL_REASONING_EFFORTS.get(model, []))
+
 DEFAULT_CODEX_MODELS: List[str] = [
     "gpt-5.5",
     "gpt-5.4-mini",
@@ -72,6 +120,7 @@ def _fetch_models_from_api(access_token: str) -> List[str]:
         return []
 
     sortable = []
+    discovered_efforts: dict[str, list[str]] = {}
     for item in entries:
         if not isinstance(item, dict):
             continue
@@ -89,8 +138,12 @@ def _fetch_models_from_api(access_token: str) -> List[str]:
         priority = item.get("priority")
         rank = int(priority) if isinstance(priority, (int, float)) else 10_000
         sortable.append((rank, slug))
+        efforts = _read_supported_reasoning_levels(item)
+        discovered_efforts[slug.lower()] = efforts
 
     sortable.sort(key=lambda x: (x[0], x[1]))
+    _MODEL_REASONING_EFFORTS.clear()
+    _MODEL_REASONING_EFFORTS.update(discovered_efforts)
     return _add_forward_compat_models([slug for _, slug in sortable])
 
 
@@ -124,6 +177,7 @@ def _read_cache_models(codex_home: Path) -> List[str]:
     entries = raw.get("models") if isinstance(raw, dict) else None
     sortable = []
     if isinstance(entries, list):
+        _MODEL_REASONING_EFFORTS.clear()
         for item in entries:
             if not isinstance(item, dict):
                 continue
@@ -140,6 +194,7 @@ def _read_cache_models(codex_home: Path) -> List[str]:
             priority = item.get("priority")
             rank = int(priority) if isinstance(priority, (int, float)) else 10_000
             sortable.append((rank, slug))
+            _MODEL_REASONING_EFFORTS[slug.lower()] = _read_supported_reasoning_levels(item)
 
     sortable.sort(key=lambda item: (item[0], item[1]))
     deduped: List[str] = []

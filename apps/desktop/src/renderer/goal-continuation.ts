@@ -4,6 +4,19 @@ export interface GoalContinuationEvent {
   data?: unknown;
 }
 
+export function readGoalEvaluationMessageKey(
+  event: GoalContinuationEvent,
+  expectedStreamId: string,
+  expectedSessionId: string,
+): string | null {
+  if (event.event !== 'goal' || event.streamId !== expectedStreamId) return null;
+  if (!event.data || typeof event.data !== 'object' || Array.isArray(event.data)) return null;
+  const data = event.data as Record<string, unknown>;
+  return data.session_id === expectedSessionId && data.message_key === 'goal_judge_unavailable'
+    ? 'goal_judge_unavailable'
+    : null;
+}
+
 /** Recover only a durable, still-unconsumed goal handoff from a restored session. */
 export function readRestorableGoalContinuation(session: unknown): string | null {
   if (!session || typeof session !== 'object' || Array.isArray(session)) return null;

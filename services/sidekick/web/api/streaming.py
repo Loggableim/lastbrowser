@@ -71,6 +71,30 @@ _SSE_DISCONNECT_ERRORS = (
 )
 
 
+def _provider_evidence_from_result(result):
+    """Describe the actual provider used, marking only complete visible chats successful."""
+    if not isinstance(result, dict):
+        return None
+    provider_id = str(result.get("provider") or "").strip().lower()
+    model_id = str(result.get("model") or "").strip()
+    if not provider_id or not model_id:
+        return None
+    final_response = result.get("final_response")
+    visible_answer = _strip_thinking_markup(str(final_response or "")).strip()
+    successful = bool(
+        result.get("completed") is True
+        and not result.get("interrupted")
+        and not result.get("partial")
+        and not result.get("error")
+        and visible_answer
+    )
+    return {
+        "provider_id": provider_id,
+        "model_id": model_id,
+        "successful_chat": successful,
+    }
+
+
 def _should_fail_fast_on_provider_resolution_error(error: Exception, provider: str | None) -> bool:
     """Typed credential errors for explicit API-key providers are fatal."""
     from cli.auth import AuthError
@@ -2409,7 +2433,8 @@ def _capture_goal_turn_context(session, session_id):
 
         profile_home = get_profile_home(getattr(session, "profile", None))
         space_slug = str(
-            getattr(session, "workspace_slug", "")
+            getattr(session, "goal_space_slug", "")
+            or getattr(session, "workspace_slug", "")
             or getattr(session, "space_slug", "")
             or getattr(session, "space", "") or ""
         ).strip().lower() or None
@@ -2452,7 +2477,8 @@ def _evaluate_goal_after_stream_turn(
         except Exception:
             profile_home = get_webui_home()
         space_slug = str(
-            getattr(session, "workspace_slug", "")
+            getattr(session, "goal_space_slug", "")
+            or getattr(session, "workspace_slug", "")
             or getattr(session, "space_slug", "")
             or getattr(session, "space", "")
             or ""
@@ -2559,6 +2585,8 @@ def _run_agent_streaming(
     mode="",
     sandbox_disabled=False,
     grounding_context="",
+    reasoning_effort=None,
+    supported_reasoning_efforts=None,
 ):
     """Run agent in background thread, writing SSE events to STREAMS[stream_id].
 
@@ -3596,10 +3624,18 @@ def _run_agent_streaming(
             # `/reasoning <level>`) and hand the parsed dict to AIAgent.  When
             # the key is absent or invalid, pass None → agent uses its default.
             try:
-                from web.api.config import parse_reasoning_effort as _parse_reff
-                _effort_cfg = _cfg.get('agent', {}) if isinstance(_cfg, dict) else {}
-                _effort_raw = _effort_cfg.get('reasoning_effort') if isinstance(_effort_cfg, dict) else None
-                _reasoning_config = _parse_reff(_effort_raw)
+                from web.api.config import resolve_reasoning_config as _resolve_reff
+                if reasoning_effort is not None:
+                    _effort_raw = reasoning_effort
+                else:
+                    _effort_cfg = _cfg.get('agent', {}) if isinstance(_cfg, dict) else {}
+                    _effort_raw = _effort_cfg.get('reasoning_effort') if isinstance(_effort_cfg, dict) else None
+                _reasoning_config = _resolve_reff(_effort_raw, supported_reasoning_efforts)
+                if _reasoning_config is None and _effort_raw:
+                    logger.info(
+                        "Configured reasoning effort is unsupported by selected model %s; using provider default",
+                        resolved_model,
+                    )
             except Exception:
                 _reasoning_config = None
 
@@ -4636,7 +4672,14 @@ def _run_agent_streaming(
             # Run the same persistent-goal hook used by orchestration streams.
             _evaluate_goal_after_stream_turn(s, session_id, goal_related, put, goal_turn_context=goal_turn_context)
             raw_session = s.compact() | {'messages': s.messages, 'tool_calls': tool_calls}
-            put('done', {'session': redact_session_data(raw_session), 'usage': usage})
+            done_payload = {
+                'session': redact_session_data(raw_session),
+                'usage': usage,
+            }
+            provider_evidence = _provider_evidence_from_result(result)
+            if provider_evidence is not None:
+                done_payload['provider_evidence'] = provider_evidence
+            put('done', done_payload)
             # Emit one last metering packet for the live message-header TPS label.
             meter_stats = meter().get_stats()
             meter_stats['session_id'] = session_id
@@ -4891,7 +4934,8 @@ def _run_agent_streaming(
                     claim_turn=goal_claim_turn,
                     profile_home=get_profile_home(getattr(s, "profile", None)),
                     space_slug=(
-                        getattr(s, "workspace_slug", None)
+                        getattr(s, "goal_space_slug", None)
+                        or getattr(s, "workspace_slug", None)
                         or getattr(s, "space_slug", None)
                         or getattr(s, "space", None)
                     ),

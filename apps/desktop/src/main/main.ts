@@ -162,7 +162,8 @@ import {
 import { registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
 import { createAdblockController } from './adblock.js';
 import { createSidekickUpdater } from './sidekick-updater.js';
-import { subscribeChatStream, type ChatStreamHandle } from './chat-stream.js';
+import { subscribeChatStream } from './chat-stream.js';
+import { ChatStreamRegistry } from './chat-stream-registry.js';
 import { createPermissionController, loadTrustedOrigins, resolvePermissionRequest, saveTrustedOrigins, trustedNotificationOriginsFileName, trustedOriginsFileName } from './permissions.js';
 import { configureDrmWidevine, initializeCastlabsWidevine } from './drm.js';
 import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
@@ -269,7 +270,7 @@ let isQuitting = false;
 const adblock = createAdblockController();
 const sidekickUpdater = createSidekickUpdater();
 const agentWorkspaceStreams = new Map<string, AbortController>();
-const chatStreams = new Map<string, ChatStreamHandle>();
+const chatStreams = new ChatStreamRegistry();
 const downloads = createDownloadTracker();
 // Trusted origins live next to the app's other settings so a video-call site the
 // user allowed once does not have to be allowed again after a restart.
@@ -529,7 +530,7 @@ function registerIpc(): void {
     return true;
   });
   ipcMain.handle('lastbrowser:sidekick:requestWebui', (_event, request) => requestWebui(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:listSessions', () => listSessions(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:sidekick:listSessions', (_event, request) => listSessions(requireWebuiUrl(), request || {}));
   ipcMain.handle('lastbrowser:sidekick:listSpaces', () => listSpaces(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:createSession', (_event, request) => createSidekickSession(requireWebuiUrl(), request || {}));
   ipcMain.handle('lastbrowser:sidekick:getSession', (_event, request) => {
@@ -539,7 +540,10 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:renameSession', (_event, request) => renameSession(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:deleteSession', (_event, request) => deleteSession(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:duplicateSession', (_event, request) => duplicateSession(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:getDraft', (_event, sessionId) => getSessionDraft(requireWebuiUrl(), String(sessionId || '')));
+  ipcMain.handle('lastbrowser:sidekick:getDraft', (_event, request) => {
+    if (typeof request === 'string') return getSessionDraft(requireWebuiUrl(), request);
+    return getSessionDraft(requireWebuiUrl(), request || { sessionId: '' });
+  });
   ipcMain.handle('lastbrowser:sidekick:saveDraft', (_event, request) => saveSessionDraft(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:startChat', (_event, request) => startSidekickChat(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:getStreamStatus', (_event, streamId) => getChatStreamStatus(requireWebuiUrl(), String(streamId || '')));
@@ -549,29 +553,18 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:subscribeChatStream', (event, request) => {
     const streamId = String(request?.streamId || '');
     if (!streamId) throw new Error('streamId is required');
-    chatStreams.get(streamId)?.close();
-    const handle = subscribeChatStream(
+    return chatStreams.subscribe(event.sender, streamId, (onEvent) => subscribeChatStream(
       requireWebuiUrl(),
       streamId,
       getWebuiSessionToken(),
-      (streamEvent) => {
-        if (event.sender.isDestroyed()) return;
-        event.sender.send('lastbrowser:sidekick:chatStreamEvent', { streamId, ...streamEvent });
-      },
+      onEvent,
       undefined,
       getAccessAuthCookie()
-    );
-    chatStreams.set(streamId, handle);
-    void handle.done.finally(() => {
-      if (chatStreams.get(streamId) === handle) chatStreams.delete(streamId);
-    });
-    return { ok: true, streamId };
+    ));
   });
-  ipcMain.handle('lastbrowser:sidekick:unsubscribeChatStream', (_event, request) => {
+  ipcMain.handle('lastbrowser:sidekick:unsubscribeChatStream', (event, request) => {
     const streamId = String(request?.streamId || '');
-    chatStreams.get(streamId)?.close();
-    chatStreams.delete(streamId);
-    return { ok: true, streamId };
+    return chatStreams.unsubscribe(event.sender, streamId);
   });
   ipcMain.handle('lastbrowser:sidekick:cancelStream', (_event, streamId) => cancelChatStream(requireWebuiUrl(), String(streamId || '')));
   ipcMain.handle('lastbrowser:sidekick:listWorkspace', (_event, request) => listWorkspace(requireWebuiUrl(), request));

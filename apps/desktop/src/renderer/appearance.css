@@ -96,8 +96,8 @@ html[data-message-layout="bubbles"] .chat-message .message-body {
 }
 
 html[data-message-layout="bubbles"] .chat-message.user .message-body {
-  background: rgba(14, 165, 233, 0.14);
-  border-color: rgba(14, 165, 233, 0.28);
+  background: var(--lb-chat-user-message-bg, rgba(14, 165, 233, 0.14));
+  border-color: var(--lb-chat-user-message-border, rgba(14, 165, 233, 0.28));
 }
 
 html[data-message-layout="expanded"] .chat-message .message-body {

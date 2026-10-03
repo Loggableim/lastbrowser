@@ -52,6 +52,8 @@ class CaptureResult:
     window_title: str = ""
     # Raw bytes we sent to Anthropic, for token estimation.
     png_bytes_len: int = 0
+    snapshot_id: str = ""
+    meta: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -148,3 +150,34 @@ class ComputerUseBackend(ABC):
         import time
         time.sleep(max(0.0, min(seconds, 30.0)))
         return ActionResult(ok=True, action="wait", message=f"waited {seconds:.2f}s")
+
+    # ── Semantic & Physical Extensions ──────────────────────────────
+    def set_value(
+        self,
+        value: str,
+        element: Optional[Any] = None,
+        snapshot_id: Optional[str] = None,
+    ) -> ActionResult:
+        """Replace element value semantically (e.g. ValuePattern). Does NOT append."""
+        return ActionResult(ok=False, action="set_value", message="set_value not supported by this backend")
+
+    def invoke(
+        self,
+        element: Any,
+        snapshot_id: Optional[str] = None,
+    ) -> ActionResult:
+        """Semantic invoke on element (e.g. InvokePattern)."""
+        return ActionResult(ok=False, action="invoke", message="invoke not supported by this backend")
+
+    def physical_input(
+        self,
+        actions: List[Dict[str, Any]],
+        snapshot_id: Optional[str] = None,
+        approval_id: str = "",
+    ) -> ActionResult:
+        """Execute physical mouse/keyboard actions (SendInput) with approval."""
+        return ActionResult(ok=False, action="physical_input", message="physical_input not supported by this backend")
+
+    def emergency_stop(self) -> ActionResult:
+        """Backend-specific emergency stop; unsupported is never success."""
+        return ActionResult(ok=False, action="emergency_stop", message="emergency_stop not supported by this backend")

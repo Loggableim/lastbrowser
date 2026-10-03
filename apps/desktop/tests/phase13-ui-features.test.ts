@@ -163,7 +163,7 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
 
       const source = readRendererFile('components/CopilotSplitView.tsx');
       expect(source).toContain('const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS)');
-      expect(source).toContain('if (alive) setModelList(AVAILABLE_MODELS)');
+      expect(source).toMatch(/if \(alive\)\s*\{\s*setModelList\(AVAILABLE_MODELS\);/);
       expect(source).not.toContain('...prev.filter((item) => item.category !== \'gemini\'');
     });
 

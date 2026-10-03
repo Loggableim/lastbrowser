@@ -83,7 +83,7 @@ describe('terminal-process', () => {
     const [file, args, options] = call;
 
     expect(file).toBe('C:\\Python\\python.exe');
-    expect(args).toEqual(['-m', 'sidekick_cli.main', '--tui']);
+    expect(args).toEqual(['-m', 'cli.lastbrowser_tui']);
     expect(options.env.LASTBROWSER_PYTHON_EXE).toBe('C:\\Python\\python.exe');
   });
 

@@ -50,7 +50,7 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
       expect(source).toContain("case 'open-extensions':");
       expect(source).toContain('toggleExtensionHub()');
       expect(source).toContain('setExtensionHubOpen(true)');
-      expect(source).toContain('open={extensionHubOpen}');
+      expect(source).toContain('open={usePanelStore.getState().extensionHubOpen}');
     });
 
     it('integrates Extension & Skill Hub into SidekickSidebar.tsx drawer and shortcuts', () => {

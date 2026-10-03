@@ -213,15 +213,15 @@ if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMai
     sendMessage: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:sendMessage', request)
   },
   terminal: {
-    start: (request: string | { cwd?: string; mode?: 'shell' | 'tui'; cols?: number; rows?: number }) =>
+    start: (request: string | { cwd?: string; mode?: 'shell' | 'tui'; cols?: number; rows?: number; sessionId?: string }) =>
       ipcRenderer.invoke('lastbrowser:terminal:start', request),
     write: (request: { id: string; data: string }) => ipcRenderer.invoke('lastbrowser:terminal:write', request),
     resize: (request: { id: string; cols: number; rows: number }) =>
       ipcRenderer.invoke('lastbrowser:terminal:resize', request),
     close: (id: string) => ipcRenderer.invoke('lastbrowser:terminal:close', id),
     list: () => ipcRenderer.invoke('lastbrowser:terminal:list'),
-    onData: (callback: (event: { id: string; data: string }) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, payload: { id: string; data: string }) => callback(payload);
+    onData: (callback: (event: { id: string; data?: string; exitCode?: number }) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: { id: string; data?: string; exitCode?: number }) => callback(payload);
       ipcRenderer.on('lastbrowser:terminal:data', listener);
       return () => ipcRenderer.removeListener('lastbrowser:terminal:data', listener);
     }

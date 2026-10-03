@@ -48,7 +48,7 @@ export const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = 
   todos: ['Pending', 'In progress', 'Completed'],
   insights: ['Usage', 'Models', 'Cost', 'LLM wiki'],
   logs: ['Agent', 'WebUI', 'Errors', 'Gateway'],
-  gmail: ['Accounts', 'Inbox', 'Search', 'AI actions'],
+  gmail: ['Inbox', 'Search', 'Compose', 'Mail settings'],
   discord: ['Guild', 'Channels', 'Members', 'Moderation'],
   appstore: ['Home', 'Categories', 'My apps', 'SDK', 'Submit'],
   settings: ['Conversation', 'Appearance', 'Preferences', 'Providers', 'Plugins', 'System'],
@@ -64,7 +64,7 @@ export function panelForContextItem(item: string): LastbrowserPanelId | null {
   if (['pending', 'in progress', 'completed'].includes(label)) return 'todos';
   if (['usage', 'models', 'cost', 'llm wiki'].includes(label)) return 'insights';
   if (['agent', 'webui', 'errors'].includes(label)) return 'logs';
-  if (['accounts', 'inbox', 'ai actions'].includes(label)) return 'gmail';
+  if (['accounts', 'inbox', 'ai actions', 'compose', 'mail settings'].includes(label)) return 'gmail';
   if (['guild', 'channels', 'members', 'moderation'].includes(label)) return 'discord';
   if (['home', 'categories', 'my apps', 'sdk', 'submit'].includes(label)) return 'appstore';
   if (['conversation', 'appearance', 'preferences', 'providers', 'plugins', 'system'].includes(label)) return 'settings';

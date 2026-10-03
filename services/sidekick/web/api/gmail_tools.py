@@ -240,6 +240,11 @@ def _get_workspace_accounts() -> dict:
     This means global Gmail credentials are available in ALL spaces,
     not just the default space.  Per-space accounts take precedence.
     """
+    mail_workspace = getattr(_REQUEST_WORKSPACE_LOCAL, "mail_workspace", None)
+    if mail_workspace:
+        from web.api.mail_plugin import load
+        configured = load(mail_workspace, secrets=True)
+        return {key: (value["email"], value["password"]) for key, value in configured["accounts"].items()} if configured["enabled"] else {}
     try:
         # ── 1. Load global accounts from env (available everywhere) ──
         global_accounts = dict(ACCOUNTS) if ACCOUNTS else {}
@@ -357,6 +362,14 @@ def _get_creds(account):
     return all_accounts.get(account, (account, None))
 
 
+def _server_settings(account):
+    workspace = getattr(_REQUEST_WORKSPACE_LOCAL, "mail_workspace", None)
+    if workspace:
+        from web.api.mail_plugin import settings
+        return settings(workspace, account)
+    return {"imap_host": "imap.gmail.com", "imap_port": 993, "imap_security": "ssl", "smtp_host": "smtp.gmail.com", "smtp_port": 587, "smtp_security": "starttls"}
+
+
 def _connect_imap(account=DEFAULT_ACCOUNT):
     """Get an IMAP connection for the current thread + account (pooled)."""
     if not account or str(account).strip().lower() == "none":
@@ -365,7 +378,9 @@ def _connect_imap(account=DEFAULT_ACCOUNT):
     user, pw = _get_creds(account)
     if not user or not pw:
         raise ValueError(f"Missing credentials for account '{account}'. Set GMAIL_PASS_ environment variables.")
-    tid = (threading.get_ident(), account)
+    server = _server_settings(account)
+    scope = getattr(_REQUEST_WORKSPACE_LOCAL, "mail_workspace", None) or getattr(_REQUEST_WORKSPACE_LOCAL, "slug", None) or "legacy"
+    tid = (threading.get_ident(), scope, account, server["imap_host"], hashlib.sha256(pw.encode()).hexdigest())
     now = time.time()
 
     with _CONN_POOL_LOCK:
@@ -384,8 +399,20 @@ def _connect_imap(account=DEFAULT_ACCOUNT):
             except Exception:
                 pass
 
-    conn = imaplib.IMAP4_SSL("imap.gmail.com", 993, timeout=15)
-    conn.login(user, pw)
+    import ssl
+    if server["imap_security"] == "ssl":
+        conn = imaplib.IMAP4_SSL(server["imap_host"], server["imap_port"], timeout=15, ssl_context=ssl.create_default_context())
+    else:
+        conn = imaplib.IMAP4(server["imap_host"], server["imap_port"], timeout=15)
+        conn.starttls(ssl_context=ssl.create_default_context())
+    try:
+        conn.login(server.get("username", user), pw)
+    except Exception:
+        try:
+            conn.logout()
+        except Exception:
+            pass
+        raise
 
     with _CONN_POOL_LOCK:
         if len(_conn_pool) >= _CONN_POOL_MAX_SIZE:
@@ -518,12 +545,12 @@ def _list_emails(max_r=25, folder="INBOX", account=DEFAULT_ACCOUNT):
         return {"error": "IMAP list failed", "emails": [], "count": 0, "folder": folder, "account": account}
 
 
-def _read_email(email_id, account=DEFAULT_ACCOUNT):
+def _read_email(email_id, account=DEFAULT_ACCOUNT, folder="INBOX"):
     """Read full email content."""
     try:
         conn, user = _connect_imap(account)
-        conn.select("INBOX")
-        status, data = conn.uid("fetch", str(email_id), "(BODY[])")
+        conn.select(_imap_mailbox_arg(folder), readonly=True)
+        status, data = conn.uid("fetch", str(email_id), "(BODY.PEEK[])")
         if status != "OK":
             return {"error": "Fetch failed", "account": account}
 
@@ -540,6 +567,7 @@ def _read_email(email_id, account=DEFAULT_ACCOUNT):
                     fn = part.get_filename()
                     if fn:
                         attachments.append(_decode_rfc2047(fn))
+                    continue
                 ct = part.get_content_type()
                 if ct == "text/plain":
                     payload = part.get_payload(decode=True)
@@ -596,7 +624,7 @@ def _read_email(email_id, account=DEFAULT_ACCOUNT):
         return {"error": "IMAP read failed", "account": account}
 
 
-def _search_emails(query, max_r=25, account=DEFAULT_ACCOUNT):
+def _search_emails(query, max_r=25, account=DEFAULT_ACCOUNT, folder="INBOX"):
     """Search emails by Gmail-style query syntax."""
     q = query.lower().strip()
     if q.startswith("from:"):
@@ -610,8 +638,8 @@ def _search_emails(query, max_r=25, account=DEFAULT_ACCOUNT):
 
     try:
         conn, user = _connect_imap(account)
-        conn.select("INBOX")
-        status, data = conn.search(None, imap_q)
+        conn.select(_imap_mailbox_arg(folder), readonly=True)
+        status, data = conn.uid("search", None, imap_q)
         if status != "OK" or not data[0]:
             return {"emails": [], "count": 0, "query": query, "account": account}
 
@@ -619,12 +647,12 @@ def _search_emails(query, max_r=25, account=DEFAULT_ACCOUNT):
         ids = ids[-max_r:] if len(ids) > max_r else ids
         str_ids = [i.decode() if isinstance(i, bytes) else str(i) for i in ids]
 
-        msg_list = _fetch_headers(conn, ids)
+        msg_list = _fetch_headers_by_uid(conn, ids)
         results = []
-        for i, (msg, seen) in enumerate(reversed(msg_list)):
+        for uid, msg, seen in reversed(msg_list):
             fr = _decode_header_safe(msg, "From")
             results.append({
-                "id": str_ids[-(i+1)] if i < len(str_ids) else str(i),
+                "id": uid,
                 "from": fr,
                 "from_name": re.sub(r'\s*<[^>]+>\s*', '', fr).strip() or fr,
                 "to": _decode_header_safe(msg, "To"),
@@ -708,10 +736,14 @@ def _send_email(to, subject, body, account=DEFAULT_ACCOUNT, attachments=None):
         msg["To"] = to
         msg["Subject"] = subject
 
-    conn = smtplib.SMTP("smtp.gmail.com", 587, timeout=30)
+    server = _server_settings(account)
+    import ssl
+    klass = smtplib.SMTP_SSL if server["smtp_security"] == "ssl" else smtplib.SMTP
+    conn = klass(server["smtp_host"], server["smtp_port"], timeout=30)
     try:
-        conn.starttls()
-        conn.login(user, pw)
+        if server["smtp_security"] == "starttls":
+            conn.starttls(context=ssl.create_default_context())
+        conn.login(server.get("username", user), pw)
         conn.send_message(msg)
         return {"status": "sent", "to": to, "subject": subject, "account": account}
     except Exception as e:
@@ -1130,6 +1162,9 @@ def _get_account(parsed):
 
 
 def handle_gmail_get(handler, parsed) -> bool:
+    if parsed.path.startswith("/api/mail/"):
+        from web.api.mail_plugin import handle
+        return handle(handler, parsed)
     path = parsed.path
     qs = parse_qs(parsed.query)
     workspace = (qs.get("workspace") or [""])[0].strip().lower()
@@ -1149,14 +1184,14 @@ def handle_gmail_get(handler, parsed) -> bool:
             email_id = (qs.get("id") or [""])[0]
             if not email_id:
                 return bad(handler, "Missing email id")
-            return j(handler, _read_email(email_id, account))
+            return j(handler, _read_email(email_id, account, (qs.get("folder") or ["INBOX"])[0]))
 
         if path == "/api/gmail/search":
             query = (qs.get("query") or [""])[0]
             max_r = min(int((qs.get("max") or [25])[0]), 100)
             if not query:
                 return bad(handler, "Missing query")
-            return j(handler, _search_emails(query, max_r, account))
+            return j(handler, _search_emails(query, max_r, account, (qs.get("folder") or ["INBOX"])[0]))
 
         if path == "/api/gmail/folders":
             return j(handler, _list_folders(account))
@@ -1205,6 +1240,9 @@ def handle_gmail_get(handler, parsed) -> bool:
 
 
 def handle_gmail_post(handler, parsed, body) -> bool:
+    if parsed.path.startswith("/api/mail/"):
+        from web.api.mail_plugin import handle
+        return handle(handler, parsed, body or {})
     path = parsed.path
     if body is None:
         try:

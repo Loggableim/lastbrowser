@@ -11,7 +11,7 @@ import { ExtensionManager } from './extensions.js';
 import { isCdpEnabled, resolveCdpPort, setPersistedCdpEnabled } from './cdp.js';
 import { loadCdpPreference, saveCdpPreference } from './cdp-settings.js';
 import { moduleDirname } from './module-path.js';
-import { SidecarServices, appResourcesDir, resolveServiceLayout } from './services.js';
+import { SidecarServices, appResourcesDir, resolveServiceLayout, buildSidecarEnvironment } from './services.js';
 import { loadSetupState, saveSetupState } from './setup-store.js';
 import {
   addSupermemoryDocument,
@@ -721,6 +721,8 @@ function registerIpc(): void {
     const cwd = String(reqObj.cwd || '');
     const mode = reqObj.mode === 'tui' ? 'tui' : 'shell';
     const layout = services?.getLayout();
+    let ownedTerminalId = '';
+    const closeOwnedTerminal = () => { if (ownedTerminalId) closeTerminal(ownedTerminalId); };
     const result = startTerminal(
       cwd,
       (id, data) => {
@@ -731,9 +733,20 @@ function registerIpc(): void {
         pythonExe: layout?.pythonExe,
         sidekickDir: layout?.sidekickDir,
         cols: reqObj.cols,
-        rows: reqObj.rows
+        rows: reqObj.rows,
+        sessionId: typeof reqObj.sessionId === 'string' ? reqObj.sessionId : undefined,
+        env: layout ? { ...buildSidecarEnvironment(layout, services?.getStatus().port || 9119),
+          LASTBROWSER_TUI_TOKEN: getWebuiSessionToken() || '',
+          LASTBROWSER_TUI_COOKIE: getAccessAuthCookie() || ''
+        } as Record<string, string> : undefined,
+        onExit: (id, exitCode) => {
+          webContents.removeListener('destroyed', closeOwnedTerminal);
+          if (!webContents.isDestroyed()) webContents.send('lastbrowser:terminal:data', { id, exitCode });
+        }
       }
     );
+    ownedTerminalId = result.id;
+    if (!result.error) webContents.once('destroyed', closeOwnedTerminal);
     return result;
   });
   ipcMain.handle('lastbrowser:terminal:write', (_event, request) => writeTerminal(String(request?.id || ''), String(request?.data || '')));

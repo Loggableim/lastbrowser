@@ -20,7 +20,7 @@ function main() {
     // Bump when the bundled runtime dependency set changes. In particular,
     // older prepared trees can otherwise pass the cache check without the
     // OpenAI-compatible client needed by Ollama providers.
-    runtimeSchema: 6
+    runtimeSchema: 7
   };
 
   if (isPreparedRuntimeCompatible(marker, desired, existsSync(join(pythonRuntimeDir, 'python.exe')))) {
@@ -67,7 +67,7 @@ function main() {
 
   run(join(pythonRuntimeDir, 'python.exe'), [
     '-c',
-    'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, yaml; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
+    'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; from mcp import ClientSession, StdioServerParameters; import anthropic, requests, yaml; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
   ]);
 
   writeFileSync(markerPath, `${JSON.stringify(desired, null, 2)}\n`, 'utf8');

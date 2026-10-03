@@ -10,6 +10,8 @@ import type {
 import { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { isOAuthUrl, openAuthConnectWindow, openExternalUrl } from './auth-window.js';
 
+import { searchEngineById, searchUrlFor } from './search-engines.js';
+
 export const browserOpenTabChannel = 'lastbrowser:browser:openTab';
 export const browserOpenIncognitoTabChannel = 'lastbrowser:browser:openIncognitoTab';
 export const browserDeepResearchChannel = 'lastbrowser:browser:deepResearch';
@@ -33,11 +35,13 @@ export type BrowserContextMenuActions = {
   deepResearch?: (payload: { selectionText?: string; pageUrl?: string }) => void;
   assistantName?: string;
   locale?: string;
+  searchEngineId?: string;
 };
 
 export type ContextMenuLocale = 'en' | 'de' | 'es' | 'fr' | 'it' | 'pt-BR' | 'ru';
 
 export interface ContextMenuLabels {
+  searchSelection: (engine: string) => string;
   deepResearchSelection: (assistant: string, text: string) => string;
   deepResearchLink: (assistant: string) => string;
   deepResearchPage: (assistant: string) => string;
@@ -53,6 +57,7 @@ export interface ContextMenuLabels {
 
 export const contextMenuLocales: Record<ContextMenuLocale, ContextMenuLabels> = {
   en: {
+    searchSelection: (engine) => `Search with ${engine}`,
     deepResearchSelection: (assistant, text) => `Deep Research with ${assistant}: "${text}"`,
     deepResearchLink: (assistant) => `Deep Research link with ${assistant}`,
     deepResearchPage: (assistant) => `Deep Research with ${assistant}`,
@@ -66,6 +71,7 @@ export const contextMenuLocales: Record<ContextMenuLocale, ContextMenuLabels> = 
     inspect: 'Inspect element'
   },
   de: {
+    searchSelection: (engine) => `Suche mit ${engine}`,
     deepResearchSelection: (assistant, text) => `Deep Research mit ${assistant}: „${text}“`,
     deepResearchLink: (assistant) => `Deep Research Link mit ${assistant}`,
     deepResearchPage: (assistant) => `Deep Research mit ${assistant}`,
@@ -79,6 +85,7 @@ export const contextMenuLocales: Record<ContextMenuLocale, ContextMenuLabels> = 
     inspect: 'Element untersuchen'
   },
   es: {
+    searchSelection: (engine) => `Buscar con ${engine}`,
     deepResearchSelection: (assistant, text) => `Investigación profunda con ${assistant}: "${text}"`,
     deepResearchLink: (assistant) => `Investigación profunda de enlace con ${assistant}`,
     deepResearchPage: (assistant) => `Investigación profunda con ${assistant}`,
@@ -92,6 +99,7 @@ export const contextMenuLocales: Record<ContextMenuLocale, ContextMenuLabels> = 
     inspect: 'Inspeccionar elemento'
   },
   fr: {
+    searchSelection: (engine) => `Rechercher avec ${engine}`,
     deepResearchSelection: (assistant, text) => `Recherche approfondie avec ${assistant} : « ${text} »`,
     deepResearchLink: (assistant) => `Recherche approfondie du lien avec ${assistant}`,
     deepResearchPage: (assistant) => `Recherche approfondie avec ${assistant}`,
@@ -105,6 +113,7 @@ export const contextMenuLocales: Record<ContextMenuLocale, ContextMenuLabels> = 
     inspect: 'Inspecter l’élément'
   },
   it: {
+    searchSelection: (engine) => `Cerca con ${engine}`,
     deepResearchSelection: (assistant, text) => `Ricerca approfondita con ${assistant}: "${text}"`,
     deepResearchLink: (assistant) => `Ricerca approfondita del link con ${assistant}`,
     deepResearchPage: (assistant) => `Ricerca approfondita con ${assistant}`,
@@ -118,6 +127,7 @@ export const contextMenuLocales: Record<ContextMenuLocale, ContextMenuLabels> = 
     inspect: 'Ispeziona elemento'
   },
   'pt-BR': {
+    searchSelection: (engine) => `Pesquisar com ${engine}`,
     deepResearchSelection: (assistant, text) => `Pesquisa aprofundada com ${assistant}: "${text}"`,
     deepResearchLink: (assistant) => `Pesquisa aprofundada do link com ${assistant}`,
     deepResearchPage: (assistant) => `Pesquisa aprofundada com ${assistant}`,
@@ -131,6 +141,7 @@ export const contextMenuLocales: Record<ContextMenuLocale, ContextMenuLabels> = 
     inspect: 'Inspecionar elemento'
   },
   ru: {
+    searchSelection: (engine) => `Поиск через ${engine}`,
     deepResearchSelection: (assistant, text) => `Глубокое исследование с ${assistant}: «${text}»`,
     deepResearchLink: (assistant) => `Исследовать ссылку с помощью ${assistant}`,
     deepResearchPage: (assistant) => `Глубокое исследование с ${assistant}`,
@@ -148,6 +159,7 @@ export const contextMenuLocales: Record<ContextMenuLocale, ContextMenuLabels> = 
 export function resolveContextMenuLabels(locale?: string): ContextMenuLabels {
   if (!locale) {
     return {
+      searchSelection: (engine) => `Search with ${engine}`,
       deepResearchSelection: (assistant, text) => `Deep Research mit ${assistant}: „${text}“`,
       deepResearchLink: (assistant) => `Deep Research Link mit ${assistant}`,
       deepResearchPage: (assistant) => `Deep Research mit ${assistant}`,
@@ -190,6 +202,10 @@ export function buildBrowserContextMenuTemplate(
     const raw = params.selectionText.trim();
     const shortText = raw.length > 28 ? `${raw.slice(0, 28)}…` : raw;
     template.push(
+      {
+        label: labels.searchSelection(searchEngineById(actions.searchEngineId || '').label),
+        click: () => actions.openLinkInNewTab(searchUrlFor(raw, actions.searchEngineId))
+      },
       {
         label: labels.deepResearchSelection(assistantName, shortText),
         click: () => actions.deepResearch?.({ selectionText: raw, pageUrl: params.pageURL })
@@ -284,7 +300,8 @@ export function registerBrowserContextMenu({
   shell,
   getWindow,
   getAssistantName,
-  getLocale
+  getLocale,
+  getSearchEngineId
 }: {
   app: App;
   Menu: MenuLike;
@@ -293,10 +310,22 @@ export function registerBrowserContextMenu({
   getWindow: () => BrowserWindow | null;
   getAssistantName?: () => string;
   getLocale?: () => string;
+  getSearchEngineId?: () => string;
 }): void {
   app.on('web-contents-created', (_event, contents) => {
     installWindowOpenBridge(contents, getWindow, shell);
-    contents.on('context-menu', (_contextEvent, params) => {
+    contents.on('dom-ready', () => {
+      void contents.executeJavaScript(preserveContextMenuSelectionScript).catch(() => { /* document navigated */ });
+    });
+    contents.on('context-menu', async (_contextEvent, params) => {
+      // Chromium can omit selectionText after a right-click outside the range,
+      // even when the DOM selection is preserved. Read the originating document.
+      if (!params.selectionText) {
+        try {
+          params.selectionText = await contents.executeJavaScript(readContextMenuSelectionScript);
+        } catch { /* document navigated */ }
+      }
+      if (contents.isDestroyed()) return;
       const template = buildBrowserContextMenuTemplate(params, {
         canGoBack: contents.canGoBack(),
         canGoForward: contents.canGoForward(),
@@ -315,7 +344,8 @@ export function registerBrowserContextMenu({
         },
         deepResearch: (payload) => getWindow()?.webContents.send(browserDeepResearchChannel, payload),
         assistantName: getAssistantName?.() || 'Nova',
-        locale: getLocale?.()
+        locale: getLocale?.(),
+        searchEngineId: getSearchEngineId?.()
       });
       Menu.buildFromTemplate(template).popup({ window: getWindow() ?? undefined });
     });
@@ -397,3 +427,31 @@ function isHttpUrl(url: string): boolean {
     return false;
   }
 }
+
+/** Preserve a deliberate text selection when Windows moves the caret on right-click. */
+export const preserveContextMenuSelectionScript = `(() => {
+  if (window.__lastbrowserSelectionGuard) return;
+  window.__lastbrowserSelectionGuard = true;
+  const preserve = (event) => {
+    if (event.button !== 2) return;
+    const target = event.target;
+    const editableSelection = (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)
+      && target.selectionStart !== null && target.selectionEnd > target.selectionStart;
+    if (editableSelection || !window.getSelection()?.isCollapsed) event.preventDefault();
+  };
+  document.addEventListener('pointerdown', preserve, true);
+  document.addEventListener('mousedown', preserve, true);
+  document.addEventListener('pointerup', preserve, true);
+  document.addEventListener('mouseup', preserve, true);
+})();`;
+
+export const readContextMenuSelectionScript = `(() => {
+  const active = document.activeElement;
+  if ((active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)
+      && active.selectionStart !== null && active.selectionEnd > active.selectionStart) {
+    // Never expose a selected password through search or research actions.
+    if (active instanceof HTMLInputElement && active.type === 'password') return '';
+    return active.value.slice(active.selectionStart, active.selectionEnd);
+  }
+  return window.getSelection()?.toString() || '';
+})();`;

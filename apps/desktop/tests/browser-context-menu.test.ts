@@ -5,6 +5,7 @@ vi.mock('../src/main/auth-window.js', async (importOriginal) => {
 });
 
 import {
+  registerBrowserContextMenu,
   browserOpenTabChannel,
   buildBrowserContextMenuTemplate,
   installWindowOpenBridge,
@@ -292,5 +293,64 @@ describe('browser context menu', () => {
     expect(ruTemplate.map((item) => item.label)).toContain('Открыть ссылку в новой вкладке');
     expect(ruTemplate.map((item) => item.label)).toContain('Копировать адрес ссылки');
     expect(ruTemplate.map((item) => item.label)).toContain('Назад');
+  });
+});
+
+
+describe('selection search', () => {
+  it.each([
+    ['google', 'Google', 'https://www.google.com/search?q='],
+    ['duckduckgo', 'DuckDuckGo', 'https://duckduckgo.com/?q='],
+    ['bing', 'Bing', 'https://www.bing.com/search?q='],
+    ['brave', 'Brave Search', 'https://search.brave.com/search?q='],
+    ['startpage', 'Startpage', 'https://www.startpage.com/sp/search?query='],
+    ['ecosia', 'Ecosia', 'https://www.ecosia.org/search?q='],
+    ['wikipedia', 'Wikipedia', 'https://en.wikipedia.org/w/index.php?search=']
+  ])('uses the current %s engine and encodes the selected text', (searchEngineId, label, prefix) => {
+    const openLinkInNewTab = vi.fn();
+    const template = buildBrowserContextMenuTemplate({ linkURL: '', pageURL: 'https://example.com', selectionText: ' C++ & Größe? ', isEditable: false, editFlags: {} }, {
+      canGoBack: false, canGoForward: false, copyText: vi.fn(), openLinkInNewTab, searchEngineId, locale: 'de'
+    });
+    const item = template.find(item => item.label === `Suche mit ${label}`);
+    expect(item).toBeDefined();
+    item?.click?.({} as never, {} as never, {} as never);
+    expect(openLinkInNewTab).toHaveBeenCalledWith(prefix + encodeURIComponent('C++ & Größe?'));
+  });
+  it('does not offer search without a selection', () => {
+    const template = buildBrowserContextMenuTemplate({ linkURL: '', pageURL: 'https://example.com', selectionText: '  ', isEditable: false, editFlags: {} }, {
+      canGoBack: false, canGoForward: false, copyText: vi.fn(), openLinkInNewTab: vi.fn(), locale: 'de'
+    });
+    expect(template.some(item => item.label?.startsWith('Suche mit'))).toBe(false);
+  });
+});
+
+
+describe('native context menu selection fallback', () => {
+  it('reads missing Chromium selection from its source and opens a search tab with the live preference', async () => {
+    const appHandlers: Record<string, Function> = {};
+    const handlers: Record<string, Function> = {};
+    const send = vi.fn();
+    const executeJavaScript = vi.fn().mockResolvedValue('C++ & Größe?');
+    const contents = {
+      on: (name: string, fn: Function) => { handlers[name] = fn; }, setWindowOpenHandler: vi.fn(),
+      executeJavaScript, isDestroyed: () => false, canGoBack: () => false, canGoForward: () => false
+    };
+    let built: any[] = [];
+    const popup = vi.fn();
+    let engine = 'google';
+    registerBrowserContextMenu({
+      app: { on: (name: string, fn: Function) => { appHandlers[name] = fn; } } as never,
+      Menu: { buildFromTemplate: template => { built = template; return { popup }; } },
+      clipboard: { writeText: vi.fn() } as never, shell: {} as never,
+      getWindow: () => ({ webContents: { send } }) as never, getLocale: () => 'de', getSearchEngineId: () => engine
+    });
+    appHandlers['web-contents-created']({}, contents);
+    handlers['dom-ready']();
+    expect(executeJavaScript).toHaveBeenCalledOnce();
+    engine = 'bing';
+    await handlers['context-menu']({}, { selectionText: '', linkURL: '', pageURL: 'https://example.com', isEditable: false, editFlags: {} });
+    expect(popup).toHaveBeenCalledOnce();
+    built.find(item => item.label === 'Suche mit Bing').click();
+    expect(send).toHaveBeenCalledWith(browserOpenTabChannel, 'https://www.bing.com/search?q=' + encodeURIComponent('C++ & Größe?'));
   });
 });

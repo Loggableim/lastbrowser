@@ -192,6 +192,7 @@ declare global {
         save: (state: LastbrowserSetupState) => Promise<LastbrowserSetupState>;
       };
       browser: {
+        setSearchEngine?: (id: string) => Promise<boolean>;
         onOpenTab: (callback: (url: string) => void) => () => void;
         onOpenIncognitoTab: (callback: (url: string) => void) => () => void;
         onDeepResearch: (callback: (payload: { selectionText?: string; pageUrl?: string }) => void) => () => void;

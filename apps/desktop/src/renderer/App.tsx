@@ -1255,6 +1255,7 @@ function AppContent(): JSX.Element {
 
   useEffect(() => {
     saveSearchEngineId(window.localStorage, searchEngineId);
+    void window.lastbrowser.browser.setSearchEngine?.(searchEngineId);
   }, [searchEngineId]);
 
   /** Drop a single entry from the history panel. */

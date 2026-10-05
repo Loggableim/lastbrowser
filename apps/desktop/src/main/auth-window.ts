@@ -101,7 +101,7 @@ export function openAuthConnectWindow(options: AuthWindowOptions): BrowserWindow
     minHeight: 520,
     parent: parentWindow || undefined,
     modal: false,
-    title: 'Lastbrowser Connect',
+    title: 'LastBrowser Connect',
     autoHideMenuBar: true,
     backgroundColor: '#07111f',
     webPreferences: {

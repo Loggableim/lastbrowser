@@ -198,7 +198,7 @@ export class IndependentBrowserHostRegistry {
       if (this.quitting || ticket.expiresAt <= this.now()) throw new BrowserHostError('quitting', 'Lease creation cancelled');
       await this.options.validateTicket(ticket);
       if (this.quitting || ticket.expiresAt <= this.now()) throw new BrowserHostError('quitting', 'Lease creation cancelled');
-      const host = new BaseWindow({ show: false, width: 1100, height: 760, title: ticket.title ?? 'Lastbrowser agent',
+      const host = new BaseWindow({ show: false, width: 1100, height: 760, title: ticket.title ?? 'LastBrowser agent',
         skipTaskbar: true,
         autoHideMenuBar: true, backgroundColor: '#ffffff' });
       createdHost = host;

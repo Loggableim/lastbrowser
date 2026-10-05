@@ -23,7 +23,7 @@ export function getChatCompletionNotification(locale: unknown): { title: string;
     (candidate) => candidate.toLowerCase() === requested.toLowerCase()
   ) as ChatNotificationLocale | undefined;
   return {
-    title: 'Lastbrowser',
+    title: 'LastBrowser',
     body: CHAT_COMPLETION_BODIES[supportedLocale ?? 'en']
   };
 }

@@ -197,7 +197,7 @@ export function firstRunStatus(serviceStatus: FirstRunServiceStatus, onboardingS
     return {
       id: 'error',
       label: 'Runtime needs attention',
-      detail: serviceStatus.lastError || 'Sidekick could not start. Restart Lastbrowser or check the local runtime.',
+      detail: serviceStatus.lastError || 'Sidekick could not start. Restart LastBrowser or check the local runtime.',
       canSubmit: false
     };
   }
@@ -206,7 +206,7 @@ export function firstRunStatus(serviceStatus: FirstRunServiceStatus, onboardingS
     return {
       id: 'starting-runtime',
       label: 'Starting runtime',
-      detail: 'Lastbrowser is preparing the local Sidekick service in the background.',
+      detail: 'LastBrowser is preparing the local Sidekick service in the background.',
       canSubmit: false
     };
   }
@@ -215,7 +215,7 @@ export function firstRunStatus(serviceStatus: FirstRunServiceStatus, onboardingS
     return {
       id: 'sidekick-ready',
       label: 'Sidekick ready',
-      detail: 'The local runtime has started. Lastbrowser is loading setup details.',
+      detail: 'The local runtime has started. LastBrowser is loading setup details.',
       canSubmit: false
     };
   }

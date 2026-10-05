@@ -84,7 +84,7 @@ describe('auth-window logic', () => {
     expect(mockConstructor).toHaveBeenCalledWith(expect.objectContaining({
       width: 640,
       height: 780,
-      title: 'Lastbrowser Connect',
+      title: 'LastBrowser Connect',
       autoHideMenuBar: true,
       webPreferences: expect.objectContaining({
         sandbox: true

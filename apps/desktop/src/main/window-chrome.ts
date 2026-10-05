@@ -15,7 +15,7 @@ export function createMainWindowOptions(mainDir: string): BrowserWindowConstruct
     height: 920,
     minWidth: 1100,
     minHeight: 720,
-    title: 'Lastbrowser',
+    title: 'LastBrowser',
     frame: false,
     autoHideMenuBar: true,
     backgroundColor: '#07111F',

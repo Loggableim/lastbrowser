@@ -19,7 +19,7 @@ describe('window chrome', () => {
 
     expect(options.frame).toBe(false);
     expect(options.autoHideMenuBar).toBe(true);
-    expect(options.title).toBe('Lastbrowser');
+    expect(options.title).toBe('LastBrowser');
     expect(options.webPreferences?.nodeIntegration).toBe(false);
     expect(options.webPreferences?.contextIsolation).toBe(true);
     expect(options.webPreferences?.sandbox).toBe(true);

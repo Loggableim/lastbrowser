@@ -97,7 +97,7 @@ export function AiFeedbackModal({
         {submitted ? (
           <div className="ai-feedback-success-state">
             <CheckCircle2 size={32} color="#22c55e" />
-            <p>Vielen Dank für deine Rückmeldung! Dein Feedback hilft, Lastbrowser zu verbessern.</p>
+            <p>Vielen Dank für deine Rückmeldung! Dein Feedback hilft, LastBrowser zu verbessern.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="ai-feedback-form">

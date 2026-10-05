@@ -21,17 +21,17 @@ describe('background chat completion notifications', () => {
       ja: '返信が届きました。'
     };
     for (const [locale, body] of Object.entries(translations)) {
-      expect(getChatCompletionNotification(locale)).toEqual({ title: 'Lastbrowser', body });
+      expect(getChatCompletionNotification(locale)).toEqual({ title: 'LastBrowser', body });
     }
   });
 
   it('falls back to English for an unknown locale and does not include chat content', () => {
     expect(getChatCompletionNotification('unknown')).toEqual({
-      title: 'Lastbrowser',
+      title: 'LastBrowser',
       body: 'A reply is ready.'
     });
     expect(CHAT_COMPLETION_NOTIFICATION).toEqual({
-      title: 'Lastbrowser',
+      title: 'LastBrowser',
       body: 'A reply is ready.'
     });
   });

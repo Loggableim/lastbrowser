@@ -3,8 +3,8 @@
   "version": "0.1.46",
   "private": true,
   "type": "module",
-  "description": "Lastbrowser Electron desktop shell.",
-  "author": "Lastbrowser",
+  "description": "LastBrowser Electron desktop shell.",
+  "author": "LastBrowser",
   "main": "dist/main/main.js",
   "scripts": {
     "dev": "npm run build:main && vite --host 127.0.0.1",
@@ -51,7 +51,8 @@
   },
   "build": {
     "appId": "com.lastbrowser.desktop",
-    "productName": "Lastbrowser",
+    "productName": "LastBrowser",
+    "executableName": "Lastbrowser",
     "npmRebuild": false,
     "electronVersion": "37.10.3+wvcus",
     "electronDownload": {
@@ -177,7 +178,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Lastbrowser"
+      "shortcutName": "LastBrowser"
     },
     "portable": {
       "artifactName": "Lastbrowser-${version}-${arch}-portable.${ext}"

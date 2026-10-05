@@ -52,6 +52,6 @@ describe('brand assets', () => {
 
     expect(nsis).toContain('!macro customUnInstall');
     expect(nsis).toContain('$APPDATA\\Lastbrowser');
-    expect(nsis).toContain('Remove Lastbrowser user data');
+    expect(nsis).toContain('Remove LastBrowser user data');
   });
 });

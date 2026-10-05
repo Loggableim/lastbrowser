@@ -1691,7 +1691,7 @@ export function ExtensionsSettingsSection(): JSX.Element {
       {/* Curated Store Presets */}
       <SettingsCard
         title="Curated Extension Store"
-        description="Top open-source and privacy extensions verified for Manifest V3 and Lastbrowser."
+        description="Top open-source and privacy extensions verified for Manifest V3 and LastBrowser."
       >
         <div className="extension-store-grid">
           {presets.map((preset) => {
@@ -1738,7 +1738,7 @@ export function ExtensionsSettingsSection(): JSX.Element {
                     ) : (
                       <>
                         <Download size={13} />
-                        <span>Add to Lastbrowser</span>
+                        <span>Add to LastBrowser</span>
                       </>
                     )}
                   </button>
@@ -2766,7 +2766,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         openExternal: window.lastbrowser.system?.openExternal,
         openConnectWindow: window.lastbrowser.auth?.openConnectWindow
       });
-      if (!opened) throw new Error('Lastbrowser could not open the sign-in page.');
+      if (!opened) throw new Error('LastBrowser could not open the sign-in page.');
       showToast(t('firstRun.oauthPromptCode', { provider: option.label }));
     } catch (error) {
       if (isCodex && startedFlowId) {

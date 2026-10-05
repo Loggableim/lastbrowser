@@ -49,8 +49,8 @@ describe('localized shell navigation', () => {
   });
 
   it.each([
-    ['de', 'Aufgaben', 'Lastbrowser-Navigation', 'Seitenleiste ein- oder ausblenden'],
-    ['ru', 'Задачи', 'Навигация Lastbrowser', 'Переключить боковую панель']
+    ['de', 'Aufgaben', 'LastBrowser-Navigation', 'Seitenleiste ein- oder ausblenden'],
+    ['ru', 'Задачи', 'Навигация LastBrowser', 'Переключить боковую панель']
   ] as const)('renders translated labels, title and ARIA name for %s', (locale, taskLabel, navigationLabel, toggleLabel) => {
     const markup = renderRail(locale);
     expect(markup).toContain(`aria-label="${navigationLabel}"`);

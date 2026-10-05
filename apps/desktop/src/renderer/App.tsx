@@ -4298,7 +4298,7 @@ function AppContent(): JSX.Element {
       <main className="access-lock-screen">
         <section className="access-lock-card" aria-labelledby="access-lock-title">
           <div className="access-lock-icon"><ShieldCheck size={28} /></div>
-          <p className="eyebrow">Lastbrowser</p>
+          <p className="eyebrow">LastBrowser</p>
           <h1 id="access-lock-title">{accessAuthRequired ? t('access.lock.title') : t('access.lock.checking')}</h1>
           <p>{accessAuthRequired
             ? t('access.lock.description')
@@ -6588,7 +6588,7 @@ function NativePanelMain({
         <img src={sidebarIconForPanel(activePanel)} alt="" />
         <span className="eyebrow">{panelLabel}</span>
         <h1>{panelLabel}</h1>
-        <p>{panelLabel} is available in the native Lastbrowser shell.</p>
+        <p>{panelLabel} is available in the native LastBrowser shell.</p>
         {!spaces.length && serviceStatus?.sidekick !== 'ready' && <small>Sidekick runtime is starting.</small>}
       </div>
     </section>

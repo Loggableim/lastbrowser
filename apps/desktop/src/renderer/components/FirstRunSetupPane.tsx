@@ -560,7 +560,7 @@ export function FirstRunSetupPane({
         {/* Top bar with branding & skip button */}
         <header className="first-run-topbar">
           <div className="first-run-topbar-brand">
-            <img src={brandAssets.logo} alt="Lastbrowser" className="first-run-brand-logo" />
+            <img src={brandAssets.logo} alt="LastBrowser" className="first-run-brand-logo" />
             <span className="first-run-badge">Willkommen</span>
           </div>
           <button
@@ -1246,8 +1246,8 @@ export function FirstRunSetupPane({
             <div className="setup-section-header">
               <span className="setup-step-number">5</span>
               <div>
-                <h2>Lastbrowser als Windows Standard-Browser</h2>
-                <p>Öffne Webseiten, HTML-Dateien und Links aus externen Apps wie Outlook, Teams oder Discord standardmäßig mit Lastbrowser.</p>
+                <h2>LastBrowser als Windows Standard-Browser</h2>
+                <p>Öffne Webseiten, HTML-Dateien und Links aus externen Apps wie Outlook, Teams oder Discord standardmäßig mit LastBrowser.</p>
               </div>
             </div>
 

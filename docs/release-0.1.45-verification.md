@@ -17,4 +17,6 @@ Actual signed application start passed in an isolated temporary profile (`output
 
 Update metadata and blockmap were refreshed from the final signed artifacts. The publicly downloaded `latest.yml` matches the local metadata exactly.
 
+Cloudflare Pages production deployment succeeded with both Worker compilation and Functions upload (`https://cb7383f9.lastbrowser-website.pages.dev`). All seven public download pages on lastbrowser.com showed version 0.1.45 and both verified hashes. Setup/portable proxy response filenames matched their published artifacts; the public `/downloads/latest.yml` was byte-identical to the signed release metadata. Receipt: `output/root-website-public-verification-0.1.45.json`.
+
 Open acceptance remains explicit: clean-Windows installation/update/uninstallation, Store certification, paid-provider Teamwork quality, and the experimental small router's failed independent quality holdout. Start/help and app-local CRT loading do not prove model inference or clean-Windows dependency closure. This release does not mark the full browser goal complete.

@@ -77,21 +77,33 @@
   <div class="section-header">
     <div class="pill-badge">Versions-Historie &amp; Hashes</div>
     <h1>Lastbrowser <span class="grad">Release-Archiv</span></h1>
-    <p>Hier finden Sie alle bisherigen Windows-Builds mit SHA-256 Prüfsummen und Änderungsprotokollen.</p>
+    <p>Hier finden Sie veröffentlichte Versionen und verfügbare Änderungsprotokolle. Prüfsummen werden nur für einzeln verifizierte Artefakte angezeigt.</p>
   </div>
 
   <div style="max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:30px;">
+    <!-- v0.1.44 was published; no website-side asset hashes asserted here -->
+    <div id="v0.1.44" class="feature-card" style="border-color:var(--stroke-glow);">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+        <div><h2 style="font-size:24px;display:inline-block;margin-right:12px;">v0.1.44 Beta</h2><span class="badge badge-cyan">Veröffentlicht</span></div>
+        <span style="font-size:13px;color:var(--muted);">3. Oktober 2026</span>
+      </div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-size:14px;color:var(--muted);">
+        <li>Diese Version wurde aus dem früheren Quellstand <code>86d7090b</code> veröffentlicht. Die Veröffentlichung enthält vier GitHub-Artefakte; Dateinamen, Signaturen und Prüfsummen werden hier erst nach eigener Root-Prüfung ergänzt.</li>
+        <li><a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.44">GitHub-Release v0.1.44 ansehen</a></li>
+      </ul>
+    </div>
+
     <!-- v0.1.43 Beta (Aktuell) -->
     <div id="v0.1.43" class="feature-card" style="border-color:var(--stroke-glow);">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
         <div>
           <h2 style="font-size:24px;display:inline-block;margin-right:12px;">v0.1.43 Beta</h2>
-          <span class="badge badge-cyan">Aktuellste Version</span>
+          <span class="badge badge-cyan">Frühere Version</span>
         </div>
         <span style="font-size:13px;color:var(--muted);">2. Oktober 2026</span>
       </div>
       <ul style="list-style:none;display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-size:14px;color:var(--muted);">
-        <li><strong style="color:var(--text);">Aktuelle Windows-Version:</strong> v0.1.43 mit korrigierter Alibaba-Workspace-Erkennung und eindeutiger Provider-Modellauswahl.</li>
+        <li><strong style="color:var(--text);">Frühere Windows-Version:</strong> v0.1.43 mit korrigierter Alibaba-Workspace-Erkennung und eindeutiger Provider-Modellauswahl.</li>
         <li>Setup und Portable sind Authenticode-signiert; die SHA-256 Prüfsummen unten stammen von den signierten Release-Dateien.</li>
       </ul>
       <div class="code-block" style="margin:0;">

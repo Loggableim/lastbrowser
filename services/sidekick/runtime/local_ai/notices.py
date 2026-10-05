@@ -63,7 +63,7 @@ def notice_summary(repository_root):
         'THIRD-PARTY-NOTICES.txt':(37419,'42429aa934c72f0e2d7f4477b69d588cdb25a1fe091b99585deb84c0c9b676a2'),
         'embedded-notices.json':(38375,'a2be59975c44e544253e8407109383ccdcb13817844fc9ffb35cc3a04d89e320'),
         'native-imports.json':(15307,'bc62a8dbebb13be6cec42f875265c6673b797eb34df7f3dff38f7ebff51dbbb4'),
-        'runtime-build-manifest.json':(7411,'c810e7eb5736943c18a421dd6a5f1ef2acaf1db610061815e527c2ad06a8429f'),
+        'runtime-build-manifest.json':(7646,'07d08133959c0037f44d2a2bc6b8ff0fd0e90aa90fbb54e6fb74a13f4e9f41a4'),
     }
     if any(pins.get(name)!=pin for name,pin in supplementary.items()):raise ValueError('runtime_source_notice_metadata_pin_changed')
     for file in manifest.files:

@@ -17,8 +17,16 @@ async function freePort() {
 async function main() {
   const distDir = fs.realpathSync(path.resolve(process.argv[2] || ''));
   assert(distDir.startsWith(fs.realpathSync(path.join(root, 'output')) + path.sep));
-  const portableExe = path.join(distDir, 'Lastbrowser-0.1.43-x64-portable.exe');
-  assert(fs.existsSync(portableExe), `Portable executable exists at ${portableExe}`);
+  const portableCandidates = fs.readdirSync(distDir, { withFileTypes: true })
+    .filter(entry => entry.isFile() && /^Lastbrowser-.+-x64-portable\.exe$/i.test(entry.name))
+    .map(entry => path.join(distDir, entry.name));
+  if (portableCandidates.length !== 1) {
+    const found = portableCandidates.length
+      ? `found ${portableCandidates.length}: ${portableCandidates.map(file => path.basename(file)).join(', ')}`
+      : 'found none';
+    throw new Error(`Expected exactly one Lastbrowser-*-x64-portable.exe in ${distDir}; ${found}`);
+  }
+  const [portableExe] = portableCandidates;
 
   const owned = fs.mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-portable-'));
   const id = randomUUID(), port = await freePort(), pending = new Map();

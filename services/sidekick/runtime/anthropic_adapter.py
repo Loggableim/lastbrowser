@@ -661,7 +661,7 @@ def _read_claude_code_credentials_from_keychain() -> Optional[Dict[str, Any]]:
 
     Returns dict with {accessToken, refreshToken?, expiresAt?} or None.
     """
-    if platform.system() != "Darwin":
+    if os.getenv("LASTBROWSER_INDEPENDENT_WORKER") == "1" or platform.system() != "Darwin":
         return None
 
     try:

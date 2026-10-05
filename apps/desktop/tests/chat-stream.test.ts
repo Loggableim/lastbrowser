@@ -176,6 +176,21 @@ describe('chat stream access auth', () => {
     ]);
   });
 
+  it('keeps native cancellation open through process cleanup and receives goal handoff before the final exit', async () => {
+    const events: string[] = [];
+    const payload = [
+      'event: cancel\ndata: {"nativeChat":true,"processExited":false}',
+      'event: error\ndata: {"nativeChat":true,"processExited":false}',
+      'event: stream_end\ndata: {"nativeChat":true,"processExited":false}',
+      'event: goal_continue\ndata: {"processExited":true}',
+      'event: stream_end\ndata: {"nativeChat":true,"processExited":true}',
+    ].join('\n\n') + '\n\n';
+    const stream = subscribeChatStream('http://127.0.0.1:8787', 'native-cleanup', null,
+      event => events.push(event.event), async () => new Response(payload));
+    await stream.done;
+    expect(events).toEqual(['cancel', 'error', 'stream_end', 'goal_continue', 'stream_end']);
+  });
+
   it('does not report an error after an explicit terminal event', async () => {
     const events: Array<{ event: string; data: unknown; raw: string }> = [];
     const fetchImpl: typeof fetch = async () => new Response(

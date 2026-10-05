@@ -7,12 +7,27 @@ vi.mock('../src/main/auth-window.js', async (importOriginal) => {
 import {
   browserOpenTabChannel,
   buildBrowserContextMenuTemplate,
+  resolveContextMenuLabels,
   installWindowOpenBridge,
   openContextMenuExternalUrl
 } from '../src/main/browser-context-menu.js';
 import { openAuthConnectWindow } from '../src/main/auth-window.js';
 
 describe('browser context menu', () => {
+  it('searches selected text with the selected engine in a new tab', () => {
+    const openLinkInNewTab = vi.fn();
+    const template = buildBrowserContextMenuTemplate({ selectionText: '  C++ & 日本語  ', linkURL: '', pageURL: 'https://example.com', isEditable: false, editFlags: {} } as never,
+      { canGoBack: false, canGoForward: false, openLinkInNewTab, copyText: vi.fn(), locale: 'de',
+        searchEngine: { label: 'DuckDuckGo', search: query => `https://duckduckgo.com/?q=${encodeURIComponent(query)}` } });
+    const search = template.find(item => item.label === 'Suche mit DuckDuckGo');
+    expect(search).toBeDefined();
+    (search!.click as () => void)();
+    expect(openLinkInNewTab).toHaveBeenCalledWith('https://duckduckgo.com/?q=C%2B%2B%20%26%20%E6%97%A5%E6%9C%AC%E8%AA%9E');
+  });
+  it('uses Japanese native labels for Japanese regional locales', () => {
+    expect(resolveContextMenuLabels('ja-JP').openLinkInNewTab).toBe('リンクを新しいタブで開く');
+    expect(resolveContextMenuLabels('ja_JP').copyLink).toBe('リンクのアドレスをコピー');
+  });
   it('routes Google sign-in popups into a secure same-session window and keeps other OAuth in Connect', () => {
     let openHandler: ((details: { url: string }) => { action: 'deny' | 'allow' }) | undefined;
     const setWindowOpenHandler = vi.fn((handler: typeof openHandler) => { openHandler = handler; });

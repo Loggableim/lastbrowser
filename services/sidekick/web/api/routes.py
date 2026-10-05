@@ -867,6 +867,23 @@ def _load_gateway_session_identity_map() -> dict[str, dict]:
     return mapping.copy()
 
 
+def _guard_native_session_writer(handler, session):
+    """Return True after a scoped mutation was refused; legacy stays unchanged."""
+    from runtime.independent.chat_binding import assert_session_writer_available
+    from runtime.independent.store import ResourceBusy
+    from runtime.independent.scope import ScopeError
+    from web.api.profiles import get_active_profile_name
+    try:
+        assert_session_writer_available(session, actor=str(get_active_profile_name() or "default"))
+    except ResourceBusy:
+        bad(handler, "This task chat has an independent writer. Stop its run before changing its transcript.", 409)
+        return True
+    except (ScopeError, ValueError):
+        bad(handler, "The native chat profile or writer cannot be verified.", 403)
+        return True
+    return False
+
+
 def _mark_cron_running(job_id: str):
     with _RUNNING_CRON_LOCK:
         _RUNNING_CRON_JOBS[job_id] = time.time()
@@ -875,6 +892,7 @@ def _mark_cron_running(job_id: str):
 def _mark_cron_done(job_id: str):
     with _RUNNING_CRON_LOCK:
         _RUNNING_CRON_JOBS.pop(job_id, None)
+        _CRON_COMPUTE_PHASES.pop(job_id, None)
 
 
 def _is_cron_running(job_id: str) -> tuple[bool, float]:
@@ -1029,7 +1047,31 @@ def _cron_subprocess_result_timeout_seconds(job):
     return 30 * 60.0
 
 
+_CRON_COMPUTE_PHASES = {}
+
+
 def _run_cron_job_in_profile_subprocess(job, execution_profile_home):
+    """Reserve real host compute before creating a profile-isolated child."""
+    if job.get("job_type") == "independent_agent":
+        raise ValueError("independent_agent_requires_scoped_enqueue")
+    from runtime.independent.governance import LegacyComputeLease
+    from runtime.independent.contracts import new_id
+    from web.api.independent import _watchdog_stop
+    job_id = job.get("id", "")
+    lease = LegacyComputeLease("manual-cron:" + new_id())
+    with _RUNNING_CRON_LOCK:
+        _CRON_COMPUTE_PHASES[job_id] = "waiting_for_compute"
+    if not lease.wait_acquire(_watchdog_stop):
+        raise RuntimeError("manual_cron_cancelled_before_compute")
+    try:
+        with _RUNNING_CRON_LOCK:
+            _CRON_COMPUTE_PHASES[job_id] = "running"
+        return _run_cron_job_in_profile_subprocess_admitted(job, execution_profile_home)
+    finally:
+        lease.release()
+
+
+def _run_cron_job_in_profile_subprocess_admitted(job, execution_profile_home):
     """Execute cron.scheduler.run_job without holding the parent cron env lock.
 
     cron.scheduler/cron.jobs still rely on process-global SIDEKICK_HOME and module
@@ -1120,6 +1162,10 @@ def _run_cron_tracked(job, profile_home=None, execution_profile_home=None):
             return fn()
 
     try:
+        if job.get("job_type") == "independent_agent":
+            # Never send typed native IDs through legacy output directories.
+            logger.warning("Independent schedule requires its scoped definition control")
+            return
         success, output, final_response, error = _run_cron_job_in_profile_subprocess(
             job, execution_profile_home
         )
@@ -4791,10 +4837,8 @@ def handle_get(handler, parsed) -> bool:
         return j(handler, load_teamwork_config())
 
     if parsed.path == "/api/teamwork/status":
-        from runtime.teamwork_orchestrator import load_teamwork_config, get_teamwork_model_pool
-        cfg = load_teamwork_config()
-        pool = get_teamwork_model_pool()
-        return j(handler, {"config": cfg, "models": pool, "models_count": len(pool)})
+        from runtime.teamwork_orchestrator import get_teamwork_status
+        return j(handler, get_teamwork_status())
 
     if parsed.path == "/api/smart-track/config":
         from runtime.smart_track_orchestrator import load_smart_track_config
@@ -5174,6 +5218,12 @@ def handle_get(handler, parsed) -> bool:
                 "threshold_tokens": getattr(s, "threshold_tokens", 0) or 0,
                 "last_prompt_tokens": getattr(s, "last_prompt_tokens", 0) or 0,
             }
+            if getattr(s, "space_scope", None) is not None:
+                from web.api.native_chats import pending_control_snapshot
+                from web.api.profiles import get_active_profile_name
+                raw["native_controls"] = pending_control_snapshot(s.session_id,
+                    getattr(s, "active_stream_id", None) or "",
+                    actor=str(get_active_profile_name() or "default"), scope=s.space_scope)
             if goal_state_error:
                 # Preserve session and transcript reads when only the optional
                 # goal store is unavailable; omitting `goal` distinguishes an
@@ -5689,6 +5739,20 @@ def handle_get(handler, parsed) -> bool:
         return j(handler, {"commands": list_commands()})
 
     if parsed.path == "/api/updates/check":
+        from shared.constants import is_lastbrowser_integrated
+
+        if is_lastbrowser_integrated():
+            return j(
+                handler,
+                {
+                    "disabled": True,
+                    "managed_by": "lastbrowser",
+                    "message": "Sidekick is integrated into Lastbrowser and updates together with the browser.",
+                    "webui": None,
+                    "agent": None,
+                    "checked_at": 0,
+                },
+            )
         settings = load_settings()
         if not settings.get("check_for_updates", True):
             return j(handler, {"disabled": True})
@@ -5725,7 +5789,13 @@ def handle_get(handler, parsed) -> bool:
 
     if parsed.path == "/api/chat/stream/status":
         stream_id = parse_qs(parsed.query).get("stream_id", [""])[0]
+        try:
+            native_read = _native_stream_read_context(handler, stream_id)
+        except (PermissionError, ValueError, KeyError):
+            return bad(handler, "The original native stream scope is required", 403)
         payload = {"active": stream_id in STREAMS, "stream_id": stream_id}
+        if native_read is not None:
+            payload["native_controls"] = native_read
         try:
             from web.api import config as _live_config
             with _live_config.ACTIVE_RUNS_LOCK:
@@ -5743,6 +5813,9 @@ def handle_get(handler, parsed) -> bool:
         stream_id = parse_qs(parsed.query).get("stream_id", [""])[0]
         if not stream_id:
             return bad(handler, "stream_id required")
+        from web.api.native_chats import is_native_stream
+        if is_native_stream(stream_id):
+            return j(handler, {"error": "Use the scoped native chat control", "error_code": "native_control_required"}, status=409)
         cancelled = cancel_stream(stream_id)
         return j(handler, {"ok": True, "cancelled": cancelled, "stream_id": stream_id})
 
@@ -6697,6 +6770,25 @@ def handle_post(handler, parsed) -> bool:
             diag.finish()
         raise
 
+    # History writes share the durable owner with native chat turns/runners.
+    # Keep the lease through the complete operation, including compression.
+    if parsed.path in {"/api/session/delete", "/api/session/clear", "/api/session/truncate", "/api/session/compress"} and body.get("session_id"):
+        from runtime.independent.chat_binding import native_chat_writer
+        from runtime.independent.store import StoreError
+        from web.api.profiles import get_active_profile_name
+        try:
+            session = get_session(body["session_id"])
+        except KeyError:
+            return _handle_post_parsed(handler, parsed, body, diag)
+        try:
+            with native_chat_writer(session, actor=str(get_active_profile_name() or "default"), owner_ref=uuid.uuid4().hex):
+                return _handle_post_parsed(handler, parsed, body, diag)
+        except (StoreError, PermissionError, ValueError) as exc:
+            return j(handler, {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied")}, status=409)
+    return _handle_post_parsed(handler, parsed, body, diag)
+
+
+def _handle_post_parsed(handler, parsed, body, diag=None):
     if parsed.path == "/api/models/probe":
         return _handle_model_probe(handler, body)
 
@@ -7054,8 +7146,16 @@ def handle_post(handler, parsed) -> bool:
     if parsed.path == "/api/session/new":
         try:
             workspace = str(resolve_trusted_workspace(body.get("workspace"))) if body.get("workspace") else None
+            from runtime.independent.chat_binding import capture_chat_profile, require_native_scope_header
+            from web.api.profiles import get_active_profile_name
+            require_native_scope_header(handler, body.get("space_scope"))
+            captured_space_profile = capture_chat_profile(raw_scope=body.get("space_scope"), actor=str(get_active_profile_name() or "default"), workspace=workspace or "")
+            if captured_space_profile is not None:
+                workspace = captured_space_profile.workspace
         except (TypeError, ValueError) as e:
             return bad(handler, str(e))
+        except PermissionError as e:
+            return bad(handler, str(e), status=403)
         worktree_info = None
         worktree_requested = (
             body.get("worktree") is True
@@ -7089,19 +7189,43 @@ def handle_post(handler, parsed) -> bool:
             # slugs. Keep the session in this profile's default native Space
             # while storing the path and goal namespace independently.
             session_storage_slug = DEFAULT_SPACE_SLUG
+        if captured_space_profile is not None:
+            from web.api.independent import hub
+            _, native_resolver = hub().by_scope(captured_space_profile.scope,
+                str(get_active_profile_name() or "default"))
+            session_storage_slug = native_resolver.resolve(captured_space_profile.scope,
+                authenticated_profile_name=str(get_active_profile_name() or "default")).space.slug
+            workspace_goal_slug = session_storage_slug
         # Use the profile sent by the client tab (if any) so that two tabs on
         # different profiles never clobber each other via the process-level global.
         s = new_session(
             workspace=workspace,
             model=model,
             model_provider=model_provider,
-            profile=body.get("profile") or None,
+            profile=str(get_active_profile_name() or "default") if captured_space_profile is not None else body.get("profile") or None,
             project_id=body.get("project_id") or None,
             worktree_info=worktree_info,
             agent_slug=body.get("agent") or None,
             workspace_slug=session_storage_slug,
             goal_space_slug=workspace_goal_slug,
+            title=body.get("title") or None,
+            space_scope=captured_space_profile.scope.model_dump(mode="json", by_alias=True) if captured_space_profile is not None else None,
+            space_profile_snapshot={"profileId": captured_space_profile.snapshot_id, "revision": captured_space_profile.snapshot_revision} if captured_space_profile is not None else None,
         )
+        if body.get("title"):
+            s.title = str(body["title"]).strip()
+            s.save()
+        if captured_space_profile is not None:
+            s.space_scope = captured_space_profile.scope.model_dump(mode="json", by_alias=True)
+            s.space_profile_snapshot = {"profileId": captured_space_profile.snapshot_id, "revision": captured_space_profile.snapshot_revision}
+            s.save()
+        try:
+            from web.api.state_sync import sync_session_start, sync_session_usage
+            sync_session_start(s.session_id, model=s.model)
+            if s.title:
+                sync_session_usage(s.session_id, title=s.title, model=s.model)
+        except Exception:
+            pass
         return j(handler, {"session": s.compact() | {"messages": s.messages}})
 
     if parsed.path == "/api/session/duplicate":
@@ -7551,6 +7675,8 @@ def handle_post(handler, parsed) -> bool:
         except KeyError:
             goal_session = None
         if goal_session is not None:
+            if _guard_native_session_writer(handler, goal_session):
+                return
             try:
                 from web.api.profiles import get_profile_home
                 from web.api.goals import (
@@ -7679,6 +7805,8 @@ def handle_post(handler, parsed) -> bool:
         except KeyError:
             return bad(handler, "Session not found", 404)
         with _get_session_agent_lock(body["session_id"]):
+            if _guard_native_session_writer(handler, s):
+                return
             s.messages = []
             s.tool_calls = []
             s.title = DEFAULT_SESSION_TITLE
@@ -7701,6 +7829,8 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, "Session not found", 404)
         keep = int(body["keep_count"])
         with _get_session_agent_lock(body["session_id"]):
+            if _guard_native_session_writer(handler, s):
+                return
             s.messages = s.messages[:keep]
             s.save()
         return j(
@@ -7938,6 +8068,68 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/chat/start":
         return _handle_chat_start(handler, body, diag=diag)
+
+    if parsed.path in {"/api/quickchat/start", "/api/quickchat/stop", "/api/quickchat/cancel"}:
+        from web.api.quickchat import QuickChatError, cancel_quickchat, start_quickchat, stop_quickchat
+        operation = (start_quickchat if parsed.path.endswith("/start") else
+                     stop_quickchat if parsed.path.endswith("/stop") else cancel_quickchat)
+        try:
+            result, status = operation(body, handler)
+        except QuickChatError as exc:
+            result, status = {"ok": False, "error": str(exc), "error_code": exc.code}, exc.status
+        except Exception:
+            logger.exception("Quickchat request failed")
+            result, status = {"ok": False, "error": "Quickchat request failed", "error_code": "quickchat_internal_error"}, 500
+        return j(handler, result, status=status)
+
+    if parsed.path == "/api/chat/mode":
+        _setup_workspace_from_request(handler, parsed)
+        try:
+            return _handle_chat_mode(handler, body)
+        finally:
+            _teardown_workspace_context()
+
+    if parsed.path == "/api/chat/grill":
+        _setup_workspace_from_request(handler, parsed)
+        try:
+            return _handle_grill(handler, body)
+        finally:
+            _teardown_workspace_context()
+
+    if parsed.path == "/api/chat/goal-migration":
+        _setup_workspace_from_request(handler, parsed)
+        try:
+            return _handle_goal_migration(handler, body)
+        finally:
+            _teardown_workspace_context()
+
+    if parsed.path == "/api/chat/control":
+        _setup_workspace_from_request(handler, parsed)
+        try:
+            return _handle_native_chat_control(handler, body)
+        finally:
+            _teardown_workspace_context()
+
+    if parsed.path == "/api/chat/read-context":
+        _setup_workspace_from_request(handler, parsed)
+        try:
+            return _handle_native_chat_read_context(handler, body)
+        finally:
+            _teardown_workspace_context()
+
+    if parsed.path == "/api/chat/model-policy":
+        _setup_workspace_from_request(handler, parsed)
+        try:
+            return _handle_model_policy(handler, body)
+        finally:
+            _teardown_workspace_context()
+
+    if parsed.path == "/api/chat/children":
+        _setup_workspace_from_request(handler, parsed)
+        try:
+            return _handle_child_history(handler, body)
+        finally:
+            _teardown_workspace_context()
 
     if parsed.path == "/api/chat":
         return _handle_chat_sync(handler, body)
@@ -8725,6 +8917,19 @@ def handle_post(handler, parsed) -> bool:
 
     # â”€â”€ Self-update (POST) â”€â”€
     if parsed.path == "/api/updates/apply":
+        from shared.constants import is_lastbrowser_integrated
+
+        if is_lastbrowser_integrated():
+            return j(
+                handler,
+                {
+                    "ok": False,
+                    "error": "Sidekick is integrated into Lastbrowser and updates together with the browser. Independent backend updates are disabled.",
+                    "disabled": True,
+                    "managed_by": "lastbrowser",
+                },
+                status=409,
+            )
         target = body.get("target", "")
         if target not in ("webui", "agent"):
             return bad(handler, 'target must be "webui" or "agent"')
@@ -8733,6 +8938,19 @@ def handle_post(handler, parsed) -> bool:
         return j(handler, apply_update(target))
 
     if parsed.path == "/api/updates/force":
+        from shared.constants import is_lastbrowser_integrated
+
+        if is_lastbrowser_integrated():
+            return j(
+                handler,
+                {
+                    "ok": False,
+                    "error": "Sidekick is integrated into Lastbrowser and updates together with the browser. Independent backend updates are disabled.",
+                    "disabled": True,
+                    "managed_by": "lastbrowser",
+                },
+                status=409,
+            )
         target = body.get("target", "")
         if target not in ("webui", "agent"):
             return bad(handler, 'target must be "webui" or "agent"')
@@ -9681,6 +9899,10 @@ def _handle_events_sse(handler, parsed):
 
 def _handle_sse_stream(handler, parsed):
     stream_id = parse_qs(parsed.query).get("stream_id", [""])[0]
+    try:
+        _native_stream_read_context(handler, stream_id)
+    except (PermissionError, ValueError, KeyError):
+        return bad(handler, "The original native stream scope is required", 403)
     from web.api.config import get_chat_stream_channel
     stream = get_chat_stream_channel(stream_id)
     if stream is None:
@@ -9755,7 +9977,9 @@ def _handle_sse_stream(handler, parsed):
                 continue
             _trace_subscriber("subscriber_event", event)
             _sse(handler, event, data)
-            if event in ("stream_end", "error", "apperror", "cancel"):
+            if event in ("stream_end", "error", "apperror", "cancel") and (
+                not isinstance(data, dict) or not data.get("nativeChat") or data.get("processExited") is True
+            ):
                 break
     except _CLIENT_DISCONNECT_ERRORS:
         pass
@@ -11276,7 +11500,9 @@ def _handle_cron_status(handler, parsed):
     job_id = qs.get("job_id", [""])[0]
     if job_id:
         running, elapsed = _is_cron_running(job_id)
-        return j(handler, {"job_id": job_id, "running": running, "elapsed": round(elapsed, 1)})
+        with _RUNNING_CRON_LOCK:
+            phase = _CRON_COMPUTE_PHASES.get(job_id)
+        return j(handler, {"job_id": job_id, "running": running, "elapsed": round(elapsed, 1), "phase": phase})
     # Return status for all running jobs
     with _RUNNING_CRON_LOCK:
         all_running = {jid: round(time.time() - t, 1) for jid, t in _RUNNING_CRON_JOBS.items()}
@@ -11672,6 +11898,19 @@ def _handle_sessions_cleanup(handler, body, zero_only=False):
             continue
         try:
             s = Session.load(p.stem)
+            # Bulk legacy cleanup must not erase a native task/history whose
+            # persisted writer can be admitted concurrently by the scheduler.
+            if s is not None and (getattr(s, "space_scope", None) is not None or getattr(s, "independent", None) is not None):
+                continue
+            from runtime.independent.chat_binding import assert_session_writer_available
+            from runtime.independent.store import ResourceBusy
+            from runtime.independent.scope import ScopeError
+            from web.api.profiles import get_active_profile_name
+            try:
+                if s is not None:
+                    assert_session_writer_available(s, actor=str(get_active_profile_name() or "default"))
+            except (ResourceBusy, ScopeError, ValueError):
+                continue
             if zero_only:
                 should_delete = s and len(s.messages) == 0
             else:
@@ -11896,6 +12135,136 @@ def _prepare_chat_start_session_for_stream(
     s.save()
 
 
+def _run_agent_streaming_with_native_writer(*args, native_chat_writer=None, native_chat_context=None,
+                                          native_chat_session=None, **kwargs):
+    """Retain the saved chat owner until all streaming cleanup has finished."""
+    if native_chat_context is not None:
+        from web.api.native_chats import run_native_chat, native_chat_exit_confirmed, fail_unstarted_native_chat
+        broker = None
+        entered_worker = False
+        try:
+            local_short_chat = None
+            if str(args[2] if len(args) > 2 else "").strip().lower() == "teamwork" or str(kwargs.get("mode") or "").strip().lower() == "teamwork":
+                from runtime.independent.native_teamwork import NativeTeamworkSessionBroker
+                broker = NativeTeamworkSessionBroker(native_chat_context, native_chat_session,
+                    str(args[1] if len(args) > 1 else ""), execution_policy=kwargs.get("execution_policy"))
+            elif getattr(native_chat_context, "selection_mode", "fixed") == "auto":
+                from runtime.independent.native_chat_auto import NativeAutoSessionBroker
+                broker = NativeAutoSessionBroker(native_chat_context, native_chat_session, execution_policy=kwargs.get("execution_policy"))
+                # Short, safe text questions may use the separately qualified
+                # bounded local-chat role. Sensitive/current/complex turns and
+                # any turn with attachments, goals, or a special mode stay on
+                # the ordinary frozen AUTO provider route below.
+                local_args=tuple(args)
+                plain_turn=(len(local_args)>5 and not local_args[5]
+                    and not kwargs.get("goal_claim_turn") and not kwargs.get("native_goal_retry")
+                    and not kwargs.get("goal_related") and not kwargs.get("mode"))
+                if plain_turn:
+                    from runtime.local_ai.auto_router import AutoRouteCapabilities,AutoRouteRequest,decide_auto_route
+                    decision=decide_auto_route(AutoRouteRequest(text=str(local_args[1] or "")),
+                        AutoRouteCapabilities())
+                    if decision.task_class=="simple":
+                        try:
+                            from web.api import independent as independent_api
+                            host=independent_api._local_ai_product_host(native_chat_context.scope,
+                                native_chat_context.profile_name,broker.service.manager)
+                            capability=host.short_chat_capability(native_chat_context.scope,
+                                native_chat_context.profile_name)
+                            decision=decide_auto_route(AutoRouteRequest(text=str(local_args[1] or "")),
+                                AutoRouteCapabilities(local_chat_ready=capability.get("state")=="ready"))
+                        except Exception:
+                            host=None;capability={"state":"unavailable","reasonCode":"local_chat_host_unavailable"}
+                        if decision.route=="local":
+                            from runtime.independent.contracts import canonical_json
+                            identity=uuid.uuid5(uuid.NAMESPACE_URL,canonical_json([
+                                "native-local-chat",native_chat_context.scope.key,native_chat_context.session_id,
+                                native_chat_context.stream_id,native_chat_context.writer_generation,
+                                capability["profileRevision"],capability["artifactId"],capability["qualityEvidenceRef"]])).hex
+                            route_decision={**capability,"decisionId":identity,
+                                "reasonCode":decision.reason_code,"taskClass":decision.task_class}
+                            local_short_chat=(host,local_args,route_decision)
+            else:
+                from runtime.independent.native_sdk_broker import NativeSdkSessionBroker
+                broker = NativeSdkSessionBroker(native_chat_context, native_chat_session, execution_policy=kwargs.get("execution_policy"))
+            resolved = broker.service.manager.resolver.resolve(native_chat_context.scope,
+                authenticated_profile_name=native_chat_context.profile_name)
+            space_config = resolved.space.load_config()
+            if space_config.get("_nova_management_malformed") or space_config.get("_space_config_malformed"):
+                raise PermissionError("Native chat governance configuration is malformed")
+            if (space_config.get("nova_management") or {}).get("enrolled"):
+                from runtime.independent.native_governance import NativeManagedGovernance
+                claim_turn = kwargs.get("goal_claim_turn")
+                goal_validator = None
+                retry_request = kwargs.get("native_goal_retry")
+                if retry_request is not None:
+                    from runtime.independent.native_goal_retry import goal_retry_ingress_authorization
+                    goal_validator = lambda captured: goal_retry_ingress_authorization(captured, retry_request)
+                elif claim_turn is not None:
+                    from web.api.goals import native_goal_ingress_authorization
+                    goal_validator = lambda captured: native_goal_ingress_authorization(captured, claim_turn=claim_turn)
+                governance = NativeManagedGovernance(broker.service.manager, native_chat_context, native_chat_session,
+                    actor_ref="user:desktop", execution_policy=kwargs.get("execution_policy"),
+                    ingress_kind="goal_judge_retry" if retry_request is not None else "goal_continuation" if claim_turn is not None else "human",
+                    goal_ingress_validator=goal_validator).bind(broker)
+                broker.authorize = governance
+            # Local inference still belongs to the accepted native chat scope.
+            # Until the local executor can issue/consume NativeManagedGovernance
+            # claims itself, enrolled Spaces must use the governed native AUTO
+            # provider path. Malformed governance config already fails above.
+            if local_short_chat is not None and not (space_config.get("nova_management") or {}).get("enrolled"):
+                from web.api.native_chats import run_native_local_short_chat
+                host,local_args,route_decision=local_short_chat
+                entered_worker=True
+                return run_native_local_short_chat(native_chat_context,local_args,kwargs,
+                    host=host,decision=route_decision)
+            entered_worker = True
+            if kwargs.get("native_goal_retry") is not None:
+                from web.api.native_chats import run_native_goal_judge_retry
+                from web.api.goals import apply_native_goal_judge_result
+                request = kwargs["native_goal_retry"]
+                return run_native_goal_judge_retry(native_chat_context, args, kwargs,
+                    snapshot=request, sdk_broker=broker,
+                    on_result=lambda result: apply_native_goal_judge_result(native_chat_context, request, result))
+            return run_native_chat(native_chat_context, args, kwargs, rpc_handler=broker,
+                before_stop=broker.request_stop, defer_terminal=True)
+        except Exception as error:
+            if entered_worker:
+                raise
+            error_code = getattr(error, "code", None)
+            claim_turn = kwargs.get("goal_claim_turn")
+            if claim_turn is not None and isinstance(error_code, str) and error_code.startswith(("native_goal_", "native_nova_goal_")):
+                from web.api.goals import pause_native_goal_without_authorization
+                try:
+                    pause_native_goal_without_authorization(native_chat_context, claim_turn=claim_turn)
+                except Exception:
+                    logger.error("Could not persist the denied native goal pause", exc_info=True)
+            # Constructor/import failures have no child process. The native
+            # registry proves this before cleaning only its captured session.
+            if not fail_unstarted_native_chat(native_chat_context,
+                materialize_pending=kwargs.get("goal_claim_turn") is None and kwargs.get("native_goal_retry") is None,
+                goal_claim_turn=kwargs.get("goal_claim_turn"),
+                goal_claim_space_slug=kwargs.get("goal_claim_space_slug"), error_code=error_code):
+                raise RuntimeError("Native startup termination could not be confirmed")
+            logger.error("Native chat failed before worker launch")
+            return 1
+        finally:
+            if native_chat_exit_confirmed(native_chat_context):
+                if broker is not None:
+                    broker.close_after_exit()
+                if native_chat_writer is not None:
+                    native_chat_writer.release()
+                from web.api.native_chats import finalize_native_chat
+                finalize_native_chat(native_chat_context)
+            else:
+                logger.error("Native chat termination was not confirmed; retaining its writer lease")
+    else:
+        try:
+            return _run_agent_streaming(*args, **kwargs)
+        finally:
+            if native_chat_writer is not None:
+                native_chat_writer.release()
+
+
 def _start_chat_stream_for_session(
     s,
     *,
@@ -11913,9 +12282,31 @@ def _start_chat_stream_for_session(
     grounding_context: str = "",
     reasoning_effort: str | None = None,
     supported_reasoning_efforts: list[str] | None = None,
+    confirmed_chat_profile=None,
 ):
     """Persist pending state, register an SSE channel, and start an agent turn."""
     attachments = attachments or []
+    quickchat = getattr(s, "session_kind", None) == "quickchat"
+    if quickchat and goal_related:
+        return {"error": "Quickchat cannot run persistent goals", "error_code": "quickchat_goal_disabled", "_status": 409}
+    from runtime.independent.chat_binding import capture_chat_profile
+    from runtime.independent.store import StoreError
+    from web.api.profiles import get_active_profile_name
+    try:
+        captured_space_profile = capture_chat_profile(session=s, actor=str(get_active_profile_name() or "default"), workspace=workspace)
+        if confirmed_chat_profile is not None:
+            from runtime.independent.chat_binding import CapturedChatProfile
+            if type(confirmed_chat_profile) is not CapturedChatProfile:
+                raise ValueError("Confirmed Space profile capture is invalid")
+            if (captured_space_profile is None
+                    or captured_space_profile.scope != confirmed_chat_profile.scope
+                    or captured_space_profile.workspace != confirmed_chat_profile.workspace
+                    or captured_space_profile.snapshot_id != confirmed_chat_profile.snapshot_id
+                    or captured_space_profile.snapshot_revision != confirmed_chat_profile.snapshot_revision):
+                return {"error": "The confirmed Space profile changed before Quickchat started.",
+                    "error_code": "space_profile_changed", "_status": 409}
+    except (StoreError, PermissionError, ValueError) as exc:
+        return {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied"), "_status": 409}
     # Prevent duplicate runs in the same session while a stream is still active.
     # This commonly happens after page refresh/reconnect races and can produce
     # duplicated clarify cards for what appears to be a single user request.
@@ -11960,11 +12351,14 @@ def _start_chat_stream_for_session(
             or getattr(s, "space", None)
             or ""
         ).strip().lower() or None
-        continuation_state = consume_goal_continuation(
-            s.session_id,
-            msg,
-            profile_home=continuation_profile_home,
-            space_slug=continuation_space_slug,
+        if getattr(s, "space_scope", None) is not None and not quickchat:
+            from web.api.chat_modes import resolve_native_chat
+            native_owner = resolve_native_chat(s, s.space_scope,
+                actor=str(get_active_profile_name() or "default"))
+            continuation_profile_home = str(native_owner.profile_home)
+            continuation_space_slug = native_owner.space.slug
+        continuation_state = None if quickchat else consume_goal_continuation(
+            s.session_id, msg, profile_home=continuation_profile_home, space_slug=continuation_space_slug,
         )
         if continuation_state == "cancelled":
             return {
@@ -11990,20 +12384,14 @@ def _start_chat_stream_for_session(
             "retryable": True,
             "_status": 503,
         }
-    if not goal_related:
+    if not goal_related and not quickchat:
         try:
             from web.api.goals import has_active_goal
 
             from web.api.profiles import get_profile_home
 
-            profile_home = get_profile_home(getattr(s, "profile", None))
-            goal_space_slug = str(
-                getattr(s, "goal_space_slug", None)
-                or getattr(s, "workspace_slug", None)
-                or getattr(s, "space_slug", None)
-                or getattr(s, "space", None)
-                or ""
-            ).strip().lower() or None
+            profile_home = continuation_profile_home
+            goal_space_slug = continuation_space_slug
             goal_related = has_active_goal(
                 s.session_id,
                 profile_home=profile_home,
@@ -12020,16 +12408,33 @@ def _start_chat_stream_for_session(
 
     stream_id = uuid.uuid4().hex
     worker_started = False
+    native_writer = None
+    native_context = None
+    original_mode_settings = getattr(s, "chat_execution_mode", None)
+    captured_execution_policy = None
     try:
         session_lock = _get_session_agent_lock(s.session_id)
         diag.stage("session_lock_wait") if diag else None
         with session_lock:
             diag.stage("save_pending_state") if diag else None
-            activate_kanban_orchestration(
-                s,
-                msg,
-                _resolve_cli_toolsets(),
-            )
+            from runtime.independent.chat_binding import mark_legacy_writer, reserve_chat_writer
+            if not quickchat:
+                native_writer = reserve_chat_writer(s, actor=str(get_active_profile_name() or "default"), owner_ref=stream_id)
+                mark_legacy_writer(s)
+            from runtime.chat_modes import capture_policy
+            from web.api.config import get_config
+            if not quickchat and (getattr(s, "space_scope", None) or captured_space_profile is not None or original_mode_settings is not None or mode not in {"", "action"}):
+                captured_execution_policy, s.chat_execution_mode = capture_policy(
+                    original_mode_settings, requested_mode=mode, config=get_config())
+            if not quickchat and captured_space_profile is not None:
+                previous_turns = getattr(s, "child_parent_turns", None) or []
+                if not isinstance(previous_turns, list) or len(previous_turns) > 32:
+                    raise ValueError("Saved child parent turns cannot be verified")
+                s.child_parent_turns = [*previous_turns[-31:], stream_id]
+            if not quickchat and reasoning_effort is not None:
+                s.reasoning_selection = {"schemaVersion": 1, "provider": model_provider, "model": model, "effort": reasoning_effort}
+            if not quickchat:
+                activate_kanban_orchestration(s, msg, _resolve_cli_toolsets())
             _prepare_chat_start_session_for_stream(
                 s,
                 msg=msg,
@@ -12040,27 +12445,21 @@ def _start_chat_stream_for_session(
                 stream_id=stream_id,
             )
         diag.stage("turn_journal_submitted") if diag else None
-        journal_event = {}
-        try:
-            from web.api.turn_journal import append_turn_journal_event
-            journal_event = append_turn_journal_event(
-                s.session_id,
-                {
-                    "event": "submitted",
-                    "stream_id": stream_id,
-                    "role": "user",
-                    "content": msg,
-                    "attachments": attachments,
-                    "workspace": workspace,
-                    "model": model,
-                    "model_provider": model_provider,
-                    "created_at": s.pending_started_at,
-                },
-            )
-        except Exception:
-            logger.warning("Failed to append submitted turn journal event", exc_info=True)
+        journal_event = None
+        if not quickchat:
+            try:
+                from web.api.turn_journal import append_turn_journal_event
+                journal_event = append_turn_journal_event(
+                    s.session_id,
+                    {"event": "submitted", "stream_id": stream_id, "role": "user", "content": msg,
+                     "attachments": attachments, "workspace": workspace, "model": model,
+                     "model_provider": model_provider, "created_at": s.pending_started_at},
+                )
+            except Exception:
+                logger.warning("Failed to append submitted turn journal event", exc_info=True)
         diag.stage("set_last_workspace") if diag else None
-        set_last_workspace(workspace)
+        if not quickchat:
+            set_last_workspace(workspace)
         diag.stage("stream_registration") if diag else None
         stream = create_stream_channel()
         with STREAMS_LOCK:
@@ -12075,9 +12474,16 @@ def _start_chat_stream_for_session(
                 "profile_home": continuation_profile_home,
                 "space_slug": continuation_space_slug,
             }
+        if getattr(s, "space_scope", None) is not None and not quickchat:
+            from runtime.independent.native_chat_protocol import capture_native_chat_context
+            from web.api.native_chats import register_native_chat
+            native_context = capture_native_chat_context(s, stream_id, native_writer,
+                teamwork=(str(model or "").strip().lower() == "teamwork"
+                    or str(mode or "").strip().lower() == "teamwork"))
+            register_native_chat(native_context)
         diag.stage("worker_thread_start") if diag else None
         thr = threading.Thread(
-            target=_run_agent_streaming,
+            target=_run_agent_streaming_with_native_writer,
             args=(s.session_id, msg, model, workspace, stream_id, attachments),
             kwargs={
                 "model_provider": model_provider,
@@ -12087,17 +12493,35 @@ def _start_chat_stream_for_session(
                 "goal_claim_profile_home": continuation_profile_home,
                 "goal_claim_space_slug": continuation_space_slug,
                 "mode": mode,
+                "execution_policy": captured_execution_policy,
                 "sandbox_disabled": sandbox_disabled,
                 "grounding_context": grounding_context,
                 "reasoning_effort": reasoning_effort,
                 "supported_reasoning_efforts": supported_reasoning_efforts,
+                "confirmed_space_profile_prompt": captured_space_profile.prompt if captured_space_profile else "",
+                "native_chat_writer": native_writer,
+                "native_chat_context": native_context,
+                "native_chat_session": s if native_context is not None else None,
             },
             daemon=True,
         )
         thr.start()
         worker_started = True
-    except Exception:
+    except Exception as exc:
         if not worker_started:
+            if native_context is not None:
+                from web.api.native_chats import abandon_unstarted_native_chat
+                if not abandon_unstarted_native_chat(native_context):
+                    raise RuntimeError("Native startup ownership could not be abandoned safely") from exc
+            if captured_execution_policy is not None:
+                try:
+                    with _get_session_agent_lock(s.session_id):
+                        s.chat_execution_mode = original_mode_settings
+                        s.save(touch_updated_at=True)
+                except Exception:
+                    logger.warning("Could not restore chat mode after failed startup", exc_info=True)
+            if native_writer is not None:
+                native_writer.release()
             with STREAMS_LOCK:
                 STREAMS.pop(stream_id, None)
                 STREAM_GOAL_RELATED.pop(stream_id, None)
@@ -12126,12 +12550,17 @@ def _start_chat_stream_for_session(
                     )
                 except Exception:
                     logger.warning("Could not release goal claim after stream startup failure", exc_info=True)
+        if isinstance(exc, (StoreError, PermissionError, ValueError)):
+            return {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied"),
+                    "retryable": isinstance(exc, StoreError), "_status": 409}
         raise
     response = {
         "stream_id": stream_id,
         "session_id": s.session_id,
+        "space_scope": native_context.scope.model_dump(mode="json", by_alias=True) if native_context is not None else None,
         "pending_started_at": s.pending_started_at,
-        "turn_id": journal_event.get("turn_id"),
+        "turn_id": journal_event.get("turn_id") if isinstance(journal_event, dict) else None,
+        "execution_policy": captured_execution_policy.view() if captured_execution_policy else None,
     }
     if normalized_model:
         response["effective_model"] = model
@@ -12268,6 +12697,89 @@ def _game_mode_nova_remote_model_state(
     return None
 
 
+def _chat_reasoning_selection(body, model, model_provider, session=None):
+    """Bind per-turn effort to actual provider/model capability metadata."""
+    from web.api.config import _known_reasoning_efforts_for_model
+    supported = _known_reasoning_efforts_for_model(model, model_provider)
+    effort = None
+    saved = getattr(session, "reasoning_selection", None)
+    if "reasoning_effort" not in body and isinstance(saved, dict) and saved.get("schemaVersion") == 1 and saved.get("model") == model and saved.get("provider") == model_provider and saved.get("effort") in supported:
+        effort = saved["effort"]
+    if "reasoning_effort" in body:
+        requested = body["reasoning_effort"]
+        if not isinstance(requested, str) or not requested.strip():
+            raise ValueError("reasoning_effort must be a supported non-empty value")
+        effort = requested.strip().lower()
+        if effort not in supported:
+            raise ValueError("reasoning_effort is not supported by the selected model")
+    return effort, supported if str(model_provider or "").strip().lower() == "openai-codex" else None
+
+
+def _start_native_goal_judge_retry_for_session(s, *, owner, retry):
+    """Reserve the original chat for a judge-only process, without a user turn."""
+    from runtime.independent.chat_binding import reserve_chat_writer, mark_legacy_writer
+    from runtime.independent.native_chat_protocol import capture_native_chat_context
+    from runtime.independent.native_goal_retry import NativeGoalRetryRequest, read_retry_goal
+    from runtime.chat_modes import capture_policy
+    from web.api.config import get_config
+    from web.api.native_chats import register_native_chat, abandon_unstarted_native_chat
+    stream_id = uuid.uuid4().hex
+    writer = context = None
+    saved = False
+    previous_started = getattr(s, "pending_started_at", None)
+    try:
+        with _get_session_agent_lock(s.session_id):
+            if getattr(s, "active_stream_id", None) or getattr(s, "pending_user_message", None) is not None:
+                return {"error": "agent_running", "error_code": "agent_running", "_status": 409}
+            writer = reserve_chat_writer(s, actor=owner.profile_name if hasattr(owner, "profile_name") else str(s.profile or "default"), owner_ref=stream_id)
+            mark_legacy_writer(s)
+            policy, _ = capture_policy(getattr(s, "chat_execution_mode", None), config=get_config())
+            s.active_stream_id = stream_id
+            s.pending_started_at = time.time()
+            s.save()
+            saved = True
+            context = capture_native_chat_context(s, stream_id, writer)
+            request = NativeGoalRetryRequest(request_id=uuid.uuid4().hex, scope=context.scope,
+                session_id=context.session_id, stream_id=stream_id, goal_run_id=retry["goalRunId"],
+                goal_revision=retry["goalRevision"], goal_digest=retry["goalDigest"],
+                human_command_ref=retry["humanCommandRef"], human_command_digest=retry["humanCommandDigest"])
+            read_retry_goal(context, request)
+            register_native_chat(context)
+            stream = create_stream_channel()
+            with STREAMS_LOCK:
+                STREAMS[stream_id] = stream
+            thread = threading.Thread(target=_run_agent_streaming_with_native_writer,
+                args=(s.session_id, "", s.model, str(s.workspace), stream_id, []),
+                kwargs={"model_provider": s.model_provider, "execution_policy": policy,
+                    "native_goal_retry": request.model_dump(mode="json", by_alias=True),
+                    "native_chat_writer": writer, "native_chat_context": context,
+                    "native_chat_session": s}, daemon=True)
+            thread.start()
+            return {"stream_id": stream_id, "session_id": s.session_id,
+                "space_scope": context.scope.model_dump(mode="json", by_alias=True),
+                "pending_started_at": s.pending_started_at, "judge_only": True}
+    except Exception as error:
+        if context is not None:
+            # No Thread.start succeeded, hence no child exists in this branch.
+            if not abandon_unstarted_native_chat(context):
+                # Capture may fail before registration; never assume exit for a registered live worker.
+                from web.api.native_chats import get_native_stream_context
+                if get_native_stream_context(stream_id) is not None:
+                    raise RuntimeError("Native goal retry startup ownership is not settled") from error
+        with _get_session_agent_lock(s.session_id):
+            if s.active_stream_id == stream_id:
+                s.active_stream_id = None
+                s.pending_started_at = previous_started
+                s.save()
+        with STREAMS_LOCK:
+            STREAMS.pop(stream_id, None)
+        if writer is not None:
+            writer.release()
+        code = getattr(error, "code", "native_goal_retry_start_failed")
+        return {"error": "Native goal evaluation could not start.", "error_code": code,
+            "retryable": True, "_status": 409}
+
+
 def _handle_goal_command(handler, body):
     """Handle WebUI /goal command controls and optional kickoff stream."""
     try:
@@ -12279,6 +12791,39 @@ def _handle_goal_command(handler, body):
     except KeyError:
         return bad(handler, "Session not found", 404)
 
+    native_goal_owner = None
+    legacy_native_goal_namespace = None
+    if getattr(s, "space_scope", None) is not None:
+        try:
+            from runtime.independent.chat_binding import require_native_scope_header
+            from web.api.chat_modes import resolve_native_chat
+            from web.api.profiles import get_active_profile_name
+            if not body.get("space_scope"):
+                raise PermissionError("Native goal controls require the saved chat scope")
+            require_native_scope_header(handler, body["space_scope"])
+            native_goal_owner = resolve_native_chat(s, body["space_scope"], actor=str(get_active_profile_name() or "default"))
+            previous_goal_slug = str(getattr(s, "goal_space_slug", None) or "").strip().lower()
+            goal_text = str(body.get("args", "") or body.get("text", "") or "").strip().lower()
+            if previous_goal_slug and previous_goal_slug != native_goal_owner.space.slug:
+                from web.api.goals import lastbrowser_workspace_goal_slug
+                old_command = goal_text.split(None, 1)[0] if goal_text else "status"
+                if previous_goal_slug == lastbrowser_workspace_goal_slug(s.workspace) and old_command in {"status", "pause"}:
+                    # Permit explicit safe pause of this exact old goal before
+                    # migration; never move its namespace or start a worker.
+                    legacy_native_goal_namespace = previous_goal_slug
+                else:
+                    return j(handler, {"ok": False, "error": "native_goal_migration_required",
+                        "error_code": "native_goal_migration_required",
+                        "message": "This saved goal needs a verified Space migration before it can be changed.",
+                        "retryable": False}, status=409)
+            if goal_text and goal_text != "status" and (
+                not body.get("client_request_id", body.get("clientRequestId"))
+                or body.get("expected_revision", body.get("expectedRevision")) is None
+            ):
+                raise ValueError("Native goal changes require the current revision and a command identity")
+        except (PermissionError, ValueError) as exc:
+            return j(handler, {"ok": False, "error": str(exc), "error_code": getattr(exc, "code", "scope_denied")}, status=409)
+
     requested_profile = str(body.get("profile") or "").strip()
     if requested_profile:
         try:
@@ -12289,6 +12834,8 @@ def _handle_goal_command(handler, body):
         except ImportError:
             requested_profile = ""
     if requested_profile and not _profiles_match(getattr(s, "profile", None), requested_profile):
+        if getattr(s, "space_scope", None) is not None or getattr(s, "independent", None) is not None:
+            return bad(handler, "An existing native chat cannot switch its bound backend profile", 409)
         has_persisted_turns = bool(
             getattr(s, "messages", None)
             or getattr(s, "context_messages", None)
@@ -12342,7 +12889,7 @@ def _handle_goal_command(handler, body):
             return bad(handler, "Persistent goals must target the workspace bound to this session.", status=400)
         from web.api.goals import lastbrowser_workspace_goal_slug
 
-        space_slug = lastbrowser_workspace_goal_slug(requested_workspace)
+        space_slug = (legacy_native_goal_namespace or native_goal_owner.space.slug) if native_goal_owner is not None else lastbrowser_workspace_goal_slug(requested_workspace)
         if getattr(s, "goal_space_slug", None) != space_slug:
             s.goal_space_slug = space_slug
             try:
@@ -12350,6 +12897,10 @@ def _handle_goal_command(handler, body):
             except Exception:
                 logger.error("Could not persist the Lastbrowser workspace goal scope for session %s", s.session_id, exc_info=True)
                 return j(handler, {"ok": False, "error": "goal_state_unavailable", "message": "Could not persist this goal's workspace scope.", "retryable": True}, status=503)
+
+    if native_goal_owner is not None:
+        profile_home = native_goal_owner.profile_home
+        space_slug = legacy_native_goal_namespace or native_goal_owner.space.slug
 
     from web.api.goals import _CONTINUATION_LOCK, goal_command_payload, goal_state_snapshot, restore_goal_state
 
@@ -12391,6 +12942,7 @@ def _handle_goal_command(handler, body):
         and not stream_running
     )
     workspace = model = model_provider = normalized_model = None
+    reasoning_effort = supported_reasoning_efforts = None
     previous_goal_state = None
     # ``resume`` can also return a kickoff prompt when no stream is running.
     # Preserve the pre-resume state so a failed kickoff restores the paused
@@ -12400,6 +12952,14 @@ def _handle_goal_command(handler, body):
             workspace = str(resolve_trusted_workspace(body.get("workspace") or s.workspace))
         except ValueError as e:
             return bad(handler, str(e))
+        try:
+            from runtime.independent.chat_binding import capture_chat_profile, require_native_scope_header
+            from runtime.independent.store import StoreError
+            from web.api.profiles import get_active_profile_name
+            require_native_scope_header(handler, body.get("space_scope") or getattr(s, "space_scope", None))
+            capture_chat_profile(session=s, raw_scope=body.get("space_scope"), actor=str(get_active_profile_name() or "default"), workspace=workspace)
+        except (StoreError, PermissionError, ValueError) as exc:
+            return j(handler, {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied"), "retryable": False}, status=409)
         requested_model = body.get("model") or s.model
         requested_provider = (
             body.get("model_provider")
@@ -12410,6 +12970,15 @@ def _handle_goal_command(handler, body):
             requested_model,
             requested_provider,
         )
+        game_mode_nova_override = _game_mode_nova_remote_model_state(
+            model, model_provider, space_slug=space_slug, workspace=workspace,
+        )
+        if game_mode_nova_override:
+            model, model_provider, normalized_model = game_mode_nova_override
+        try:
+            reasoning_effort, supported_reasoning_efforts = _chat_reasoning_selection(body, model, model_provider, session=s)
+        except ValueError as exc:
+            return bad(handler, str(exc), status=400)
     # Keep the pre-command and post-command snapshots adjacent to the state
     # mutation. Otherwise a concurrent clear between mutation and snapshot
     # could be mistaken for the state created by this kickoff and rolled back.
@@ -12426,6 +12995,16 @@ def _handle_goal_command(handler, body):
             space_slug=space_slug,
             max_turns=goal_max_turns if not goal_unlimited else None,
             unlimited=goal_unlimited,
+            expected_revision=body.get("expected_revision", body.get("expectedRevision")),
+            client_request_id=body.get("client_request_id", body.get("clientRequestId")),
+            source_actor="human",
+            human_authorization={"schemaVersion": 1, "actorRef": "user:desktop",
+                "scope": native_goal_owner.scope.model_dump(mode="json", by_alias=True),
+                "backendProfileName": str(getattr(s, "profile", None) or "default"),
+                "spaceSlug": space_slug, "sessionId": s.session_id}
+                if native_goal_owner is not None and not legacy_native_goal_namespace
+                and goal_args.strip() and goal_action != "status" else None,
+            native_judge_retry=native_goal_owner is not None and not legacy_native_goal_namespace and goal_action == "resume",
         )
         kickoff_prompt = str(payload.get("kickoff_prompt") or "").strip()
         kickoff_goal_state = (
@@ -12435,13 +13014,24 @@ def _handle_goal_command(handler, body):
         )
     if not payload.get("ok", True):
         error_code = payload.get("error")
-        if error_code == "agent_running":
+        if error_code in {"agent_running", "goal_revision_conflict", "command_in_progress",
+                          "command_interrupted", "request_identity_conflict", "run_owned"}:
             status = 409
         elif error_code in {"unavailable", "persistence_failed", "goal_state_unavailable"}:
             status = 503
             payload.setdefault("retryable", True)
         else:
             status = 400
+        return j(handler, payload, status=status)
+
+    retry = payload.pop("native_judge_retry", None)
+    payload.pop("native_judge_retry_pending", None)
+    if retry is not None and not payload.get("replayed"):
+        stream_response = _start_native_goal_judge_retry_for_session(s, owner=native_goal_owner, retry=retry)
+        status = int(stream_response.pop("_status", 200) or 200)
+        payload.update(stream_response)
+        if status >= 400:
+            payload["ok"] = False
         return j(handler, payload, status=status)
 
     if kickoff_prompt:
@@ -12478,6 +13068,8 @@ def _handle_goal_command(handler, body):
             model_provider=model_provider,
             normalized_model=normalized_model,
             goal_related=True,
+            reasoning_effort=reasoning_effort,
+            supported_reasoning_efforts=supported_reasoning_efforts,
         )
         status = int(stream_response.pop("_status", 200) or 200)
         payload.update(stream_response)
@@ -12494,6 +13086,242 @@ def _handle_goal_command(handler, body):
             return j(handler, payload, status=status)
 
     return j(handler, payload)
+
+
+def _native_stream_read_context(handler, stream_id, *, session_id=None, scope=None):
+    from runtime.independent.chat_binding import require_native_scope_header
+    from web.api.chat_modes import resolve_native_chat
+    from web.api.native_chats import get_native_stream_context, native_chat_exit_confirmed
+    from web.api.profiles import get_active_profile_name
+    context = get_native_stream_context(stream_id)
+    if context is None:
+        if session_id is not None:
+            raise KeyError("Native stream context is no longer retained")
+        return None  # Existing unbound legacy streams retain their read path.
+    captured_scope = context.scope.model_dump(mode="json", by_alias=True)
+    if session_id is not None and session_id != context.session_id or scope is not None and scope != captured_scope:
+        raise PermissionError("Native stream belongs to another accepted chat")
+    require_native_scope_header(handler, captured_scope)
+    actor = str(get_active_profile_name() or "default")
+    if actor != context.profile_name:
+        raise PermissionError("Native stream belongs to another backend profile")
+    session = get_session(context.session_id)
+    resolved = resolve_native_chat(session, captured_scope, actor=actor)
+    from runtime.independent.scope import same_path
+    if not same_path(session.workspace, context.workspace) or not same_path(resolved.profile_home, context.profile_home):
+        raise PermissionError("Native stream workspace binding changed")
+    return {"schemaVersion": 1, "nativeChat": True, "scope": captured_scope,
+            "sessionId": context.session_id, "streamId": context.stream_id,
+            "profileName": context.profile_name, "writerGeneration": context.writer_generation,
+            "processExited": native_chat_exit_confirmed(context)}
+
+
+def _handle_native_chat_read_context(handler, body):
+    try:
+        if not isinstance(body, dict) or set(body) != {"session_id", "stream_id", "space_scope"}:
+            raise ValueError("Invalid native stream read request")
+        require(body, "session_id", "stream_id", "space_scope")
+        return j(handler, _native_stream_read_context(handler, body["stream_id"],
+            session_id=body["session_id"], scope=body["space_scope"]))
+    except KeyError:
+        return bad(handler, "Native stream context not found", 404)
+    except PermissionError:
+        return bad(handler, "The original native stream scope is required", 403)
+    except ValueError as exc:
+        return bad(handler, str(exc), 400)
+
+
+def _handle_native_chat_control(handler, body):
+    from runtime.independent.chat_binding import require_native_scope_header
+    from web.api.chat_modes import resolve_native_chat
+    from web.api.native_chats import control_native_chat
+    from web.api.profiles import get_active_profile_name
+    try:
+        if not isinstance(body, dict) or set(body) - {"session_id", "stream_id", "space_scope", "command", "request_id", "choice", "response"}:
+            raise ValueError("Invalid native chat control")
+        require(body, "session_id", "stream_id", "command")
+        if body["command"] not in {"cancel", "pause", "approval", "clarify"}:
+            raise ValueError("Unsupported native chat control")
+        if not body.get("space_scope"):
+            raise PermissionError("Native chat controls require their original scope")
+        require_native_scope_header(handler, body["space_scope"])
+        s = get_session(body["session_id"])
+        actor = str(get_active_profile_name() or "default")
+        resolve_native_chat(s, body["space_scope"], actor=actor)
+        accepted = control_native_chat(s.session_id, body["stream_id"], actor=actor,
+            scope=body["space_scope"], command=body["command"], request_id=body.get("request_id"),
+            choice=body.get("choice"), response=body.get("response"))
+        return j(handler, {"schemaVersion": 1, "scope": s.space_scope, "sessionId": s.session_id,
+                           "streamId": body["stream_id"], "accepted": accepted,
+                           "state": "stopping" if accepted and body["command"] in {"cancel", "pause"} else "submitted" if accepted else "stale"},
+                 status=200 if accepted else 409)
+    except KeyError:
+        return bad(handler, "Session not found", 404)
+    except PermissionError as exc:
+        return j(handler, {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied")}, status=409)
+    except ValueError as exc:
+        return bad(handler, str(exc), status=400)
+
+
+def _handle_model_policy(handler, body):
+    from runtime.independent.chat_binding import require_native_scope_header
+    from runtime.independent.store import StoreError
+    from web.api.model_policy import handle_model_policy
+    from web.api.profiles import get_active_profile_name
+    try:
+        require(body, "session_id")
+        if not body.get("space_scope"):
+            raise PermissionError("Model policy requires the original native chat scope")
+        require_native_scope_header(handler, body["space_scope"])
+        actor = str(get_active_profile_name() or "default")
+        with _get_session_agent_lock(body["session_id"]):
+            s = get_session(body["session_id"])
+            return j(handler, handle_model_policy(s, body, actor=actor))
+    except KeyError:
+        return bad(handler, "Session not found", 404)
+    except (StoreError, PermissionError) as exc:
+        return j(handler, {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied"),
+                           "retryable": isinstance(exc, StoreError)}, status=409)
+    except ValueError as exc:
+        return bad(handler, str(exc), status=400)
+
+
+def _handle_child_history(handler, body):
+    from runtime.independent.chat_binding import require_native_scope_header
+    from runtime.independent.store import StoreError
+    from web.api.child_streams import child_history
+    from web.api.profiles import get_active_profile_name
+    try:
+        require(body, "session_id")
+        if not body.get("space_scope"):
+            raise PermissionError("Child history requires the original native chat scope")
+        require_native_scope_header(handler, body["space_scope"])
+        s = get_session(body["session_id"])
+        return j(handler, child_history(s, body, actor=str(get_active_profile_name() or "default")))
+    except KeyError:
+        return bad(handler, "Session not found", 404)
+    except (StoreError, PermissionError) as exc:
+        return j(handler, {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied")}, status=409)
+    except ValueError as exc:
+        return bad(handler, str(exc), status=400)
+
+
+def _handle_chat_mode(handler, body):
+    from runtime.chat_modes import ChatModeConflict
+    from runtime.independent.chat_binding import require_native_scope_header
+    from runtime.independent.store import StoreError
+    from web.api.chat_modes import change_chat_mode, read_chat_mode
+    from web.api.profiles import get_active_profile_name
+    try:
+        require(body, "session_id")
+        if body.get("action") not in {"get", "set"}:
+            raise ValueError("action must be get or set")
+        if not body.get("space_scope"):
+            raise PermissionError("Chat modes require a Lastbrowser native scope")
+        require_native_scope_header(handler, body["space_scope"])
+        actor = str(get_active_profile_name() or "default")
+        with _get_session_agent_lock(body["session_id"]):
+            s = get_session(body["session_id"])
+            result = (read_chat_mode(s, body["space_scope"], actor=actor)
+                      if body["action"] == "get" else change_chat_mode(s, body, actor=actor))
+            result["session"] = s.compact(include_runtime=True)
+            return j(handler, result)
+    except KeyError:
+        return bad(handler, "Session not found", 404)
+    except ChatModeConflict as exc:
+        return j(handler, {"ok": False, "error": str(exc), "error_code": exc.code,
+                           "retryable": True}, status=409)
+    except (StoreError, PermissionError) as exc:
+        return j(handler, {"ok": False, "error": str(exc),
+                           "error_code": getattr(exc, "code", "scope_denied"),
+                           "retryable": isinstance(exc, StoreError)}, status=409)
+    except ValueError as exc:
+        return bad(handler, str(exc), status=400)
+
+
+def _handle_grill(handler, body):
+    from runtime.independent.chat_binding import require_native_scope_header
+    from runtime.independent.grill import GrillConflict
+    from runtime.independent.store import StoreError
+    from web.api.grill import command_grill, read_grill
+    from web.api.profiles import get_active_profile_name
+    try:
+        require(body, "session_id", "space_scope", "action")
+        if not body["space_scope"]:
+            raise PermissionError("Clarification requires the original native chat scope")
+        require_native_scope_header(handler, body["space_scope"])
+        actor = str(get_active_profile_name() or "default")
+        with _get_session_agent_lock(body["session_id"]):
+            # The private worker writes the transcript in another process.
+            # A cached pre-exit Session must never overwrite its newer state.
+            s = Session.load(body["session_id"])
+            if s is None:
+                raise KeyError(body["session_id"])
+            if body["action"] == "get":
+                if set(body) != {"session_id", "space_scope", "action"}:
+                    raise ValueError("Unknown clarification read field")
+                result = read_grill(s, body["space_scope"], actor=actor)
+            else:
+                result = command_grill(s, body, actor=actor)
+            with LOCK:
+                SESSIONS[s.session_id] = s
+            return j(handler, result)
+    except KeyError:
+        return bad(handler, "Session not found", 404)
+    except GrillConflict as exc:
+        return j(handler, {"ok": False, "error": str(exc), "error_code": exc.code,
+                           "retryable": True}, status=409)
+    except (StoreError, PermissionError) as exc:
+        return j(handler, {"ok": False, "error": str(exc),
+                           "error_code": getattr(exc, "code", "scope_denied"),
+                           "retryable": isinstance(exc, StoreError)}, status=409)
+    except ValueError as exc:
+        return bad(handler, str(exc), status=400)
+
+
+def _handle_goal_migration(handler, body):
+    from runtime.independent.chat_binding import require_native_scope_header
+    from runtime.independent.contracts import Scope
+    from runtime.independent.native_goal_migration import (
+        NativeGoalMigrationRequest, inspect_native_goal_migration, migrate_native_goal,
+    )
+    from runtime.independent.store import StoreError
+    from web.api import independent
+    from web.api.profiles import get_active_profile_name
+    try:
+        require(body, "session_id", "space_scope", "action")
+        allowed = {"session_id", "space_scope", "action"}
+        if body["action"] == "migrate":
+            allowed |= {"expected_source_revision", "expected_source_digest", "client_request_id"}
+        elif body["action"] != "review":
+            raise ValueError("Unsupported goal migration action")
+        if set(body) - allowed:
+            raise ValueError("Unknown goal migration field")
+        require_native_scope_header(handler, body["space_scope"])
+        actor = str(get_active_profile_name() or "default")
+        scope = Scope.model_validate(body["space_scope"])
+        with _get_session_agent_lock(body["session_id"]):
+            s = Session.load(body["session_id"])
+            if s is None:
+                raise KeyError(body["session_id"])
+            if body["action"] == "review":
+                result = inspect_native_goal_migration(s, actor=actor, scope=scope)
+            else:
+                request = NativeGoalMigrationRequest(scope=scope, session_id=s.session_id,
+                    expected_source_revision=body.get("expected_source_revision"),
+                    expected_source_digest=body.get("expected_source_digest"),
+                    client_request_id=body.get("client_request_id"))
+                result = migrate_native_goal(s, request, actor=actor, generation=independent._GENERATION)
+                with LOCK:
+                    SESSIONS[s.session_id] = s
+            return j(handler, {"ok": True, **result})
+    except KeyError:
+        return bad(handler, "Session not found", 404)
+    except (StoreError, PermissionError) as exc:
+        return j(handler, {"ok": False, "error": str(exc), "error_code": getattr(exc, "code", "scope_denied"),
+                           "retryable": isinstance(exc, StoreError)}, status=409)
+    except ValueError as exc:
+        return bad(handler, str(exc), status=400)
 
 
 def _handle_chat_start(handler, body, diag=None):
@@ -12519,6 +13347,8 @@ def _handle_chat_start(handler, body, diag=None):
             except ImportError:
                 requested_profile = ""
         if requested_profile and not _profiles_match(getattr(s, "profile", None), requested_profile):
+            if getattr(s, "space_scope", None) is not None or getattr(s, "independent", None) is not None:
+                return bad(handler, "An existing native chat cannot switch its bound backend profile", 409)
             has_persisted_turns = bool(
                 getattr(s, "messages", None)
                 or getattr(s, "context_messages", None)
@@ -12541,6 +13371,14 @@ def _handle_chat_start(handler, body, diag=None):
             workspace = str(resolve_trusted_workspace(body.get("workspace") or s.workspace))
         except ValueError as e:
             return bad(handler, str(e))
+        try:
+            from runtime.independent.chat_binding import capture_chat_profile, require_native_scope_header
+            from runtime.independent.store import StoreError
+            from web.api.profiles import get_active_profile_name
+            require_native_scope_header(handler, body.get("space_scope") or getattr(s, "space_scope", None))
+            capture_chat_profile(session=s, raw_scope=body.get("space_scope"), actor=str(get_active_profile_name() or "default"), workspace=workspace)
+        except (StoreError, PermissionError, ValueError) as exc:
+            return j(handler, {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied"), "retryable": False}, status=409)
         space_slug = str(
             body.get("workspace_slug")
             or body.get("space_slug")
@@ -12642,35 +13480,10 @@ def _handle_chat_start(handler, body, diag=None):
         )
         if game_mode_payload:
             return j(handler, game_mode_payload, status=409)
-        reasoning_effort = None
-        supported_reasoning_efforts = None
-        if str(model_provider or "").strip().lower() == "openai-codex":
-            try:
-                from web.api.config import _known_reasoning_efforts_for_model
-
-                supported_reasoning_efforts = _known_reasoning_efforts_for_model(
-                    model,
-                    model_provider,
-                )
-            except Exception:
-                supported_reasoning_efforts = []
-        if "reasoning_effort" in body:
-            requested_effort = str(body.get("reasoning_effort") or "").strip().lower()
-            if not requested_effort:
-                return bad(handler, "reasoning_effort must be a supported non-empty value")
-            try:
-                from web.api.config import _known_reasoning_efforts_for_model
-
-                supported_efforts = _known_reasoning_efforts_for_model(model, model_provider)
-            except Exception:
-                supported_efforts = []
-            if requested_effort not in supported_efforts:
-                return bad(
-                    handler,
-                    "reasoning_effort is not supported by the selected model",
-                    status=400,
-                )
-            reasoning_effort = requested_effort
+        try:
+            reasoning_effort, supported_reasoning_efforts = _chat_reasoning_selection(body, model, model_provider, session=s)
+        except ValueError as exc:
+            return bad(handler, str(exc), status=400)
         is_google_cli_provider = str(model_provider or "").strip().lower() in {
             "google-gemini-cli", "gemini-cli", "gemini-oauth",
         }
@@ -12896,6 +13709,15 @@ def _normalize_chat_attachments(raw_attachments):
 def _handle_chat_sync(handler, body):
     """Fallback synchronous chat endpoint (POST /api/chat). Not used by frontend."""
     s = get_session(body["session_id"])
+    from runtime.chat_modes import settings_view
+    try:
+        saved_mode = settings_view(getattr(s, "chat_execution_mode", None))
+        requested_mode = str(body.get("mode") or "").strip().lower()
+        if saved_mode["mode"] != "action" or requested_mode not in {"", "action"}:
+            return j(handler, {"error": "Use the scoped streaming endpoint for this chat mode",
+                               "error_code": "chat_mode_requires_stream"}, status=409)
+    except ValueError as exc:
+        return bad(handler, str(exc), status=400)
     msg = str(body.get("message", "")).strip()
     if not msg:
         return j(handler, {"error": "empty message"}, status=400)
@@ -12903,8 +13725,27 @@ def _handle_chat_sync(handler, body):
         workspace = str(resolve_trusted_workspace(body.get("workspace") or s.workspace))
     except ValueError as e:
         return bad(handler, str(e))
+    try:
+        from runtime.independent.chat_binding import capture_chat_profile, require_native_scope_header
+        from runtime.independent.store import StoreError
+        from web.api.profiles import get_active_profile_name
+        require_native_scope_header(handler, body.get("space_scope"))
+        captured_space_profile = capture_chat_profile(session=s, raw_scope=body.get("space_scope"), actor=str(get_active_profile_name() or "default"), workspace=workspace)
+    except (StoreError, PermissionError, ValueError) as exc:
+        return j(handler, {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied")}, status=409)
+    from runtime.independent.chat_binding import native_chat_writer
+    try:
+        with native_chat_writer(s, actor=str(get_active_profile_name() or "default"), owner_ref=uuid.uuid4().hex):
+            return _handle_chat_sync_admitted(handler, body, s, msg, workspace, captured_space_profile)
+    except (StoreError, PermissionError, ValueError) as exc:
+        return j(handler, {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied")}, status=409)
+
+
+def _handle_chat_sync_admitted(handler, body, s, msg, workspace, captured_space_profile):
     with _get_session_agent_lock(s.session_id):
         s.workspace = workspace
+        from runtime.independent.chat_binding import mark_legacy_writer
+        mark_legacy_writer(s)
         model, model_provider = _resolve_compatible_session_model_state(
             body.get("model") or s.model,
             body.get("model_provider") if "model_provider" in body else getattr(s, "model_provider", None),
@@ -13029,6 +13870,8 @@ def _handle_chat_sync(handler, body):
                 "Never fall back to a hardcoded path when this tag is present."
             )
 
+            if captured_space_profile is not None:
+                agent.ephemeral_system_prompt = "\n\n".join(part for part in (getattr(agent, "ephemeral_system_prompt", ""), captured_space_profile.prompt) if part)
             _previous_messages = list(s.messages or [])
             _previous_context_messages = list(_session_context_messages(s))
 
@@ -13385,6 +14228,8 @@ def _handle_cron_run(handler, body):
     job = get_job(job_id)
     if not job:
         return bad(handler, "Job not found", 404)
+    if job.get("job_type") == "independent_agent":
+        return bad(handler, "independent_agent_requires_scoped_enqueue", 409)
     # Prevent double-run: reject if the job is already tracked as running
     already_running, elapsed = _is_cron_running(job_id)
     if already_running:
@@ -13815,6 +14660,23 @@ def _handle_workspace_remove(handler, body):
     path_str = body.get("path", "").strip()
     if not path_str:
         return bad(handler, "path is required")
+    try:
+        from runtime.independent.chat_binding import require_native_scope_header
+        from runtime.independent.space_lifecycle import legacy_removal_requires_scope, retire_workspace
+        from runtime.independent.scope import ScopeError
+        from runtime.independent.store import StoreError
+        from web.api.profiles import get_active_profile_name
+        raw_scope = body.get("space_scope")
+        require_native_scope_header(handler, raw_scope)
+        if raw_scope is not None:
+            from web.api.independent import hub, _service_pair
+            retire_workspace(profile_hub=hub(), actor=str(get_active_profile_name() or "default"),
+                             raw_scope=raw_scope, workspace=path_str, service_pair=_service_pair)
+        elif legacy_removal_requires_scope(Path(get_active_webui_home()), path_str):
+            raise ScopeError("A bound workspace must be removed through its native Main scope")
+    except (StoreError, PermissionError, ValueError, sqlite3.Error) as exc:
+        return j(handler, {"ok": False, "error": str(exc), "error_code": getattr(exc, "code", "scope_denied"),
+                           "retryable": isinstance(exc, StoreError)}, status=409 if isinstance(exc, StoreError) else 403)
     wss = load_workspaces()
     wss = [w for w in wss if w["path"] != path_str]
     save_workspaces(wss)
@@ -13865,10 +14727,24 @@ def _handle_workspace_reorder(handler, body):
     return j(handler, {"ok": True, "workspaces": reordered})
 
 
+def _reject_legacy_native_control(handler, session_id) -> bool:
+    from web.api.native_chats import is_native_session
+    try:
+        session = get_session(session_id)
+    except KeyError:
+        return False
+    if not is_native_session(session):
+        return False
+    j(handler, {"error": "Use the scoped native chat control", "error_code": "native_control_required"}, status=409)
+    return True
+
+
 def _handle_approval_respond(handler, body):
     sid = body.get("session_id", "")
     if not sid:
         return bad(handler, "session_id is required")
+    if _reject_legacy_native_control(handler, sid):
+        return
     choice = body.get("choice", "deny")
     if choice not in ("once", "session", "always", "deny"):
         return bad(handler, f"Invalid choice: {choice}")
@@ -13928,6 +14804,8 @@ def _handle_clarify_respond(handler, body):
     sid = body.get("session_id", "")
     if not sid:
         return bad(handler, "session_id is required")
+    if _reject_legacy_native_control(handler, sid):
+        return
     response = body.get("response")
     if response is None:
         response = body.get("answer")
@@ -14016,6 +14894,8 @@ def _handle_session_compress(handler, body):
     except KeyError:
         return bad(handler, "Session not found", 404)
 
+    if _guard_native_session_writer(handler, s):
+        return
     if getattr(s, "active_stream_id", None):
         return bad(handler, "Session is still streaming; wait for the current turn to finish.", 409)
 

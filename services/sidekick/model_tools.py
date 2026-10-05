@@ -21,6 +21,7 @@ Public API (signatures preserved from the original 2,400-line version):
 """
 
 import json
+import os
 import asyncio
 import logging
 import threading
@@ -286,6 +287,35 @@ def get_tool_definitions(
     Returns:
         Filtered list of OpenAI-format tool definitions.
     """
+    # Native browser schemas describe the actual Parent adapter. Never run the
+    # legacy browser check_fn (or discover ambient provider tools) in a worker.
+    if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1":
+        from runtime.independent.native_browser_bridge import has_bound_native_browser_bridge
+        from runtime.independent.native_browser_contracts import native_browser_tool_definitions
+        from runtime.independent.native_chat_policy import get_bound_native_context, _SAFE_TOOLS
+        context = get_bound_native_context()
+        browser = context is not None and has_bound_native_browser_bridge(context)
+        browser_defs = native_browser_tool_definitions() if browser else []
+        browser_names = {row["function"]["name"] for row in browser_defs}
+        allowed = set(_SAFE_TOOLS) if context is not None else set()
+        allowed.update(browser_names)
+        names = set()
+        if enabled_toolsets is not None:
+            for toolset in enabled_toolsets:
+                if validate_toolset(toolset): names.update(resolve_toolset(toolset))
+                else: names.update(_LEGACY_TOOLSET_MAP.get(toolset, ()))
+        else:
+            names.update(allowed)
+        if disabled_toolsets:
+            for toolset in disabled_toolsets:
+                if validate_toolset(toolset): names.difference_update(resolve_toolset(toolset))
+                else: names.difference_update(_LEGACY_TOOLSET_MAP.get(toolset, ()))
+        # Native non-browser schemas are restricted before registry check_fn.
+        local = registry.get_definitions((names & allowed) - browser_names, quiet=True)
+        result = local + [row for row in browser_defs if row["function"]["name"] in names]
+        global _last_resolved_tool_names
+        _last_resolved_tool_names = [row["function"]["name"] for row in result]
+        return result
     # Fast path: memoized result when the caller doesn't need stdout prints.
     # The cache key captures every argument-level input; the registry
     # generation captures registry mutations (MCP refresh, plugin load).
@@ -312,7 +342,6 @@ def get_tool_definitions(
         if cached is not None:
             # Update _last_resolved_tool_names so downstream callers see
             # consistent state even on a cache hit.
-            global _last_resolved_tool_names
             _last_resolved_tool_names = [t["function"]["name"] for t in cached]
             # Return a shallow copy of the list but share the dict references —
             # schemas are treated as read-only by all known callers.
@@ -703,6 +732,7 @@ def handle_function_call(
     user_task: Optional[str] = None,
     enabled_tools: Optional[List[str]] = None,
     skip_pre_tool_call_hook: bool = False,
+    execution_policy=None,
 ) -> str:
     """
     Main function call dispatcher that routes calls to the tool registry.
@@ -720,8 +750,45 @@ def handle_function_call(
     Returns:
         Function result as a JSON string.
     """
+    from runtime.independent.native_tool_paths import bind_native_file_arguments
+    from runtime.independent.policy import PolicyDenied, native_tool_block_reason
+    try:
+        function_args = bind_native_file_arguments(function_name, function_args)
+    except PolicyDenied as denied:
+        return json.dumps({"error": denied.code, "denied": True})
+    native_denial = native_tool_block_reason(function_name, function_args)
+    if native_denial:
+        return json.dumps({"error": native_denial, "denied": True})
+    if execution_policy is not None:
+        from runtime.chat_modes import tool_denial
+        denied = tool_denial(execution_policy, function_name, function_args)
+        if denied:
+            return json.dumps({"error": denied, "denied": True})
+    # Native file effects execute only after the actual Parent's durable
+    # dispatch fence. The ordinary tool registry never receives this call.
+    from runtime.independent.native_file_io import native_file_dispatch
+    try:
+        native_result = native_file_dispatch(function_name, function_args, execution_policy,
+            tool_call_id=tool_call_id, task_id=task_id)
+        if native_result is not None:
+            return native_result
+    except PolicyDenied as denied:
+        return json.dumps({"error": denied.code, "denied": True})
+    from runtime.independent.native_browser_bridge import native_browser_dispatch
+    try:
+        native_result = native_browser_dispatch(function_name, function_args, execution_policy,
+            tool_call_id=tool_call_id, task_id=task_id)
+        if native_result is not None:
+            return native_result
+    except PolicyDenied as denied:
+        return json.dumps({"error": denied.code, "denied": True})
     # Coerce string arguments to their schema-declared types (e.g. "42"→42)
     function_args = coerce_tool_args(function_name, function_args)
+
+    from runtime.independent.policy import tool_block_reason
+    independent_denial = tool_block_reason(function_name, function_args)
+    if independent_denial:
+        return json.dumps({"error": independent_denial, "denied": True})
 
     try:
         if function_name in _AGENT_LOOP_TOOLS:
@@ -737,7 +804,8 @@ def handle_function_call(
         # directive (if any), so observer plugins see the hook on that same
         # pass. When skip=True, the caller already fired it — do nothing
         # here.
-        if not skip_pre_tool_call_hook:
+        native_dispatch = os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1"
+        if not skip_pre_tool_call_hook and not native_dispatch:
             block_message: Optional[str] = None
             try:
                 from sidekick_cli.plugins import get_pre_tool_call_block_message
@@ -787,6 +855,12 @@ def handle_function_call(
                 user_task=user_task,
             )
         duration_ms = int((time.monotonic() - _dispatch_start) * 1000)
+
+        # Native processes currently have no issued plugin-hook capability.
+        # An ordinary file operation cannot grant a plugin network/OS action
+        # through a post hook or substitute its result via a transform hook.
+        if native_dispatch:
+            return result
 
         try:
             from sidekick_cli.plugins import invoke_hook

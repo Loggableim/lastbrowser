@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 SIDEKICK_HOME_ENV = "SIDEKICK_HOME"
+LASTBROWSER_HOME_ENV = "LASTBROWSER_HOME"
 STATE_DIR_ENV = "SIDEKICK_STATE_DIR"
 
 
@@ -16,7 +17,7 @@ def _env(*names: str) -> str | None:
 
 
 def sidekick_home() -> Path:
-    configured = _env(SIDEKICK_HOME_ENV)
+    configured = _env(SIDEKICK_HOME_ENV, LASTBROWSER_HOME_ENV)
     if configured:
         return Path(configured).expanduser().resolve()
     return (Path.home() / ".sidekick").resolve()

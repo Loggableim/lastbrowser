@@ -25,6 +25,7 @@
 <link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/main.css">
 <link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/download-counter.css">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 
 <!-- Client-side immediate language detection & theme initialization -->
@@ -108,6 +109,7 @@
         Kein bloßer Wrapper. Lastbrowser vereint blitzschnelles Chromium mit Nova AI, 48 kuratierten Agentic-Workflows, echtem ConPTY PowerShell-Terminal, Castlabs Widevine DRM L3 und vollständiger Session-Isolation in Spaces.
       </p>
 
+      <div class="download-counter" data-download-counter data-locale="de" role="status">Downloadzahl derzeit nicht verfügbar.</div>
       <div class="cta-group">
         <a href="/download/" class="btn btn-primary btn-lg">
           ⬇️ Für Windows herunterladen (v0.1.43 Beta)
@@ -122,8 +124,8 @@
     <!-- Screenshot Showcase -->
     <div class="container showcase-container">
       <div class="showcase-nav">
-        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-zen-sidebar.png" data-title="Zen Sidebar &amp; Spaces" data-desc="Vertikale Tab-Leiste mit visueller Trennung nach Spaces, Web-Apps und Audio-Indikatoren.">
-          🪐 Zen Sidebar &amp; Spaces
+        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-sidebar-spaces-de.png" data-title="Vertikale Sidebar &amp; Spaces" data-desc="Vertikale Tab-Leiste mit visueller Trennung nach Spaces, Web-Apps und Audio-Indikatoren.">
+          🪐 Vertikale Sidebar &amp; Spaces
         </button>
         <button class="sc-btn" data-img="/assets/screenshots/store-screen-2-copilot-splitview.png" data-title="Nova AI Copilot im Split-View" data-desc="Arbeiten Sie im 70/30 Split-View: Nova analysiert Webinhalte, extrahiert Daten und fasst Dokumente zusammen.">
           🤖 Nova AI Split-View
@@ -156,11 +158,11 @@
           <div style="font-size:12px;color:var(--muted);">Lastbrowser Win32 Shell</div>
         </div>
         <div class="showcase-view">
-          <img id="showcase-image" src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Lastbrowser Benutzeroberfläche" width="1920" height="1080">
+          <img id="showcase-image" src="/assets/screenshots/store-screen-1-sidebar-spaces-de.png" alt="Lastbrowser Benutzeroberfläche" width="1920" height="1080">
         </div>
         <div class="showcase-footer">
           <div>
-            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Zen Sidebar &amp; Spaces</strong>
+            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Vertikale Sidebar &amp; Spaces</strong>
             <span id="showcase-desc" style="color:var(--muted);font-size:13px;">Vertikale Tab-Leiste mit visueller Trennung nach Spaces, Web-Apps und Audio-Indikatoren.</span>
           </div>
           <a href="/features/" class="btn btn-ghost btn-sm">Mehr erfahren ➔</a>
@@ -310,5 +312,6 @@
 </footer>
 
 <script src="/assets/js/app.js"></script>
+<script src="/assets/js/download-counter.js" defer></script>
 </body>
 </html>

@@ -1411,6 +1411,25 @@ def get_providers() -> dict[str, Any]:
                     oauth_email = str(
                         (status.get("accounts") or [{}])[0].get("email") or ""
                     ) if oauth_connected else ""
+                elif pid == "qwen-oauth":
+                    # Qwen CLI owns a process-user ~/.qwen credential file.
+                    # Only the root profile may use that legacy discovery;
+                    # named profiles require the explicit profile-local CLI
+                    # import recorded in their own credential pool.
+                    from web.api.profiles import (
+                        _is_root_profile,
+                        get_active_profile_home,
+                        get_active_profile_name,
+                    )
+                    from cli.auth import get_qwen_profile_pool_auth_status
+
+                    if _is_root_profile(get_active_profile_name()):
+                        from cli.auth import get_auth_status as _gas
+                        status = _gas(pid)
+                    else:
+                        status = get_qwen_profile_pool_auth_status(get_active_profile_home())
+                    oauth_connected = bool(isinstance(status, dict) and status.get("logged_in"))
+                    auth_state = "connected" if oauth_connected else "not_connected"
                 else:
                     from cli.auth import get_auth_status as _gas
                     status = _gas(pid)
@@ -1462,7 +1481,7 @@ def get_providers() -> dict[str, Any]:
 
         if pid == "anthropic":
             oauth_connected = _anthropic_claude_code_linked()
-        elif pid not in _PROVIDER_ENV_VAR:
+        elif pid not in _PROVIDER_ENV_VAR and pid != "qwen-oauth":
             # Fallback: provider is not a known API-key provider and not in
             # the hardcoded _OAUTH_PROVIDERS set.  It may be a custom or
             # newly-added OAuth provider (e.g. Anthropic connected via OAuth).

@@ -1,4 +1,4 @@
-import type { DesktopCatalog, DesktopLocaleId, DesktopTranslationKey } from './keys.js';
+import type { DesktopCatalog, LegacyDesktopLocaleId as DesktopLocaleId, DesktopTranslationKey } from './keys.js';
 
 const rows: Partial<Record<DesktopTranslationKey, Record<DesktopLocaleId, string>>> = {
   'spaceSetup.title': { en: 'Set up a new Space', de: 'Neuen Space einrichten', es: 'Configurar un espacio nuevo', fr: 'Configurer un nouvel espace', it: 'Configura un nuovo spazio', 'pt-BR': 'Configurar um novo espaço', ru: 'Настройка нового пространства' },

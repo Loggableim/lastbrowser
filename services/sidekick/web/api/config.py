@@ -2063,6 +2063,17 @@ def _annotate_model_reasoning_efforts(groups):
                 if not isinstance(entry, dict):
                     continue
                 model_id = entry.get("id")
+                if isinstance(entry.get('reasoning_efforts'), list):
+                    entry['reasoning_efforts'] = list(dict.fromkeys(value for value in entry['reasoning_efforts']
+                        if isinstance(value, str) and value in {'none', *VALID_REASONING_EFFORTS}))
+                    entry.setdefault('reasoning_effort_source', 'provided_catalog')
+                    continue
+                if _normalize_reasoning_provider(provider) == 'openai-codex':
+                    from cli.codex_models import get_codex_model_reasoning_metadata
+                    efforts, source = get_codex_model_reasoning_metadata(model_id)
+                    entry['reasoning_efforts'] = efforts
+                    entry['reasoning_effort_source'] = source
+                    continue
                 entry["reasoning_efforts"] = _known_reasoning_efforts_for_model(
                     model_id,
                     provider,
@@ -2472,6 +2483,12 @@ def _read_auth_store() -> dict:
 
 def _runtime_provider_status(requested: str | None = None) -> dict:
     """Best-effort provider context from the Sidekick runtime resolver."""
+    if (os.getenv("LASTBROWSER_INDEPENDENT_WORKER") == "1"
+            and os.getenv("LASTBROWSER_INDEPENDENT_PURPOSE") == "model_catalog"):
+        # Configuration discovery is not an authenticated inference request.
+        # The runtime resolver may refresh/exchange OAuth tokens as a side
+        # effect; the catalog reports local configuration evidence instead.
+        return {}
     try:
         from web.api.oauth import resolve_runtime_provider_with_anthropic_env_lock
         import sidekick_cli.runtime_provider as _runtime_provider
@@ -5297,6 +5314,10 @@ DEV_MODE = False
 try:
     from web.api.profiles import init_profile_state
 
-    init_profile_state()
+    # Isolated independent workers carry a fixed, filtered profile environment.
+    # Sticky UI defaults and an unfiltered .env reload would retarget that child
+    # before its immutable RunContext can bind the existing runtime globals.
+    if os.environ.get("LASTBROWSER_INDEPENDENT_WORKER") != "1":
+        init_profile_state()
 except ImportError:
     pass  # sidekick_cli not available -- default profile only

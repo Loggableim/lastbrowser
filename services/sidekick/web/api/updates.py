@@ -92,6 +92,21 @@ def _detect_webui_version() -> str:
          ``__version__ = 'vX.Y.Z'``.
       3. ``'unknown'`` — last resort; displayed as-is in the settings badge.
     """
+    try:
+        from shared.constants import is_lastbrowser_integrated
+        if is_lastbrowser_integrated():
+            version_file = REPO_ROOT / 'api' / '_version.py'
+            if version_file.exists():
+                import re as _re
+                m = _re.search(
+                    r"""__version__\s*=\s*['"]([^'"]+)['"]""",
+                    version_file.read_text(encoding='utf-8'),
+                )
+                if m:
+                    return m.group(1)
+            return 'v0.8.84'
+    except Exception:
+        pass
     # When webui/ is part of a parent repo (sidekick-portable), use that.
     version_root = REPO_ROOT
     if not (version_root / '.git').exists() and (version_root.parent / '.git').exists():
@@ -124,6 +139,12 @@ def _detect_webui_version() -> str:
 
 def _detect_agent_version() -> str:
     """Detect the running Nova version for UI display."""
+    try:
+        from shared.constants import is_lastbrowser_integrated
+        if is_lastbrowser_integrated():
+            return WEBUI_VERSION if 'WEBUI_VERSION' in globals() else 'v0.8.84'
+    except Exception:
+        pass
     if _AGENT_DIR is None:
         return 'not detected'
 
@@ -203,6 +224,12 @@ def _check_repo(path, name):
     """Check if a git repo is behind its upstream. Returns dict or None."""
     if path is None:
         return None
+    try:
+        from shared.constants import is_lastbrowser_integrated
+        if is_lastbrowser_integrated():
+            return None
+    except Exception:
+        pass
 
     # Fallback: if the given path has no .git, walk up one level.
     # This lets the update checker find the sidekick-portable repo
@@ -283,6 +310,19 @@ def _check_repo(path, name):
 
 def check_for_updates(force=False):
     """Return cached update status for webui and agent repos."""
+    try:
+        from shared.constants import is_lastbrowser_integrated
+        if is_lastbrowser_integrated():
+            return {
+                'disabled': True,
+                'managed_by': 'lastbrowser',
+                'message': 'Sidekick is integrated into Lastbrowser and updates together with the browser.',
+                'webui': None,
+                'agent': None,
+                'checked_at': time.time(),
+            }
+    except Exception:
+        pass
     global _check_in_progress
     with _cache_lock:
         if not force and time.time() - _update_cache['checked_at'] < CACHE_TTL:
@@ -370,6 +410,18 @@ def apply_force_update(target: str) -> dict:
     response with ``conflict: True`` or ``diverged: True`` and the user
     has confirmed they want to discard local changes.
     """
+    try:
+        from shared.constants import is_lastbrowser_integrated
+        if is_lastbrowser_integrated():
+            return {
+                'ok': False,
+                'disabled': True,
+                'managed_by': 'lastbrowser',
+                'message': 'Sidekick is integrated into Lastbrowser and updates together with the browser. Independent backend updates are disabled.',
+                'target': target,
+            }
+    except Exception:
+        pass
     active_streams = _active_stream_count()
     if active_streams:
         return _restart_blocked_response(target, active_streams)
@@ -428,6 +480,18 @@ def apply_force_update(target: str) -> dict:
 
 def apply_update(target):
     """Stash, pull --ff-only, pop for the given target repo."""
+    try:
+        from shared.constants import is_lastbrowser_integrated
+        if is_lastbrowser_integrated():
+            return {
+                'ok': False,
+                'disabled': True,
+                'managed_by': 'lastbrowser',
+                'message': 'Sidekick is integrated into Lastbrowser and updates together with the browser. Independent backend updates are disabled.',
+                'target': target,
+            }
+    except Exception:
+        pass
     active_streams = _active_stream_count()
     if active_streams:
         return _restart_blocked_response(target, active_streams)

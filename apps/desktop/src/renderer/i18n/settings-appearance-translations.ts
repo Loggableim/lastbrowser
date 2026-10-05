@@ -1,4 +1,4 @@
-import type { DesktopCatalog, DesktopLocaleId, DesktopTranslationKey } from './keys';
+import type { DesktopCatalog, LegacyDesktopLocaleId as DesktopLocaleId, DesktopTranslationKey } from './keys';
 
 // Newly added appearance and preferences controls. Keep all shipped locales in
 // one table so additions cannot silently fall back to English.

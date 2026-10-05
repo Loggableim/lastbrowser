@@ -25,6 +25,7 @@
 <link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/main.css">
 <link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/download-counter.css">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 <script src="/assets/js/theme.js"></script>
 
@@ -105,6 +106,7 @@
         単なるWebラッパーではありません。Lastbrowserは、Chromiumの圧倒的な表示速度に、Nova AI Copilot、48のエージェントワークフロー、内蔵Windows ConPTY PowerShellターミナル、Castlabs Widevine DRM L3、そしてSpacesによるセッション完全分離を統合しています。
       </p>
 
+      <div class="download-counter" data-download-counter data-locale="ja" role="status">現在、ダウンロード数を取得できません。</div>
       <div class="cta-group">
         <a href="/ja/download/" class="btn btn-primary btn-lg">
           ⬇️ Windows版を無料ダウンロード (v0.1.43 Beta)
@@ -119,8 +121,8 @@
     <!-- Screenshot Showcase -->
     <div class="container showcase-container">
       <div class="showcase-nav">
-        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-zen-sidebar.png" data-title="Zenサイドバー &amp; Spaces" data-desc="ワークスペースごとの視覚的分離、Webアプリアイコン固定、オーディオ再生インジケーターを備えた垂直タブ。">
-          🪐 Zenサイドバー &amp; Spaces
+        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-sidebar-spaces.png" data-title="バーティカルサイドバー &amp; Spaces" data-desc="ワークスペースごとの視覚的分離、Webアプリアイコン固定、オーディオ再生インジケーターを備えた垂直タブ。">
+          🪐 バーティカルサイドバー &amp; Spaces
         </button>
         <button class="sc-btn" data-img="/assets/screenshots/store-screen-2-copilot-splitview.png" data-title="Nova AI 分割画面 Copilot" data-desc="70/30の画面分割で作業：NovaがWeb情報から要点を抽出し、コードを生成し、論文を要約します。">
           🤖 Nova AI スプリットビュー
@@ -153,11 +155,11 @@
           <div style="font-size:12px;color:var(--muted);">Lastbrowser Win32 Shell</div>
         </div>
         <div class="showcase-view">
-          <img id="showcase-image" src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Lastbrowser ユーザーインターフェース" width="1920" height="1080">
+          <img id="showcase-image" src="/assets/screenshots/store-screen-1-sidebar-spaces.png" alt="Lastbrowser ユーザーインターフェース" width="1920" height="1080">
         </div>
         <div class="showcase-footer">
           <div>
-            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Zenサイドバー &amp; Spaces</strong>
+            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">バーティカルサイドバー &amp; Spaces</strong>
             <span id="showcase-desc" style="color:var(--muted);font-size:13px;">ワークスペースごとの視覚的分離、Webアプリアイコン固定、オーディオ再生インジケーターを備えた垂直タブ。</span>
           </div>
           <a href="/ja/features/" class="btn btn-ghost btn-sm">詳細を見る ➔</a>
@@ -299,5 +301,6 @@
 </footer>
 
 <script src="/assets/js/app.js"></script>
+<script src="/assets/js/download-counter.js" defer></script>
 </body>
 </html>

@@ -574,6 +574,9 @@ class CredentialPool:
             logger.debug("Failed to sync %s pool entry back to auth store: %s", self.provider, exc)
 
     def _refresh_entry(self, entry: PooledCredential, *, force: bool) -> Optional[PooledCredential]:
+        if (os.getenv("LASTBROWSER_INDEPENDENT_WORKER") == "1"
+                and os.getenv("LASTBROWSER_INDEPENDENT_PURPOSE") == "model_catalog"):
+            return None
         if entry.auth_type != AUTH_TYPE_OAUTH or not entry.refresh_token:
             if force:
                 self._mark_exhausted(entry, None)
@@ -1068,6 +1071,9 @@ def _seed_from_singletons(provider: str, entries: List[PooledCredential]) -> Tup
         # env vars (COPILOT_GITHUB_TOKEN / GH_TOKEN).  They don't live in
         # the auth store or credential pool, so we resolve them here.
         try:
+            if (os.getenv("LASTBROWSER_INDEPENDENT_WORKER") == "1"
+                    and os.getenv("LASTBROWSER_INDEPENDENT_PURPOSE") == "model_catalog"):
+                return changed, active_sources
             from cli.copilot_auth import resolve_copilot_token, get_copilot_api_token
             token, source = resolve_copilot_token()
             if token:
@@ -1383,6 +1389,10 @@ def _seed_custom_pool(pool_key: str, entries: List[PooledCredential]) -> Tuple[b
 def load_pool(provider: str) -> CredentialPool:
     provider = (provider or "").strip().lower()
     raw_entries = read_credential_pool(provider)
+    if os.getenv("LASTBROWSER_INDEPENDENT_WORKER") == "1":
+        # A persisted automatically discovered OS account is not an explicit
+        # connection of this profile. Keep human-imported own credentials.
+        raw_entries = [row for row in raw_entries if row.get("source") != "gh_cli"]
     entries = [PooledCredential.from_dict(provider, payload) for payload in raw_entries]
 
     if provider.startswith(CUSTOM_POOL_PREFIX):
@@ -1397,7 +1407,11 @@ def load_pool(provider: str) -> CredentialPool:
         changed |= _prune_stale_seeded_entries(entries, singleton_sources | env_sources)
         changed |= _normalize_pool_priorities(provider, entries)
 
-    if changed:
+    # In the bound independent child, native config/env-derived credentials
+    # are ephemeral seeds. Persisting them while resolving the first SDK call
+    # would invalidate the exact account/config evidence captured by its host.
+    # Explicit authentication/refresh writes retain their normal persistence.
+    if changed and os.getenv("LASTBROWSER_INDEPENDENT_WORKER") != "1":
         write_credential_pool(
             provider,
             [entry.to_dict() for entry in sorted(entries, key=lambda item: item.priority)],

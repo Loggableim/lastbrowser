@@ -124,6 +124,10 @@ def _try_gh_cli_token() -> Optional[str]:
     subprocess environment so ``gh`` reads from its own credential store
     (hosts.yml) instead of just echoing the env var back.
     """
+    if os.getenv("LASTBROWSER_INDEPENDENT_WORKER") == "1":
+        # Windows gh may use Credential Manager independently of HOME. An
+        # immutable profile worker has no authority over that ambient account.
+        return None
     hostname = os.getenv("COPILOT_GH_HOST", "").strip()
 
     # Build a clean env so gh doesn't short-circuit on GITHUB_TOKEN / GH_TOKEN
@@ -306,6 +310,9 @@ def exchange_copilot_token(raw_token: str, *, timeout: float = 10.0) -> tuple[st
     Results are cached in-process and reused until close to expiry.
     Raises ``ValueError`` on failure.
     """
+    if (os.getenv("LASTBROWSER_INDEPENDENT_WORKER") == "1"
+            and os.getenv("LASTBROWSER_INDEPENDENT_PURPOSE") == "model_catalog"):
+        raise RuntimeError("Catalog discovery cannot exchange provider credentials")
     import urllib.request
 
     fp = _token_fingerprint(raw_token)
@@ -358,6 +365,9 @@ def get_copilot_api_token(raw_token: str) -> str:
     account type). This preserves existing behaviour for accounts that don't
     need exchange while enabling access to internal-only models for those that do.
     """
+    if (os.getenv("LASTBROWSER_INDEPENDENT_WORKER") == "1"
+            and os.getenv("LASTBROWSER_INDEPENDENT_PURPOSE") == "model_catalog"):
+        raise RuntimeError("Catalog discovery cannot exchange provider credentials")
     if not raw_token:
         return raw_token
     try:

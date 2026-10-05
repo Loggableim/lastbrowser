@@ -6,7 +6,8 @@ import {
 import {
   detectPageCategory,
   getQuickActionChips,
-  executeQuickAction
+  executeQuickAction,
+  isQuickChatAction
 } from '../src/renderer/quick-actions.js';
 import { processRichText } from '../src/renderer/NativeRichText.js';
 import { useTabStore } from '../src/renderer/stores/useTabStore.js';
@@ -70,6 +71,16 @@ describe('Citation Badge In-Page Attributes', () => {
 });
 
 describe('Contextual Quick-Action Chips (Phase 10.5)', () => {
+  it('keeps short page questions in Quickchat and long extraction/research in normal work', () => {
+    expect(isQuickChatAction('summarize-page')).toBe(true);
+    expect(isQuickChatAction('explain-selection')).toBe(true);
+    expect(isQuickChatAction('tldr')).toBe(true);
+    expect(isQuickChatAction('counter-args')).toBe(true);
+    expect(isQuickChatAction('research-page')).toBe(false);
+    expect(isQuickChatAction('extract-code')).toBe(false);
+    expect(isQuickChatAction('export-tables')).toBe(false);
+  });
+
   it('accurately classifies developer and code pages', () => {
     expect(detectPageCategory('https://github.com/torvalds/linux')).toBe('code');
     expect(detectPageCategory('https://gitlab.com/group/repo')).toBe('code');

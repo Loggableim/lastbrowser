@@ -1,16 +1,29 @@
 export type SessionListScope = {
   profile: string;
   workspacePath: string;
+  backendProfileName?: string;
 };
 
 export type SessionListEntry = {
   session_id: string;
 };
 
+/** A resolved profile belongs to its original UI selection, even before effects reset it. */
+export function resolveSessionBackendProfile(
+  requestedScope: SessionListScope | null,
+  resolvedProfile: string | undefined,
+  currentScope: SessionListScope
+): string | undefined {
+  return sameSessionListScope(requestedScope, currentScope)
+    ? resolvedProfile || currentScope.backendProfileName
+    : currentScope.backendProfileName;
+}
+
 export function sameSessionListScope(left: SessionListScope | null, right: SessionListScope): boolean {
   return left !== null
     && left.profile === right.profile
-    && left.workspacePath === right.workspacePath;
+    && left.workspacePath === right.workspacePath
+    && (left.backendProfileName ?? '') === (right.backendProfileName ?? '');
 }
 
 export function sessionListResponseMatchesScope(

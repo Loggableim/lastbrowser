@@ -25,6 +25,7 @@
 <link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/main.css">
 <link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/download-counter.css">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 <script src="/assets/js/theme.js"></script>
 
@@ -105,6 +106,7 @@
         Mais do que um simples invólucro web. O Lastbrowser combina o desempenho imbatível do Chromium com o copiloto Nova AI, 48 fluxos de agentes selecionados, terminal ConPTY PowerShell nativo do Windows, Castlabs Widevine DRM L3 e verdadeiro isolamento de sessões em Espaços.
       </p>
 
+      <div class="download-counter" data-download-counter data-locale="pt" role="status">O número de downloads está indisponível.</div>
       <div class="cta-group">
         <a href="/pt/download/" class="btn btn-primary btn-lg">
           ⬇️ Baixar para Windows (v0.1.43 Beta)
@@ -119,7 +121,7 @@
     <!-- Screenshot Showcase -->
     <div class="container showcase-container">
       <div class="showcase-nav">
-        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-zen-sidebar.png" data-title="Barra Lateral Zen &amp; Espaços" data-desc="Barra vertical de abas com partição visual de espaços, fixação de web apps e indicadores de áudio.">
+        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-sidebar-spaces.png" data-title="Barra Lateral &amp; Espaços" data-desc="Barra vertical de abas com partição visual de espaços, fixação de web apps e indicadores de áudio.">
           🪐 Barra Zen &amp; Espaços
         </button>
         <button class="sc-btn" data-img="/assets/screenshots/store-screen-2-copilot-splitview.png" data-title="Copiloto Nova AI em Tela Dividida" data-desc="Trabalhe em visão 70/30: Nova extrai dados da web, gera código e resume artigos científicos.">
@@ -153,11 +155,11 @@
           <div style="font-size:12px;color:var(--muted);">Lastbrowser Win32 Shell</div>
         </div>
         <div class="showcase-view">
-          <img id="showcase-image" src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Interface do Lastbrowser" width="1920" height="1080">
+          <img id="showcase-image" src="/assets/screenshots/store-screen-1-sidebar-spaces.png" alt="Interface do Lastbrowser" width="1920" height="1080">
         </div>
         <div class="showcase-footer">
           <div>
-            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Barra Lateral Zen &amp; Espaços</strong>
+            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Barra Lateral &amp; Espaços</strong>
             <span id="showcase-desc" style="color:var(--muted);font-size:13px;">Barra vertical de abas com partição visual de espaços, fixação de web apps e indicadores de áudio.</span>
           </div>
           <a href="/pt/features/" class="btn btn-ghost btn-sm">Saiba mais ➔</a>
@@ -299,5 +301,6 @@
 </footer>
 
 <script src="/assets/js/app.js"></script>
+<script src="/assets/js/download-counter.js" defer></script>
 </body>
 </html>

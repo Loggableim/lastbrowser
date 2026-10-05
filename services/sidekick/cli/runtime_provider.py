@@ -688,6 +688,7 @@ def _resolve_openrouter_runtime(
         )
         api_key_candidates = [
             explicit_api_key,
+            os.getenv("CUSTOM_API_KEY", "").strip(),
             (cfg_api_key if use_config_base_url else ""),
             (os.getenv("OLLAMA_API_KEY") if _is_ollama_url else ""),
             _ambient_api_key_for_endpoint(base_url),

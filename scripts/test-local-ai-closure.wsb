@@ -1,0 +1,14 @@
+<Configuration>
+  <VGpu>Disable</VGpu>
+  <Networking>Disable</Networking>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>C:\projekte\lastbrowser</HostFolder>
+      <SandboxFolder>C:\lastbrowser</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>powershell.exe -NoExit -ExecutionPolicy Bypass -File C:\lastbrowser\scripts\guest-verify-crt.ps1</Command>
+  </LogonCommand>
+</Configuration>

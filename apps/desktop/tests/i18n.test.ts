@@ -12,6 +12,16 @@ import {
 } from '../src/renderer/i18n.js';
 
 describe('desktop i18n', () => {
+  it('offers every language in the actual in-tree website language picker', () => {
+    const website = readFileSync(resolve(process.cwd(), '../../lastbrowser.com/index.html'), 'utf8');
+    const websiteLocales = [...new Set([...website.matchAll(/data-lang="([^"]+)"/g)].map(match => match[1]))];
+    expect(websiteLocales).toEqual(expect.arrayContaining(['de', 'en', 'es', 'fr', 'it', 'pt', 'ja']));
+    for (const language of websiteLocales) {
+      const locale = normalizeDesktopLocale(language);
+      expect(locale, `${language} from website picker has a desktop locale`).not.toBeNull();
+      expect(desktopLocaleIds).toContain(locale);
+    }
+  });
   it('normalizes supported locale inputs to desktop locale ids', () => {
     expect(normalizeDesktopLocale('de-DE')).toBe('de');
     expect(normalizeDesktopLocale('it_IT')).toBe('it');
@@ -22,6 +32,7 @@ describe('desktop i18n', () => {
     expect(normalizeDesktopLocale('ru-RU')).toBe('ru');
     expect(normalizeDesktopLocale('ru_RU')).toBe('ru');
     expect(normalizeDesktopLocale('Русский')).toBe('ru');
+    for (const locale of ['ja', 'ja-JP', 'ja_JP', 'Japanese', '日本語']) expect(normalizeDesktopLocale(locale)).toBe('ja');
     expect(normalizeDesktopLocale('xx-YY')).toBeNull();
   });
 
@@ -31,6 +42,8 @@ describe('desktop i18n', () => {
     expect(resolveDesktopLocale({ settingsLanguage: '', browserLanguage: '' })).toBe('en');
     expect(resolveDesktopLocale({ savedLocale: 'unsupported', settingsLanguage: 'ru-RU', browserLanguage: 'de' })).toBe('ru');
     expect(resolveDesktopLocale({ savedLocale: 'ru_RU', settingsLanguage: 'it', browserLanguage: 'de' })).toBe('ru');
+    expect(resolveDesktopLocale({ savedLocale: 'ja', settingsLanguage: 'de', browserLanguage: 'en' })).toBe('ja');
+    expect(resolveDesktopLocale({ settingsLanguage: '', browserLanguage: 'ja-JP' })).toBe('ja');
   });
 
   it('falls back to English when a locale is missing a key', () => {
@@ -40,7 +53,7 @@ describe('desktop i18n', () => {
   });
 
   it('keeps the locale catalogs in parity across all shipped languages', () => {
-    expect(desktopLocaleIds).toEqual(['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru']);
+    expect(desktopLocaleIds).toEqual(['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja']);
     const englishKeys = new Set(desktopTranslationKeys);
 
     for (const localeId of desktopLocaleIds) {
@@ -72,6 +85,17 @@ describe('desktop i18n', () => {
     expect(i18n.t('settings.title')).toBe('Настройки');
     expect(i18n.t('firstRun.section2Title', { botName: 'Nova' })).toContain('Nova');
     expect(i18n.t('firstRun.section2Title', { botName: 'Nova' })).not.toContain('{botName}');
+  });
+
+  it('ships Japanese settings, provider setup, adaptive interview and native composer copy', () => {
+    const i18n = createDesktopI18n('ja');
+    for (const key of ['settings.title', 'chat.newSession', 'chat.reasoningEffort', 'spaceAssistant.apiKey', 'spaceAssistant.ownAnswer', 'agentPanels.agents'] as const) {
+      expect(i18n.t(key)).toMatch(/[\u3040-\u30ff\u3400-\u9fff]/);
+    }
+    expect(i18n.t('firstRun.section2Title', { botName: 'Nova' })).toContain('Nova');
+    expect(i18n.t('firstRun.section2Title', { botName: 'Nova' })).not.toContain('{botName}');
+    const settings = readFileSync(resolve(process.cwd(), 'src/renderer/panels/SystemPanels.tsx'), 'utf8');
+    expect(settings).toContain("value: 'ja'"); expect(settings).toContain('日本語');
   });
 
   it('keeps prominent navigation and settings copy localized instead of leaking English labels', () => {
@@ -168,7 +192,8 @@ describe('desktop i18n', () => {
       fr: ['Espace de travail', 'Changer d’espace', 'Espaces'],
       it: ['Area di lavoro', 'Cambia spazio', 'Spazi'],
       'pt-BR': ['Área de trabalho', 'Trocar espaço', 'Espaços'],
-      ru: ['Рабочее пространство', 'Сменить пространство', 'Пространства']
+      ru: ['Рабочее пространство', 'Сменить пространство', 'Пространства'],
+      ja: ['ワークスペース', 'スペースを切り替え', 'スペース']
     };
     for (const locale of desktopLocaleIds) {
       const i18n = createDesktopI18n(locale);
@@ -188,7 +213,8 @@ describe('desktop i18n', () => {
       fr: 'Interrogez Nova sur cette page',
       it: 'Chiedi a Nova informazioni su questa pagina',
       'pt-BR': 'Pergunte ao Nova sobre esta página',
-      ru: 'Спросите Nova об этой странице'
+      ru: 'Спросите Nova об этой странице',
+      ja: 'このページについて Nova に質問'
     };
 
     for (const locale of desktopLocaleIds) {
@@ -208,7 +234,8 @@ describe('desktop i18n', () => {
       fr: 'Adresse ou recherche',
       it: 'Indirizzo o ricerca',
       'pt-BR': 'Endereço ou pesquisa',
-      ru: 'Адрес или поиск'
+      ru: 'Адрес или поиск',
+      ja: 'アドレスまたは検索'
     };
     for (const locale of desktopLocaleIds) {
       const i18n = createDesktopI18n(locale);

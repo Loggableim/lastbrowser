@@ -64,6 +64,7 @@ import {
   getInsights,
   getAppstoreUpdates,
   hybridMemorySearch,
+  independentApiRequest,
   installAppstoreApp,
   kickDiscordMember,
   listAgentSessions,
@@ -135,6 +136,22 @@ import {
 } from '../src/main/sidekick-api.js';
 
 describe('sidekick api client', () => {
+  it('classifies only a refused local startup connection as retryable', async () => {
+    const refusal = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    const refusedFetch = vi.fn(async () => { throw Object.assign(new Error('fetch failed'), { cause: refusal }); });
+    await expect(independentApiRequest('http://127.0.0.1:8788', 'browser.handshake', null, {}, '', 'private', refusedFetch as any))
+      .rejects.toMatchObject({ code: 'sidekick_not_ready', retryable: true });
+
+    const reset = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' });
+    const resetFetch = vi.fn(async () => { throw Object.assign(new Error('fetch failed'), { cause: reset }); });
+    let resetError: unknown;
+    try {
+      await independentApiRequest('http://127.0.0.1:8788', 'browser.handshake', null, {}, '', 'private', resetFetch as any);
+    } catch (error) { resetError = error; }
+    expect(resetError).toBeInstanceOf(Error);
+    expect(resetError).not.toHaveProperty('code', 'sidekick_not_ready');
+  });
+
   it('posts cloud setup using the existing onboarding API shape', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = async (url: string | URL, init?: RequestInit) => {
@@ -552,6 +569,19 @@ describe('sidekick api client', () => {
     expect(JSON.parse(String(calls[1].init?.body))).toEqual({ path: 'C:/work/portfolio', name: 'Client work' });
     expect(JSON.parse(String(calls[2].init?.body))).toEqual({ paths: ['C:/work/portfolio', 'C:/work/default'] });
     expect(JSON.parse(String(calls[3].init?.body))).toEqual({ path: 'C:/work/portfolio' });
+  });
+
+  it('removes a bound Space with Main profile and private bridge authority only', async () => {
+    const calls: RequestInit[] = [];
+    const scope = { backendProfileId: 'a'.repeat(32), spaceId: 'b'.repeat(32), browserProfileId: 'browser-a' };
+    await removeSpace('http://127.0.0.1:8787', { path: 'C:/work/a', profile: 'profile-a',
+      browserProfileId: 'browser-a', spaceScope: scope, nativeBridgeNonce: 'private-bridge' }, async (_url, init) => {
+      calls.push(init!);
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    expect(calls[0].headers).toMatchObject({ cookie: 'sidekick_profile=profile-a', 'X-Lastbrowser-Bridge-Token': 'private-bridge' });
+    expect(JSON.parse(String(calls[0].body))).toEqual({ path: 'C:/work/a', space_scope: scope });
+    expect(String(calls[0].body)).not.toContain('private-bridge');
   });
 
   it('uses existing cron endpoints for the native Tasks panel', async () => {

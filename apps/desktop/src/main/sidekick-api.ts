@@ -1,7 +1,70 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve, relative, sep } from 'node:path';
+import type { NativeStreamReadProof } from './native-chat-stream-controller.js';
 
 export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
+
+/** Added by trusted Main after looking up the saved browser/profile binding. */
+export type NativeSpaceScope = Readonly<{ backendProfileId: string; spaceId: string; browserProfileId: string }>;
+export type IndependentRunState = 'queued' | 'running' | 'waiting_for_user' | 'waiting_for_approval' | 'pausing' | 'paused' | 'cancelling' | 'cancelled' | 'completed' | 'failed' | 'interrupted';
+
+/** Native-only independent broker operations. No caller supplies a route. */
+export const INDEPENDENT_OPERATIONS = new Set([
+  'resolveScope', 'assistantSnapshot', 'assistantTurn', 'cancelAssistantTurn', 'assistantReset', 'assistantControl',
+  'interviewStart', 'interviewAnswer', 'interviewReview', 'interviewContinue', 'interviewConfirm', 'interviewSkip',
+  'activity', 'globalActivity', 'modelSelection', 'definitions', 'connectionSetup', 'connectionConfigure', 'dispatch', 'runControl', 'permissions', 'approve', 'capabilities', 'bindings', 'events',
+  'selectedContext', 'browser.spacePaths', 'browser.backendProfiles', 'backendProfiles', 'browser.handshake', 'browser.heartbeat', 'browser.event', 'browser.shutdown', 'browser.nativeValidate', 'browser.nativeView', 'browser.nativeTakeover',
+  'browser.connectionStart', 'browser.connectionOpened', 'browser.connectionPoll', 'browser.connectionConfirm',
+  'browser.connectionCancel', 'browser.connectionBeginLogout', 'browser.connectionCompleteLogout',
+  'browser.connectionAuthorize', 'browser.connectionInvalidate',
+  'localAi.catalog', 'localAi.hardwareBind', 'localAi.hardwareRead', 'localAi.recommend', 'localAi.setup', 'localAi.runtime', 'localAi.roleProfile', 'localAi.bootstrap'
+]);
+
+export async function independentApiRequest(
+  webuiUrl: string,
+  operation: string,
+  scope: Readonly<{ backendProfileId: string; spaceId: string; browserProfileId: string }> | null,
+  payload: unknown,
+  backendProfileName: string,
+  privateBridgeNonce: string,
+  fetchImpl: FetchLike = globalThis.fetch
+): Promise<unknown> {
+  if (!INDEPENDENT_OPERATIONS.has(operation) || !privateBridgeNonce) throw new Error('Independent operation unavailable.');
+  let response: Response;
+  try {
+    response = await sendJson(webuiUrl, `/api/independent/v1/${operation}`, {
+      method: 'POST',
+      headers: { ...profileScopeHeaders(backendProfileName), 'x-lastbrowser-bridge-token': privateBridgeNonce },
+      body: JSON.stringify({ schemaVersion: 1, scope, payload: payload ?? {} }),
+      signal: AbortSignal.timeout(WEBUI_REQUEST_TIMEOUT_MS)
+    }, fetchImpl);
+  } catch (cause) {
+    // A refused loopback connection means the local server has not accepted
+    // this request yet. Preserve that distinction for bounded startup recovery.
+    let current: unknown = cause;
+    const seen = new Set<object>();
+    for (let depth = 0; depth < 5 && current && typeof current === 'object' && !seen.has(current); depth++) {
+      seen.add(current);
+      if ('code' in current && (current as { code?: unknown }).code === 'ECONNREFUSED') {
+        const error = Object.assign(new Error('The local Sidekick service is starting.'), {
+          code: 'sidekick_not_ready', retryable: true, cause
+        });
+        throw error;
+      }
+      current = 'cause' in current ? (current as { cause?: unknown }).cause : undefined;
+    }
+    throw cause;
+  }
+  const value: unknown = await response.json();
+  if (!response.ok) {
+    const detail = isRecord(value) && isRecord(value.error) ? value.error : null;
+    const error = new Error(detail && typeof detail.message === 'string' ? detail.message : 'Independent broker request failed.');
+    Object.assign(error, { code: detail?.code ?? 'independent_request_failed', status: response.status,
+      retryable: detail?.retryable ?? false, currentRevision: detail?.currentRevision });
+    throw error;
+  }
+  return value;
+}
 
 export type WebuiRequestMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
@@ -11,6 +74,8 @@ export type WebuiRequest = {
   query?: Record<string, string | number | boolean | null | undefined>;
   body?: unknown;
   headers?: Record<string, string>;
+  /** Internal Main binding, never accepted directly from the renderer. */
+  profile?: string;
 };
 
 export const WEBUI_REQUEST_TIMEOUT_MS = 30_000;
@@ -55,6 +120,9 @@ export type SidekickMessageRequest = {
   providerAccountEmail?: string | null;
   profile?: string;
   workspace?: string;
+  spaceScope?: NativeSpaceScope;
+  /** Private Main value, used only as an HTTP header. Never a renderer input. */
+  nativeBridgeNonce?: string;
   mode?: 'action' | 'plan';
   chatMode?: string;
   sandboxDisabled?: boolean;
@@ -96,6 +164,8 @@ export type DesktopChatMessage = {
   pending?: boolean;
   teamwork?: unknown;
   smartTrack?: unknown;
+  grill_question?: { questionId: string; revision: number };
+  grill_fallback?: { reason: 'invalid_structured_question' | 'question_state_unavailable'; streamId: string; writerGeneration: string };
 };
 
 export type ComposerDraft = {
@@ -104,6 +174,10 @@ export type ComposerDraft = {
 };
 
 export type DesktopSessionDetail = DesktopSessionSummary & {
+  space_scope?: NativeSpaceScope | null;
+  native_controls?: Record<string, unknown> | null;
+  grill_state?: Record<string, unknown> | null;
+  reasoning_selection?: { schemaVersion: 1; provider: string; model: string; effort: string } | null;
   model?: string;
   model_provider?: string | null;
   active_stream_id?: string | null;
@@ -111,6 +185,7 @@ export type DesktopSessionDetail = DesktopSessionSummary & {
   messages?: DesktopChatMessage[];
   composer_draft?: ComposerDraft;
   goal?: Record<string, unknown> | null;
+  independent?: { runId: string; dispatchId: string; scope: NativeSpaceScope; state: IndependentRunState; stateRevision: number; assistantConversationId: string; deliveryKey?: string; writerOwner?: 'independent_run' | 'legacy_chat' } | null;
   goal_state_error?: { error?: string; message?: string; retryable?: boolean };
 };
 
@@ -147,6 +222,8 @@ export type CreateSessionRequest = {
   model?: string;
   modelProvider?: string | null;
   profile?: string;
+  spaceScope?: NativeSpaceScope;
+  nativeBridgeNonce?: string;
 };
 
 export type WorkspaceRequest = {
@@ -192,6 +269,11 @@ export type RenameSpaceRequest = {
 
 export type RemoveSpaceRequest = {
   path: string;
+  browserProfileId?: string;
+  /** Authority injected by Main after its read-only binding lookup. */
+  profile?: string;
+  spaceScope?: NativeSpaceScope;
+  nativeBridgeNonce?: string;
 };
 
 export type ReorderSpacesRequest = {
@@ -731,7 +813,11 @@ export async function requestWebui(
   appendQuery(url, request.query);
 
   const headers: Record<string, string> = { ...authHeader(), ...(request.headers || {}) };
-  if (_sidekickAuthCookie && !headers.cookie) headers.cookie = _sidekickAuthCookie;
+  if (request.profile !== undefined) {
+    for (const key of Object.keys(headers)) if (key.toLowerCase() === 'cookie') delete headers[key];
+    const profileCookie = profileScopeHeaders(request.profile).cookie;
+    headers.cookie = [_sidekickAuthCookie, profileCookie].filter(Boolean).join('; ');
+  } else if (_sidekickAuthCookie && !headers.cookie) headers.cookie = _sidekickAuthCookie;
   const init: RequestInit = { method, headers };
   if (method !== 'GET' && request.body !== undefined) {
     headers['content-type'] = headers['content-type'] || 'application/json';
@@ -972,10 +1058,11 @@ export function createSidekickSession(
   if (request.model?.trim()) body.model = request.model.trim();
   if (request.modelProvider !== undefined) body.model_provider = request.modelProvider;
   if (request.profile?.trim()) body.profile = request.profile.trim();
+  if (request.spaceScope) body.space_scope = request.spaceScope;
 
   return jsonRequest(webuiUrl, '/api/session/new', {
     method: 'POST',
-    headers: profileScopeHeaders(request.profile),
+    headers: { ...profileScopeHeaders(request.profile), ...(request.spaceScope && request.nativeBridgeNonce ? { 'X-Lastbrowser-Bridge-Token': request.nativeBridgeNonce } : {}) },
     body: JSON.stringify(body)
   }, fetchImpl);
 }
@@ -1200,7 +1287,12 @@ export function removeSpace(
 ): Promise<{ workspaces?: SpaceSummary[]; [key: string]: unknown }> {
   return jsonRequest(webuiUrl, '/api/workspaces/remove', {
     method: 'POST',
-    body: JSON.stringify({ path: request.path })
+    headers: {
+      ...profileScopeHeaders(request.profile),
+      ...(request.spaceScope && request.nativeBridgeNonce
+        ? { 'X-Lastbrowser-Bridge-Token': request.nativeBridgeNonce } : {})
+    },
+    body: JSON.stringify({ path: request.path, ...(request.spaceScope ? { space_scope: request.spaceScope } : {}) })
   }, fetchImpl);
 }
 
@@ -2228,6 +2320,8 @@ function sessionCreationScope(request: SidekickMessageRequest): CreateSessionReq
     ...(request.model?.trim() ? { model: request.model.trim() } : {}),
     ...(request.modelProvider !== undefined ? { modelProvider: request.modelProvider } : {}),
     ...(request.profile?.trim() ? { profile: request.profile.trim() } : {}),
+    ...(request.spaceScope ? { spaceScope: request.spaceScope } : {}),
+    ...(request.nativeBridgeNonce ? { nativeBridgeNonce: request.nativeBridgeNonce } : {}),
   };
 }
 
@@ -2259,7 +2353,7 @@ async function getSession(
   return response.session;
 }
 
-async function startChat(webuiUrl: string, session: SessionShape, request: SidekickMessageRequest, fetchImpl: FetchLike): Promise<{ stream_id: string; session_id?: string }> {
+async function startChat(webuiUrl: string, session: SessionShape, request: SidekickMessageRequest, fetchImpl: FetchLike): Promise<{ stream_id: string; session_id?: string; space_scope?: NativeSpaceScope | null }> {
   // Omit `model` entirely when nothing is configured. Sending '' made the
   // backend resolve a stale catalog entry instead of the provider default
   // (observed: "Ring-2.6-1T is no longer available as a free model").
@@ -2270,11 +2364,12 @@ async function startChat(webuiUrl: string, session: SessionShape, request: Sidek
     workspace: request.workspace || session.workspace || '',
     model_provider: request.modelProvider ?? session.model_provider ?? null,
     profile: request.profile || 'default',
-    mode: request.mode || 'action',
     chat_mode: request.chatMode || 'chat',
     sandbox_disabled: request.sandboxDisabled ?? false
   };
+  if (request.mode) body.mode = request.mode;
   if (request.providerAccountEmail?.trim()) body.provider_account_email = request.providerAccountEmail.trim().toLowerCase();
+  if (request.spaceScope) body.space_scope = request.spaceScope;
   if (request.reasoningEffort?.trim()) body.reasoning_effort = request.reasoningEffort.trim();
   if (request.groundingContext && typeof request.groundingContext === 'object') {
     body.grounding_context = {
@@ -2286,16 +2381,233 @@ async function startChat(webuiUrl: string, session: SessionShape, request: Sidek
   if (resolvedModel) body.model = resolvedModel;
   return jsonRequest(webuiUrl, '/api/chat/start', {
     method: 'POST',
-    headers: profileScopeHeaders(request.profile),
+    headers: { ...profileScopeHeaders(request.profile), ...(request.spaceScope && request.nativeBridgeNonce ? { 'X-Lastbrowser-Bridge-Token': request.nativeBridgeNonce } : {}) },
     body: JSON.stringify(body)
   }, fetchImpl);
+}
+
+export interface ChatModeRequest {
+  action: 'get' | 'set';
+  sessionId: string;
+  workspacePath?: string;
+  browserProfileId?: string;
+  profile?: string;
+  spaceScope?: Record<string, unknown>;
+  nativeBridgeNonce?: string;
+  mode?: 'action' | 'plan' | 'grill_me' | 'boost';
+  lifetime?: 'chat' | 'next_turn';
+  expectedRevision?: number;
+  clientRequestId?: string;
+}
+
+export interface GrillRequest extends Omit<ChatModeRequest, 'action' | 'mode' | 'lifetime'> {
+  action: 'get' | 'start' | 'answer' | 'skip' | 'review' | 'resume' | 'finish';
+  objective?: string;
+  topics?: Array<{ id: string; label: string }>;
+  questionId?: string;
+  questionRevision?: number;
+  choiceId?: string;
+  text?: string;
+}
+
+export interface GoalMigrationRequest extends Omit<ChatModeRequest, 'action' | 'mode' | 'lifetime' | 'expectedRevision'> {
+  action: 'review' | 'migrate';
+  expectedSourceRevision?: number;
+  expectedSourceDigest?: string;
+}
+
+export interface NativeChatControlRequest {
+  sessionId: string;
+  streamId: string;
+  command: 'cancel' | 'pause' | 'approval' | 'clarify';
+  workspacePath?: string;
+  browserProfileId?: string;
+  profile?: string;
+  spaceScope?: NativeSpaceScope;
+  nativeBridgeNonce?: string;
+  requestId?: string;
+  choice?: 'once' | 'session' | 'always' | 'deny';
+  response?: string;
+}
+
+export function controlNativeChat(webuiUrl: string, request: NativeChatControlRequest,
+  fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  if (!request.sessionId || !request.streamId || !request.spaceScope || !request.nativeBridgeNonce
+    || !['cancel', 'pause', 'approval', 'clarify'].includes(request.command)) {
+    throw new Error('Native chat controls require the accepted chat, stream and scope.');
+  }
+  return jsonRequest(webuiUrl, '/api/chat/control', { method: 'POST', headers: nativeChatHeaders(request),
+    body: JSON.stringify({ session_id: request.sessionId, stream_id: request.streamId, space_scope: request.spaceScope,
+      command: request.command, ...(request.requestId ? { request_id: request.requestId } : {}),
+      ...(request.choice ? { choice: request.choice } : {}),
+      ...(request.response !== undefined ? { response: request.response } : {}) }) }, fetchImpl);
+}
+
+export interface ModelPolicyRequest {
+  action: 'get' | 'set';
+  sessionId: string;
+  workspacePath?: string;
+  browserProfileId?: string;
+  profile?: string;
+  spaceScope?: NativeSpaceScope;
+  nativeBridgeNonce?: string;
+  draft?: Record<string, unknown>;
+  expectedRevision?: number;
+  clientRequestId?: string;
+}
+
+export function nativeChatReadHeaders(request: { profile?: string; workspacePath?: string; nativeBridgeNonce?: string }): Record<string, string> {
+  return { ...profileScopeHeaders(request.profile), ...(request.nativeBridgeNonce ? { 'X-Lastbrowser-Bridge-Token': request.nativeBridgeNonce } : {}),
+    ...(request.workspacePath ? { 'X-Sidekick-Workspace': request.workspacePath } : {}) };
+}
+const nativeChatHeaders = nativeChatReadHeaders;
+
+export function readNativeChatContext(webuiUrl: string,
+  request: Omit<NativeChatControlRequest, 'command'>, fetchImpl: FetchLike = fetch): Promise<NativeStreamReadProof> {
+  if (!request.sessionId || !request.streamId || !request.spaceScope || !request.nativeBridgeNonce) {
+    throw new Error('Native stream reads require their original Main-owned binding.');
+  }
+  return jsonRequest(webuiUrl, '/api/chat/read-context', { method: 'POST', headers: nativeChatHeaders(request),
+    body: JSON.stringify({ session_id: request.sessionId, stream_id: request.streamId, space_scope: request.spaceScope }) }, fetchImpl);
+}
+
+export function controlModelPolicy(webuiUrl: string, request: ModelPolicyRequest,
+  fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  if (!['get', 'set'].includes(request.action) || !request.sessionId || !request.spaceScope || !request.nativeBridgeNonce) {
+    throw new Error('Model policy requires the original native chat binding.');
+  }
+  if (request.action === 'set' && (!request.draft || !Number.isSafeInteger(request.expectedRevision)
+    || request.expectedRevision! < 0 || !request.clientRequestId)) {
+    throw new Error('Model policy save requires a draft, revision and request identity.');
+  }
+  return jsonRequest(webuiUrl, '/api/chat/model-policy', {
+    method: 'POST',
+    headers: nativeChatHeaders(request),
+    body: JSON.stringify({ action: request.action, session_id: request.sessionId, space_scope: request.spaceScope,
+      ...(request.action === 'set' ? { draft: request.draft, expectedRevision: request.expectedRevision,
+        clientRequestId: request.clientRequestId } : {}) })
+  }, fetchImpl);
+}
+
+export interface PersistentGoalRequest {
+  sessionId: string;
+  args: string;
+  workspacePath?: string;
+  browserProfileId?: string;
+  profile?: string;
+  spaceScope?: NativeSpaceScope;
+  nativeBridgeNonce?: string;
+  model?: string;
+  modelProvider?: string | null;
+  reasoningEffort?: string;
+  expectedRevision?: number;
+  clientRequestId?: string;
+}
+
+export interface ChildHistoryRequest {
+  sessionId: string;
+  workspacePath?: string;
+  browserProfileId?: string;
+  profile?: string;
+  spaceScope?: NativeSpaceScope;
+  nativeBridgeNonce?: string;
+  parentTurnId?: string;
+  afterSequence?: Record<string, number>;
+}
+
+export function readChildHistory(webuiUrl: string, request: ChildHistoryRequest,
+  fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  if (!request.sessionId || !request.spaceScope || !request.nativeBridgeNonce) {
+    throw new Error('Child recovery requires the original native chat binding.');
+  }
+  return jsonRequest(webuiUrl, '/api/chat/children', {
+    method: 'POST',
+    headers: nativeChatHeaders(request),
+    body: JSON.stringify({ session_id: request.sessionId, space_scope: request.spaceScope,
+      ...(request.parentTurnId ? { parent_turn_id: request.parentTurnId } : {}),
+      ...(request.afterSequence ? { after_sequence: request.afterSequence } : {}) })
+  }, fetchImpl);
+}
+
+export function controlPersistentGoal(webuiUrl: string, request: PersistentGoalRequest,
+  fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  if (!request.sessionId || !request.spaceScope || !request.nativeBridgeNonce) {
+    throw new Error('Goal controls require the existing native chat binding.');
+  }
+  return jsonRequest(webuiUrl, '/api/goal', {
+    method: 'POST',
+    headers: nativeChatHeaders(request),
+    body: JSON.stringify({ session_id: request.sessionId, args: request.args,
+      profile: request.profile, space_scope: request.spaceScope,
+      ...(request.workspacePath ? { workspace: request.workspacePath, scope_goals_to_workspace: true } : {}),
+      ...(request.model ? { model: request.model } : {}),
+      ...(request.modelProvider ? { model_provider: request.modelProvider } : {}),
+      ...(request.reasoningEffort ? { reasoning_effort: request.reasoningEffort } : {}),
+      ...(request.expectedRevision !== undefined ? { expected_revision: request.expectedRevision } : {}),
+      ...(request.clientRequestId ? { client_request_id: request.clientRequestId } : {}) })
+  }, fetchImpl);
+}
+
+export function controlChatMode(webuiUrl: string, request: ChatModeRequest,
+  fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  if (!['get', 'set'].includes(request.action) || !request.sessionId || !request.spaceScope || !request.nativeBridgeNonce) {
+    throw new Error('Chat modes require a bound native chat and a purpose action.');
+  }
+  return jsonRequest(webuiUrl, '/api/chat/mode', {
+    method: 'POST',
+    headers: nativeChatHeaders(request),
+    body: JSON.stringify({ action: request.action, session_id: request.sessionId,
+      space_scope: request.spaceScope,
+      ...(request.action === 'set' ? { mode: request.mode, lifetime: request.lifetime,
+        expected_revision: request.expectedRevision, client_request_id: request.clientRequestId } : {}) })
+  }, fetchImpl);
+}
+
+export function controlGrill(webuiUrl: string, request: GrillRequest,
+  fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  if (!['get', 'start', 'answer', 'skip', 'review', 'resume', 'finish'].includes(request.action)
+    || !request.sessionId || !request.spaceScope || !request.nativeBridgeNonce) {
+    throw new Error('Clarification requires an existing native chat and a purpose action.');
+  }
+  return jsonRequest(webuiUrl, '/api/chat/grill', {
+    method: 'POST', headers: nativeChatHeaders(request),
+    body: JSON.stringify({ action: request.action, session_id: request.sessionId,
+      space_scope: request.spaceScope,
+      ...(request.action !== 'get' ? { expected_revision: request.expectedRevision,
+        client_request_id: request.clientRequestId,
+        ...(request.objective !== undefined ? { objective: request.objective } : {}),
+        ...(request.topics !== undefined ? { topics: request.topics } : {}),
+        ...(request.questionId !== undefined ? { questionId: request.questionId } : {}),
+        ...(request.questionRevision !== undefined ? { questionRevision: request.questionRevision } : {}),
+        ...(request.choiceId !== undefined ? { choiceId: request.choiceId } : {}),
+        ...(request.text !== undefined ? { text: request.text } : {}) } : {}) })
+  }, fetchImpl);
+}
+
+export async function controlGoalMigration(webuiUrl: string, request: GoalMigrationRequest,
+  fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  if (!['review', 'migrate'].includes(request.action) || !request.sessionId || !request.spaceScope || !request.nativeBridgeNonce) {
+    throw new Error('Goal migration requires its original native chat and a purpose action.');
+  }
+  const response = await sendJson(webuiUrl, '/api/chat/goal-migration', {
+    method: 'POST', headers: nativeChatHeaders(request),
+    body: JSON.stringify({ action: request.action, session_id: request.sessionId, space_scope: request.spaceScope,
+      ...(request.action === 'migrate' ? { expected_source_revision: request.expectedSourceRevision,
+        expected_source_digest: request.expectedSourceDigest, client_request_id: request.clientRequestId } : {}) })
+  }, fetchImpl);
+  const value: unknown = await response.json();
+  if (!isRecord(value)) throw new Error('Invalid goal migration response.');
+  if (!response.ok && (value.ok !== false || typeof value.error_code !== 'string')) {
+    throw new Error('Goal migration request failed.');
+  }
+  return value;
 }
 
 export async function startSidekickChat(
   webuiUrl: string,
   request: SidekickMessageRequest,
   fetchImpl: FetchLike = fetch
-): Promise<{ sessionId: string; streamId: string }> {
+): Promise<{ sessionId: string; streamId: string; spaceScope?: NativeSpaceScope | null }> {
   const message = request.message.trim();
   if (!message) throw new Error('Sidekick needs a message before it can respond.');
   const session = request.sessionId
@@ -2311,19 +2623,62 @@ export async function startSidekickChat(
   if (!sessionId || !started.stream_id) throw new Error('Sidekick did not return a chat stream.');
   return {
     sessionId,
-    streamId: String(started.stream_id)
+    streamId: String(started.stream_id),
+    ...(Object.hasOwn(started, 'space_scope') ? { spaceScope: started.space_scope } : {})
   };
+}
+
+export type QuickChatBackendRequest = Readonly<{
+  quickChatId: string; scope: NativeSpaceScope; profile: string; workspacePath: string | null;
+  nativeBridgeNonce: string; prompt: string; context?: Readonly<Record<string, string>>;
+  model?: string; modelProvider?: string | null;
+}>;
+export type QuickChatBackendStreamRequest = Omit<QuickChatBackendRequest, 'prompt' | 'context' | 'model' | 'modelProvider'> & { streamId: string };
+
+/** Quickchat uses a private, explicitly tagged Sidekick transcript, never /api/chat/start. */
+export function startQuickChat(webuiUrl: string, request: QuickChatBackendRequest,
+  fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  if (!request.nativeBridgeNonce || !request.quickChatId || !request.prompt.trim()) throw new Error('Quickchat requires its Main-bound scope and prompt.');
+  return jsonRequest(webuiUrl, '/api/quickchat/start', {
+    method: 'POST', headers: nativeChatReadHeaders({ profile: request.profile, workspacePath: request.workspacePath ?? undefined,
+      nativeBridgeNonce: request.nativeBridgeNonce }),
+    body: JSON.stringify({ quick_chat_id: request.quickChatId, space_scope: request.scope, profile: request.profile,
+      workspace: request.workspacePath, prompt: request.prompt, context: request.context,
+      ...(request.model ? { model: request.model } : {}), ...(request.modelProvider ? { model_provider: request.modelProvider } : {}) })
+  }, fetchImpl);
+}
+
+export function cancelQuickChat(webuiUrl: string, request: QuickChatBackendStreamRequest,
+  fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/quickchat/cancel', {
+    method: 'POST', headers: nativeChatReadHeaders({ profile: request.profile, workspacePath: request.workspacePath ?? undefined,
+      nativeBridgeNonce: request.nativeBridgeNonce }),
+    body: JSON.stringify({ quick_chat_id: request.quickChatId, stream_id: request.streamId,
+      space_scope: request.scope, profile: request.profile, workspace: request.workspacePath })
+  }, fetchImpl);
+}
+
+/** Stop the response but retain the private transcript for a later turn. */
+export function stopQuickChat(webuiUrl: string, request: QuickChatBackendStreamRequest,
+  fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/quickchat/stop', {
+    method: 'POST', headers: nativeChatReadHeaders({ profile: request.profile, workspacePath: request.workspacePath ?? undefined,
+      nativeBridgeNonce: request.nativeBridgeNonce }),
+    body: JSON.stringify({ quick_chat_id: request.quickChatId, stream_id: request.streamId,
+      space_scope: request.scope, profile: request.profile, workspace: request.workspacePath })
+  }, fetchImpl);
 }
 
 export function getChatStreamStatus(
   webuiUrl: string,
   streamId: string,
-  fetchImpl: FetchLike = fetch
+  fetchImpl: FetchLike = fetch,
+  readHeaders: Readonly<Record<string, string>> = {}
 ): Promise<Record<string, unknown>> {
   return jsonRequest(
     webuiUrl,
     `/api/chat/stream/status?stream_id=${encodeURIComponent(streamId)}`,
-    {},
+    { headers: readHeaders },
     fetchImpl
   );
 }
@@ -2331,12 +2686,13 @@ export function getChatStreamStatus(
 export function cancelChatStream(
   webuiUrl: string,
   streamId: string,
-  fetchImpl: FetchLike = fetch
+  fetchImpl: FetchLike = fetch,
+  profile?: string
 ): Promise<Record<string, unknown>> {
   return jsonRequest(
     webuiUrl,
     `/api/chat/cancel?stream_id=${encodeURIComponent(streamId)}`,
-    {},
+    { headers: profileScopeHeaders(profile) },
     fetchImpl
   );
 }

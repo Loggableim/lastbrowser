@@ -82,7 +82,7 @@
   <div class="feature-card" style="margin-bottom: 24px;">
     <h2>1. Das Local-First Prinzip</h2>
     <p style="margin-top:10px;">
-      Lastbrowser ist als <strong>Local-First</strong> Anwendung konzipiert. Sämtliche Verläufe, Lesezeichen, geöffnete Tabs, Passwörter, Cookie-Jars und API-Schlüssel werden ausschließlich lokal auf Ihrem Endgerät im Verzeichnis <code>%APPDATA%\Lastbrowser</code> abgelegt. Es existiert keine zentrale Server-Infrastruktur, die diese Daten entgegennimmt oder synchronisiert.
+      Lastbrowser ist als <strong>Local-First</strong> Anwendung konzipiert. Browserprofile mit Verläufen, Lesezeichen, geöffnete Tabs, Passwörter, Cookie-Jars und gespeicherte Zugangsdaten liegen auf Ihrem Endgerät im Verzeichnis <code>%APPDATA%\Lastbrowser</code>. Lastbrowser betreibt keinen zentralen Dienst zur Synchronisierung dieser Profile. Bei externen KI-Anfragen werden die in Abschnitt 3 beschriebenen Daten an den gewählten Anbieter übertragen.
     </p>
   </div>
 
@@ -99,15 +99,16 @@
       Wenn Sie den Nova AI Copilot nutzen, bestimmen Sie selbst, an wen Daten übertragen werden:
     </p>
     <ul style="padding-left:22px;margin:12px 0;color:var(--muted);line-height:1.7;">
-      <li><strong>Lokale Modelle (Ollama):</strong> Wenn Sie Ollama wählen, verlässt kein einziges Prompt-Wort Ihren PC. Die Inferenz erfolgt 100% offline.</li>
-      <li><strong>KI-Anbieter:</strong> Bei der Verbindung externer KI-Dienste gelten die jeweiligen Anbieterbedingungen. Lastbrowser kann je nach Verbindung lokale Anbieter oder externe Dienste verwenden.</li>
+      <li><strong>Lokale Ollama-Modelle:</strong> Wenn Modell und Ollama-Endpunkt auf Ihrem eigenen Rechner laufen, erfolgt die Inferenz lokal. Ein entfernt erreichbarer Ollama-Endpunkt oder ein Cloud-Modell kann Anfragen außerhalb Ihres Rechners verarbeiten.</li>
+      <li><strong>Ollama Cloud und externe KI-Anbieter:</strong> Bei diesen Verbindungen werden Ihre Anfragen und der für die Aufgabe bereitgestellte Kontext, etwa ausgewählte Tab-Inhalte, an den gewählten Anbieter übertragen. Dazu werden die für die Verbindung erforderlichen Zugangsdaten verwendet. Es gelten die Datenschutzbestimmungen und Speicherfristen dieses Anbieters. Eine Cloud-Verbindung ist keine Offline-Verarbeitung.</li>
+      <li><strong>Aufträge und Ziele:</strong> Wenn Sie einen KI-Auftrag oder ein fortlaufendes Ziel starten, können innerhalb dieses Auftrags mehrere Anfragen entstehen. Die Übertragungen richten sich nach den aktivierten Anbietern und den für die Aufgabe freigegebenen Werkzeugen und Inhalten.</li>
     </ul>
   </div>
 
   <div class="feature-card" style="margin-bottom: 24px;">
     <h2>4. Rechte der betroffenen Person (DSGVO)</h2>
     <p style="margin-top:10px;">
-      Da wir keine personenbezogenen Daten auf externen Servern verarbeiten, verbleibt die volle Kontrolle bei Ihnen: Sie können jederzeit über die Einstellungen von Lastbrowser alle temporären Dateien, Caches und Spaces unwiderruflich löschen.
+      Ihre lokal gespeicherten Browserdaten können Sie über die Einstellungen von Lastbrowser löschen. Bei externen KI-Anbietern bleiben bereits übertragene Daten von einer lokalen Löschung unberührt. Auskunfts- und Löschanfragen zu solchen Daten richten sich nach den Datenschutzbestimmungen des jeweiligen Anbieters.
     </p>
   </div>
 

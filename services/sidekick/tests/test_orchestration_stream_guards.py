@@ -378,7 +378,7 @@ def test_enabled_orchestration_stream_runs_persistent_goal_hook(
     monkeypatch.setattr("web.api.kanban_orchestration.clear_webui_kanban_orchestration", lambda: None)
 
     orchestrator_module = importlib.import_module(config_module)
-    monkeypatch.setattr(orchestrator_module, config_loader, lambda: {"enabled": True})
+    monkeypatch.setattr(orchestrator_module, config_loader, lambda **_kwargs: {"enabled": True})
 
     def run_turn(*_args, **_kwargs):
         session.messages.append({"role": "assistant", "content": "Team answer"})

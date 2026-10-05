@@ -825,6 +825,11 @@ def _global_auth_file_path() -> Optional[Path]:
 
     See issue #18594 follow-up (credential_pool shadowing).
     """
+    if os.environ.get("LASTBROWSER_INDEPENDENT_WORKER") == "1":
+        # Dedicated Lastbrowser workers own exactly their captured Home.
+        # Their own default-profile auth.json remains available through
+        # _auth_file_path; shared-root fallback cannot add another account.
+        return None
     try:
         from runtime._compat.shim_constants import get_default_sidekick_root
         global_root = get_default_sidekick_root()
@@ -1796,6 +1801,34 @@ def get_qwen_auth_status() -> Dict[str, Any]:
             "auth_file": str(auth_path),
             "error": str(exc),
         }
+
+
+def get_qwen_profile_pool_auth_status(profile_home: Path) -> Dict[str, Any]:
+    """Report only a Qwen CLI credential explicitly imported into this profile.
+
+    Named profiles must not inherit the process user's ``~/.qwen`` login.
+    Read the profile's auth store directly rather than ``read_credential_pool``,
+    whose compatibility fallback intentionally merges credentials from the
+    global auth store. This status check is read-only and never refreshes.
+    """
+    auth_file = Path(profile_home) / "auth.json"
+    try:
+        payload = json.loads(auth_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        payload = {}
+    pool = payload.get("credential_pool") if isinstance(payload, dict) else None
+    entries = pool.get("qwen-oauth") if isinstance(pool, dict) else None
+    connected = any(
+        isinstance(entry, dict)
+        and entry.get("source") == "manual:qwen_cli"
+        and bool(str(entry.get("access_token") or "").strip())
+        for entry in (entries if isinstance(entries, list) else [])
+    )
+    return {
+        "logged_in": connected,
+        "key_source": "oauth" if connected else "none",
+        "error": None if connected else "Qwen OAuth is not connected to this backend profile.",
+    }
 
 
 # =============================================================================

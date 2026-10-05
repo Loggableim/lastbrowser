@@ -11,10 +11,35 @@ import importlib
 
 import pytest
 
+_AUTH_STATE_GLOBALS = (
+    "_STATE_DIR",
+    "_SESSIONS_FILE",
+    "_LOGIN_ATTEMPTS_FILE",
+    "_STATE_DIR_CACHE",
+    "_STATE_DIR_RESOLVE_CACHE",
+    "_sessions",
+    "_login_attempts",
+    "_ENV_PASSWORD_HASH_CACHE",
+    "_last_prune_at",
+)
+
 
 def _fresh_auth(monkeypatch, tmp_path):
-    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+    home = tmp_path / "home"
+    monkeypatch.setenv("SIDEKICK_HOME", str(home))
+    from web.api import config as config_module
+
+    # config.STATE_DIR is captured at import time. A test may set SIDEKICK_HOME
+    # after collection has already imported the module, so bind this fixture's
+    # actual state path before reloading auth. Reload mutates the module object
+    # in place, so register its prior state globals with monkeypatch first; the
+    # normal fixture teardown then restores both config and auth module state.
+    monkeypatch.setattr(config_module, "STATE_DIR", home / "state" / "webui")
     from web.api import auth as auth_module
+
+    for name in _AUTH_STATE_GLOBALS:
+        if hasattr(auth_module, name):
+            monkeypatch.setattr(auth_module, name, getattr(auth_module, name))
 
     importlib.reload(auth_module)
     return auth_module

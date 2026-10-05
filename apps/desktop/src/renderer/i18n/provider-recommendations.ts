@@ -9,6 +9,7 @@ export type ProviderRecommendationCopy = {
 
 const copy: Record<string, Record<DesktopLocaleId, ProviderRecommendationCopy>> = {
   'openai-codex': {
+    ja: { badge: 'ChatGPT アカウント', headline: 'OpenAI Codex (ChatGPT)', benefits: ['現在のアクセス権が対応している場合に、アカウントでログインできます', '利用可能なモデルや機能はアカウントによって異なります', 'この接続の動作はまだ実際のリクエストで確認されていません'], bestFor: 'ChatGPT アカウントによるアクセスを試したい方に' },
     de: { badge: 'ChatGPT-Konto', headline: 'OpenAI Codex (ChatGPT)', benefits: ['Kontobasierte Anmeldung, sofern der aktuelle Zugang sie unterstützt', 'Verfügbare Modelle und Funktionen hängen vom Konto ab', 'Die Verbindung ist noch nicht live geprüft'], bestFor: 'Für Nutzer, die den ChatGPT-Kontozugang testen möchten' },
     en: { badge: 'ChatGPT account', headline: 'OpenAI Codex (ChatGPT)', benefits: ['Account sign-in where supported by your current access', 'Available models and features depend on the account', 'This connection has not been live-tested'], bestFor: 'For users who want to try ChatGPT account access' },
     es: { badge: 'Cuenta de ChatGPT', headline: 'OpenAI Codex (ChatGPT)', benefits: ['Inicio de sesión con cuenta si tu acceso actual lo permite', 'Los modelos y funciones disponibles dependen de la cuenta', 'Esta conexión no se ha probado en vivo'], bestFor: 'Para quienes quieran probar el acceso con su cuenta de ChatGPT' },
@@ -18,6 +19,7 @@ const copy: Record<string, Record<DesktopLocaleId, ProviderRecommendationCopy>> 
     ru: { badge: 'Аккаунт ChatGPT', headline: 'OpenAI Codex (ChatGPT)', benefits: ['Вход через аккаунт, если это поддерживается вашим доступом', 'Доступные модели и функции зависят от аккаунта', 'Подключение не проверено вживую'], bestFor: 'Для тех, кто хочет попробовать вход через аккаунт ChatGPT' }
   },
   ollama: {
+    ja: { badge: 'ローカル・プライベート', headline: 'Ollama（ローカルモデル）', benefits: ['ローカルリクエストはこの端末内で処理されます', 'ローカルの Ollama カタログからモデルを選択できます', 'ローカルサーバーの起動中はオフラインでも利用できます'], bestFor: 'ローカルでの利用やプライベートな作業に' },
     de: { badge: 'Lokal · private', headline: 'Ollama (lokale Modelle)', benefits: ['Lokale Anfragen bleiben auf deinem Gerät', 'Modelle aus deinem lokalen Ollama-Katalog', 'Funktioniert offline, wenn der lokale Server läuft'], bestFor: 'Für lokale Nutzung und private Workflows' },
     en: { badge: 'Local · private', headline: 'Ollama (local models)', benefits: ['Local requests stay on your device', 'Models from your local Ollama catalog', 'Works offline while the local server is running'], bestFor: 'For local use and private workflows' },
     es: { badge: 'Local · privado', headline: 'Ollama (modelos locales)', benefits: ['Las solicitudes locales permanecen en tu dispositivo', 'Modelos del catálogo local de Ollama', 'Funciona sin conexión mientras el servidor local esté activo'], bestFor: 'Para uso local y flujos de trabajo privados' },
@@ -27,6 +29,7 @@ const copy: Record<string, Record<DesktopLocaleId, ProviderRecommendationCopy>> 
     ru: { badge: 'Локально · конфиденциально', headline: 'Ollama (локальные модели)', benefits: ['Локальные запросы остаются на вашем устройстве', 'Модели из локального каталога Ollama', 'Работает офлайн, пока запущен локальный сервер'], bestFor: 'Для локального использования и приватных задач' }
   },
   openrouter: {
+    ja: { badge: 'API キー', headline: 'OpenRouter（複数プロバイダーのモデル）', benefits: ['1 つのキーで OpenRouter のモデルカタログを利用できます', '提供状況と料金はカタログに基づきます', 'チャットリクエストの動作はまだ実際に確認されていません'], bestFor: '複数のプロバイダーのモデルを比較したい方に' },
     de: { badge: 'API-Schlüssel', headline: 'OpenRouter (Modelle verschiedener Anbieter)', benefits: ['Ein Schlüssel für den OpenRouter-Modellkatalog', 'Verfügbarkeit und Kosten stammen aus dem Katalog', 'Chat-Aufrufe sind noch nicht live geprüft'], bestFor: 'Wenn du Modelle verschiedener Anbieter vergleichen möchtest' },
     en: { badge: 'API key', headline: 'OpenRouter (models from multiple providers)', benefits: ['One key for the OpenRouter model catalog', 'Availability and costs come from the catalog', 'Chat requests have not been live-tested'], bestFor: 'If you want to compare models from multiple providers' },
     es: { badge: 'Clave API', headline: 'OpenRouter (modelos de varios proveedores)', benefits: ['Una clave para el catálogo de modelos de OpenRouter', 'La disponibilidad y los costes proceden del catálogo', 'Las solicitudes de chat no se han probado en vivo'], bestFor: 'Si quieres comparar modelos de varios proveedores' },

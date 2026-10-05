@@ -7,9 +7,29 @@ import {
   formatDashboardDate,
   DASHBOARD_QUICK_ACTIONS,
   DEFAULT_SPEED_DIAL_ITEMS
+  , startPageSpaceWorkspacePath
 } from '../src/renderer/panels/NativeBrowserStartPage.js';
+import { browserStartSpaceCopy,browserStartHistoryCopy } from '../src/renderer/i18n/browser-start-space-copy.js';
+import { desktopLocaleIds } from '../src/renderer/i18n/keys.js';
 
 describe('startpage atmospheric dashboard helpers', () => {
+  it('keeps different Japanese Space names distinct and excludes traversal separators',()=>{
+    expect(startPageSpaceWorkspacePath('調査')).toBe('workspaces/調査');
+    expect(startPageSpaceWorkspacePath('仕事')).toBe('workspaces/仕事');
+    expect(startPageSpaceWorkspacePath('My Research')).toBe('workspaces/my-research');
+    expect(startPageSpaceWorkspacePath('../調査\\秘密')).toBe('workspaces/調査-秘密');
+    expect(startPageSpaceWorkspacePath('🔎')).not.toBe(startPageSpaceWorkspacePath('🔎'));
+  });
+  it('has real translated Space and history states in every website language',()=>{
+    for(const locale of desktopLocaleIds){
+      const space=browserStartSpaceCopy[locale],history=browserStartHistoryCopy[locale];
+      expect(space.noTabs.trim()).toBeTruthy();expect(space.session.trim()).toBeTruthy();expect(space.tabCount(2)).toContain('2');
+      expect(history.empty.trim()).toBeTruthy();expect(history.visits(2)).toContain('2');
+    }
+    expect(browserStartSpaceCopy.en.noTabs).toBe('No tabs');expect(browserStartSpaceCopy.ja.session).toBe('個別のセッション');
+    const source=fs.readFileSync(path.resolve(__dirname,'../src/renderer/panels/NativeBrowserStartPage.tsx'),'utf8');
+    for(const literal of ['>Aktiv<','>Wechseln<','>Eigene Session<','>Neuer Space<','>Name des Space<'])expect(source).not.toContain(literal);
+  });
   it('returns morning greeting between 5:00 and 11:59', () => {
     const d = new Date(2026, 8, 21, 8, 30);
     const res = getDashboardGreeting(d);

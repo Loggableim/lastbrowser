@@ -10,6 +10,7 @@ import re
 import threading
 import time
 import uuid
+import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -26,6 +27,9 @@ try:  # Exposed as a module attribute so tests can monkeypatch it directly.
         format_goal_turn_budget,
         judge_goal,
         normalize_goal_turn_budget,
+        persist_goal_state,
+        GoalRevisionConflict,
+        _COMMAND_RECEIPT,
     )
 except Exception:  # pragma: no cover - depends on installed sidekick-agent
     CONTINUATION_PROMPT_TEMPLATE = ""  # type: ignore
@@ -437,9 +441,11 @@ class _ProfileGoalManager:
         except Exception as exc:
             raise RuntimeError("Failed to read persistent goal state") from exc
         if not raw:
+            self._loaded_revision = 0
             return None
         try:
             state = GoalState.from_json(raw)  # type: ignore[union-attr]
+            self._loaded_revision = state.revision
             # Older goal records have no discriminator and keep their legacy
             # continuation text until the user explicitly resumes/replaces it.
             parsed = json.loads(raw)
@@ -462,11 +468,10 @@ class _ProfileGoalManager:
         if db is None:
             raise RuntimeError("Persistent goal store is unavailable")
         try:
-            serialized = json.loads(state.to_json())
-            run_id = getattr(state, "_goal_run_id", None)
-            if run_id:
-                serialized["_goal_run_id"] = str(run_id)
-            db.set_meta(_meta_key(self.session_id), json.dumps(serialized, ensure_ascii=False))
+            persist_goal_state(db, self.session_id, state, expected_revision=self._loaded_revision)
+            self._loaded_revision = state.revision
+        except GoalRevisionConflict:
+            raise
         except Exception as exc:
             raise RuntimeError("Failed to persist goal state") from exc
 
@@ -603,6 +608,31 @@ class _ProfileGoalManager:
         self._save(self._state)
         self._state = None
 
+    def apply_pending_judge_result(self, *, expected_digest, verdict, reason, parse_failed):
+        """Apply a validated private judge result with the existing durable CAS."""
+        from runtime.independent.contracts import digest_json
+        raw = _profile_db(self.profile_home, space_slug=self.space_slug).get_meta(_meta_key(self.session_id))
+        expected = json.loads(raw) if raw else None
+        if expected is None or digest_json(expected) != expected_digest:
+            raise GoalRevisionConflict("Goal changed during native judge retry")
+        self._state = self._load()
+        state = self._state
+        if (state is None or state.status != "paused" or state.pending_judge_response is None
+                or state.revision != expected.get("revision") or self._run_id() != expected.get("_goal_run_id")):
+            raise GoalRevisionConflict("Goal is no longer awaiting evaluation")
+        if verdict not in {"done", "continue", "unavailable"} or type(parse_failed) is not bool:
+            raise ValueError("Invalid native goal verdict")
+        if verdict == "unavailable":
+            state.last_verdict, state.last_reason = verdict, reason
+            state.paused_reason = "goal judge unavailable; retry /goal resume after restoring the judge provider"
+            self._save(state)
+            return {"status": "paused", "should_continue": False, "continuation_prompt": None,
+                "verdict": verdict, "reason": reason}
+        state.status, state.paused_reason = "active", None
+        return self.evaluate_after_turn(state.pending_judge_response,
+            user_initiated=state.pending_judge_user_initiated,
+            judged_result=(verdict, reason, parse_failed))
+
     def evaluate_after_turn(
         self,
         last_response: str,
@@ -731,7 +761,7 @@ class _ProfileGoalManager:
         }
 
     def next_continuation_prompt(self) -> Optional[str]:
-        if not self._state or self._state.status != "active":
+        if not self._state or self._state.status != "active" or self._state.continuation_owner != "legacy_chat":
             return None
         prompt = CONTINUATION_PROMPT_TEMPLATE.format(goal=self._state.goal)
         run_id = self._run_id()
@@ -743,13 +773,17 @@ class _ProfileGoalManager:
     def consume_continuation(self) -> bool:
         """Persist an idempotent claim for this turn's continuation prompt."""
         state = self._state
-        if not state or state.status != "active":
+        if not state or state.status != "active" or state.continuation_owner != "legacy_chat":
             return False
         turn = int(state.turns_used or 0)
         if int(state.consumed_continuation_turn) == turn:
             return False
         state.consumed_continuation_turn = turn
-        self._save(state)
+        try:
+            self._save(state)
+        except GoalRevisionConflict:
+            self._state = self._load()
+            return False
         return True
 
 
@@ -797,6 +831,9 @@ def _state_payload(
         "paused_reason": getattr(state, "paused_reason", None),
         "pending_judge": getattr(state, "pending_judge_response", None) is not None,
         "session_id": str(session_id).strip() if session_id else "",
+        "revision": int(getattr(state, "revision", 0)),
+        "continuation_owner": getattr(state, "continuation_owner", "legacy_chat"),
+        "owner_run_id": getattr(state, "owner_run_id", None),
         **({"space": space} if space else {}),
     }
 
@@ -826,7 +863,7 @@ def _rearm_unfinished_continuation_claim(
     """
     mgr = _manager(str(session_id or ""), profile_home=profile_home, space_slug=space_slug)
     state = getattr(mgr, "state", None) if mgr is not None else None
-    if state is None or str(getattr(state, "status", "") or "").strip() != "active":
+    if state is None or str(getattr(state, "status", "") or "").strip() != "active" or getattr(state, "continuation_owner", "legacy_chat") != "legacy_chat":
         return False
     turns_used = int(getattr(state, "turns_used", 0) or 0)
     consumed_turn = getattr(state, "consumed_continuation_turn", -1)
@@ -898,12 +935,14 @@ def _payload(
     message_key: str | None = None,
     message_args: list[Any] | None = None,
     retryable: bool = False,
+    revision: int | None = None,
 ) -> Dict[str, Any]:
     body: Dict[str, Any] = {
         "ok": bool(ok),
         "action": action,
         "message": message,
         "goal": _state_payload(state, session_id=session_id, space_slug=space_slug),
+        "revision": int(getattr(state, "revision", 0)) if revision is None else revision,
     }
     if error:
         body["error"] = error
@@ -1168,7 +1207,7 @@ def goal_state_for_session(
     return payload
 
 
-def goal_command_payload(
+def _goal_command_payload(
     session_id: str,
     args: str = "",
     *,
@@ -1177,6 +1216,8 @@ def goal_command_payload(
     space_slug: str | None = None,
     max_turns: Optional[int] = None,
     unlimited: bool = False,
+    _expected_revision: int | None = None,
+    native_judge_retry: bool = False,
 ) -> Dict[str, Any]:
     """Return the WebUI response payload for a /goal command.
 
@@ -1200,22 +1241,28 @@ def goal_command_payload(
         mgr = None
     if mgr is None:
         return _payload(ok=False, action="error", error="unavailable", message="Goals unavailable on this session.", retryable=True, session_id=sid, space_slug=space_slug)
+    if _expected_revision is not None and int(getattr(getattr(mgr, "state", None), "revision", 0)) != _expected_revision:
+        return _payload(ok=False, action="error", error="goal_revision_conflict", message="Goal changed; refresh before retrying.", state=getattr(mgr, "state", None), session_id=sid, space_slug=space_slug)
 
     text = str(args or "").strip()
     lower = text.lower()
+    if lower and lower != "status" and getattr(getattr(mgr, "state", None), "continuation_owner", "legacy_chat") != "legacy_chat":
+        return _payload(ok=False, action="error", error="goal_owned_by_run", message="Use the owning agent run controls.", state=mgr.state, session_id=sid, space_slug=space_slug)
 
     if not text or lower == "status":
         state = getattr(mgr, "state", None)
         status_payload = _goal_status_payload(state)
         state_status = str(getattr(state, "status", "") or "").strip()
         visible_state = None if state_status == "cleared" else state
-        return _payload(action="status", state=visible_state, session_id=sid, space_slug=space_slug, **status_payload)
+        return _payload(action="status", state=visible_state, revision=int(getattr(state, "revision", 0)), session_id=sid, space_slug=space_slug, **status_payload)
 
     if lower == "pause":
         try:
             with _CONTINUATION_LOCK:
                 cancel_goal_continuation(sid, profile_home=profile_home, space_slug=space_slug)
                 state = mgr.pause(reason="user-paused")
+        except GoalRevisionConflict:
+            return _payload(ok=False, action="pause", error="goal_revision_conflict", message="Goal changed; refresh before retrying.", session_id=sid)
         except Exception as exc:
             logger.warning("Could not persist goal pause for session %s: %s", sid, exc)
             return _payload(ok=False, action="pause", error="persistence_failed", message="Goal state could not be saved.", retryable=True, session_id=sid, space_slug=space_slug)
@@ -1250,6 +1297,17 @@ def goal_command_payload(
                     )
                 cancel_goal_continuation(sid, profile_home=profile_home, space_slug=space_slug)
                 has_pending_judge = getattr(state, "pending_judge_response", None) is not None
+                if has_pending_judge and native_judge_retry:
+                    if stream_running:
+                        return _payload(ok=False, action="resume", error="agent_running",
+                            message="A stream is already active.", state=state, session_id=sid, space_slug=space_slug)
+                    if state.status != "paused":
+                        return _payload(ok=False, action="resume", error="goal_revision_conflict",
+                            message="Goal changed; refresh before retrying.", state=state, session_id=sid)
+                    deferred = _payload(action="resume", state=state, session_id=sid, space_slug=space_slug,
+                        message="Retrying the saved goal evaluation.")
+                    deferred["native_judge_retry_pending"] = True
+                    return deferred
                 if not has_pending_judge:
                     state = mgr.resume()
             if has_pending_judge:
@@ -1268,6 +1326,8 @@ def goal_command_payload(
                         session_id=sid,
                         space_slug=space_slug,
                     )
+        except GoalRevisionConflict:
+            return _payload(ok=False, action="resume", error="goal_revision_conflict", message="Goal changed; refresh before retrying.", session_id=sid)
         except Exception as exc:
             logger.warning("Could not persist goal resume for session %s: %s", sid, exc)
             return _payload(ok=False, action="resume", error="persistence_failed", message="Goal state could not be saved.", retryable=True, session_id=sid, space_slug=space_slug)
@@ -1313,11 +1373,14 @@ def goal_command_payload(
             with _CONTINUATION_LOCK:
                 cancel_goal_continuation(sid, profile_home=profile_home, space_slug=space_slug)
                 mgr.clear()
+        except GoalRevisionConflict:
+            return _payload(ok=False, action="clear", error="goal_revision_conflict", message="Goal changed; refresh before retrying.", session_id=sid)
         except Exception as exc:
             logger.warning("Could not persist goal clear for session %s: %s", sid, exc)
             return _payload(ok=False, action="clear", error="persistence_failed", message="Goal state could not be saved.", retryable=True, session_id=sid, space_slug=space_slug)
         return _payload(
             action="clear",
+            revision=getattr(mgr, "_loaded_revision", 0),
             message="Goal cleared." if had else "No active goal.",
             message_key="goal_cleared" if had else "goal_no_goal",
             state=getattr(mgr, "state", None),
@@ -1344,6 +1407,8 @@ def goal_command_payload(
             state = mgr.set(text, max_turns=max_turns, unlimited=unlimited)
     except ValueError as exc:
         return _payload(ok=False, action="set", error="invalid_goal", message=f"Invalid goal: {exc}", session_id=sid, space_slug=space_slug)
+    except GoalRevisionConflict:
+        return _payload(ok=False, action="set", error="goal_revision_conflict", message="Goal changed; refresh before retrying.", session_id=sid)
     except Exception as exc:
         logger.warning("Could not persist goal for session %s: %s", sid, exc)
         return _payload(ok=False, action="set", error="persistence_failed", message="Goal state could not be saved.", retryable=True, session_id=sid, space_slug=space_slug)
@@ -1367,6 +1432,281 @@ def goal_command_payload(
         kickoff_prompt=state.goal,
         space_slug=space_slug,
     )
+
+
+def _command_store(manager: Any):
+    if isinstance(manager, _ProfileGoalManager):
+        return _profile_db(manager.profile_home, space_slug=manager.space_slug)
+    from cli.goals import _get_session_db
+    return _get_session_db()
+
+
+def goal_command_payload(
+    session_id: str, args: str = "", *, stream_running: bool = False,
+    profile_home: str | Path | None = None, space_slug: str | None = None,
+    max_turns: Optional[int] = None, unlimited: bool = False,
+    expected_revision: int | None = None, client_request_id: str | None = None,
+    source_actor: str = "human",
+    human_authorization: dict[str, Any] | None = None,
+    native_judge_retry: bool = False,
+) -> Dict[str, Any]:
+    """Scoped CAS controls with durable receipts in the existing goal store.
+
+    The HTTP adapter supplies the actor from its trusted user ingress. Replayed
+    results never repeat a kickoff. No SQL transaction spans a judge call.
+    """
+    sid = str(session_id or "").strip()
+    text = str(args or "").strip()
+    mutation = bool(text and text.lower() != "status")
+    options = dict(stream_running=stream_running, profile_home=profile_home, space_slug=space_slug,
+                   max_turns=max_turns, unlimited=unlimited)
+    if native_judge_retry:
+        options["native_judge_retry"] = True
+    if native_judge_retry and (human_authorization is None or not client_request_id or expected_revision is None):
+        return _payload(ok=False, action="error", error="native_goal_retry_human_receipt_required",
+            message="Refresh goal state before retrying its evaluation.", session_id=sid)
+    if mutation and source_actor != "human":
+        return _payload(ok=False, action="error", error="human_command_required", message="Goal controls require a user action.", session_id=sid)
+    if human_authorization is not None:
+        from runtime.independent.contracts import Scope
+        expected_fields = {"schemaVersion", "actorRef", "scope", "backendProfileName", "spaceSlug", "sessionId"}
+        if (not isinstance(human_authorization, dict) or set(human_authorization) != expected_fields
+                or human_authorization.get("schemaVersion") != 1
+                or human_authorization.get("actorRef") != "user:desktop"
+                or human_authorization.get("sessionId") != sid
+                or human_authorization.get("spaceSlug") != space_slug
+                or not isinstance(human_authorization.get("backendProfileName"), str)
+                or not human_authorization["backendProfileName"] or source_actor != "human"):
+            raise ValueError("Invalid native goal human authorization")
+        Scope.model_validate(human_authorization["scope"])
+        if not client_request_id or expected_revision is None:
+            raise ValueError("Native goal authorization needs its durable command identity")
+    if expected_revision is not None and (type(expected_revision) is not int or expected_revision < 0):
+        return _payload(ok=False, action="error", error="invalid_revision", message="Invalid goal revision.", session_id=sid)
+    if client_request_id is not None and (not isinstance(client_request_id, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", client_request_id)):
+        return _payload(ok=False, action="error", error="invalid_request_id", message="Invalid command request identity.", session_id=sid)
+    if mutation and client_request_id is not None and expected_revision is None:
+        return _payload(ok=False, action="error", error="missing_revision", message="Refresh goal state before changing it.", session_id=sid)
+    # Keep old lightweight CLI/test integrations available. Production desktop
+    # mutations use a request identity and an explicit profile-bound store.
+    if not mutation or (client_request_id is None and expected_revision is None):
+        return _goal_command_payload(sid, text, **options)
+    try:
+        manager = _manager(sid, profile_home=profile_home, space_slug=space_slug)
+        db = _command_store(manager)
+        if db is None or not getattr(db, "db_path", None):
+            raise RuntimeError("durable goal store unavailable")
+        db_path = str(db.db_path)
+        command_input = {"args": text, "max_turns": max_turns, "unlimited": unlimited,
+            "expected_revision": expected_revision, "actor": source_actor}
+        if human_authorization is not None:
+            command_input["humanAuthorization"] = human_authorization
+        digest = hashlib.sha256(json.dumps(command_input, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        key = "goal-command:" + hashlib.sha256(json.dumps([sid, source_actor, client_request_id or uuid.uuid4().hex]).encode()).hexdigest()
+        with sqlite3.connect(db_path, timeout=1.0, isolation_level=None) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                previous_receipt = conn.execute("SELECT value FROM state_meta WHERE key=?", (key,)).fetchone()
+                if previous_receipt:
+                    receipt = json.loads(previous_receipt[0])
+                    conn.execute("COMMIT")
+                    if receipt["digest"] != digest:
+                        return _payload(ok=False, action="error", error="request_identity_conflict", message="Request identity already used for another command.", session_id=sid)
+                    if receipt["state"] == "pending":
+                        interrupted = time.time() - receipt["started_at"] > 120
+                        return _payload(ok=False, action="error", error="command_interrupted" if interrupted else "command_in_progress",
+                            message="Previous command has no confirmed result; refresh goal state." if interrupted else "Command is still being processed.",
+                            retryable=not interrupted, session_id=sid)
+                    if receipt["state"] == "complete":
+                        result = dict(receipt["result"])
+                    else:  # crash after state commit, before response materialization
+                        state = GoalState.from_json(json.dumps(receipt["goal"]))
+                        result = _payload(action=receipt["action"], message="Command was already applied.",
+                            state=None if state.status == "cleared" else state, session_id=sid, space_slug=space_slug)
+                        result["revision"] = receipt["revision"]
+                    result.pop("kickoff_prompt", None)
+                    result.pop("native_judge_retry", None)
+                    result.pop("native_judge_retry_pending", None)
+                    result["replayed"] = True
+                    return result
+                row = conn.execute("SELECT value FROM state_meta WHERE key=?", (_meta_key(sid),)).fetchone()
+                current = GoalState.from_json(row[0]) if row else None
+                revision = current.revision if current else 0
+                if expected_revision is not None and revision != expected_revision:
+                    conn.execute("COMMIT")
+                    result = _payload(ok=False, action="error", error="goal_revision_conflict", message="Goal changed; refresh before retrying.", state=current, session_id=sid, space_slug=space_slug)
+                    result["revision"] = revision
+                    return result
+                if current and current.continuation_owner != "legacy_chat":
+                    conn.execute("COMMIT")
+                    return _payload(ok=False, action="error", error="goal_owned_by_run", message="Use the owning agent run controls.", state=current, session_id=sid, space_slug=space_slug)
+                action = text.lower() if text.lower() in ("pause", "resume") else "clear" if text.lower() in ("clear", "stop", "done") else "set"
+                receipt = {"digest": digest, "state": "pending", "action": action, "started_at": time.time()}
+                if human_authorization is not None:
+                    receipt["humanAuthorization"] = human_authorization
+                conn.execute("INSERT INTO state_meta(key,value) VALUES (?,?)", (key, json.dumps(receipt)))
+                conn.execute("COMMIT")
+            except BaseException:
+                if conn.in_transaction:
+                    conn.execute("ROLLBACK")
+                raise
+        token = _COMMAND_RECEIPT.set({"db_path": db_path, "session_id": sid, "key": key, "value": receipt})
+        try:
+            result = _goal_command_payload(sid, text, _expected_revision=revision, **options)
+        finally:
+            _COMMAND_RECEIPT.reset(token)
+        # Preserve the goal snapshot written atomically by persist_goal_state.
+        # It contains the actual run discriminator, unlike the public status.
+        saved_receipt = db.get_meta(key)
+        if saved_receipt:
+            committed = json.loads(saved_receipt)
+            if committed.get("digest") != digest:
+                raise RuntimeError("Goal command receipt identity changed")
+            receipt.update(committed)
+        receipt.update(state="complete", result=result)
+        if result.get("native_judge_retry_pending"):
+            from runtime.independent.contracts import digest_json
+            goal_raw = json.loads(db.get_meta(_meta_key(sid)))
+            if (goal_raw.get("revision") != revision or goal_raw.get("status") != "paused"
+                    or not isinstance(goal_raw.get("pending_judge_response"), str)
+                    or not re.fullmatch(r"[0-9a-f]{32}", str(goal_raw.get("_goal_run_id") or ""))
+                    or goal_raw.get("continuation_owner", "legacy_chat") != "legacy_chat"
+                    or goal_raw.get("owner_run_id") is not None):
+                raise GoalRevisionConflict("Goal changed during native retry admission")
+            receipt.update(goal=goal_raw, revision=revision)
+            result["native_judge_retry"] = {"humanCommandRef": key, "humanCommandDigest": digest,
+                "goalRunId": goal_raw["_goal_run_id"], "goalRevision": revision,
+                "goalDigest": digest_json(goal_raw)}
+        db.set_meta(key, json.dumps(receipt, ensure_ascii=False))
+        return result
+    except GoalRevisionConflict:
+        return _payload(ok=False, action="error", error="goal_revision_conflict", message="Goal changed; refresh before retrying.", session_id=sid)
+    except Exception:
+        logger.warning("Durable goal command failed for session %s", sid, exc_info=True)
+        return _payload(ok=False, action="error", error="unavailable", message="Goal command could not be confirmed. Refresh goal state.", retryable=True, session_id=sid)
+
+
+def apply_native_goal_judge_result(context, request, result):
+    """Trusted Parent CAS, after SDK validation and OS exit with writer held."""
+    from runtime.independent.native_goal_retry import NativeGoalRetryRequest, NativeGoalRetryResult, read_retry_goal
+    request = NativeGoalRetryRequest.model_validate(request)
+    result = NativeGoalRetryResult.model_validate(result)
+    with _CONTINUATION_LOCK:
+        read_retry_goal(context, request)
+        if any(getattr(request, field) != getattr(result, field) for field in
+                ("request_id", "scope", "session_id", "stream_id", "goal_run_id", "goal_revision", "goal_digest")):
+            raise GoalRevisionConflict("Native goal judge result belongs to another snapshot")
+        manager = _manager(context.session_id, profile_home=context.profile_home, space_slug=Path(context.space_root).name)
+        if not isinstance(manager, _ProfileGoalManager):
+            raise RuntimeError("Native goal retry requires its own profile store")
+        db = _profile_db(context.profile_home, space_slug=Path(context.space_root).name)
+        receipt = json.loads(db.get_meta(request.human_command_ref))
+        token = _COMMAND_RECEIPT.set({"db_path": str(db.db_path), "session_id": context.session_id,
+            "key": request.human_command_ref, "value": receipt})
+        try:
+            decision = manager.apply_pending_judge_result(expected_digest=request.goal_digest,
+                verdict=result.verdict, reason=result.reason, parse_failed=result.parse_failed)
+        finally:
+            _COMMAND_RECEIPT.reset(token)
+        committed = json.loads(db.get_meta(request.human_command_ref))
+        committed.update(state="complete", result=_payload(action="resume", state=manager.state,
+            session_id=context.session_id, space_slug=Path(context.space_root).name,
+            message="Goal evaluation complete.", decision=decision))
+        db.set_meta(request.human_command_ref, json.dumps(committed, ensure_ascii=False))
+        return {**decision, "goal": _state_payload(manager.state, context.session_id,
+            space_slug=Path(context.space_root).name), "session_id": context.session_id}
+
+
+def native_goal_ingress_authorization(context, *, claim_turn: int) -> dict[str, Any]:
+    """Read the actual consumed goal and its atomically bound human command."""
+    from runtime.independent.native_chat_protocol import verify_native_context
+    from runtime.independent.contracts import digest_json
+    from runtime.independent.policy import PolicyDenied
+    verify_native_context(context)
+    if type(claim_turn) is not int or claim_turn < 0:
+        raise PolicyDenied("native_goal_claim_required")
+    path = Path(context.space_root) / "goals.db"
+    if not path.is_file():
+        raise PolicyDenied("native_goal_authorization_unavailable")
+    slug = Path(context.space_root).name
+    with _CONTINUATION_LOCK:
+        key = _continuation_key(context.session_id, profile_home=context.profile_home, space_slug=slug)
+        if _in_flight_continuation_key(key, claim_turn) not in _IN_FLIGHT_CONTINUATIONS:
+            raise PolicyDenied("native_goal_claim_not_current")
+        with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=1) as conn:
+            conn.execute("BEGIN")
+            row = conn.execute("SELECT value FROM state_meta WHERE key=?", (_meta_key(context.session_id),)).fetchone()
+            if row is None or len(row[0]) > 4 * 1024 * 1024:
+                raise PolicyDenied("native_goal_state_unavailable")
+            state = json.loads(row[0])
+            run_id = state.get("_goal_run_id")
+            if (not isinstance(run_id, str) or not re.fullmatch(r"[0-9a-f]{32}", run_id)
+                    or state.get("status") != "active" or state.get("continuation_owner") != "legacy_chat"
+                    or state.get("owner_run_id") is not None or state.get("turns_used") != claim_turn
+                    or state.get("consumed_continuation_turn") != claim_turn):
+                raise PolicyDenied("native_goal_claim_not_current")
+            authority_key = "native-goal-human:" + context.session_id + ":" + run_id
+            row = conn.execute("SELECT value FROM state_meta WHERE key=?", (authority_key,)).fetchone()
+            if row is None or len(row[0]) > 65536:
+                raise PolicyDenied("native_goal_human_authorization_required")
+            authority = json.loads(row[0])
+            expected = {"schemaVersion": 1, "actorRef": "user:desktop",
+                "scope": context.scope.model_dump(mode="json", by_alias=True), "backendProfileName": context.profile_name,
+                "spaceSlug": slug, "sessionId": context.session_id}
+            objective = {"goal": state.get("goal"), "max_turns": state.get("max_turns")}
+            if authority.get("humanAuthorization") != expected or authority.get("goalDigest") != digest_json(objective):
+                raise PolicyDenied("native_goal_authorization_changed")
+            row = conn.execute("SELECT value FROM state_meta WHERE key=?", (authority.get("commandRef"),)).fetchone()
+            if row is None or len(row[0]) > 4 * 1024 * 1024:
+                raise PolicyDenied("native_goal_command_unavailable")
+            receipt = json.loads(row[0])
+            if (receipt.get("state") not in {"committed", "complete"}
+                    or receipt.get("digest") != authority.get("commandDigest")
+                    or receipt.get("humanAuthorization") != expected
+                    or (receipt.get("goal") or {}).get("_goal_run_id") != run_id):
+                raise PolicyDenied("native_goal_command_unverified")
+    return {"authorizationRef": authority_key, "authorizationDigest": digest_json(authority),
+        "scope": context.scope.model_dump(mode="json", by_alias=True), "sessionId": context.session_id,
+        "goalTurn": claim_turn, "goalRevision": state["revision"], "goalRunId": run_id}
+
+
+def pause_native_goal_without_authorization(context, *, claim_turn: int) -> bool:
+    """Pause only the actual unstarted claim; do not rearm a denied ingress."""
+    from runtime.independent.native_chat_protocol import verify_native_context
+    verify_native_context(context)
+    slug = Path(context.space_root).name
+    key = _continuation_key(context.session_id, profile_home=context.profile_home, space_slug=slug)
+    with _CONTINUATION_LOCK:
+        if _in_flight_continuation_key(key, claim_turn) not in _IN_FLIGHT_CONTINUATIONS:
+            return False
+        manager = _manager(context.session_id, profile_home=context.profile_home, space_slug=slug)
+        state = manager.state
+        if (state is None or state.status != "active" or state.continuation_owner != "legacy_chat"
+                or state.owner_run_id is not None or state.turns_used != claim_turn
+                or state.consumed_continuation_turn != claim_turn):
+            return False
+        manager.pause("native_goal_human_authorization_required")
+        cancel_goal_continuation(context.session_id, profile_home=context.profile_home, space_slug=slug)
+        return True
+
+
+def transfer_goal_continuation_owner(session_id: str, *, profile_home: str | Path, space_slug: str | None,
+    expected_revision: int, continuation_owner: str, owner_run_id: str | None = None) -> Dict[str, Any]:
+    """Trusted broker operation; never exposed as an unvalidated model tool."""
+    if type(expected_revision) is not int or expected_revision < 0:
+        raise ValueError("invalid goal revision")
+    if continuation_owner not in ("legacy_chat", "independent_run") or (continuation_owner == "independent_run" and (not isinstance(owner_run_id, str) or not owner_run_id.strip() or len(owner_run_id) > 128)):
+        raise ValueError("invalid continuation owner")
+    with _CONTINUATION_LOCK:
+        manager = _manager(session_id, profile_home=profile_home, space_slug=space_slug)
+        state = getattr(manager, "state", None)
+        if state is None or state.revision != expected_revision:
+            raise GoalRevisionConflict("goal revision changed")
+        state.continuation_owner = continuation_owner
+        state.owner_run_id = owner_run_id if continuation_owner == "independent_run" else None
+        manager._save(state)
+        cancel_goal_continuation(session_id, profile_home=profile_home, space_slug=space_slug)
+        return _state_payload(state, session_id, space_slug=space_slug)
 
 
 def has_active_goal(
@@ -1400,6 +1740,8 @@ def evaluate_goal_after_turn(
     profile_home: str | Path | None = None,
     space_slug: str | None = None,
     expected_goal_state: Any = _UNSPECIFIED_GOAL_SNAPSHOT,
+    continuation_owner: str = "legacy_chat",
+    owner_run_id: str | None = None,
 ) -> Dict[str, Any]:
     """Evaluate a completed turn without overwriting concurrent user changes."""
     sid = str(session_id or "").strip()
@@ -1429,6 +1771,12 @@ def evaluate_goal_after_turn(
                     "message": "",
                 }
             expected_state = copy.deepcopy(getattr(mgr, "state", None))
+            if expected_state and (
+                getattr(expected_state, "continuation_owner", "legacy_chat") != continuation_owner
+                or (continuation_owner == "independent_run" and getattr(expected_state, "owner_run_id", None) != owner_run_id)
+            ):
+                return {"status": expected_state.status, "should_continue": False, "continuation_prompt": None,
+                        "verdict": "foreign_owner", "reason": "goal continuation belongs to another owner", "message": ""}
             if expected_goal_state is not _UNSPECIFIED_GOAL_SNAPSHOT and (
                 expected_state != expected_goal_state
                 or getattr(expected_state, "_goal_run_id", None)
@@ -1499,4 +1847,7 @@ def evaluate_goal_after_turn(
     decision.setdefault("message", "")
     decision = dict(decision)
     decision = _goal_decision_payload(decision, getattr(commit_mgr, "state", None))
+    if continuation_owner != "legacy_chat":
+        decision["should_continue"] = False
+        decision["continuation_prompt"] = None
     return decision

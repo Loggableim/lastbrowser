@@ -593,6 +593,20 @@ registry.register(
     emoji="🧠",
 )
 
+# Explicit opt-in read/data consumer. Existing memory writes and their authority
+# remain in the original memory tool; no ambient provider is installed.
+from runtime.independent.policy import current_guard, independent_worker
+registry.register(
+    name='independent_memory_recall',toolset='memory',
+    schema={'name':'independent_memory_recall',
+        'description':'Recall from the original run Space memory using explicitly confirmed local embedding roles. Read only; no cloud fallback or memory writes.',
+        'parameters':{'type':'object','properties':{
+            'query':{'type':'string','minLength':1,'maxLength':2048},
+            'target':{'type':'string','enum':['memory','user']}},
+            'required':['query'],'additionalProperties':False}},
+    handler=lambda args,**kw:current_guard().invoke('independent_memory_recall',args),
+    check_fn=independent_worker,emoji='🧠')
+
 
 
 

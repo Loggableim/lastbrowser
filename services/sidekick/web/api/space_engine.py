@@ -1487,14 +1487,15 @@ def create_space(
     *,
     nova_instance: bool = False,
     nova_character: str = "",
+    custom_root: Path | None = None,
 ) -> Space:
     """Create a brand-new space. Raises SpaceExists if slug taken."""
     slug = _normalize_space_slug(slug)
     if not _is_valid_space_slug(slug):
         raise SpaceError(f"invalid space slug: {slug!r}")
-    if get_space(slug):
+    if (Space(slug, custom_root=custom_root).root.exists() if custom_root is not None else get_space(slug)):
         raise SpaceExists(f"space {slug!r} already exists")
-    space = Space(slug, name or slug)
+    space = Space(slug, name or slug, custom_root=custom_root)
     space.root.mkdir(parents=True, exist_ok=True)
     space.memory_dir.mkdir(parents=True, exist_ok=True)
     space.ensure_agent("default", create_soul=True)
@@ -1503,7 +1504,7 @@ def create_space(
     if color:
         cfg["color"] = color
     space.save_config(cfg, mint_space_id=True)
-    if space.slug == DEFAULT_SPACE_SLUG:
+    if space.slug == DEFAULT_SPACE_SLUG and custom_root is None:
         _seed_default_space_from_consciousness()
     elif nova_instance:
         seed_space_with_nova(space, character=nova_character)

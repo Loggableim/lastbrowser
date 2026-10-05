@@ -17,7 +17,8 @@ describe('background chat completion notifications', () => {
       es: 'La respuesta está lista.',
       fr: 'Une réponse est prête.',
       'pt-BR': 'Uma resposta está pronta.',
-      ru: 'Ответ готов.'
+      ru: 'Ответ готов.',
+      ja: '返信が届きました。'
     };
     for (const [locale, body] of Object.entries(translations)) {
       expect(getChatCompletionNotification(locale)).toEqual({ title: 'Lastbrowser', body });

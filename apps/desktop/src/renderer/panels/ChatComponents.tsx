@@ -23,6 +23,7 @@ import {
   Columns3,
   Cpu,
   Layers,
+  ListFilter,
   Loader2,
   Plus,
   Send,
@@ -41,6 +42,27 @@ import { qualifyModelForProvider } from '../provider-model-selection.js';
 import { ReasoningEffortPicker } from '../components/ReasoningEffortPicker.js';
 import { toBionicSegments } from '../utils/bionic-reading.js';
 import { usePanelStore } from '../stores/usePanelStore.js';
+import type { DesktopLocaleId } from '../i18n/keys.js';
+import type { RunState } from '../independent-contracts.js';
+import type { CommandAction, CommandCapabilities, CommandContext } from '../CommandActionContracts.js';
+import { createChatCommandAction, parseChatCommand } from '../chat-command-registry.js';
+import { chatCommandCopy } from '../chat-command-copy.js';
+import { manualModelPickerOptions } from '../model-picker-options.js';
+import { SlashCommandMenu } from './SlashCommandMenu.js';
+import { ChildRunBubbles,childRunLabels } from '../components/ChildRunBubbles.js';
+import type { ChildRunState } from '../child-run-controller.js';
+import { modelPolicyCopy } from '../i18n/model-policy-copy.js';
+import { useChatTranscriptScroll } from '../chat-transcript-scroll.js';
+import { TeamworkProcessCard } from '../components/TeamworkProcessCard.js';
+import type { TeamworkMetadata } from '../teamwork-live-stream.js';
+import './chat-composer.css';
+
+const nativeMessageCopy: Record<DesktopLocaleId,{ you:string; system:string; partial:string }> = {
+  en:{you:'You',system:'System',partial:'Partial output'},de:{you:'Du',system:'System',partial:'Teilausgabe'},
+  es:{you:'Tú',system:'Sistema',partial:'Salida parcial'},fr:{you:'Vous',system:'Système',partial:'Sortie partielle'},
+  it:{you:'Tu',system:'Sistema',partial:'Output parziale'},'pt-BR':{you:'Você',system:'Sistema',partial:'Saída parcial'},
+  ru:{you:'Вы',system:'Система',partial:'Частичный вывод'},ja:{you:'あなた',system:'システム',partial:'途中の出力'},
+};
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -50,6 +72,12 @@ type ComposerMode = 'action' | 'plan';
 // ─── ChatTranscript ──────────────────────────────────────────────────────────
 
 export type ChatTranscriptProps = {
+  childGroups?:readonly ChildRunState[];
+  childParentTurns?:readonly string[];
+  childHistoryUnavailable?:boolean;
+  childHistoryResyncNeeded?:boolean;
+  onChildResync?:(turnId:string)=>void;
+  independentRunState?: RunState;
   activeSession: DesktopSessionDetail | null;
   error: string;
   developerMessages: DesktopChatMessage[];
@@ -68,6 +96,8 @@ export type ChatTranscriptProps = {
 };
 
 export function ChatTranscript({
+  childGroups=[],childParentTurns=[],childHistoryUnavailable=false,childHistoryResyncNeeded=false,onChildResync,
+  independentRunState,
   activeSession,
   error,
   developerMessages,
@@ -85,6 +115,7 @@ export function ChatTranscript({
   serviceStatus
 }: ChatTranscriptProps): React.JSX.Element {
   const { locale, t } = useDesktopI18n();
+  const transcript=useChatTranscriptScroll(activeSession?.session_id??'',{messages,childGroups,pendingUserMessage});
   const numberFormat = new Intl.NumberFormat(locale);
   const normalizedPendingUserMessage = pendingUserMessage.replace(/\s+/g, ' ').trim();
   let lastUserMessageIndex = -1;
@@ -103,27 +134,27 @@ export function ChatTranscript({
     return (
       <div className="chat-transcript chat-state">
         <Loader2 size={22} className="spin" />
-        <span>Loading session...</span>
+        <span>{t('common.loading')}</span>
       </div>
     );
   }
 
-  if (!activeSession && !messages.length) {
+  if (!activeSession && !messages.length && !childGroups.length) {
     return (
       <div className="chat-transcript chat-empty-state">
         <img src={brandAssets.sidekickAvatar} alt="" />
-        <h2>Start a Sidekick chat</h2>
-        <p>Chat, browser actions, planning and workspace runs now use native Lastbrowser UI.</p>
+        <h2>{t('chat.startOrSelect')}</h2>
+        <p>{t('chat.emptyHint')}</p>
         <button type="button" className="primary-action compact" onClick={onCreateSession} disabled={!ready}>
           <Plus size={15} />
-          <span>New chat</span>
+          <span>{t('chat.newSession')}</span>
         </button>
       </div>
     );
   }
 
   return (
-    <div className="chat-transcript">
+    <div ref={transcript} className="chat-transcript">
       {error && <div className="chat-error">{error}</div>}
       {messages.map((message, index) => {
         const isLastAssistant = message.role === 'assistant' && !messages.slice(index + 1).some((item) => item.role === 'assistant');
@@ -142,10 +173,14 @@ export function ChatTranscript({
           </div>
           <div className="message-body">
             <div className="message-meta">
-              <strong>{message.role === 'user' ? 'You' : message.role === 'system' ? 'System' : 'Sidekick'}</strong>
-              {message.pending && <Loader2 size={13} className="spin" />}
+              <strong>{message.role === 'user' ? nativeMessageCopy[locale].you : message.role === 'system' ? nativeMessageCopy[locale].system : 'Sidekick'}</strong>
+              {(message.pending || (message.isPartial === true && message.streaming && (independentRunState === 'running' || independentRunState === 'pausing'))) && <Loader2 size={13} className="spin" />}
+              {message.isPartial === true && <span className="chat-partial-label">{nativeMessageCopy[locale].partial}</span>}
             </div>
             <ChatMessageBody content={String(message.content || '')} />
+            {message.role === 'assistant' && Boolean(message.teamwork && typeof message.teamwork === 'object') && (
+              <TeamworkProcessCard metadata={message.teamwork as TeamworkMetadata} />
+            )}
             {showThinking && reasoning && (
               <details className="chat-reasoning-details">
                 <summary>{t('chat.reasoning')}</summary>
@@ -178,6 +213,13 @@ export function ChatTranscript({
         </article>
         );
       })}
+      {childGroups.map(group=><section key={group.binding.parentTurnId} className="chat-child-turn-group">
+        <p className="child-run-identity">{childRunLabels[locale==='pt-BR'?'pt':locale].children} · {group.binding.parentTurnId}</p>
+        <ChildRunBubbles state={group} locale={locale==='pt-BR'?'pt':locale} onResync={identity=>onChildResync?.(identity.parentTurnId)} renderContent={content=><ChatMessageBody content={content}/>}/>
+      </section>)}
+      {(childHistoryUnavailable||childHistoryResyncNeeded)&&<p className="chat-status-message" role="status">{childRunLabels[locale==='pt-BR'?'pt':locale][childHistoryUnavailable?'stale':'overflow']}</p>}
+      {childParentTurns.filter(turn=>!childGroups.some(group=>group.binding.parentTurnId===turn)).map(turn=><button key={turn} type="button" className="secondary-action compact" onClick={()=>onChildResync?.(turn)}>
+        {childRunLabels[locale==='pt-BR'?'pt':locale].resync} · {turn}</button>)}
       {pendingUserMessage && !pendingUserMessageAlreadyInTranscript && (
         <article className="chat-message user pending">
           <div className="message-avatar"><UserCircle size={17} /></div>
@@ -360,14 +402,22 @@ export function BionicText({ text, enabled = true, as = 'p' }: { text: string; e
 // ─── ChatComposer ─────────────────────────────────────────────────────────────
 
 export type ChatComposerProps = {
+  automaticPolicy?:Readonly<{active:boolean;available:boolean}>;
+  sendBlocked?:boolean;
+  commandContext?: CommandContext;
+  commandCapabilities?: CommandCapabilities;
+  onCommandAction?: (action:CommandAction)=>boolean|void;
   busy: boolean;
   mode: ComposerMode;
   model: string;
   /** Selectable models, grouped by provider. The current model remains visible when empty. */
-  modelOptions: Array<{ provider: string; providerId?: string; models: Array<{ id: string; label: string }> }>;
+  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts?: string[] }> }>;
+  modelCatalogError?: boolean;
+  onRetryModelCatalog?: () => void;
   modelProvider?: string;
   reasoningEffort: string;
   reasoningEfforts: string[];
+  reasoningCapabilityState?: 'loading' | 'unknown' | 'ready';
   profile: string;
   ready: boolean;
   runState: ChatRunState;
@@ -381,21 +431,7 @@ export type ChatComposerProps = {
   onText: (text: string) => void;
 };
 
-type SlashCmd = { name: string; help: string; action: string };
-
-const SLASH_COMMANDS: SlashCmd[] = [
-  { name: 'help', help: 'Show available commands', action: 'local' },
-  { name: 'tabs', help: 'Synthesize open browser tabs (@tabs)', action: 'context' },
-  { name: 'clear', help: 'Clear current conversation', action: 'local' },
-  { name: 'new', help: 'Start a new conversation', action: 'local' },
-  { name: 'compress', help: 'Compress conversation context', action: 'api' },
-  { name: 'model', help: 'Switch model: /model <name>', action: 'api' },
-  { name: 'workspace', help: 'Switch workspace: /workspace <path>', action: 'api' },
-  { name: 'usage', help: 'Show token usage', action: 'api' },
-  { name: 'gquota', help: 'Check Antigravity quota for connected Google accounts', action: 'api' },
-  { name: 'theme', help: 'Toggle theme: /theme <name>', action: 'local' },
-  { name: 'undo', help: 'Undo last exchange', action: 'local' },
-];
+const unavailableCommands:CommandCapabilities={plan:false,grill_me:false,boost:false,goal:false,gquota:false,plugins:false};
 
 /** Derive the last segment of a workspace path for display in the chip row. */
 function workspaceLabel(path?: string | null): string {
@@ -407,13 +443,20 @@ function workspaceLabel(path?: string | null): string {
 }
 
 export function ChatComposer({
+  automaticPolicy,sendBlocked=false,
+  commandContext,
+  commandCapabilities=unavailableCommands,
+  onCommandAction,
   busy,
   mode,
   model,
   modelProvider,
   reasoningEffort,
   reasoningEfforts,
+  reasoningCapabilityState,
   modelOptions,
+  modelCatalogError=false,
+  onRetryModelCatalog,
   profile,
   ready,
   runState,
@@ -426,64 +469,33 @@ export function ChatComposer({
   onStop,
   onText
 }: ChatComposerProps): React.JSX.Element {
-  const { t } = useDesktopI18n();
-  const canSend = ready && text.trim().length > 0 && !busy;
+  const { t,locale } = useDesktopI18n();
+  const commandCopy=chatCommandCopy(locale);
+  const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
 
   const [showSlashDropdown, setShowSlashDropdown] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
-  const slashRef = useRef<HTMLDivElement>(null);
-
-  const filteredSlashCommands = useMemo(
-    () => slashFilter ? SLASH_COMMANDS.filter((c) => c.name.startsWith(slashFilter)) : SLASH_COMMANDS,
-    [slashFilter]
-  );
-
-  // Close slash dropdown on outside click
-  useEffect(() => {
-    if (!showSlashDropdown) return;
-    function handleClick(e: MouseEvent) {
-      if (slashRef.current && !slashRef.current.contains(e.target as Node)) setShowSlashDropdown(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showSlashDropdown]);
-
-  function executeSlashCommand(name: string): void {
+  const [showManualModels, setShowManualModels] = useState(false);
+  const [manualModelSearch, setManualModelSearch] = useState('');
+  const composerInput=useRef<HTMLTextAreaElement>(null);
+  const manualModelTrigger=useRef<HTMLButtonElement>(null);
+  const manualModelSearchInput=useRef<HTMLInputElement>(null);
+  const closeSlashMenu=()=>{setShowSlashDropdown(false);queueMicrotask(()=>composerInput.current?.focus());};
+  useEffect(()=>{if(showManualModels)manualModelSearchInput.current?.focus();},[showManualModels]);
+  function executeCommand(input:string):boolean {
+    if(!commandContext||!onCommandAction)return false;
+    const action=createChatCommandAction(input,'composer',{...commandContext,model,modelProvider,reasoningEffort:reasoningEffort||undefined},commandCapabilities);
+    if(!action)return false;
+    const accepted=onCommandAction(action);
     setShowSlashDropdown(false);
-    const cmd = SLASH_COMMANDS.find((c) => c.name === name);
-    if (!cmd) return;
-
-    if (name === 'help') {
-      const helpText = SLASH_COMMANDS.map((c) => `/${c.name} — ${c.help}`).join('\n');
-      alert(`Available commands:\n\n${helpText}`);
-      return;
-    }
-    if (name === 'clear') {
-      if (confirm('Clear the current conversation?')) onText('');
-      return;
-    }
-    if (name === 'new') {
-      window.location.reload();
-      return;
-    }
-    if (name === 'tabs') {
-      onText(text ? `@tabs ${text}` : '@tabs ');
-      return;
-    }
-    if (name === 'undo') {
-      onText('/undo');
-      onSend('/undo');
-      return;
-    }
-    // For API commands, send as message to agent
-    onText('/' + name);
-    onSend('/' + name, reasoningEffort || undefined);
+    if(action.kind!=='unavailable'&&accepted!==false)onText('');
+    return true;
   }
 
   function handleComposerChange(value: string): void {
     onText(value);
-    if (value.startsWith('/') && value.length > 1 && !value.includes(' ')) {
+    if (value.startsWith('/') && !value.includes(' ')) {
       setSlashFilter(value.slice(1).toLowerCase());
       setShowSlashDropdown(true);
     } else {
@@ -493,107 +505,143 @@ export function ChatComposer({
 
   function submit(event?: FormEvent): void {
     event?.preventDefault();
+    if(ready&&parseChatCommand(text)&&executeCommand(text))return;
     if (!canSend) return;
     setShowSlashDropdown(false);
     onSend(text, reasoningEffort || undefined);
   }
 
   const isTabsActive = /@tabs\b/i.test(text);
+  const reasoningHelp = reasoningCapabilityState === 'loading'
+    ? t('common.loading')
+    : reasoningCapabilityState !== 'ready' || reasoningEfforts.length === 0
+      ? t('chat.reasoningEffortUnavailable')
+      : t('chat.reasoningEffort');
+  const manualModelGroups=manualModelPickerOptions(modelOptions).map(group=>({...group,models:group.models.filter(entry=>
+    `${group.provider} ${entry.label} ${entry.id}`.toLocaleLowerCase().includes(manualModelSearch.trim().toLocaleLowerCase()))}));
 
   return (
     <form className="chat-composer" onSubmit={submit}>
       <div className="composer-toolbar">
-        <div className="composer-mode" role="group" aria-label="Composer mode">
-          <button type="button" className={mode === 'action' ? 'active' : ''} onClick={() => onMode('action')}>
-            <Sparkles size={13} />
-            <span>Action</span>
-          </button>
-          <button type="button" className={mode === 'plan' ? 'active' : ''} onClick={() => onMode('plan')}>
-            <Columns3 size={13} />
-            <span>Plan</span>
+        <div className="composer-toolbar-group composer-command-group">
+          {commandContext&&onCommandAction&&<button type="button" className="composer-command-button" title={commandCopy.menu} aria-label={commandCopy.menu}
+            onClick={()=>{setSlashFilter('');setShowSlashDropdown(current=>!current);}}>/</button>}
+          <div className="composer-mode" role="group" aria-label={`${t('chat.action')} / ${t('chat.plan')}`}>
+            <button type="button" className={mode === 'action' ? 'active' : ''} onClick={() => onMode('action')}>
+              <Sparkles size={13} />
+              <span>{t('chat.action')}</span>
+            </button>
+            <button type="button" className={mode === 'plan' ? 'active' : ''} onClick={() => onMode('plan')}>
+              <Columns3 size={13} />
+              <span>{t('chat.plan')}</span>
+            </button>
+          </div>
+        </div>
+        <div className="composer-toolbar-group composer-context-group">
+          <button
+            type="button"
+            className="composer-tab-btn"
+            onClick={() => {
+              if (isTabsActive) {
+                onText(text.replace(/@tabs\s*/gi, '').trim());
+              } else {
+                onText(text ? `@tabs ${text}` : '@tabs ');
+              }
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              border: 'none',
+              background: isTabsActive ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.06)',
+              color: isTabsActive ? '#38bdf8' : 'rgba(232, 242, 255, 0.65)',
+              padding: '3px 8px',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            title={`@tabs · ${t('browser.chrome.tabs')}`}
+          >
+            <Layers size={13} />
+            <span>@tabs</span>
           </button>
         </div>
-        <button
-          type="button"
-          className="composer-tab-btn"
-          onClick={() => {
-            if (isTabsActive) {
-              onText(text.replace(/@tabs\s*/gi, '').trim());
-            } else {
-              onText(text ? `@tabs ${text}` : '@tabs ');
-            }
-          }}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            border: 'none',
-            background: isTabsActive ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.06)',
-            color: isTabsActive ? '#38bdf8' : 'rgba(232, 242, 255, 0.65)',
-            padding: '3px 8px',
-            borderRadius: '6px',
-            fontSize: '11px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-          title="Offene Browser-Tabs als Kontext einbinden (@tabs)"
-        >
-          <Layers size={13} />
-          <span>@tabs</span>
-        </button>
-        <label className="composer-model" title="Model for this conversation">
-            <Cpu size={13} />
-            <select
-              value={qualifyModelForProvider(model, modelProvider)}
+        <div className="composer-toolbar-group composer-model-group">
+          <label className="composer-model composer-current-model" title={`${model || 'default'} · ${modelProvider || 'current'}`}>
+              <Cpu size={13} />
+              <select
+                aria-label={`${t('chat.model')}: ${model || 'default'}`}
+                title={`${model || 'default'} · ${modelProvider || 'current'}`}
+                value={automaticPolicy?.active?'__lastbrowser_auto_policy__':qualifyModelForProvider(model, modelProvider)}
+                disabled={!ready || running}
+                onChange={(event) => onModelChange(event.target.value)}
+                style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}
+              >
+                {automaticPolicy&&<option value="__lastbrowser_auto_policy__">AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
+                {!automaticPolicy?.active&&!modelOptions.some(group=>!group.providerId&&group.models.some(entry=>entry.id===model))&&
+                  <option value={qualifyModelForProvider(model, modelProvider)}>{model || 'default'} · {modelProvider || 'current'}</option>}
+                {modelOptions.filter(group=>!group.providerId).map((group) => (
+                  <optgroup key={group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
+                    {group.models.map((m) => (
+                      <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+          </label>
+          <button ref={manualModelTrigger} type="button" className="composer-command-button composer-model-trigger" aria-expanded={showManualModels}
+            aria-label={t('chat.chooseModelManually')} title={t('chat.chooseModelManually')}
+            aria-controls="composer-manual-models" onClick={()=>setShowManualModels(open=>!open)}>
+            <ListFilter size={14} aria-hidden="true" />
+            <span>{t('chat.chooseModelShort')}</span>
+          </button>
+          <details className="composer-reasoning-disclosure">
+            <summary title={reasoningHelp} aria-label={t('chat.reasoningEffort')} data-testid="composer-reasoning-toggle">
+              {t('chat.reasoningEffort')}
+            </summary>
+            <ReasoningEffortPicker
+              value={reasoningEffort}
+              efforts={reasoningEfforts}
+              capabilityState={reasoningCapabilityState}
               disabled={!ready || running}
-              onChange={(event) => onModelChange(event.target.value)}
-              style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}
-            >
-              {/* Keep the current model visible even when the catalog has not
-                  loaded yet or the model is no longer offered. */}
-              {!modelOptions.some((group) => group.models.some((m) => m.id === model && (!modelProvider || group.providerId === modelProvider))) && (
-                <option value={qualifyModelForProvider(model, modelProvider)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
-                  {model || 'default'}
-                </option>
-              )}
-              {modelOptions.map((group) => (
-                <optgroup key={group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
-                  {group.models.map((m) => (
-                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
-                      {m.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-        </label>
-        <ReasoningEffortPicker
-          value={reasoningEffort}
-          efforts={reasoningEfforts}
-          disabled={!ready || running}
-          onChange={onReasoningEffort}
-        />
+              onChange={onReasoningEffort}
+            />
+          </details>
+        </div>
       </div>
-      <div className="composer-input-row" ref={slashRef}>
-        {showSlashDropdown && filteredSlashCommands.length > 0 && (
-          <div className="slash-dropdown">
-            {filteredSlashCommands.map((cmd) => (
-              <button key={cmd.name} type="button" className="slash-dropdown-item" onClick={() => executeSlashCommand(cmd.name)}>
-                <span className="slash-cmd-name">/{cmd.name}</span>
-                <span className="slash-cmd-help">{cmd.help}</span>
-                <span className="slash-cmd-badge">{cmd.action}</span>
-              </button>
-            ))}
-          </div>
-        )}
+      {modelCatalogError&&<div className="composer-model-notice" role="alert">
+        <span>{t('chat.modelCatalogUnavailable')}</span>
+        {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
+      </div>}
+      {showManualModels&&<section id="composer-manual-models" className="composer-manual-models" role="region" aria-label={t('chat.chooseModelManually')}
+        onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}}>
+        <label>{t('chat.modelSearch')}<input ref={manualModelSearchInput} type="search" value={manualModelSearch} onChange={event=>setManualModelSearch(event.target.value)}/></label>
+        {manualModelGroups.map(group=><fieldset key={group.providerId||group.provider} disabled={group.configured===false}>
+          <legend>{group.provider}{group.configured===false&&` · ${t(group.disabledReason==='unavailable'?'chat.modelProviderUnavailable':'chat.modelProviderNotConfigured')}`}</legend>
+          {group.models.map(entry=><button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||!ready||running}
+            title={`${entry.label} · ${entry.id}`}
+            aria-pressed={model===entry.id&&modelProvider===group.providerId} onClick={()=>{onModelChange(qualifyModelForProvider(entry.id,group.providerId));setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}>
+            <span className="composer-manual-model-name">{entry.label}</span><small>{entry.id}</small>
+          </button>)}
+        </fieldset>)}
+        {!manualModelGroups.some(group=>group.models.length>0)&&<p role="status">{t('chat.noManualModels')}</p>}
+      </section>}
+      <div className="composer-input-row">
+        {showSlashDropdown&&commandContext&&onCommandAction&&<SlashCommandMenu locale={locale} query={slashFilter} capabilities={commandCapabilities}
+          onChoose={command=>{executeCommand('/'+command.name);}} onClose={closeSlashMenu}/>}
         <textarea
+          ref={composerInput}
           value={text}
           placeholder={ready ? t('chat.composerPlaceholder') : t('chat.runtimeStarting')}
           rows={3}
           disabled={!ready}
           onChange={(event) => handleComposerChange(event.target.value)}
           onKeyDown={(event) => {
+            if(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229)return;
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
               submit();
@@ -602,23 +650,21 @@ export function ChatComposer({
           }}
         />
         {running ? (
-          <button type="button" className="composer-send stop" onClick={onStop}>
+          <button type="button" className="composer-send stop" onClick={onStop} aria-label={t('chat.stop')}>
             <StopCircle size={17} />
           </button>
         ) : (
-          <button type="submit" className="composer-send" disabled={!canSend}>
+          <button type="submit" className="composer-send" disabled={!canSend} aria-label={t('chat.send')}>
             <Send size={17} />
           </button>
         )}
       </div>
       <div className="composer-chips">
-        <span>{mode}</span>
         {isTabsActive && (
           <span style={{ color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.3)', background: 'rgba(56, 189, 248, 0.1)' }}>
-            @tabs aktiv
+            @tabs · {t('browser.chrome.tabs')}
           </span>
         )}
-        <span>{model}</span>
         <span>{profile}</span>
         <span>{workspaceLabel(workspace)}</span>
       </div>

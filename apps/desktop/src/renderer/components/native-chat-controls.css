@@ -1,0 +1,12 @@
+.native-grill-controls,.native-pending-controls { min-width:0; overflow-wrap:anywhere; }
+.native-grill-controls button,.native-pending-controls button { box-sizing:border-box; max-width:100%; margin:3px; padding:7px 10px; border:1px solid var(--border,#46576c); border-radius:6px; color:inherit; background:var(--bg-tertiary,#192536); font:inherit; font-size:.85rem; white-space:normal; cursor:pointer; }
+.native-grill-controls button:hover:not(:disabled),.native-pending-controls button:hover:not(:disabled) { border-color:var(--accent,#75aaff); }
+.native-grill-controls button:disabled,.native-pending-controls button:disabled { opacity:.55; cursor:default; }
+.native-grill-controls textarea,.native-pending-controls textarea { box-sizing:border-box; width:100%; max-width:100%; min-width:0; min-height:80px; padding:8px; border:1px solid var(--border,#46576c); border-radius:6px; color:inherit; background:var(--bg,#101725); font:inherit; resize:vertical; }
+.native-grill-controls button:focus-visible,.native-pending-controls button:focus-visible,.native-grill-controls textarea:focus-visible,.native-pending-controls textarea:focus-visible,.native-grill-controls input:focus-visible { outline:2px solid var(--accent,#75aaff); outline-offset:2px; }
+.native-grill-controls fieldset { min-width:0; margin:0; padding:0; border:0; }
+.native-grill-controls legend { margin-block:10px; font-weight:600; line-height:1.5; }
+.native-grill-controls details summary { padding-block:8px; cursor:pointer; }
+.native-grill-controls p { line-height:1.5; }
+.native-goal-migration-review code { overflow-wrap:anywhere; white-space:normal; }
+.native-goal-migration-review p { overflow-wrap:anywhere; }

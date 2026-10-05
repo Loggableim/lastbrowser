@@ -17,7 +17,7 @@ def get_sidekick_home() -> Path:
 def get_default_sidekick_root() -> Path:
     native_sidekick = Path.home() / ".sidekick"
 
-    env_home = os.environ.get("SIDEKICK_HOME", "")
+    env_home = os.environ.get("SIDEKICK_HOME", "").strip() or os.environ.get("LASTBROWSER_HOME", "").strip()
     if not env_home:
         return native_sidekick
 
@@ -134,3 +134,55 @@ def is_container() -> bool:
 def apply_ipv4_preference() -> None:
     if os.getenv("SIDEKICK_PREFER_IPV4", "").strip().lower() in {"1", "true", "yes"}:
         os.environ.setdefault("RES_OPTIONS", "single-request-reopen")
+
+
+def is_lastbrowser_integrated(root: Path | str | None = None) -> bool:
+    """Return True if Sidekick is running as the integrated backend for Lastbrowser."""
+    explicit = os.getenv("LASTBROWSER_INTEGRATED")
+    if explicit is not None:
+        return explicit.strip().lower() in {"1", "true", "yes"}
+
+    for var in (
+        "LASTBROWSER_HOME",
+        "LASTBROWSER_WEBUI_AGENT_DIR",
+        "LASTBROWSER_BRIDGE_TOKEN",
+        "LASTBROWSER_SIDEKICK_DIR",
+        "LASTBROWSER_WEBUI_PORT",
+    ):
+        if os.getenv(var):
+            return True
+
+    try:
+        target = Path(root).resolve() if root is not None else Path(__file__).resolve()
+        if ".test-tmp" in target.parts:
+            return False
+        candidates = [target, *target.parents]
+        for parent in candidates:
+            # Check for sidekick-source.json manifest (present in both repo and packaged build)
+            manifest = parent / "sidekick-source.json"
+            if manifest.exists():
+                try:
+                    import json
+                    manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+                    if manifest_data.get("mode") == "in-tree-monorepo" or manifest_data.get("source") == "in-tree":
+                        return True
+                except Exception:
+                    return True
+            # Packaged Electron app indicators
+            if (parent / "app.asar").exists() or (parent / "Lastbrowser.exe").exists() or (parent / "resources" / "app.asar").exists():
+                return True
+            pkg_json = parent / "package.json"
+            if pkg_json.exists():
+                try:
+                    import json
+                    data = json.loads(pkg_json.read_text(encoding="utf-8"))
+                    if data.get("name") in ("lastbrowser", "@lastbrowser/desktop"):
+                        return True
+                except Exception:
+                    pass
+            if (parent / "apps" / "desktop").is_dir() and (parent / "services" / "sidekick").is_dir():
+                return True
+    except Exception:
+        pass
+
+    return False

@@ -1,0 +1,42 @@
+.child-run-list { margin-block: .75rem; margin-inline-start: clamp(.75rem, 3vw, 2rem); display: grid; gap: .5rem; }
+.child-run-bubble[data-color-index="0"] { --child-accent: #3b82f6; --child-border: #1d4ed8; }
+.child-run-bubble[data-color-index="1"] { --child-accent: #10b981; --child-border: #047857; }
+.child-run-bubble[data-color-index="2"] { --child-accent: #8b5cf6; --child-border: #6d28d9; }
+.child-run-bubble[data-color-index="3"] { --child-accent: #f59e0b; --child-border: #b45309; }
+.child-run-bubble[data-color-index="4"] { --child-accent: #f43f5e; --child-border: #be123c; }
+.child-run-bubble[data-color-index="5"] { --child-accent: #06b6d4; --child-border: #0e7490; }
+.child-run-bubble[data-color-index="6"] { --child-accent: #6366f1; --child-border: #4338ca; }
+.child-run-bubble[data-color-index="7"] { --child-accent: #84cc16; --child-border: #4d7c0f; }
+.child-run-bubble {
+  background: color-mix(in srgb, var(--bg-secondary, #19202d) 88%, var(--child-accent, #6b83c4));
+  border: 1px solid color-mix(in srgb, var(--child-border, currentColor) 22%, transparent);
+  border-inline-start: 3.5px solid var(--child-accent, #788cc1);
+  border-radius: .65rem;
+  color: inherit;
+  min-width: 0;
+  margin-inline-start: clamp(0rem, calc(var(--child-depth, 0) * 1.25rem), 3.75rem);
+  transition: border-color .2s ease, background-color .2s ease;
+}
+.child-run-bubble summary { cursor: pointer; padding: .7rem; overflow-wrap: anywhere; }
+.child-run-bubble summary:focus-visible, .child-run-content button:focus-visible { outline: 2px solid var(--child-accent, #92b8ff); outline-offset: 3px; }
+.child-run-title { font-weight: 600; margin-inline-end: .75rem; }
+.child-run-status { font-size: .8rem; margin-inline-end: .75rem; display: inline-flex; align-items: center; }
+.child-run-streaming-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--child-accent, #38bdf8);
+  margin-inline-end: 6px;
+  animation: child-streaming-pulse 1.2s ease-in-out infinite;
+  vertical-align: middle;
+}
+@keyframes child-streaming-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+.child-run-model, .child-run-identity { font-size: .75rem; opacity: .8; overflow-wrap: anywhere; }
+.child-run-content { padding: 0 .85rem .85rem; }
+.child-run-message { margin-block: .65rem; overflow-wrap: anywhere; overflow-x: auto; }
+.child-run-plain { white-space: pre-wrap; }
+.child-run-content button { font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: .35rem; padding: .2rem .5rem; }

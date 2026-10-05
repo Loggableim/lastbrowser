@@ -9,7 +9,7 @@
  * - Shared browser grounding
  */
 
-import React, { useEffect, useState, useId } from 'react';
+import React, { useEffect, useState, useId, useRef } from 'react';
 import {
   Users,
   Zap,
@@ -61,7 +61,7 @@ const DEFAULT_CONFIG: TeamworkConfig = {
   strategy: 'balanced',
   auto_scale: true,
   max_subagents: 4,
-  shared_grounding: true,
+  shared_grounding: false,
   roles: {
     planner: 'auto',
     worker_pool: 'auto',
@@ -74,101 +74,163 @@ const DEFAULT_CONFIG: TeamworkConfig = {
   }
 };
 
-export function TeamworkSettingsPanel(): React.JSX.Element {
+type TeamworkSettingsPanelProps = { browserProfileId: string; workspacePath: string | null; backendProfileName?: string | null };
+
+export function TeamworkSettingsPanel({ browserProfileId, workspacePath, backendProfileName }: TeamworkSettingsPanelProps): React.JSX.Element {
   const { t } = useDesktopI18n();
   const [config, setConfig] = useState<TeamworkConfig>(DEFAULT_CONFIG);
   const [initialConfig, setInitialConfig] = useState<TeamworkConfig>(DEFAULT_CONFIG);
   const [activeTab, setActiveTab] = useState<'teamwork' | 'smart-track'>('teamwork');
   const [models, setModels] = useState<DetectedModelItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [configKnown, setConfigKnown] = useState(false);
+  const [catalogKnown, setCatalogKnown] = useState(false);
   const [refreshingModels, setRefreshingModels] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const scopeSelection = React.useMemo(() => ({ browserProfileId, workspacePath,
+    ...(backendProfileName ? { backendProfileName } : {}) }), [browserProfileId, workspacePath, backendProfileName]);
+  const scopeIdentity = JSON.stringify(scopeSelection);
+  const currentScopeRef = useRef(scopeIdentity);
+  const scopeEpochRef = useRef(0);
+  const lastScopeIdentityRef = useRef(scopeIdentity);
+  if (lastScopeIdentityRef.current !== scopeIdentity) {
+    // Advance during render so an A→B→A transition invalidates A's old promise
+    // before any effect or event handler can observe the restored identity.
+    lastScopeIdentityRef.current = scopeIdentity;
+    scopeEpochRef.current += 1;
+  }
+  currentScopeRef.current = scopeIdentity;
+  const [configScopeIdentity, setConfigScopeIdentity] = useState<string | null>(null);
+  const [catalogScopeIdentity, setCatalogScopeIdentity] = useState<string | null>(null);
+  const configReady = configKnown && configScopeIdentity === scopeIdentity;
+  const catalogReady = catalogKnown && catalogScopeIdentity === scopeIdentity;
 
   const plannerSelectId = useId();
   const criticSelectId = useId();
   const synthSelectId = useId();
 
   async function refreshModelCatalog(): Promise<void> {
+    const requestEpoch = scopeEpochRef.current;
     try {
       setRefreshingModels(true);
       setError(null);
       const status = await window.lastbrowser.sidekick.requestWebui({
         method: 'GET',
-        path: '/api/teamwork/status'
+        path: '/api/teamwork/status',
+        scopeSelection
       });
+      if (requestEpoch !== scopeEpochRef.current || currentScopeRef.current !== scopeIdentity) return;
       if (!status || typeof status !== 'object' || !Array.isArray((status as any).models)) {
         throw new Error('The provider model catalog returned an invalid response.');
       }
       setModels((status as any).models);
+      setCatalogKnown(true);
+      setCatalogScopeIdentity(scopeIdentity);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (requestEpoch === scopeEpochRef.current && currentScopeRef.current === scopeIdentity) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      setRefreshingModels(false);
+      if (requestEpoch === scopeEpochRef.current && currentScopeRef.current === scopeIdentity) setRefreshingModels(false);
     }
   }
 
   // Load live config and detected models
   useEffect(() => {
     let alive = true;
+    const requestEpoch = scopeEpochRef.current;
+    setLoading(true);
+    setConfigKnown(false);
+    setConfigScopeIdentity(null);
+    setCatalogKnown(false);
+    setCatalogScopeIdentity(null);
+    setConfig(DEFAULT_CONFIG);
+    setInitialConfig(DEFAULT_CONFIG);
+    setModels([]);
+    setError(null);
+    setSavedSuccess(false);
+    setSaving(false);
+    setRefreshingModels(false);
     async function loadData() {
       try {
-        setLoading(true);
         const [configRes, statusRes] = await Promise.all([
-          window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/config' }),
-          window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/status' })
+          window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/config', scopeSelection }),
+          window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/status', scopeSelection })
         ]);
 
-        if (!alive) return;
+        if (!alive || requestEpoch !== scopeEpochRef.current || currentScopeRef.current !== scopeIdentity) return;
 
-        if (configRes && typeof configRes === 'object') {
-          const merged = { ...DEFAULT_CONFIG, ...configRes };
-          setConfig(merged);
-          setInitialConfig(merged);
+        if (!configRes || typeof configRes !== 'object' || Array.isArray(configRes)) {
+          throw new Error('The Teamwork configuration returned an invalid response.');
         }
+        const merged = { ...DEFAULT_CONFIG, ...configRes };
+        setConfig(merged);
+        setInitialConfig(merged);
+        setConfigKnown(true);
+        setConfigScopeIdentity(scopeIdentity);
 
         if (statusRes && typeof statusRes === 'object' && Array.isArray((statusRes as any).models)) {
           setModels((statusRes as any).models);
+          setCatalogKnown(true);
+          setCatalogScopeIdentity(scopeIdentity);
+        } else {
+          throw new Error('The provider model catalog returned an invalid response.');
         }
       } catch (err) {
-        if (alive) {
+        if (alive && requestEpoch === scopeEpochRef.current && currentScopeRef.current === scopeIdentity) {
+          setConfigKnown(false);
+          setConfigScopeIdentity(null);
+          setCatalogKnown(false);
+          setCatalogScopeIdentity(null);
+          setModels([]);
           setError(err instanceof Error ? err.message : String(err));
         }
       } finally {
-        if (alive) setLoading(false);
+        if (alive && requestEpoch === scopeEpochRef.current && currentScopeRef.current === scopeIdentity) setLoading(false);
       }
     }
     void loadData();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [scopeIdentity, scopeSelection]);
 
   const isDirty = JSON.stringify(config) !== JSON.stringify(initialConfig);
 
   async function handleSave(): Promise<void> {
+    const requestEpoch = scopeEpochRef.current;
+    if (!configReady || loading) return;
     try {
       setSaving(true);
       setError(null);
       const res = await window.lastbrowser.sidekick.requestWebui({
         method: 'POST',
         path: '/api/teamwork/config',
-        body: config
+        body: config,
+        scopeSelection
       });
+      if (requestEpoch !== scopeEpochRef.current || currentScopeRef.current !== scopeIdentity) return;
       if (res && (res as any).config) {
         setConfig((res as any).config);
         setInitialConfig((res as any).config);
+        setConfigScopeIdentity(scopeIdentity);
       } else {
         setInitialConfig(config);
+        setConfigScopeIdentity(scopeIdentity);
       }
       window.dispatchEvent(new Event('lastbrowser:orchestration-config-updated'));
       setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 2800);
+      setTimeout(() => {
+        if (requestEpoch === scopeEpochRef.current && currentScopeRef.current === scopeIdentity) setSavedSuccess(false);
+      }, 2800);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (requestEpoch === scopeEpochRef.current && currentScopeRef.current === scopeIdentity) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      setSaving(false);
+      if (requestEpoch === scopeEpochRef.current && currentScopeRef.current === scopeIdentity) setSaving(false);
     }
   }
 
@@ -257,8 +319,8 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
               <Users size={20} style={{ color: 'var(--accent, #6366f1)' }} />
               <strong style={{ fontSize: '1.1rem' }}>{t('teamwork.header.title')}</strong>
-              <span className="native-rest-pill ready" style={{ fontSize: '0.75rem', padding: '2px 8px' }}>
-                {t('teamwork.header.status')}
+              <span className={`native-rest-pill ${configReady && config.enabled ? 'ready' : ''}`} style={{ fontSize: '0.75rem', padding: '2px 8px' }}>
+                {t(configReady ? (config.enabled ? 'teamwork.status.on' : 'teamwork.status.off') : 'teamwork.status.unknown')}
               </span>
             </div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
@@ -282,7 +344,7 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
               type="button"
               className="primary-action compact"
               onClick={() => void handleSave()}
-              disabled={saving || !isDirty}
+              disabled={saving || loading || !isDirty || !configReady}
               style={{ minWidth: '100px' }}
             >
               {saving ? (
@@ -316,19 +378,21 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
       {/* Global Enable Switch */}
       <SettingsCard
         title={t('teamwork.mode.title')}
-        description={t('teamwork.mode.description')}
+        description={t('teamwork.overview.description')}
       >
-        <SettingsToggle
-          label={t('teamwork.mode.enabled')}
-          description={t('teamwork.mode.enabledDescription')}
-          checked={config.enabled}
-          onChange={(checked) => setConfig((prev) => ({ ...prev, enabled: checked }))}
-        />
+        {configReady ? (
+          <SettingsToggle
+            label={t('teamwork.mode.enabled')}
+            description={t('teamwork.mode.enabledDescription')}
+            checked={config.enabled}
+            onChange={(checked) => setConfig((prev) => ({ ...prev, enabled: checked }))}
+          />
+        ) : <p role="status" style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('teamwork.status.unknown')}</p>}
       </SettingsCard>
 
       {/* Strategy Presets */}
       <SettingsCard
-        title={t('teamwork.strategy.title')}
+        title={t('teamwork.overview.title')}
         description={t('teamwork.strategy.description')}
       >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginTop: '0.5rem' }}>
@@ -336,6 +400,7 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
           <button
             type="button"
             aria-pressed={config.strategy === 'cost'}
+            disabled={!configReady}
             onClick={() => setConfig((prev) => ({ ...prev, strategy: 'cost' }))}
             style={{
               width: '100%',
@@ -357,12 +422,12 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
             <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.9rem' }}>
                 <Zap size={16} style={{ color: '#eab308' }} />
-                <span>{t('teamwork.strategy.cost')}</span>
+                <span>{t('teamwork.preset.cost')}</span>
               </span>
               {config.strategy === 'cost' && <CheckCircle2 size={16} style={{ color: 'var(--accent, #6366f1)' }} />}
             </span>
             <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
-              {t('teamwork.strategy.costDescription')}
+              {t('teamwork.preset.costDescription')}
             </span>
           </button>
 
@@ -370,6 +435,7 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
           <button
             type="button"
             aria-pressed={config.strategy === 'balanced'}
+            disabled={!configReady}
             onClick={() => setConfig((prev) => ({ ...prev, strategy: 'balanced' }))}
             style={{
               width: '100%',
@@ -391,12 +457,12 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
             <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.9rem' }}>
                 <Scale size={16} style={{ color: '#38bdf8' }} />
-                <span>{t('teamwork.strategy.balanced')}</span>
+                <span>{t('teamwork.preset.balanced')}</span>
               </span>
               {config.strategy === 'balanced' && <CheckCircle2 size={16} style={{ color: 'var(--accent, #6366f1)' }} />}
             </span>
             <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
-              {t('teamwork.strategy.balancedDescription')}
+              {t('teamwork.preset.balancedDescription')}
             </span>
           </button>
 
@@ -404,6 +470,7 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
           <button
             type="button"
             aria-pressed={config.strategy === 'quality'}
+            disabled={!configReady}
             onClick={() => setConfig((prev) => ({ ...prev, strategy: 'quality' }))}
             style={{
               width: '100%',
@@ -425,17 +492,40 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
             <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.9rem' }}>
                 <Brain size={16} style={{ color: '#a855f7' }} />
-                <span>{t('teamwork.strategy.quality')}</span>
+                <span>{t('teamwork.preset.quality')}</span>
               </span>
               {config.strategy === 'quality' && <CheckCircle2 size={16} style={{ color: 'var(--accent, #6366f1)' }} />}
             </span>
             <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
-              {t('teamwork.strategy.qualityDescription')}
+              {t('teamwork.preset.qualityDescription')}
             </span>
           </button>
         </div>
       </SettingsCard>
 
+      <SettingsCard title={t('teamwork.provider.title')} description={t('teamwork.provider.note')}>
+        {models.length === 0 ? (
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+            {t(catalogReady ? 'teamwork.provider.none' : 'teamwork.status.unknown')}
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            {Array.from(new Map(models.map((model) => [model.provider, model.provider_label || model.provider])).entries()).map(([provider, label]) => (
+              <span key={provider} className="native-rest-pill" title={t('teamwork.provider.found')}>
+                {label} · {models.filter((model) => model.provider === provider).length}
+              </span>
+            ))}
+          </div>
+        )}
+        <button type="button" className="secondary-action compact" onClick={() => void refreshModelCatalog()} disabled={refreshingModels} style={{ marginTop: '0.65rem' }}>
+          <RefreshCw size={14} className={refreshingModels ? 'spin' : undefined} />
+          <span>{t('teamwork.provider.refresh')}</span>
+        </button>
+      </SettingsCard>
+
+      <details className="settings-card" style={{ padding: '1rem' }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{t('teamwork.advanced')}</summary>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
       {/* Capacity & Auto-Scale */}
       <SettingsCard
         title={t('teamwork.capacity.title')}
@@ -478,6 +568,26 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
             checked={config.shared_grounding}
             onChange={(checked) => setConfig((prev) => ({ ...prev, shared_grounding: checked }))}
           />
+
+          <SettingsToggle
+            label={t('teamwork.fallback.enabled')}
+            description={t('teamwork.fallback.enabledDescription')}
+            checked={config.hot_swap.enabled}
+            disabled={!configReady}
+            onChange={(checked) => setConfig((prev) => ({ ...prev, hot_swap: { ...prev.hot_swap, enabled: checked } }))}
+          />
+          <label style={{ display: 'grid', gap: '0.35rem', maxWidth: '20rem', fontSize: '0.85rem' }}>
+            <span>{t('teamwork.fallback.quorum')}</span>
+            <input
+              type="number"
+              min={1}
+              max={8}
+              value={config.hot_swap.fallback_quorum_min}
+              disabled={!configReady}
+              onChange={(event) => setConfig((prev) => ({ ...prev, hot_swap: { ...prev.hot_swap, fallback_quorum_min: Math.max(1, Math.min(8, Number(event.target.value) || 1)) } }))}
+              style={{ width: '6rem', padding: '0.4rem', borderRadius: '6px', background: 'var(--input-bg, rgba(255,255,255,0.05))', color: 'inherit', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))' }}
+            />
+          </label>
         </div>
       </SettingsCard>
 
@@ -670,6 +780,8 @@ export function TeamworkSettingsPanel(): React.JSX.Element {
           )}
         </div>
       </SettingsCard>
+        </div>
+      </details>
         </>
       )}
     </div>

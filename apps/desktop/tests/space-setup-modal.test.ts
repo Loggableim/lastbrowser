@@ -82,8 +82,9 @@ describe('Space setup validation and model defaults', () => {
     expect(savedData).toMatchObject({ model: 'deepseek-v4.1-flash', modelProvider: 'ollama-cloud' });
 
     const app = readFileSync(resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
-    expect(app).toContain('saveSpaceModel(createdSpacePath, data.model, window.localStorage, data.modelProvider)');
-    expect(app).toContain('setSelectedModelProvider(data.modelProvider || \'\')');
+    expect(app).toContain('saveSpaceModel(createdSpacePath, chosen.value.model, window.localStorage, chosen.value.provider)');
+    expect(app).toContain('setSelectedModelProvider(chosen.value.provider)');
+    expect(app).toContain('expectedRevision: current.value.revision');
   });
 
   it('accepts custom HTTP(S) pinned apps and rejects invalid or unsafe URLs', () => {

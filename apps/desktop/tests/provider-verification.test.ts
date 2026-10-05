@@ -97,7 +97,7 @@ describe('provider verification claims', () => {
       expect(i18n.t('settings.panels.providers.antigravityQuotaOnly')).not.toBe('settings.panels.providers.antigravityQuotaOnly');
       expect(i18n.t('settings.panels.providers.ollamaCloudSourceEvidence')).not.toBe('settings.panels.providers.ollamaCloudSourceEvidence');
       expect(i18n.t('settings.panels.providers.codexSourceEvidence')).not.toBe('settings.panels.providers.codexSourceEvidence');
-      expect(i18n.t('settings.panels.providers.betaUntested').toLowerCase()).toContain(locale === 'ru' ? 'бета' : locale === 'fr' ? 'bêta' : 'beta');
+      expect(i18n.t('settings.panels.providers.betaUntested').toLowerCase()).toContain(locale === 'ru' ? 'бета' : locale === 'fr' ? 'bêta' : locale === 'ja' ? 'ベータ' : 'beta');
     }
   });
 });

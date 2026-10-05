@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
   Check,
+  ChevronLeft,
   ChevronDown,
+  ChevronRight,
   Columns2,
   Download,
   EyeOff,
@@ -36,6 +38,8 @@ import { NovaDock } from './NovaDock.js';
 import { type SidebarDrawerTab, type SidebarMode, type ZenExitDefaultMode, usePanelStore } from '../stores/usePanelStore.js';
 import type { DesktopSessionSummary } from '../shell-state.js';
 import { useDesktopI18n } from '../i18n.js';
+import { useSidebarDrawerEdgeScroll } from './useSidebarDrawerEdgeScroll.js';
+import './sidebar-drawer-tabs.css';
 
 export interface DrawerItem {
   id: LastbrowserPanelId;
@@ -162,6 +166,34 @@ export function SidekickSidebar({
   const [dragOverInfo, setDragOverInfo] = useState<{ id: string; mode: 'before' | 'after' | 'split' } | null>(null);
   const [internalDrawerTab, setInternalDrawerTab] = useState<SidebarDrawerTab>(drawerTab);
   const currentDrawerTab = onSelectDrawerTab ? drawerTab : internalDrawerTab;
+  const drawerTabsRef=useSidebarDrawerEdgeScroll<HTMLDivElement>();
+  const [drawerTabScroll, setDrawerTabScroll] = useState({ hasOverflow: false, atStart: true, atEnd: true });
+  const updateDrawerTabScroll = useCallback(() => {
+    const element = drawerTabsRef.current;
+    if (!element) return;
+    const maxScroll = Math.max(0, element.scrollWidth - element.clientWidth);
+    const next = { hasOverflow: maxScroll > 1, atStart: element.scrollLeft <= 1, atEnd: element.scrollLeft >= maxScroll - 1 };
+    setDrawerTabScroll((current) => current.hasOverflow === next.hasOverflow && current.atStart === next.atStart && current.atEnd === next.atEnd ? current : next);
+  }, [drawerTabsRef]);
+  useEffect(() => {
+    const element = drawerTabsRef.current;
+    if (!element) return;
+    updateDrawerTabScroll();
+    element.addEventListener('scroll', updateDrawerTabScroll, { passive: true });
+    const observer = new ResizeObserver(updateDrawerTabScroll);
+    observer.observe(element);
+    Array.from(element.children).forEach((child) => observer.observe(child));
+    return () => {
+      element.removeEventListener('scroll', updateDrawerTabScroll);
+      observer.disconnect();
+    };
+  }, [drawerTabsRef, updateDrawerTabScroll]);
+  const scrollDrawerTabs = (direction: -1 | 1) => {
+    const element = drawerTabsRef.current;
+    if (!element) return;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    element.scrollBy({ left: direction * Math.max(80, element.clientWidth * 0.9), behavior: reducedMotion ? 'auto' : 'smooth' });
+  };
   const dockSettings = usePanelStore((s) => s.dockSettings);
   const [spacePickerOpen, setSpacePickerOpen] = useState(false);
   const spacePickerRef = useRef<HTMLDivElement | null>(null);
@@ -356,7 +388,13 @@ export function SidekickSidebar({
           </div>
 
           {/* Variante B: Segmented Multi-Tier Drawer Tabs */}
-          <div className="sidebar-drawer-tabs" role="tablist" aria-label={t('sidebar.drawer.sections')}>
+          <div className="sidebar-drawer-tabs-shell">
+          {drawerTabScroll.hasOverflow && (
+            <button type="button" className="sidebar-drawer-scroll-control" aria-label={`${t('sidebar.drawer.sections')}: ${t('common.back')}`} title={`${t('sidebar.drawer.sections')}: ${t('common.back')}`} disabled={drawerTabScroll.atStart} onClick={() => scrollDrawerTabs(-1)}>
+              <ChevronLeft size={15} aria-hidden="true" />
+            </button>
+          )}
+          <div ref={drawerTabsRef} onScroll={updateDrawerTabScroll} className="sidebar-drawer-tabs" role="tablist" aria-label={t('sidebar.drawer.sections')}>
             <button
               type="button"
               role="tab"
@@ -401,6 +439,12 @@ export function SidekickSidebar({
               <Wrench size={13} />
               <span>{t('sidebar.drawer.tools')}</span>
             </button>
+          </div>
+          {drawerTabScroll.hasOverflow && (
+            <button type="button" className="sidebar-drawer-scroll-control" aria-label={`${t('sidebar.drawer.sections')}: ${t('common.next')}`} title={`${t('sidebar.drawer.sections')}: ${t('common.next')}`} disabled={drawerTabScroll.atEnd} onClick={() => scrollDrawerTabs(1)}>
+              <ChevronRight size={15} aria-hidden="true" />
+            </button>
+          )}
           </div>
 
           {/* Drawer Body depending on active drawer tab */}
@@ -595,6 +639,8 @@ export function SidekickSidebar({
                           type="button"
                           className="vtab-close-btn"
                           title={t('sidebar.tabs.close')}
+                          aria-label={t('sidebar.tabs.close')}
+                          onKeyDown={(event) => event.stopPropagation()}
                           onClick={(event) => {
                             event.stopPropagation();
                             onCloseTab(tab.id);

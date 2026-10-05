@@ -1,0 +1,46 @@
+Lastbrowser — fr-FR
+
+DESCRIPTION
+Lastbrowser associe un navigateur Chromium pour Windows à l’assistant IA intégré Nova. Organisez vos pages web dans des onglets verticaux et des espaces de travail, puis utilisez l’assistant à côté de vos pages ouvertes.
+
+Fonctionnalités :
+• Onglets verticaux et espaces de travail pour vos projets web.
+• Assistant IA Nova pour vos questions, résumés et tâches utilisant le contexte des pages web que vous fournissez.
+• Connexion aux fournisseurs d’IA pris en charge avec vos propres identifiants et utilisation de modèles locaux via Ollama.
+• Terminal intégré et prise en charge des extensions du navigateur.
+• Profils du navigateur stockés localement et outils pour effacer les données de navigation.
+
+L’usage personnel est gratuit. L’usage commercial nécessite une licence commerciale distincte. Les services d’IA externes peuvent nécessiter leur propre compte et des services payants. Les modèles d’IA locaux nécessitent une installation locale adaptée. Lorsque vous utilisez des fournisseurs d’IA externes, vos requêtes et le contexte fourni pour la tâche sont transmis au fournisseur sélectionné. Les profils du navigateur sont stockés localement sur votre PC.
+
+SHORT DESCRIPTION
+Navigateur Chromium pour Windows avec onglets verticaux, espaces de travail et assistant IA Nova. Les profils restent locaux ; les services d’IA externes reçoivent les requêtes et contenus que vous fournissez.
+
+PRODUCT FEATURES
+• Onglets verticaux et espaces de travail
+• Assistant IA Nova intégré
+• Fournisseurs d’IA externes pris en charge et modèles Ollama locaux
+• Terminal intégré et extensions du navigateur
+• Profils du navigateur stockés localement
+
+SEARCH TERMS
+navigateur
+navigateur web
+navigateur ia
+onglets verticaux
+assistant ia
+espaces de travail
+local-first
+
+WHAT'S NEW
+Première version de Lastbrowser dans le Microsoft Store.
+
+APPLICABLE LICENSE TERMS
+Lastbrowser peut être utilisé gratuitement à des fins personnelles et non commerciales. L’usage commercial nécessite une licence commerciale distincte. Pour toute demande relative aux licences commerciales : rainer@dominik.in.
+
+Les licences des composants tiers inclus restent applicables indépendamment et accordent les droits décrits pour les composants concernés. L’accès aux services d’IA externes et leur utilisation sont également soumis aux conditions de leur fournisseur.
+
+COPYRIGHT
+© 2026 Dominik Rainer / Lastbrowser.com
+
+DEVELOPED BY
+Dominik Rainer / Lastbrowser.com

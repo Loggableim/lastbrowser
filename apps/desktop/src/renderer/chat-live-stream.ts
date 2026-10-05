@@ -5,6 +5,10 @@ export type LiveChatMessage = {
   pending?: boolean;
   streaming?: boolean;
   progress?: string;
+  chatStreamId?: string;
+  chatStreamSessionId?: string;
+  teamwork?: unknown;
+  isPartial?: boolean;
 };
 
 export type RestoredChatStream = {
@@ -212,10 +216,10 @@ export function preserveInFlightChatMessages<T extends LiveChatMessage>(
 }
 
 /** Attach orchestration activity to the pending bubble without changing answer text. */
-export function applyLiveChatProgress<T extends LiveChatMessage>(messages: T[], progress: string): T[] {
+export function applyLiveChatProgress<T extends LiveChatMessage>(messages: T[], progress: string, streamId?: string): T[] {
   if (!progress) return messages;
   return messages.map((message) => (
-    message.role === 'assistant' && message.pending
+    message.role === 'assistant' && message.pending && (!streamId || message.chatStreamId === streamId)
       ? { ...message, progress }
       : message
   ));
@@ -244,11 +248,13 @@ export function applyLiveChatDelta<T extends LiveChatMessage>(
   messages: T[],
   event: 'token' | 'reasoning',
   text: string,
+  streamId?: string,
 ): T[] {
   if (!text) return messages;
   let index = -1;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i].role === 'assistant' && (messages[i].pending || messages[i].streaming)) {
+    if (messages[i].role === 'assistant' && (messages[i].pending || messages[i].streaming)
+      && (!streamId || messages[i].chatStreamId === streamId)) {
       index = i;
       break;
     }
@@ -275,10 +281,11 @@ export function applyLiveChatDelta<T extends LiveChatMessage>(
   return next;
 }
 
-export function finishLiveChatMessage<T extends LiveChatMessage>(messages: T[]): T[] {
-  return messages.map((message) => message.pending || message.streaming || message.progress
-    ? { ...message, pending: false, streaming: false, progress: undefined }
-    : message);
+export function finishLiveChatMessage<T extends LiveChatMessage>(messages: T[], streamId?: string): T[] {
+  return messages.map((message) => {
+    if (!(message.pending || message.streaming || message.progress) || streamId && message.chatStreamId !== streamId) return message;
+    return { ...message, pending: false, streaming: false, progress: undefined };
+  });
 }
 
 /** Read actionable provider errors from native chat SSE payload variants. */
@@ -306,9 +313,10 @@ export function readNativeChatStreamError(data: unknown): string {
 export function finishLiveChatMessageWithError<T extends LiveChatMessage>(
   messages: T[],
   error: string,
+  streamId?: string,
 ): T[] {
   return messages.map((message) => {
-    if (!(message.pending || message.streaming || message.progress)) return message;
+    if (!(message.pending || message.streaming || message.progress) || streamId && message.chatStreamId !== streamId) return message;
     const hasPartialOutput = Boolean(message.content && message.content !== 'Working on it...') || Boolean(message.reasoning);
     return {
       ...message,

@@ -1148,6 +1148,10 @@ class AIAgent:
         checkpoint_max_total_size_mb: int = 500,
         checkpoint_max_file_size_mb: int = 10,
         pass_session_id: bool = False,
+        runtime_config: Dict[str, Any] | None = None,
+        chat_execution_policy=None,
+        native_auto_bridge=None,
+        native_sdk_bridge=None,
     ):
         """
         Initialize the AI Agent.
@@ -1197,6 +1201,12 @@ class AIAgent:
                 identity even when skip_context_files=True. Project context files from the cwd
                 remain skipped.
         """
+        if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1":
+            # Native context and memory are supplied by the trusted captured
+            # Space. No implicit cwd discovery or memory-plugin imports.
+            skip_context_files = True
+            load_soul_identity = False
+            skip_memory = True
         _install_safe_stdio()
 
         self.model = model
@@ -1226,6 +1236,48 @@ class AIAgent:
         self.skip_context_files = skip_context_files
         self.load_soul_identity = load_soul_identity
         self.pass_session_id = pass_session_id
+        if native_auto_bridge is not None and native_sdk_bridge is not None:
+            raise PermissionError("native_sdk_builder_ambiguous")
+        self._native_sdk_bridge = native_sdk_bridge
+        # Both modes share the sealed SDK/auxiliary fences below. The fixed
+        # bridge retains a fixed decision and never creates an AUTO policy.
+        self._native_auto_bridge = native_auto_bridge or native_sdk_bridge
+        self._native_auto_purpose = "child" if parent_session_id else "conversation"
+        if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1":
+            from runtime.independent.native_chat_auto import get_bound_native_auto_bridge, NativeAutoBridge
+            bound_auto = get_bound_native_auto_bridge()
+            if bound_auto is not None and native_auto_bridge is not bound_auto:
+                raise PermissionError("native_auto_bound_builder_required")
+            from runtime.independent.native_sdk_broker import get_bound_native_sdk_bridge
+            bound_fixed = get_bound_native_sdk_bridge()
+            if bound_fixed is not None and native_sdk_bridge is not bound_fixed:
+                raise PermissionError("native_sdk_bound_builder_required")
+            if bound_auto is None and bound_fixed is None:
+                raise PermissionError("native_sdk_bound_builder_required")
+        if native_auto_bridge is not None:
+            from runtime.independent.native_chat_auto import get_bound_native_auto_bridge, NativeAutoBridge
+            if not isinstance(native_auto_bridge, NativeAutoBridge) or get_bound_native_auto_bridge() is not native_auto_bridge:
+                raise PermissionError("native_auto_bound_builder_required")
+        if native_sdk_bridge is not None:
+            from runtime.independent.native_sdk_broker import NativeFixedSdkBridge, get_bound_native_sdk_bridge
+            if type(native_sdk_bridge) is not NativeFixedSdkBridge or get_bound_native_sdk_bridge() is not native_sdk_bridge:
+                raise PermissionError("native_sdk_bound_builder_required")
+        if self._native_auto_bridge is not None:
+            self._native_auto_bridge.validate_selection(model, provider, api_mode=api_mode)
+            runtime_config = self._native_auto_bridge.runtime_config()
+            fallback_model = []
+            credential_pool = None
+        # A private, instance-owned plan can constrain a bound worker without
+        # changing the process environment or the profile's persisted config.
+        if runtime_config is not None and not isinstance(runtime_config, dict):
+            raise TypeError("runtime_config must be a mapping")
+        self._runtime_config = copy.deepcopy(runtime_config) if runtime_config is not None else None
+        self._runtime_hooks_enabled = self._runtime_config is None or self._runtime_config.get("runtime_hooks_enabled", True) is not False
+        if chat_execution_policy is not None:
+            from runtime.chat_modes import ChatExecutionPolicy
+            if not isinstance(chat_execution_policy, ChatExecutionPolicy):
+                raise TypeError("chat_execution_policy must be a frozen ChatExecutionPolicy")
+        self._chat_execution_policy = chat_execution_policy
         self._credential_pool = credential_pool
         self.log_prefix_chars = log_prefix_chars
         self.log_prefix = f"{log_prefix} " if log_prefix else ""
@@ -1342,7 +1394,8 @@ class AIAgent:
         # AIAgent is created for every gateway request, so without the guard
         # each message leaks one OS thread and the process eventually exhausts
         # the system thread limit (RuntimeError: can't start new thread).
-        if (self.provider == "openrouter" or self._is_openrouter_url()) and \
+        if (self._runtime_config is None or self._runtime_config.get("provider_metadata_prewarm", True) is not False) and \
+                (self.provider == "openrouter" or self._is_openrouter_url()) and \
                 not _openrouter_prewarm_done.is_set():
             _openrouter_prewarm_done.set()
             threading.Thread(
@@ -1584,6 +1637,8 @@ class AIAgent:
                 from runtime.anthropic_adapter import _is_oauth_token as _is_oat
                 self._is_anthropic_oauth = _is_oat(effective_key) if _is_native_anthropic else False
                 self._anthropic_client = build_anthropic_client(effective_key, base_url, timeout=_provider_timeout)
+                if self._native_auto_bridge is not None:
+                    self._anthropic_client = self._native_auto_bridge.wrap(self._anthropic_client, agent=self)
                 # No OpenAI client needed for Anthropic mode
                 self.client = None
                 self._client_kwargs = {}
@@ -1674,6 +1729,8 @@ class AIAgent:
                         pass
             else:
                 # No explicit creds — use the centralized provider router
+                if self._native_auto_bridge is not None:
+                    raise PermissionError("native_sdk_explicit_credentials_required")
                 from runtime.auxiliary_client import resolve_provider_client
                 _routed_client, _ = resolve_provider_client(
                     self.provider or "auto", model=self.model, raw_codex=True)
@@ -1933,7 +1990,7 @@ class AIAgent:
         # Load config once for memory, skills, and compression sections
         try:
             from cli.config import load_config as _load_agent_config
-            _agent_cfg = _load_agent_config()
+            _agent_cfg = copy.deepcopy(self._runtime_config) if self._runtime_config is not None else _load_agent_config()
         except Exception:
             _agent_cfg = {}
         try:
@@ -2250,6 +2307,10 @@ class AIAgent:
         except Exception:
             pass
 
+        if self._native_auto_bridge is not None:
+            # A configured plugin is not a native action capability. Block
+            # before importing/loading custom context engines or their hooks.
+            _engine_name = "compressor"
         if _engine_name != "compressor":
             # Try loading from plugins/context_engine/<name>/
             try:
@@ -2400,7 +2461,7 @@ class AIAgent:
                 self._ollama_num_ctx = int(_ollama_num_ctx_override)
             except (TypeError, ValueError):
                 logger.debug("Invalid ollama_num_ctx config value: %r", _ollama_num_ctx_override)
-        if self._ollama_num_ctx is None and self.base_url and is_local_endpoint(self.base_url):
+        if self._ollama_num_ctx is None and self.base_url and is_local_endpoint(self.base_url) and (self._runtime_config is None or self._runtime_config.get("provider_metadata_prewarm", True) is not False):
             try:
                 _detected = query_ollama_num_ctx(self.model, self.base_url, api_key=self.api_key or "")
                 if _detected and _detected > 0:
@@ -2558,6 +2619,8 @@ class AIAgent:
         """
         Preload the LM Studio model with at least Sidekick's minimum context.
         """
+        if getattr(self, "_native_auto_bridge", None) is not None:
+            return  # Model lifecycle needs its actual Parent-issued runtime lease.
         if (self.provider or "").strip().lower() != "lmstudio":
             return
         try:
@@ -2601,6 +2664,8 @@ class AIAgent:
         change persists across turns (unlike fallback which is
         turn-scoped).
         """
+        if getattr(self, "_native_auto_bridge", None) is not None:
+            raise PermissionError("native_auto_turn_model_frozen")
         from cli.providers import determine_api_mode
 
         # ── Determine api_mode if not provided ──
@@ -3175,6 +3240,9 @@ class AIAgent:
         stored warning through the callback on the first
         ``run_conversation()`` call.
         """
+        if getattr(self, "_native_auto_bridge", None) is not None:
+            self.compression_enabled = False
+            return
         if not self.compression_enabled:
             return
         try:
@@ -4231,6 +4299,8 @@ class AIAgent:
         forked conversation. Writes directly to the shared memory/skill stores.
         Never modifies the main conversation history or produces user-visible output.
         """
+        if getattr(self, "_native_auto_bridge", None) is not None:
+            raise PermissionError("native_auto_auxiliary_review_requires_broker")
         import threading
 
         # Pick the right prompt based on which triggers fired
@@ -6445,6 +6515,12 @@ class AIAgent:
             return None
 
     def _create_openai_client(self, client_kwargs: dict, *, reason: str, shared: bool) -> Any:
+        auto_bridge = getattr(self, "_native_auto_bridge", None)
+        if auto_bridge is not None:
+            auto_bridge.validate_selection(self.model, self.provider, api_mode=self.api_mode)
+            client_kwargs = {**client_kwargs, "max_retries": 0}
+            client = OpenAI(**client_kwargs)
+            return auto_bridge.wrap(client, agent=self)
         from runtime.auxiliary_client import _validate_base_url, _validate_proxy_env_urls
         # Treat client_kwargs as read-only. Callers pass self._client_kwargs (or shallow
         # copies of it) in; any in-place mutation leaks back into the stored dict and is
@@ -7279,6 +7355,39 @@ class AIAgent:
             return len(pool.entries()) > 1
         return pool.has_available()
 
+    def _invoke_runtime_hook(self, name: str, **kwargs):
+        if getattr(self, "_runtime_hooks_enabled", True) is False:
+            return []
+        from cli.plugins import invoke_hook
+        return invoke_hook(name, **kwargs)
+
+    def _runtime_tool_block_message(self, name: str, arguments: dict, **kwargs):
+        from runtime.independent.policy import native_tool_block_reason
+        native_denial = native_tool_block_reason(name, arguments)
+        if native_denial:
+            return native_denial
+        policy = getattr(self, "_chat_execution_policy", None)
+        if policy is not None:
+            from runtime.chat_modes import tool_denial
+            denied = tool_denial(policy, name, arguments)
+            if denied:
+                return denied
+        if getattr(self, "_runtime_hooks_enabled", True) is False:
+            return None
+        from cli.plugins import get_pre_tool_call_block_message
+        return get_pre_tool_call_block_message(name, arguments, **kwargs)
+
+    def _get_bedrock_runtime_client(self, region: str):
+        from runtime.bedrock_adapter import _get_bedrock_runtime_client
+        return _get_bedrock_runtime_client(region)
+
+    def _estimate_runtime_usage_cost(self, usage):
+        if getattr(self, "_native_auto_bridge", None) is not None:
+            from runtime.usage_pricing import CostResult
+            return CostResult(amount_usd=None, status="unknown", source="none", label="n/a")
+        return estimate_usage_cost(self.model, usage, provider=self.provider,
+            base_url=self.base_url, api_key=getattr(self, "api_key", ""))
+
     def _anthropic_messages_create(self, api_kwargs: dict):
         if self.api_mode == "anthropic_messages":
             self._try_refresh_anthropic_client_credentials()
@@ -7309,6 +7418,8 @@ class AIAgent:
                 timeout=get_provider_request_timeout(self.provider, self.model),
                 drop_context_1m_beta=_drop_1m,
             )
+        if getattr(self, "_native_auto_bridge", None) is not None:
+            self._anthropic_client = self._native_auto_bridge.wrap(self._anthropic_client, agent=self)
 
     def _interruptible_api_call(self, api_kwargs: dict):
         """
@@ -7354,7 +7465,7 @@ class AIAgent:
                     )
                     region = api_kwargs.pop("__bedrock_region__", "us-east-1")
                     api_kwargs.pop("__bedrock_converse__", None)
-                    client = _get_bedrock_runtime_client(region)
+                    client = self._get_bedrock_runtime_client(region)
                     try:
                         raw_response = client.converse(**api_kwargs)
                     except Exception as _bedrock_exc:
@@ -7464,8 +7575,12 @@ class AIAgent:
 
     # ── Unified streaming API call ─────────────────────────────────────────
 
-    def _reset_stream_delivery_tracking(self) -> None:
-        """Reset tracking for text delivered during the current model response."""
+    def _flush_stream_delivery_tails(self) -> None:
+        """Deliver only the benign tails of this response's text filters.
+
+        This does not reset visible text or publish a reasoning fallback.
+        Native SDK adapters also call it before settling their owned claim.
+        """
         # Flush any benign partial-tag tail held by the think scrubber
         # first (#17924): an innocent '<' at the end of the stream that
         # turned out not to be a tag prefix should reach the UI.  Then
@@ -7483,12 +7598,17 @@ class AIAgent:
                     think_tail = ctx_scrubber.feed(think_tail)
                 if think_tail:
                     callbacks = [cb for cb in (self.stream_delta_callback, self._stream_callback) if cb is not None]
+                    delivered = False
                     for cb in callbacks:
                         try:
                             cb(think_tail)
+                            delivered = True
                         except Exception:
                             pass
-                    self._record_streamed_assistant_text(think_tail)
+                    if delivered and getattr(self, "_native_auto_bridge", None) is not None:
+                        self._native_auto_bridge.mark_visible_delta(agent=self)
+                    if delivered or os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") != "1":
+                        self._record_streamed_assistant_text(think_tail)
         # Flush any benign partial-tag tail held by the context scrubber so it
         # reaches the UI before we clear state for the next model call.  If
         # the scrubber is mid-span, flush() drops the orphaned content.
@@ -7497,12 +7617,21 @@ class AIAgent:
             tail = scrubber.flush()
             if tail:
                 callbacks = [cb for cb in (self.stream_delta_callback, self._stream_callback) if cb is not None]
+                delivered = False
                 for cb in callbacks:
                     try:
                         cb(tail)
+                        delivered = True
                     except Exception:
                         pass
-                self._record_streamed_assistant_text(tail)
+                if delivered and getattr(self, "_native_auto_bridge", None) is not None:
+                    self._native_auto_bridge.mark_visible_delta(agent=self)
+                if delivered or os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") != "1":
+                    self._record_streamed_assistant_text(tail)
+
+    def _reset_stream_delivery_tracking(self) -> None:
+        """Reset tracking for text delivered during the current model response."""
+        self._flush_stream_delivery_tails()
         self._current_streamed_assistant_text = ""
         # Per-model-response reset: the post-response reasoning fallback in
         # _build_assistant_message fires only when THIS response streamed
@@ -7601,6 +7730,9 @@ class AIAgent:
             except Exception:
                 pass
         if delivered:
+            auto_bridge = getattr(self, "_native_auto_bridge", None)
+            if auto_bridge is not None:
+                auto_bridge.mark_visible_delta(agent=self)
             self._record_streamed_assistant_text(text)
 
     def _fire_reasoning_delta(self, text: str) -> None:
@@ -7667,7 +7799,10 @@ class AIAgent:
             # temporarily so _run_codex_stream can pick it up.
             self._codex_on_first_delta = on_first_delta
             try:
-                return self._interruptible_api_call(api_kwargs)
+                response = self._interruptible_api_call(api_kwargs)
+                if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1":
+                    self._flush_stream_delivery_tails()
+                return response
             finally:
                 self._codex_on_first_delta = None
 
@@ -7696,7 +7831,7 @@ class AIAgent:
                     )
                     region = api_kwargs.pop("__bedrock_region__", "us-east-1")
                     api_kwargs.pop("__bedrock_converse__", None)
-                    client = _get_bedrock_runtime_client(region)
+                    client = self._get_bedrock_runtime_client(region)
                     try:
                         raw_response = client.converse_stream(**api_kwargs)
                     except Exception as _bedrock_exc:
@@ -7737,6 +7872,8 @@ class AIAgent:
                     raise InterruptedError("Agent interrupted during Bedrock API call")
             if result["error"] is not None:
                 raise result["error"]
+            if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1":
+                self._flush_stream_delivery_tails()
             return result["response"]
 
         result = {"response": None, "error": None, "partial_tool_names": []}
@@ -8556,6 +8693,8 @@ class AIAgent:
                     usage=None,
                 )
             raise result["error"]
+        if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1":
+            self._flush_stream_delivery_tails()
         return result["response"]
 
     # ── Provider fallback ──────────────────────────────────────────────────
@@ -8995,6 +9134,8 @@ class AIAgent:
         return str(path), path
 
     def _describe_image_for_anthropic_fallback(self, image_url: str, role: str) -> str:
+        if getattr(self, "_native_auto_bridge", None) is not None:
+            raise PermissionError("native_auto_auxiliary_vision_requires_broker")
         cache_key = hashlib.sha256(str(image_url or "").encode("utf-8")).hexdigest()
         cached = self._anthropic_image_fallback_cache.get(cache_key)
         if cached:
@@ -10215,6 +10356,8 @@ class AIAgent:
         Returns:
             (compressed_messages, new_system_prompt) tuple
         """
+        if getattr(self, "_native_auto_bridge", None) is not None:
+            raise PermissionError("native_auto_auxiliary_compression_requires_broker")
         _pre_msg_count = len(messages)
         logger.info(
             "context compression started: session=%s messages=%d tokens=~%s model=%s focus=%r",
@@ -10471,12 +10614,25 @@ class AIAgent:
         tools. Used by the concurrent execution path; the sequential path retains
         its own inline invocation for backward-compatible display handling.
         """
+        from runtime.independent.policy import native_tool_block_reason
+        native_denial = native_tool_block_reason(function_name, function_args)
+        if native_denial:
+            return json.dumps({"error": native_denial, "denied": True})
+        policy = getattr(self, "_chat_execution_policy", None)
+        if policy is not None:
+            from runtime.chat_modes import tool_denial
+            denied = tool_denial(policy, function_name, function_args)
+            if denied:
+                return json.dumps({"error": denied, "denied": True})
+        from runtime.independent.policy import tool_block_reason
+        independent_denial = tool_block_reason(function_name, function_args)
+        if independent_denial:
+            return json.dumps({"error": independent_denial, "denied": True})
         # Check plugin hooks for a block directive before executing anything.
         block_message: Optional[str] = None
         if not pre_tool_block_checked:
             try:
-                from cli.plugins import get_pre_tool_call_block_message
-                block_message = get_pre_tool_call_block_message(
+                block_message = self._runtime_tool_block_message(
                     function_name, function_args, task_id=effective_task_id or "",
                 )
             except Exception:
@@ -10547,6 +10703,7 @@ class AIAgent:
                 session_id=self.session_id or "",
                 enabled_tools=list(self.valid_tool_names) if self.valid_tool_names else None,
                 skip_pre_tool_call_hook=True,
+                execution_policy=getattr(self, "_chat_execution_policy", None),
             )
 
     @staticmethod
@@ -10597,14 +10754,9 @@ class AIAgent:
 
         # ── Parse args + pre-execution bookkeeping ───────────────────────
         parsed_calls = []  # list of (tool_call, function_name, function_args)
+        mode_blocked_ids = set()
         for tool_call in tool_calls:
             function_name = tool_call.function.name
-
-            # Reset nudge counters
-            if function_name == "memory":
-                self._turns_since_memory = 0
-            elif function_name == "skill_manage":
-                self._iters_since_skill = 0
 
             try:
                 function_args = json.loads(tool_call.function.arguments)
@@ -10612,6 +10764,28 @@ class AIAgent:
                 function_args = {}
             if not isinstance(function_args, dict):
                 function_args = {}
+
+            from runtime.independent.policy import native_tool_block_reason
+            native_denial = native_tool_block_reason(function_name, function_args)
+            if native_denial:
+                mode_blocked_ids.add(tool_call.id)
+                parsed_calls.append((tool_call, function_name, function_args,
+                    json.dumps({"error": native_denial, "denied": True}), False))
+                continue
+            policy = getattr(self, "_chat_execution_policy", None)
+            if policy is not None:
+                from runtime.chat_modes import tool_denial
+                denied = tool_denial(policy, function_name, function_args)
+                if denied:
+                    mode_blocked_ids.add(tool_call.id)
+                    parsed_calls.append((tool_call, function_name, function_args,
+                        json.dumps({"error": denied, "denied": True}), False))
+                    continue
+            # A rejected mode request causes no pre-execution bookkeeping.
+            if function_name == "memory":
+                self._turns_since_memory = 0
+            elif function_name == "skill_manage":
+                self._iters_since_skill = 0
 
             # Checkpoint for file-mutating tools
             if function_name in {"write_file", "patch"} and self._checkpoint_mgr.enabled:
@@ -10638,8 +10812,7 @@ class AIAgent:
             block_result = None
             blocked_by_guardrail = False
             try:
-                from cli.plugins import get_pre_tool_call_block_message
-                block_message = get_pre_tool_call_block_message(
+                block_message = self._runtime_tool_block_message(
                     function_name, function_args, task_id=effective_task_id or "",
                 )
             except Exception:
@@ -10654,6 +10827,12 @@ class AIAgent:
                     blocked_by_guardrail = True
 
             parsed_calls.append((tool_call, function_name, function_args, block_result, blocked_by_guardrail))
+
+        if len(mode_blocked_ids) == len(parsed_calls):
+            for tc, name, args, block_result, _ in parsed_calls:
+                messages.append({"role": "tool", "name": name,
+                    "content": block_result, "tool_call_id": tc.id})
+            return
 
         # ── Logging / callbacks ──────────────────────────────────────────
         tool_names_str = ", ".join(name for _, name, _, _, _ in parsed_calls)
@@ -10861,6 +11040,10 @@ class AIAgent:
         # ── Post-execution: display per-tool results ─────────────────────
         for i, (tc, name, args, block_result, blocked_by_guardrail) in enumerate(parsed_calls):
             r = results[i]
+            if tc.id in mode_blocked_ids:
+                messages.append({"role": "tool", "name": name,
+                    "content": block_result, "tool_call_id": tc.id})
+                continue
             blocked = False
             if r is None:
                 # Tool was cancelled (interrupt) or thread didn't return
@@ -11006,11 +11189,33 @@ class AIAgent:
             if not isinstance(function_args, dict):
                 function_args = {}
 
+            # The serial loop has special handlers outside the registry. Gate
+            # them before hooks, checkpoints, memory or delegation can run.
+            from runtime.independent.policy import native_tool_block_reason
+            native_denial = native_tool_block_reason(function_name, function_args)
+            if native_denial:
+                messages.append({"role": "tool", "name": function_name,
+                    "content": json.dumps({"error": native_denial, "denied": True}), "tool_call_id": tool_call.id})
+                continue
+            policy = getattr(self, "_chat_execution_policy", None)
+            if policy is not None:
+                from runtime.chat_modes import tool_denial
+                denied = tool_denial(policy, function_name, function_args)
+                if denied:
+                    messages.append({"role": "tool", "name": function_name,
+                        "content": json.dumps({"error": denied, "denied": True}), "tool_call_id": tool_call.id})
+                    continue
+            from runtime.independent.policy import tool_block_reason
+            independent_denial = tool_block_reason(function_name, function_args)
+            if independent_denial:
+                messages.append({"role": "tool", "name": function_name,
+                                 "content": json.dumps({"error": independent_denial, "denied": True}),
+                                 "tool_call_id": tool_call.id})
+                continue
             # Check plugin hooks for a block directive before executing.
             _block_msg: Optional[str] = None
             try:
-                from cli.plugins import get_pre_tool_call_block_message
-                _block_msg = get_pre_tool_call_block_message(
+                _block_msg = self._runtime_tool_block_message(
                     function_name, function_args, task_id=effective_task_id or "",
                 )
             except Exception:
@@ -11257,6 +11462,7 @@ class AIAgent:
                         session_id=self.session_id or "",
                         enabled_tools=list(self.valid_tool_names) if self.valid_tool_names else None,
                         skip_pre_tool_call_hook=True,
+                        execution_policy=getattr(self, "_chat_execution_policy", None),
                     )
                     _spinner_result = function_result
                 except Exception as tool_error:
@@ -11277,6 +11483,7 @@ class AIAgent:
                         session_id=self.session_id or "",
                         enabled_tools=list(self.valid_tool_names) if self.valid_tool_names else None,
                         skip_pre_tool_call_hook=True,
+                        execution_policy=getattr(self, "_chat_execution_policy", None),
                     )
                 except Exception as tool_error:
                     function_result = f"Error executing tool '{function_name}': {tool_error}"
@@ -11872,8 +12079,7 @@ class AIAgent:
                 # continuation).  Plugins can use this to initialise
                 # session-scoped state (e.g. warm a memory cache).
                 try:
-                    from cli.plugins import invoke_hook as _invoke_hook
-                    _invoke_hook(
+                    self._invoke_runtime_hook(
                         "on_session_start",
                         session_id=self.session_id,
                         model=self.model,
@@ -11973,8 +12179,7 @@ class AIAgent:
         # All injected context is ephemeral (not persisted to session DB).
         _plugin_user_context = ""
         try:
-            from cli.plugins import invoke_hook as _invoke_hook
-            _pre_results = _invoke_hook(
+            _pre_results = self._invoke_runtime_hook(
                 "pre_llm_call",
                 session_id=self.session_id,
                 user_message=original_user_message,
@@ -12392,8 +12597,7 @@ class AIAgent:
                         api_kwargs = self._get_transport().preflight_kwargs(api_kwargs, allow_stream=False)
 
                     try:
-                        from cli.plugins import invoke_hook as _invoke_hook
-                        _invoke_hook(
+                        self._invoke_runtime_hook(
                             "pre_api_request",
                             task_id=effective_task_id,
                             session_id=self.session_id or "",
@@ -12953,13 +13157,7 @@ class AIAgent:
                             api_duration, _cache_pct,
                         )
 
-                        cost_result = estimate_usage_cost(
-                            self.model,
-                            canonical_usage,
-                            provider=self.provider,
-                            base_url=self.base_url,
-                            api_key=getattr(self, "api_key", ""),
-                        )
+                        cost_result = self._estimate_runtime_usage_cost(canonical_usage)
                         if cost_result.amount_usd is not None:
                             self.session_estimated_cost_usd += float(cost_result.amount_usd)
                         self.session_cost_status = cost_result.status
@@ -14169,10 +14367,9 @@ class AIAgent:
                         assistant_message.content = str(raw)
 
                 try:
-                    from cli.plugins import invoke_hook as _invoke_hook
                     _assistant_tool_calls = getattr(assistant_message, "tool_calls", None) or []
                     _assistant_text = assistant_message.content or ""
-                    _invoke_hook(
+                    self._invoke_runtime_hook(
                         "post_api_request",
                         task_id=effective_task_id,
                         session_id=self.session_id or "",
@@ -15050,6 +15247,7 @@ class AIAgent:
                             ),
                         },
                         task_id=effective_task_id,
+                        execution_policy=getattr(self, "_chat_execution_policy", None),
                     )
                     logger.info(
                         "kanban_block called for task %s after iteration "
@@ -15131,8 +15329,7 @@ class AIAgent:
         # First hook to return a string wins; None/empty return leaves text unchanged.
         if final_response and not interrupted:
             try:
-                from cli.plugins import invoke_hook as _invoke_hook
-                _transform_results = _invoke_hook(
+                _transform_results = self._invoke_runtime_hook(
                     "transform_llm_output",
                     response_text=final_response,
                     session_id=self.session_id or "",
@@ -15152,8 +15349,7 @@ class AIAgent:
         # to an external memory system).
         if final_response and not interrupted:
             try:
-                from cli.plugins import invoke_hook as _invoke_hook
-                _invoke_hook(
+                self._invoke_runtime_hook(
                     "post_llm_call",
                     session_id=self.session_id,
                     user_message=original_user_message,
@@ -15267,8 +15463,7 @@ class AIAgent:
         # Fired at the very end of every run_conversation call.
         # Plugins can use this for cleanup, flushing buffers, etc.
         try:
-            from cli.plugins import invoke_hook as _invoke_hook
-            _invoke_hook(
+            self._invoke_runtime_hook(
                 "on_session_end",
                 session_id=self.session_id,
                 completed=completed,

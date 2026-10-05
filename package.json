@@ -1,6 +1,6 @@
 {
   "name": "lastbrowser",
-  "version": "0.1.43",
+  "version": "0.1.44",
   "private": true,
   "description": "Lastbrowser desktop browser shell with Sidekick integration.",
   "scripts": {
@@ -8,6 +8,7 @@
     "build": "npm --workspace apps/desktop run build",
     "test": "npm --workspace apps/desktop run test",
     "test:run": "npm --workspace apps/desktop run test:run",
+    "prepare:python:online": "npm --workspace apps/desktop run prepare:python:online",
     "package:win": "npm --workspace apps/desktop run package:win",
     "release:win": "npm --workspace apps/desktop run package:win:publish",
     "verify:store": "powershell -ExecutionPolicy Bypass -File scripts/verify-store-readiness.ps1"

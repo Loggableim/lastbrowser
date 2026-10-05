@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -46,6 +47,74 @@ _ALLOWED_ACTION_FAMILIES = (
     "github_publication",
     "target_deployment_worker",
 )
+_INDEPENDENT_BROWSER_ACTION_FAMILIES = ("independent_browser",)
+_NATIVE_CHAT_ACTION_FAMILIES = ("native_sdk", "native_file", "native_browser")
+_DISPATCH_LOCKS: dict[str, threading.RLock] = {}
+_DISPATCH_LOCKS_GUARD = threading.RLock()
+
+
+def _native_model_choices_valid(captured: Mapping[str, Any]) -> bool:
+    """Validate the immutable provider/model set authorized for one native run."""
+    choices = captured.get("modelChoices")
+    if choices is None:
+        return True  # Legacy persisted native-chat runs remain single-model.
+    if (not isinstance(choices, list) or not 1 <= len(choices) <= 64
+            or any(not isinstance(item, dict) or set(item) != {"provider", "model"}
+                or not isinstance(item.get("provider"), str) or not item["provider"]
+                or len(item["provider"]) > 160
+                or not isinstance(item.get("model"), str) or not item["model"]
+                or len(item["model"]) > 512 for item in choices)):
+        return False
+    identities = [(item["provider"], item["model"]) for item in choices]
+    if (len(set(identities)) != len(identities) or identities != sorted(identities)
+            or (captured.get("modelProvider"), captured.get("model")) not in identities):
+        return False
+    canonical = json.dumps(choices, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return captured.get("modelChoiceDigest") == sha256(canonical.encode("utf-8")).hexdigest()
+
+
+@contextmanager
+def _independent_dispatch_lock(ledger_path: Path):
+    """Serialize native revoke acknowledgements with bounded host effects.
+
+    No SQLite transaction spans a provider/network/browser call. All native
+    supervisor instances for this durable ledger use the same OS lock.
+    """
+    key = str(ledger_path.resolve())
+    with _DISPATCH_LOCKS_GUARD:
+        lock = _DISPATCH_LOCKS.setdefault(key, threading.RLock())
+    with lock:
+        ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(ledger_path) + ".dispatch.lock", os.O_RDWR | os.O_CREAT, 0o600)
+        locked = False
+        try:
+            if os.name == "nt":
+                import msvcrt
+                if os.fstat(fd).st_size == 0:
+                    os.write(fd, b"0")
+                os.lseek(fd, 0, os.SEEK_SET)
+                deadline = time.monotonic() + 30
+                while True:
+                    try:
+                        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                        break
+                    except OSError:
+                        if time.monotonic() >= deadline:
+                            raise TimeoutError("Native dispatch boundary is busy")
+                        time.sleep(0.025)
+            else:
+                import fcntl
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            locked = True
+            yield
+        finally:
+            if locked:
+                if os.name == "nt":
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
 _SPACE_CHANGE_PAUSE_REASONS = frozenset(
     {"governance_changed", "root_changed", "space_deleted"}
 )
@@ -342,6 +411,7 @@ class ManagedSpaceSupervisor:
         governance_resolver: Callable[[str], ManagedSpaceGovernance],
         child_store_factory: Callable[[Path], ProjectSwarmStore] = ProjectSwarmStore,
         action_executor: Any | None = None,
+        native_ingress_validator: Callable[[str, Mapping[str, Any]], bool] | None = None,
     ) -> None:
         if not callable(governance_resolver) or not callable(child_store_factory):
             raise TypeError("managed Space supervisor requires callable dependencies")
@@ -351,6 +421,9 @@ class ManagedSpaceSupervisor:
         self._governance_resolver = governance_resolver
         self._child_store_factory = child_store_factory
         self._action_executor = action_executor
+        if native_ingress_validator is not None and not callable(native_ingress_validator):
+            raise TypeError("Native ingress validator must be callable")
+        self._native_ingress_validator = native_ingress_validator
         self._bindings: dict[str, ManagedSpaceCapability] = {}
         self._bindings_lock = threading.RLock()
 
@@ -613,6 +686,71 @@ class ManagedSpaceSupervisor:
         return len(rows) > 1 or any(row["target_key"] != target for row in rows)
 
     def admit(self, target_key: str, intent: Mapping[str, Any]) -> SupervisorAdmission:
+        return self._admit(target_key, intent)
+
+    def admit_independent_browser(
+        self, target_key: str, intent: Mapping[str, Any], *, binding: Mapping[str, Any]
+    ) -> SupervisorAdmission:
+        """Issue a narrower host-only capability for one real external run.
+
+        It occupies the existing global supervisor slot and uses the existing
+        project ledger. It grants none of the coding/publication families.
+        The host must supply its durable immutable run binding, never UI paths.
+        """
+        try:
+            captured = json.loads(json.dumps(dict(binding), allow_nan=False))
+            UUID(captured["runId"])
+            UUID(captured["runnerGeneration"])
+            scope = captured["scope"]
+            UUID(scope["backendProfileId"])
+            UUID(scope["spaceId"])
+            if not isinstance(scope["browserProfileId"], str) or not scope["browserProfileId"]:
+                raise ValueError("invalid browser profile")
+            if not _INTENT_DIGEST_RE.fullmatch(captured["contextDigest"]):
+                raise ValueError("invalid context digest")
+            if type(captured["callBudget"]) is not int or not 1 <= captured["callBudget"] <= 48:
+                raise ValueError("invalid model call budget")
+            if not isinstance(captured["model"], str) or not captured["model"]:
+                raise ValueError("invalid model")
+            if captured["autonomy"] not in {"observe", "suggest", "execute_safe", "reviewed_execution", "autonomous"}:
+                raise ValueError("invalid autonomy")
+        except (KeyError, TypeError, ValueError, AttributeError):
+            return SupervisorAdmission("rejected", None, None, None, "invalid_independent_binding")
+        return self._admit(target_key, intent, independent_binding=captured)
+
+    def admit_native_chat(self, target_key: str, intent: Mapping[str, Any], *, binding: Mapping[str, Any]) -> SupervisorAdmission:
+        """Issue only from a live saved human turn validated by the host.
+
+        A namespace, UI DTO or deserialized capability is never an ingress.
+        Native work occupies the same durable admission slot as Nova/Swarm.
+        """
+        try:
+            captured = json.loads(json.dumps(dict(binding), allow_nan=False))
+            scope = captured["scope"]
+            UUID(scope["backendProfileId"]); UUID(scope["spaceId"])
+            for key in ("sessionId", "streamId", "writerGeneration", "writerLeaseId", "ingressRef", "model"):
+                if not isinstance(captured[key], str) or not 1 <= len(captured[key]) <= 512:
+                    raise ValueError("Invalid native owner")
+            if not isinstance(scope["browserProfileId"], str) or not scope["browserProfileId"]:
+                raise ValueError("Invalid native scope")
+            if any(not _INTENT_DIGEST_RE.fullmatch(captured[key]) for key in ("contextDigest", "ingressDigest")):
+                raise ValueError("Invalid native binding digest")
+            if type(captured["callBudget"]) is not int or not 1 <= captured["callBudget"] <= 48:
+                raise ValueError("Invalid native role budget")
+            if captured["autonomy"] not in {"observe", "suggest", "execute_safe", "reviewed_execution", "autonomous"}:
+                raise ValueError("Invalid native autonomy")
+            if not isinstance(captured["actorRef"], str) or not captured["actorRef"].startswith("user:"):
+                raise ValueError("Human ingress required")
+            if not _native_model_choices_valid(captured):
+                raise ValueError("Invalid native model choices")
+            if self._native_ingress_validator is None or self._native_ingress_validator(target_key, captured) is not True:
+                raise ValueError("Live native ingress unavailable")
+        except (KeyError, TypeError, ValueError, AttributeError, PermissionError):
+            return SupervisorAdmission("rejected", None, None, None, "invalid_native_ingress")
+        return self._admit(target_key, intent, native_binding=captured)
+
+    def _admit(self, target_key: str, intent: Mapping[str, Any], *, independent_binding: dict | None = None,
+               native_binding: dict | None = None) -> SupervisorAdmission:
         target_key = _target_key(target_key)
         # An explicitly supplied empty goal is never actionable. Reject it
         # before governance resolution or any ledger write so malformed
@@ -627,13 +765,17 @@ class ManagedSpaceSupervisor:
         governance = _resolved_governance(self._governance_resolver, target_key)
         if (
             governance is None
-            or governance.yolo is not True
+            or (governance.yolo is not True and native_binding is None)
             or governance.enrolled is not True
         ):
             return SupervisorAdmission(
                 "rejected", None, None, None, "not_yolo_enrolled"
             )
         intent_digest = _intent_digest(intent)
+        if independent_binding is not None and UUID(independent_binding["scope"]["spaceId"]).hex != governance.space_id:
+            return SupervisorAdmission("rejected", None, None, None, "independent_scope_mismatch")
+        if native_binding is not None and UUID(native_binding["scope"]["spaceId"]).hex != governance.space_id:
+            return SupervisorAdmission("rejected", None, None, None, "native_scope_mismatch")
         self.start()
         admission_id = str(uuid4())
         run_id = str(uuid4())
@@ -644,8 +786,18 @@ class ManagedSpaceSupervisor:
             run_id,
             intent_digest,
             attachment_generation=1,
+            families=(_NATIVE_CHAT_ACTION_FAMILIES if native_binding is not None else
+                _INDEPENDENT_BROWSER_ACTION_FAMILIES if independent_binding is not None else _ALLOWED_ACTION_FAMILIES),
         )
         metadata = _diagnostic_metadata(capability, intent)
+        if independent_binding is not None:
+            metadata.update(pack="independent-browser", autonomy=independent_binding["autonomy"],
+                            started_by="lastbrowser-independent", independent_browser=independent_binding,
+                            production_verifier="independent-journal-v1")
+        if native_binding is not None:
+            metadata.update(pack="native-chat", autonomy=native_binding["autonomy"],
+                started_by="lastbrowser-native-human", native_chat=native_binding,
+                production_verifier="native-journal-v1")
         workflow_contract_digest = _workflow_contract_digest(metadata)
         now = _timestamp()
         with self._immediate_connection() as connection:
@@ -734,7 +886,7 @@ class ManagedSpaceSupervisor:
                     governance.root_fingerprint,
                     governance.revision,
                     governance.policy_identity,
-                    _allowed_action_families_json(),
+                    _allowed_action_families_json(capability._allowed_action_families),
                     workflow_contract_digest,
                     run_id,
                     now,
@@ -1034,6 +1186,10 @@ class ManagedSpaceSupervisor:
         if reason is not None:
             self._pause(capability, reason)
             return SwarmExecutionOptions(blocked_reason=reason)
+        if capability._allowed_action_families == _INDEPENDENT_BROWSER_ACTION_FAMILIES:
+            return SwarmExecutionOptions(blocked_reason="independent_browser_host_required")
+        if capability._allowed_action_families == _NATIVE_CHAT_ACTION_FAMILIES:
+            return SwarmExecutionOptions(blocked_reason="native_chat_host_required")
         from nova.production_verifier import ProductionReadOnlyVerifier
         return SwarmExecutionOptions(
             max_calls=128,
@@ -1192,6 +1348,14 @@ class ManagedSpaceSupervisor:
         return _resolved_governance(self._governance_resolver, _target_key(target_key))
 
     def pause_for_space_change(
+        self, target_key: str, *, reason: str, actor: str | None = None,
+    ) -> bool:
+        if not self._ledger_path.exists():
+            return self._pause_for_space_change(target_key, reason=reason, actor=actor)
+        with _independent_dispatch_lock(self._ledger_path):
+            return self._pause_for_space_change(target_key, reason=reason, actor=actor)
+
+    def _pause_for_space_change(
         self,
         target_key: str,
         *,
@@ -1527,7 +1691,7 @@ class ManagedSpaceSupervisor:
             return None
         try:
             families = tuple(json.loads(record["allowed_action_families_json"]))
-            if families != _ALLOWED_ACTION_FAMILIES:
+            if families not in (_ALLOWED_ACTION_FAMILIES, _INDEPENDENT_BROWSER_ACTION_FAMILIES, _NATIVE_CHAT_ACTION_FAMILIES):
                 return None
             context = ManagedSpaceActionContext(
                 record["run_id"],
@@ -1734,6 +1898,73 @@ class ManagedSpaceSupervisor:
             allowed_states=("active",),
             event_type="completed",
         )
+
+    @contextmanager
+    def independent_action_boundary(self):
+        with _independent_dispatch_lock(self._ledger_path):
+            yield
+
+    def finish_independent_host(self, capability, *, parent_state: str, journal_digest: str) -> bool:
+        """Release a stopped, known-result browser host without a fake human actor.
+
+        This path is restricted to the exact capability issued in this process;
+        revoked/paused generations remain under ordinary human recovery.
+        """
+        if parent_state not in {"cancelled", "failed", "interrupted"} or not _INTENT_DIGEST_RE.fullmatch(journal_digest):
+            raise ValueError("Invalid independent terminal evidence")
+        with _independent_dispatch_lock(self._ledger_path):
+            if not isinstance(capability, ManagedSpaceCapability) or not self._has_current_binding(capability):
+                return False
+            record = self._record(capability._admission_id)
+            if record is None or record["state"] != "active" or not _capability_matches_record(capability, record):
+                return False
+            if capability._allowed_action_families != _INDEPENDENT_BROWSER_ACTION_FAMILIES:
+                raise PermissionError("Host terminal path is restricted to independent browser work")
+            child = self._child_store_factory(Path(record["canonical_root"]))
+            state = "cancelled" if parent_state == "cancelled" else "abandoned"
+            child.set_run_status(record["run_id"], state)
+            child.append_event_once(record["run_id"], "independent.host_terminal",
+                {"parent_state": parent_state, "journal_digest": journal_digest}, idempotency_key="independent-host-terminal")
+            with self._immediate_connection() as connection:
+                changed = connection.execute("""UPDATE supervisor_admissions SET state=?,
+                    attachment_generation=attachment_generation+1, record_version=record_version+1, updated_at=?
+                    WHERE admission_id=? AND state='active' AND attachment_generation=? AND record_version=?""",
+                    (state, _timestamp(), record["admission_id"], record["attachment_generation"], record["record_version"])).rowcount
+                if changed:
+                    _audit(connection, record["admission_id"], "independent_host_terminal", "system:independent-host", parent_state, _timestamp())
+            if changed:
+                self._remove_binding_for_record(record)
+            return bool(changed)
+
+    def finish_native_host(self, capability, *, journal_digest: str) -> bool:
+        """Acknowledge a stopped native host; never invent coding completion.
+
+        The capability must be the actual current process attachment. Unknown
+        effects stay paused for human recovery and never enter this path.
+        """
+        if not _INTENT_DIGEST_RE.fullmatch(journal_digest):
+            raise ValueError("Invalid native terminal evidence")
+        with _independent_dispatch_lock(self._ledger_path):
+            if (not isinstance(capability, ManagedSpaceCapability)
+                or capability._allowed_action_families != _NATIVE_CHAT_ACTION_FAMILIES
+                or not self._has_current_binding(capability)):
+                return False
+            record = self._record(capability._admission_id)
+            if record is None or record["state"] != "active" or not _capability_matches_record(capability, record):
+                return False
+            child = self._child_store_factory(Path(record["canonical_root"]))
+            child.set_run_status(record["run_id"], "cancelled")
+            child.append_event_once(record["run_id"], "native.host_closed",
+                {"journal_digest": journal_digest, "coding_completion": False}, idempotency_key="native-host-closed")
+            with self._immediate_connection() as connection:
+                changed = connection.execute("""UPDATE supervisor_admissions SET state='cancelled',
+                    attachment_generation=attachment_generation+1,record_version=record_version+1,updated_at=?
+                    WHERE admission_id=? AND state='active' AND attachment_generation=? AND record_version=?""",
+                    (_timestamp(), record["admission_id"], record["attachment_generation"], record["record_version"])).rowcount
+                if changed:
+                    _audit(connection, record["admission_id"], "native_host_closed", "system:native-host", "process_exited", _timestamp())
+            if changed: self._remove_binding_for_record(record)
+            return bool(changed)
 
     def reconcile_host_dispatch(
         self,
@@ -2096,6 +2327,11 @@ class ManagedSpaceSupervisor:
 
     def cancel(self, admission_id: str, *, actor: str) -> bool:
         _dashboard_actor(actor)
+        with _independent_dispatch_lock(self._ledger_path):
+            return self._cancel(admission_id, actor=actor)
+
+    def _cancel(self, admission_id: str, *, actor: str) -> bool:
+        _dashboard_actor(actor)
         self.start()
         with self._immediate_connection() as connection:
             record = connection.execute(
@@ -2214,6 +2450,11 @@ class ManagedSpaceSupervisor:
         return self.abandon(str(record["admission_id"]), actor=actor)
 
     def abandon(self, admission_id: str, *, actor: str) -> bool:
+        _dashboard_actor(actor)
+        with _independent_dispatch_lock(self._ledger_path):
+            return self._abandon(admission_id, actor=actor)
+
+    def _abandon(self, admission_id: str, *, actor: str) -> bool:
         _dashboard_actor(actor)
         self.start()
         with self._immediate_connection() as connection:
@@ -2459,7 +2700,7 @@ class ManagedSpaceSupervisor:
         )
         if (
             governance is None
-            or governance.yolo is not True
+            or (governance.yolo is not True and capability._allowed_action_families != _NATIVE_CHAT_ACTION_FAMILIES)
             or governance.enrolled is not True
         ):
             return "governance_revoked"
@@ -2837,8 +3078,8 @@ def _capability(
     digest: str,
     *,
     attachment_generation: int,
+    families: tuple[str, ...] = _ALLOWED_ACTION_FAMILIES,
 ) -> ManagedSpaceCapability:
-    families = _ALLOWED_ACTION_FAMILIES
     return ManagedSpaceCapability(
         admission_id,
         target_key,
@@ -2863,7 +3104,7 @@ def _capability_from_record(
 ) -> ManagedSpaceCapability | None:
     try:
         families = tuple(json.loads(record["allowed_action_families_json"]))
-        if families != _ALLOWED_ACTION_FAMILIES:
+        if families not in (_ALLOWED_ACTION_FAMILIES, _INDEPENDENT_BROWSER_ACTION_FAMILIES, _NATIVE_CHAT_ACTION_FAMILIES):
             return None
         return ManagedSpaceCapability(
             record["admission_id"],
@@ -3041,7 +3282,7 @@ def _diagnostic_metadata_matches_record(
         families = tuple(json.loads(record["allowed_action_families_json"]))
     except (TypeError, ValueError, json.JSONDecodeError):
         return False
-    if families != _ALLOWED_ACTION_FAMILIES:
+    if families not in (_ALLOWED_ACTION_FAMILIES, _INDEPENDENT_BROWSER_ACTION_FAMILIES, _NATIVE_CHAT_ACTION_FAMILIES):
         return False
     diagnostic = (
         metadata.get("nova_supervisor") if isinstance(metadata, Mapping) else None
@@ -3072,8 +3313,12 @@ def _governance_matches_record(
     governance: ManagedSpaceGovernance | None,
     record: Mapping[str, Any],
 ) -> bool:
+    try:
+        native = tuple(json.loads(record["allowed_action_families_json"])) == _NATIVE_CHAT_ACTION_FAMILIES
+    except (KeyError, TypeError, ValueError):
+        native = False
     return governance is not None and (
-        governance.yolo is True
+        (governance.yolo is True or native)
         and governance.enrolled is True
         and governance.space_id == record["target_space_id"]
         and governance.canonical_root == Path(record["canonical_root"]).resolve()
@@ -3101,7 +3346,7 @@ def _workflow_contract_digest(metadata: Mapping[str, Any]) -> str:
 def _allowed_action_families_json(
     families: tuple[str, ...] = _ALLOWED_ACTION_FAMILIES,
 ) -> str:
-    if tuple(families) != _ALLOWED_ACTION_FAMILIES:
+    if tuple(families) not in (_ALLOWED_ACTION_FAMILIES, _INDEPENDENT_BROWSER_ACTION_FAMILIES, _NATIVE_CHAT_ACTION_FAMILIES):
         raise ValueError("managed Space action families are not permitted")
     return json.dumps(list(families), separators=(",", ":"))
 

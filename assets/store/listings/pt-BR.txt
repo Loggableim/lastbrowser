@@ -1,0 +1,46 @@
+Lastbrowser — pt-BR
+
+DESCRIPTION
+O Lastbrowser combina um navegador Chromium para Windows com o assistente de IA integrado Nova. Organize páginas da web em abas verticais e espaços de trabalho e use o assistente ao lado das páginas abertas.
+
+Recursos:
+• Abas verticais e espaços de trabalho para seus projetos na web.
+• Assistente de IA Nova para perguntas, resumos e tarefas com o contexto das páginas da web que você fornece.
+• Conexão com provedores de IA compatíveis usando suas próprias credenciais e suporte a modelos locais pelo Ollama.
+• Terminal integrado e suporte a extensões do navegador.
+• Perfis do navegador armazenados localmente e ferramentas para limpar os dados de navegação.
+
+O uso pessoal é gratuito. O uso comercial exige uma licença comercial separada. Os serviços externos de IA podem exigir uma conta própria e serviços pagos. Os modelos locais de IA precisam de uma instalação local adequada. Ao usar provedores externos de IA, suas solicitações e o contexto fornecido para a tarefa são enviados ao provedor selecionado. Os perfis do navegador são armazenados localmente no seu PC.
+
+SHORT DESCRIPTION
+Navegador Chromium para Windows com abas verticais, espaços de trabalho e assistente de IA Nova. Os perfis ficam locais; os serviços externos de IA recebem as solicitações e os conteúdos que você fornece.
+
+PRODUCT FEATURES
+• Abas verticais e espaços de trabalho
+• Assistente de IA Nova integrado
+• Provedores externos de IA compatíveis e modelos locais do Ollama
+• Terminal integrado e extensões do navegador
+• Perfis do navegador armazenados localmente
+
+SEARCH TERMS
+navegador
+navegador web
+navegador ia
+abas verticais
+assistente ia
+espaços de trabalho
+local-first
+
+WHAT'S NEW
+Primeira versão do Lastbrowser na Microsoft Store.
+
+APPLICABLE LICENSE TERMS
+O Lastbrowser pode ser usado gratuitamente para fins pessoais e não comerciais. O uso comercial exige uma licença comercial separada. Consultas sobre licenciamento comercial: rainer@dominik.in.
+
+As licenças dos componentes de terceiros incluídos continuam aplicáveis de forma independente e concedem os direitos descritos para os respectivos componentes. O acesso e o uso de serviços externos de IA também estão sujeitos aos termos do respectivo provedor.
+
+COPYRIGHT
+© 2026 Dominik Rainer / Lastbrowser.com
+
+DEVELOPED BY
+Dominik Rainer / Lastbrowser.com

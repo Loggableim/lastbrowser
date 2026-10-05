@@ -82,7 +82,7 @@
   <div class="feature-card" style="margin-bottom: 24px;">
     <h2>1. The Local-First Principle</h2>
     <p style="margin-top:10px;">
-      Lastbrowser is built as a <strong>Local-First</strong> desktop application. All browsing history, bookmarks, tabs, passwords, cookie jars, and API keys reside exclusively on your local machine in <code>%APPDATA%\Lastbrowser</code>. There are no central servers receiving or storing your activity.
+      Lastbrowser is built as a <strong>Local-First</strong> desktop application. Browser profiles containing history, bookmarks, tabs, passwords, cookie jars and saved credentials are stored on your device in <code>%APPDATA%\Lastbrowser</code>. Lastbrowser does not operate a central service to synchronize those profiles. External AI requests send the data described in section 3 to your selected provider.
     </p>
   </div>
 
@@ -99,15 +99,16 @@
       When interacting with Nova AI, you control where data travels:
     </p>
     <ul style="padding-left:22px;margin:12px 0;color:var(--muted);line-height:1.7;">
-      <li><strong>Local Models (Ollama):</strong> When using Ollama, no prompt data ever leaves your computer. Inference is 100% offline.</li>
-      <li><strong>AI providers:</strong> When connecting external AI services, the terms of the selected provider apply. Depending on your configuration, Lastbrowser can use local providers or external services.</li>
+      <li><strong>Local Ollama models:</strong> Inference runs locally when both the model and Ollama endpoint run on your own computer. A remote Ollama endpoint or cloud model may process requests outside your computer.</li>
+      <li><strong>Ollama Cloud and external AI providers:</strong> These connections send your requests and the context supplied for the task, such as selected tab content, to the selected provider. Credentials required for the connection are used to authenticate it. That provider's privacy policy and retention periods apply. A cloud connection is not offline processing.</li>
+      <li><strong>Tasks and goals:</strong> Starting an AI task or ongoing goal can result in multiple requests within that task. Data transfers depend on the enabled providers and the tools and content authorized for the task.</li>
     </ul>
   </div>
 
   <div class="feature-card" style="margin-bottom: 24px;">
     <h2>4. Data Subject Rights (GDPR)</h2>
     <p style="margin-top:10px;">
-      Because all data is stored on your device, you have immediate, permanent control: you can clear all cookies, cache, and Spaces at any time via settings.
+      You can delete locally stored browsing data through Lastbrowser settings. Local deletion does not remove data already sent to external AI providers. Access and deletion requests for that data are governed by the relevant provider's privacy policy.
     </p>
   </div>
 

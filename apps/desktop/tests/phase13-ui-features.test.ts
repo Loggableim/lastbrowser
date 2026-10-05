@@ -17,6 +17,20 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
     expect(normalizeSettingsSectionId('extensions')).toBe('plugins');
   });
 
+  it('makes local AI discoverable in Settings and keeps setup Space-scoped', () => {
+    expect(SETTINGS_SECTIONS.providers.title).toBe('AI & local models');
+    expect(readRendererFile('i18n/locales/de.ts')).toContain("'settings.sections.providers': 'KI & lokale Modelle'");
+    const settings = readRendererFile('panels/SystemPanels.tsx');
+    expect(settings).toContain("{section === 'providers' && (");
+    expect(settings).toContain('<LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||\'\'])}');
+    expect(settings).toContain('keepGlobalRouterStatusVisible');
+    expect(settings).toContain('browserProfileId={activeProfileId} workspacePath={activeSpacePath}');
+    expect(settings).toContain('backendProfileName={activeBackendProfileName} ready={ready}');
+    const setup = readRendererFile('components/LocalAiSetupPane.tsx');
+    expect(setup).toContain("import { LocalAiBootstrapPane } from './LocalAiBootstrapPane.js'");
+    expect(setup).toContain('<LocalAiBootstrapPane compact keepVisible={keepGlobalRouterStatusVisible}/>');
+  });
+
   describe('Panel Store & Zen Exit Default Mode', () => {
     it('manages zenExitDefaultMode, sidebarDrawerTab, and actionBarDock in usePanelStore', () => {
       const store = usePanelStore.getState();

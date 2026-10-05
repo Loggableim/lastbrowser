@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import type { DesktopCatalog, DesktopLocaleId, DesktopTranslationKey } from './i18n/keys.js';
 import {
   desktopLocaleIds,
+  legacyDesktopLocaleIds,
   desktopLocaleNames,
   desktopTranslationKeys
 } from './i18n/keys.js';
@@ -12,6 +13,7 @@ import { desktopFrOverrides } from './i18n/locales/fr.js';
 import { desktopItOverrides } from './i18n/locales/it.js';
 import { desktopPtBrOverrides } from './i18n/locales/pt-BR.js';
 import { desktopRuOverrides } from './i18n/locales/ru.js';
+import { desktopJaOverrides } from './i18n/locales/ja.js';
 import { desktopSystemPanelCoreOverrides } from './i18n/system-panels-extra.js';
 import { systemPanelsRomanTranslations } from './i18n/system-panels-roman.js';
 import { settingsAppearanceTranslations } from './i18n/settings-appearance-translations.js';
@@ -23,10 +25,15 @@ import { browserChromeTranslations } from './i18n/browser-chrome-translations.js
 import { visionImpairedTranslations } from './i18n/vision-impaired-translations.js';
 import { splitMagnifierTranslations } from './i18n/split-magnifier-translations.js';
 import { sidekickUxTranslations } from './i18n/sidekick-ux-translations.js';
+import { teamworkUxTranslations } from './i18n/teamwork-ux-translations.js';
 import { agentPanelsTranslations } from './i18n/agent-panels-translations.js';
+import { spaceAssistantTranslations } from './i18n/space-assistant-translations.js';
 
-for (const locale of desktopLocaleIds) {
+for (const locale of legacyDesktopLocaleIds) {
   Object.assign(visionImpairedTranslations[locale], splitMagnifierTranslations[locale]);
+}
+for (const locale of legacyDesktopLocaleIds) {
+  Object.assign(sidekickUxTranslations[locale], teamworkUxTranslations[locale]);
 }
 
 const systemPanelOverrides = {
@@ -59,7 +66,8 @@ export const desktopLocaleCatalogs: Record<DesktopLocaleId, Readonly<DesktopCata
   es: mergeCatalog(defaultEnglishCatalog, { ...desktopEsOverrides, ...desktopSystemPanelCoreOverrides.es, ...systemPanelOverrides.es, ...settingsAppearanceTranslations.es, ...settingsProviderTranslations.es, ...settingsOtherPanelsTranslations.es, ...geminiSubscriptionTranslations.es, ...spaceSetupTranslations.es, ...browserChromeTranslations.es, ...visionImpairedTranslations.es, ...sidekickUxTranslations.es, ...agentPanelsTranslations.es }),
   fr: mergeCatalog(defaultEnglishCatalog, { ...desktopFrOverrides, ...desktopSystemPanelCoreOverrides.fr, ...systemPanelOverrides.fr, ...settingsAppearanceTranslations.fr, ...settingsProviderTranslations.fr, ...settingsOtherPanelsTranslations.fr, ...geminiSubscriptionTranslations.fr, ...spaceSetupTranslations.fr, ...browserChromeTranslations.fr, ...visionImpairedTranslations.fr, ...sidekickUxTranslations.fr, ...agentPanelsTranslations.fr }),
   'pt-BR': mergeCatalog(defaultEnglishCatalog, { ...desktopPtBrOverrides, ...desktopSystemPanelCoreOverrides['pt-BR'], ...settingsAppearanceTranslations['pt-BR'], ...settingsProviderTranslations['pt-BR'], ...settingsOtherPanelsTranslations['pt-BR'], ...geminiSubscriptionTranslations['pt-BR'], ...spaceSetupTranslations['pt-BR'], ...browserChromeTranslations['pt-BR'], ...visionImpairedTranslations['pt-BR'], ...sidekickUxTranslations['pt-BR'], ...agentPanelsTranslations['pt-BR'] }),
-  ru: mergeCatalog(defaultEnglishCatalog, { ...desktopRuOverrides, ...desktopSystemPanelCoreOverrides.ru, ...settingsAppearanceTranslations.ru, ...settingsProviderTranslations.ru, ...settingsOtherPanelsTranslations.ru, ...geminiSubscriptionTranslations.ru, ...spaceSetupTranslations.ru, ...browserChromeTranslations.ru, ...visionImpairedTranslations.ru, ...sidekickUxTranslations.ru, ...agentPanelsTranslations.ru })
+  ru: mergeCatalog(defaultEnglishCatalog, { ...desktopRuOverrides, ...desktopSystemPanelCoreOverrides.ru, ...settingsAppearanceTranslations.ru, ...settingsProviderTranslations.ru, ...settingsOtherPanelsTranslations.ru, ...geminiSubscriptionTranslations.ru, ...spaceSetupTranslations.ru, ...browserChromeTranslations.ru, ...visionImpairedTranslations.ru, ...sidekickUxTranslations.ru, ...agentPanelsTranslations.ru }),
+  ja: Object.freeze(mergeCatalog(defaultEnglishCatalog, desktopJaOverrides))
 };
 
 /** Raw locale resources, exported so coverage tests can detect keys hidden by English fallback. */
@@ -70,8 +78,14 @@ export const desktopLocaleOverrides: Record<DesktopLocaleId, Readonly<DesktopCat
   es: { ...desktopEsOverrides, ...desktopSystemPanelCoreOverrides.es, ...systemPanelOverrides.es, ...settingsAppearanceTranslations.es, ...settingsProviderTranslations.es, ...settingsOtherPanelsTranslations.es, ...geminiSubscriptionTranslations.es, ...spaceSetupTranslations.es, ...browserChromeTranslations.es, ...visionImpairedTranslations.es, ...sidekickUxTranslations.es, ...agentPanelsTranslations.es },
   fr: { ...desktopFrOverrides, ...desktopSystemPanelCoreOverrides.fr, ...systemPanelOverrides.fr, ...settingsAppearanceTranslations.fr, ...settingsProviderTranslations.fr, ...settingsOtherPanelsTranslations.fr, ...geminiSubscriptionTranslations.fr, ...spaceSetupTranslations.fr, ...browserChromeTranslations.fr, ...visionImpairedTranslations.fr, ...sidekickUxTranslations.fr, ...agentPanelsTranslations.fr },
   'pt-BR': { ...desktopPtBrOverrides, ...desktopSystemPanelCoreOverrides['pt-BR'], ...settingsAppearanceTranslations['pt-BR'], ...settingsProviderTranslations['pt-BR'], ...settingsOtherPanelsTranslations['pt-BR'], ...geminiSubscriptionTranslations['pt-BR'], ...spaceSetupTranslations['pt-BR'], ...browserChromeTranslations['pt-BR'], ...visionImpairedTranslations['pt-BR'], ...sidekickUxTranslations['pt-BR'], ...agentPanelsTranslations['pt-BR'] },
-  ru: { ...desktopRuOverrides, ...desktopSystemPanelCoreOverrides.ru, ...settingsAppearanceTranslations.ru, ...settingsProviderTranslations.ru, ...settingsOtherPanelsTranslations.ru, ...geminiSubscriptionTranslations.ru, ...spaceSetupTranslations.ru, ...browserChromeTranslations.ru, ...visionImpairedTranslations.ru, ...sidekickUxTranslations.ru, ...agentPanelsTranslations.ru }
+  ru: { ...desktopRuOverrides, ...desktopSystemPanelCoreOverrides.ru, ...settingsAppearanceTranslations.ru, ...settingsProviderTranslations.ru, ...settingsOtherPanelsTranslations.ru, ...geminiSubscriptionTranslations.ru, ...spaceSetupTranslations.ru, ...browserChromeTranslations.ru, ...visionImpairedTranslations.ru, ...sidekickUxTranslations.ru, ...agentPanelsTranslations.ru },
+  ja: Object.freeze({ ...desktopJaOverrides })
 };
+
+for (const locale of legacyDesktopLocaleIds) {
+  desktopLocaleCatalogs[locale] = Object.freeze({ ...desktopLocaleCatalogs[locale], ...spaceAssistantTranslations[locale] });
+  desktopLocaleOverrides[locale] = Object.freeze({ ...desktopLocaleOverrides[locale], ...spaceAssistantTranslations[locale] });
+}
 
 export function normalizeDesktopLocale(value: unknown): DesktopLocaleId | null {
   if (typeof value !== 'string') return null;
@@ -82,6 +96,7 @@ export function normalizeDesktopLocale(value: unknown): DesktopLocaleId | null {
 
   if (lower === 'pt' || lower === 'pt-br' || lower === 'ptbr') return 'pt-BR';
   if (lower === 'russian' || lower === 'русский' || lower.startsWith('ru-') || lower === 'ru') return 'ru';
+  if (lower === 'japanese' || lower === '日本語' || lower.startsWith('ja-') || lower === 'ja') return 'ja';
   if (lower.startsWith('de')) return 'de';
   if (lower.startsWith('it')) return 'it';
   if (lower.startsWith('es')) return 'es';

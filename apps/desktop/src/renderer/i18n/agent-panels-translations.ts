@@ -1,4 +1,4 @@
-import type { DesktopCatalog, DesktopLocaleId, DesktopTranslationKey } from './keys.js';
+import type { DesktopCatalog, LegacyDesktopLocaleId as DesktopLocaleId, DesktopTranslationKey } from './keys.js';
 
 type Row = Record<DesktopLocaleId, string>;
 const rows: Partial<Record<DesktopTranslationKey, Row>> = {

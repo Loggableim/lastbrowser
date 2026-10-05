@@ -1,0 +1,46 @@
+Lastbrowser — en-US
+
+DESCRIPTION
+Lastbrowser combines a Chromium browser for Windows with the integrated Nova AI assistant. Organize webpages in vertical tabs and workspaces, and use the assistant alongside your open pages.
+
+Features:
+• Vertical tabs and workspaces for your web projects.
+• Nova AI assistant for questions, summaries, and working with webpage context you provide.
+• Connect supported AI providers using your own credentials, or use local models through Ollama.
+• Integrated terminal and support for browser extensions.
+• Locally stored browser profiles and tools for clearing browsing data.
+
+Personal use is free. Commercial use requires a separate commercial license. External AI services may require their own account and paid services. Local AI models require a suitable local model installation. When you use external AI providers, your requests and the context supplied for the task are sent to the selected provider. Browser profiles are stored locally on your PC.
+
+SHORT DESCRIPTION
+Chromium browser for Windows with vertical tabs, workspaces, and Nova AI assistant. Browser profiles stay local; external AI services receive the requests and content you provide.
+
+PRODUCT FEATURES
+• Vertical tabs and workspaces
+• Integrated Nova AI assistant
+• Supported external AI providers and local Ollama models
+• Integrated terminal and browser extensions
+• Locally stored browser profiles
+
+SEARCH TERMS
+browser
+web browser
+ai browser
+vertical tabs
+ai assistant
+workspaces
+local-first
+
+WHAT'S NEW
+First Microsoft Store release of Lastbrowser.
+
+APPLICABLE LICENSE TERMS
+Lastbrowser may be used free of charge for personal, non-commercial purposes. Commercial use requires a separate commercial license. Commercial licensing inquiries: rainer@dominik.in.
+
+The licenses of included third-party components remain independently applicable and grant the rights stated for those components. Access to and use of external AI services are also subject to the respective provider's terms.
+
+COPYRIGHT
+© 2026 Dominik Rainer / Lastbrowser.com
+
+DEVELOPED BY
+Dominik Rainer / Lastbrowser.com

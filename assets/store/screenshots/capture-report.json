@@ -1,0 +1,2689 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-03T23:59:44.634Z",
+  "source": "Real Lastbrowser source-build with isolated in-tree backend",
+  "buildRoot": "C:\\projekte\\lastbrowser\\out\\store-capture\\current",
+  "dimensions": {
+    "width": 1920,
+    "height": 1080
+  },
+  "locales": [
+    "en",
+    "de",
+    "it",
+    "es",
+    "fr",
+    "pt-BR",
+    "ru",
+    "ja"
+  ],
+  "systemProtocolRegistrationDisabled": true,
+  "captures": [
+    {
+      "locale": "en",
+      "area": "browser",
+      "file": "assets/store/screenshots/en/browser.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Good night",
+        "Spaces & sessions",
+        "Home",
+        "Quick launch",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "extension-hub",
+      "file": "assets/store/screenshots/en/extension-hub.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Kuratierter 1-Klick Showcase",
+        "Weitere Erweiterung installieren",
+        "Installierte Erweiterungen (0)",
+        "Good night",
+        "Spaces & sessions",
+        "Home",
+        "Quick launch",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "skill-hub",
+      "file": "assets/store/screenshots/en/skill-hub.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Good night",
+        "Spaces & sessions",
+        "Home",
+        "Quick launch",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "downloads",
+      "file": "assets/store/screenshots/en/downloads.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Good night",
+        "Spaces & sessions",
+        "Home",
+        "Quick launch",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "history",
+      "file": "assets/store/screenshots/en/history.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Good night",
+        "Spaces & sessions",
+        "Home",
+        "Quick launch",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "permissions",
+      "file": "assets/store/screenshots/en/permissions.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Good night",
+        "Spaces & sessions",
+        "Home",
+        "Quick launch",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "command-palette",
+      "file": "assets/store/screenshots/en/command-palette.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Good night",
+        "Spaces & sessions",
+        "Home",
+        "Quick launch",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "chat",
+      "file": "assets/store/screenshots/en/chat.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-chat modern-mode  ",
+      "headings": [
+        "Sidekick",
+        "Start or select a chat"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "tasks",
+      "file": "assets/store/screenshots/en/tasks.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-tasks modern-mode  ",
+      "headings": [
+        "Scheduled jobs"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "kanban",
+      "file": "assets/store/screenshots/en/kanban.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-kanban modern-mode  ",
+      "headings": [
+        "Board"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "skills",
+      "file": "assets/store/screenshots/en/skills.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-skills modern-mode  ",
+      "headings": [
+        "Skills"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "agents",
+      "file": "assets/store/screenshots/en/agents.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-agents modern-mode  ",
+      "headings": [
+        "Agents",
+        "Creative Writer"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "memory",
+      "file": "assets/store/screenshots/en/memory.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-memory modern-mode  ",
+      "headings": [
+        "Memory"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "workspaces",
+      "file": "assets/store/screenshots/en/workspaces.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-workspaces modern-mode  ",
+      "headings": [
+        "Workspaces"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "profiles",
+      "file": "assets/store/screenshots/en/profiles.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-profiles modern-mode  ",
+      "headings": [
+        "Agent Profiles"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "todos",
+      "file": "assets/store/screenshots/en/todos.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-todos modern-mode  ",
+      "headings": [
+        "Pending"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "insights",
+      "file": "assets/store/screenshots/en/insights.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-insights modern-mode  ",
+      "headings": [
+        "Insights"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "logs",
+      "file": "assets/store/screenshots/en/logs.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-logs modern-mode  ",
+      "headings": [
+        "Logs"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "gmail",
+      "file": "assets/store/screenshots/en/gmail.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-gmail modern-mode  ",
+      "headings": [
+        "Gmail"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "discord",
+      "file": "assets/store/screenshots/en/discord.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-discord modern-mode  ",
+      "headings": [
+        "Discord"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "settings",
+      "file": "assets/store/screenshots/en/settings.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Settings"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "settings-01",
+      "file": "assets/store/screenshots/en/settings-01.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Settings"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "settings-02",
+      "file": "assets/store/screenshots/en/settings-02.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Settings"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "settings-03",
+      "file": "assets/store/screenshots/en/settings-03.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Settings"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "settings-04",
+      "file": "assets/store/screenshots/en/settings-04.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Settings",
+        "Google accounts and round-robin"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "settings-05",
+      "file": "assets/store/screenshots/en/settings-05.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Settings"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "settings-06",
+      "file": "assets/store/screenshots/en/settings-06.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Settings"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "settings-07",
+      "file": "assets/store/screenshots/en/settings-07.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Settings"
+      ]
+    },
+    {
+      "locale": "en",
+      "area": "terminal",
+      "file": "assets/store/screenshots/en/terminal.png",
+      "lang": "en",
+      "shellClass": "app-shell panel-terminal modern-mode  ",
+      "headings": [
+        "Native Terminal & Sidekick CLI"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "browser",
+      "file": "assets/store/screenshots/de/browser.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Gute Nacht",
+        "Spaces & Sitzungen",
+        "Home",
+        "Schnellstart",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "extension-hub",
+      "file": "assets/store/screenshots/de/extension-hub.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Kuratierter 1-Klick Showcase",
+        "Weitere Erweiterung installieren",
+        "Installierte Erweiterungen (0)",
+        "Gute Nacht",
+        "Spaces & Sitzungen",
+        "Home",
+        "Schnellstart",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "skill-hub",
+      "file": "assets/store/screenshots/de/skill-hub.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Gute Nacht",
+        "Spaces & Sitzungen",
+        "Home",
+        "Schnellstart",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "downloads",
+      "file": "assets/store/screenshots/de/downloads.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Gute Nacht",
+        "Spaces & Sitzungen",
+        "Home",
+        "Schnellstart",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "history",
+      "file": "assets/store/screenshots/de/history.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Gute Nacht",
+        "Spaces & Sitzungen",
+        "Home",
+        "Schnellstart",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "permissions",
+      "file": "assets/store/screenshots/de/permissions.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Gute Nacht",
+        "Spaces & Sitzungen",
+        "Home",
+        "Schnellstart",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "command-palette",
+      "file": "assets/store/screenshots/de/command-palette.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Gute Nacht",
+        "Spaces & Sitzungen",
+        "Home",
+        "Schnellstart",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "chat",
+      "file": "assets/store/screenshots/de/chat.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-chat modern-mode  ",
+      "headings": [
+        "Sidekick",
+        "Chat starten oder auswählen"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "tasks",
+      "file": "assets/store/screenshots/de/tasks.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-tasks modern-mode  ",
+      "headings": [
+        "Scheduled jobs"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "kanban",
+      "file": "assets/store/screenshots/de/kanban.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-kanban modern-mode  ",
+      "headings": [
+        "Board"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "skills",
+      "file": "assets/store/screenshots/de/skills.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-skills modern-mode  ",
+      "headings": [
+        "Fähigkeiten"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "agents",
+      "file": "assets/store/screenshots/de/agents.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-agents modern-mode  ",
+      "headings": [
+        "Agenten",
+        "Creative Writer"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "memory",
+      "file": "assets/store/screenshots/de/memory.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-memory modern-mode  ",
+      "headings": [
+        "Gedächtnis"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "workspaces",
+      "file": "assets/store/screenshots/de/workspaces.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-workspaces modern-mode  ",
+      "headings": [
+        "Workspaces"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "profiles",
+      "file": "assets/store/screenshots/de/profiles.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-profiles modern-mode  ",
+      "headings": [
+        "Agenten-Profile"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "todos",
+      "file": "assets/store/screenshots/de/todos.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-todos modern-mode  ",
+      "headings": [
+        "Pending"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "insights",
+      "file": "assets/store/screenshots/de/insights.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-insights modern-mode  ",
+      "headings": [
+        "Analysen"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "logs",
+      "file": "assets/store/screenshots/de/logs.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-logs modern-mode  ",
+      "headings": [
+        "Protokolle"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "gmail",
+      "file": "assets/store/screenshots/de/gmail.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-gmail modern-mode  ",
+      "headings": [
+        "Gmail"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "discord",
+      "file": "assets/store/screenshots/de/discord.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-discord modern-mode  ",
+      "headings": [
+        "Discord"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "settings",
+      "file": "assets/store/screenshots/de/settings.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Einstellungen"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "settings-01",
+      "file": "assets/store/screenshots/de/settings-01.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Einstellungen"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "settings-02",
+      "file": "assets/store/screenshots/de/settings-02.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Einstellungen"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "settings-03",
+      "file": "assets/store/screenshots/de/settings-03.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Einstellungen"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "settings-04",
+      "file": "assets/store/screenshots/de/settings-04.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Einstellungen",
+        "Google-Konten"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "settings-05",
+      "file": "assets/store/screenshots/de/settings-05.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Einstellungen"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "settings-06",
+      "file": "assets/store/screenshots/de/settings-06.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Einstellungen"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "settings-07",
+      "file": "assets/store/screenshots/de/settings-07.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Einstellungen"
+      ]
+    },
+    {
+      "locale": "de",
+      "area": "terminal",
+      "file": "assets/store/screenshots/de/terminal.png",
+      "lang": "de",
+      "shellClass": "app-shell panel-terminal modern-mode  ",
+      "headings": [
+        "Native Terminal & Sidekick CLI"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "browser",
+      "file": "assets/store/screenshots/it/browser.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Buonanotte",
+        "Space e sessioni",
+        "Home",
+        "Avvio rapido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "extension-hub",
+      "file": "assets/store/screenshots/it/extension-hub.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Kuratierter 1-Klick Showcase",
+        "Weitere Erweiterung installieren",
+        "Installierte Erweiterungen (0)",
+        "Buonanotte",
+        "Space e sessioni",
+        "Home",
+        "Avvio rapido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "skill-hub",
+      "file": "assets/store/screenshots/it/skill-hub.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Buonanotte",
+        "Space e sessioni",
+        "Home",
+        "Avvio rapido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "downloads",
+      "file": "assets/store/screenshots/it/downloads.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Buonanotte",
+        "Space e sessioni",
+        "Home",
+        "Avvio rapido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "history",
+      "file": "assets/store/screenshots/it/history.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Buonanotte",
+        "Space e sessioni",
+        "Home",
+        "Avvio rapido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "permissions",
+      "file": "assets/store/screenshots/it/permissions.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Buonanotte",
+        "Space e sessioni",
+        "Home",
+        "Avvio rapido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "command-palette",
+      "file": "assets/store/screenshots/it/command-palette.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Buonanotte",
+        "Space e sessioni",
+        "Home",
+        "Avvio rapido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "chat",
+      "file": "assets/store/screenshots/it/chat.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-chat modern-mode  ",
+      "headings": [
+        "Sidekick",
+        "Avvia o seleziona una chat"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "tasks",
+      "file": "assets/store/screenshots/it/tasks.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-tasks modern-mode  ",
+      "headings": [
+        "Scheduled jobs"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "kanban",
+      "file": "assets/store/screenshots/it/kanban.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-kanban modern-mode  ",
+      "headings": [
+        "Board"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "skills",
+      "file": "assets/store/screenshots/it/skills.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-skills modern-mode  ",
+      "headings": [
+        "Competenze"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "agents",
+      "file": "assets/store/screenshots/it/agents.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-agents modern-mode  ",
+      "headings": [
+        "Agenti",
+        "Creative Writer"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "memory",
+      "file": "assets/store/screenshots/it/memory.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-memory modern-mode  ",
+      "headings": [
+        "Memoria"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "workspaces",
+      "file": "assets/store/screenshots/it/workspaces.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-workspaces modern-mode  ",
+      "headings": [
+        "Workspaces"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "profiles",
+      "file": "assets/store/screenshots/it/profiles.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-profiles modern-mode  ",
+      "headings": [
+        "Profili agente"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "todos",
+      "file": "assets/store/screenshots/it/todos.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-todos modern-mode  ",
+      "headings": [
+        "Pending"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "insights",
+      "file": "assets/store/screenshots/it/insights.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-insights modern-mode  ",
+      "headings": [
+        "Statistiche"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "logs",
+      "file": "assets/store/screenshots/it/logs.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-logs modern-mode  ",
+      "headings": [
+        "Log"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "gmail",
+      "file": "assets/store/screenshots/it/gmail.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-gmail modern-mode  ",
+      "headings": [
+        "Gmail"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "discord",
+      "file": "assets/store/screenshots/it/discord.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-discord modern-mode  ",
+      "headings": [
+        "Discord"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "settings",
+      "file": "assets/store/screenshots/it/settings.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Impostazioni"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "settings-01",
+      "file": "assets/store/screenshots/it/settings-01.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Impostazioni"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "settings-02",
+      "file": "assets/store/screenshots/it/settings-02.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Impostazioni"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "settings-03",
+      "file": "assets/store/screenshots/it/settings-03.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Impostazioni"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "settings-04",
+      "file": "assets/store/screenshots/it/settings-04.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Impostazioni",
+        "Account Google"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "settings-05",
+      "file": "assets/store/screenshots/it/settings-05.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Impostazioni"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "settings-06",
+      "file": "assets/store/screenshots/it/settings-06.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Impostazioni"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "settings-07",
+      "file": "assets/store/screenshots/it/settings-07.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Impostazioni"
+      ]
+    },
+    {
+      "locale": "it",
+      "area": "terminal",
+      "file": "assets/store/screenshots/it/terminal.png",
+      "lang": "it",
+      "shellClass": "app-shell panel-terminal modern-mode  ",
+      "headings": [
+        "Native Terminal & Sidekick CLI"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "browser",
+      "file": "assets/store/screenshots/es/browser.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Buenas noches",
+        "Espacios y sesiones",
+        "Home",
+        "Acceso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "extension-hub",
+      "file": "assets/store/screenshots/es/extension-hub.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Kuratierter 1-Klick Showcase",
+        "Weitere Erweiterung installieren",
+        "Installierte Erweiterungen (0)",
+        "Buenas noches",
+        "Espacios y sesiones",
+        "Home",
+        "Acceso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "skill-hub",
+      "file": "assets/store/screenshots/es/skill-hub.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Buenas noches",
+        "Espacios y sesiones",
+        "Home",
+        "Acceso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "downloads",
+      "file": "assets/store/screenshots/es/downloads.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Buenas noches",
+        "Espacios y sesiones",
+        "Home",
+        "Acceso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "history",
+      "file": "assets/store/screenshots/es/history.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Buenas noches",
+        "Espacios y sesiones",
+        "Home",
+        "Acceso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "permissions",
+      "file": "assets/store/screenshots/es/permissions.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Buenas noches",
+        "Espacios y sesiones",
+        "Home",
+        "Acceso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "command-palette",
+      "file": "assets/store/screenshots/es/command-palette.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Buenas noches",
+        "Espacios y sesiones",
+        "Home",
+        "Acceso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "chat",
+      "file": "assets/store/screenshots/es/chat.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-chat modern-mode  ",
+      "headings": [
+        "Sidekick",
+        "Inicia o selecciona un chat"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "tasks",
+      "file": "assets/store/screenshots/es/tasks.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-tasks modern-mode  ",
+      "headings": [
+        "Scheduled jobs"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "kanban",
+      "file": "assets/store/screenshots/es/kanban.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-kanban modern-mode  ",
+      "headings": [
+        "Board"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "skills",
+      "file": "assets/store/screenshots/es/skills.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-skills modern-mode  ",
+      "headings": [
+        "Habilidades"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "agents",
+      "file": "assets/store/screenshots/es/agents.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-agents modern-mode  ",
+      "headings": [
+        "Agentes",
+        "Creative Writer"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "memory",
+      "file": "assets/store/screenshots/es/memory.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-memory modern-mode  ",
+      "headings": [
+        "Memoria"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "workspaces",
+      "file": "assets/store/screenshots/es/workspaces.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-workspaces modern-mode  ",
+      "headings": [
+        "Workspaces"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "profiles",
+      "file": "assets/store/screenshots/es/profiles.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-profiles modern-mode  ",
+      "headings": [
+        "Perfiles de agente"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "todos",
+      "file": "assets/store/screenshots/es/todos.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-todos modern-mode  ",
+      "headings": [
+        "Pending"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "insights",
+      "file": "assets/store/screenshots/es/insights.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-insights modern-mode  ",
+      "headings": [
+        "Estadísticas"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "logs",
+      "file": "assets/store/screenshots/es/logs.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-logs modern-mode  ",
+      "headings": [
+        "Registros"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "gmail",
+      "file": "assets/store/screenshots/es/gmail.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-gmail modern-mode  ",
+      "headings": [
+        "Gmail"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "discord",
+      "file": "assets/store/screenshots/es/discord.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-discord modern-mode  ",
+      "headings": [
+        "Discord"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "settings",
+      "file": "assets/store/screenshots/es/settings.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Ajustes"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "settings-01",
+      "file": "assets/store/screenshots/es/settings-01.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Ajustes"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "settings-02",
+      "file": "assets/store/screenshots/es/settings-02.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Ajustes"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "settings-03",
+      "file": "assets/store/screenshots/es/settings-03.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Ajustes"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "settings-04",
+      "file": "assets/store/screenshots/es/settings-04.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Ajustes",
+        "Cuentas de Google"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "settings-05",
+      "file": "assets/store/screenshots/es/settings-05.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Ajustes"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "settings-06",
+      "file": "assets/store/screenshots/es/settings-06.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Ajustes"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "settings-07",
+      "file": "assets/store/screenshots/es/settings-07.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Ajustes"
+      ]
+    },
+    {
+      "locale": "es",
+      "area": "terminal",
+      "file": "assets/store/screenshots/es/terminal.png",
+      "lang": "es",
+      "shellClass": "app-shell panel-terminal modern-mode  ",
+      "headings": [
+        "Native Terminal & Sidekick CLI"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "browser",
+      "file": "assets/store/screenshots/fr/browser.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Bonne nuit",
+        "Espaces et sessions",
+        "Home",
+        "Accès rapide",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "extension-hub",
+      "file": "assets/store/screenshots/fr/extension-hub.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Kuratierter 1-Klick Showcase",
+        "Weitere Erweiterung installieren",
+        "Installierte Erweiterungen (0)",
+        "Bonne nuit",
+        "Espaces et sessions",
+        "Home",
+        "Accès rapide",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "skill-hub",
+      "file": "assets/store/screenshots/fr/skill-hub.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Bonne nuit",
+        "Espaces et sessions",
+        "Home",
+        "Accès rapide",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "downloads",
+      "file": "assets/store/screenshots/fr/downloads.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Bonne nuit",
+        "Espaces et sessions",
+        "Home",
+        "Accès rapide",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "history",
+      "file": "assets/store/screenshots/fr/history.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Bonne nuit",
+        "Espaces et sessions",
+        "Home",
+        "Accès rapide",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "permissions",
+      "file": "assets/store/screenshots/fr/permissions.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Bonne nuit",
+        "Espaces et sessions",
+        "Home",
+        "Accès rapide",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "command-palette",
+      "file": "assets/store/screenshots/fr/command-palette.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Bonne nuit",
+        "Espaces et sessions",
+        "Home",
+        "Accès rapide",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "chat",
+      "file": "assets/store/screenshots/fr/chat.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-chat modern-mode  ",
+      "headings": [
+        "Sidekick",
+        "Démarrez ou sélectionnez un chat"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "tasks",
+      "file": "assets/store/screenshots/fr/tasks.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-tasks modern-mode  ",
+      "headings": [
+        "Scheduled jobs"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "kanban",
+      "file": "assets/store/screenshots/fr/kanban.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-kanban modern-mode  ",
+      "headings": [
+        "Board"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "skills",
+      "file": "assets/store/screenshots/fr/skills.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-skills modern-mode  ",
+      "headings": [
+        "Compétences"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "agents",
+      "file": "assets/store/screenshots/fr/agents.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-agents modern-mode  ",
+      "headings": [
+        "Agents",
+        "Creative Writer"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "memory",
+      "file": "assets/store/screenshots/fr/memory.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-memory modern-mode  ",
+      "headings": [
+        "Mémoire"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "workspaces",
+      "file": "assets/store/screenshots/fr/workspaces.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-workspaces modern-mode  ",
+      "headings": [
+        "Workspaces"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "profiles",
+      "file": "assets/store/screenshots/fr/profiles.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-profiles modern-mode  ",
+      "headings": [
+        "Profils d’agent"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "todos",
+      "file": "assets/store/screenshots/fr/todos.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-todos modern-mode  ",
+      "headings": [
+        "Pending"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "insights",
+      "file": "assets/store/screenshots/fr/insights.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-insights modern-mode  ",
+      "headings": [
+        "Analyses"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "logs",
+      "file": "assets/store/screenshots/fr/logs.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-logs modern-mode  ",
+      "headings": [
+        "Journaux"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "gmail",
+      "file": "assets/store/screenshots/fr/gmail.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-gmail modern-mode  ",
+      "headings": [
+        "Gmail"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "discord",
+      "file": "assets/store/screenshots/fr/discord.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-discord modern-mode  ",
+      "headings": [
+        "Discord"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "settings",
+      "file": "assets/store/screenshots/fr/settings.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Paramètres"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "settings-01",
+      "file": "assets/store/screenshots/fr/settings-01.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Paramètres"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "settings-02",
+      "file": "assets/store/screenshots/fr/settings-02.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Paramètres"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "settings-03",
+      "file": "assets/store/screenshots/fr/settings-03.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Paramètres"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "settings-04",
+      "file": "assets/store/screenshots/fr/settings-04.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Paramètres",
+        "Comptes Google"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "settings-05",
+      "file": "assets/store/screenshots/fr/settings-05.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Paramètres"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "settings-06",
+      "file": "assets/store/screenshots/fr/settings-06.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Paramètres"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "settings-07",
+      "file": "assets/store/screenshots/fr/settings-07.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Paramètres"
+      ]
+    },
+    {
+      "locale": "fr",
+      "area": "terminal",
+      "file": "assets/store/screenshots/fr/terminal.png",
+      "lang": "fr",
+      "shellClass": "app-shell panel-terminal modern-mode  ",
+      "headings": [
+        "Native Terminal & Sidekick CLI"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "browser",
+      "file": "assets/store/screenshots/pt-BR/browser.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Boa noite",
+        "Espaços e sessões",
+        "Home",
+        "Acesso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "extension-hub",
+      "file": "assets/store/screenshots/pt-BR/extension-hub.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Kuratierter 1-Klick Showcase",
+        "Weitere Erweiterung installieren",
+        "Installierte Erweiterungen (0)",
+        "Boa noite",
+        "Espaços e sessões",
+        "Home",
+        "Acesso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "skill-hub",
+      "file": "assets/store/screenshots/pt-BR/skill-hub.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Boa noite",
+        "Espaços e sessões",
+        "Home",
+        "Acesso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "downloads",
+      "file": "assets/store/screenshots/pt-BR/downloads.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Boa noite",
+        "Espaços e sessões",
+        "Home",
+        "Acesso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "history",
+      "file": "assets/store/screenshots/pt-BR/history.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Boa noite",
+        "Espaços e sessões",
+        "Home",
+        "Acesso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "permissions",
+      "file": "assets/store/screenshots/pt-BR/permissions.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Boa noite",
+        "Espaços e sessões",
+        "Home",
+        "Acesso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "command-palette",
+      "file": "assets/store/screenshots/pt-BR/command-palette.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Boa noite",
+        "Espaços e sessões",
+        "Home",
+        "Acesso rápido",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "chat",
+      "file": "assets/store/screenshots/pt-BR/chat.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-chat modern-mode  ",
+      "headings": [
+        "Sidekick",
+        "Inicie ou selecione um chat"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "tasks",
+      "file": "assets/store/screenshots/pt-BR/tasks.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-tasks modern-mode  ",
+      "headings": [
+        "Scheduled jobs"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "kanban",
+      "file": "assets/store/screenshots/pt-BR/kanban.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-kanban modern-mode  ",
+      "headings": [
+        "Board"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "skills",
+      "file": "assets/store/screenshots/pt-BR/skills.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-skills modern-mode  ",
+      "headings": [
+        "Habilidades"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "agents",
+      "file": "assets/store/screenshots/pt-BR/agents.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-agents modern-mode  ",
+      "headings": [
+        "Agentes",
+        "Creative Writer"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "memory",
+      "file": "assets/store/screenshots/pt-BR/memory.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-memory modern-mode  ",
+      "headings": [
+        "Memória"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "workspaces",
+      "file": "assets/store/screenshots/pt-BR/workspaces.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-workspaces modern-mode  ",
+      "headings": [
+        "Workspaces"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "profiles",
+      "file": "assets/store/screenshots/pt-BR/profiles.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-profiles modern-mode  ",
+      "headings": [
+        "Perfis de agente"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "todos",
+      "file": "assets/store/screenshots/pt-BR/todos.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-todos modern-mode  ",
+      "headings": [
+        "Pending"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "insights",
+      "file": "assets/store/screenshots/pt-BR/insights.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-insights modern-mode  ",
+      "headings": [
+        "Análises"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "logs",
+      "file": "assets/store/screenshots/pt-BR/logs.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-logs modern-mode  ",
+      "headings": [
+        "Registros"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "gmail",
+      "file": "assets/store/screenshots/pt-BR/gmail.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-gmail modern-mode  ",
+      "headings": [
+        "Gmail"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "discord",
+      "file": "assets/store/screenshots/pt-BR/discord.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-discord modern-mode  ",
+      "headings": [
+        "Discord"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "settings",
+      "file": "assets/store/screenshots/pt-BR/settings.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Configurações"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "settings-01",
+      "file": "assets/store/screenshots/pt-BR/settings-01.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Configurações"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "settings-02",
+      "file": "assets/store/screenshots/pt-BR/settings-02.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Configurações"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "settings-03",
+      "file": "assets/store/screenshots/pt-BR/settings-03.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Configurações"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "settings-04",
+      "file": "assets/store/screenshots/pt-BR/settings-04.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Configurações",
+        "Contas Google e rotação round-robin"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "settings-05",
+      "file": "assets/store/screenshots/pt-BR/settings-05.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Configurações"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "settings-06",
+      "file": "assets/store/screenshots/pt-BR/settings-06.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Configurações"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "settings-07",
+      "file": "assets/store/screenshots/pt-BR/settings-07.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Configurações"
+      ]
+    },
+    {
+      "locale": "pt-BR",
+      "area": "terminal",
+      "file": "assets/store/screenshots/pt-BR/terminal.png",
+      "lang": "pt-BR",
+      "shellClass": "app-shell panel-terminal modern-mode  ",
+      "headings": [
+        "Native Terminal & Sidekick CLI"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "browser",
+      "file": "assets/store/screenshots/ru/browser.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Спокойной ночи",
+        "Пространства и сеансы",
+        "Home",
+        "Быстрый запуск",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "extension-hub",
+      "file": "assets/store/screenshots/ru/extension-hub.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Kuratierter 1-Klick Showcase",
+        "Weitere Erweiterung installieren",
+        "Installierte Erweiterungen (0)",
+        "Спокойной ночи",
+        "Пространства и сеансы",
+        "Home",
+        "Быстрый запуск",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "skill-hub",
+      "file": "assets/store/screenshots/ru/skill-hub.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Спокойной ночи",
+        "Пространства и сеансы",
+        "Home",
+        "Быстрый запуск",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "downloads",
+      "file": "assets/store/screenshots/ru/downloads.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Спокойной ночи",
+        "Пространства и сеансы",
+        "Home",
+        "Быстрый запуск",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "history",
+      "file": "assets/store/screenshots/ru/history.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Спокойной ночи",
+        "Пространства и сеансы",
+        "Home",
+        "Быстрый запуск",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "permissions",
+      "file": "assets/store/screenshots/ru/permissions.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Спокойной ночи",
+        "Пространства и сеансы",
+        "Home",
+        "Быстрый запуск",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "command-palette",
+      "file": "assets/store/screenshots/ru/command-palette.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Спокойной ночи",
+        "Пространства и сеансы",
+        "Home",
+        "Быстрый запуск",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "chat",
+      "file": "assets/store/screenshots/ru/chat.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-chat modern-mode  ",
+      "headings": [
+        "Sidekick",
+        "Начните или выберите чат"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "tasks",
+      "file": "assets/store/screenshots/ru/tasks.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-tasks modern-mode  ",
+      "headings": [
+        "Scheduled jobs"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "kanban",
+      "file": "assets/store/screenshots/ru/kanban.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-kanban modern-mode  ",
+      "headings": [
+        "Board"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "skills",
+      "file": "assets/store/screenshots/ru/skills.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-skills modern-mode  ",
+      "headings": [
+        "Навыки"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "agents",
+      "file": "assets/store/screenshots/ru/agents.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-agents modern-mode  ",
+      "headings": [
+        "Агенты",
+        "Creative Writer"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "memory",
+      "file": "assets/store/screenshots/ru/memory.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-memory modern-mode  ",
+      "headings": [
+        "Память"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "workspaces",
+      "file": "assets/store/screenshots/ru/workspaces.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-workspaces modern-mode  ",
+      "headings": [
+        "Workspaces"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "profiles",
+      "file": "assets/store/screenshots/ru/profiles.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-profiles modern-mode  ",
+      "headings": [
+        "Профили агентов"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "todos",
+      "file": "assets/store/screenshots/ru/todos.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-todos modern-mode  ",
+      "headings": [
+        "Pending"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "insights",
+      "file": "assets/store/screenshots/ru/insights.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-insights modern-mode  ",
+      "headings": [
+        "Аналитика"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "logs",
+      "file": "assets/store/screenshots/ru/logs.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-logs modern-mode  ",
+      "headings": [
+        "Журналы"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "gmail",
+      "file": "assets/store/screenshots/ru/gmail.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-gmail modern-mode  ",
+      "headings": [
+        "Gmail"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "discord",
+      "file": "assets/store/screenshots/ru/discord.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-discord modern-mode  ",
+      "headings": [
+        "Discord"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "settings",
+      "file": "assets/store/screenshots/ru/settings.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Настройки"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "settings-01",
+      "file": "assets/store/screenshots/ru/settings-01.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Настройки"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "settings-02",
+      "file": "assets/store/screenshots/ru/settings-02.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Настройки"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "settings-03",
+      "file": "assets/store/screenshots/ru/settings-03.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Настройки"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "settings-04",
+      "file": "assets/store/screenshots/ru/settings-04.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Настройки",
+        "Аккаунты Google и циклическое распределение"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "settings-05",
+      "file": "assets/store/screenshots/ru/settings-05.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Настройки"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "settings-06",
+      "file": "assets/store/screenshots/ru/settings-06.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Настройки"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "settings-07",
+      "file": "assets/store/screenshots/ru/settings-07.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "Настройки"
+      ]
+    },
+    {
+      "locale": "ru",
+      "area": "terminal",
+      "file": "assets/store/screenshots/ru/terminal.png",
+      "lang": "ru",
+      "shellClass": "app-shell panel-terminal modern-mode  ",
+      "headings": [
+        "Native Terminal & Sidekick CLI"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "browser",
+      "file": "assets/store/screenshots/ja/browser.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "夜のひとときに",
+        "スペースとセッション",
+        "Home",
+        "クイック起動",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "extension-hub",
+      "file": "assets/store/screenshots/ja/extension-hub.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "Kuratierter 1-Klick Showcase",
+        "Weitere Erweiterung installieren",
+        "Installierte Erweiterungen (0)",
+        "夜のひとときに",
+        "スペースとセッション",
+        "Home",
+        "クイック起動",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "skill-hub",
+      "file": "assets/store/screenshots/ja/skill-hub.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "Unified Extension & Skill Hub",
+        "夜のひとときに",
+        "スペースとセッション",
+        "Home",
+        "クイック起動",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "downloads",
+      "file": "assets/store/screenshots/ja/downloads.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "夜のひとときに",
+        "スペースとセッション",
+        "Home",
+        "クイック起動",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "history",
+      "file": "assets/store/screenshots/ja/history.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "夜のひとときに",
+        "スペースとセッション",
+        "Home",
+        "クイック起動",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "permissions",
+      "file": "assets/store/screenshots/ja/permissions.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "夜のひとときに",
+        "スペースとセッション",
+        "Home",
+        "クイック起動",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "command-palette",
+      "file": "assets/store/screenshots/ja/command-palette.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-browser modern-mode  ",
+      "headings": [
+        "夜のひとときに",
+        "スペースとセッション",
+        "Home",
+        "クイック起動",
+        "Bookmarks",
+        "Recent sites"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "chat",
+      "file": "assets/store/screenshots/ja/chat.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-chat modern-mode  ",
+      "headings": [
+        "Sidekick",
+        "チャットを開始または選択"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "tasks",
+      "file": "assets/store/screenshots/ja/tasks.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-tasks modern-mode  ",
+      "headings": [
+        "Scheduled jobs"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "kanban",
+      "file": "assets/store/screenshots/ja/kanban.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-kanban modern-mode  ",
+      "headings": [
+        "Board"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "skills",
+      "file": "assets/store/screenshots/ja/skills.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-skills modern-mode  ",
+      "headings": [
+        "スキル"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "agents",
+      "file": "assets/store/screenshots/ja/agents.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-agents modern-mode  ",
+      "headings": [
+        "エージェント",
+        "Creative Writer"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "memory",
+      "file": "assets/store/screenshots/ja/memory.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-memory modern-mode  ",
+      "headings": [
+        "メモリー"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "workspaces",
+      "file": "assets/store/screenshots/ja/workspaces.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-workspaces modern-mode  ",
+      "headings": [
+        "Workspaces"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "profiles",
+      "file": "assets/store/screenshots/ja/profiles.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-profiles modern-mode  ",
+      "headings": [
+        "エージェントプロファイル"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "todos",
+      "file": "assets/store/screenshots/ja/todos.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-todos modern-mode  ",
+      "headings": [
+        "Pending"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "insights",
+      "file": "assets/store/screenshots/ja/insights.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-insights modern-mode  ",
+      "headings": [
+        "利用状況"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "logs",
+      "file": "assets/store/screenshots/ja/logs.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-logs modern-mode  ",
+      "headings": [
+        "ログ"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "gmail",
+      "file": "assets/store/screenshots/ja/gmail.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-gmail modern-mode  ",
+      "headings": [
+        "Gmail"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "discord",
+      "file": "assets/store/screenshots/ja/discord.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-discord modern-mode  ",
+      "headings": [
+        "Discord"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "settings",
+      "file": "assets/store/screenshots/ja/settings.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "設定"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "settings-01",
+      "file": "assets/store/screenshots/ja/settings-01.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "設定"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "settings-02",
+      "file": "assets/store/screenshots/ja/settings-02.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "設定"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "settings-03",
+      "file": "assets/store/screenshots/ja/settings-03.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "設定"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "settings-04",
+      "file": "assets/store/screenshots/ja/settings-04.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "設定",
+        "Googleアカウントと順次振り分け"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "settings-05",
+      "file": "assets/store/screenshots/ja/settings-05.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "設定"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "settings-06",
+      "file": "assets/store/screenshots/ja/settings-06.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "設定"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "settings-07",
+      "file": "assets/store/screenshots/ja/settings-07.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-settings modern-mode  ",
+      "headings": [
+        "設定"
+      ]
+    },
+    {
+      "locale": "ja",
+      "area": "terminal",
+      "file": "assets/store/screenshots/ja/terminal.png",
+      "lang": "ja",
+      "shellClass": "app-shell panel-terminal modern-mode  ",
+      "headings": [
+        "Native Terminal & Sidekick CLI"
+      ]
+    }
+  ],
+  "failures": [],
+  "driverModelRequests": false
+}

@@ -6,7 +6,10 @@
 
 [CmdletBinding()]
 param(
-    [switch]$Quick = $false
+    [switch]$Quick = $false,
+    [string]$PackageDirectory,
+    [string]$InstallerPath,
+    [string]$SignatureReportPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -90,6 +93,58 @@ foreach ($imgSpec in $expectedImages) {
     }
 }
 
+# Current EXE/MSI listing form requires 1080 or 2160 square main box art.
+# The older 512/1024 icons above remain useful app assets, not Store box art.
+$validStoreMainLogos = @()
+foreach ($candidate in (Get-ChildItem -LiteralPath $storeAssetDir -Filter '*.png' -File)) {
+    $logoImage = $null
+    try {
+        $logoImage = [System.Drawing.Image]::FromFile($candidate.FullName)
+        if ($logoImage.Width -eq $logoImage.Height -and $logoImage.Width -in @(1080, 2160) -and $candidate.Length -lt 50MB) {
+            $validStoreMainLogos += $candidate.Name
+        }
+    } catch {
+        # Image readability is reported by the existing asset checks above.
+    } finally {
+        if ($null -ne $logoImage) { $logoImage.Dispose() }
+    }
+}
+if ($validStoreMainLogos.Count -gt 0) {
+    Report-Pass "Store main box art" ($validStoreMainLogos -join ', ')
+} elseif ($PackageDirectory) {
+    Report-Fail "Store main box art" "Final submission needs a PNG main logo at 1080x1080 or 2160x2160, below 50 MB"
+} else {
+    Report-Warn "Store main box art" "Prepared 512/1024 icons do not meet the current 1080/2160 square listing requirement"
+}
+$captureReportPath = Join-Path $storeAssetDir 'screenshots\capture-report.json'
+if (Test-Path -LiteralPath $captureReportPath) {
+    try {
+        $captureReport = Get-Content -LiteralPath $captureReportPath -Raw | ConvertFrom-Json
+        if ($captureReport.failures.Count -gt 0) { throw 'Screenshot navigation failures are present' }
+        $captureRoot = [IO.Path]::GetFullPath((Join-Path $storeAssetDir 'screenshots')) + [IO.Path]::DirectorySeparatorChar
+        $captureKeys = @{}
+        foreach ($capture in $captureReport.captures) {
+            $capturePath = [IO.Path]::GetFullPath((Join-Path $rootDir $capture.file))
+            if (-not $capturePath.StartsWith($captureRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Screenshot path leaves its asset directory' }
+            if ($capture.lang -ne $capture.locale) { throw "UI locale mismatch in $($capture.file)" }
+            $captureKey = "$($capture.locale)/$($capture.area)"
+            if ($captureKeys.ContainsKey($captureKey)) { throw "Duplicate capture entry: $captureKey" }
+            $captureKeys[$captureKey] = $true
+            $captureImage = [System.Drawing.Image]::FromFile($capturePath)
+            try {
+                if ($captureImage.Width -ne 1920 -or $captureImage.Height -ne 1080 -or (Get-Item -LiteralPath $capturePath).Length -ge 50MB) { throw "Invalid screenshot dimensions or size: $($capture.file)" }
+            } finally { $captureImage.Dispose() }
+        }
+        foreach ($locale in $captureReport.locales) {
+            if (@($captureReport.captures | Where-Object locale -eq $locale).Count -lt 29) { throw "Incomplete screenshot coverage: $locale" }
+        }
+        Report-Pass "Real app screenshot inventory" "$($captureReport.captures.Count) PNGs, $($captureReport.locales.Count) UI locales, 1920x1080, no navigation failures"
+        Report-Warn "Store screenshot content" "Real source-build captures remain provisional until the completed release is checked; visible localization gaps are documented"
+    } catch { Report-Fail "Real app screenshot inventory" $_.Exception.Message }
+} else {
+    Report-Warn "Store screenshot content" "Legacy generated mockups must be replaced with genuine screenshots of the completed app"
+}
+
 # ------------------------------------------------------------------------------
 # 2. Web Presence & Legal Compliance (lastbrowser.com)
 # ------------------------------------------------------------------------------
@@ -162,6 +217,14 @@ if (Test-Path $desktopPkgPath) {
         Report-Pass "Application ID" "$($pkgJson.build.appId)"
     } else {
         Report-Warn "Application ID" "$($pkgJson.build.appId) differs from standard com.lastbrowser.desktop"
+    }
+
+    $nativeSigningExtensions = @($pkgJson.build.win.signExts)
+    $missingNativeSigningExtensions = @('.dll', '.pyd', '.node' | Where-Object { $_ -notin $nativeSigningExtensions })
+    if ($missingNativeSigningExtensions.Count -eq 0) {
+        Report-Pass "Native payload signing configuration" "DLL, Python and Node native modules are included in Authenticode signing"
+    } else {
+        Report-Fail "Native payload signing configuration" "Missing extensions: $($missingNativeSigningExtensions -join ', ')"
     }
 } else {
     Report-Fail "Desktop package.json" "Not found at $desktopPkgPath"
@@ -256,13 +319,72 @@ if (Test-Path $storeListingPath) {
     Report-Fail "Store Listing Metadata" "Missing docs/store-listing.md"
 }
 
+$listingDraftPath = Join-Path $storeAssetDir 'listing-drafts.json'
+if (Test-Path -LiteralPath $listingDraftPath) {
+    try {
+        $listingDraft = Get-Content -LiteralPath $listingDraftPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $appLocaleSource = Get-Content -LiteralPath (Join-Path $rootDir 'apps/desktop/src/renderer/i18n/keys.ts') -Raw -Encoding UTF8
+        $appLocaleMatch = [regex]::Match($appLocaleSource, 'export const desktopLocaleIds[^=]*=\s*\[([^\]]+)\]')
+        if (-not $appLocaleMatch.Success) { throw 'Cannot read the desktop locale inventory' }
+        $appLocales = @([regex]::Matches($appLocaleMatch.Groups[1].Value, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
+        $expectedStoreLocales = @()
+        $missingLocaleMappings = @()
+        foreach ($appLocale in $appLocales) {
+            $storeLocale = $listingDraft.appLocaleMapping.$appLocale
+            if ([string]::IsNullOrWhiteSpace($storeLocale) -or $null -eq $listingDraft.listings.$storeLocale) {
+                $missingLocaleMappings += $appLocale
+            } else {
+                $expectedStoreLocales += $storeLocale
+            }
+        }
+        if ($appLocales.Count -eq 0 -or $missingLocaleMappings.Count -gt 0) {
+            Report-Fail 'Store language coverage' "Missing drafts or mappings for app locales: $($missingLocaleMappings -join ', ')"
+        } else {
+            Report-Pass 'Store language coverage' "All $($appLocales.Count) desktop languages have mapped Store text drafts"
+        }
+        foreach ($locale in $expectedStoreLocales) {
+            $localeDraft = $listingDraft.listings.$locale
+            $draftIssues = @()
+            if ($null -eq $localeDraft -or [string]::IsNullOrWhiteSpace($localeDraft.description) -or $localeDraft.description.Length -gt 10000) {
+                $draftIssues += 'Description missing or longer than 10000 characters'
+            }
+            if ([string]::IsNullOrWhiteSpace($localeDraft.shortDescription) -or $localeDraft.shortDescription.Length -gt 270) {
+                $draftIssues += 'Short description missing or longer than the recommended 270 characters'
+            }
+            if ([string]::IsNullOrWhiteSpace($localeDraft.additionalLicenseTerms) -or $localeDraft.additionalLicenseTerms.Length -gt 10000) {
+                $draftIssues += 'License text missing or longer than 10000 characters'
+            }
+            $searchTerms = @($localeDraft.searchTerms)
+            $searchWords = @((($searchTerms -join ' ').Trim() -split '\s+') | Where-Object { $_ })
+            if ($searchTerms.Count -gt 7 -or $searchWords.Count -gt 21 -or @($searchTerms | Where-Object { $_.Length -gt 40 }).Count -gt 0) {
+                $draftIssues += 'Search terms exceed 7 terms, 21 words, or 40 characters per term'
+            }
+            if (@($localeDraft.productFeatures).Count -gt 20 -or @($localeDraft.productFeatures | Where-Object { $_.Length -gt 200 }).Count -gt 0) {
+                $draftIssues += 'Features exceed 20 entries or 200 characters per entry'
+            }
+            if ([string]::IsNullOrWhiteSpace($localeDraft.productName) -or [string]::IsNullOrWhiteSpace($localeDraft.whatsNew) -or $localeDraft.whatsNew.Length -gt 1500) {
+                $draftIssues += 'Product name or initial release note missing, or release note longer than 1500 characters'
+            }
+            if ($draftIssues.Count -gt 0) {
+                Report-Fail "Current Store text draft ($locale)" ($draftIssues -join '; ')
+            } else {
+                Report-Pass "Current Store text draft ($locale)" "Description, license text and search terms present; short description $($localeDraft.shortDescription.Length)/270 characters"
+            }
+        }
+    } catch {
+        Report-Fail 'Current Store text drafts' $_.Exception.Message
+    }
+} else {
+    Report-Fail 'Current Store text drafts' 'Missing assets/store/listing-drafts.json'
+}
+
 # ------------------------------------------------------------------------------
 # 6. Automated Unit & Integration Tests (Vitest)
 # ------------------------------------------------------------------------------
 Write-SectionHeader "6. Policy & Integration Tests (Phase 1.4 - 1.6)"
 
 if ($Quick) {
-    Report-Pass "Vitest Test Suite" "Skipped due to -Quick flag"
+    Report-Warn "Vitest Test Suite" "Not executed due to -Quick flag"
 } else {
     Write-Host "  Running Vitest system integration suite..." -ForegroundColor Gray
     $testResult = Start-Process -FilePath "npm.cmd" -ArgumentList "run", "test:run", "--", "tests/system-integration.test.ts" -NoNewWindow -PassThru -Wait
@@ -271,6 +393,26 @@ if ($Quick) {
     } else {
         Report-Fail "Store Policy Integration Tests" "tests/system-integration.test.ts returned exit code $($testResult.ExitCode)"
     }
+}
+
+# Package checks are separate from source/configuration checks. A green source
+# preflight must not hide unsigned binaries inside an otherwise signed installer.
+Write-SectionHeader "7. Final Windows Package Signatures"
+if ($PackageDirectory) {
+    try {
+        & (Join-Path $PSScriptRoot 'verify-windows-package-signatures.ps1') -PackageDirectory $PackageDirectory -InstallerPath $InstallerPath -ReportPath $SignatureReportPath
+        if ($InstallerPath) {
+            Report-Pass "Final installer and native payload signatures" "All checked files have valid timestamped signatures"
+        } else {
+            Report-Warn "Final installer signature" "Native payload checked; no installer supplied"
+        }
+    } catch {
+        Report-Fail "Final installer and native payload signatures" $_.Exception.Message
+    }
+} elseif ($InstallerPath) {
+    Report-Fail "Final Windows package" "InstallerPath requires PackageDirectory so the native payload is checked as well"
+} else {
+    Report-Warn "Final Windows package" "No package supplied; binary signature readiness was not checked"
 }
 
 # ------------------------------------------------------------------------------
@@ -292,8 +434,8 @@ if ($failCount -gt 0) {
 Write-Host ""
 
 if ($failCount -eq 0) {
-    Write-Host ">>> ALL MICROSOFT STORE CERTIFICATION PREFLIGHT CHECKS PASSED <<<" -ForegroundColor Green
-    Write-Host "Source, assets, and release workflow checks passed. A signed package still requires build-time signature and checksum verification before submission." -ForegroundColor Yellow
+    Write-Host ">>> EXECUTED PREFLIGHT CHECKS PASSED <<<" -ForegroundColor Green
+    Write-Host "Review all warnings. This is not a Store certification result: final app behavior, listing content, published legal URLs, signed package and checksums still need validation." -ForegroundColor Yellow
     exit 0
 } else {
     Write-Host ">>> STORE CERTIFICATION CHECKS FAILED WITH $failCount ISSUES <<<" -ForegroundColor Red

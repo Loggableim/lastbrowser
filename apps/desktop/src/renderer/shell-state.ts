@@ -60,6 +60,12 @@ export type ProjectSummary = {
 };
 
 export type DesktopChatMessage = {
+  grill_question?: { questionId: string; revision: number };
+  grill_fallback?: import('./native-grill-client.js').NativeGrillFallbackMarker;
+  independentProgressId?: string;
+  independentRunId?: string;
+  progressRevision?: number;
+  isPartial?: boolean;
   role?: string;
   content?: string;
   timestamp?: string | number;
@@ -71,6 +77,8 @@ export type DesktopChatMessage = {
   streaming?: boolean;
   progress?: string;
   teamwork?: unknown;
+  chatStreamId?: string;
+  chatStreamSessionId?: string;
   smartTrack?: unknown;
 };
 
@@ -80,8 +88,14 @@ export type ComposerDraft = {
 };
 
 export type DesktopSessionDetail = DesktopSessionSummary & {
+  space_scope?:import('./independent-contracts.js').IndependentScope|null;
+  native_controls?:import('./native-chat-control.js').NativeControlSnapshot|null;
+  independent?: import('./independent-work-chat.js').IndependentSessionRun | null;
   model?: string;
   model_provider?: string | null;
+  reasoning_selection?: { schemaVersion: 1; provider: string; model: string; effort: string } | null;
+  chat_execution_mode?:import('./chat-mode-client.js').ChatModeSettings|null;
+  grill_state?: import('./native-grill-client.js').NativeGrillState|null;
   active_stream_id?: string | null;
   pending_user_message?: string | null;
   messages?: DesktopChatMessage[];

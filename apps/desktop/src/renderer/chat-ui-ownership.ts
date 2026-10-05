@@ -36,6 +36,14 @@ export class ChatUiOwnership {
     return ownerId !== undefined && this.owners.has(ownerId) ? ownerId : null;
   }
 
+  isActive(ownerId: number): boolean {
+    return this.activeOwnerId === ownerId && this.owners.has(ownerId);
+  }
+
+  ownsStream(ownerId: number, streamId: string): boolean {
+    return Boolean(streamId) && this.owners.get(ownerId)?.streamId === streamId;
+  }
+
   reactivate(ownerId: number, sessionId: string): boolean {
     const owner = this.owners.get(ownerId);
     if (!owner || owner.sessionId !== sessionId) return false;

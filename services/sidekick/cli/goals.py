@@ -33,6 +33,8 @@ import json
 import logging
 import re
 import time
+import sqlite3
+from contextvars import ContextVar
 from dataclasses import dataclass, asdict, field
 from typing import Any, Dict, Optional, Tuple
 
@@ -140,6 +142,9 @@ class GoalState:
     recent_assistant_responses: list[str] = field(default_factory=list)
     pending_judge_response: Optional[str] = None
     pending_judge_user_initiated: bool = True
+    revision: int = 0
+    continuation_owner: str = "legacy_chat"
+    owner_run_id: Optional[str] = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -147,6 +152,15 @@ class GoalState:
     @classmethod
     def from_json(cls, raw: str) -> "GoalState":
         data = json.loads(raw)
+        revision = data.get("revision", 0)
+        owner = data.get("continuation_owner", "legacy_chat")
+        owner_run_id = data.get("owner_run_id")
+        if type(revision) is not int or revision < 0:
+            raise ValueError("invalid goal revision")
+        if owner not in ("legacy_chat", "independent_run"):
+            raise ValueError("invalid continuation owner")
+        if owner == "independent_run" and (not isinstance(owner_run_id, str) or not owner_run_id.strip() or len(owner_run_id) > 128):
+            raise ValueError("independent continuation requires an owning run")
         raw_max_turns = data.get("max_turns", DEFAULT_MAX_TURNS)
         max_turns: Optional[int]
         if raw_max_turns in (None, ""):
@@ -176,6 +190,9 @@ class GoalState:
                 else None
             ),
             pending_judge_user_initiated=bool(data.get("pending_judge_user_initiated", True)),
+            revision=revision,
+            continuation_owner=owner,
+            owner_run_id=owner_run_id,
         )
 
 
@@ -275,6 +292,65 @@ def load_goal(session_id: str) -> Optional[GoalState]:
         return None
 
 
+class GoalRevisionConflict(RuntimeError):
+    """A newer durable goal state won over this mutation."""
+
+
+# Used only by the trusted WebUI command adapter. A receipt is committed with
+# the state mutation so a crash before the HTTP response cannot repeat it.
+_COMMAND_RECEIPT: ContextVar[Optional[Dict[str, Any]]] = ContextVar("goal_command_receipt", default=None)
+
+
+def persist_goal_state(db: Any, session_id: str, state: GoalState, *, expected_revision: Optional[int] = None) -> None:
+    expected = state.revision if expected_revision is None else expected_revision
+    if state.continuation_owner not in ("legacy_chat", "independent_run"):
+        raise ValueError("invalid continuation owner")
+    if state.continuation_owner == "independent_run" and (not isinstance(state.owner_run_id, str) or not state.owner_run_id.strip() or len(state.owner_run_id) > 128):
+        raise ValueError("independent continuation requires an owning run")
+    serialized = json.loads(state.to_json())
+    serialized["revision"] = expected + 1
+    if getattr(state, "_goal_run_id", None):
+        serialized["_goal_run_id"] = state._goal_run_id
+    raw = json.dumps(serialized, ensure_ascii=False)
+    db_path = getattr(db, "db_path", None)
+    if db_path is None:  # compatibility for non-SQLite test/embedding adapters
+        previous = db.get_meta(_meta_key(session_id))
+        revision = int(json.loads(previous).get("revision", 0)) if previous else 0
+        if revision != expected:
+            raise GoalRevisionConflict("goal revision changed")
+        db.set_meta(_meta_key(session_id), raw)
+        state.revision = expected + 1
+        return
+    with sqlite3.connect(str(db_path), timeout=1.0, isolation_level=None) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = conn.execute("SELECT value FROM state_meta WHERE key = ?", (_meta_key(session_id),)).fetchone()
+            previous = json.loads(row[0]) if row else None
+            revision = int(previous.get("revision", 0)) if previous else 0
+            if revision != expected:
+                raise GoalRevisionConflict("goal revision changed")
+            conn.execute("INSERT OR REPLACE INTO state_meta(key,value) VALUES (?,?)", (_meta_key(session_id), raw))
+            receipt = _COMMAND_RECEIPT.get()
+            if receipt and receipt["db_path"] == str(db_path) and receipt["session_id"] == session_id:
+                item = dict(receipt["value"])
+                item.update(state="committed", goal=serialized, revision=expected + 1)
+                conn.execute("INSERT OR REPLACE INTO state_meta(key,value) VALUES (?,?)", (receipt["key"], json.dumps(item, ensure_ascii=False)))
+                authorization = item.get("humanAuthorization")
+                run_id = serialized.get("_goal_run_id")
+                if isinstance(authorization, dict) and isinstance(run_id, str) and re.fullmatch(r"[0-9a-f]{32}", run_id):
+                    from runtime.independent.contracts import digest_json
+                    authority = {"humanAuthorization": authorization, "commandRef": receipt["key"],
+                        "commandDigest": item["digest"], "goalDigest": digest_json({
+                            "goal": serialized.get("goal"), "max_turns": serialized.get("max_turns")})}
+                    conn.execute("INSERT OR REPLACE INTO state_meta(key,value) VALUES (?,?)", (
+                        "native-goal-human:" + session_id + ":" + run_id, json.dumps(authority, ensure_ascii=False)))
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+    state.revision = expected + 1
+
+
 def save_goal(session_id: str, state: GoalState) -> None:
     """Persist a goal to SessionDB. No-op if DB unavailable."""
     if not session_id:
@@ -282,10 +358,7 @@ def save_goal(session_id: str, state: GoalState) -> None:
     db = _get_session_db()
     if db is None:
         return
-    try:
-        db.set_meta(_meta_key(session_id), state.to_json())
-    except Exception as exc:
-        logger.debug("GoalManager: set_meta failed: %s", exc)
+    persist_goal_state(db, session_id, state)
 
 
 def clear_goal(session_id: str) -> None:
@@ -417,6 +490,16 @@ def judge_goal(
     """
     if not goal.strip():
         return "skipped", "empty goal", False
+    import os
+    native_auto_bridge = None
+    if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1":
+        from runtime.independent.native_chat_auto import get_bound_native_auto_bridge
+        native_auto_bridge = get_bound_native_auto_bridge()
+        if native_auto_bridge is None:
+            from runtime.independent.native_sdk_broker import get_bound_native_sdk_bridge
+            native_auto_bridge = get_bound_native_sdk_bridge()
+        if native_auto_bridge is None:
+            raise PermissionError("native_sdk_goal_broker_required")
     if not last_response.strip():
         # No substantive reply this turn — almost certainly not done yet.
         return "continue", "empty response (nothing to evaluate)", False
@@ -426,6 +509,17 @@ def judge_goal(
         response=_truncate(last_response, _JUDGE_RESPONSE_SNIPPET_CHARS),
         history=json.dumps(bounded_goal_evidence(prior_responses), ensure_ascii=False),
     )
+
+    if native_auto_bridge is not None:
+        try:
+            raw = _call_judge_with_retry(lambda: native_auto_bridge.goal_judge(
+                system=JUDGE_SYSTEM_PROMPT, prompt=prompt, timeout=timeout))
+        except Exception as error:
+            # Local private admission and transport failures never fall back
+            # to another account/model or the ambient auxiliary client.
+            return "unavailable", "bound judge unavailable: " + type(error).__name__, False
+        done, reason, parse_failed = _parse_judge_response(raw)
+        return "done" if done else "continue", reason, parse_failed
 
     try:
         from web.api.config import is_game_mode_enabled
@@ -580,6 +674,7 @@ class GoalManager:
         self._resume_stale = False
         state = GoalState(
             goal=goal,
+            revision=getattr(self._state or load_goal(self.session_id), "revision", 0),
             status="active",
             turns_used=0,
             max_turns=normalize_goal_turn_budget(
@@ -673,6 +768,68 @@ class GoalManager:
         self._state.consecutive_parse_failures = 0
         save_goal(self.session_id, self._state)
         return self._state
+
+    def apply_pending_judge_result(
+        self, *, expected_json: str, verdict: str,
+        reason: str, parse_failed: bool,
+    ) -> Dict[str, Any]:
+        """Apply an already trusted judge result with an exact persisted CAS.
+
+        This method performs no model calls. The caller must validate native
+        worker ownership and its SDK receipt before passing a result here.
+        """
+        if verdict not in {"done", "continue", "unavailable"}:
+            raise ValueError("invalid pending goal verdict")
+        if not isinstance(expected_json, str):
+            raise ValueError("invalid pending goal snapshot")
+        if not isinstance(reason, str) or type(parse_failed) is not bool:
+            raise ValueError("invalid pending goal result")
+        self._resume_stale = False
+        expected_state = self._state
+        latest_state = load_goal(self.session_id)
+        if (
+            expected_state is None
+            or expected_state.to_json() != expected_json
+            or expected_state.status != "paused"
+            or expected_state.pending_judge_response is None
+            or latest_state is None
+            or latest_state.to_json() != expected_json
+        ):
+            self._state = latest_state
+            self._resume_stale = True
+            return {
+                "status": latest_state.status if latest_state else None,
+                "should_continue": False, "continuation_prompt": None,
+                "verdict": "stale", "reason": "goal changed during evaluation",
+                "message": "",
+            }
+        try:
+            if verdict == "unavailable":
+                expected_state.last_verdict = verdict
+                expected_state.last_reason = reason
+                expected_state.paused_reason = "goal judge unavailable; retry /goal resume after restoring the judge provider"
+                save_goal(self.session_id, expected_state)
+                return {
+                    "status": "paused", "should_continue": False,
+                    "continuation_prompt": None, "verdict": verdict,
+                    "reason": reason, "message": "",
+                }
+            expected_state.status = "active"
+            expected_state.paused_reason = None
+            return self._apply_judged_response(
+                expected_state, expected_state.pending_judge_response,
+                user_initiated=expected_state.pending_judge_user_initiated,
+                verdict=verdict, reason=reason, parse_failed=parse_failed,
+            )
+        except GoalRevisionConflict:
+            self._state = load_goal(self.session_id)
+            self._resume_stale = True
+            return {
+                "status": self._state.status if self._state else None,
+                "should_continue": False, "continuation_prompt": None,
+                "verdict": "stale", "reason": "goal changed during evaluation",
+                "message": "",
+            }
 
     def clear(self) -> None:
         if self._state is None:
@@ -866,21 +1023,144 @@ class GoalManager:
             "message": f"↻ Continuing toward goal ({state.turns_used}/{format_goal_turn_budget(state.max_turns)}): {reason}",
         }
 
+    def _apply_judged_response(
+        self, state: GoalState, last_response: str, *, user_initiated: bool,
+        verdict: str, reason: str, parse_failed: bool,
+    ) -> Dict[str, Any]:
+        """Shared state transition after caller-owned snapshot validation."""
+        if verdict == "unavailable":
+            # The assistant response is durable evidence waiting for a judge.
+            # Do not consume goal budget or launch another generation until a
+            # later explicit resume obtains a valid verdict.
+            state.pending_judge_response = _truncate(last_response, _JUDGE_RESPONSE_SNIPPET_CHARS)
+            state.pending_judge_user_initiated = bool(user_initiated)
+            state.last_turn_at = time.time()
+            state.last_verdict = verdict
+            state.last_reason = reason
+            state.status = "paused"
+            state.paused_reason = "goal judge unavailable; retry /goal resume after restoring the judge provider"
+            save_goal(self.session_id, state)
+            return {
+                "status": "paused",
+                "should_continue": False,
+                "continuation_prompt": None,
+                "verdict": "unavailable",
+                "reason": reason,
+                "message": (
+                    "⏸ Goal paused because its judge could not evaluate the last response after a bounded retry. "
+                    "The response was saved for re-evaluation; no completion was assumed and no new generation was started. "
+                    "Restore the judge provider, then use /goal resume."
+                ),
+            }
+
+        # Count only turns that received a usable completion verdict.
+        state.turns_used += 1
+        state.last_turn_at = time.time()
+        state.pending_judge_response = None
+        state.pending_judge_user_initiated = True
+        state.recent_assistant_responses = bounded_goal_evidence(
+            [*state.recent_assistant_responses, last_response]
+        )
+        state.last_verdict = verdict
+        state.last_reason = reason
+
+        # Track consecutive judge parse failures. Reset on any usable reply,
+        # including successfully parsed replies, so only malformed output
+        # trips the auto-pause meant for bad judge models.
+        if parse_failed:
+            state.consecutive_parse_failures += 1
+        else:
+            state.consecutive_parse_failures = 0
+
+        if verdict == "done":
+            state.status = "done"
+            save_goal(self.session_id, state)
+            return {
+                "status": "done",
+                "should_continue": False,
+                "continuation_prompt": None,
+                "verdict": "done",
+                "reason": reason,
+                "message": f"✓ Goal achieved: {reason}",
+            }
+
+        # Auto-pause when the judge model can't produce the expected JSON
+        # verdict N turns in a row. Points the user at the goal_judge config
+        # so they can route this side task to a model that follows the
+        # contract (e.g. google/gemini-3-flash-preview). Without this guard,
+        # weak judge models burn the entire turn budget returning prose or
+        # empty strings.
+        if state.consecutive_parse_failures >= DEFAULT_MAX_CONSECUTIVE_PARSE_FAILURES:
+            state.status = "paused"
+            state.paused_reason = (
+                f"judge model returned unparseable output {state.consecutive_parse_failures} turns in a row"
+            )
+            save_goal(self.session_id, state)
+            return {
+                "status": "paused",
+                "should_continue": False,
+                "continuation_prompt": None,
+                "verdict": "continue",
+                "reason": reason,
+                "message": (
+                    f"⏸ Goal paused — the judge model ({state.consecutive_parse_failures} turns) "
+                    "isn't returning the required JSON verdict. Route the judge to a stricter "
+                    "model in ~/.sidekick/config.yaml:\n"
+                    "  auxiliary:\n"
+                    "    goal_judge:\n"
+                    "      provider: openrouter\n"
+                    "      model: google/gemini-3-flash-preview\n"
+                    "Then /goal resume to continue."
+                ),
+            }
+
+        if state.max_turns is not None and state.turns_used >= state.max_turns:
+            state.status = "paused"
+            state.paused_reason = (
+                f"turn budget exhausted ({state.turns_used}/{format_goal_turn_budget(state.max_turns)})"
+            )
+            save_goal(self.session_id, state)
+            return {
+                "status": "paused",
+                "should_continue": False,
+                "continuation_prompt": None,
+                "verdict": "continue",
+                "reason": reason,
+                "message": (
+                    f"⏸ Goal paused — {state.turns_used}/{format_goal_turn_budget(state.max_turns)} turns used. "
+                    "Use /goal resume to keep going, or /goal clear to stop."
+                ),
+            }
+
+        save_goal(self.session_id, state)
+        return {
+            "status": "active",
+            "should_continue": True,
+            "continuation_prompt": self.next_continuation_prompt(),
+            "verdict": "continue",
+            "reason": reason,
+            "message": f"↻ Continuing toward goal ({state.turns_used}/{format_goal_turn_budget(state.max_turns)}): {reason}",
+        }
+
     def next_continuation_prompt(self) -> Optional[str]:
-        if self._resume_stale or not self._state or self._state.status != "active":
+        if self._resume_stale or not self._state or self._state.status != "active" or self._state.continuation_owner != "legacy_chat":
             return None
         return CONTINUATION_PROMPT_TEMPLATE.format(goal=self._state.goal)
 
     def consume_continuation(self) -> bool:
         """Atomically claim this turn's continuation once, including after restart."""
         state = self._state
-        if not state or state.status != "active":
+        if not state or state.status != "active" or state.continuation_owner != "legacy_chat":
             return False
         turn = int(state.turns_used or 0)
         if int(state.consumed_continuation_turn) == turn:
             return False
         state.consumed_continuation_turn = turn
-        save_goal(self.session_id, state)
+        try:
+            save_goal(self.session_id, state)
+        except GoalRevisionConflict:
+            self._state = load_goal(self.session_id)
+            return False
         return True
 
 

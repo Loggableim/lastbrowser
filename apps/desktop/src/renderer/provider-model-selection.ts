@@ -145,3 +145,11 @@ export function isProviderModelSelected(
   if (candidate.id !== model) return false;
   return !provider || candidate.providerId === provider;
 }
+
+/** Match the picker spelling while preserving the broker catalogue's literal IDs. */
+export function resolveLiteralCatalogModelSelection(selection: string,
+  groups: readonly { providerId: string; models: readonly { id: string }[] }[]): ProviderModelSelection | null {
+  const matches = groups.flatMap(group => group.models.map(entry => ({ model: entry.id, provider: group.providerId })))
+    .filter(entry => qualifyModelForProvider(entry.model, entry.provider) === selection);
+  return matches.length === 1 ? matches[0] : null;
+}

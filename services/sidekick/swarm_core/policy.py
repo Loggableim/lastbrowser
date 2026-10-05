@@ -167,6 +167,21 @@ class PolicyGate:
         if autonomy == "observe":
             return self._decision(proposal, PolicyStatus.BLOCKED, "observe_only")
 
+        native = durable_run.metadata.get("native_chat")
+        action_binding = proposal.requested_action.arguments
+        scoped_native = (
+            capabilities.category in {"native_sdk", "native_file", "native_browser"}
+            and durable_run.metadata.get("pack") == "native-chat"
+            and isinstance(native, Mapping)
+            and (durable_run.metadata.get("nova_supervisor") or {}).get("allowed_action_families")
+                == ["native_sdk", "native_file", "native_browser"]
+            and proposal.requested_action.name.startswith(capabilities.category + ".")
+            and all(action_binding.get(key) == native.get(key) for key in
+                ("scope", "sessionId", "streamId", "writerGeneration", "writerLeaseId", "contextDigest"))
+        )
+        if capabilities.category.startswith("native_") and not scoped_native:
+            return self._decision(proposal, PolicyStatus.BLOCKED, "native_capability_binding_mismatch")
+
         if any(not approval.approved for approval in approvals):
             return self._decision(proposal, PolicyStatus.BLOCKED, "approval_denied")
 
@@ -189,7 +204,14 @@ class PolicyGate:
             return self._decision(
                 proposal, PolicyStatus.ALLOWED, "human_approval_recorded"
             )
-        if capabilities.category not in self._LOCAL_REVERSIBLE_CATEGORIES:
+        scoped_browser = (
+            capabilities.category == "independent_browser"
+            and durable_run.metadata.get("pack") == "independent-browser"
+            and isinstance(durable_run.metadata.get("independent_browser"), Mapping)
+            and (durable_run.metadata.get("nova_supervisor") or {}).get("allowed_action_families") == ["independent_browser"]
+            and proposal.requested_action.name.startswith("independent_browser.")
+        )
+        if capabilities.category not in self._LOCAL_REVERSIBLE_CATEGORIES and not scoped_browser and not scoped_native:
             return self._decision(
                 proposal, PolicyStatus.BLOCKED, "unclassified_action_category"
             )

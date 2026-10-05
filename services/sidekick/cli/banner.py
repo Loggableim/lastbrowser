@@ -247,6 +247,10 @@ def check_for_updates() -> Optional[int]:
     if behind but the count is unknown, ``0`` if up-to-date, or ``None`` if
     the check failed or doesn't apply. Cached for 6 hours.
     """
+    from shared.constants import is_lastbrowser_integrated
+
+    if is_lastbrowser_integrated():
+        return None
     sidekick_home = get_sidekick_home()
     cache_file = sidekick_home / ".update_check"
     embedded_rev = os.environ.get("SIDEKICK_REVISION") or None

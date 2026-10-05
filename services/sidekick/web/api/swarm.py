@@ -433,24 +433,35 @@ def _launch_background_execution(
         execution = _BackgroundRun()
 
         def execute() -> None:
+            from runtime.independent.governance import LegacyComputeLease, authoritative_scope_keys_for_project
+            compute = LegacyComputeLease("swarm:" + str(project_root) + ":" + run_id,
+                scope_keys=authoritative_scope_keys_for_project(project_root))
+
+            def pause_wait():
+                compute.release()
+                _set_background_run_state(key, execution, "waiting_for_resume")
+
+            def resume_compute():
+                _set_background_run_state(key, execution, "waiting_for_resource")
+                if not compute.wait_acquire(execution.cancelled):
+                    raise RuntimeError("Swarm execution cancelled before compute admission")
+                _set_background_run_state(key, execution, "executing")
+
             try:
                 execution.start_gate.wait()
                 if execution.cancelled.is_set():
                     return
-                _set_background_run_state(key, execution, "executing")
+                resume_compute()
                 service.execute_run(
                     project_root,
                     run_id,
-                    on_pause_wait=lambda: _set_background_run_state(
-                        key, execution, "waiting_for_resume"
-                    ),
-                    on_resume=lambda: _set_background_run_state(
-                        key, execution, "executing"
-                    ),
+                    on_pause_wait=pause_wait,
+                    on_resume=resume_compute,
                 )
             except Exception as exc:
                 _record_background_execution_failure(project_root, run_id, exc)
             finally:
+                compute.release()
                 with _BACKGROUND_RUNS_LOCK:
                     if _BACKGROUND_RUNS.get(key) is execution:
                         execution.state = "finished"

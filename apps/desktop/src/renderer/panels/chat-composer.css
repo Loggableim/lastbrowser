@@ -1,0 +1,290 @@
+.chat-composer {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 760px;
+}
+
+.chat-composer .composer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.chat-composer .composer-toolbar-group {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-composer .composer-command-group,
+.chat-composer .composer-context-group {
+  flex-wrap: nowrap;
+}
+
+.chat-composer .composer-model-group {
+  flex: 1 1 24rem;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.chat-composer .composer-current-model {
+  box-sizing: border-box;
+  flex: 0 1 15rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.chat-composer .composer-current-model select {
+  box-sizing: border-box;
+  flex: 1 1 7rem;
+  width: clamp(5rem, 18vw, 12rem);
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-composer .composer-model-trigger {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.chat-composer .composer-reasoning-effort {
+  box-sizing: border-box;
+  flex: 0 1 13rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.chat-composer .composer-reasoning-effort > span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.chat-composer .composer-reasoning-effort select {
+  box-sizing: border-box;
+  flex: 1 1 6rem;
+  max-width: 9rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-composer .composer-reasoning-disclosure {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-composer .composer-reasoning-disclosure > summary {
+  box-sizing: border-box;
+  min-height: 30px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 7px;
+  color: rgba(232, 242, 255, .76);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.chat-composer .composer-reasoning-disclosure > summary:focus-visible {
+  outline: 2px solid var(--accent, #91a5ff);
+  outline-offset: 2px;
+}
+
+.chat-composer .composer-reasoning-disclosure:not([open]) > .composer-reasoning-effort {
+  display: none;
+}
+
+.chat-composer .composer-reasoning-disclosure[open] {
+  flex: 1 1 100%;
+}
+
+.chat-composer .composer-reasoning-disclosure[open] .composer-reasoning-effort {
+  flex: 1 1 13rem;
+}
+
+.composer-model-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  min-width: 0;
+  margin: 2px 0 8px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 159, 28, .25);
+  border-radius: 8px;
+  color: #ffe0a8;
+  background: rgba(255, 159, 28, .08);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.composer-model-notice > span {
+  flex: 1 1 14rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat-composer ~ .chat-status-message[role='alert'] {
+  display: none;
+}
+
+.chat-composer .composer-manual-models {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-height: min(42vh, 22rem);
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 10px;
+  background: rgba(7, 12, 24, .98);
+}
+
+.chat-composer .composer-manual-models > label,
+.chat-composer .composer-manual-models fieldset {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-composer .composer-manual-models > label {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.chat-composer .composer-manual-models input[type='search'] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.chat-composer .composer-manual-models fieldset {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0;
+  padding: 7px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 8px;
+}
+
+.chat-composer .composer-manual-models fieldset button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  text-align: start;
+}
+
+.chat-composer .composer-manual-model-name,
+.chat-composer .composer-manual-models fieldset button small {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-composer .composer-input-row,
+.chat-composer .composer-input-row textarea {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-composer .composer-input-row textarea {
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.chat-composer .composer-chips {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .chat-composer .composer-toolbar-group {
+    flex: 0 1 auto;
+  }
+
+  .chat-composer .composer-model-group {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .chat-composer .composer-current-model {
+    flex-basis: min(100%, 13rem);
+  }
+
+  .chat-composer .composer-current-model select {
+    width: min(9rem, calc(100vw - 190px));
+  }
+
+  .chat-composer .composer-reasoning-effort {
+    flex-basis: 12rem;
+  }
+
+  .chat-composer .composer-reasoning-effort select {
+    max-width: min(8rem, calc(100vw - 190px));
+  }
+}
+
+@media (max-width: 380px) {
+  .chat-composer {
+    width: calc(100% - 20px);
+    padding: 8px;
+  }
+
+  .chat-composer .composer-model-group {
+    gap: 6px 5px;
+  }
+
+  .chat-composer .composer-current-model {
+    flex: 1 1 100%;
+  }
+
+  .chat-composer .composer-current-model select {
+    width: auto;
+  }
+
+  .chat-composer .composer-model-trigger {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .chat-composer .composer-reasoning-effort {
+    flex: 1 1 11rem;
+  }
+
+  .chat-composer .composer-reasoning-effort select {
+    max-width: 8rem;
+  }
+}

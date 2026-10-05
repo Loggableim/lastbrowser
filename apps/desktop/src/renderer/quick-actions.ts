@@ -9,6 +9,13 @@ export interface QuickActionChip {
   promptTemplate: string;
 }
 
+/** Short page-local responses stay in the transient Quickchat; research and
+ * extraction actions belong to the ordinary work/chat flow. */
+export function isQuickChatAction(actionId: string): boolean {
+  return actionId === 'summarize-page' || actionId === 'explain-selection'
+    || actionId === 'tldr' || actionId === 'counter-args';
+}
+
 export interface ExtractedPageSignals {
   url?: string;
   title?: string;

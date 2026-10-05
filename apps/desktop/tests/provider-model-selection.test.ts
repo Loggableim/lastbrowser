@@ -1,16 +1,45 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { manualModelPickerOptions, mapScopedModelPickerOptions } from '../src/renderer/model-picker-options.js';
 import {
   isProviderModelSelected,
   parseProviderModelId,
   qualifyModelForProvider,
   resolveCatalogModelSelection,
+  resolveLiteralCatalogModelSelection,
   resolvePreferredChatModel,
   resolvePreferredChatModelSelection
 } from '../src/renderer/provider-model-selection.js';
 
 describe('provider-aware model selection', () => {
+  it('keeps extra models and unavailable providers visible without making them selectable, while binding real manual IDs', () => {
+    const catalog={schemaVersion:1 as const,scope:{backendProfileId:'p',spaceId:'s',browserProfileId:'b'},revision:2,model:'default',provider:'configured',configured:true,supportsIndependent:true,
+      groups:[
+        {provider:'Configured',provider_id:'configured',configured:true,models:[{id:'chat-model',label:'Chat model',supportsIndependent:true,reasoning_efforts:['low','high']}],extra_models:[{id:'extra-model',label:'Extra model',supportsIndependent:true,reasoning_efforts:['medium']}]},
+        {provider:'Offline',provider_id:'offline',configured:false,models:[{id:'offline-model',label:'Offline model',supportsIndependent:true}]},
+        {provider:'AUTO presets',provider_id:'',configured:true,models:[{id:'teamwork',label:'Teamwork',supportsIndependent:false}]}
+      ],providers:[{id:'offline',display_name:'Offline',has_key:false,oauth_connected:false,auth_state:'not_configured',provider_available:false,models:[]}]};
+    const all=mapScopedModelPickerOptions(catalog);
+    expect(all.find(group=>group.providerId==='configured')?.models).toHaveLength(2);
+    expect(all.find(group=>group.providerId==='configured')?.models[0].reasoningEfforts).toEqual(['low','high']);
+    expect(all.find(group=>group.providerId==='offline')).toMatchObject({configured:false,disabledReason:'unavailable'});
+    expect(manualModelPickerOptions(all).some(group=>group.providerId==='')).toBe(false);
+    const choice=resolveLiteralCatalogModelSelection('@configured:extra-model',all);
+    expect(choice).toEqual({provider:'configured',model:'extra-model'});
+  });
+  it('preserves literal IDs for the bound broker and refuses ambiguous picker values', () => {
+    const groups = [
+      { providerId: 'custom:local', models: [{ id: 'gemma4:31b' }, { id: '@custom:local:already-qualified' }] },
+      { providerId: 'second', models: [{ id: 'gemma4:31b' }] },
+      { providerId: '', models: [{ id: 'teamwork' }, { id: 'smart-track-high' }] }
+    ];
+    expect(resolveLiteralCatalogModelSelection('@custom:local:gemma4:31b', groups)).toEqual({ model: 'gemma4:31b', provider: 'custom:local' });
+    expect(resolveLiteralCatalogModelSelection('@custom:local:already-qualified', groups)).toEqual({ model: '@custom:local:already-qualified', provider: 'custom:local' });
+    expect(resolveLiteralCatalogModelSelection('teamwork', groups)).toEqual({ model: 'teamwork', provider: '' });
+    expect(resolveLiteralCatalogModelSelection('@missing:gemma4:31b', groups)).toBe(null);
+    expect(resolveLiteralCatalogModelSelection('teamwork', [...groups, groups[2]])).toBe(null);
+  });
   it('keeps provider identity separate while parsing qualified backend IDs', () => {
     expect(parseProviderModelId('@openrouter:vendor/model:free', 'other-provider')).toEqual({
       provider: 'openrouter',
@@ -215,13 +244,16 @@ describe('provider-aware model selection', () => {
     const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
     const copilot = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8');
     expect(composer).toContain('value={qualifyModelForProvider(model, modelProvider)}');
-    expect(composer).toContain('<label className="composer-model"');
+    expect(composer).toContain('<label className="composer-model composer-current-model"');
     expect(composer).not.toContain('{modelOptions.length > 0 && (');
     expect(composer).toContain('value={qualifyModelForProvider(m.id, group.providerId)}');
     expect(composer).toContain('key={`${group.providerId || group.provider}:${m.id}`}');
-    expect(chat).toContain('const parsed = resolveCatalogModelSelection(selection, modelCatalog);');
+    expect(chat).toContain('resolveLiteralCatalogModelSelection(selection, modelCatalog)');
+    expect(chat).toContain("operation: 'modelSelection'");
+    expect(chat).not.toContain('sidekick.setDefaultModel');
     expect(chat).toContain('modelProvider={modelProvider}');
-    expect(app).toContain('const chatModelSelection = resolvePreferredChatModelSelection({');
+    expect(app).toContain('const chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
+    expect(app).toContain("includeCatalog: false");
     expect(app).toContain('const copilotModelSelection = resolvePreferredChatModelSelection({');
     expect(copilot).toContain('const activeModelId = modelName || selectedModel;');
     expect(chat).toContain('setModelCatalogError(true)');

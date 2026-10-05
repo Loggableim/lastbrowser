@@ -1,7 +1,13 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { isPreparedRuntimeCompatible, replaceRuntimeTreeIfUnused } from '../scripts/prepare-python-runtime.mjs';
+import {
+  isPreparedRuntimeCompatible,
+  replaceRuntimeTreeIfUnused,
+  resolveWheelhouseDir,
+  verifyWheelhouse
+} from '../scripts/prepare-python-runtime.mjs';
 
 describe('desktop runtime packaging', () => {
   it('runs the Python runtime preparation before Windows packaging', () => {
@@ -127,6 +133,48 @@ describe('desktop runtime packaging', () => {
     })).toThrow(/cannot determine the executable path/);
 
     expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('exposes an online preparation script alongside offline packaging', () => {
+    const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
+
+    expect(packageJson.scripts['prepare:python:online']).toBe('node scripts/prepare-python-runtime.mjs --online');
+    expect(packageJson.scripts['package:win']).toContain('npm run prepare:python');
+  });
+
+  it('fails with a clear error when offline wheelhouse is missing or empty', () => {
+    const missingDir = path.resolve(process.cwd(), 'runtime', 'missing-wheelhouse-dir');
+    expect(() => verifyWheelhouse(missingDir)).toThrow(/Offline Python runtime wheelhouse is missing/);
+    expect(() => verifyWheelhouse(missingDir)).toThrow(/npm run prepare:python:online/);
+    expect(() => verifyWheelhouse(missingDir)).toThrow(/LASTBROWSER_WHEELHOUSE/);
+
+    const tempEmptyDir = path.join(os.tmpdir(), `test-empty-wheelhouse-${Date.now()}`);
+    mkdirSync(tempEmptyDir, { recursive: true });
+    try {
+      expect(() => verifyWheelhouse(tempEmptyDir)).toThrow(/contains no \.whl files/);
+      expect(() => verifyWheelhouse(tempEmptyDir)).toThrow(/npm run prepare:python:online/);
+    } finally {
+      rmSync(tempEmptyDir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves the wheelhouse from LASTBROWSER_WHEELHOUSE override or default runtime path', () => {
+    const custom = 'C:\\custom\\wheelhouse\\dir';
+    expect(resolveWheelhouseDir({ LASTBROWSER_WHEELHOUSE: custom })).toBe(path.resolve(custom));
+    expect(resolveWheelhouseDir({})).toBe(path.resolve(process.cwd(), 'runtime', 'wheelhouse'));
+  });
+
+  it('packages services/sidekick directly into Electron extraResources', () => {
+    const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
+
+    expect(packageJson.build.extraResources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          from: '../../services',
+          to: 'services'
+        })
+      ])
+    );
   });
 
   it('uses branded NSIS resources for the assisted installer', () => {

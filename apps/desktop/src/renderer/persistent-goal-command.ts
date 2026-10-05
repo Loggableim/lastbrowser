@@ -1,4 +1,7 @@
+import { NativeGoalCommandError } from './native-goal-errors.js';
 export type ParsedPersistentGoalCommand = { args: string };
+export type NativeGoalRequest=Readonly<{sessionId:string;args:string;workspacePath:string;browserProfileId:string;
+  model?:string;modelProvider?:string|null;reasoningEffort?:string;expectedRevision?:number;clientRequestId?:string}>;
 
 /** Match the native chat command without treating longer slash commands as goals. */
 export function parsePersistentGoalCommand(input: string): ParsedPersistentGoalCommand | null {
@@ -19,12 +22,20 @@ export function shouldDispatchPersistentGoalControlWhileBusy(input: string, busy
   return action === '' || ['status', 'pause', 'clear', 'stop', 'done'].includes(action);
 }
 
+/** Resume/start cannot be accepted while the current chat writer is active. */
+export function shouldAcceptPersistentGoalCommand(input: string, busy: boolean): boolean {
+  return !busy || shouldDispatchPersistentGoalControlWhileBusy(input, true);
+}
+
 export function buildPersistentGoalCommandBody(args: string, context: {
   sessionId: string;
   profileId: string;
   workspace: string;
   model?: string;
   modelProvider?: string | null;
+  reasoningEffort?: string;
+  expectedRevision?: number;
+  clientRequestId?: string;
 }): Record<string, unknown> {
   return {
     session_id: context.sessionId,
@@ -34,6 +45,9 @@ export function buildPersistentGoalCommandBody(args: string, context: {
     ...(context.workspace ? { scope_goals_to_workspace: true } : {}),
     ...(context.model ? { model: context.model } : {}),
     ...(context.modelProvider ? { model_provider: context.modelProvider } : {}),
+    ...(context.reasoningEffort ? { reasoning_effort: context.reasoningEffort } : {}),
+    ...(context.expectedRevision !== undefined ? { expected_revision: context.expectedRevision } : {}),
+    ...(context.clientRequestId ? { client_request_id: context.clientRequestId } : {}),
   };
 }
 
@@ -59,4 +73,22 @@ export function requestPersistentGoalControlWhileBusy(
   if (!shouldDispatchPersistentGoalControlWhileBusy(input, busy)) return null;
   const command = parsePersistentGoalCommand(input);
   return command ? requestPersistentGoalCommand(requestWebui, command.args, context) : null;
+}
+/** Native Main maps the browser profile; no generic URL/body profile is accepted. */
+export async function requestNativePersistentGoalCommand(transport:(request:NativeGoalRequest)=>Promise<Record<string,unknown>>,
+  args:string,context:Parameters<typeof buildPersistentGoalCommandBody>[1]&{browserProfileId:string}):Promise<Record<string,unknown>> {
+  const response=await transport({sessionId:context.sessionId,args:args.trim(),workspacePath:context.workspace,browserProfileId:context.browserProfileId,
+    ...(context.model?{model:context.model}:{}),...(context.modelProvider?{modelProvider:context.modelProvider}:{}),
+    ...(context.reasoningEffort?{reasoningEffort:context.reasoningEffort}:{}),
+    ...(context.expectedRevision!==undefined?{expectedRevision:context.expectedRevision}:{}),
+    ...(context.clientRequestId?{clientRequestId:context.clientRequestId}:{})});
+  if(response.ok!==true)throw new NativeGoalCommandError(typeof response.error==='string'?response.error:'goal_action_unconfirmed');
+  if(response.session_id!==undefined&&response.session_id!==context.sessionId)throw new NativeGoalCommandError('goal_response_foreign_session');
+  return response;
+}
+export function requestNativePersistentGoalControlWhileBusy(transport:Parameters<typeof requestNativePersistentGoalCommand>[0],input:string,busy:boolean,
+  context:Parameters<typeof requestNativePersistentGoalCommand>[2]):Promise<Record<string,unknown>>|null {
+  if(!shouldDispatchPersistentGoalControlWhileBusy(input,busy))return null;
+  const command=parsePersistentGoalCommand(input);
+  return command?requestNativePersistentGoalCommand(transport,command.args,context):null;
 }

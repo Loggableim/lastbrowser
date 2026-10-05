@@ -472,6 +472,66 @@ def save_jobs(jobs: List[Dict[str, Any]]):
         raise
 
 
+def read_scoped_jobs(profile_home: Path) -> List[Dict[str, Any]]:
+    """Read the native jobstore for an explicitly resolved profile Home.
+
+    Unlike the legacy default-home API, this does not alter process globals
+    or create directories on a read. Independent adapters supply trusted Homes.
+    """
+    home = Path(profile_home).resolve(strict=True)
+    path = home / "cron" / "jobs.json"
+    if not path.resolve().is_relative_to(home):
+        raise PermissionError("Native jobstore escapes its resolved profile Home")
+    if not path.exists():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("jobs"), list) or not all(isinstance(row, dict) for row in data["jobs"]):
+        raise ValueError("Invalid native cron jobstore")
+    return data["jobs"]
+
+
+def update_scoped_independent_job(profile_home: Path, record: Dict[str, Any], *, expected_revision: int | None = None, expected_next_run: str | None = None) -> bool:
+    """Atomically project one definition without replacing legacy jobs.
+
+    The existing Cron tick remains the sole clock. Revision CAS prevents a
+    slow old tick from overwriting a newly edited definition's next occurrence.
+    """
+    if record.get("job_type") != "independent_agent" or not record.get("id"):
+        raise ValueError("Expected a scoped independent job")
+    home = Path(profile_home).resolve(strict=True)
+    with _jobs_file_lock:
+        records = read_scoped_jobs(home)
+        old = next((item for item in records if item.get("id") == record["id"]), None)
+        if old and old.get("job_type") != "independent_agent":
+            raise ValueError("Independent projection cannot replace a legacy job")
+        old_rev = (old or {}).get("independent_ref", {}).get("definitionRevision")
+        new_rev = record["independent_ref"]["definitionRevision"]
+        if expected_revision is not None and old_rev != expected_revision or old_rev is not None and old_rev > new_rev:
+            return False
+        if expected_next_run is not None and (old or {}).get("next_run_at") != expected_next_run:
+            return False
+        records = [record if item.get("id") == record["id"] else item for item in records]
+        if old is None:
+            records.append(record)
+        directory = home / "cron"
+        directory.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(dir=str(directory), suffix=".tmp", prefix=".jobs_")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump({"jobs": records, "updated_at": _sidekick_now().isoformat()}, handle, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            atomic_replace(temporary, directory / "jobs.json")
+            _secure_file(directory / "jobs.json")
+        except BaseException:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
+        return True
+
+
 def _normalize_workdir(workdir: Optional[str]) -> Optional[str]:
     """Normalize and validate a cron job workdir.
 
@@ -685,6 +745,8 @@ def update_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]
     for i, job in enumerate(jobs):
         if job["id"] != job_id:
             continue
+        if job.get("job_type") == "independent_agent":
+            raise ValueError("Manage this independent definition in its Space Assistant")
 
         # Validate / normalize workdir if present in updates.  Empty string or
         # None both mean "clear the field" (restore old behaviour).
@@ -804,6 +866,8 @@ def remove_job(job_id: str) -> bool:
         return False
     jobs = load_jobs()
     original_len = len(jobs)
+    if any(job.get("id") == job_id and job.get("job_type") == "independent_agent" for job in jobs):
+        raise ValueError("Disable this independent definition in its Space Assistant")
     jobs = [j for j in jobs if j["id"] != job_id]
     if len(jobs) < original_len:
         save_jobs(jobs)
@@ -938,6 +1002,10 @@ def _get_due_jobs_locked() -> List[Dict[str, Any]]:
     needs_save = False
 
     for job in jobs:
+        if job.get("job_type") == "independent_agent":
+            # Requires the registered scoped enqueue adapter. Never execute
+            # through legacy run_job, even when that adapter is unavailable.
+            continue
         if not job.get("enabled", True):
             continue
 

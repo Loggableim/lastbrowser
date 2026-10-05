@@ -223,6 +223,37 @@ def test_unknown_model_lookup_does_not_erase_live_reasoning_capabilities(tmp_pat
     assert codex_models.get_codex_model_reasoning_efforts("local-model") == ["low"]
 
 
+def test_exact_documented_codex_efforts_work_without_external_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv('CODEX_HOME', str(tmp_path))
+    monkeypatch.setattr(codex_models, '_MODEL_REASONING_EFFORTS', {})
+    monkeypatch.setattr(codex_models, '_MODEL_REASONING_SOURCES', {})
+    assert codex_models.get_codex_model_reasoning_metadata('@openai-codex:gpt-5.3-codex') == (
+        ['low', 'medium', 'high', 'xhigh'], 'official_model_docs')
+    assert codex_models.get_codex_model_reasoning_efforts('gpt-5.5') == ['none', 'low', 'medium', 'high', 'xhigh']
+    assert codex_models.get_codex_model_reasoning_metadata('future-gpt-5.5-custom') == ([], 'unknown')
+    assert codex_models.get_codex_model_reasoning_metadata('@another:gpt-5.5') == ([], 'unknown')
+
+
+def test_explicit_empty_catalog_outranks_documented_codex_fallback(tmp_path, monkeypatch):
+    monkeypatch.setenv('CODEX_HOME', str(tmp_path))
+    monkeypatch.setattr(codex_models, '_MODEL_REASONING_EFFORTS', {'gpt-5.3-codex': []})
+    monkeypatch.setattr(codex_models, '_MODEL_REASONING_SOURCES', {'gpt-5.3-codex': 'live_catalog'})
+    (tmp_path / 'models_cache.json').write_text('{"models":[{"slug":"gpt-5.3-codex","supported_reasoning_levels":[{"effort":"high"}]}]}', 'utf-8')
+    assert codex_models.get_codex_model_reasoning_metadata('gpt-5.3-codex') == ([], 'live_catalog')
+    codex_models.get_codex_model_ids()
+    assert codex_models.get_codex_model_reasoning_metadata('gpt-5.3-codex') == ([], 'live_catalog')
+
+
+def test_catalog_annotation_preserves_provided_efforts_and_authoritative_empty():
+    groups = [{'provider_id': 'openai-codex', 'models': [
+        {'id': '@openai-codex:gpt-5.3-codex', 'reasoning_efforts': ['high', 'xhigh', 'ultra']},
+        {'id': 'gpt-5.5', 'reasoning_efforts': []},
+    ]}]
+    _annotate_model_reasoning_efforts(groups)
+    assert groups[0]['models'][0]['reasoning_efforts'] == ['high', 'xhigh']
+    assert groups[0]['models'][1]['reasoning_efforts'] == []
+
+
 def test_provider_evidence_uses_actual_fallback_provider_and_requires_success():
     result = {
         "provider": "fallback-provider",

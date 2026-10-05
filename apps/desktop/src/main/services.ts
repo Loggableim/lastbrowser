@@ -127,6 +127,7 @@ export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number
     LASTBROWSER_WEBUI_URL: webuiBaseUrl,
     LASTBROWSER_WEBUI_PYTHON: layout.pythonExe,
     LASTBROWSER_BRIDGE_TOKEN: layout.bridgeToken,
+    LASTBROWSER_INTEGRATED: '1',
     SIDEKICK_HOME: layout.runtimeDir,
     SIDEKICK_AGENT_DIR: layout.sidekickDir,
     SIDEKICK_BRIDGE_TOKEN: layout.bridgeToken,

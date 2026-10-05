@@ -302,3 +302,23 @@ export async function collectBrowserContext(
     pageText: clampContextText(String(page?.pageText || ''), 9000)
   };
 }
+
+/** Convert a browser action into an explicit dispatch decision for callers/tests. */
+export async function resolveSidekickAction(
+  action: SidekickActionId,
+  webview: Electron.WebviewTag | null,
+  activeTab: { url: string; title: string }
+): Promise<SidekickPromptResult> {
+  return buildSidekickPrompt(action, await collectBrowserContext(webview, activeTab));
+}
+
+export async function dispatchSidekickAction(
+  action: SidekickActionId,
+  webview: Electron.WebviewTag | null,
+  activeTab: { url: string; title: string },
+  dispatch: (prompt: string, displayTitle: string) => void | Promise<unknown>
+): Promise<SidekickPromptResult> {
+  const result = await resolveSidekickAction(action, webview, activeTab);
+  if (result.ok) await dispatch(result.prompt, result.title);
+  return result;
+}

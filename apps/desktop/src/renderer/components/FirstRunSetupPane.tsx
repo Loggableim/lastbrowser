@@ -51,6 +51,7 @@ import { useDesktopI18n } from '../i18n.js';
 import { localizedProviderRecommendation } from '../i18n/provider-recommendations.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
+import { LocalAiSetupPane } from './LocalAiSetupPane.js';
 import {
   OnboardingStatus,
   canSubmitCloudSetup,
@@ -93,6 +94,8 @@ type CodexOAuthState = {
 };
 
 export type FirstRunSetupPaneProps = {
+  browserProfileId?:string;
+  workspacePath?:string;
   status: ServiceStatus | null;
   onboardingStatus: OnboardingStatus | null;
   setupLoading: boolean;
@@ -106,6 +109,8 @@ export type FirstRunSetupPaneProps = {
 const idleCodexOAuth: CodexOAuthState = { status: 'idle' };
 
 export function FirstRunSetupPane({
+  browserProfileId,
+  workspacePath='',
   status,
   onboardingStatus,
   setupLoading,
@@ -644,6 +649,8 @@ export function FirstRunSetupPane({
           </div>
         )}
 
+        {browserProfileId&&<LocalAiSetupPane key={JSON.stringify([browserProfileId,workspacePath])} browserProfileId={browserProfileId} workspacePath={workspacePath}
+          ready={status?.sidekick==='ready'&&Boolean(status.webuiUrl)}/>}
         {/* Form container */}
         <form className="setup-fullscreen-form" onSubmit={submit}>
           {/* ── SECTION 1: IDENTITY & PERSONALITY ── */}

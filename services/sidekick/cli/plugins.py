@@ -43,6 +43,7 @@ import os
 import sys
 import threading
 import types
+from urllib.parse import parse_qsl, urlsplit
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Union
@@ -265,6 +266,45 @@ class PluginManifest:
     # category plugin at ``plugins/image_gen/openai/`` the key is
     # ``image_gen/openai``. When empty, falls back to ``name``.
     key: str = ""
+    # Optional untrusted browser launch metadata. This is never an API/tool
+    # capability and is surfaced only after strict HTTP(S) URL validation.
+    start_url: Optional[str] = None
+
+
+_URL_CREDENTIAL_QUERY_KEYS = frozenset({
+    "access_token", "api_key", "apikey", "auth", "authorization", "credential",
+    "credentials", "client_secret", "id_token", "key", "password", "passwd",
+    "refresh_token", "secret", "token",
+})
+
+
+def _validated_start_url(value: Any) -> Optional[str]:
+    """Return safe browser-link metadata, never a credential-bearing URL."""
+    if not isinstance(value, str) or not value or len(value) > 2048 or value != value.strip():
+        return None
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in value) or "\\" in value:
+        return None
+    try:
+        parsed = urlsplit(value)
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+            return None
+        # Accessing .port validates malformed/non-numeric/out-of-range ports.
+        _ = parsed.port
+        if "@" in parsed.netloc or parsed.username is not None or parsed.password is not None:
+            return None
+        credentials = (*parse_qsl(parsed.query, keep_blank_values=True), *parse_qsl(parsed.fragment, keep_blank_values=True))
+        if any(_credential_query_key(key) and item for key, item in credentials):
+            return None
+    except (ValueError, UnicodeError):
+        return None
+    return value
+
+
+def _credential_query_key(value: str) -> bool:
+    key = value.strip().lower().replace("-", "_")
+    return key in _URL_CREDENTIAL_QUERY_KEYS or key.endswith("_key") or any(
+        marker in key for marker in ("token", "secret", "password", "passwd", "credential", "authorization")
+    )
 
 
 @dataclass
@@ -1025,6 +1065,7 @@ class PluginManager:
                 path=str(plugin_dir),
                 kind=kind,
                 key=key,
+                start_url=_validated_start_url(data.get("start_url")),
             )
         except Exception as exc:
             logger.warning(

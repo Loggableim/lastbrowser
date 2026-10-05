@@ -137,6 +137,25 @@ import {
   startAgentChat,
   startAgentWorkspaceProcess,
   startSidekickChat,
+  startQuickChat,
+  stopQuickChat,
+  cancelQuickChat,
+  controlChatMode,
+  controlGrill,
+  type GrillRequest,
+  controlGoalMigration,
+  type GoalMigrationRequest,
+  type ChatModeRequest,
+  controlModelPolicy,
+  type ModelPolicyRequest,
+  controlNativeChat,
+  type NativeChatControlRequest,
+  readNativeChatContext,
+  nativeChatReadHeaders,
+  controlPersistentGoal,
+  type PersistentGoalRequest,
+  readChildHistory,
+  type ChildHistoryRequest,
   startOnboardingOAuth,
   stopAgentWorkspace,
   submitAppstoreApp,
@@ -164,12 +183,21 @@ import { createAdblockController } from './adblock.js';
 import { createSidekickUpdater } from './sidekick-updater.js';
 import { subscribeChatStream } from './chat-stream.js';
 import { ChatStreamRegistry } from './chat-stream-registry.js';
+import { NativeChatStreamController } from './native-chat-stream-controller.js';
+import { QuickChatController } from './quick-chat-controller.js';
+import type { BrowserScope } from './independent-browser-host.js';
 import { createPermissionController, loadTrustedOrigins, resolvePermissionRequest, saveTrustedOrigins, trustedNotificationOriginsFileName, trustedOriginsFileName } from './permissions.js';
 import { configureDrmWidevine, initializeCastlabsWidevine } from './drm.js';
 import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startPrimaryInstanceStartup } from './app-startup.js';
 import { hardenWebViewAttachment } from './webview-security.js';
+import { IndependentController, independentIpcRequest } from './independent-controller.js';
+import { installSessionRequestPolicy } from './session-request-policy.js';
+import { independentApiRequest } from './sidekick-api.js';
+import { captureTrustedShellSender } from './ipc-sender.js';
+import { requestScopedWebui } from './scoped-webui-request.js';
+import { isReservedAgentPartition } from './agent-execution-partition.js';
 import { capturePageDataUrl, normalizeCapturePageRect } from './capture-page.js';
 import { createOpenUrlLifecycle } from './open-url-lifecycle.js';
 import { registerDefaultSidekickMigrationIpc } from './sidekick-migration.js';
@@ -178,6 +206,7 @@ import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTermina
 import { createAppTray, setupMinimizeToTray, type TrayController } from './tray.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
+import { defaultSearchEngineId, searchEngineById } from './browser-search.js';
 import { registerBrowserShortcuts } from './shortcuts.js';
 import { openAuthConnectWindow, cleanOAuthUserAgent, sanitizeSecChUa, isStreamingLoginUrl, openExternalUrl } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
@@ -267,11 +296,63 @@ async function restoreDetachedNavigationHistory(
 let services: SidecarServices | null = null;
 let appTray: TrayController | null = null;
 let isQuitting = false;
+let quitCleanupComplete = false;
+let quitCleanupStarted = false;
+let independentController: IndependentController | null = null;
+let quickChatController: QuickChatController | null = null;
+function isTrustedShell(contents: Electron.WebContents): boolean {
+  return Boolean((mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents === contents)
+    || [...secondaryWindows].some(window => !window.isDestroyed() && window.webContents === contents));
+}
+async function boundChatRequest(event: Electron.IpcMainInvokeEvent, raw: unknown, workspaceField: 'workspace' | 'workspacePath', includeScope = false): Promise<Record<string, any>> {
+  const recheck = captureTrustedShellSender(event, isTrustedShell);
+  if (raw !== undefined && (!raw || typeof raw !== 'object' || Array.isArray(raw))) throw new Error('Invalid chat request');
+  const request = { ...(raw as Record<string, any> | undefined) };
+  if ('spaceScope' in request || 'space_scope' in request || 'nativeBridgeNonce' in request)
+    throw new Error('Renderer cannot choose the native chat scope');
+  const selectedProfile = request.profile ?? 'default', workspace = request[workspaceField] ?? null;
+  if (typeof selectedProfile !== 'string' || (workspace !== null && typeof workspace !== 'string')) throw new Error('Invalid chat Space');
+  const backendProfileName = typeof request.backendProfileName === 'string' ? request.backendProfileName : undefined;
+  const binding = await independentController?.lookupBinding(selectedProfile, workspace, backendProfileName);
+  recheck();
+  if (!binding) return request; // existing, unresolved chats retain their legacy route
+  return { ...request, profile: binding.backendProfileName,
+    ...(includeScope ? { spaceScope: binding.scope, nativeBridgeNonce: services?.getLayout().bridgeToken } : {}) };
+}
+async function boundPurposeChatRequest(event: Electron.IpcMainInvokeEvent, raw: unknown): Promise<Record<string, any>> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid chat command');
+  const request = { ...(raw as Record<string, any>) };
+  if (request.browserProfileId !== undefined) {
+    if (typeof request.browserProfileId !== 'string' || !request.browserProfileId.trim()) throw new Error('Invalid browser profile');
+    request.profile = request.browserProfileId;
+  }
+  return boundChatRequest(event, request, 'workspacePath', true);
+}
+function quitIfLastShellClosed(): void {
+  if (!isQuitting && process.platform !== 'darwin' && !mainWindow && secondaryWindows.size === 0) app.quit();
+}
 const adblock = createAdblockController();
 const sidekickUpdater = createSidekickUpdater();
 const agentWorkspaceStreams = new Map<string, AbortController>();
 const chatStreams = new ChatStreamRegistry();
-const downloads = createDownloadTracker();
+const nativeChatStreams = new NativeChatStreamController({
+  isShell: isTrustedShell,
+  registry: chatStreams,
+  readContext: binding => readNativeChatContext(requireWebuiUrl(), { ...binding,
+    workspacePath: binding.workspacePath ?? undefined, nativeBridgeNonce: services?.getLayout().bridgeToken }),
+  subscribeTransport: (binding, onEvent) => subscribeChatStream(requireWebuiUrl(), binding.streamId,
+    getWebuiSessionToken(), onEvent, undefined, getAccessAuthCookie(), nativeChatReadHeaders({
+      profile: binding.profile, workspacePath: binding.workspacePath ?? undefined,
+      nativeBridgeNonce: binding.nativeChat ? services?.getLayout().bridgeToken : undefined })),
+  statusTransport: binding => getChatStreamStatus(requireWebuiUrl(), binding.streamId, undefined,
+    nativeChatReadHeaders({ profile: binding.profile, workspacePath: binding.workspacePath ?? undefined,
+      nativeBridgeNonce: binding.nativeChat ? services?.getLayout().bridgeToken : undefined })),
+  cancelTransport: binding => cancelChatStream(requireWebuiUrl(), binding.streamId, undefined, binding.profile)
+});
+const downloads = createDownloadTracker({ denyDownload: contents => {
+  const id = (contents as { id?: number } | null)?.id;
+  return typeof id === 'number' && Boolean(independentController?.ownsWebContents(id));
+} });
 // Trusted origins live next to the app's other settings so a video-call site the
 // user allowed once does not have to be allowed again after a restart.
 const trustedOriginsPath = path.join(app.getPath('userData'), trustedOriginsFileName);
@@ -326,6 +407,7 @@ async function promptForWebsiteNotifications(contents: Electron.WebContents, req
 }
 let currentAssistantName = 'Nova';
 let currentLocale = 'en';
+let currentSearchEngineId = defaultSearchEngineId;
 const activeSessions = new Set<Session>();
 const extensionManager = new ExtensionManager(app.getPath('userData'), () => Array.from(activeSessions));
 
@@ -347,6 +429,7 @@ function createWindow(): BrowserWindow {
   });
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null;
+    quitIfLastShellClosed();
   });
 
   window.on('maximize', () => {
@@ -409,6 +492,9 @@ function broadcastAccessAuthLocked(): void {
 
 function registerIpc(): void {
   setAccessAuthRequiredHandler(broadcastAccessAuthLocked);
+  ipcMain.handle('lastbrowser:independent:request', (event, request) => {
+    return independentIpcRequest(independentController, event, request);
+  });
   ipcMain.handle('lastbrowser:system:getCursorPosition', (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window || window.isDestroyed()) return null;
@@ -442,7 +528,8 @@ function registerIpc(): void {
     if (typeof app?.isDefaultProtocolClient !== 'function') return false;
     return app.isDefaultProtocolClient('http') && app.isDefaultProtocolClient('https');
   });
-  ipcMain.handle('lastbrowser:system:setDefaultBrowser', () => {
+  ipcMain.handle('lastbrowser:system:setDefaultBrowser', (event) => {
+    if (!isTrustedShell(event.sender)) return false;
     if (typeof app?.setAsDefaultProtocolClient !== 'function') return false;
     const httpOk = app.setAsDefaultProtocolClient('http');
     const httpsOk = app.setAsDefaultProtocolClient('https');
@@ -468,6 +555,11 @@ function registerIpc(): void {
     }
     return true;
   });
+  ipcMain.handle('lastbrowser:browser:setSearchEngine', (event, id: unknown) => {
+    if (!isTrustedShell(event.sender) || typeof id !== 'string' || searchEngineById(id).id !== id) return false;
+    currentSearchEngineId = id;
+    return true;
+  });
   registerBrowserDataCleanupIpc(ipcMain, () => {
     const targets = Array.from(activeSessions);
     if (!targets.includes(session.defaultSession)) targets.push(session.defaultSession);
@@ -488,14 +580,17 @@ function registerIpc(): void {
     ipcMain.handle('lastbrowser:services:start', async () => {
       try {
         await services?.start();
+        await ensureSidecarAuth();
+        await independentController?.start();
       } catch (error) {
         console.error('[lastbrowser] Failed to start services:', error);
       }
       return services?.getStatus();
     });
   ipcMain.handle('lastbrowser:services:stop', () => {
-    services?.stop();
-    return services?.getStatus();
+    return (independentController?.disconnect('services_stopped') ?? Promise.resolve()).then(() => {
+      services?.stop(); return services?.getStatus();
+    });
   });
   ipcMain.handle('lastbrowser:setup:load', async () => {
     const state = await loadSetupState(app.getPath('userData'));
@@ -529,44 +624,72 @@ function registerIpc(): void {
     openAuthConnectWindow({ url: String(url || ''), parentWindow: mainWindow });
     return true;
   });
-  ipcMain.handle('lastbrowser:sidekick:requestWebui', (_event, request) => requestWebui(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:listSessions', (_event, request) => listSessions(requireWebuiUrl(), request || {}));
+  ipcMain.handle('lastbrowser:sidekick:requestWebui', (event, request) => requestScopedWebui(event, request, {
+    isShell: isTrustedShell,
+    lookupBinding: async (browserProfileId, workspacePath, backendProfileName) =>
+      await independentController?.lookupBinding(browserProfileId, workspacePath, backendProfileName) ?? null,
+    request: boundRequest => requestWebui(requireWebuiUrl(), boundRequest)
+  }));
+  ipcMain.handle('lastbrowser:sidekick:listSessions', async (event, request) => listSessions(requireWebuiUrl(), await boundChatRequest(event, request, 'workspacePath')));
   ipcMain.handle('lastbrowser:sidekick:listSpaces', () => listSpaces(requireWebuiUrl()));
-  ipcMain.handle('lastbrowser:sidekick:createSession', (_event, request) => createSidekickSession(requireWebuiUrl(), request || {}));
-  ipcMain.handle('lastbrowser:sidekick:getSession', (_event, request) => {
-    if (typeof request === 'string') return getDesktopSession(requireWebuiUrl(), request);
-    return getDesktopSession(requireWebuiUrl(), request || { sessionId: '' });
+  ipcMain.handle('lastbrowser:sidekick:createSession', async (event, request) => createSidekickSession(requireWebuiUrl(), await boundChatRequest(event, request, 'workspace', true)));
+  ipcMain.handle('lastbrowser:sidekick:getSession', async (event, request) => {
+    const scoped = await boundChatRequest(event, typeof request === 'string' ? { sessionId: request } : request, 'workspacePath', true);
+    const captured = nativeChatStreams.beginCapture(event, scoped);
+    const result = await getDesktopSession(requireWebuiUrl(), scoped as { sessionId: string });
+    await nativeChatStreams.captureSession(captured, result);
+    return result;
   });
-  ipcMain.handle('lastbrowser:sidekick:renameSession', (_event, request) => renameSession(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:deleteSession', (_event, request) => deleteSession(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:duplicateSession', (_event, request) => duplicateSession(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:getDraft', (_event, request) => {
-    if (typeof request === 'string') return getSessionDraft(requireWebuiUrl(), request);
-    return getSessionDraft(requireWebuiUrl(), request || { sessionId: '' });
+  ipcMain.handle('lastbrowser:sidekick:renameSession', async (event, request) => renameSession(requireWebuiUrl(), await boundChatRequest(event, request, 'workspacePath') as { sessionId: string; title: string }));
+  ipcMain.handle('lastbrowser:sidekick:deleteSession', async (event, request) => deleteSession(requireWebuiUrl(), await boundChatRequest(event, request, 'workspacePath') as { sessionId: string }));
+  ipcMain.handle('lastbrowser:sidekick:duplicateSession', async (event, request) => duplicateSession(requireWebuiUrl(), await boundChatRequest(event, request, 'workspacePath') as { sessionId: string }));
+  ipcMain.handle('lastbrowser:sidekick:getDraft', async (event, request) => {
+    const scoped = await boundChatRequest(event, typeof request === 'string' ? { sessionId: request } : request, 'workspacePath');
+    return getSessionDraft(requireWebuiUrl(), scoped as { sessionId: string });
   });
-  ipcMain.handle('lastbrowser:sidekick:saveDraft', (_event, request) => saveSessionDraft(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:startChat', (_event, request) => startSidekickChat(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:getStreamStatus', (_event, streamId) => getChatStreamStatus(requireWebuiUrl(), String(streamId || '')));
+  ipcMain.handle('lastbrowser:sidekick:saveDraft', async (event, request) => saveSessionDraft(requireWebuiUrl(), await boundChatRequest(event, request, 'workspacePath') as { sessionId: string }));
+  ipcMain.handle('lastbrowser:sidekick:startChat', async (event, request) => {
+    const scoped = await boundChatRequest(event, request, 'workspace', true);
+    const captured = nativeChatStreams.beginCapture(event, scoped);
+    const result = await startSidekickChat(requireWebuiUrl(), scoped as { message: string });
+    await nativeChatStreams.captureStart(captured, result);
+    return result;
+  });
+  ipcMain.handle('lastbrowser:quickchat:start', (event, request) => {
+    if (!quickChatController) throw new Error('Quickchat is unavailable');
+    return quickChatController.start(event, request);
+  });
+  ipcMain.handle('lastbrowser:quickchat:stop', (event, request) => {
+    if (!quickChatController) throw new Error('Quickchat is unavailable');
+    return quickChatController.stop(event, request);
+  });
+  ipcMain.handle('lastbrowser:quickchat:cancel', (event, request) => {
+    if (!quickChatController) throw new Error('Quickchat is unavailable');
+    return quickChatController.cancel(event, request);
+  });
+  ipcMain.handle('lastbrowser:sidekick:chatMode', async (event, request) => controlChatMode(requireWebuiUrl(), await boundPurposeChatRequest(event, request) as ChatModeRequest));
+  ipcMain.handle('lastbrowser:sidekick:grill', async (event, request) => controlGrill(requireWebuiUrl(), await boundPurposeChatRequest(event, request) as GrillRequest));
+  ipcMain.handle('lastbrowser:sidekick:goalMigration', async (event, request) => controlGoalMigration(requireWebuiUrl(), await boundPurposeChatRequest(event, request) as GoalMigrationRequest));
+  ipcMain.handle('lastbrowser:sidekick:modelPolicy', async (event, request) => controlModelPolicy(requireWebuiUrl(), await boundPurposeChatRequest(event, request) as ModelPolicyRequest));
+  ipcMain.handle('lastbrowser:sidekick:controlChat', async (event, request) => controlNativeChat(requireWebuiUrl(), await boundPurposeChatRequest(event, request) as NativeChatControlRequest));
+  ipcMain.handle('lastbrowser:sidekick:goalCommand', async (event, request) => {
+    const scoped = await boundPurposeChatRequest(event, request);
+    const captured = nativeChatStreams.beginCapture(event, scoped);
+    const result = await controlPersistentGoal(requireWebuiUrl(), scoped as PersistentGoalRequest);
+    if (typeof result.session_id === 'string' && typeof result.stream_id === 'string') {
+      await nativeChatStreams.captureStart(captured, { sessionId: result.session_id, streamId: result.stream_id,
+        ...(Object.hasOwn(result, 'space_scope') ? { spaceScope: result.space_scope as BrowserScope | null } : {}) });
+    }
+    return result;
+  });
+  ipcMain.handle('lastbrowser:sidekick:childHistory', async (event, request) => readChildHistory(requireWebuiUrl(), await boundPurposeChatRequest(event, request) as ChildHistoryRequest));
+  ipcMain.handle('lastbrowser:sidekick:getStreamStatus', (event, streamId) => nativeChatStreams.status(event, streamId));
   // Live chat stream: subscribe over SSE and push each event to the renderer.
   // Polling `/api/chat/stream/status` on a timer costs a round-trip per tick and
   // makes the transcript feel laggy; SSE delivers each delta as it happens.
-  ipcMain.handle('lastbrowser:sidekick:subscribeChatStream', (event, request) => {
-    const streamId = String(request?.streamId || '');
-    if (!streamId) throw new Error('streamId is required');
-    return chatStreams.subscribe(event.sender, streamId, (onEvent) => subscribeChatStream(
-      requireWebuiUrl(),
-      streamId,
-      getWebuiSessionToken(),
-      onEvent,
-      undefined,
-      getAccessAuthCookie()
-    ));
-  });
-  ipcMain.handle('lastbrowser:sidekick:unsubscribeChatStream', (event, request) => {
-    const streamId = String(request?.streamId || '');
-    return chatStreams.unsubscribe(event.sender, streamId);
-  });
-  ipcMain.handle('lastbrowser:sidekick:cancelStream', (_event, streamId) => cancelChatStream(requireWebuiUrl(), String(streamId || '')));
+  ipcMain.handle('lastbrowser:sidekick:subscribeChatStream', (event, request) => nativeChatStreams.subscribe(event, request));
+  ipcMain.handle('lastbrowser:sidekick:unsubscribeChatStream', (event, request) => nativeChatStreams.unsubscribe(event, request));
+  ipcMain.handle('lastbrowser:sidekick:cancelStream', (event, streamId) => nativeChatStreams.cancel(event, streamId));
   ipcMain.handle('lastbrowser:sidekick:listWorkspace', (_event, request) => listWorkspace(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:readWorkspaceFile', (_event, request) => readWorkspaceFile(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:createWorkspaceFile', (_event, request) => createWorkspaceFile(requireWebuiUrl(), request));
@@ -583,7 +706,15 @@ function registerIpc(): void {
       (webuiUrl) => addSpace(webuiUrl, request)
     );
   });
-  ipcMain.handle('lastbrowser:sidekick:removeSpace', (_event, request) => removeSpace(requireWebuiUrl(), request));
+  ipcMain.handle('lastbrowser:sidekick:removeSpace', async (event, request) => {
+    if (!independentController) throw new Error('Independent Space mapping is unavailable');
+    const bound = await independentController.bindSpaceRemoval(event, request);
+    bound.recheck();
+    const result = await removeSpace(requireWebuiUrl(), { ...bound.request,
+      ...(bound.request.spaceScope ? { nativeBridgeNonce: services?.getLayout().bridgeToken } : {}) });
+    bound.recheck();
+    return result;
+  });
   ipcMain.handle('lastbrowser:sidekick:renameSpace', (_event, request) => renameSpace(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:reorderSpaces', (_event, request) => reorderSpaces(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:listCrons', () => listCrons(requireWebuiUrl()));
@@ -714,7 +845,7 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:untimeoutDiscordMember', (_event, request) => untimeoutDiscordMember(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:unbanDiscordMember', (_event, request) => unbanDiscordMember(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:configureDiscord', (_event, request) => configureDiscord(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:sendMessage', (_event, request) => sendSidekickMessage(requireWebuiUrl(), request));
+  ipcMain.handle('lastbrowser:sidekick:sendMessage', async (event, request) => sendSidekickMessage(requireWebuiUrl(), await boundChatRequest(event, request, 'workspace', true) as { message: string }));
   ipcMain.handle('lastbrowser:terminal:start', (_event, request) => {
     const webContents = _event.sender;
     const reqObj = typeof request === 'string' ? { cwd: request } : (request || {});
@@ -779,11 +910,17 @@ function registerIpc(): void {
     return services?.runDoctor(options);
   });
   // Cross-Tab Context Synthesis & Intelligence (Phase 10.1 & 10.6)
-  ipcMain.handle('lastbrowser:tabs:synthesizeContext', (_event, options?: TabSynthesisOptions) => {
-    return synthesizeTabs(options);
+  ipcMain.handle('lastbrowser:tabs:synthesizeContext', async (event, options?: TabSynthesisOptions) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell), owner = recheck().id;
+    const result = await synthesizeTabs(options, { allowNetworkFetch: false,
+      isAllowed: contents => isGuestOwnedByRenderer(contents, owner) && !independentController?.ownsWebContents(contents.id) });
+    recheck(); return result;
   });
-  ipcMain.handle('lastbrowser:tabs:extractActive', (_event, maxChars?: number) => {
-    return extractActiveWebview(maxChars);
+  ipcMain.handle('lastbrowser:tabs:extractActive', async (event, maxChars?: number) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell), owner = recheck().id;
+    const result = await extractActiveWebview(maxChars, { allowNetworkFetch: false,
+      isAllowed: contents => isGuestOwnedByRenderer(contents, owner) && !independentController?.ownsWebContents(contents.id) });
+    recheck(); return result;
   });
   registerWindowControlIpc(
     ipcMain,
@@ -911,6 +1048,7 @@ function registerIpc(): void {
             detachedTabTransfers.delete(contentsId);
             pending.resolve(false);
           }
+          quitIfLastShellClosed();
         });
 
         setupMinimizeToTray(detachedWindow, () => {
@@ -1067,19 +1205,23 @@ function registerIpc(): void {
       };
     }
   });
-  ipcMain.handle('lastbrowser:cdp:execute', async (_event, request: unknown) => {
+  ipcMain.handle('lastbrowser:cdp:execute', async (event, request: unknown) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
     if (!isCdpEnabled()) return { ok: false, error: 'CDP debugging is disabled.' };
     const payload = (request || {}) as { targetUrl?: string; method?: string; params?: Record<string, unknown> };
     try {
       const listRes = await fetch(`http://127.0.0.1:${cdpPort}/json/list`);
       const targets = (await listRes.json()) as Array<{ id: string; url: string; webSocketDebuggerUrl?: string; type: string }>;
+      recheck();
+      const independentTargets = new Set(independentController?.browserTargets() ?? []);
+      const ordinaryTargets = targets.filter(target => !independentTargets.has(target.id));
       const guestTarget = payload.targetUrl
-        ? targets.find((t) => t.url.includes(payload.targetUrl!))
-        : targets.find((t) => t.type === 'webview' || (t.type === 'page' && !t.url.includes('index.html')));
+        ? ordinaryTargets.find((t) => t.url.includes(payload.targetUrl!))
+        : ordinaryTargets.find((t) => t.type === 'webview' || (t.type === 'page' && !t.url.includes('index.html')));
 
       return {
         ok: true,
-        targetsCount: targets.length,
+        targetsCount: ordinaryTargets.length,
         matchedTarget: guestTarget ? { id: guestTarget.id, url: guestTarget.url } : null
       };
     } catch (err) {
@@ -1199,15 +1341,8 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
   // Initialize native Widevine CDM if running under Castlabs Electron
   await initializeCastlabsWidevine();
 
-  // Register Lastbrowser as protocol client for standard web links
-  if (typeof app?.isDefaultProtocolClient === 'function') {
-    if (!app.isDefaultProtocolClient('http')) {
-      app.setAsDefaultProtocolClient('http');
-    }
-    if (!app.isDefaultProtocolClient('https')) {
-      app.setAsDefaultProtocolClient('https');
-    }
-  }
+  // Register HTTP/HTTPS only through the user's explicit Settings action.
+  // Starting the browser (including portable previews) must not change OS defaults.
 
   // Serve the renderer over app:// so localStorage/IndexedDB persist to disk.
   // Under file:// Chromium uses an opaque origin and every setting is lost on
@@ -1221,14 +1356,52 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     shell,
     getWindow: () => mainWindow,
     getAssistantName: () => currentAssistantName,
-    getLocale: () => currentLocale
+    getLocale: () => currentLocale,
+    getSearchEngine: () => {
+      const engine = searchEngineById(currentSearchEngineId);
+      return { label: engine.label, search: (query: string) => engine.template.replace('%s', encodeURIComponent(query)) };
+    }
   });
   registerBrowserShortcuts({
     app,
     getWindow: () => mainWindow
   });
   services = new SidecarServices(resolveServiceLayout(appResourcesDir()));
-  void services.start().then(() => ensureSidecarAuth());
+  independentController = new IndependentController({
+    userDataDir: app.getPath('userData'),
+    isShell: isTrustedShell,
+    apiRequest: (operation, scope, payload, profile) => independentApiRequest(requireWebuiUrl(), operation,
+      scope, payload, profile, services!.getLayout().bridgeToken),
+    attachSession: attachSessionHandlers
+  });
+  quickChatController = new QuickChatController({
+    isShell: isTrustedShell,
+    resolveBinding: (browserProfileId, workspacePath, backendProfileName) =>
+      independentController!.lookupBinding(browserProfileId, workspacePath, backendProfileName),
+    start: async (request) => {
+      const response = await startQuickChat(requireWebuiUrl(), { quickChatId: request.quickChatId, scope: request.scope,
+        profile: request.profile, workspacePath: request.workspacePath, nativeBridgeNonce: services!.getLayout().bridgeToken,
+        prompt: request.prompt, ...(request.context ? { context: { ...request.context } } : {}),
+        ...(request.model ? { model: request.model } : {}), ...(request.modelProvider ? { modelProvider: request.modelProvider } : {}) });
+      const scopeValue = (response.space_scope ?? response.scope) as BrowserScope;
+      if (response.ok !== true || response.quick_chat_id !== request.quickChatId || typeof response.session_id !== 'string'
+        || typeof response.stream_id !== 'string' || !scopeValue) throw new Error('Quickchat backend did not accept the scoped stream');
+      return { quickChatId: request.quickChatId, streamId: response.stream_id as string,
+        sessionId: response.session_id as string, scope: scopeValue };
+    },
+    stop: (request) => stopQuickChat(requireWebuiUrl(), { quickChatId: request.quickChatId, streamId: request.streamId,
+      scope: request.scope, profile: request.profile, workspacePath: request.workspacePath,
+      nativeBridgeNonce: services!.getLayout().bridgeToken }),
+    cancel: (request) => cancelQuickChat(requireWebuiUrl(), { quickChatId: request.quickChatId, streamId: request.streamId,
+      scope: request.scope, profile: request.profile, workspacePath: request.workspacePath,
+      nativeBridgeNonce: services!.getLayout().bridgeToken }),
+    subscribe: (streamId, binding, onEvent) => subscribeChatStream(requireWebuiUrl(), streamId, getWebuiSessionToken(), onEvent,
+      undefined, getAccessAuthCookie(), nativeChatReadHeaders({ profile: binding.profile, workspacePath: binding.workspacePath ?? undefined,
+        nativeBridgeNonce: services!.getLayout().bridgeToken }))
+  });
+  void services.start().then(async () => { await ensureSidecarAuth();
+    try { await independentController?.start(); } catch (error) { console.warn('[independent] Browser bridge unavailable:', error); }
+  });
   registerIpc();
   appReady = true;
   createWindow();
@@ -1252,7 +1425,14 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
 }, () => app.quit());
 
 function attachSessionHandlers(targetSession: Session): void {
+  if (activeSessions.has(targetSession)) return;
   activeSessions.add(targetSession);
+  // Retain the broker's closed gate during quit even after the global reference is cleared.
+  let policyController = independentController;
+  installSessionRequestPolicy(targetSession, details => {
+    policyController ??= independentController;
+    return policyController?.requestPolicy(details, targetSession) ?? { owned: false, allowed: true };
+  });
   const currentUa = targetSession.getUserAgent();
   if (currentUa) {
     targetSession.setUserAgent(cleanOAuthUserAgent(currentUa));
@@ -1308,6 +1488,7 @@ function attachSessionHandlers(targetSession: Session): void {
   // Deny-by-default with whitelist (permissions.ts): Electron grants every permission silently
   // otherwise, which would hand any website the camera, microphone, and location.
   targetSession.setPermissionRequestHandler((_contents, permission, callback, details) => {
+    if (_contents && independentController?.ownsWebContents(_contents.id)) { callback(false); return; }
     const requestingUrl = String((details as { requestingUrl?: string })?.requestingUrl || '');
     if (permission === 'notifications') {
       const isMainFrame = (details as { isMainFrame?: boolean })?.isMainFrame === true;
@@ -1323,6 +1504,7 @@ function attachSessionHandlers(targetSession: Session): void {
     callback(permissions.decide(String(permission), requestingUrl) === 'allow');
   });
   targetSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) => {
+    if (_contents && independentController?.ownsWebContents(_contents.id)) return false;
     return permissions.decide(String(permission), String(requestingOrigin || '')) === 'allow';
   });
 }
@@ -1334,7 +1516,10 @@ app.on('web-contents-created', (_event, contents) => {
   // policy intentionally leaves src/partition/plugins alone; the detached-tab
   // handler below may still set src to about:blank during history restoration.
   if (contents.getType() === 'window') {
-    contents.on('will-attach-webview', (_attachEvent, webPreferences, params) => {
+    contents.on('will-attach-webview', (attachEvent, webPreferences, params) => {
+      if (isReservedAgentPartition(webPreferences.partition) || isReservedAgentPartition(params.partition)) {
+        attachEvent.preventDefault(); return;
+      }
       hardenWebViewAttachment(
         webPreferences as unknown as Record<string, unknown>,
         params as Record<string, unknown>
@@ -1374,10 +1559,21 @@ function cleanupServices(): void {
   } catch {}
 }
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   isQuitting = true;
+  nativeChatStreams.close();
   try { appTray?.destroy(); } catch {}
-  cleanupServices();
+  if (quitCleanupComplete || !independentController) { cleanupServices(); return; }
+  event.preventDefault();
+  // Repeated close requests share the original shutdown and watchdog.
+  if (quitCleanupStarted) return;
+  quitCleanupStarted = true;
+  const watchdog = setTimeout(() => {
+    cleanupServices(); app.exit(0);
+  }, 15000);
+  void independentController.shutdown().catch(error => console.warn('[independent] Quit cleanup:', error)).finally(() => {
+    clearTimeout(watchdog); quitCleanupComplete = true; cleanupServices(); app.quit();
+  });
 });
 
 app.on('will-quit', () => {
@@ -1387,7 +1583,6 @@ app.on('will-quit', () => {
 const handleTerminationSignal = () => {
   if (isQuitting) return;
   isQuitting = true;
-  cleanupServices();
   if (typeof app?.quit === 'function') {
     app.quit();
   }

@@ -110,7 +110,7 @@ export function broadcastDownloadSnapshot(windows: Iterable<DownloadWindowLike>,
   }
 }
 
-export function createDownloadTracker(): DownloadTracker {
+export function createDownloadTracker(options: { denyDownload?: (contents: unknown) => boolean } = {}): DownloadTracker {
   const entries = new Map<string, DownloadEntry>();
   const listeners = new Set<(entries: DownloadEntry[]) => void>();
   const attached = new Set<SessionLike>();
@@ -164,7 +164,12 @@ export function createDownloadTracker(): DownloadTracker {
     attach(session: SessionLike, downloadsDirectory?: string): void {
       if (attached.has(session)) return;
       attached.add(session);
-      session.on('will-download', (_event, item) => {
+      session.on('will-download', (_event, item, contents) => {
+        if (options.denyDownload?.(contents)) {
+          (_event as { preventDefault?: () => void })?.preventDefault?.();
+          try { item.cancel(); } catch { /* Main host may already have cancelled the item. */ }
+          return; // no save path, user download history or privileged save dialog for an agent target
+        }
         const id = `dl-${++counter}-${Date.now()}`;
         activeDownloads.add(id);
         downloadItems.set(id, item);

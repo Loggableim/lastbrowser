@@ -24,10 +24,11 @@ describe('Ollama settings configuration flow', () => {
     expect(source).not.toContain('api_key: ollamaKey.trim(),\n                                  ...cleanSettingsPayload');
   });
 
-  it('uses the server model default in the chat picker when no local choice exists', () => {
+  it('uses the bound Space server model in the chat picker', () => {
     const chatSource = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8');
-    expect(chatSource).toContain("resolveCatalogModelSelection(data?.default_model, rawParsed, data?.active_provider)");
-    expect(chatSource).toContain("currentSelection.setSelectedModelProvider(defaultSelection.provider || '')");
-    expect(chatSource).toContain('catalogDefaultModel,\n    \'default\'');
+    expect(chatSource).toContain("operation: 'modelSelection'");
+    expect(chatSource).toContain('setScopedModel({ viewKey: modelViewKey, selection: data })');
+    expect(chatSource).toContain('setCatalogDefaultModel(data.model)');
+    expect(chatSource).toMatch(/catalogDefaultModel,\r?\n\s*'default'/);
   });
 });

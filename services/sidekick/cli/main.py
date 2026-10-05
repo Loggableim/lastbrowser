@@ -7121,6 +7121,12 @@ def _finalize_update_output(state):
 
 def _cmd_update_check():
     """Implement ``sidekick update --check``: fetch and report without installing."""
+    from shared.constants import is_lastbrowser_integrated
+
+    if is_lastbrowser_integrated(PROJECT_ROOT):
+        print("Sidekick is integrated into Lastbrowser and updates together with the browser.")
+        print("Independent backend updates are disabled in Lastbrowser mode.")
+        return
     git_dir = PROJECT_ROOT / ".git"
     if not git_dir.exists():
         print("✗ Not a git repository — cannot check for updates.")
@@ -7372,6 +7378,13 @@ def cmd_update(args):
     runs the update, then restores stdio on the way out (even on
     ``sys.exit`` or unhandled exceptions).
     """
+    from shared.constants import is_lastbrowser_integrated
+
+    if is_lastbrowser_integrated():
+        print("Sidekick is integrated into Lastbrowser and updates together with the browser.")
+        print("Independent backend updates are disabled in Lastbrowser mode.")
+        return
+
     from cli.config import is_managed, managed_error
 
     if is_managed():
@@ -7397,6 +7410,12 @@ def cmd_update(args):
 def _cmd_update_impl(args, gateway_mode: bool):
     """Body of ``cmd_update`` — kept separate so the wrapper can always
     restore stdio even on ``sys.exit``."""
+    from shared.constants import is_lastbrowser_integrated
+
+    if is_lastbrowser_integrated(PROJECT_ROOT):
+        print("Sidekick is integrated into Lastbrowser and updates together with the browser.")
+        print("Independent backend updates are disabled in Lastbrowser mode.")
+        return
     # In gateway mode, use file-based IPC for prompts instead of stdin
     gw_input_fn = (
         (lambda prompt, default="": _gateway_prompt(prompt, default))

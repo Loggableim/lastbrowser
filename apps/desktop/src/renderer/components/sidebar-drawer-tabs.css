@@ -1,0 +1,68 @@
+.sidebar-drawer-tabs-shell {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 6px;
+  background: rgba(13, 20, 36, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-drawer-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  scroll-behavior: smooth;
+}
+
+.sidebar-drawer-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.sidebar-drawer-tabs .drawer-tab-btn {
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.sidebar-drawer-tabs-shell .sidebar-drawer-scroll-control {
+  display: grid;
+  flex: 0 0 22px;
+  place-items: center;
+  width: 22px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(160, 190, 225, 0.16);
+  border-radius: 6px;
+  color: rgba(225, 240, 255, 0.86);
+  background: rgba(255, 255, 255, 0.045);
+  cursor: pointer;
+}
+
+.sidebar-drawer-tabs-shell .sidebar-drawer-scroll-control:hover:not(:disabled) {
+  color: #eaf4ff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-drawer-tabs-shell .sidebar-drawer-scroll-control:focus-visible {
+  outline: 2px solid #00d9ff;
+  outline-offset: 1px;
+}
+
+.sidebar-drawer-tabs-shell .sidebar-drawer-scroll-control:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-drawer-tabs {
+    scroll-behavior: auto;
+  }
+}

@@ -27,6 +27,11 @@ export type TabSynthesisOptions = {
   tabIds?: string[];
   maxCharsPerTab?: number;
 };
+export type TabReadAuthority = {
+  isAllowed(contents: Electron.WebContents): boolean;
+  /** IPC callers must not silently fetch a different session after a missing guest. */
+  allowNetworkFetch: boolean;
+};
 
 export type TabSynthesisResult = {
   tabCount: number;
@@ -54,10 +59,16 @@ export function isSynthesizableUrl(url: string): boolean {
 /**
  * Find a live Electron WebContents matching a tab's URL.
  */
-function findMatchingWebContents(url: string): Electron.WebContents | null {
+function findMatchingWebContents(url: string, authority?: TabReadAuthority): Electron.WebContents | null {
   try {
     const all = webContents.getAllWebContents();
     const cleanTarget = url.split('#')[0].replace(/\/+$/, '').toLowerCase();
+    if (authority) {
+      const matches = all.filter(wc => !wc.isDestroyed() && authority.isAllowed(wc)
+        && wc.getType() === 'webview' && wc.getURL().split('#')[0].replace(/\/+$/, '').toLowerCase() === cleanTarget);
+      // Identical URLs across spaces are ambiguous; never choose the first arbitrary target.
+      return matches.length === 1 ? matches[0] : null;
+    }
 
     // Prefer webview type
     for (const wc of all) {
@@ -164,9 +175,14 @@ export async function fetchBackgroundTabContent(
 /**
  * Extract content from the currently active webview.
  */
-export async function extractActiveWebview(maxChars = 4000): Promise<ExtractedTabContent | null> {
+export async function extractActiveWebview(maxChars = 4000, authority?: TabReadAuthority): Promise<ExtractedTabContent | null> {
   try {
     const all = webContents.getAllWebContents();
+    if (authority) {
+      const focused = all.filter(wc => !wc.isDestroyed() && authority.isAllowed(wc)
+        && wc.getType() === 'webview' && wc.isFocused() && isSynthesizableUrl(wc.getURL()));
+      return focused.length === 1 ? extractFromWebContents(focused[0], undefined, maxChars) : null;
+    }
     for (const wc of all) {
       if (wc.isDestroyed()) continue;
       if (wc.getType() === 'webview' && isSynthesizableUrl(wc.getURL())) {
@@ -183,7 +199,7 @@ export async function extractActiveWebview(maxChars = 4000): Promise<ExtractedTa
 /**
  * Synthesize context from multiple browser tabs into a cohesive Markdown context block.
  */
-export async function synthesizeTabs(options: TabSynthesisOptions = {}): Promise<TabSynthesisResult> {
+export async function synthesizeTabs(options: TabSynthesisOptions = {}, authority?: TabReadAuthority): Promise<TabSynthesisResult> {
   const maxChars = options.maxCharsPerTab || 3500;
   const inputTabs = options.tabs || [];
 
@@ -199,20 +215,20 @@ export async function synthesizeTabs(options: TabSynthesisOptions = {}): Promise
 
   // If candidateTabs is empty (e.g. caller didn't supply tab list), try extracting whatever live webview is available
   if (candidateTabs.length === 0) {
-    const active = await extractActiveWebview(maxChars);
+    const active = await extractActiveWebview(maxChars, authority);
     if (active) {
       extractedList.push(active);
     }
   } else {
     for (const tab of candidateTabs) {
-      const liveWc = findMatchingWebContents(tab.url);
+      const liveWc = findMatchingWebContents(tab.url, authority);
       let content: ExtractedTabContent | null = null;
 
       if (liveWc) {
         content = await extractFromWebContents(liveWc, tab.id, maxChars);
       }
 
-      if (!content) {
+      if (!content && (!authority || authority.allowNetworkFetch)) {
         content = await fetchBackgroundTabContent(tab.url, tab.title, tab.id, maxChars);
       }
 

@@ -1,5 +1,7 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '../appearance.css';
+import { LocalAiSetupPane } from '../components/LocalAiSetupPane.js';
+import { BackendProfileControls } from '../components/BackendProfileControls.js';
 import {
   AlertTriangle,
   Brain,
@@ -48,6 +50,7 @@ import { copyDoctorOutput, runDoctorExclusively } from '../utils/doctor-dashboar
 import { searchEngines } from '../tabs.js';
 import { computeAccentTokens } from '../App.js';
 import { type ExtensionRecord, type ExtensionPreset } from '../bridge.js';
+import { loadExtensionSettingsData } from '../extension-settings-state.js';
 import { useDesktopI18n } from '../i18n.js';
 import type { DoctorReport } from '../shell-state.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
@@ -66,6 +69,13 @@ import { DEFAULT_VISION_IMPAIRED_CONFIG } from '../stores/a11y-config.js';
 import { AccessibilityTestCard } from '../components/AccessibilityTestCard.js';
 import { ProfileSwitcher } from '../components/HeaderComponents.js';
 import type { BrowserProfile } from '../profiles.js';
+import { ModelPolicyControls, type ModelPolicyCandidate } from '../components/ModelPolicyControls.js';
+import { IndependentAssistantClient } from '../independent-assistant-client.js';
+import { mapScopedModelPickerOptions } from '../model-picker-options.js';
+import { canExecuteAutomaticPolicy, readObservedDecisionFromSession, requestModelPolicy, type ModelPolicyDraft, type ModelPolicyResponse } from '../model-policy-client.js';
+import { modelPolicyCopy, modelPolicyReason } from '../i18n/model-policy-copy.js';
+import { modelPolicySettingsCopy } from '../i18n/model-policy-settings-copy.js';
+import { newIndependentRequestId, sameAssistantScope } from '../independent-contracts.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -172,7 +182,7 @@ export function normalizeAppstoreRecord(app: AnyRecord): NormalizedAppstoreRecor
   };
 }
 
-export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'teamwork' | 'plugins' | 'system';
+export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'advanced' | 'teamwork' | 'plugins' | 'system';
 
 export type SettingsSectionMeta ={
   title: string;
@@ -200,7 +210,8 @@ export const SETTINGS_LANGUAGES = [
   { value: 'es', label: 'Español' },
   { value: 'fr', label: 'Français' },
   { value: 'pt-BR', label: 'Português (Brasil)' },
-  { value: 'ru', label: 'Русский' }
+  { value: 'ru', label: 'Русский' },
+  { value: 'ja', label: '日本語' }
 ] as const;
 
 export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> ={
@@ -220,9 +231,14 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
     icon: <Gauge size={16} />
   },
   providers: {
-    title: 'Providers',
-    description: 'Provider defaults and model routing settings.',
+    title: 'AI & local models',
+    description: 'AI providers, per-Space local models and model routing settings.',
     icon: <Brain size={16} />
+  },
+  advanced: {
+    title: 'Advanced',
+    description: 'Automatic model selection and policy for the active chat and Space.',
+    icon: <Wrench size={16} />
   },
   teamwork: {
     title: 'KI-Orchestrierung',
@@ -246,6 +262,7 @@ const SETTINGS_SECTION_COPY: Record<SettingsSectionId, { title: DesktopTranslati
   appearance: { title: 'settings.sections.appearance', description: 'settings.sectionDescriptions.appearance' },
   preferences: { title: 'settings.sections.preferences', description: 'settings.sectionDescriptions.preferences' },
   providers: { title: 'settings.sections.providers', description: 'settings.sectionDescriptions.providers' },
+  advanced: { title: 'settings.sections.advanced', description: 'settings.sectionDescriptions.advanced' },
   teamwork: { title: 'settings.sections.teamwork', description: 'settings.sectionDescriptions.teamwork' },
   plugins: { title: 'settings.sections.plugins', description: 'settings.sectionDescriptions.plugins' },
   system: { title: 'settings.sections.system', description: 'settings.sectionDescriptions.system' }
@@ -1562,21 +1579,23 @@ export function ExtensionsSettingsSection(): JSX.Element {
   const [extensions, setExtensions] = useState<ExtensionRecord[]>([]);
   const [presets, setPresets] = useState<ExtensionPreset[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [cwsInput, setCwsInput] = useState('');
   const [installingId, setInstallingId] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
       if (window.lastbrowser?.extensions) {
-        const [extList, presetList] = await Promise.all([
-          window.lastbrowser.extensions.list(),
-          window.lastbrowser.extensions.presets()
-        ]);
-        setExtensions(extList);
-        setPresets(presetList);
+        const data = await loadExtensionSettingsData<ExtensionRecord, ExtensionPreset>(window.lastbrowser.extensions);
+        setExtensions(data.extensions);
+        setPresets(data.presets);
+        setLoadError('');
+      } else {
+        setLoadError('Extension service is unavailable.');
       }
     } catch (err) {
       console.error('Failed to load extensions:', err);
+      setLoadError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -1663,6 +1682,12 @@ export function ExtensionsSettingsSection(): JSX.Element {
 
   return (
     <div className="extensions-settings-content">
+      {loadError && (
+        <div className="workspace-error" role="alert">
+          <span>{loadError}</span>
+          <button type="button" className="secondary-action compact" onClick={() => void loadData()}>Retry</button>
+        </div>
+      )}
       {/* Curated Store Presets */}
       <SettingsCard
         title="Curated Extension Store"
@@ -2176,7 +2201,98 @@ export function createReadinessAwareSettingsWriter<T>(write: (value: T) => Promi
   };
 }
 
-export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void }): JSX.Element {
+function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileId, backendProfileName, ready, locale }: {
+  sessionId: string | null; workspacePath: string; browserProfileId: string; backendProfileName: string | null;
+  ready: boolean; locale: import('../i18n/keys.js').DesktopLocaleId;
+}): JSX.Element {
+  const client = useMemo(() => new IndependentAssistantClient(window.lastbrowser.independent), []);
+  const identity = JSON.stringify([sessionId, workspacePath, browserProfileId, backendProfileName]);
+  const identityRef = useRef(identity); identityRef.current = identity;
+  const scopeEpochRef = useRef({ identity, epoch: 0 });
+  if (scopeEpochRef.current.identity !== identity) scopeEpochRef.current = { identity, epoch: scopeEpochRef.current.epoch + 1 };
+  const requestEpochRef = useRef(0), saveLocks = useRef(new Set<string>());
+  const [refresh, setRefresh] = useState(0), [loadingKey, setLoadingKey] = useState<string | null>(null), [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<{ identity: string; policy: ModelPolicyResponse; candidates: ModelPolicyCandidate[]; observedDecision: ReturnType<typeof readObservedDecisionFromSession> } | null>(null);
+  const [errorState, setErrorState] = useState<{ identity: string; message: string } | null>(null);
+  const current = loaded?.identity === identity ? loaded : null;
+  const policy = current?.policy ?? null, candidates = current?.candidates ?? [], observedDecision = current?.observedDecision ?? null;
+  const error = errorState?.identity === identity ? errorState.message : '';
+  const loading = loadingKey === identity || Boolean(ready && sessionId && !current && !error);
+  const saveKey = `${scopeEpochRef.current.epoch}:${identity}`;
+  const pending = pendingKey === saveKey;
+  const copy = modelPolicyCopy(locale), statusCopy = modelPolicySettingsCopy[locale];
+
+  useEffect(() => {
+    const requestEpoch = ++requestEpochRef.current, scopeEpoch = scopeEpochRef.current.epoch;
+    let active = true;
+    setLoaded(null); setErrorState(null); setLoadingKey(null);
+    if (!ready || !sessionId || !backendProfileName) {
+      if (ready && sessionId && !backendProfileName) setErrorState({ identity, message: 'model_policy_scope_unavailable' });
+      return () => { active = false; };
+    }
+    setLoadingKey(identity);
+    void (async () => {
+      try {
+        const resolved = await client.request({ schemaVersion: 1, operation: 'resolveScope',
+          payload: { browserProfileId, workspacePath: workspacePath || null }, backendProfileName });
+        if (!resolved.ok || resolved.value.scope.browserProfileId !== browserProfileId) throw Error('model_policy_scope_unavailable');
+        const scope = resolved.value.scope;
+        const sessionScope = { profile: browserProfileId, workspacePath, backendProfileName };
+        const [policyResponse, selectionResponse, sessionResult] = await Promise.all([
+          requestModelPolicy(request => window.lastbrowser.sidekick.modelPolicy(request),
+            { action: 'get', sessionId, workspacePath, browserProfileId }, scope),
+          client.request({ schemaVersion: 1, operation: 'modelSelection', scope, payload: { action: 'get', includeCatalog: true } }),
+          window.lastbrowser.sidekick.getSession({ sessionId, messages: true, msgLimit: 80, ...sessionScope })
+        ]);
+        if (!selectionResponse.ok || !sameAssistantScope(selectionResponse.value.scope, scope)) throw Error('model_policy_scope_unavailable');
+        const session = sessionResult.session;
+        if (!session || session.session_id !== sessionId || session.profile && session.profile !== backendProfileName) throw Error('model_policy_scope_unavailable');
+        const nextCandidates = mapScopedModelPickerOptions(selectionResponse.value).flatMap(group => group.providerId
+          ? group.models.map(entry => ({ pair: { provider: group.providerId, model: entry.id }, label: entry.label, providerLabel: group.provider,
+              available: group.configured && entry.supportsIndependent })) : []);
+        if (!active || requestEpochRef.current !== requestEpoch || scopeEpochRef.current.epoch !== scopeEpoch || identityRef.current !== identity) return;
+        setLoaded({ identity, policy: policyResponse, candidates: nextCandidates, observedDecision: readObservedDecisionFromSession(session, sessionId) }); setErrorState(null);
+      } catch (cause) {
+        if (active && requestEpochRef.current === requestEpoch && scopeEpochRef.current.epoch === scopeEpoch && identityRef.current === identity) {
+          setErrorState({ identity, message: cause instanceof Error ? cause.message : 'model_policy_unavailable' });
+        }
+      } finally {
+        if (active && requestEpochRef.current === requestEpoch && scopeEpochRef.current.epoch === scopeEpoch && identityRef.current === identity) setLoadingKey(currentKey => currentKey === identity ? null : currentKey);
+      }
+    })();
+    return () => { active = false; };
+  }, [identity, ready, refresh, client, sessionId, workspacePath, browserProfileId, backendProfileName]);
+
+  async function save(draft: ModelPolicyDraft): Promise<void> {
+    const epoch = scopeEpochRef.current.epoch, capturedIdentity = identityRef.current, capturedPolicy = policy, lockKey = `${epoch}:${capturedIdentity}`;
+    if (identityRef.current !== identity || scopeEpochRef.current.epoch !== epoch || !capturedPolicy || !sessionId || !backendProfileName || !ready || saveLocks.current.has(lockKey)) return;
+    saveLocks.current.add(lockKey); setPendingKey(lockKey); setErrorState(null);
+    try {
+      const response = await requestModelPolicy(request => window.lastbrowser.sidekick.modelPolicy(request), {
+        action: 'set', sessionId, workspacePath, browserProfileId, draft,
+        expectedRevision: capturedPolicy.policy.revision, clientRequestId: newIndependentRequestId()
+      }, capturedPolicy.scope);
+      if (scopeEpochRef.current.epoch !== epoch || identityRef.current !== capturedIdentity) return;
+      setLoaded(previous => previous?.identity === capturedIdentity ? { ...previous, policy: response } : previous);
+    } catch (cause) {
+      if (scopeEpochRef.current.epoch === epoch && identityRef.current === capturedIdentity) setErrorState({ identity: capturedIdentity, message: cause instanceof Error ? cause.message : 'model_policy_unavailable' });
+    } finally {
+      saveLocks.current.delete(lockKey);
+      setPendingKey(currentKey => currentKey === lockKey ? null : currentKey);
+    }
+  }
+
+  return <SettingsCard title={copy.title} description={copy.privacy}>
+    {!sessionId && <p role="status">{statusCopy.sessionRequired}</p>}
+    {sessionId && loading && <p role="status">{statusCopy.loading}</p>}
+    {sessionId && error && <p role="alert">{modelPolicyReason(locale, error)}</p>}
+    {sessionId && policy && <ModelPolicyControls value={policy} candidates={candidates} pending={pending || loading}
+      error={error} open onOpen={() => {}} locale={locale} onSave={draft => { void save(draft); }} onRefresh={() => setRefresh(value => value + 1)}
+      observedDecision={observedDecision} />}
+  </SettingsCard>;
+}
+
+export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
@@ -2920,8 +3036,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             <button key={key} type="button" className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}>
               <span className="settings-section-button-icon">{meta.icon}</span>
               <span className="settings-section-button-text">
-                <strong>{t(SETTINGS_SECTION_COPY[key].title)}</strong>
-                <small>{t(SETTINGS_SECTION_COPY[key].description)}</small>
+                  <strong>{t(SETTINGS_SECTION_COPY[key].title)}</strong>
+                  <small>{t(SETTINGS_SECTION_COPY[key].description)}</small>
               </span>
             </button>
           ))}
@@ -2950,6 +3066,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
           </header>
 
           <div className="settings-panel-stack">
+            {section === 'advanced' && <AdvancedModelPolicySettings sessionId={activeSessionId} workspacePath={activeSpacePath}
+              browserProfileId={activeProfileId} backendProfileName={activeBackendProfileName ?? null} ready={ready} locale={locale} />}
             {section === 'conversation' && (
               <>
                 <SettingsCard
@@ -3650,6 +3768,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   />
                 </SettingsCard>
 
+                <BackendProfileControls
+                  activeBrowserProfileId={activeProfileId}
+                  activeSpacePath={activeSpacePath}
+                />
+
                 <SettingsCard
                   title={t('settings.panels.preferences.searchEngine')}
                   description={t('settings.panels.preferences.searchEngineDescription')}
@@ -3896,6 +4019,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
             {section === 'providers' && (
               <>
+                <LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||''])} browserProfileId={activeProfileId} workspacePath={activeSpacePath}
+                  backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible/>
                 <SettingsCard
                   title={t('settings.panels.providers.title')}
                   description={t('settings.panels.providers.description')}
@@ -4266,7 +4391,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             )}
 
             {section === 'teamwork' && (
-              <TeamworkSettingsPanel />
+              <TeamworkSettingsPanel browserProfileId={activeProfileId} workspacePath={activeSpacePath || null} backendProfileName={activeBackendProfileName} />
             )}
 
             {section === 'plugins' && (

@@ -7,34 +7,41 @@ type ProviderDescriptionId =
 
 const descriptions: Record<ProviderDescriptionId, Record<DesktopLocaleId, string>> = {
   'openai-codex': {
+    ja: 'ChatGPT アカウントでログインできます。API キーは不要です。',
     en: 'Sign in with your ChatGPT account — no API key needed.', de: 'Melde dich mit deinem ChatGPT-Konto an – ein API-Schlüssel ist nicht nötig.',
     es: 'Inicia sesión con tu cuenta de ChatGPT; no necesitas una clave de API.', fr: 'Connectez-vous avec votre compte ChatGPT, sans clé API.',
     it: 'Accedi con il tuo account ChatGPT: non serve una chiave API.', 'pt-BR': 'Entre com sua conta do ChatGPT; não é necessária uma chave de API.', ru: 'Войдите через аккаунт ChatGPT — ключ API не нужен.'
   },
   anthropic: {
+    ja: 'Claude Code に接続するか、Anthropic の API キーを入力します。',
     en: 'Connect Claude Code or enter an Anthropic API key.', de: 'Verbinde Claude Code oder gib einen Anthropic-API-Schlüssel ein.',
     es: 'Conecta Claude Code o introduce una clave de API de Anthropic.', fr: 'Connectez Claude Code ou saisissez une clé API Anthropic.',
     it: 'Collega Claude Code o inserisci una chiave API Anthropic.', 'pt-BR': 'Conecte o Claude Code ou informe uma chave de API da Anthropic.', ru: 'Подключите Claude Code или укажите ключ API Anthropic.'
   },
   'google-gemini-cli': {
+    ja: '個人向け Gemini CLI のサブスクリプションアクセスは 2026 年 6 月 18 日に変更されました。Antigravity CLI の公式移行ガイドをご確認ください。Gemini の API キーは別の接続方法です。',
     en: 'Consumer Gemini CLI subscription access changed on June 18, 2026. See the official Antigravity CLI migration guide; Gemini API keys are separate.', de: 'Der Gemini-CLI-Abozugriff für Privatkonten wurde am 18. Juni 2026 geändert. Hinweise stehen in der offiziellen Migrationsanleitung für Antigravity CLI; Gemini-API-Schlüssel sind davon getrennt.',
     es: 'El acceso de suscripción de Gemini CLI para consumidores cambió el 18 de junio de 2026. Consulta la guía oficial de migración a Antigravity CLI; las claves API de Gemini son independientes.', fr: 'L’accès par abonnement à Gemini CLI pour les particuliers a changé le 18 juin 2026. Consultez le guide officiel de migration vers Antigravity CLI ; les clés API Gemini sont distinctes.',
     it: 'L’accesso agli abbonamenti consumer di Gemini CLI è cambiato il 18 giugno 2026. Consulta la guida ufficiale alla migrazione di Antigravity CLI; le chiavi API Gemini sono separate.', 'pt-BR': 'O acesso por assinatura à Gemini CLI para consumidores mudou em 18 de junho de 2026. Consulte o guia oficial de migração para Antigravity CLI; as chaves de API Gemini são separadas.', ru: 'Доступ к Gemini CLI по потребительской подписке изменился 18 июня 2026 года. См. официальное руководство по переходу на Antigravity CLI; ключи API Gemini — отдельный способ доступа.'
   },
   antigravity: {
+    ja: 'Google アカウントを 1 つ以上接続します。チャットリクエストは接続済みアカウントに順番に割り当てられます。',
     en: 'Connect one or more Google accounts. Chat requests rotate round-robin across all connected accounts.', de: 'Verbinde ein oder mehrere Google-Konten. Chat-Anfragen rotieren im Round-Robin über alle verbundenen Konten.',
     es: 'Conecta una o más cuentas de Google. Las solicitudes de chat rotan en round-robin entre todas las cuentas conectadas.', fr: 'Connectez un ou plusieurs comptes Google. Les requêtes de chat tournent en round-robin entre tous les comptes connectés.',
     it: 'Collega uno o più account Google. Le richieste di chat ruotano in round-robin tra tutti gli account collegati.', 'pt-BR': 'Conecte uma ou mais contas do Google. As solicitações de chat alternam em round-robin entre todas as contas conectadas.', ru: 'Подключите один или несколько аккаунтов Google. Запросы чата распределяются по кругу между всеми подключёнными аккаунтами.'
   },
   openai: {
+    ja: 'GPT モデルを利用するための OpenAI API キーです。',
     en: 'OpenAI API key for GPT models.', de: 'OpenAI-API-Schlüssel für GPT-Modelle.', es: 'Clave de API de OpenAI para modelos GPT.', fr: 'Clé API OpenAI pour les modèles GPT.',
     it: 'Chiave API OpenAI per i modelli GPT.', 'pt-BR': 'Chave de API da OpenAI para modelos GPT.', ru: 'Ключ API OpenAI для моделей GPT.'
   },
   openrouter: {
+    ja: '1 つのキーで複数のプロバイダーのモデルを利用できます。',
     en: 'One key for models from many providers.', de: 'Ein Schlüssel für Modelle vieler Anbieter.', es: 'Una clave para modelos de muchos proveedores.', fr: 'Une clé pour des modèles de nombreux fournisseurs.',
     it: 'Una chiave per modelli di molti provider.', 'pt-BR': 'Uma chave para modelos de vários provedores.', ru: 'Один ключ для моделей разных провайдеров.'
   },
   alibaba: {
+    ja: 'Alibaba Cloud DashScope のワークスペースに接続し、現在のモデルカタログから選択します。利用料金が発生する場合があります。',
     en: 'Connect your Alibaba Cloud DashScope workspace and choose from its live model catalog. Usage may be billed.',
     de: 'Verbinde deinen Alibaba-Cloud-DashScope-Workspace und wähle aus dem Live-Modellkatalog. Die Nutzung kann kostenpflichtig sein.',
     es: 'Conecta tu espacio de Alibaba Cloud DashScope y elige modelos de su catálogo en vivo. El uso puede tener costo.',
@@ -44,48 +51,59 @@ const descriptions: Record<ProviderDescriptionId, Record<DesktopLocaleId, string
     ru: 'Подключите рабочую область Alibaba Cloud DashScope и выберите модель из актуального каталога. Использование может быть платным.'
   },
   gemini: {
+    ja: 'Gemini モデルを利用するための Google AI Studio API キーです。',
     en: 'Google AI Studio API key for Gemini models.', de: 'Google-AI-Studio-API-Schlüssel für Gemini-Modelle.', es: 'Clave de API de Google AI Studio para modelos Gemini.', fr: 'Clé API Google AI Studio pour les modèles Gemini.',
     it: 'Chiave API di Google AI Studio per i modelli Gemini.', 'pt-BR': 'Chave de API do Google AI Studio para modelos Gemini.', ru: 'Ключ API Google AI Studio для моделей Gemini.'
   },
   deepseek: {
+    ja: 'DeepSeek の推論モデルを利用するための API キーです。',
     en: 'DeepSeek API key for its reasoning models.', de: 'DeepSeek-API-Schlüssel für die Reasoning-Modelle.', es: 'Clave de API de DeepSeek para sus modelos de razonamiento.', fr: 'Clé API DeepSeek pour ses modèles de raisonnement.',
     it: 'Chiave API DeepSeek per i suoi modelli di ragionamento.', 'pt-BR': 'Chave de API da DeepSeek para modelos de raciocínio.', ru: 'Ключ API DeepSeek для моделей рассуждения.'
   },
   mistralai: {
+    ja: '欧州でホストされるモデルを利用するための Mistral API キーです。',
     en: 'Mistral API key for models hosted in Europe.', de: 'Mistral-API-Schlüssel für in Europa gehostete Modelle.', es: 'Clave de API de Mistral para modelos alojados en Europa.', fr: 'Clé API Mistral pour des modèles hébergés en Europe.',
     it: 'Chiave API Mistral per modelli ospitati in Europa.', 'pt-BR': 'Chave de API da Mistral para modelos hospedados na Europa.', ru: 'Ключ API Mistral для моделей, размещённых в Европе.'
   },
   nvidia: {
+    ja: 'Nemotron などの NVIDIA NIM エンドポイントに接続します。',
     en: 'NVIDIA NIM endpoints, including Nemotron.', de: 'NVIDIA-NIM-Endpunkte, darunter Nemotron.', es: 'Endpoints de NVIDIA NIM, incluido Nemotron.', fr: 'Points de terminaison NVIDIA NIM, dont Nemotron.',
     it: 'Endpoint NVIDIA NIM, incluso Nemotron.', 'pt-BR': 'Endpoints NVIDIA NIM, incluindo o Nemotron.', ru: 'Конечные точки NVIDIA NIM, включая Nemotron.'
   },
   xiaomi: {
+    ja: 'Xiaomi MiMo の API キーです。',
     en: 'Xiaomi MiMo API key.', de: 'Xiaomi-MiMo-API-Schlüssel.', es: 'Clave de API de Xiaomi MiMo.', fr: 'Clé API Xiaomi MiMo.',
     it: 'Chiave API Xiaomi MiMo.', 'pt-BR': 'Chave de API do Xiaomi MiMo.', ru: 'Ключ API Xiaomi MiMo.'
   },
   zai: {
+    ja: 'Z.AI / GLM の API キーです。',
     en: 'Z.AI / GLM API key.', de: 'Z.AI-/GLM-API-Schlüssel.', es: 'Clave de API de Z.AI / GLM.', fr: 'Clé API Z.AI / GLM.',
     it: 'Chiave API Z.AI / GLM.', 'pt-BR': 'Chave de API da Z.AI / GLM.', ru: 'Ключ API Z.AI / GLM.'
   },
   'x-ai': {
+    ja: 'Grok モデルを利用するための xAI API キーです。',
     en: 'xAI API key for Grok models.', de: 'xAI-API-Schlüssel für Grok-Modelle.', es: 'Clave de API de xAI para modelos Grok.', fr: 'Clé API xAI pour les modèles Grok.',
     it: 'Chiave API xAI per i modelli Grok.', 'pt-BR': 'Chave de API da xAI para modelos Grok.', ru: 'Ключ API xAI для моделей Grok.'
   },
   ollama: {
+    ja: 'モデルをローカルで実行するか、キーを使って Ollama Cloud を利用します。',
     en: 'Run models locally or use Ollama Cloud with a key.', de: 'Führe Modelle lokal aus oder nutze Ollama Cloud mit einem Schlüssel.',
     es: 'Ejecuta modelos localmente o usa Ollama Cloud con una clave.', fr: 'Exécutez des modèles localement ou utilisez Ollama Cloud avec une clé.',
     it: 'Esegui i modelli in locale o usa Ollama Cloud con una chiave.', 'pt-BR': 'Execute modelos localmente ou use o Ollama Cloud com uma chave.', ru: 'Запускайте модели локально или используйте Ollama Cloud с ключом.'
   },
   'ollama-cloud': {
+    ja: 'API キーを使って、ホストされた Ollama モデルを利用します。',
     en: 'Use hosted Ollama models with an API key.', de: 'Nutze gehostete Ollama-Modelle mit einem API-Schlüssel.',
     es: 'Usa modelos de Ollama alojados con una clave de API.', fr: 'Utilisez les modèles Ollama hébergés avec une clé API.',
     it: 'Usa i modelli Ollama ospitati con una chiave API.', 'pt-BR': 'Use modelos hospedados do Ollama com uma chave de API.', ru: 'Используйте размещённые модели Ollama с ключом API.'
   },
   lmstudio: {
+    ja: 'ローカルの LM Studio サーバーに接続します。',
     en: 'Connect to a local LM Studio server.', de: 'Verbinde dich mit einem lokalen LM-Studio-Server.', es: 'Conéctate a un servidor local de LM Studio.', fr: 'Connectez-vous à un serveur LM Studio local.',
     it: 'Collegati a un server LM Studio locale.', 'pt-BR': 'Conecte-se a um servidor local do LM Studio.', ru: 'Подключитесь к локальному серверу LM Studio.'
   },
   custom: {
+    ja: 'vLLM や llama.cpp など、OpenAI 互換エンドポイントに接続します。',
     en: 'Any OpenAI-compatible endpoint (vLLM, llama.cpp, and more).', de: 'Jeder OpenAI-kompatible Endpunkt (vLLM, llama.cpp und weitere).',
     es: 'Cualquier endpoint compatible con OpenAI (vLLM, llama.cpp y más).', fr: 'Tout point de terminaison compatible avec OpenAI (vLLM, llama.cpp, etc.).',
     it: 'Qualsiasi endpoint compatibile con OpenAI (vLLM, llama.cpp e altri).', 'pt-BR': 'Qualquer endpoint compatível com OpenAI (vLLM, llama.cpp e outros).', ru: 'Любая совместимая с OpenAI конечная точка (vLLM, llama.cpp и другие).'
@@ -93,6 +111,7 @@ const descriptions: Record<ProviderDescriptionId, Record<DesktopLocaleId, string
 };
 
 const fallback: Record<DesktopLocaleId, string> = {
+  ja: 'このプロバイダーを Sidekick に接続します。',
   en: 'Connect this provider to Sidekick.', de: 'Verbinde diesen Anbieter mit Sidekick.', es: 'Conecta este proveedor con Sidekick.',
   fr: 'Connectez ce fournisseur à Sidekick.', it: 'Collega questo provider a Sidekick.', 'pt-BR': 'Conecte este provedor ao Sidekick.', ru: 'Подключите этот провайдер к Sidekick.'
 };

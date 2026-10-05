@@ -1,5 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Archive, List, Loader2, Trash2, X } from 'lucide-react';
+import { useDesktopI18n } from './i18n.js';
+import type { DesktopLocaleId } from './i18n/keys.js';
+
+const compressionCopy: Record<DesktopLocaleId, { action:string; busy:string; title:string; done:string; failed:string }> = {
+  en:{action:'Compress',busy:'Compressing…',title:'Compress conversation context',done:'Context compressed successfully.',failed:'Context compression failed'},
+  de:{action:'Komprimieren',busy:'Wird komprimiert…',title:'Gesprächskontext komprimieren',done:'Kontext wurde komprimiert.',failed:'Kontext konnte nicht komprimiert werden'},
+  es:{action:'Comprimir',busy:'Comprimiendo…',title:'Comprimir el contexto de conversación',done:'Contexto comprimido.',failed:'No se pudo comprimir el contexto'},
+  fr:{action:'Compresser',busy:'Compression…',title:'Compresser le contexte de conversation',done:'Contexte compressé.',failed:'La compression du contexte a échoué'},
+  it:{action:'Comprimi',busy:'Compressione…',title:'Comprimi il contesto della conversazione',done:'Contesto compresso.',failed:'Impossibile comprimere il contesto'},
+  'pt-BR':{action:'Comprimir',busy:'Comprimindo…',title:'Comprimir contexto da conversa',done:'Contexto comprimido.',failed:'Não foi possível comprimir o contexto'},
+  ru:{action:'Сжать',busy:'Сжатие…',title:'Сжать контекст беседы',done:'Контекст сжат.',failed:'Не удалось сжать контекст'},
+  ja:{action:'圧縮',busy:'圧縮中…',title:'会話のコンテキストを圧縮',done:'コンテキストを圧縮しました。',failed:'コンテキストを圧縮できませんでした'},
+};
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 
@@ -121,6 +134,7 @@ export function CompressButton({
   ready: boolean;
   onResult: (msg: string) => void;
 }): JSX.Element {
+  const { locale } = useDesktopI18n(), copy = compressionCopy[locale];
   const [compressing, setCompressing] = useState(false);
 
   const doCompress = useCallback(async () => {
@@ -133,7 +147,7 @@ export function CompressButton({
         body: { session_id: activeSessionId }
       });
       if (result?.error) {
-        onResult(`Compress failed: ${result.error}`);
+        onResult(`${copy.failed}: ${result.error}`);
       } else {
         const summary = result?.summary;
         const referenceMessage = typeof summary === 'object' && summary !== null && !Array.isArray(summary) && 'reference_message' in summary
@@ -141,14 +155,14 @@ export function CompressButton({
           : undefined;
         onResult(typeof referenceMessage === 'string' && referenceMessage.trim()
           ? referenceMessage
-          : 'Context compressed successfully.');
+          : copy.done);
       }
     } catch (err) {
-      onResult(`Compress error: ${err instanceof Error ? err.message : String(err)}`);
+      onResult(`${copy.failed}: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setCompressing(false);
     }
-  }, [activeSessionId, ready, onResult]);
+  }, [activeSessionId, ready, onResult, copy]);
 
   return (
     <button
@@ -156,10 +170,10 @@ export function CompressButton({
       className="secondary-action compact"
       onClick={doCompress}
       disabled={!ready || !activeSessionId || compressing}
-      title="Compress conversation context"
+      title={copy.title}
     >
       {compressing ? <Loader2 size={14} className="spin" /> : <Archive size={14} />}
-      <span>{compressing ? 'Compressing…' : 'Compress'}</span>
+      <span>{compressing ? copy.busy : copy.action}</span>
     </button>
   );
 }

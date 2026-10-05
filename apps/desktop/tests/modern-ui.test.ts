@@ -54,7 +54,7 @@ describe('Phase 9: Modern UI Redesign (Sidekick + Zen Browser Synthese)', () => 
 
     expect(source).toContain('<ModernTitlebar');
     expect(source).toContain('<SidekickSidebar');
-    expect(source).toContain('<CopilotSplitView');
+    expect(source).toContain('<SpaceAssistantPanel');
     expect(source).toContain('browser-zen-workspace');
     expect(source).toContain('with-copilot-split');
     expect(source).toContain('browser-canvas-pane');

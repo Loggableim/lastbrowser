@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useDesktopI18n } from '../i18n.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
+import type { BackendProfileEntry, BackendProfilesResponse, ProfilePatch } from '../independent-contracts.js';
+import { isBackendProfilesResponse } from '../independent-assistant-client.js';
+import { backendProfileCopy } from '../i18n/backend-profile-copy.js';
 import {
   X,
   Sparkles,
@@ -26,6 +29,8 @@ export interface SpaceSetupData {
   modelProvider?: string;
   pinnedApps: { name: string; url: string; color?: string }[];
   startUrl: string;
+  assistantSeed?: ProfilePatch;
+  backendProfileName?: string;
 }
 
 export interface SpaceSetupModalProps {
@@ -36,7 +41,7 @@ export interface SpaceSetupModalProps {
 }
 
 interface SpacePreset {
-  id: string;
+  id: 'coding-dev' | 'research-writing' | 'media-creative' | 'custom-blank';
   name: string;
   description: string;
   color: string;
@@ -197,7 +202,8 @@ export function SpaceSetupModal({
   onCreateSpace,
   existingSpaceNames = []
 }: SpaceSetupModalProps): React.JSX.Element | null {
-  const { t } = useDesktopI18n();
+  const { t, locale } = useDesktopI18n();
+  const profileCopy = backendProfileCopy(locale || 'en');
   const initialDefaults = createSpaceSetupDefaults(t('spaceSetup.preset.coding'));
   const [step, setStep] = useState<1 | 2 | 3>(initialDefaults.step);
   const [selectedPreset, setSelectedPreset] = useState<SpacePreset>(initialDefaults.preset);
@@ -210,9 +216,10 @@ export function SpaceSetupModal({
   const [selectedApps, setSelectedApps] = useState(initialDefaults.selectedApps);
   const [customAppName, setCustomAppName] = useState('');
   const [customAppUrl, setCustomAppUrl] = useState('');
+  const [backendProfiles, setBackendProfiles] = useState<readonly BackendProfileEntry[]>([]);
+  const [backendProfileName, setBackendProfileName] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createError, setCreateError] = useState('');
-  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; provider_label?: string; provider?: string }>>([]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -230,30 +237,27 @@ export function SpaceSetupModal({
     setCustomAppUrl(defaults.customAppUrl);
     setCreateError(defaults.createError);
     setIsSubmitting(false);
-
+    setBackendProfiles([]);
+    setBackendProfileName('');
     let active = true;
-    void window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/status' })
-      .then((data: any) => {
-        if (!active || !Array.isArray(data?.models)) return;
-        const models = data.models.filter((item: any) => typeof item?.id === 'string' && item.id.trim());
-        setAvailableModels(models);
-        setModel((current) => current === 'smart-track' || models.some((item: any) => item.id === current)
-          ? current
-          : 'smart-track');
-      })
-      .catch(() => { if (active) setAvailableModels([]); });
+    if (window?.lastbrowser?.independent?.request) {
+      window.lastbrowser.independent.request({
+        schemaVersion: 1,
+        operation: 'backendProfiles',
+        payload: {}
+      }).then((res: any) => {
+        if (!active) return;
+        const val = (res && typeof res === 'object' && 'ok' in res && res.ok) ? res.value : res;
+        if (isBackendProfilesResponse(val)) {
+          setBackendProfiles(val.profiles);
+          const defaultProf = val.profiles.find((p: BackendProfileEntry) => p.isDefault)?.name || val.profiles[0]?.name || '';
+          setBackendProfileName(defaultProf);
+        }
+      }).catch(() => { if (active) setBackendProfiles([]); });
+    }
+
     return () => { active = false; };
   }, [isOpen]);
-
-  useEffect(() => {
-    if (BUILT_IN_MODEL_IDS.has(model) || availableModels.length === 0) {
-      if (BUILT_IN_MODEL_IDS.has(model)) setModelProvider('');
-      return;
-    }
-    setModelProvider((current) => availableModels.some((entry) => entry.id === model && entry.provider === current)
-      ? current
-      : availableModels.find((entry) => entry.id === model)?.provider || '');
-  }, [model, availableModels]);
 
   const handleSelectPreset = (preset: SpacePreset) => {
     setSelectedPreset(preset);
@@ -265,10 +269,7 @@ export function SpaceSetupModal({
     };
     setName(t(presetNameKeys[preset.id]));
     setColor(preset.color);
-    setModel((current) => resolvePresetModel(
-      current,
-      availableModels.map((availableModel) => availableModel.id)
-    ));
+    setModel((current) => resolvePresetModel(current, []));
     setStartUrl(preset.startUrl);
     setSelectedApps([...preset.pinnedApps]);
   };
@@ -316,7 +317,13 @@ export function SpaceSetupModal({
       model,
       modelProvider: modelProvider || undefined,
       pinnedApps: selectedApps,
-      startUrl: startUrl.trim() || 'app://browser-home'
+      startUrl: startUrl.trim() || 'app://browser-home',
+      backendProfileName: backendProfileName.trim() || undefined,
+      assistantSeed: selectedPreset.id === 'custom-blank' ? undefined : { purpose: t(({
+        'coding-dev': 'spaceSetup.preset.codingDescription',
+        'research-writing': 'spaceSetup.preset.researchDescription',
+        'media-creative': 'spaceSetup.preset.mediaDescription'
+      } as const)[selectedPreset.id]) }
     }, onCreateSpace, onClose, t('spaceSetup.createFailed'));
     if (error) setCreateError(error.message);
     setIsSubmitting(false);
@@ -447,6 +454,28 @@ export function SpaceSetupModal({
                 />
                 <span className="space-hint">{t('spaceSetup.pathHint', { path: resolvedPath })}</span>
               </div>
+              {backendProfiles.length > 1 && (
+                <div className="space-field-group" style={{ marginTop: 12 }}>
+                  <label className="space-setup-label" htmlFor="space-backend-profile-select">
+                    {profileCopy.backendProfile}
+                  </label>
+                  <select
+                    id="space-backend-profile-select"
+                    className="space-setup-input"
+                    value={backendProfileName}
+                    onChange={(e) => setBackendProfileName(e.target.value)}
+                  >
+                    {backendProfiles.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name} {p.isDefault ? `(${profileCopy.defaultTag})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="space-hint">
+                    {profileCopy.backendProfileDesc}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -459,21 +488,12 @@ export function SpaceSetupModal({
               </p>
 
               <div className="space-models-list">
-                {[
-                  ...MODE_OPTIONS.map((mode) => {
+                {MODE_OPTIONS.map((mode) => {
                     const nameKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrack' : mode.id === 'teamwork' ? 'teamwork' : 'ollama'}` as DesktopTranslationKey;
                     const descKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrackDescription' : mode.id === 'teamwork' ? 'teamworkDescription' : 'ollamaDescription'}` as DesktopTranslationKey;
                     const badgeKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'adaptive' : mode.id === 'teamwork' ? 'multiAgent' : 'local'}` as DesktopTranslationKey;
                     return { id: mode.id, provider: '', name: t(nameKey), desc: t(descKey), badge: t(badgeKey) };
-                  }),
-                  ...availableModels.map((entry) => ({
-                    id: entry.id,
-                    provider: entry.provider || '',
-                    name: entry.name || entry.id,
-                    desc: t('spaceSetup.model.availableVia', { provider: entry.provider_label || entry.provider || 'Provider' }),
-                    badge: entry.provider_label || entry.provider || 'Live'
-                  }))
-                ].map((m) => (
+                  }).map((m) => (
                   <div
                     key={m.id}
                     className={`space-model-item ${model === m.id && modelProvider === m.provider ? 'active' : ''}`}

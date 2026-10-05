@@ -35,6 +35,11 @@ Thumbs.db
 installer/build/
 installer/dist/
 smoke-output/
+# Local acceptance reports, downloaded models and disposable test profiles.
+/output/
+/.test-tmp/
+/.worktrees/
+/apps/desktop/release-*/
 .agents/
 # Local tooling / installer leftovers — never commit these.
 $payload/

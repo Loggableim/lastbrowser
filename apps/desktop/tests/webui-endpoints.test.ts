@@ -28,7 +28,7 @@ describe('native WebUI API endpoint catalog', () => {
       '/api/providers',
       '/api/mcp/tools',
       '/api/system/health',
-      '/api/updates/apply',
+      '/api/gateway/status',
       '/api/gmail/stream',
       '/api/discord/config',
       '/api/appstore/detail',
@@ -36,6 +36,10 @@ describe('native WebUI API endpoint catalog', () => {
     ].forEach((path) => {
       expect(paths).toContain(path);
     });
+
+    expect(paths).not.toContain('/api/updates/apply');
+    expect(paths).not.toContain('/api/updates/check');
+    expect(paths).not.toContain('/api/updates/force');
   });
 
   it('marks destructive or privileged endpoints as dangerous', () => {
@@ -49,7 +53,7 @@ describe('native WebUI API endpoint catalog', () => {
       '/api/rollback/restore',
       '/api/system/shutdown',
       '/api/system/restart',
-      '/api/updates/apply',
+      '/api/terminal/start',
       '/api/discord/ban',
       '/api/discord/purge'
     ].forEach((path) => {

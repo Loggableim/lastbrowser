@@ -25,6 +25,7 @@
 <link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/main.css">
 <link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/download-counter.css">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 <script src="/assets/js/theme.js"></script>
 
@@ -105,6 +106,7 @@
         Not just another web wrapper. Lastbrowser merges Chromium speed with Nova AI Copilot, 48 curated agentic workflows, embedded ConPTY Windows terminal, Castlabs Widevine DRM L3, and true session isolation in Spaces.
       </p>
 
+      <div class="download-counter" data-download-counter data-locale="en" role="status">Download count is currently unavailable.</div>
       <div class="cta-group">
         <a href="/en/download/" class="btn btn-primary btn-lg">
           ⬇️ Download for Windows (v0.1.43 Beta)
@@ -119,8 +121,8 @@
     <!-- Screenshot Showcase -->
     <div class="container showcase-container">
       <div class="showcase-nav">
-        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-zen-sidebar.png" data-title="Zen Sidebar &amp; Spaces" data-desc="Vertical tab rail with clear visual space partitioning, web app pins, and audio indicators.">
-          🪐 Zen Sidebar &amp; Spaces
+        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-sidebar-spaces.png" data-title="Vertical Sidebar &amp; Spaces" data-desc="Vertical tab rail with clear visual space partitioning, web app pins, and audio indicators.">
+          🪐 Vertical Sidebar &amp; Spaces
         </button>
         <button class="sc-btn" data-img="/assets/screenshots/store-screen-2-copilot-splitview.png" data-title="Nova AI Copilot in Split-View" data-desc="Work in a 70/30 split view: Nova extracts web insights, writes code, and summarizes research papers.">
           🤖 Nova AI Split-View
@@ -153,11 +155,11 @@
           <div style="font-size:12px;color:var(--muted);">Lastbrowser Win32 Shell</div>
         </div>
         <div class="showcase-view">
-          <img id="showcase-image" src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Lastbrowser UI" width="1920" height="1080">
+          <img id="showcase-image" src="/assets/screenshots/store-screen-1-sidebar-spaces.png" alt="Lastbrowser UI" width="1920" height="1080">
         </div>
         <div class="showcase-footer">
           <div>
-            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Zen Sidebar &amp; Spaces</strong>
+            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Vertical Sidebar &amp; Spaces</strong>
             <span id="showcase-desc" style="color:var(--muted);font-size:13px;">Vertical tab rail with clear visual space partitioning, web app pins, and audio indicators.</span>
           </div>
           <a href="/en/features/" class="btn btn-ghost btn-sm">Learn more ➔</a>
@@ -299,5 +301,6 @@
 </footer>
 
 <script src="/assets/js/app.js"></script>
+<script src="/assets/js/download-counter.js" defer></script>
 </body>
 </html>

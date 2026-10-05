@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "buildRef": "llama-cpp-b11377-win-cpu-x64",
+  "sourceRevision": "9bf55f4a3677af697d914d959eaa70f93cfdc494",
+  "packageRelativeDir": "apps/desktop/runtime/local-ai/b11377-cpu",
+  "os": "win32",
+  "arch": "x64",
+  "declaredBackends": [
+    "cpu"
+  ],
+  "requiredCpuFeatures": [],
+  "roleAdapters": [],
+  "files": [
+    {
+      "relativePath": "ggml-base.dll",
+      "bytes": 803328,
+      "sha256": "2be9a2f5db544eb0d5202a0465846849fe663dd90edf2b46285345a042f31b5a",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-alderlake.dll",
+      "bytes": 1430016,
+      "sha256": "b5ec07ca5423c3514db6fbc1334abd8bf195472891ca42e58485b9d23fbe876f",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-cannonlake.dll",
+      "bytes": 1656320,
+      "sha256": "652cecdeb454fd36d13dbba49537898a94d3dc5c5cdaba43a56803a268483798",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-cascadelake.dll",
+      "bytes": 1640960,
+      "sha256": "ccd335db706488a96393260d73d86f34e7fd9558c6de6b7fc64c89cc63df1eea",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-cooperlake.dll",
+      "bytes": 1641984,
+      "sha256": "a854abdfc8b4d73418ceb10407fc1ba1b6017c7b105b616ab9b1bf23028465f7",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-haswell.dll",
+      "bytes": 1434624,
+      "sha256": "dedcf887df7fe81a22bdd7742ac1bd622fee0e01ca77a2072c3eafb82fd857d4",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-icelake.dll",
+      "bytes": 1647616,
+      "sha256": "968035ce0fd6c81e97910927fd3f068e1f2a18e41619267b0e08f59520656e01",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-ivybridge.dll",
+      "bytes": 1305088,
+      "sha256": "fcf900330f295de1d732857d03d76d9f2ce0ec01a3beff822b2bdb53a9afcc03",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-piledriver.dll",
+      "bytes": 1308672,
+      "sha256": "78768faef3b5163896ae3077509d4cd639d2740b18cb233df12167db9dad713c",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-sandybridge.dll",
+      "bytes": 1285120,
+      "sha256": "f18cb56687b8b34dff7e2ec5d8ae2190760e531fccff70c1f033e935b55909dc",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-sapphirerapids.dll",
+      "bytes": 1918464,
+      "sha256": "3cabb3e8fc4c0c522f18d0117f090ee45c2799c3fed6c93db8b78142e2325485",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-skylakex.dll",
+      "bytes": 1649664,
+      "sha256": "a145d344b71d0f8a2c10686ea104c94fbe4e72ed1781432d1106908544ded6da",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-sse42.dll",
+      "bytes": 915456,
+      "sha256": "fe9beb7fc25fc97bc93c6117bfcafa2e5a6195b6c69c674b4276ec6a2e6727a0",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-x64.dll",
+      "bytes": 908288,
+      "sha256": "e6c5ddb2066ddc2ac74112b37236f0330647ff119e2b484548dc0ff23b42557d",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-cpu-zen4.dll",
+      "bytes": 1648128,
+      "sha256": "d07ae507afccc35ca45d5f822583155067ccde9fdb1950dd74268eed2bb6cf83",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml-rpc.dll",
+      "bytes": 168960,
+      "sha256": "198433aaa2c7c66ced2c2c8d0c6414b8a815fb9305ff31abc328ebc2b29d20b4",
+      "kind": "library"
+    },
+    {
+      "relativePath": "ggml.dll",
+      "bytes": 79872,
+      "sha256": "fc1fd3b626ee393b36875903fac431b8e8a552b285efa969358d5eb3fc1238cb",
+      "kind": "library"
+    },
+    {
+      "relativePath": "libomp.dll",
+      "bytes": 768000,
+      "sha256": "a12116ba72d1d6820407cf30be23da04ce79d6bb8a71a5ee71759c5a1faa6f1c",
+      "kind": "library"
+    },
+    {
+      "relativePath": "LICENSE-LLVM-OpenMP",
+      "bytes": 19741,
+      "sha256": "fdad1758a9e1f9d5a81e18879b3406772115edc92c24bfa36b70c654f325e8e4",
+      "kind": "license"
+    },
+    {
+      "relativePath": "llama-batched-bench-impl.dll",
+      "bytes": 61952,
+      "sha256": "0a4e14a96f48918e95b4de651661bb1dcec76a01553d523d1ab63761c7360dbf",
+      "kind": "library"
+    },
+    {
+      "relativePath": "llama-bench-impl.dll",
+      "bytes": 404480,
+      "sha256": "152f871bab7796d51442175d3562cbd19d5cdd2ae651075901c51a640b12dceb",
+      "kind": "library"
+    },
+    {
+      "relativePath": "llama-cli-impl.dll",
+      "bytes": 3302912,
+      "sha256": "852bc99b11868d0e84dca9a32d7f0a9057c0c8b5dd6381e568049a6521004e23",
+      "kind": "library"
+    },
+    {
+      "relativePath": "llama-common.dll",
+      "bytes": 7913984,
+      "sha256": "8c77f798fdeb840e238163f73fb090e07e640d9bc11f4040db3833949560f25f",
+      "kind": "library"
+    },
+    {
+      "relativePath": "llama-completion-impl.dll",
+      "bytes": 136192,
+      "sha256": "c740714c885ca854927b2f3f87698dbb7b41a792216651a5081a204c3ebb5097",
+      "kind": "library"
+    },
+    {
+      "relativePath": "llama-fit-params-impl.dll",
+      "bytes": 43008,
+      "sha256": "7e6d44edac244d0634087c0f02736a7579c23329414e356c81852300d03c906d",
+      "kind": "library"
+    },
+    {
+      "relativePath": "llama-perplexity-impl.dll",
+      "bytes": 197632,
+      "sha256": "bf50b0ff28c69f8de8421a4b2e0b18761b6ff3f22c345564e4c30c21085f334f",
+      "kind": "library"
+    },
+    {
+      "relativePath": "llama-quantize-impl.dll",
+      "bytes": 137216,
+      "sha256": "afcdb2fa91d456376adf1a40dcb42e258ecc697bf7fb7486686430c0a15e497b",
+      "kind": "library"
+    },
+    {
+      "relativePath": "llama-server-impl.dll",
+      "bytes": 9137152,
+      "sha256": "49f0c429793b6e0edc6c87c0f20419316693a4474d96f60991ce007a54eb4e60",
+      "kind": "library"
+    },
+    {
+      "relativePath": "llama-server.exe",
+      "bytes": 9216,
+      "sha256": "e400ec25de0f806ac45ddbd93813b8ebd8816a3883460a7b252418d6eaf04f6b",
+      "kind": "binary"
+    },
+    {
+      "relativePath": "llama.dll",
+      "bytes": 3302400,
+      "sha256": "548b4ed0213c970da85a821bcc849fb85ad8ca6be3f2d0cd8e36089db9fe5836",
+      "kind": "library"
+    },
+    {
+      "relativePath": "mtmd.dll",
+      "bytes": 1795072,
+      "sha256": "6b77b9ccbcc585b26df61ed95207545fde7eafb3c75125693363878abb22417e",
+      "kind": "library"
+    },
+    {
+      "relativePath": "LICENSE-llama.cpp",
+      "bytes": 1099,
+      "sha256": "bcd8ec749126d45cb06737d0690295d73df4b6e7e194205bcf91190368f27285",
+      "kind": "license"
+    }
+  ],
+  "versionOutputMarker": "11377",
+  "helpOutputMarker": "--ctx-size",
+  "licenseSource": "https://github.com/ggml-org/llama.cpp/blob/9bf55f4a3677af697d914d959eaa70f93cfdc494/LICENSE",
+  "redistributionReviewRef": "b11377-inventory-only-license-closure-pending"
+}

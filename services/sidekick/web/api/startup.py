@@ -58,17 +58,24 @@ def fix_credential_permissions() -> None:
 
 
 def _agent_dir() -> Path | None:
-    sidekick_home = get_webui_home()
-    for raw in [
-        os.environ.get('SIDEKICK_WEBUI_AGENT_DIR', '').strip(),
-        os.environ.get('SIDEKICK_WEBUI_AGENT_DIR', '').strip(),
-        str(sidekick_home / 'sidekick-agent'),
-    ]:
-        if not raw:
-            continue
-        p = Path(raw).expanduser()
+    from shared.constants import is_lastbrowser_integrated
+
+    explicit = os.environ.get('SIDEKICK_WEBUI_AGENT_DIR', '').strip()
+    if explicit:
+        p = Path(explicit).expanduser()
         if p.is_dir():
             return p.resolve()
+
+    in_tree = Path(__file__).resolve().parent.parent.parent
+    if (in_tree / 'run_agent.py').exists():
+        return in_tree.resolve()
+
+    if not is_lastbrowser_integrated():
+        sidekick_home = get_webui_home()
+        fallback = sidekick_home / 'sidekick-agent'
+        if fallback.is_dir():
+            return fallback.resolve()
+
     return None
 
 def _trusted_agent_dir(agent_dir: Path) -> bool:
@@ -96,6 +103,11 @@ def _trusted_agent_dir(agent_dir: Path) -> bool:
 
 
 def auto_install_agent_deps() -> bool:
+    from shared.constants import is_lastbrowser_integrated
+
+    if is_lastbrowser_integrated():
+        print('[!!] Auto-install disabled: Lastbrowser uses a bundled offline Python runtime.', flush=True)
+        return False
     enabled = (
         os.environ.get('SIDEKICK_WEBUI_AUTO_INSTALL', '').strip().lower() in ('1', 'true', 'yes')
         or os.environ.get('SIDEKICK_WEBUI_AUTO_INSTALL', '').strip().lower() in ('1', 'true', 'yes')

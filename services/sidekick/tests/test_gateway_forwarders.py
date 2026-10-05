@@ -118,6 +118,7 @@ def test_platform_base_exports_proxy_helpers(monkeypatch):
     monkeypatch.delenv("DISCORD_PROXY", raising=False)
     monkeypatch.delenv("HTTPS_PROXY", raising=False)
     monkeypatch.delenv("HTTP_PROXY", raising=False)
+    monkeypatch.delenv("ALL_PROXY", raising=False)
 
     assert resolve_proxy_url(platform_env_var="DISCORD_PROXY") is None
     assert proxy_kwargs_for_aiohttp(None) == ({}, {})

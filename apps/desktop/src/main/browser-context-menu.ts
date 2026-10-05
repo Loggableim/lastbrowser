@@ -9,6 +9,7 @@ import type {
 } from 'electron';
 import { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { isOAuthUrl, openAuthConnectWindow, openExternalUrl } from './auth-window.js';
+import { preserveContextSelectionScript } from './selection-context-menu.js';
 
 export const browserOpenTabChannel = 'lastbrowser:browser:openTab';
 export const browserOpenIncognitoTabChannel = 'lastbrowser:browser:openIncognitoTab';
@@ -33,9 +34,10 @@ export type BrowserContextMenuActions = {
   deepResearch?: (payload: { selectionText?: string; pageUrl?: string }) => void;
   assistantName?: string;
   locale?: string;
+  searchEngine?: { label: string; search: (query: string) => string };
 };
 
-export type ContextMenuLocale = 'en' | 'de' | 'es' | 'fr' | 'it' | 'pt-BR' | 'ru';
+export type ContextMenuLocale = 'en' | 'de' | 'es' | 'fr' | 'it' | 'pt-BR' | 'ru' | 'ja';
 
 export interface ContextMenuLabels {
   deepResearchSelection: (assistant: string, text: string) => string;
@@ -130,6 +132,16 @@ export const contextMenuLocales: Record<ContextMenuLocale, ContextMenuLabels> = 
     reload: 'Recarregar',
     inspect: 'Inspecionar elemento'
   },
+  ja: {
+    deepResearchSelection: (assistant, text) => `${assistant}で詳しく調べる：「${text}」`,
+    deepResearchLink: (assistant) => `${assistant}でリンクを詳しく調べる`,
+    deepResearchPage: (assistant) => `${assistant}で詳しく調べる`,
+    openLinkInNewTab: 'リンクを新しいタブで開く',
+    openLinkInIncognitoTab: 'リンクを新しいプライベートタブで開く',
+    openExternal: 'リンクをシステムブラウザーで開く',
+    copyLink: 'リンクのアドレスをコピー',
+    back: '戻る', forward: '進む', reload: '再読み込み', inspect: '要素を検証'
+  },
   ru: {
     deepResearchSelection: (assistant, text) => `Глубокое исследование с ${assistant}: «${text}»`,
     deepResearchLink: (assistant) => `Исследовать ссылку с помощью ${assistant}`,
@@ -168,6 +180,7 @@ export function resolveContextMenuLabels(locale?: string): ContextMenuLabels {
   if (normalized.startsWith('it')) return contextMenuLocales.it;
   if (normalized === 'pt' || normalized.startsWith('pt')) return contextMenuLocales['pt-BR'];
   if (normalized.startsWith('ru')) return contextMenuLocales.ru;
+  if (normalized.startsWith('ja')) return contextMenuLocales.ja;
   return contextMenuLocales.en;
 }
 
@@ -176,6 +189,12 @@ type MenuLike = {
     popup: (options: { window?: BrowserWindow }) => void;
   };
 };
+
+export function selectionSearchLabel(locale: string | undefined, engine: string): string {
+  const language = locale?.toLowerCase().split(/[-_]/)[0] || 'en';
+  const prefix: Record<string, string> = { de: 'Suche mit', en: 'Search with', es: 'Buscar con', fr: 'Rechercher avec', it: 'Cerca con', pt: 'Pesquisar com', ru: 'Поиск через', ja: '検索：' };
+  return `${prefix[language] || prefix.en} ${engine}`;
+}
 
 export function buildBrowserContextMenuTemplate(
   params: BrowserContextMenuParams,
@@ -193,6 +212,10 @@ export function buildBrowserContextMenuTemplate(
       {
         label: labels.deepResearchSelection(assistantName, shortText),
         click: () => actions.deepResearch?.({ selectionText: raw, pageUrl: params.pageURL })
+      },
+      {
+        label: selectionSearchLabel(actions.locale, actions.searchEngine?.label || 'Google'),
+        click: () => actions.openLinkInNewTab(actions.searchEngine?.search(raw) || `https://www.google.com/search?q=${encodeURIComponent(raw)}`)
       },
       { type: 'separator' }
     );
@@ -284,7 +307,8 @@ export function registerBrowserContextMenu({
   shell,
   getWindow,
   getAssistantName,
-  getLocale
+  getLocale,
+  getSearchEngine
 }: {
   app: App;
   Menu: MenuLike;
@@ -293,9 +317,15 @@ export function registerBrowserContextMenu({
   getWindow: () => BrowserWindow | null;
   getAssistantName?: () => string;
   getLocale?: () => string;
+  getSearchEngine?: () => { label: string; search: (query: string) => string };
 }): void {
   app.on('web-contents-created', (_event, contents) => {
     installWindowOpenBridge(contents, getWindow, shell);
+    contents.on('dom-ready', () => {
+      for (const frame of contents.mainFrame.framesInSubtree) {
+        void frame.executeJavaScript(preserveContextSelectionScript).catch(() => {});
+      }
+    });
     contents.on('context-menu', (_contextEvent, params) => {
       const template = buildBrowserContextMenuTemplate(params, {
         canGoBack: contents.canGoBack(),
@@ -315,7 +345,8 @@ export function registerBrowserContextMenu({
         },
         deepResearch: (payload) => getWindow()?.webContents.send(browserDeepResearchChannel, payload),
         assistantName: getAssistantName?.() || 'Nova',
-        locale: getLocale?.()
+        locale: getLocale?.(),
+        searchEngine: getSearchEngine?.()
       });
       Menu.buildFromTemplate(template).popup({ window: getWindow() ?? undefined });
     });

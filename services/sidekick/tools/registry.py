@@ -377,6 +377,13 @@ class ToolRegistry:
         * All exceptions are caught and returned as ``{"error": "..."}``
           for consistent error format.
         """
+        # Independent workers cannot bypass scope through a directly invoked
+        # registry handler (including plugins and raw CDP). Ordinary turns
+        # retain their existing dispatch behavior.
+        from runtime.independent.policy import dispatch_independent
+        scoped_result = dispatch_independent(name, args)
+        if scoped_result is not None:
+            return scoped_result
         entry = self.get_entry(name)
         if not entry:
             return json.dumps({"error": f"Unknown tool: {name}"})

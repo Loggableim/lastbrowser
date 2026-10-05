@@ -1,4 +1,7 @@
+import { spaceAssistantTranslationKeys } from './space-assistant-translations.js';
+
 export const desktopTranslationKeys = [
+  ...spaceAssistantTranslationKeys,
   'access.lock.checking',
   'access.lock.description',
   'access.lock.password',
@@ -321,6 +324,12 @@ export const desktopTranslationKeys = [
   'chat.interruptedPendingTurn',
   'chat.filterPlaceholder',
   'chat.modelCatalogUnavailable',
+  'chat.chooseModelManually',
+  'chat.chooseModelShort',
+  'chat.modelSearch',
+  'chat.modelProviderUnavailable',
+  'chat.modelProviderNotConfigured',
+  'chat.noManualModels',
   'chat.kicker',
   'chat.model',
   'chat.reasoningEffort',
@@ -487,6 +496,7 @@ export const desktopTranslationKeys = [
   'settings.providers',
   'settings.save',
   'settings.sections.appearance',
+  'settings.sections.advanced',
   'settings.sections.conversation',
   'settings.sections.preferences',
   'settings.sections.plugins',
@@ -510,6 +520,7 @@ export const desktopTranslationKeys = [
   'settings.sections.googleAccounts',
   'settings.sections.extensions',
   'settings.sectionDescriptions.conversation',
+  'settings.sectionDescriptions.advanced',
   'settings.sectionDescriptions.appearance',
   'settings.sectionDescriptions.preferences',
   'settings.sectionDescriptions.providers',
@@ -1247,6 +1258,8 @@ export const desktopTranslationKeys = [
   , 'sidebar.tabs.openSplit'
   , 'sidebar.tabs.close'
   , 'sidebar.tabs.new'
+  , 'sidebar.pinnedApps.add'
+  , 'sidebar.pinnedApps.addShort'
   , 'sidebar.downloads'
   , 'sidebar.drawer.sections'
   , 'sidebar.drawer.aiRegion'
@@ -1306,6 +1319,41 @@ export const desktopTranslationKeys = [
   , 'teamwork.modelPool.recognizedOne'
   , 'teamwork.modelPool.recognizedMany'
   , 'teamwork.modelPool.empty'
+  , 'teamwork.status.on'
+  , 'teamwork.status.off'
+  , 'teamwork.status.unknown'
+  , 'teamwork.overview.title'
+  , 'teamwork.overview.description'
+  , 'teamwork.preset.cost'
+  , 'teamwork.preset.costDescription'
+  , 'teamwork.preset.balanced'
+  , 'teamwork.preset.balancedDescription'
+  , 'teamwork.preset.quality'
+  , 'teamwork.preset.qualityDescription'
+  , 'teamwork.advanced'
+  , 'teamwork.provider.title'
+  , 'teamwork.provider.note'
+  , 'teamwork.provider.none'
+  , 'teamwork.provider.found'
+  , 'teamwork.provider.refresh'
+  , 'teamwork.process.summary'
+  , 'teamwork.process.details'
+  , 'teamwork.process.complete'
+  , 'teamwork.process.partial'
+  , 'teamwork.process.failed'
+  , 'teamwork.process.running'
+  , 'teamwork.process.stopped'
+  , 'teamwork.process.skipped'
+  , 'teamwork.process.planned'
+  , 'teamwork.process.aborted'
+  , 'teamwork.process.diagnostic'
+  , 'teamwork.process.candidateDiagnostics'
+  , 'teamwork.process.critic'
+  , 'teamwork.process.contributor'
+  , 'teamwork.process.final'
+  , 'teamwork.fallback.enabled'
+  , 'teamwork.fallback.enabledDescription'
+  , 'teamwork.fallback.quorum'
   , 'smartTrack.loading'
   , 'smartTrack.title'
   , 'smartTrack.description'
@@ -1371,9 +1419,12 @@ export const desktopTranslationKeys = [
 
 export type DesktopTranslationKey = (typeof desktopTranslationKeys)[number];
 export type DesktopCatalog = Partial<Record<DesktopTranslationKey, string>>;
-export type DesktopLocaleId = 'en' | 'de' | 'it' | 'es' | 'fr' | 'pt-BR' | 'ru';
+export type DesktopLocaleId = 'en' | 'de' | 'it' | 'es' | 'fr' | 'pt-BR' | 'ru' | 'ja';
+/** Existing supplement tables; Japanese ships one complete dedicated catalog. */
+export type LegacyDesktopLocaleId = Exclude<DesktopLocaleId, 'ja'>;
 
-export const desktopLocaleIds: DesktopLocaleId[] = ['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru'];
+export const desktopLocaleIds: DesktopLocaleId[] = ['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja'];
+export const legacyDesktopLocaleIds: LegacyDesktopLocaleId[] = ['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru'];
 
 export const desktopLocaleNames: Record<DesktopLocaleId, string> = {
   en: 'English',
@@ -1382,5 +1433,6 @@ export const desktopLocaleNames: Record<DesktopLocaleId, string> = {
   es: 'Español',
   fr: 'Français',
   'pt-BR': 'Português (Brasil)',
-  ru: 'Русский'
+  ru: 'Русский',
+  ja: '日本語'
 };

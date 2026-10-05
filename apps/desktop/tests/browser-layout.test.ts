@@ -23,7 +23,8 @@ describe('browser shell layout', () => {
     expect(composer).toContain('onChange={(event) => onModelChange(event.target.value)}');
     expect(chatMain).toContain('saveSpaceModel(activeSpacePath, nextModel, window.localStorage, provider)');
     expect(chatMain).toContain('setSelectedModelProvider(provider)');
-    expect(app).toContain('spaceSelection: spaceModelSelection');
+    expect(app).toContain('const chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
+    expect(chatMain).toContain("operation: 'modelSelection'");
     expect(app).toContain('model: configuredChatModel');
     expect(app).toContain('modelProvider: chatModelProvider');
   });
@@ -382,7 +383,8 @@ describe('browser shell layout', () => {
     expect(restPanels).toContain('<AdvancedWebUiTools');
     expect(restPanels).toContain("panel=\"agents\"");
     expect(restPanels).toContain("panel=\"settings\"");
-    expect(restPanels).not.toContain('activeSessionId');
+    // Advanced model policy uses the actual chat identity, never a fabricated session.
+    expect(restPanels).toContain('<AdvancedModelPolicySettings sessionId={activeSessionId}');
     expect(css).toContain('.native-rest-main');
     expect(css).toContain('.agent-terminal');
     expect(css).toContain('.integration-list');

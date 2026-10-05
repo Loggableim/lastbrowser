@@ -30,6 +30,15 @@ export type ChatStreamHandle = {
 
 type FetchLike = typeof fetch;
 
+function isTerminalEvent(event: ChatStreamEvent): boolean {
+  if (!['stream_end', 'error', 'apperror', 'cancel'].includes(event.event)) return false;
+  const data = event.data;
+  if (data !== null && typeof data === 'object' && 'nativeChat' in data && data.nativeChat === true) {
+    return 'processExited' in data && data.processExited === true;
+  }
+  return true;
+}
+
 const CHAT_TRANSPORT_TRACE_ENABLED = process.env.LASTBROWSER_DEBUG_CHAT_TRANSPORT === '1';
 const CHAT_TRANSPORT_EVENT_NAMES = new Set([
   'heartbeat', 'delta', 'token', 'reasoning', 'message', 'tool', 'tool_complete',
@@ -97,7 +106,8 @@ export function subscribeChatStream(
   sessionToken: string | null,
   onEvent: (event: ChatStreamEvent) => void,
   fetchImpl: FetchLike = fetch,
-  authCookie: string | null = null
+  authCookie: string | null = null,
+  readHeaders: Readonly<Record<string, string>> = {}
 ): ChatStreamHandle {
   const controller = new AbortController();
   const trace = CHAT_TRANSPORT_TRACE_ENABLED ? ++chatTransportTraceOrdinal : 0;
@@ -116,9 +126,11 @@ export function subscribeChatStream(
     try {
       const response = await fetchImpl(url.toString(), {
         headers: {
+          ...readHeaders,
           accept: 'text/event-stream',
           ...(CHAT_TRANSPORT_TRACE_ENABLED ? { 'x-lastbrowser-chat-transport-trace': String(trace) } : {}),
-          ...(authCookie ? { cookie: authCookie } : {})
+          ...((readHeaders.cookie || authCookie) ? { cookie: [readHeaders.cookie, authCookie?.split(';')
+            .filter(part => !part.trim().startsWith('sidekick_profile=')).join(';')].filter(Boolean).join('; ') } : {})
         },
         signal: controller.signal
       });
@@ -153,7 +165,7 @@ export function subscribeChatStream(
           const kind = CHAT_TRANSPORT_EVENT_NAMES.has(event.event) ? event.event : 'unknown';
           if (sampled(parsedFrames)) traceChatTransport(trace, 'frame', { count: parsedFrames, kind });
           onEvent(event);
-          if (event.event === 'stream_end' || event.event === 'error' || event.event === 'apperror' || event.event === 'cancel') {
+          if (isTerminalEvent(event)) {
             sawTerminalEvent = true;
             finalState = `terminal_${kind}`;
             traceChatTransport(trace, 'terminal', { frames: parsedFrames, kind, state: finalState });
@@ -169,10 +181,7 @@ export function subscribeChatStream(
         const kind = CHAT_TRANSPORT_EVENT_NAMES.has(trailing.event) ? trailing.event : 'unknown';
         if (sampled(parsedFrames)) traceChatTransport(trace, 'frame', { count: parsedFrames, kind });
         onEvent(trailing);
-        sawTerminalEvent = trailing.event === 'stream_end'
-          || trailing.event === 'error'
-          || trailing.event === 'apperror'
-          || trailing.event === 'cancel';
+        sawTerminalEvent = isTerminalEvent(trailing);
         if (sawTerminalEvent) finalState = `terminal_${kind}`;
       }
       if (!sawTerminalEvent && !controller.signal.aborted) {

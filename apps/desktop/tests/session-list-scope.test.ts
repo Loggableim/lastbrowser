@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   mergeSessionListSnapshot,
+  resolveSessionBackendProfile,
   resolveSessionListSelection,
   sessionListResponseMatchesScope,
   type SessionListScope
@@ -12,6 +13,15 @@ const otherSpaceScope: SessionListScope = { profile: 'default', workspacePath: '
 const session = (session_id: string) => ({ session_id });
 
 describe('profile and Space scoped session lists', () => {
+  it('never borrows an old resolved backend during a Space or profile switch', () => {
+    expect(resolveSessionBackendProfile(workScope, 'alpha', workScope)).toBe('alpha');
+    expect(resolveSessionBackendProfile(workScope, 'alpha', personalScope)).toBeUndefined();
+    expect(resolveSessionBackendProfile(workScope, 'alpha', otherSpaceScope)).toBeUndefined();
+    const beta = { ...workScope, backendProfileName: 'beta' };
+    expect(resolveSessionBackendProfile(workScope, 'alpha', beta)).toBe('beta');
+    expect(resolveSessionBackendProfile(beta, 'beta', beta)).toBe('beta');
+    expect(resolveSessionBackendProfile(null, 'alpha', beta)).toBe('beta');
+  });
   it('rejects session-list responses from an earlier profile or Space', () => {
     expect(sessionListResponseMatchesScope(workScope, workScope)).toBe(true);
     expect(sessionListResponseMatchesScope(workScope, personalScope)).toBe(false);

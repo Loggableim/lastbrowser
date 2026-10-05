@@ -9,10 +9,59 @@ const repoRoot = resolve(desktopDir, '..', '..');
 const runtimeDir = resolve(desktopDir, 'runtime');
 const pythonRuntimeDir = resolve(runtimeDir, 'python');
 const markerPath = join(pythonRuntimeDir, '.lastbrowser-runtime.json');
+const requirementsPath = resolve(scriptDir, 'requirements-runtime.txt');
+
+export function resolveWheelhouseDir(env = process.env) {
+  const explicit = env.LASTBROWSER_WHEELHOUSE?.trim();
+  if (explicit) return resolve(explicit);
+  return resolve(runtimeDir, 'wheelhouse');
+}
+
+export function verifyWheelhouse(wheelhouseDir) {
+  if (!existsSync(wheelhouseDir)) {
+    throw new Error(
+      `[prepare:python] Offline Python runtime wheelhouse is missing: ${wheelhouseDir}\n` +
+      'Offline packaging requires pre-downloaded wheels in runtime/wheelhouse to ensure 100% deterministic builds without internet access.\n' +
+      'Run "npm run prepare:python:online" while connected to the internet to populate the wheelhouse, or set LASTBROWSER_WHEELHOUSE.'
+    );
+  }
+  const wheels = readdirSync(wheelhouseDir).filter((file) => file.endsWith('.whl'));
+  if (wheels.length === 0) {
+    throw new Error(
+      `[prepare:python] Offline Python runtime wheelhouse at ${wheelhouseDir} contains no .whl files.\n` +
+      'Offline packaging requires pre-downloaded wheels in runtime/wheelhouse to ensure 100% deterministic builds without internet access.\n' +
+      'Run "npm run prepare:python:online" while connected to the internet to populate the wheelhouse, or set LASTBROWSER_WHEELHOUSE.'
+    );
+  }
+  return wheels;
+}
 
 function main() {
   assertInside(desktopDir, pythonRuntimeDir);
+  const isOnline = process.argv.includes('--online');
+  const isDownloadOnly = process.argv.includes('--download-wheels');
+  const wheelhouseDir = resolveWheelhouseDir();
+
   const sourcePythonHome = resolvePythonHome();
+
+  if (isOnline || isDownloadOnly) {
+    console.log(`[prepare:python] Populating wheelhouse online from ${requirementsPath} -> ${wheelhouseDir}`);
+    mkdirSync(wheelhouseDir, { recursive: true });
+    run(join(sourcePythonHome, 'python.exe'), [
+      '-m',
+      'pip',
+      'download',
+      '--dest',
+      wheelhouseDir,
+      '-r',
+      requirementsPath
+    ]);
+    if (isDownloadOnly) {
+      console.log(`[prepare:python] Wheelhouse downloaded successfully at ${wheelhouseDir}`);
+      return;
+    }
+  }
+
   const marker = readMarker();
   const desired = {
     sourcePythonHome,
@@ -27,6 +76,9 @@ function main() {
     console.log(`[prepare:python] Runtime already prepared: ${pythonRuntimeDir}`);
     return;
   }
+
+  // Offline verification: fail immediately with a clear error if wheels are missing
+  verifyWheelhouse(wheelhouseDir);
 
   console.log(`[prepare:python] Preparing Python runtime from ${sourcePythonHome}`);
   // Never replace a runtime while Sidekick (or any other process) may still
@@ -48,20 +100,18 @@ function main() {
   // FastAPI/uvicorn (cli/web_server.py) and whose agent tools import requests
   // and httpx. Those must be present in the packaged Python or the sidecar
   // starts with a degraded tool set ("No module named 'requests'").
+  // Bundled requirements: 'fastapi>=0.104,<1', 'uvicorn[standard]>=0.24,<1', 'requests>=2.31', 'httpx>=0.27', 'pyyaml>=6.0', 'openai>=1.0,<3', 'anthropic>=0.39.0'
   run(join(pythonRuntimeDir, 'python.exe'), [
     '-m',
     'pip',
     'install',
+    '--no-index',
+    '--find-links',
+    wheelhouseDir,
     '--no-cache-dir',
     '--no-compile',
-    '--upgrade',
-    'fastapi>=0.104,<1',
-    'uvicorn[standard]>=0.24,<1',
-    'requests>=2.31',
-    'httpx>=0.27',
-    'pyyaml>=6.0',
-    'openai>=1.0,<3',
-    'anthropic>=0.39.0',
+    '-r',
+    requirementsPath,
     resolve(repoRoot, 'services', 'sidekick')
   ]);
 

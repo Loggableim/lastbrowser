@@ -10,13 +10,16 @@ describe('Teamwork and Smart Track settings contracts', () => {
   it('routes orchestration SSE progress into separate pending status state', () => {
     const app = readRendererFile('App.tsx');
     expect(app).toContain('describeOrchestrationProgress(event.event, event.data)');
-    expect(app).toContain('applyLiveChatProgress(current, orchestrationProgress.message)');
+    expect(app).toContain('applyLiveChatProgress(current, orchestrationProgress.message, messageStreamId)');
     expect(app).not.toContain('content: orchestrationProgress.message');
   });
 
   it('uses saved enabled state to expose only enabled orchestration choices', () => {
     const copilot = readRendererFile('components/CopilotSplitView.tsx');
     expect(copilot).toContain("path: '/api/teamwork/config'");
+    expect(copilot).toContain('scopeSelection: orchestrationScope');
+    expect(copilot).toContain('const [teamworkEnabled, setTeamworkEnabled] = useState(false)');
+    expect(copilot).toContain('orchestrationScopeGenerationRef.current += 1');
     expect(copilot).toContain("path: '/api/smart-track/config'");
     expect(copilot).toContain('setTeamworkEnabled((teamwork as any).enabled)');
     expect(copilot).toContain('setSmartTrackEnabled((smartTrack as any).enabled)');
@@ -33,6 +36,16 @@ describe('Teamwork and Smart Track settings contracts', () => {
     expect(teamwork).toContain('path: \'/api/teamwork/config\'');
     expect(teamwork).toContain('setConfig((res as any).config)');
     expect(teamwork).toContain('lastbrowser:orchestration-config-updated');
+  });
+
+  it('passes the current exact scope to Quickchat Teamwork availability and avoids new-Space status borrowing', () => {
+    const app = readRendererFile('App.tsx');
+    expect(app).toContain('browserProfileId={activeProfileId}');
+    expect(app).toContain('workspacePath={activeSpacePath || null}');
+    expect(app).toContain('backendProfileName={activeBackendProfileName}');
+    const setup = readRendererFile('components/SpaceSetupModal.tsx');
+    expect(setup).not.toContain("path: '/api/teamwork/status'");
+    expect(setup).not.toContain('availableModels.map');
   });
 
   it('shows model catalog discovery without claiming every model is ready', () => {

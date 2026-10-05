@@ -128,6 +128,9 @@ WEB_DIST = Path(_web_dist) if _web_dist else next(
 _log = logging.getLogger(__name__)
 
 app = FastAPI(title="Sidekick Agent", version=__version__)
+from web.api.independent import router as independent_router, shutdown as shutdown_independent, startup as startup_independent
+app.include_router(independent_router)
+app.router.on_shutdown.append(shutdown_independent)
 _CRON_TICKER_STARTED = False
 _NOVA_SUPERVISION_TICKER_STARTED = False
 _NOVA_SUPERVISION_CONSUMER_INTERVAL_SECONDS = 60.0
@@ -1024,6 +1027,7 @@ def _prepare_desktop_api_bridge_runtime_on_startup() -> None:
 
 app.router.on_startup.append(_install_asyncio_disconnect_exception_filter)
 app.router.on_startup.append(_prepare_desktop_api_bridge_runtime_on_startup)
+app.router.on_startup.append(startup_independent)
 app.router.on_startup.append(_start_dashboard_cron_ticker)
 app.router.on_startup.append(_start_nova_space_supervision_ticker)
 app.router.on_startup.append(_release_game_mode_resources_on_startup)
@@ -2443,6 +2447,18 @@ async def restart_gateway():
 @app.post("/api/sidekick/update")
 async def update_sidekick():
     """Kick off ``sidekick update`` in the background."""
+    from shared.constants import is_lastbrowser_integrated
+
+    if is_lastbrowser_integrated():
+        return JSONResponse(
+            status_code=409,
+            content={
+                "ok": False,
+                "error": "Sidekick is integrated into Lastbrowser and updates together with the browser. Independent backend updates are disabled.",
+                "disabled": True,
+                "managed_by": "lastbrowser",
+            },
+        )
     try:
         proc = _spawn_sidekick_action(["update"], "sidekick-update")
     except Exception as exc:
@@ -2520,6 +2536,92 @@ def _workspace_path_matches(session: dict[str, Any], workspace_path: Path) -> bo
         return Path(value).expanduser().resolve() == workspace_path
     except (OSError, RuntimeError, TypeError, ValueError):
         return False
+
+
+def _bound_workspace_spaces(workspace_path: Path):
+    from web.api import independent
+    from web.api.profiles import get_active_profile_name
+    from runtime.independent.scope import same_path
+    if independent._hub is None:
+        return []
+    actor = str(get_active_profile_name() or "default")
+    store = independent._hub.get(actor)
+    result = []
+    for binding in store.list_bindings():
+        if not binding.workspace_locator or not same_path(binding.workspace_locator, workspace_path):
+            continue
+        _, resolver = independent._hub.by_scope(binding.scope, actor)
+        resolved = resolver.resolve(binding.scope, authenticated_profile_name=actor)
+        result.append((binding, resolved.space_root, actor))
+    return result
+
+
+def _bound_session_metadata(path: Path, space_root: Path, actor: str, expected: dict, workspace_locator: Path | None = None):
+    if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(space_root.resolve()):
+        return None
+    raw = _load_space_session_metadata(path)
+    if raw is None or not raw.get("independent") or raw.get("space_scope") is None:
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+    if (not isinstance(raw, dict) or raw.get("session_id") != path.stem
+            or (raw.get("profile") or "default") != actor):
+        return None
+    marker = raw.get("independent")
+    if marker is not None:
+        if (not isinstance(marker, dict) or marker.get("scope") != expected
+                or raw.get("space_scope") not in (None, expected)):
+            return None
+    elif (raw.get("space_scope") != expected
+            or not (_workspace_path_matches(raw, space_root)
+                    or workspace_locator is not None and _workspace_path_matches(raw, workspace_locator))):
+        # Normal native chats have no independent-run marker. Their explicit
+        # saved scope and workspace must agree with the original own binding.
+        return None
+    # Additive read view for older transcripts; do not rewrite user files.
+    return {**raw, "space_scope": expected}
+
+
+def _bound_workspace_session(workspace_path: Path, sid: str):
+    """Resolve an existing bound native chat through its own profile binding.
+
+    External workspace paths are UI locators; independent transcripts remain
+    in the original native Space. Never scan other profiles or trust a caller
+    supplied session scope.
+    """
+    if not sid or Path(sid).name != sid or "\\" in sid or "/" in sid:
+        return None
+    candidates = []
+    for binding, space_root, actor in _bound_workspace_spaces(workspace_path):
+        path = space_root / "sessions" / (sid + ".json")
+        expected = binding.scope.model_dump(mode="json", by_alias=True)
+        if _bound_session_metadata(path, space_root, actor, expected, workspace_path) is not None:
+            candidates.append((path, binding.native_slug, expected))
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _bound_workspace_sessions(workspace_path: Path):
+    rows, ambiguous = {}, set()
+    for binding, space_root, actor in _bound_workspace_spaces(workspace_path):
+        expected = binding.scope.model_dump(mode="json", by_alias=True)
+        for path in (space_root / "sessions").glob("*.json"):
+            if path.name == "_index.json":
+                continue
+            raw = _bound_session_metadata(path, space_root, actor, expected, workspace_path)
+            if raw is None:
+                continue
+            sid = raw["session_id"]
+            if sid in rows:
+                ambiguous.add(sid)
+            public_fields = {"session_id", "title", "workspace", "workspace_slug", "goal_space_slug", "profile",
+                "model", "model_provider", "created_at", "updated_at", "last_message_at", "last_active", "started_at", "ended_at",
+                "pinned", "archived", "project_id", "personality", "message_count", "active_stream_id", "source_tag",
+                "independent", "space_scope", "space_profile_snapshot", "chat_execution_mode", "reasoning_selection",
+                "enabled_toolsets", "input_tokens", "output_tokens", "estimated_cost", "parent_session_id"}
+            rows[sid] = {key: value for key, value in raw.items() if key in public_fields}
+            rows[sid]["has_pending_user_message"] = bool(raw.get("pending_user_message"))
+    return [row for sid, row in rows.items() if sid not in ambiguous]
 
 
 def _get_space_workspace(slug: str):
@@ -3182,8 +3284,12 @@ async def get_space_session_detail(request: Request):
         return JSONResponse({"error": "session_id is required"}, status_code=400)
     if workspace_path is not None:
         from web.api.space_engine import DEFAULT_SPACE_SLUG
-
-        path, slug = _space_session_path(DEFAULT_SPACE_SLUG, sid)
+        bound = _bound_workspace_session(workspace_path, sid)
+        if bound:
+            path, slug, bound_scope = bound
+        else:
+            path, slug = _space_session_path(DEFAULT_SPACE_SLUG, sid)
+            bound_scope = None
     else:
         path, slug = _space_session_path(workspace_slug, sid)
     t_path = time.perf_counter()
@@ -3226,7 +3332,10 @@ async def get_space_session_detail(request: Request):
             raise HTTPException(status_code=500, detail=f"Failed to load session: {exc}") from exc
     if not isinstance(session, dict):
         raise HTTPException(status_code=500, detail="Invalid session file")
-    if workspace_path is not None and not _workspace_path_matches(session, workspace_path):
+    if workspace_path is not None and not _workspace_path_matches(session, workspace_path) and not (
+            bound_scope is not None and (session.get("independent") or {}).get("scope") == bound_scope):
+        raise HTTPException(status_code=404, detail="Session not found")
+    if workspace_path is not None and bound_scope is not None and session.get("space_scope") not in (None, bound_scope):
         raise HTTPException(status_code=404, detail="Session not found")
     t_load = time.perf_counter()
 
@@ -3277,6 +3386,8 @@ async def get_space_session_detail(request: Request):
         tail_message_count_unknown = False
     t_slice = time.perf_counter()
     payload = dict(session)
+    if workspace_path is not None and bound_scope is not None:
+        payload["space_scope"] = bound_scope
     payload.pop("context_messages", None)
     payload["messages"] = messages
     if not include_session_tool_calls:
@@ -3330,6 +3441,11 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
                 row for row in _load_space_sessions(DEFAULT_SPACE_SLUG)
                 if _workspace_path_matches(row, workspace_path)
             ]
+            # Keep legacy chats while adding only verified original transcripts.
+            own_rows = _bound_workspace_sessions(workspace_path)
+            own_ids = {row["session_id"] for row in own_rows}
+            sessions = [row for row in sessions if row.get("session_id") not in own_ids] + own_rows
+            sessions.sort(key=lambda row: (bool(row.get("pinned")), row.get("last_message_at") or row.get("updated_at") or 0), reverse=True)
             archived_count = sum(1 for s in sessions if s.get("archived"))
             visible_sessions = sessions if include_archived else [s for s in sessions if not s.get("archived")]
             total = len(visible_sessions)
@@ -3376,6 +3492,20 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
             except TypeError:
                 # Keep compatibility with older injected/embedded SessionDBs.
                 sessions = db.list_sessions(limit=db_limit, offset=offset)
+            if not startup_fallback:
+                try:
+                    from web.api.space_engine import DEFAULT_SPACE_SLUG
+                    existing_ids = {s.get("session_id") or s.get("id") for s in sessions}
+                    for sp in _load_space_sessions(DEFAULT_SPACE_SLUG):
+                        sid = sp.get("session_id") or sp.get("id")
+                        if sid and sid not in existing_ids:
+                            sessions.append(sp)
+                    sessions.sort(
+                        key=lambda s: float(s.get("updated_at") or s.get("created_at") or s.get("last_active") or 0),
+                        reverse=True,
+                    )
+                except Exception:
+                    pass
             if startup_fallback:
                 # A missing space during first paint must not serialize the
                 # entire global store. Normal unscoped callers keep the

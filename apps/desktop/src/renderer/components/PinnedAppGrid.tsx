@@ -22,6 +22,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import type { LastbrowserPanelId } from '../shell-state.js';
+import { useDesktopI18n } from '../i18n.js';
 import {
   type PinnedApp,
   DEFAULT_PINNED_APPS,
@@ -160,6 +161,7 @@ export function PinnedAppGrid({
   onAddApp,
   onEditApp
 }: PinnedAppGridProps): React.JSX.Element {
+  const { t } = useDesktopI18n();
   const store = usePinnedAppStore();
   const apps = propsApps || (spacePath
     ? store.apps.filter((app) => !app.spacePath || app.spacePath === spacePath)
@@ -307,7 +309,8 @@ export function PinnedAppGrid({
             type="button"
             className="pinned-grid-quick-add"
             onClick={onAddApp}
-            title="Neue App anheften"
+            title={t('sidebar.pinnedApps.add')}
+            aria-label={t('sidebar.pinnedApps.add')}
           >
             <Plus size={11} />
           </button>
@@ -351,14 +354,14 @@ export function PinnedAppGrid({
           <button
             type="button"
             className="pinned-grid-cell add-cell"
-            title="App anheften"
-            aria-label="App anheften"
+            title={t('sidebar.pinnedApps.add')}
+            aria-label={t('sidebar.pinnedApps.add')}
             onClick={onAddApp}
           >
             <div className="pinned-grid-icon-box">
               <Plus size={14} />
             </div>
-            <span className="pinned-grid-label">Add</span>
+            <span className="pinned-grid-label">{t('sidebar.pinnedApps.addShort')}</span>
           </button>
         )}
       </div>

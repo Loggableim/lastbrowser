@@ -35,6 +35,10 @@ export type SidekickMessage = {
   pending?: boolean;
   streaming?: boolean;
   progress?: string;
+  chatStreamId?: string;
+  chatStreamSessionId?: string;
+  teamwork?: unknown;
+  isPartial?: boolean;
 };
 
 export const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = {

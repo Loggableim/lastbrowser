@@ -44,7 +44,7 @@ describe('localized shell navigation', () => {
 
     expect(wrapper).toContain('<DesktopI18nProvider>');
     expect(wrapper).toContain('<AppContent />');
-    expect(content).toContain('const { t } = useDesktopI18n();');
+    expect(content).toMatch(/const\s+\{\s*t(?:\s*,\s*locale)?\s*\}\s*=\s*useDesktopI18n\(\);/);
     expect(content).toContain('{t(panelLabelTranslationKey(activePanel))}');
   });
 

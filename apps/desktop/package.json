@@ -1,6 +1,6 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.43",
+  "version": "0.1.44",
   "private": true,
   "type": "module",
   "description": "Lastbrowser Electron desktop shell.",
@@ -11,6 +11,7 @@
     "start": "electron dist/main/main.js",
     "start:dev": "node electron-dev.mjs",
     "prepare:python": "node scripts/prepare-python-runtime.mjs",
+    "prepare:python:online": "node scripts/prepare-python-runtime.mjs --online",
     "build:installer-assets": "python scripts/generate-installer-assets.py",
     "build": "npm run build:main && npm run build:renderer",
     "build:main": "tsc -p tsconfig.main.json && node scripts/build-preload.mjs",
@@ -27,9 +28,11 @@
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",
     "@vitejs/plugin-react": "^5.0.0",
+    "dompurify": "^3.4.16",
     "electron-is-dev": "^3.0.1",
     "electron-updater": "^6.8.3",
     "lucide-react": "^0.468.0",
+    "marked": "^18.0.14",
     "node-pty": "^1.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -62,7 +65,9 @@
       "dist/**/*",
       "!dist/*smoke*.png",
       "package.json",
-      "node_modules/node-pty/**/*"
+      "node_modules/node-pty/**/*",
+      "!node_modules/node-pty/prebuilds/darwin-*/**/*",
+      "!node_modules/node-pty/prebuilds/linux-*/**/*"
     ],
     "asarUnpack": [
       "node_modules/node-pty/**/*"
@@ -77,6 +82,12 @@
           "!**/.pytest_cache/**",
           "!**/.test-tmp/**",
           "!**/.ruff_cache/**",
+          "!**/*.db",
+          "!**/*.db-shm",
+          "!**/*.db-wal",
+          "!**/auth.json",
+          "!**/config.yaml",
+          "!**/*.gguf",
           "!**/*.egg-info/**",
           "!sidekick/build/**",
           "!**/build/lib/**"
@@ -94,6 +105,20 @@
           "!**/__pycache__/**",
           "!**/*.pyc",
           "!**/site-packages/tests/**"
+        ]
+      },
+      {
+        "from": "runtime/local-ai/b11377-cpu",
+        "to": "apps/desktop/runtime/local-ai/b11377-cpu",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.db",
+          "!**/*.db-shm",
+          "!**/*.db-wal",
+          "!**/auth.json",
+          "!**/config.yaml",
+          "!**/*.gguf"
         ]
       }
     ],
@@ -134,7 +159,12 @@
         "nsis",
         "portable"
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "signExts": [
+        ".dll",
+        ".pyd",
+        ".node"
+      ]
     },
     "nsis": {
       "artifactName": "Lastbrowser-${version}-${arch}-setup.${ext}",

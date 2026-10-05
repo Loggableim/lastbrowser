@@ -12,6 +12,7 @@ import type {
 } from './shell-state.js';
 import type { OnboardingStatus, SetupState } from './setup-state.js';
 import type * as ReactTypes from 'react';
+import type { IndependentTransport } from './independent-contracts.js';
 
 type LastbrowserSetupState = SetupState;
 
@@ -112,6 +113,12 @@ type WebuiBridgeRequest = {
   query?: Record<string, string | number | boolean | null | undefined>;
   body?: unknown;
   headers?: Record<string, string>;
+  /** Select a saved Space for the Teamwork config/status endpoints. Main resolves its profile. */
+  scopeSelection?: {
+    browserProfileId: string;
+    workspacePath: string | null;
+    backendProfileName?: string;
+  };
 };
 
 type DoctorCheck = ShellDoctorCheck;
@@ -173,6 +180,15 @@ declare global {
 declare global {
   interface Window {
     lastbrowser: {
+      independent: IndependentTransport;
+      quickChat: {
+        start: (request: import('../main/quick-chat-controller.js').QuickChatStartRequest) => Promise<{
+          quickChatId: string; streamId: string; scope: import('../main/independent-browser-host.js').BrowserScope;
+        }>;
+        stop: (request: import('../main/quick-chat-controller.js').QuickChatCancelRequest) => Promise<{ ok: true; cancelled: boolean }>;
+        cancel: (request: import('../main/quick-chat-controller.js').QuickChatCancelRequest) => Promise<{ ok: true; cancelled: boolean }>;
+        onEvent: (listener: (event: import('../main/quick-chat-controller.js').QuickChatStreamEvent) => void) => () => void;
+      };
       services: {
         status: () => Promise<{
           sidekick: 'starting' | 'ready' | 'stopped' | 'missing' | 'error';
@@ -190,6 +206,7 @@ declare global {
         save: (state: LastbrowserSetupState) => Promise<LastbrowserSetupState>;
       };
       browser: {
+        setSearchEngine: (id: string) => Promise<boolean>;
         onOpenTab: (callback: (url: string) => void) => () => void;
         onOpenIncognitoTab: (callback: (url: string) => void) => () => void;
         onDeepResearch: (callback: (payload: { selectionText?: string; pageUrl?: string }) => void) => () => void;
@@ -269,6 +286,7 @@ declare global {
           model?: string;
           modelProvider?: string | null;
           profile?: string;
+          backendProfileName?: string;
           workspace?: string;
           mode?: 'action' | 'plan';
           chatMode?: string;
@@ -276,6 +294,13 @@ declare global {
           reasoningEffort?: string;
           groundingContext?: { url?: string; title?: string; snippet?: string } | null;
         }) => Promise<{ sessionId: string; streamId: string }>;
+        chatMode:(request:import('./chat-mode-client.js').ChatModeRequest)=>Promise<Record<string,unknown>>;
+        grill:(request:import('./native-grill-client.js').NativeGrillRequest)=>Promise<Record<string,unknown>>;
+        goalCommand:(request:import('./persistent-goal-command.js').NativeGoalRequest)=>Promise<Record<string,unknown>>;
+        goalMigration:(request:import('./native-goal-migration-client.js').NativeGoalMigrationRequest)=>Promise<Record<string,unknown>>;
+        childHistory:(request:import('./child-run-client.js').ChildHistoryRequest)=>Promise<Record<string,unknown>>;
+        modelPolicy:(request:import('./model-policy-client.js').ModelPolicyRequest)=>Promise<Record<string,unknown>>;
+        controlChat:(request:import('./native-chat-control.js').NativeChatControlRequest)=>Promise<Record<string,unknown>>;
         getStreamStatus: (streamId: string) => Promise<{ active?: boolean; [key: string]: unknown }>;
         subscribeChatStream: (request: { streamId: string }) => Promise<Record<string, unknown>>;
         unsubscribeChatStream: (request: { streamId: string }) => Promise<Record<string, unknown>>;
@@ -289,7 +314,7 @@ declare global {
         createWorkspaceDirectory: (request: { sessionId: string; path: string }) => Promise<Record<string, unknown>>;
         deleteWorkspaceEntry: (request: { sessionId: string; path: string; recursive?: boolean }) => Promise<Record<string, unknown>>;
         addSpace: (request: { path: string; name?: string; create?: boolean }) => Promise<{ workspaces?: SpaceSummary[]; [key: string]: unknown }>;
-        removeSpace: (request: { path: string }) => Promise<{ workspaces?: SpaceSummary[]; [key: string]: unknown }>;
+        removeSpace: (request: { path: string; browserProfileId: string }) => Promise<{ workspaces?: SpaceSummary[]; [key: string]: unknown }>;
         renameSpace: (request: { path: string; name: string }) => Promise<{ workspaces?: SpaceSummary[]; [key: string]: unknown }>;
         reorderSpaces: (request: { paths: string[] }) => Promise<{ workspaces?: SpaceSummary[]; [key: string]: unknown }>;
         listCrons: () => Promise<{ jobs: CronJobSummary[]; [key: string]: unknown }>;

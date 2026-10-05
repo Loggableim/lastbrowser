@@ -8,6 +8,8 @@ Use a dedicated PowerShell session. Finish and review source changes first, incl
 
 Run required verification from the repository root and stop on any failure:
 
+For the first Microsoft Store submission, also follow [store-submission-preparation.md](store-submission-preparation.md): the final source and Store submission wait for the confirmed completion of **Multiagent Umsetzung**. Source/configuration preflight results alone do not verify release binaries.
+
 ```powershell
 Set-Location C:\projekte\lastbrowser
 $ErrorActionPreference = 'Stop'
@@ -103,6 +105,8 @@ foreach ($releaseFile in $filesToVerify) {
 }
 python -m castlabs_evs.vmp -n verify-pkg $packageDirectory
 Assert-Exit 'Final VMP verification'
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-windows-package-signatures.ps1 -PackageDirectory $packageDirectory -InstallerPath (Join-Path $releaseOutput "Lastbrowser-$releaseVersion-x64-setup.exe") -ReportPath (Join-Path $releaseOutput 'store-signatures.json')
+Assert-Exit 'All native Windows payload and installer signatures'
 node scripts/refresh-signed-release-metadata.mjs $releaseOutput node_modules/app-builder-bin/win/x64/app-builder.exe
 Assert-Exit 'Final signed checksums and blockmap'
 Get-FileHash -Algorithm SHA256 -LiteralPath $actualExecutables.FullName

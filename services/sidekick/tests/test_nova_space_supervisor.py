@@ -83,6 +83,25 @@ def test_live_admission_rejects_duplicate_space_identity_across_roots(tmp_path: 
     assert len(supervisor.list_active_admissions()) == 1
 
 
+def test_native_chat_model_choice_binding_is_canonical_and_bounded() -> None:
+    from hashlib import sha256
+    from nova.space_supervisor import _native_model_choices_valid
+
+    choices = [
+        {"provider": "gemini", "model": "flash"},
+        {"provider": "openai", "model": "gpt-fixture"},
+    ]
+    canonical = json.dumps(choices, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    binding = {"modelProvider": "gemini", "model": "flash", "modelChoices": choices,
+        "modelChoiceDigest": sha256(canonical.encode("utf-8")).hexdigest()}
+    assert _native_model_choices_valid(binding)
+    assert _native_model_choices_valid({"model": "legacy-single-model"})
+    assert not _native_model_choices_valid({**binding, "modelChoiceDigest": "0" * 64})
+    assert not _native_model_choices_valid({**binding, "modelChoices": [*choices, choices[0]]})
+    too_many = [{"provider": "p", "model": str(index)} for index in range(65)]
+    assert not _native_model_choices_valid({**binding, "modelChoices": too_many})
+
+
 def test_global_ledger_allows_only_one_active_target_across_concurrent_spaces(tmp_path: Path) -> None:
     records = {
         "alpha": _governance(tmp_path / "alpha"),

@@ -25,6 +25,7 @@ import { spaceDisplayName, type SpaceSummary } from '../shell-state.js';
 import { getSpaceTabCount } from '../tab-sessions.js';
 import { useDesktopI18n } from '../i18n.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
+import { browserStartSpaceCopy, browserStartHistoryCopy } from '../i18n/browser-start-space-copy.js';
 
 export interface SpeedDialItem {
   id: string;
@@ -114,6 +115,11 @@ export interface NativeBrowserStartPageProps {
   onSelectSpace?: (spacePath: string) => void;
   onAddSpace?: (path: string, name: string) => void;
 }
+/** Keep Unicode names distinct while excluding path separators and controls. */
+export function startPageSpaceWorkspacePath(name:string):string {
+  const slug=name.normalize('NFKC').trim().toLowerCase().replace(/[^\p{Letter}\p{Number}_-]+/gu,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,'');
+  return `workspaces/${slug||`space-${crypto.randomUUID()}`}`;
+}
 
 export function NativeBrowserStartPage({
   bookmarks,
@@ -129,6 +135,8 @@ export function NativeBrowserStartPage({
   onAddSpace
 }: NativeBrowserStartPageProps): JSX.Element {
   const { locale, t } = useDesktopI18n();
+  const spaceCopy = browserStartSpaceCopy[locale];
+  const historyCopy = browserStartHistoryCopy[locale];
   const [query, setQuery] = useState('');
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
@@ -138,8 +146,8 @@ export function NativeBrowserStartPage({
     if (spaces && spaces.length > 0) {
       return spaces;
     }
-    return [{ path: '', name: 'Standard Space', emoji: '🏠' }];
-  }, [spaces]);
+    return [{ path: '', name: spaceCopy.home, emoji: '🏠' }];
+  }, [spaces, spaceCopy]);
 
   const isSpaceActive = (space: SpaceSummary) => {
     if (space.path === activeSpacePath) return true;
@@ -151,8 +159,7 @@ export function NativeBrowserStartPage({
     e.preventDefault();
     const trimmed = newSpaceName.trim();
     if (!trimmed) return;
-    const slug = trimmed.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-');
-    const path = `workspaces/${slug}`;
+    const path = startPageSpaceWorkspacePath(trimmed);
     if (onAddSpace) {
       onAddSpace(path, trimmed);
     } else if (onSelectSpace) {
@@ -172,7 +179,7 @@ export function NativeBrowserStartPage({
   const effectiveBotName = botName.trim() || 'Nova';
   const greeting = useMemo(() => getDashboardGreeting(currentTime), [currentTime]);
   const timeString = useMemo(() => formatDashboardTime(currentTime), [currentTime]);
-  const dateLocale = locale === 'en' ? 'en-US' : locale === 'pt-BR' ? 'pt-BR' : `${locale}-${({ de: 'DE', es: 'ES', fr: 'FR', it: 'IT', ru: 'RU' } as const)[locale]}`;
+  const dateLocale = locale === 'en' ? 'en-US' : locale === 'pt-BR' ? 'pt-BR' : `${locale}-${({ de: 'DE', es: 'ES', fr: 'FR', it: 'IT', ru: 'RU', ja: 'JP' } as const)[locale]}`;
   const dateString = useMemo(() => formatDashboardDate(currentTime, dateLocale), [currentTime, dateLocale]);
 
   const favorites = useMemo(() => bookmarks.slice(0, 8), [bookmarks]);
@@ -345,7 +352,7 @@ export function NativeBrowserStartPage({
                     onSelectSpace?.(space.path);
                   }
                 }}
-                title={`Zu Space "${name}" wechseln (Eigene Session & Logins)`}
+                title={`${t('sidebar.space.switch')}: ${name} · ${t('browser.startPage.spaceIsolationTooltip')}`}
               >
                 <div className="startpage-space-card-top">
                   <div className="startpage-space-avatar">
@@ -354,11 +361,11 @@ export function NativeBrowserStartPage({
                   {isActive ? (
                     <span className="startpage-space-badge active">
                       <Check size={11} />
-                      <span>Aktiv</span>
+                      <span>{t('agentPanels.active')}</span>
                     </span>
                   ) : (
                     <span className="startpage-space-badge inactive">
-                      <span>Wechseln</span>
+                      <span>{t('sidebar.space.switch')}</span>
                     </span>
                   )}
                 </div>
@@ -367,10 +374,10 @@ export function NativeBrowserStartPage({
                   <h3 className="startpage-space-name">{name}</h3>
                   <div className="startpage-space-meta">
                     <span className="startpage-space-tabs-count">
-                      {tabCount === 0 ? 'Keine Tabs' : tabCount === 1 ? '1 Tab' : `${tabCount} Tabs`}
+                      {tabCount === 0 ? spaceCopy.noTabs : spaceCopy.tabCount(tabCount)}
                     </span>
                     <span className="startpage-space-dot">•</span>
-                    <span className="startpage-space-session-tag">Eigene Session</span>
+                    <span className="startpage-space-session-tag">{spaceCopy.session}</span>
                   </div>
                 </div>
               </div>
@@ -382,14 +389,14 @@ export function NativeBrowserStartPage({
             type="button"
             className="startpage-space-card startpage-space-add-card"
             onClick={() => setIsCreatingSpace(true)}
-            title="Neuen Space mit eigener Session erstellen"
+            title={t('browser.startPage.createSpaceTitle')}
           >
             <div className="startpage-add-icon-box">
               <Plus size={20} />
             </div>
             <div className="startpage-add-card-text">
-              <span className="startpage-add-title">Neuer Space</span>
-              <span className="startpage-add-sub">Isolierter Login-Bereich</span>
+              <span className="startpage-add-title">{t('browser.startPage.newSpace')}</span>
+              <span className="startpage-add-sub">{t('browser.startPage.isolatedWorkspaces')}</span>
             </div>
           </button>
         </div>
@@ -404,9 +411,9 @@ export function NativeBrowserStartPage({
                     <Layers size={16} />
                   </div>
                   <div>
-                    <h3>Neuen Space erstellen</h3>
+                    <h3>{t('browser.startPage.createSpaceTitle')}</h3>
                     <p className="startpage-modal-sub">
-                      Erstelle einen neuen isolierten Arbeitsbereich mit eigenen Logins, Cookies und Tabs.
+                      {t('browser.startPage.spaceIsolationTooltip')}
                     </p>
                   </div>
                 </div>
@@ -414,7 +421,7 @@ export function NativeBrowserStartPage({
                   type="button"
                   className="startpage-modal-close"
                   onClick={() => setIsCreatingSpace(false)}
-                  title="Schließen"
+                  title={t('common.close')}
                 >
                   <X size={16} />
                 </button>
@@ -422,12 +429,12 @@ export function NativeBrowserStartPage({
 
               <form onSubmit={handleCreateSpaceSubmit} className="startpage-modal-form">
                 <div className="startpage-form-field">
-                  <label htmlFor="startpage-space-name-input">Name des Space</label>
+                  <label htmlFor="startpage-space-name-input">{t('spaceSetup.name')}</label>
                   <input
                     id="startpage-space-name-input"
                     type="text"
                     autoFocus
-                    placeholder="z. B. Arbeit, Privat, Finanzen, Recherche..."
+                    placeholder={t('spaces.namePlaceholder')}
                     value={newSpaceName}
                     onChange={(e) => setNewSpaceName(e.target.value)}
                     className="startpage-text-input"
@@ -440,7 +447,7 @@ export function NativeBrowserStartPage({
                     className="secondary-action"
                     onClick={() => setIsCreatingSpace(false)}
                   >
-                    Abbrechen
+                    {t('common.cancel')}
                   </button>
                   <button
                     type="submit"
@@ -448,7 +455,7 @@ export function NativeBrowserStartPage({
                     disabled={!newSpaceName.trim()}
                   >
                     <Plus size={14} />
-                    <span>Space erstellen</span>
+                    <span>{t('browser.startPage.createSpaceTitle')}</span>
                   </button>
                 </div>
               </form>
@@ -499,8 +506,8 @@ export function NativeBrowserStartPage({
         <section className="browser-start-card">
           <div className="browser-start-card-head">
             <div>
-              <span className="eyebrow">Favorites</span>
-              <h2>Bookmarks</h2>
+              <span className="eyebrow">{historyCopy.favorites}</span>
+              <h2>{t('browser.chrome.bookmarks')}</h2>
             </div>
             <Star size={15} />
           </div>
@@ -518,7 +525,7 @@ export function NativeBrowserStartPage({
                 <ExternalLink size={14} />
               </button>
             )) : (
-              <div className="browser-start-empty">No bookmarks yet. Use the star in the address bar to add favorites.</div>
+              <div className="browser-start-empty">{t('browser.chrome.noBookmarks')}</div>
             )}
           </div>
         </section>
@@ -526,8 +533,8 @@ export function NativeBrowserStartPage({
         <section className="browser-start-card">
           <div className="browser-start-card-head">
             <div>
-              <span className="eyebrow">Most visited</span>
-              <h2>Recent sites</h2>
+              <span className="eyebrow">{historyCopy.mostVisited}</span>
+              <h2>{historyCopy.recentSites}</h2>
             </div>
             <TrendingUp size={15} />
           </div>
@@ -541,11 +548,11 @@ export function NativeBrowserStartPage({
                 title={visit.url}
               >
                 <strong>{visit.title}</strong>
-                <span>{visit.count} visits</span>
+                <span>{historyCopy.visits(visit.count)}</span>
                 <ExternalLink size={14} />
               </button>
             )) : (
-              <div className="browser-start-empty">Most visited sites appear here after you browse a few pages.</div>
+              <div className="browser-start-empty">{historyCopy.empty}</div>
             )}
           </div>
         </section>

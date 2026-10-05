@@ -774,6 +774,9 @@ def test_chat_start_account_choice_reaches_runtime_worker_once(pool_env, monkeyp
     """The selected route account is forwarded unchanged to one runtime worker."""
     from web.api import routes
 
+    # This contract is about forwarding the selected account, not persistence
+    # of goals; keep the worker-start test independent of profile GoalManager state.
+    monkeypatch.setattr("web.api.goals.has_active_goal", lambda *a, **k: False)
     session = _chat_start_session()
     session.pending_started_at = 0.0
     session.save = lambda: None
@@ -942,11 +945,25 @@ def test_antigravity_provider_status_reports_oauth_key_source_when_connected(poo
     monkeypatch.setattr(providers, "_PROVIDER_DISPLAY", {"antigravity": "Antigravity"})
     monkeypatch.setattr(providers, "_PROVIDER_MODELS", {"antigravity": []})
     monkeypatch.setattr(providers, "_PROVIDER_ENV_VAR", {})
+    # Keep this focused Antigravity assertion from probing unrelated OAuth
+    # credential stores (notably Qwen's Path.home() auth file).
+    monkeypatch.setattr(providers, "_OAUTH_PROVIDERS", frozenset({"antigravity"}))
+    generic_auth_status_calls = []
+    original_auth_status = auth_mod.get_auth_status
+
+    def record_generic_auth_status(provider_id=None):
+        generic_auth_status_calls.append(provider_id)
+        assert provider_id == "antigravity"
+        return original_auth_status(provider_id)
+
+    monkeypatch.setattr(auth_mod, "get_auth_status", record_generic_auth_status)
     monkeypatch.setattr(providers, "_provider_has_key", lambda _provider_id: False)
     monkeypatch.setattr(providers, "get_config", lambda: {})
     monkeypatch.setattr(profiles, "cron_profile_context", nullcontext)
 
     result = providers.get_providers()["providers"]
+    assert [provider["id"] for provider in result] == ["antigravity"]
+    assert generic_auth_status_calls == ["antigravity"]
     antigravity = next(provider for provider in result if provider["id"] == "antigravity")
 
     assert antigravity["is_oauth"] is True

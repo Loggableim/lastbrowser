@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-05",
+  "scope": "Read-only findings for the separate Settings > Plugins surface and its boundary with Space Assistant connections.",
+  "findings": [
+    {
+      "id": "settings-plugin-inventory",
+      "status": "observed",
+      "finding": "Settings > Plugins has its own installed-plugin inventory, enabled-plugin settings, and separate Gmail/Discord visibility toggles. The inventory shows name, key/id, version, description, lifecycle hooks, and enabled/disabled state.",
+      "evidence": [
+        "apps/desktop/src/renderer/panels/SystemPanels.tsx:2881-2910",
+        "apps/desktop/src/renderer/panels/SystemPanels.tsx:4291-4314"
+      ],
+      "interpretation": "This inventory is not a model-provider catalog or proof of a usable API connection. Keep it distinct from Space Assistant capability evidence."
+    },
+    {
+      "id": "settings-plugin-empty-and-error-states",
+      "status": "passed",
+      "finding": "The Settings > Plugins renderer handled null, valid, and malformed fixtures without an ErrorBoundary failure or the targeted undefined-to-object TypeError; malformed extensions displayed a local error.",
+      "command": "node apps/desktop/tests/settings-plugins-renderer-smoke.cjs",
+      "result": "PASS: null/valid/invalid; boundaryErrors=0; targetTypeErrorObserved=false",
+      "evidence": [
+        "apps/desktop/tests/settings-plugins-renderer-smoke.cjs",
+        "apps/desktop/src/renderer/panels/SystemPanels.tsx:2881-2910"
+      ]
+    },
+    {
+      "id": "browser-only-plugin-boundary",
+      "status": "preserved-and-tested",
+      "finding": "A restricted taskless plugin with a validated start URL is exposed in Space Assistant as browser-only access, never as an API connection. The scoped App callback revalidates current catalog/scope before opening a tab.",
+      "evidence": [
+        "apps/desktop/src/renderer/components/IndependentConnections.tsx:11-29",
+        "apps/desktop/src/renderer/plugin-browser-navigation.ts:1-96",
+        "docs/root-url-only-plugin-acceptance.md"
+      ],
+      "limits": "The root source-App probe is reported separately in docs/root-space-assistant-simple-ux.md; this JSON records renderer/settings evidence, not provider access or packaged-app behavior."
+    }
+  ]
+}

@@ -25,6 +25,7 @@
 <link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/main.css">
 <link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/download-counter.css">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 <script src="/assets/js/theme.js"></script>
 
@@ -105,6 +106,7 @@
         No es solo otro envoltorio web. Lastbrowser combina el rendimiento extremo de Chromium con Nova AI Copilot, 48 flujos de agentes seleccionados, terminal nativo Windows ConPTY PowerShell, Castlabs Widevine DRM L3 y verdadero aislamiento de sesiones en Espacios.
       </p>
 
+      <div class="download-counter" data-download-counter data-locale="es" role="status">El número de descargas no está disponible.</div>
       <div class="cta-group">
         <a href="/es/download/" class="btn btn-primary btn-lg">
           ⬇️ Descargar para Windows (v0.1.43 Beta)
@@ -119,7 +121,7 @@
     <!-- Screenshot Showcase -->
     <div class="container showcase-container">
       <div class="showcase-nav">
-        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-zen-sidebar.png" data-title="Barra Lateral Zen y Espacios" data-desc="Barra vertical de pestañas con partición visual de espacios, anclaje de aplicaciones web e indicadores de audio.">
+        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-sidebar-spaces.png" data-title="Barra Lateral y Espacios" data-desc="Barra vertical de pestañas con partición visual de espacios, anclaje de aplicaciones web e indicadores de audio.">
           🪐 Barra Zen y Espacios
         </button>
         <button class="sc-btn" data-img="/assets/screenshots/store-screen-2-copilot-splitview.png" data-title="Copiloto Nova AI en Vista Dividida" data-desc="Trabaja en pantalla dividida 70/30: Nova extrae datos de la web, escribe código y resume artículos de investigación.">
@@ -153,11 +155,11 @@
           <div style="font-size:12px;color:var(--muted);">Lastbrowser Win32 Shell</div>
         </div>
         <div class="showcase-view">
-          <img id="showcase-image" src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Interfaz de usuario de Lastbrowser" width="1920" height="1080">
+          <img id="showcase-image" src="/assets/screenshots/store-screen-1-sidebar-spaces.png" alt="Interfaz de usuario de Lastbrowser" width="1920" height="1080">
         </div>
         <div class="showcase-footer">
           <div>
-            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Barra Lateral Zen y Espacios</strong>
+            <strong id="showcase-title" style="color:var(--text);font-size:15px;display:block;">Barra Lateral y Espacios</strong>
             <span id="showcase-desc" style="color:var(--muted);font-size:13px;">Barra vertical de pestañas con partición visual de espacios, anclaje de aplicaciones web e indicadores de audio.</span>
           </div>
           <a href="/es/features/" class="btn btn-ghost btn-sm">Saber más ➔</a>
@@ -299,5 +301,6 @@
 </footer>
 
 <script src="/assets/js/app.js"></script>
+<script src="/assets/js/download-counter.js" defer></script>
 </body>
 </html>

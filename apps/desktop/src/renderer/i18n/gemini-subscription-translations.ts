@@ -1,4 +1,4 @@
-import type { DesktopCatalog, DesktopLocaleId, DesktopTranslationKey } from './keys.js';
+import type { DesktopCatalog, LegacyDesktopLocaleId as DesktopLocaleId, DesktopTranslationKey } from './keys.js';
 
 const rows: Partial<Record<DesktopTranslationKey, Record<DesktopLocaleId, string>>> = {
   'settings.panels.providers.geminiSubscriptionTitle': { en: 'Gemini subscription access changed', de: 'Gemini-Abozugriff wurde geändert', es: 'Cambió el acceso de suscripción a Gemini', fr: 'L’accès Gemini par abonnement a changé', it: 'È cambiato l’accesso Gemini con abbonamento', 'pt-BR': 'O acesso à Gemini por assinatura mudou', ru: 'Доступ Gemini по подписке изменился' },

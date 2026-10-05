@@ -3975,6 +3975,7 @@ def call_llm(
     timeout: float = None,
     extra_body: dict = None,
     required_base_url: str = None,
+    native_teamwork_adapter: Any = None,
 ) -> Any:
     """Centralized synchronous LLM call.
 
@@ -4050,6 +4051,8 @@ def call_llm(
             main_runtime=main_runtime,
         )
         if client is None:
+            if native_teamwork_adapter is not None:
+                raise RuntimeError("Native Teamwork provider binding is unavailable")
             # When the user explicitly chose a non-OpenRouter provider but no
             # credentials were found, fail fast instead of silently routing
             # through OpenRouter (which causes confusing 404s).
@@ -4082,6 +4085,10 @@ def call_llm(
         resolved_provider,
         actual_endpoint or resolved_base_url,
     )
+    if native_teamwork_adapter is not None:
+        client = native_teamwork_adapter.wrap_client(
+            client, provider=resolved_provider, model=final_model or resolved_model,
+        )
 
     # Log what we're about to do — makes auxiliary operations visible
     _base_info = str(getattr(client, "base_url", resolved_base_url) or "")
@@ -4109,6 +4116,11 @@ def call_llm(
     try:
         return _create_completion_with_metadata(client, kwargs, resolved_provider, task)
     except Exception as first_err:
+        # A native Teamwork role has one parent-authorized provider/model and
+        # one admission claim per SDK dispatch. Generic auxiliary retries and
+        # fallback would create unadmitted requests on other accounts.
+        if native_teamwork_adapter is not None:
+            raise
         if "temperature" in kwargs and _is_unsupported_temperature_error(first_err):
             retry_kwargs = dict(kwargs)
             retry_kwargs.pop("temperature", None)
@@ -4295,6 +4307,9 @@ def stream_llm(
     on_reasoning: Optional[Callable[[str], None]] = None,
     timeout: float = 30.0,
     cancel_event: Optional[threading.Event] = None,
+    max_tokens: Optional[int] = None,
+    native_teamwork_adapter: Any = None,
+    native_teamwork_visible: bool = False,
     retry_transient_before_first_token: bool = False,
 ) -> str:
     """Stream a selected provider response and return its visible text.
@@ -4342,6 +4357,11 @@ def stream_llm(
                 "Connect the provider and try again."
             )
 
+        if native_teamwork_adapter is not None:
+            client = native_teamwork_adapter.wrap_client(
+                client, provider=resolved_provider, model=final_model or resolved_model,
+            )
+
         actual_endpoint = str(getattr(client, "base_url", "") or "").strip().rstrip("/")
         _raise_if_game_mode_blocks_local_request(
             resolved_provider,
@@ -4351,6 +4371,7 @@ def stream_llm(
             resolved_provider,
             final_model,
             messages,
+            max_tokens=max_tokens,
             timeout=timeout,
             base_url=actual_endpoint or resolved_base_url,
         )
@@ -4375,6 +4396,8 @@ def stream_llm(
                 return
             emitted_anything = True
             visible_parts.append(text)
+            if native_teamwork_adapter is not None and native_teamwork_visible:
+                native_teamwork_adapter.mark_visible_delta()
             on_content(text)
 
         scrubber = StreamingThinkScrubber(reasoning_callback=emit_reasoning)

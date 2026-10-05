@@ -10,7 +10,8 @@ const CHAT_COMPLETION_BODIES = {
   es: 'La respuesta está lista.',
   fr: 'Une réponse est prête.',
   'pt-BR': 'Uma resposta está pronta.',
-  ru: 'Ответ готов.'
+  ru: 'Ответ готов.',
+  ja: '返信が届きました。'
 } as const;
 
 export type ChatNotificationLocale = keyof typeof CHAT_COMPLETION_BODIES;

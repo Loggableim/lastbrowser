@@ -1,4 +1,4 @@
-import type { DesktopCatalog, DesktopLocaleId, DesktopTranslationKey } from './keys.js';
+import type { DesktopCatalog, LegacyDesktopLocaleId as DesktopLocaleId, DesktopTranslationKey } from './keys.js';
 
 // Desktop Settings copy that is unique to SystemPanels. Each row is English,
 // Brazilian Portuguese, then Russian; de/es/fr/it live in system-panels-roman.ts.
@@ -9,7 +9,7 @@ const rows: Partial<Record<DesktopTranslationKey, readonly [string, string, stri
   'settings.sectionDescriptions.conversation': ['Default model, send key and assistant identity.', 'Modelo padrão, tecla de envio e identidade do assistente.', 'Модель по умолчанию, клавиша отправки и имя помощника.'],
   'settings.sectionDescriptions.appearance': ['Theme, skin, font sizing and message layout.', 'Tema, aparência, tamanho da fonte e layout das mensagens.', 'Тема, оформление, размер шрифта и расположение сообщений.'],
   'settings.sectionDescriptions.preferences': ['Language, notifications and chat behavior.', 'Idioma, notificações e comportamento do chat.', 'Язык, уведомления и поведение чата.'],
-  'settings.sectionDescriptions.providers': ['Provider defaults and model routing settings.', 'Provedores padrão e configurações de roteamento de modelos.', 'Провайдеры по умолчанию и маршрутизация моделей.'],
+  'settings.sectionDescriptions.providers': ['AI providers, per-Space local models and model routing settings.', 'Provedores de IA, modelos locais por Espaço e configurações de roteamento.', 'Провайдеры ИИ, локальные модели для каждого пространства и маршрутизация моделей.'],
   'settings.sectionDescriptions.teamwork': ['Multi-agent Teamwork, Smart Track and model availability.', 'Teamwork multiagente, Smart Track e disponibilidade de modelos.', 'Мультиагентный Teamwork, Smart Track и доступность моделей.'],
   'settings.sectionDescriptions.googleAccounts': ['Google CLI / Antigravity OAuth accounts and token rotation.', 'Contas OAuth do Google CLI / Antigravity e rotação de tokens.', 'Аккаунты OAuth Google CLI / Antigravity и ротация токенов.'],
   'settings.sectionDescriptions.extensions': ['Chrome extensions, Manifest V3 add-ons and content scripts.', 'Extensões do Chrome, complementos Manifest V3 e scripts de conteúdo.', 'Расширения Chrome, дополнения Manifest V3 и скрипты содержимого.'],

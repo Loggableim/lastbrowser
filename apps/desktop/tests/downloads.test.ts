@@ -161,6 +161,18 @@ describe('download tracker', () => {
     expect(list[0].state).toBe('progressing');
     expect(list[0].total).toBe(1000);
   });
+  it('blocks independent target downloads before save paths, item reads, history or user notifications', () => {
+    const notify = vi.fn(), preventDefault = vi.fn(), cancel = vi.fn(), readItem = vi.fn(() => { throw new Error('Already cancelled item'); });
+    const tracker = createDownloadTracker({ denyDownload: contents => (contents as { id: number })?.id === 77 });
+    tracker.subscribe(notify); notify.mockClear();
+    let listener: any;
+    tracker.attach({ on: (_event, handler) => { listener = handler; } }, 'C:/controlled/downloads');
+    const item = { cancel, getFilename: readItem, getURL: readItem, getReceivedBytes: readItem,
+      getTotalBytes: readItem, getSavePath: readItem, setSavePath: readItem, on: readItem };
+    listener({ preventDefault }, item, { id: 77 });
+    expect(preventDefault).toHaveBeenCalledOnce(); expect(cancel).toHaveBeenCalledOnce();
+    expect(readItem).not.toHaveBeenCalled(); expect(tracker.list()).toEqual([]); expect(notify).not.toHaveBeenCalled();
+  });
 
   it('assigns a default Downloads path before tracking the item', () => {
     const tracker = createDownloadTracker();

@@ -1,7 +1,20 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { isTrustedPreloadDocumentUrl } from './preload-origin.js';
 
-if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMainWorld('lastbrowser', {
+if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMainWorld('lastbrowser', {
+  quickChat: {
+    start: (request: unknown) => ipcRenderer.invoke('lastbrowser:quickchat:start', request),
+    stop: (request: unknown) => ipcRenderer.invoke('lastbrowser:quickchat:stop', request),
+    cancel: (request: unknown) => ipcRenderer.invoke('lastbrowser:quickchat:cancel', request),
+    onEvent: (listener: (event: unknown) => void) => {
+      const wrapped = (_event: Electron.IpcRendererEvent, payload: unknown) => listener(payload);
+      ipcRenderer.on('lastbrowser:quickchat:event', wrapped);
+      return () => ipcRenderer.removeListener('lastbrowser:quickchat:event', wrapped);
+    }
+  },
+  independent: {
+    request: (request: unknown) => ipcRenderer.invoke('lastbrowser:independent:request', request)
+  },
   services: {
     status: () => ipcRenderer.invoke('lastbrowser:services:status'),
     start: () => ipcRenderer.invoke('lastbrowser:services:start'),
@@ -25,6 +38,7 @@ if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMai
     setLocale: (locale: string) => ipcRenderer.invoke('lastbrowser:i18n:setLocale', locale)
   },
   browser: {
+    setSearchEngine: (id: string) => ipcRenderer.invoke('lastbrowser:browser:setSearchEngine', id),
     onOpenTab: (callback: (url: string) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url);
       ipcRenderer.on('lastbrowser:browser:openTab', listener);
@@ -74,6 +88,13 @@ if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMai
     getDraft: (sessionId: string) => ipcRenderer.invoke('lastbrowser:sidekick:getDraft', sessionId),
     saveDraft: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:saveDraft', request),
     startChat: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:startChat', request),
+    chatMode: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:chatMode', request),
+    grill: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:grill', request),
+    goalMigration: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:goalMigration', request),
+    modelPolicy: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:modelPolicy', request),
+    controlChat: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:controlChat', request),
+    goalCommand: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:goalCommand', request),
+    childHistory: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:childHistory', request),
     getStreamStatus: (streamId: string) => ipcRenderer.invoke('lastbrowser:sidekick:getStreamStatus', streamId),
     subscribeChatStream: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:subscribeChatStream', request),
     unsubscribeChatStream: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:unsubscribeChatStream', request),

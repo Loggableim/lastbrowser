@@ -1,0 +1,7 @@
+.native-chat-browser { flex:none; margin:8px; padding:9px; border:1px solid var(--border); border-radius:7px; min-width:0; overflow-wrap:anywhere; }
+.native-chat-browser p { margin-block:6px; font-size:.82rem; color:var(--text-secondary,var(--text)); }
+.native-chat-browser-actions { display:flex; flex-wrap:wrap; gap:6px; margin-block:8px; }
+.native-chat-browser-actions button { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+.native-chat-browser figure { margin:8px 0 0; }
+.native-chat-browser figure img { display:block; max-width:100%; max-height:240px; object-fit:contain; }
+.native-chat-browser time { display:block; font-size:.8rem; }

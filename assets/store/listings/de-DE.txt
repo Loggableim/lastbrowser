@@ -1,0 +1,46 @@
+Lastbrowser — de-DE
+
+DESCRIPTION
+Lastbrowser verbindet einen Chromium-Browser für Windows mit dem integrierten Nova KI-Assistenten. Organisieren Sie Webseiten in vertikalen Tabs und Arbeitsbereichen und nutzen Sie den Assistenten neben Ihren geöffneten Seiten.
+
+Funktionen:
+• Vertikale Tabs und Arbeitsbereiche für Ihre Webprojekte.
+• Nova KI-Assistent für Fragen, Zusammenfassungen und die Arbeit mit bereitgestelltem Webseitenkontext.
+• Verbindung mit unterstützten KI-Anbietern über eigene Zugangsdaten sowie Unterstützung lokaler Modelle über Ollama.
+• Integriertes Terminal und Unterstützung für Browser-Erweiterungen.
+• Lokal gespeicherte Browserprofile und Werkzeuge zum Löschen von Browserdaten.
+
+Die Anwendung ist für die persönliche Nutzung kostenlos. Gewerbliche Nutzung erfordert eine separate kommerzielle Lizenz. Externe KI-Dienste können ein eigenes Konto und kostenpflichtige Leistungen erfordern. Für lokale KI-Modelle benötigen Sie eine passende lokale Modellinstallation. Bei Nutzung externer KI-Anbieter werden Ihre Anfragen und der für die Aufgabe bereitgestellte Kontext an den ausgewählten Anbieter gesendet. Browserprofile werden lokal auf Ihrem PC gespeichert.
+
+SHORT DESCRIPTION
+Chromium-Browser für Windows mit vertikalen Tabs, Arbeitsbereichen und Nova KI-Assistent. Browserprofile bleiben lokal; externe KI-Dienste erhalten die von Ihnen bereitgestellten Anfragen und Inhalte.
+
+PRODUCT FEATURES
+• Vertikale Tabs und Arbeitsbereiche
+• Integrierter Nova KI-Assistent
+• Unterstützte externe KI-Anbieter und lokale Ollama-Modelle
+• Integriertes Terminal und Browser-Erweiterungen
+• Lokal gespeicherte Browserprofile
+
+SEARCH TERMS
+browser
+webbrowser
+ai browser
+vertikale tabs
+ki assistent
+arbeitsbereiche
+local-first
+
+WHAT'S NEW
+Erste Microsoft Store-Version von Lastbrowser.
+
+APPLICABLE LICENSE TERMS
+Lastbrowser darf für die persönliche, nicht gewerbliche Nutzung kostenlos verwendet werden. Für gewerbliche Nutzung ist eine separate kommerzielle Lizenz erforderlich. Anfragen zur kommerziellen Lizenzierung: rainer@dominik.in.
+
+Die Lizenzen der enthaltenen Drittanbieter-Komponenten bleiben unabhängig davon bestehen. Sie gewähren die dort beschriebenen Rechte an den jeweiligen Komponenten. Zugang und Nutzung externer KI-Dienste unterliegen zusätzlich den Bedingungen des jeweiligen Anbieters.
+
+COPYRIGHT
+© 2026 Dominik Rainer / Lastbrowser.com
+
+DEVELOPED BY
+Dominik Rainer / Lastbrowser.com

@@ -40,12 +40,12 @@ describe('Space Session & Partition Isolation', () => {
   it('refreshes the session list in the active profile and Space scope', () => {
     const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
 
-    expect(appTsx).toContain('const requestedScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath };');
+    expect(appTsx).toContain('const requestedScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName };');
     expect(appTsx).toContain('sidekick.listSessions(requestedScope)');
-    expect(appTsx).toContain('}, [activeProfileId, activeSpacePath, sidekickApiReady]);');
+    expect(appTsx).toContain('}, [activeProfileId, activeSpacePath, activeBackendProfileName, sidekickApiReady]);');
     expect(appTsx).toContain('!sessionId || activeSessionIdRef.current !== sessionId');
     expect(appTsx).toMatch(/sidekick\.getSession\(\{[\s\S]*?profile:\s*activeProfileIdRef\.current,[\s\S]*?workspacePath:\s*activeSpacePathRef\.current\s*\}\)/);
-    expect(appTsx).toContain('const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath };');
+    expect(appTsx).toContain('const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName };');
     expect(appTsx).toContain('workspacePath: turnContext.spacePath');
     expect(appTsx).toContain('window.lastbrowser.sidekick.renameSession({');
     expect(appTsx).toContain('const isRequestScopeCurrent = (): boolean => sessionListResponseMatchesScope(requestedScope, {');
@@ -54,6 +54,26 @@ describe('Space Session & Partition Isolation', () => {
     expect(appTsx).toContain('chatUiOwnershipRef.current.releaseUiOwner();');
     expect(appTsx).toContain('chatUiOwnershipRef.current.ownerForStream(restored.streamId)');
     expect(appTsx).toContain('chatUiOwnershipRef.current.reactivate(localOwnerId, restored.sessionId)');
+  });
+
+  it('resolves and loads a new chat in its backend profile before selecting it', () => {
+    const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+    const createBlock = appTsx.slice(appTsx.indexOf('async function createNativeSession()'), appTsx.indexOf('function handleNewChat()'));
+    expect(createBlock.indexOf('assistantController.resolveScope')).toBeGreaterThanOrEqual(0);
+    expect(createBlock.indexOf('assistantController.resolveScope')).toBeLessThan(createBlock.indexOf('createAndLoadScopedSession'));
+    expect(createBlock).toContain('backendProfileName: resolved.value.backendProfileName');
+    expect(createBlock).toContain('activeSessionIdRef.current = session.session_id');
+    expect(createBlock.indexOf('createAndLoadScopedSession')).toBeLessThan(createBlock.indexOf('activeSessionIdRef.current = session.session_id'));
+    expect(createBlock).toContain('sameAssistantScope(session.space_scope, resolved.value.scope)');
+  });
+
+  it('guards active session loads against stale backend-profile responses', () => {
+    const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+    const loadBlock = appTsx.slice(appTsx.indexOf('const loadActiveSession = useCallback'), appTsx.indexOf('const independentSessionRun ='));
+    expect(loadBlock).toContain('backendProfileName: activeBackendProfileNameRef.current');
+    expect(loadBlock).toContain('const isSessionScopeCurrent');
+    expect(loadBlock).toContain('backendProfileName: activeBackendProfileNameRef.current');
+    expect(appTsx).toContain('[activeSessionId, activeBackendProfileName, loadActiveSession]');
   });
 
   describe('computeSpaceSessionKey', () => {

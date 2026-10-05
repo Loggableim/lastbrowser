@@ -25,6 +25,7 @@
 <link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/main.css">
 <link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/download-counter.css">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 <script src="/assets/js/theme.js"></script>
 
@@ -105,6 +106,7 @@
         Non è un semplice contenitore web. Lastbrowser unisce la velocità di Chromium con il copilota Nova AI, 48 flussi di agenti selezionati, terminale nativo Windows ConPTY PowerShell, Castlabs Widevine DRM L3 e vero isolamento delle sessioni negli Spazi.
       </p>
 
+      <div class="download-counter" data-download-counter data-locale="it" role="status">Il numero di download non è disponibile.</div>
       <div class="cta-group">
         <a href="/it/download/" class="btn btn-primary btn-lg">
           ⬇️ Scarica per Windows (v0.1.43 Beta)
@@ -119,7 +121,7 @@
     <!-- Screenshot Showcase -->
     <div class="container showcase-container">
       <div class="showcase-nav">
-        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-zen-sidebar.png" data-title="Barra Laterale Zen &amp; Spazi" data-desc="Barra verticale delle schede con partizione visiva degli spazi, app web bloccate e indicatori audio.">
+        <button class="sc-btn active" data-img="/assets/screenshots/store-screen-1-sidebar-spaces.png" data-title="Barra Laterale Zen &amp; Spazi" data-desc="Barra verticale delle schede con partizione visiva degli spazi, app web bloccate e indicatori audio.">
           🪐 Barra Zen &amp; Spazi
         </button>
         <button class="sc-btn" data-img="/assets/screenshots/store-screen-2-copilot-splitview.png" data-title="Copilota Nova AI in Schermo Diviso" data-desc="Lavora in vista divisa 70/30: Nova estrae dati dal web, scrive codice e riassume articoli scientifici.">
@@ -153,7 +155,7 @@
           <div style="font-size:12px;color:var(--muted);">Lastbrowser Win32 Shell</div>
         </div>
         <div class="showcase-view">
-          <img id="showcase-image" src="/assets/screenshots/store-screen-1-zen-sidebar.png" alt="Interfaccia Lastbrowser" width="1920" height="1080">
+          <img id="showcase-image" src="/assets/screenshots/store-screen-1-sidebar-spaces.png" alt="Interfaccia Lastbrowser" width="1920" height="1080">
         </div>
         <div class="showcase-footer">
           <div>
@@ -299,5 +301,6 @@
 </footer>
 
 <script src="/assets/js/app.js"></script>
+<script src="/assets/js/download-counter.js" defer></script>
 </body>
 </html>

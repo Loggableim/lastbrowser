@@ -14,9 +14,10 @@ def get_webui_home() -> Path:
 
     Precedence:
     1. ``SIDEKICK_HOME``
-    2. ``~/.sidekick``
+    2. ``LASTBROWSER_HOME``
+    3. ``~/.sidekick``
     """
-    raw_home = os.getenv("SIDEKICK_HOME", "").strip()
+    raw_home = os.getenv("SIDEKICK_HOME", "").strip() or os.getenv("LASTBROWSER_HOME", "").strip()
     if raw_home:
         return Path(raw_home).expanduser().resolve()
     return (Path.home() / ".sidekick").resolve()

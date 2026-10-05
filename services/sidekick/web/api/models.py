@@ -172,7 +172,16 @@ def _index_entry_exists(session_id: str, in_memory_ids=None) -> bool:
     return p.exists()
 
 
-def _write_session_index(updates=None):
+def _belongs_to_session_index(session, directory, *, explicit):
+    if not explicit and session.space_scope is None:
+        return True
+    try:
+        return session.path.parent == directory
+    except (OSError, ValueError, PermissionError):
+        return False
+
+
+def _write_session_index(updates=None, *, session_dir=None):
     """Update the session index file.
 
     When *updates* is provided (a list of Session objects whose compact
@@ -187,7 +196,9 @@ def _write_session_index(updates=None):
     disk/JSON work.  Multiple streams calling save() concurrently used to
     block each other for 50-200ms under LOCK; now LOCK is held for ~1ms.
     """
-    _index_file = _session_index_file()
+    directory = Path(session_dir) if session_dir is not None else get_session_dir()
+    _index_file = directory / '_index.json'
+    directory.mkdir(parents=True, exist_ok=True)
     _tmp = _index_file.with_suffix(f'.tmp.{os.getpid()}.{threading.current_thread().ident}')
 
     with _INDEX_WRITE_LOCK:
@@ -195,8 +206,9 @@ def _write_session_index(updates=None):
         _needs_full_rebuild = updates is None or not _index_file.exists()
 
         if _needs_full_rebuild:
-            _cleanup_stale_tmp_files()
-            _recover_stale_tmp_files()
+            if session_dir is None:
+                _cleanup_stale_tmp_files()
+                _recover_stale_tmp_files()
             # Snapshot the live stream registry once so index rows carry a
             # truthful is_streaming flag.  compact() defaults to
             # include_runtime=False, which made every row claim
@@ -205,11 +217,11 @@ def _write_session_index(updates=None):
             # cache for genuinely active chats (verified 2026-09-19).
             _live_stream_ids = _active_stream_ids()
             disk_entries = []
-            for p in get_session_dir().glob('*.json'):
+            for p in directory.glob('*.json'):
                 if p.name.startswith('_'):
                     continue
                 try:
-                    s = Session.load(p.stem)
+                    s = Session(**json.loads(p.read_text(encoding='utf-8'))) if session_dir is not None else Session.load(p.stem)
                     if s:
                         disk_entries.append(s.compact(include_runtime=True, active_stream_ids=_live_stream_ids))
                 except Exception:
@@ -219,6 +231,8 @@ def _write_session_index(updates=None):
             with LOCK:
                 existing_ids = {e.get('session_id') for e in disk_entries}
                 for s in SESSIONS.values():
+                    if not _belongs_to_session_index(s, directory, explicit=session_dir is not None):
+                        continue
                     if s.session_id not in existing_ids:
                         disk_entries.append(s.compact(include_runtime=True, active_stream_ids=_live_stream_ids))
                 # Snapshot for sorting outside lock
@@ -258,14 +272,15 @@ def _write_session_index(updates=None):
         # Filesystem scan — OUTSIDE LOCK
         on_disk_ids = {
             p.stem
-            for p in get_session_dir().glob('*.json')
+            for p in directory.glob('*.json')
             if not p.name.startswith('_')
         }
 
         # Fast LOCK: only dict operations
         _live_stream_ids = _active_stream_ids()
         with LOCK:
-            in_memory_ids = set(SESSIONS.keys())
+            in_memory_ids = {s.session_id for s in SESSIONS.values()
+                             if _belongs_to_session_index(s, directory, explicit=session_dir is not None)}
             existing = [
                 e for e in existing
                 if (e.get('session_id') in in_memory_ids or e.get('session_id') in on_disk_ids)
@@ -273,6 +288,7 @@ def _write_session_index(updates=None):
             updated_map = {
                 s.session_id: s.compact(include_runtime=True, active_stream_ids=_live_stream_ids)
                 for s in updates
+                if _belongs_to_session_index(s, directory, explicit=session_dir is not None)
             }
             existing_ids = {e.get('session_id') for e in existing}
             for sid, entry in updated_map.items():
@@ -302,7 +318,7 @@ def _write_session_index(updates=None):
             raise
 
     if _fallback:
-        _write_session_index(updates=None)
+        _write_session_index(updates=None, session_dir=session_dir)
 
 
 _MESSAGE_TAIL_INDEX_LIMIT = 32
@@ -777,10 +793,41 @@ class Session:
             # persisted storage owner untouched until a normal save path.
             self.goal_space_slug = self.workspace_slug
         self.agent_slug = kwargs.get('agent_slug') or None
+        self.session_kind = kwargs.get('session_kind') or None
+        self.quick_chat_id = kwargs.get('quick_chat_id') or None
+        # Runner ownership is explicit. A missing legacy SSE stream does not
+        # make a broker-owned workchat an orphaned visible-chat request.
+        self.independent = kwargs.get('independent') if isinstance(kwargs.get('independent'), dict) else None
+        self.space_scope = kwargs.get('space_scope') if isinstance(kwargs.get('space_scope'), dict) else None
+        self.space_profile_snapshot = kwargs.get('space_profile_snapshot') if isinstance(kwargs.get('space_profile_snapshot'), dict) else None
+        self.reasoning_selection = kwargs.get('reasoning_selection') if isinstance(kwargs.get('reasoning_selection'), dict) else None
+        self.chat_execution_mode = kwargs.get('chat_execution_mode')
+        self.chat_mode_requests = kwargs.get('chat_mode_requests')
+        self.grill_state = kwargs.get('grill_state')
+        self.grill_history = kwargs.get('grill_history')
+        self.child_parent_turns = kwargs.get('child_parent_turns')
         self._metadata_message_count = None
 
     @property
     def path(self):
+        if self.space_scope is not None:
+            from runtime.independent.contracts import Scope
+            from runtime.independent.scope import ScopeError, same_path
+            from web.api.independent import hub
+
+            actor = self.profile or 'default'
+            scope = Scope.model_validate(self.space_scope)
+            _, resolver = hub().by_scope(scope, actor)
+            resolved = resolver.resolve(scope, authenticated_profile_name=actor)
+            if not any(value and same_path(self.workspace, value)
+                       for value in (resolved.binding.workspace_locator, str(resolved.space_root))):
+                raise ScopeError('Native session workspace does not match its storage owner')
+            directory = Path(resolved.space.sessions_dir)
+            previous = getattr(self, '_native_session_directory', None)
+            if previous is not None and directory != previous:
+                raise ScopeError('Native session storage owner changed')
+            self._native_session_directory = directory
+            return directory / f'{self.session_id}.json'
         return get_session_dir() / f'{self.session_id}.json'
 
     def _legacy_session_path(self) -> Path | None:
@@ -795,6 +842,8 @@ class Session:
             return path
 
     def _sync_legacy_session_copy(self, payload: str) -> None:
+        if self.space_scope is not None:
+            return
         legacy_path = self._legacy_session_path()
         if not legacy_path:
             return
@@ -830,6 +879,8 @@ class Session:
                 pass
 
     def _sync_legacy_session_index(self) -> None:
+        if self.space_scope is not None:
+            return
         legacy_path = self._legacy_session_path()
         if not legacy_path:
             return
@@ -878,7 +929,7 @@ class Session:
         # field and recover the native storage owner from the current session
         # directory before applying the Space redirect below.
         _legacy_goal_slug = str(getattr(self, 'workspace_slug', '') or '').strip().lower()
-        if _legacy_goal_slug.startswith('lbws-'):
+        if self.space_scope is None and _legacy_goal_slug.startswith('lbws-'):
             self.goal_space_slug = self.goal_space_slug or _legacy_goal_slug
             try:
                 from web.api.space_engine import get_all_workspaces
@@ -900,7 +951,7 @@ class Session:
         # to space X's session dir.  This prevents cross-space contamination
         # of session files and keeps each space's _index.json accurate.
         _own_space_slug = getattr(self, 'workspace_slug', None)
-        if _own_space_slug:
+        if self.space_scope is None and _own_space_slug:
             try:
                 from web.api.space_engine import get_active_space_slug, get_space
                 _active_slug = get_active_space_slug()
@@ -924,7 +975,13 @@ class Session:
         # Fields are listed in the order they should appear in the JSON file.
         METADATA_FIELDS = [
             'session_id', 'title', 'workspace', 'model', 'model_provider', 'created_at', 'updated_at',
-            'pinned', 'archived', 'project_id', 'profile',
+            # Owner validation reads a bounded prefix. Keep these before any
+            # user prompt, interview history or other growing payload.
+            'profile', 'space_scope', 'space_profile_snapshot', 'independent',
+            'reasoning_selection',
+            'chat_execution_mode', 'chat_mode_requests',
+            'child_parent_turns',
+            'pinned', 'archived', 'project_id',
             'input_tokens', 'output_tokens', 'estimated_cost',
             'personality', 'active_stream_id',
             'pending_user_message', 'pending_attachments', 'pending_started_at',
@@ -939,6 +996,8 @@ class Session:
             'workspace_slug',
             'goal_space_slug',
             'agent_slug',
+            'session_kind', 'quick_chat_id',
+            'grill_state', 'grill_history',
         ]
         meta = {k: getattr(self, k, None) for k in METADATA_FIELDS}
         meta['messages'] = self.messages
@@ -971,7 +1030,7 @@ class Session:
                 # (observed 70 s session_lock_wait). The index is updated on
                 # every save, so its count matches the file on disk; fall
                 # back to the full read only when the index has no entry.
-                existing_msg_count = _lookup_index_message_count(self.session_id)
+                existing_msg_count = _lookup_index_message_count(self.session_id) if self.space_scope is None else None
                 if existing_msg_count is None:
                     existing_text = self.path.read_text(encoding='utf-8')
                     try:
@@ -1031,7 +1090,7 @@ class Session:
         _write_message_tail_index(self.path, payload, self.messages)
         self._sync_legacy_session_copy(payload)
         if not skip_index:
-            _write_session_index(updates=[self])
+            _write_session_index(updates=[self], session_dir=self.path.parent if self.space_scope is not None else None)
             self._sync_legacy_session_index()
 
     @classmethod
@@ -1128,6 +1187,8 @@ class Session:
             'workspace': self.workspace,
             'model': self.model,
             'model_provider': self.model_provider,
+            'reasoning_selection': self.reasoning_selection,
+            'chat_execution_mode': self.chat_execution_mode,
             'message_count': message_count,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
@@ -1168,9 +1229,13 @@ class Session:
             'raw_source': self.raw_source,
             'session_source': self.session_source,
             'source_label': self.source_label,
+            'session_kind': self.session_kind,
             'workspace_slug': self.workspace_slug,
             'goal_space_slug': self.goal_space_slug,
             'agent_slug': self.agent_slug,
+            **({'independent': self.independent} if self.independent else {}),
+            **({'space_scope': self.space_scope, 'space_profile_snapshot': self.space_profile_snapshot} if self.space_scope else {}),
+            **({'grill_state': self.grill_state} if self.grill_state is not None else {}),
             'enabled_toolsets': self.enabled_toolsets,
             'composer_draft': self.composer_draft if isinstance(self.composer_draft, dict) else {},
             'is_streaming': _is_streaming_session(
@@ -1474,7 +1539,7 @@ def get_session(sid, metadata_only=False):
         return s
     raise KeyError(sid)
 
-def new_session(workspace=None, model=None, profile=None, model_provider=None, project_id=None, worktree_info=None, agent_slug=None, workspace_slug=None, goal_space_slug=None):
+def new_session(workspace=None, model=None, profile=None, model_provider=None, project_id=None, worktree_info=None, agent_slug=None, workspace_slug=None, goal_space_slug=None, title=None, *, space_scope=None, space_profile_snapshot=None):
     """Create a new in-memory session.
 
     The session lives in the SESSIONS dict only — no disk write happens until
@@ -1539,6 +1604,7 @@ def new_session(workspace=None, model=None, profile=None, model_provider=None, p
     except Exception:
         pass
     s = Session(
+        title=str(title).strip() if title else DEFAULT_SESSION_TITLE,
         workspace=workspace_path or get_last_workspace(),
         model=effective_model,
         model_provider=effective_provider,
@@ -1551,6 +1617,8 @@ def new_session(workspace=None, model=None, profile=None, model_provider=None, p
         workspace_slug=_ws_slug,
         goal_space_slug=goal_space_slug,
         agent_slug=agent_slug,
+        space_scope=space_scope,
+        space_profile_snapshot=space_profile_snapshot,
     )
     with LOCK:
         SESSIONS[s.session_id] = s
@@ -1558,7 +1626,7 @@ def new_session(workspace=None, model=None, profile=None, model_provider=None, p
         while len(SESSIONS) > SESSIONS_MAX:
             SESSIONS.popitem(last=False)
     _SESSION_LIST_CACHE.clear()
-    if wt:
+    if wt or (title and not is_default_session_title(title)):
         s.save()
     return s
 
@@ -1643,6 +1711,10 @@ def all_sessions(diag=None):
                 _SESSION_INDEX_PRUNE_AT[session_dir] = now
             backfilled = []
             for i, s in enumerate(index):
+                # Private Quickchat transcripts are intentionally excluded from
+                # the ordinary chat list, including stale/older compact indexes.
+                if s.get('session_kind') == 'quickchat' or s.get('quick_chat_id'):
+                    continue
                 if 'last_message_at' not in s:
                     _diag_stage(diag, "all_sessions.backfill_load")
                     full = Session.load(s.get('session_id'))
@@ -1667,12 +1739,16 @@ def all_sessions(diag=None):
             with LOCK:
                 in_memory_ids = set(SESSIONS.keys())
                 for s in SESSIONS.values():
+                    if getattr(s, 'session_kind', None) == 'quickchat' or getattr(s, 'quick_chat_id', None):
+                        index_map.pop(s.session_id, None)
+                        continue
                     index_map[s.session_id] = s.compact(
                         include_runtime=True,
                         active_stream_ids=active_stream_ids,
                     )
             _diag_stage(diag, "all_sessions.sort_filter")
-            result = sorted(index_map.values(), key=lambda s: (s.get('pinned', False), _session_sort_timestamp(s)), reverse=True)
+            result = sorted((s for s in index_map.values() if s.get('session_kind') != 'quickchat'),
+                            key=lambda s: (s.get('pinned', False), _session_sort_timestamp(s)), reverse=True)
             # Hide empty default-title sessions from the UI entirely — they are ephemeral
             # scratch pads that only become real once the first message is sent (#1171).
             # Exception: recent in-memory sessions (< 300s) are retained so new chats don't disappear before the first message.
@@ -1723,6 +1799,8 @@ def all_sessions(diag=None):
     for s in in_memory_sessions:
         if all(s.session_id != x.session_id for x in out): out.append(s)
     _diag_stage(diag, "all_sessions.full_scan_sort_filter")
+    out = [s for s in out if getattr(s, 'session_kind', None) != 'quickchat'
+           and not getattr(s, 'quick_chat_id', None)]
     out.sort(key=lambda s: (getattr(s, 'pinned', False), _session_sort_timestamp(s)), reverse=True)
     # Hide empty default-title sessions from the UI entirely — kept consistent with the
     # index-path filter above. Exception: recent in-memory sessions (< 300s) are retained.

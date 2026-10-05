@@ -938,7 +938,7 @@ export function ModernTitlebar({
         {topbarActionStrip}
         {children}
 
-        {onTriggerSummarize && (
+        {onTriggerSummarize && !topbarActionStrip && (
           <button
             type="button"
             className="titlebar-summarize-btn"

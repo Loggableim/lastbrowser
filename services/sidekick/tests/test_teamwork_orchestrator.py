@@ -23,6 +23,7 @@ from runtime.teamwork_orchestrator import (
     run_teamwork_turn,
     _scaled_worker_target,
     _invoke_worker,
+    _safe_teamwork_rpc_failure_code,
 )
 
 
@@ -42,6 +43,18 @@ def test_classify_model_tier():
     assert classify_model_tier("llama3.2:3b") == "fast"
     assert classify_model_tier("gemini-2.5-flash") == "balanced"
     assert classify_model_tier("qwen2.5-coder:14b") == "balanced"
+
+
+def test_teamwork_rpc_diagnostics_expose_only_allowlisted_internal_codes():
+    from runtime.independent.worker_host import WorkerError
+
+    assert _safe_teamwork_rpc_failure_code(
+        WorkerError("native_chat_rpc_denied_native_teamwork_claim_contract_mismatch")
+    ) == "native_teamwork_claim_contract_mismatch"
+    assert _safe_teamwork_rpc_failure_code(
+        WorkerError("native_chat_rpc_denied_api_key_secret")
+    ) is None
+    assert _safe_teamwork_rpc_failure_code(RuntimeError("https://private.example/token")) is None
 
 
 def test_evaluate_task_complexity():
@@ -151,7 +164,7 @@ def test_resolve_team_plan():
         assert len(set(perspectives)) == len(perspectives)
 
 
-def test_auto_scaled_plan_uses_cap_eight_and_honors_planner_override():
+def test_auto_scaled_plan_respects_turn_budget_cap_and_honors_planner_override():
     mock_pool = [
         {"id": f"model-{i}", "name": f"Model {i}", "provider": f"provider-{i}", "tier": "balanced"}
         for i in range(8)
@@ -162,7 +175,7 @@ def test_auto_scaled_plan_uses_cap_eight_and_honors_planner_override():
             "strategy": "balanced", "auto_scale": True, "max_subagents": 8,
             "roles": {"planner": "model-7"},
         })
-    assert len(plan["workers"]) == 8
+    assert len(plan["workers"]) == 4
     assert plan["planner"]["id"] == "model-7"
 
 
@@ -187,8 +200,10 @@ def test_teamwork_plan_deduplicates_manual_workers_and_falls_back_from_removed_r
     assert plan["planner"]["id"] in {"available-a", "available-b"}
     assert plan["critic"] in {"available-a", "available-b"}
     assert plan["critic_provider"] in {"ollama", "openrouter"}
-    assert plan["synthesizer"] == plan["critic"]
-    assert plan["synthesizer_provider"] == plan["critic_provider"]
+    # Prefer a different model/provider for synthesis when the live eligible
+    # pool supports it; with one manually eligible worker, reuse is expected.
+    assert plan["synthesizer"] in {"available-a", "available-b"}
+    assert plan["synthesizer_provider"] in {"ollama", "openrouter"}
 
 
 def test_worker_reports_hot_swap_even_when_every_candidate_fails():
@@ -320,7 +335,7 @@ def test_teamwork_cancellation_does_not_wait_for_blocked_worker():
 
     def run():
         try:
-            with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[model]), \
+            with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[model, {"id": "model-b", "name": "B", "provider": "mock-b", "tier": "balanced"}]), \
                  patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
                  patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="answer"):
                 run_teamwork_turn(
@@ -770,7 +785,7 @@ def test_teamwork_fails_clearly_when_no_models_are_available():
 
 def test_teamwork_zero_quorum_cannot_succeed_without_any_worker_draft():
     model = {"id": "model-a", "name": "A", "provider": "mock", "tier": "balanced"}
-    with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[model]), \
+    with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[model, {"id": "model-b", "name": "B", "provider": "mock-b", "tier": "balanced"}]), \
          patch("runtime.auxiliary_client.call_llm", side_effect=RuntimeError("provider offline")):
         with pytest.raises(RuntimeError, match="kein Lösungsentwurf"):
             run_teamwork_turn(
@@ -821,7 +836,7 @@ def test_teamwork_only_uses_browser_grounding_when_setting_is_enabled(shared_gro
         response.choices[0].message.content = "mock answer"
         return response
 
-    with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[model]), \
+    with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[model, {"id": "model-b", "name": "B", "provider": "mock-b", "tier": "balanced"}]), \
          patch("runtime.auxiliary_client.call_llm", side_effect=fake_call_llm), \
          patch("runtime.auxiliary_client.extract_content_or_reasoning", return_value="mock answer"):
         run_teamwork_turn(
@@ -1129,3 +1144,97 @@ def test_teamwork_synthesis_never_replaces_visible_partial_output(visible_output
     assert [data["text"] for event, data in events if event == "reasoning"] == (
         ["partial synthesis reasoning"] if visible_output == "reasoning" else []
     )
+
+
+def test_teamwork_config_cache_isolated_per_named_profile(tmp_path, monkeypatch):
+    from runtime import teamwork_orchestrator as orchestrator
+    from web.api import profiles
+
+    homes = {name: tmp_path / name for name in ("default", "alpha", "beta")}
+    for home in homes.values():
+        home.mkdir()
+    (homes["default"] / "teamwork.json").write_text('{"strategy":"cost"}', encoding="utf-8")
+    (homes["beta"] / "teamwork.json").write_text('{"strategy":"quality"}', encoding="utf-8")
+    monkeypatch.setattr(profiles, "get_profile_home", lambda name: homes.get(name, homes["default"]))
+    monkeypatch.setattr(profiles, "get_active_profile_home", lambda: homes["default"])
+    orchestrator._CACHED_CONFIG = None
+
+    assert load_teamwork_config(profile_name="default")["strategy"] == "cost"
+    assert load_teamwork_config(profile_name="beta")["strategy"] == "quality"
+    assert load_teamwork_config(profile_name="alpha")["strategy"] == "balanced"
+    save_teamwork_config({"strategy": "quality"}, profile_name="alpha")
+
+    assert load_teamwork_config(profile_name="default")["strategy"] == "cost"
+    assert load_teamwork_config(profile_name="beta")["strategy"] == "quality"
+    assert load_teamwork_config(profile_name="alpha")["strategy"] == "quality"
+    assert json.loads((homes["default"] / "teamwork.json").read_text(encoding="utf-8"))["strategy"] == "cost"
+    assert get_teamwork_config_path("alpha") == homes["alpha"] / "teamwork.json"
+
+
+def test_teamwork_pool_keeps_same_model_from_different_connected_providers_and_unknown_limits(monkeypatch):
+    from runtime import teamwork_orchestrator as orchestrator
+    from web.api import config
+
+    observed_profiles = []
+    monkeypatch.setattr(config, "get_available_models", lambda: (
+        observed_profiles.append(__import__("web.api.profiles", fromlist=["get_active_profile_name"]).get_active_profile_name())
+        or {"groups": [
+            {"provider_id": "openai", "provider": "OpenAI", "models": [{"id": "shared-model"}]},
+            {"provider_id": "gemini-router", "provider": "Gemini", "models": [{"id": "shared-model", "context_window": 8192}]},
+        ]}
+    ))
+    pool = orchestrator.get_teamwork_model_pool(profile_name="alpha")
+
+    assert [(row["provider"], row["id"]) for row in pool] == [
+        ("openai", "shared-model"), ("gemini-router", "shared-model")
+    ]
+    assert "context_window" not in pool[0]
+    assert pool[1]["context_window"] == 8192
+    assert observed_profiles == ["alpha"]
+
+
+def test_single_connected_provider_uses_one_bounded_stream_without_team_escalation():
+    model = {"id": "gemini-2.5-flash", "call_model": "gemini-2.5-flash", "name": "Gemini Flash", "provider": "gemini-router", "tier": "balanced"}
+    events = []
+    session = MagicMock()
+    session.profile = "fixture"
+    session.session_id = "fixture-session"
+    session.active_stream_id = "fixture-stream"
+    session.messages = []
+
+    def fake_stream_llm(*, on_content, max_tokens, **kwargs):
+        assert max_tokens == 768
+        on_content("Local fixture answer")
+        return "Local fixture answer"
+
+    with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=[model]), \
+         patch("runtime.auxiliary_client.call_llm") as call_llm, \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=fake_stream_llm):
+        result = run_teamwork_turn(session, "Answer this", config={"enabled": True, "shared_grounding": False},
+                                   stream_put=lambda name, data: events.append((name, data)))
+
+    call_llm.assert_not_called()
+    assert result["metadata"]["mode"] == "single_provider_reduced"
+    assert result["metadata"]["budget"] == {
+        "requests_reserved": 1, "requests_limit": 8,
+        "output_tokens_reserved": 768, "output_tokens_limit": 4096,
+    }
+    assert result["content"] == "Local fixture answer"
+    assert [name for name, _data in events if name == "teamwork_complete"] == ["teamwork_complete"]
+
+
+def test_teamwork_request_budget_is_thread_safe_and_enforced_before_dispatch():
+    from concurrent.futures import ThreadPoolExecutor
+    from runtime.teamwork_orchestrator import _TeamworkCallBudget
+
+    budget = _TeamworkCallBudget()
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        outcomes = list(executor.map(lambda _index: budget.reserve(128), range(32)))
+    assert sum(outcomes) == 8
+    assert budget.snapshot() == {
+        "requests_reserved": 8, "requests_limit": 8,
+        "output_tokens_reserved": 1024, "output_tokens_limit": 4096,
+    }
+    token_budget = _TeamworkCallBudget()
+    assert token_budget.reserve(4096)
+    assert not token_budget.reserve(1)

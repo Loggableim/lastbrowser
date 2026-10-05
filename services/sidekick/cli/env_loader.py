@@ -153,6 +153,11 @@ def load_sidekick_dotenv(
       the user env exists.
     - if no user env exists, the project `.env` also overrides stale shell vars.
     """
+    if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1" or os.getenv("LASTBROWSER_INDEPENDENT_WORKER") == "1":
+        # The Parent already parsed and allowlisted this exact profile's env.
+        # Reloading could overwrite immutable Home/bridge bindings, sanitize
+        # the user's file, or pull a project/shared-root fallback into a worker.
+        return []
     loaded: list[Path] = []
 
     home_path = Path(sidekick_home or get_sidekick_home())

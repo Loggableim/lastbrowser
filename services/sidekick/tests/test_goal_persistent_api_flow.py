@@ -8,6 +8,8 @@ def test_goal_scope_survives_stream_resume_clear_and_cache_reload(monkeypatch, t
     from web.api import goals, routes
 
     monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
+    from web.api import turn_journal
+    monkeypatch.setattr(turn_journal, "_default_session_dir", lambda: tmp_path / "sessions")
     monkeypatch.setattr(goals, "_DB_CACHE", dict(goals._DB_CACHE))
     monkeypatch.setattr(routes, "STREAMS", dict(routes.STREAMS))
     monkeypatch.setattr(routes, "STREAM_GOAL_RELATED", dict(routes.STREAM_GOAL_RELATED))

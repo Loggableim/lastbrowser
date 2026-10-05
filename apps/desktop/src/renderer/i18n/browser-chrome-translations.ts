@@ -1,4 +1,4 @@
-import type { DesktopCatalog, DesktopLocaleId } from './keys.js';
+import type { DesktopCatalog, LegacyDesktopLocaleId as DesktopLocaleId } from './keys.js';
 
 export const browserChromeTranslations: Record<string, Partial<DesktopCatalog>> = {
   en: {

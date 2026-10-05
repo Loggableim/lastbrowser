@@ -44,7 +44,7 @@ import { useChatStore } from '../stores/useChatStore.js';
 import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
-import { loadChatReasoningEffort, normalizeReasoningEfforts, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
+import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
 
 export interface AvailableModelItem {
@@ -112,6 +112,9 @@ export interface CopilotSplitViewProps {
   modelProvider?: string;
   messages: DesktopChatMessage[];
   busy: boolean;
+  error?: string;
+  allowWorkflows?: boolean;
+  onSwitchToSpaceAssistant?: () => void;
   onSendMessage: (text: string, reasoningEffort?: string) => void;
   onStopChat?: () => void;
   activeUrl?: string;
@@ -122,6 +125,9 @@ export interface CopilotSplitViewProps {
   onNewChat?: () => void;
   sessions?: DesktopSessionSummary[];
   activeSessionId?: string | null;
+  browserProfileId: string;
+  workspacePath: string | null;
+  backendProfileName?: string | null;
   onSelectSession?: (sessionId: string) => void;
   onOpenSettings?: (section?: string) => void;
 }
@@ -135,6 +141,9 @@ export function CopilotSplitView({
   modelProvider,
   messages,
   busy,
+  error,
+  allowWorkflows = true,
+  onSwitchToSpaceAssistant,
   onSendMessage,
   onStopChat,
   activeUrl,
@@ -145,6 +154,9 @@ export function CopilotSplitView({
   onNewChat,
   sessions = [],
   activeSessionId = null,
+  browserProfileId,
+  workspacePath,
+  backendProfileName,
   onSelectSession,
   onOpenSettings
 }: CopilotSplitViewProps): React.JSX.Element | null {
@@ -170,18 +182,29 @@ export function CopilotSplitView({
   // Provider models are selectable only after the live backend catalog returns them.
   const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS);
   const [modelCapabilitiesLoaded, setModelCapabilitiesLoaded] = useState(false);
-  const [teamworkEnabled, setTeamworkEnabled] = useState(true);
+  const [teamworkEnabled, setTeamworkEnabled] = useState(false);
   const [smartTrackEnabled, setSmartTrackEnabled] = useState(true);
+  const orchestrationScope = useMemo(() => ({ browserProfileId, workspacePath,
+    ...(backendProfileName ? { backendProfileName } : {}) }), [browserProfileId, workspacePath, backendProfileName]);
+  const orchestrationScopeKey = JSON.stringify(orchestrationScope);
+  const orchestrationScopeKeyRef = useRef(orchestrationScopeKey);
+  const orchestrationScopeGenerationRef = useRef(0);
+  if (orchestrationScopeKeyRef.current !== orchestrationScopeKey) {
+    orchestrationScopeKeyRef.current = orchestrationScopeKey;
+    orchestrationScopeGenerationRef.current += 1;
+  }
 
   useEffect(() => {
     let alive = true;
+    const generation = orchestrationScopeGenerationRef.current;
+    setTeamworkEnabled(false);
     const loadOrchestrationAvailability = async () => {
       try {
         const [teamwork, smartTrack] = await Promise.all([
-          window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/config' }),
+          backendProfileName ? window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/config', scopeSelection: orchestrationScope }) : Promise.resolve(null),
           window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/smart-track/config' })
         ]);
-        if (!alive) return;
+        if (!alive || generation !== orchestrationScopeGenerationRef.current || orchestrationScopeKeyRef.current !== orchestrationScopeKey) return;
         if (teamwork && typeof teamwork === 'object' && typeof (teamwork as any).enabled === 'boolean') {
           setTeamworkEnabled((teamwork as any).enabled);
         }
@@ -189,7 +212,7 @@ export function CopilotSplitView({
           setSmartTrackEnabled((smartTrack as any).enabled);
         }
       } catch {
-        // Older runtimes may not expose orchestration config endpoints; keep the built-in options available.
+        // Teamwork remains unavailable until this exact profile scope confirms it is enabled.
       }
     };
     const handleConfigUpdated = () => { void loadOrchestrationAvailability(); };
@@ -199,7 +222,7 @@ export function CopilotSplitView({
       alive = false;
       window.removeEventListener('lastbrowser:orchestration-config-updated', handleConfigUpdated);
     };
-  }, []);
+  }, [orchestrationScope, orchestrationScopeKey, backendProfileName]);
 
   // Phase 13.6: Dynamic live discovery via /api/models with quota status
   useEffect(() => {
@@ -354,10 +377,12 @@ export function CopilotSplitView({
       }
     );
   }, [activeModelId, activeModelProvider, visibleModelList]);
-  const reasoningEfforts = activeModelItem.reasoningEfforts || [];
-  const effectiveReasoningEffort = reasoningEfforts.includes(reasoningEffort) ? reasoningEffort : '';
+  const reasoningModel = resolveReasoningModel(activeModelId, activeModelProvider,
+    visibleModelList.map(item => ({ providerId: item.providerId || '', models: [item] })));
+  const reasoningEfforts = reasoningModel?.reasoningEfforts || [];
+  const effectiveReasoningEffort = modelCapabilitiesLoaded && reasoningEfforts.includes(reasoningEffort) ? reasoningEffort : '';
   useEffect(() => {
-    if (modelCapabilitiesLoaded && reasoningEffort && !reasoningEfforts.includes(reasoningEffort)) {
+    if (modelCapabilitiesLoaded && reasoningEfforts.length && reasoningEffort && !reasoningEfforts.includes(reasoningEffort)) {
       setReasoningEffort('');
       saveChatReasoningEffort(reasoningPreferenceKey, '', window.localStorage);
     }
@@ -647,6 +672,13 @@ export function CopilotSplitView({
           <span className="copilot-header-title">{botName} AI</span>
         </div>
         <div className="copilot-header-actions">
+          {onSwitchToSpaceAssistant && <button
+            type="button"
+            className="copilot-action-btn copilot-mode-switch"
+            aria-label={t('spaceAssistant.switchToAssistant')}
+            title={t('spaceAssistant.switchToAssistant')}
+            onClick={onSwitchToSpaceAssistant}
+          ><span>{t('spaceAssistant.switchToAssistant')}</span></button>}
           {/* Universal Model Picker in Header */}
           <div className="copilot-header-model-wrapper" ref={modelPickerRef} style={{ position: 'relative' }}>
             <button
@@ -680,7 +712,7 @@ export function CopilotSplitView({
           )}
 
           {/* Workflows Button */}
-          <div className="copilot-workflows-wrapper" ref={workflowDropdownRef} style={{ position: 'relative' }}>
+          {allowWorkflows && <div className="copilot-workflows-wrapper" ref={workflowDropdownRef} style={{ position: 'relative' }}>
             <button
               type="button"
               className={`copilot-workflows-btn ${workflowsMenuOpen ? 'active' : ''}`}
@@ -782,7 +814,7 @@ export function CopilotSplitView({
               </div>
             </div>
           )}
-          </div>
+          </div>}
 
           {/* New Chat Button */}
           {onNewChat && (
@@ -909,6 +941,7 @@ export function CopilotSplitView({
       <div className="copilot-messages-container" ref={scrollRef}>
         {messages.length === 0 ? (
           <div className="copilot-empty-state">
+            {error && <div className="copilot-stream-error" role="alert">{error}</div>}
             <div className="copilot-empty-icon">
               <img src={brandAssets.sidekickAvatar} alt={botName} className="copilot-empty-avatar" draggable={false} />
             </div>
@@ -933,6 +966,7 @@ export function CopilotSplitView({
           </div>
         ) : (
           <div className="copilot-messages-list">
+            {error && <div className="copilot-stream-error" role="alert">{error}</div>}
             {messages.map((msg, index) => {
               const isUser = msg.role === 'user';
               const isAssistant = msg.role === 'assistant';
@@ -977,7 +1011,7 @@ export function CopilotSplitView({
                       {isAssistant ? (
                         <RichTextRenderer content={msg.content || ''} text={msg.content || ''} />
                       ) : (
-                        renderMessageContent(msg.content || '', index)
+                        <RichTextRenderer content={msg.content || ''} />
                       )}
                     </div>
 
@@ -1062,6 +1096,7 @@ export function CopilotSplitView({
           <ReasoningEffortPicker
             value={effectiveReasoningEffort}
             efforts={reasoningEfforts}
+            capabilityState={modelCapabilitiesLoaded ? reasoningEfforts.length ? 'ready' : 'unknown' : 'loading'}
             disabled={busy}
             onChange={handleReasoningEffortChange}
           />

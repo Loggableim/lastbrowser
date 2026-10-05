@@ -1,6 +1,25 @@
 # Lastbrowser – Microsoft Store Submission Package & Listing Guide
 
-Dieses Dokument bündelt alle verbindlichen Metadaten, mehrsprachigen Texte, rechtlichen Angaben, Screenshot-Vorgaben und Leitfäden für das **Microsoft Partner Center** zur Veröffentlichung von **Lastbrowser** als unpaketierte Win32-Desktop-Anwendung (NSIS).
+Dieses Dokument bündelt vorbereitete Metadaten, mehrsprachige Textentwürfe, Screenshot-Vorgaben und Leitfäden für das **Microsoft Partner Center** zur Veröffentlichung von **Lastbrowser** als unpaketierte Win32-Desktop-Anwendung (NSIS).
+
+**Vorbereitung, noch keine Einreichungsfreigabe:** Die erste Store-Version wartet auf den bestätigten Abschluss des Chats **„Multiagent Umsetzung“** und die anschließenden Prüfungen des gemeinsamen Quellstands. Konto-Onboarding, Paketnachweise und Freigabereihenfolge stehen in [store-submission-preparation.md](store-submission-preparation.md). Die Texte unten sind Entwürfe und müssen zu den tatsächlich geprüften Funktionen der endgültigen Version passen.
+
+**Aktuelle Textentwürfe:** [listing-drafts.json](../assets/store/listing-drafts.json) enthält vollständige Beschreibungen, Kurzbeschreibungen, Produktmerkmale, Suchbegriffe, Hinweise zur ersten Store-Version und Lizenztexte für alle acht App-Sprachen. Der Nutzer hat bestätigt: persönliche Nutzung kostenlos, gewerbliche Nutzung mit separater kommerzieller Lizenz. Diese Texte ersetzen die unbestätigten Leistungsversprechen des historischen Entwurfs unten. Ein [PNG-Hauptlogo mit 1080×1080 Pixeln](../assets/store/store-logo-1080.png), ein [Poster mit 1440×2160 Pixeln](../assets/store/store-poster-1440x2160.png) und [232 echte App-Aufnahmen](../assets/store/screenshots/index.html) sind vorbereitet. Die Bilder zeigen den laufenden Entwicklungsstand und werden vor der Freigabe erneut abgeglichen.
+
+| App-Sprache | Store-Sprache | Kopierbarer Text |
+| :--- | :--- | :--- |
+| Deutsch (`de`) | Deutsch (Deutschland), `de-DE` | [de-DE.txt](../assets/store/listings/de-DE.txt) |
+| Englisch (`en`) | Englisch (Vereinigte Staaten), `en-US` | [en-US.txt](../assets/store/listings/en-US.txt) |
+| Italienisch (`it`) | Italienisch (Italien), `it-IT` | [it-IT.txt](../assets/store/listings/it-IT.txt) |
+| Spanisch (`es`) | Spanisch (Spanien), `es-ES` | [es-ES.txt](../assets/store/listings/es-ES.txt) |
+| Französisch (`fr`) | Französisch (Frankreich), `fr-FR` | [fr-FR.txt](../assets/store/listings/fr-FR.txt) |
+| Portugiesisch (`pt-BR`) | Portugiesisch (Brasilien), `pt-BR` | [pt-BR.txt](../assets/store/listings/pt-BR.txt) |
+| Russisch (`ru`) | Russisch (Russland), `ru-RU` | [ru-RU.txt](../assets/store/listings/ru-RU.txt) |
+| Japanisch (`ja`) | Japanisch (Japan), `ja-JP` | [ja-JP.txt](../assets/store/listings/ja-JP.txt) |
+
+Alle acht Spracheinträge sind im Partner Center gespeichert und zeigen **Abgeschlossen** (4. Oktober 2026). Jeder enthält seine Texte, vier echte Screenshots, das Hauptlogo und das Poster. Die Logos für Italienisch, Portugiesisch, Russisch und Japanisch wurden neu hochgeladen und gespeichert. **Alle acht Logos laden in der frisch geöffneten Übersicht sichtbar mit 1080×1080 Pixeln.** Die zuvor geöffnete Seitensitzung verwendete weiterhin einen anderen regionalen Microsoft-Bildserver und zeigte defekte Bilder. Der offene Tab wurde auf die erfolgreich geprüfte Seitensitzung umgestellt. Die Ursache dieses Vorschauverhaltens ist nicht abschließend bestätigt; vor der Freigabe nochmals prüfen. **Es wurde nicht auf Senden geklickt.** Die Freigabesperre bleibt bestehen. Für einen späteren CSV-Import nur Microsofts exportierte Feldstruktur mit referenzierten Bilddateien verwenden; JSON und TXT sind interne Vorbereitung. [Offizielle Importanleitung](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/import-and-export-store-listings).
+
+**Historischer Entwurf ab Abschnitt 2:** Die folgenden ausführlichen Texte und Versionsnotizen sind kein aktueller Einreichungstext. Für das erste Listing sind die oben verlinkten acht Textdateien maßgeblich; alle Funktionsangaben werden nochmals am fertigen Release geprüft. Vorgehen und Grenzen des automatisierten Aufnahmelaufs stehen in [store-screenshot-capture.md](store-screenshot-capture.md).
 
 ---
 
@@ -8,19 +27,19 @@ Dieses Dokument bündelt alle verbindlichen Metadaten, mehrsprachigen Texte, rec
 
 | Parameter | Wert | Hinweise |
 | :--- | :--- | :--- |
-| **Produktname** | `Lastbrowser` | Im Partner Center reserviert |
+| **Produktname** | `Lastbrowser` | Im Partner Center als EXE/MSI-App reserviert; Einreichung bleibt Entwurf |
 | **Paket-Typ** | `Windows-Desktopanwendung (Installationsprogramm)` | Unpackaged Win32 / NSIS |
-| **Installations-URL** | `https://github.com/Loggableim/lastbrowser/releases/download/v0.1.31/Lastbrowser-0.1.31-x64-setup.exe` | Direkter Link zum GitHub Release Asset |
+| **Installations-URL** | Nach dem endgültigen signierten Build auszufüllen | Unveränderlicher, versionsgebundener HTTPS-Link zum geprüften Setup; bisherige Releases sind kein Store-Freigabenachweis |
 | **Silent Install Argument** | `/S` | NSIS Silent-Switch für automatische WACK-Installation |
 | **Silent Uninstall Argument** | `/S` | NSIS Silent-Switch (gesichert gegen Dialog-Timeouts) |
 | **Erfolgs-Exit-Code** | `0` | Standard Windows Exit Code |
 | **Architektur** | `x64` | 64-Bit Windows |
-| **Mindest-Betriebssystem** | `Windows 10 Version 1809 (Build 17763) oder höher` / `Windows 11` | |
+| **Mindest-Betriebssystem** | Vor der Einreichung anhand des endgültigen Pakets zu bestätigen | Sauberes Windows-Testsystem und tatsächlich verwendete Electron-/Python-Version berücksichtigen |
 | **Kategorie** | `Produktivität` / `Dienstprogramme & Tools` &rsaquo; `Web-Browser` | |
 | **Datenschutz-URL** | `https://lastbrowser.com/privacy/` | Pflichtangabe für Store-Zertifizierung |
 | **Support-URL** | `https://lastbrowser.com/support/` | Support-Portal & FAQ |
 | **Support-E-Mail** | `support@lastbrowser.com` | |
-| **Copyright-Hinweis** | `© 2026 Dominik Rainer / Lastbrowser Project` | |
+| **Copyright-Hinweis** | `© 2026 Dominik Rainer / Lastbrowser.com` | |
 
 ---
 
@@ -35,7 +54,7 @@ Dieses Dokument bündelt alle verbindlichen Metadaten, mehrsprachigen Texte, rec
 ```markdown
 Lastbrowser ist die nächste Evolution des Web-Browsers für Windows: Ein ultraschneller, ressourcenschonender Chromium-Browser, der eine moderne, anpassbare Zen-Benutzeroberfläche mit einem tief integrierten, autonomen KI-Arbeitsbereich vereint. 
 
-Entwickelt nach dem konsequenten Local-First-Prinzip: Ihre Surf-Historie, Tabs, Sitzungen, Passwörter und privaten Daten verbleiben zu 100 % auf Ihrem Computer. Keine verdeckte Telemetrie, kein Cloud-Zwang.
+Entwickelt nach dem Local-First-Prinzip: Browserprofile werden lokal gespeichert. Bei Nutzung externer KI-Anbieter werden Ihre Anfragen und der für die Aufgabe bereitgestellte Kontext an den gewählten Anbieter gesendet. Lokale Modelle können ohne Cloud-Anbindung verwendet werden.
 
 KERNFEATURES:
 
@@ -54,7 +73,7 @@ KERNFEATURES:
 • Echtes ConPTY Pseudo-Terminal: Integriertes Windows-Terminal direkt in der Sidebar – nahtloser Wechsel zwischen nativer PowerShell und Sidekick TUI.
 • Universal Command Palette (Ctrl+K): Spotlight-Navigation für schnellen Zugriff auf alle Tabs, Lesezeichen, Workspaces und Browser-Operationen.
 • WebExtensions Store (Manifest V3): Unterstützung moderner Erweiterungen wie Dark Reader, uBlock Origin Lite, Bitwarden und ClearURLs – inklusive Entwickler-Modus für entpackte Add-ons.
-• Automatisches Tab-Discarding: Smartes Entladen inaktiver Hintergrund-Tabs spart bis zu 1,5 GB RAM.
+• Automatisches Tab-Discarding: Inaktive Hintergrund-Tabs können entladen werden, um Arbeitsspeicher freizugeben.
 
 🛡️ Datenschutz, Privatsphäre & Sicherheit
 • 100 % Local-First: Speicherung in %APPDATA%\Lastbrowser ohne zentrale Cloud-Server.
@@ -97,7 +116,7 @@ Das Microsoft Partner Center erlaubt bis zu 7 Suchbegriffe. Diese 7 optimierten 
 ```markdown
 Lastbrowser is the next evolution of the web browser for Windows: an ultra-fast, resource-efficient Chromium browser that synthesizes a sleek, collapsible Zen user interface with a deeply integrated, autonomous AI workspace.
 
-Built with an uncompromising Local-First philosophy: your browsing history, tabs, sessions, passwords, and private workspace data reside 100% locally on your computer. Zero involuntary telemetry, zero forced cloud lock-in.
+Built with a Local-First approach: browser profiles are stored locally. External AI services receive your requests and the context supplied for the task. Local models can be used without a cloud connection.
 
 KEY CAPABILITIES:
 
@@ -116,7 +135,7 @@ KEY CAPABILITIES:
 • Native ConPTY Terminal: Built-in pseudo-terminal supporting PowerShell and Sidekick Curses/TUI directly within the sidebar.
 • Universal Command Palette (Ctrl+K): Raycast/Spotlight-style navigation across open tabs, history, workspaces, and system tools.
 • WebExtensions Store (Manifest V3): Full support for modern Chrome extensions including Dark Reader, uBlock Origin Lite, Bitwarden, and ClearURLs, plus unpacked developer loading.
-• Smart Tab Discarding: Intelligently frees RAM from dormant background tabs, saving up to 1.5 GB of memory.
+• Smart Tab Discarding: Inactive background tabs can be unloaded to free memory.
 
 🛡️ Privacy & Security First
 • 100% Local-First: All profile databases reside strictly in %APPDATA%\Lastbrowser.
@@ -150,7 +169,7 @@ The Microsoft Partner Center allows up to 7 search keywords. Use these 7 optimiz
 
 ## 4. Spezifikation der 6 Store-Screenshots (1920×1080 Pixel / 16:9)
 
-Microsoft verlangt mindestens 1 und empfiehlt bis zu 10 Screenshots im PNG- oder JPEG-Format ohne Alpha-Kanal im Format 1920×1080.
+Die sechs vorbereiteten Bilder haben jeweils 1920×1080 Pixel. Vor dem Upload müssen sie mit der endgültigen Anwendung abgeglichen werden; abgebildete Funktionen und Messwerte benötigen einen tatsächlichen Nachweis. Die aktuellen Bildvorgaben des Partner Centers sind beim Upload maßgeblich.
 
 | # | Screenshot-Titel | Dargestellter Inhalt / Fokus | Dateiname |
 | :-: | :--- | :--- | :--- |
@@ -159,24 +178,24 @@ Microsoft verlangt mindestens 1 und empfiehlt bis zu 10 Screenshots im PNG- oder
 | **3** | **Deep Tab Intelligence (@tabs)** | Prompt `@tabs Vergleiche die Preise...`, Auswertung einer Markdown-Tabelle und klickbare Zitat-Badges `[Tab 1: ...]`. | `store-screen-3-tab-intelligence.png` |
 | **4** | **PowerShell Terminal & Doctor** | Eingebettetes ConPTY-Terminal mit ausgeführtem `sidekick doctor` Diagnose-Dashboard und farbigen Status-Checks. | `store-screen-4-conpty-terminal.png` |
 | **5** | **Extensions & Add-on Store** | Einstellungsbereich *Extensions & Add-ons* mit kuratierten 1-Klick-Add-ons (Dark Reader, uBlock Origin Lite, Bitwarden). | `store-screen-5-webextensions.png` |
-| **6** | **Privacy, Shield & Clear Data** | Omnibox Adblock-Statistik (*3,420 Ads blocked · 1.2 GB RAM saved*), Inkognito-Modus und Clear Browsing Data Dialog. | `store-screen-6-privacy-shield.png` |
+| **6** | **Privacy, Shield & Clear Data** | Tatsächliche Datenschutzfunktionen, Inkognito-Modus und Clear Browsing Data Dialog der geprüften Version. | `store-screen-6-privacy-shield.png` |
 
 ---
 
 ## 5. Leitfaden für den IARC-Fragebogen (Altersfreigabe)
 
-Der Fragebogen der **International Age Rating Coalition (IARC)** im Partner Center muss wie folgt beantwortet werden:
+Der Fragebogen der **International Age Rating Coalition (IARC)** wird anhand der endgültigen Anwendung beantwortet. Die folgenden Hinweise sind eine Vorbereitung; die Einstufung ergibt sich aus den tatsächlichen Antworten im Partner Center:
 
 1. **App-Kategorie:**
    - Wählen: *Dienstprogramme, Produktivität, Kommunikation oder andere* &rarr; *Web-Browser*.
 2. **Uneingeschränkter Internetzugriff:**
    - Frage: *Ermöglicht die Anwendung Nutzern den Zugriff auf das gesamte World Wide Web?*
-   - Antwort: **Ja** *(Dies führt automatisch zur sachgerechten Einstufung PEGI 12 oder PEGI 16).*
+   - Antwort: **Ja**, sofern die endgültige Anwendung allgemeinen Webzugriff bereitstellt.
 3. **Nutzung generativer KI:**
    - Frage: *Verfügt die Anwendung über generative KI-Funktionen (Text-, Bild- oder Sprachgenerierung)?*
    - Antwort: **Ja**.
    - Frage: *Enthält die generative KI Sicherheitsfilter oder Guardrails gegen schädliche Inhalte?*
-   - Antwort: **Ja** *(Lastbrowser maskiert Prompt-Injections und untrusted payload scripts).*
+   - Antwort anhand der geprüften Inhaltsfilter des jeweiligen Anbieters und der tatsächlichen Produktfunktionen festlegen. Prompt-Injection-Abwehr allein belegt keine Filterung schädlicher KI-Inhalte.
 4. **Weitergabe von Standortdaten:**
    - Antwort: **Nein** *(Standortabfragen durch Webseiten unterliegen der expliziten Nutzerzustimmung via Chromium Permission-Prompt).*
 5. **Kauf digitaler Güter:**
@@ -206,7 +225,7 @@ Folgen Sie dieser präzisen Anleitung zur Einreichung von Lastbrowser im Microso
 ### Schritt 2: Paket & Installationsparameter konfigurieren
 Unter dem Punkt **Pakete** (Packages) bzw. **Installationsprogramm**:
 1. **Download-URL des Installers:**
-   `https://github.com/Loggableim/lastbrowser/releases/download/v0.1.31/Lastbrowser-0.1.31-x64-setup.exe`
+   Erst nach dem endgültigen signierten Build: unveränderlicher, versionsgebundener HTTPS-Link zum geprüften Setup.
 2. **Befehlszeilenargumente für automatische Installation (Silent Install):**
    `/S`
 3. **Befehlszeilenargumente für automatische Deinstallation (Silent Uninstall):**
@@ -216,7 +235,7 @@ Unter dem Punkt **Pakete** (Packages) bzw. **Installationsprogramm**:
 5. **Architektur:**
    `x64`
 6. **Mindestversion des Betriebssystems:**
-   `Windows 10 Version 1809 (Build 17763)` oder `Windows 11`
+   Anhand des endgültigen Electron-/Python-Pakets und eines sauberen Windows-Testsystems bestätigen.
 
 ### Schritt 3: Eigenschaften & Rechtliches (Properties)
 1. **Kategorie:** `Produktivität` &rsaquo; `Web-Browser` (oder `Dienstprogramme & Tools` &rsaquo; `Web-Browser`).
@@ -227,16 +246,16 @@ Unter dem Punkt **Pakete** (Packages) bzw. **Installationsprogramm**:
 4. **Support-Kontakt-E-Mail:**
    `support@lastbrowser.com`
 5. **Copyright:**
-   `© 2026 Dominik Rainer / Lastbrowser Project`
+   `© 2026 Dominik Rainer / Lastbrowser.com`
 
 ### Schritt 4: Altersfreigabe (IARC Rating Questionnaire)
 1. Den Online-Fragebogen starten.
 2. Antworten gemäß **Abschnitt 5** dieses Dokuments ausfüllen:
    - Kategorie: Web-Browser.
    - Uneingeschränkter Internetzugriff: **Ja**.
-   - Generative KI mit Guardrails: **Ja**.
+   - Generative KI: **Ja**; Fragen zu Inhaltsfiltern anhand der tatsächlich geprüften Funktionen beantworten.
    - Standortweitergabe & In-App-Käufe: **Nein**.
-3. Altersfreigaben generieren und speichern (führt zu PEGI 12/16).
+3. Die aus den tatsächlichen Antworten generierten Altersfreigaben prüfen und speichern.
 
 ### Schritt 5: Store-Einträge (Store Listings)
 Für **Deutsch (de-DE)** und **Englisch (en-US)**:
@@ -265,7 +284,9 @@ All data is stored locally in %APPDATA%\Lastbrowser.
 
 ---
 
-## 8. What's New in v0.1.31 (Changelog für Store-Einreichung)
+## 8. Historischer Textentwurf für v0.1.31
+
+Dieser Abschnitt dokumentiert einen früheren Entwurf. Für die erste Store-Version ist nach Abschluss von „Multiagent Umsetzung“ ein neuer, auf dem endgültigen Build beruhender Versionshinweis zu erstellen.
 
 > **Hinweis zu Zeichenlimits:** Das Microsoft Partner Center begrenzt das
 > „What's New“-Feld typischerweise auf **1500 Zeichen**. Beide Varianten unten

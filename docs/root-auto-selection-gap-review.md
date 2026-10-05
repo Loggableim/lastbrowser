@@ -1,0 +1,27 @@
+# AUTO-Modellauswahl: Ist-Verhalten und kleinste Lücken
+
+Stand: 2026-10-05. Read-only-Review des vorhandenen Checkouts. Keine Providerkonten abgefragt und keine Tests ausgeführt.
+
+## Befund
+
+Der native Chat-AUTO-Pfad wählt aktuell **ein einzelnes Modell deterministisch**. `AutoSelectionService.select_turn` prüft alle erlaubten Kandidaten auf Katalog, Kontextlänge, Vision-/Tool-Capability, Datenklasse, Verbindung/Governance und Provider Admission. Unter den verfügbaren Kandidaten bevorzugt es den konfigurierten Orchestrator. Andernfalls vergleicht es frischen, aus Antwortheadern beobachteten Limit-Spielraum nur dann, wenn der Wert für alle Kandidaten bekannt ist; danach ordnet es nach aktiven und kürzlichen lokalen Anfragen und fällt bei Gleichstand/fehlenden Headroom-Belegen auf die gespeicherte Reihenfolge zurück. Die Entscheidung bleibt deterministisch und pro Turn an ein Modell gebunden. Sie bewertet weder semantische Aufgabenpassung noch Modellqualität oder Kosten. (`runtime/independent/model_selection.py:199-318`.)
+
+Der reale Worker ruft für `mode=auto` `prepare_native_auto_turn` auf. Das bindet genau die vom Parent entschiedene Provider/Modellpaarung und startet den normalen Streaming-Agenten. Das SDK kann das Modell danach nicht eigenständig wechseln. Im normalen AUTO-Pfad gibt es damit keine Modell-zu-Modell-Delegation. (`runtime/independent/native_chat_worker.py:257-258,337-352`; `runtime/independent/native_chat_auto.py:127-143,330-369,590-594`.)
+
+Eine separate, ausdrücklich als `teamwork` gestartete Spur kann dagegen aus einem AUTO-erlaubten Pool Planner, Worker, Critic und Synthesizer zuweisen. `resolve_team_plan` skaliert die Workerzahl nach Komplexität, nutzt die Strategie `cost`/`quality`/`balanced` und versucht Provider zu diversifizieren. Sie ist eine echte Mehrmodell-Orchestrierung, aber kein vom gewöhnlichen AUTO automatisch gewählter Delegationsmodus. Managed Spaces reduzieren den Pool auf ein Modell. (`runtime/independent/native_chat_worker.py:257-258`; `runtime/independent/native_teamwork.py:193-279`; `runtime/teamwork_orchestrator.py:506-671`.)
+
+`ProviderAdmission` erzwingt profilübergreifende lokale RPM-/TPM-/Concurrency-Budgets und, wenn konfiguriert, Kostenbudgets; standardmäßig sind diese 6 Requests/min, 100.000 Tokens/min, ein gleichzeitiger Request und höchstens 2.048 Outputtokens pro Request. Es zeichnet erkannte Limit-/Remaining-/Reset-Header echter Antworten, `Retry-After` und Billing-Fehler auf. Fehlende Angaben bleiben `unknown`; frische beobachtete Limits können Claims blockieren, bei unbekanntem Limit wird Concurrency konservativ auf eins reduziert. `limits(provider)` fragt keinen Anbieter ab. Die eigentliche Kandidatenrangfolge in `select_turn` nutzt die beobachteten Headroom-Signale und lokalen Claims, soweit belegt. Account-/Projektkontingent, nicht gelieferte Header, externe Parallelverbraucher und Anbieterpreise bleiben unbekannt; `provider_group_key` fasst auf verifizierten Endpoint-Origin zusammen und kann Accountgrenzen nicht auflösen. (`runtime/independent/provider_admission.py:24-31,179-210,304-369,427-432`; `runtime/independent/model_selection.py:268-318`.)
+
+## Höchstens drei kleine Lücken und vorhandene Seams
+
+1. **AUTO optimiert keine semantische Aufgabenpassung oder erwartete Antwortqualität.** Der bestehende Einstieg `AutoSelectionService.select_turn` ordnet bereits Eligibility, konfigurierten Orchestrator, beobachteten Headroom und laufende/lokale Last. Eine verbleibende Erweiterung müsste einen eigenständig qualifizierten, begrenzten Fit-Nachweis ergänzen; der lokale 350M-Router ist dafür ungeeignet, weil er den unabhängigen Holdout nicht bestanden hat. Bis zu einem solchen Nachweis sollte das Produkt den belegten Kapazitätsrang statt „bestes Modell“ versprechen.
+
+2. **Normales AUTO kann nicht delegieren; Delegation existiert nur im separaten Teamwork-Modus.** Die kleinsten Seams sind `NativeAutoSessionBroker.auto_policy`/`NativeAutoBridge.prepare` für die eine AUTO-Entscheidung und der bereits vorhandene `NativeTeamworkBridge` samt `resolve_team_plan` für Mehrmodellrollen. Eine begrenzte Integration müsste Teamwork nur als explizit auswählbare Strategie/Capability an diese bestehende Schnittstelle hängen; automatische Delegation aufgrund eines unqualifizierten Tiny-Router-Vorschlags wäre nicht gerechtfertigt.
+
+3. **Headroom-Ranking kann nur Anbieterbelege nutzen, die über Antworten beobachtet wurden.** Echte Account-/Projektkontingente, externe Parallelverbraucher und Limits ohne Antwortheader bleiben unbekannt. Vorhandene Seams `ProviderAdmission.observe`/`limits` und `selection_loads`/`select_turn` unterscheiden beobachtete Limits, Alter und lokale Claims bereits. Die Grenze bleibt: keine Anbieterabfrage oder accountgenaue Auflösung allein aus Endpoint-Origin ableiten; unbekannte Werte dürfen keinen fiktiven Headroom erzeugen.
+
+## Produktvertrag, den die Implementierung heute belegt
+
+„AUTO prüft alle zulässigen Kandidaten, bevorzugt den verfügbaren konfigurierten Orchestrator und ordnet sonst nach frischem beobachtetem Limit-Spielraum (nur wenn für alle bekannt), lokalen aktiven/kürzlichen Claims und gespeicherter Reihenfolge. Provider/Modell bleibt pro Turn fest. Diese Rangfolge belegt keine semantische Aufgabenpassung oder Kostenoptimierung. Teamwork ist ein gesonderter, expliziter Mehrmodellpfad.“
+
+Das belegt deterministische Verteilung nach ausgewählten, teils beobachteten Lastsignalen, nicht „das semantisch sinnvollste Modell“ und nicht vollständige oder stets aktuelle Providerkontingente.

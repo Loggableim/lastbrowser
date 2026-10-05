@@ -209,6 +209,19 @@
       </table>
     </div>
 
+    <div class="section-header" style="margin-top:80px;">
+      <h2>Vorbereitung: Release Candidate <span class="grad">0.1.44</span></h2>
+      <p>Die folgenden Änderungen sind im aktuellen Quellstand, aber noch nicht Teil der veröffentlichten Version 0.1.43. Der Kandidat ist nicht downloadbar; Verteilung und Freigabe folgen erst nach Paket-, Funktions- und Signaturprüfung.</p>
+    </div>
+    <div class="grid-2">
+      <div class="feature-card"><span class="badge badge-cyan">Im Kandidaten · UI geprüft</span><h3>Kompakter Chat-Composer</h3><p>AUTO und „Weitere“ halten die Standardansicht kurz; erweiterte Provider- und Auswahlregeln liegen hinter „Erweitert“. AUTO bevorzugt den verfügbaren Orchestrator. Sonst nutzt es frischen Limit-Spielraum nur, wenn er für alle Kandidaten belegt ist, vergleicht danach aktive und kürzliche lokale Anfragen und nutzt die konfigurierte Reihenfolge als Gleichstandsregel. Semantische Qualität optimiert AUTO nicht; die Router-Qualifikation ist offen.</p></div>
+      <div class="feature-card"><span class="badge badge-cyan">Im Kandidaten · Quellpfad geprüft</span><h3>Space Assistant &amp; Schnellchat</h3><p>Der Assistant bleibt an Space und Browserprofil gebunden und streamt Chat- und Aufgabenstatus. Kurze Seitenaktionen wie Zusammenfassen und Erklären laufen im getrennten, temporären Schnellchat statt als normaler Chat.</p></div>
+      <div class="feature-card"><span class="badge badge-cyan">Im Kandidaten · Loopback geprüft</span><h3>Kompakte, persistente Ziele</h3><p>Ziele lassen sich im Chat steuern und behalten Status sowie Space-Zuordnung über Shell-Neustarts. Die aktuelle Probe nutzte einen kontrollierten lokalen Provider; sie bestätigt weder externe Provider noch Paketfreigabe.</p></div>
+      <div class="feature-card"><span class="badge badge-yellow">Lokale Inferenz: noch nicht freigegeben</span><h3>Einfaches Local-AI-Setup</h3><p>Der kurze Ablauf prüft den PC und führt durch Empfehlung und Setup. Ein Modell-Download bedeutet noch keine nutzbare Inferenz: Modell-/Routerqualität, Runtime- und Lizenz-/Redistributionsnachweise sowie Paketprüfung sind offen.</p></div>
+      <div class="feature-card"><span class="badge badge-yellow">Eingeschränkt</span><h3>AUTO &amp; Teamwork</h3><p>AUTO bevorzugt den verfügbaren konfigurierten Orchestrator. Sonst nutzt es belegten frischen Limit-Spielraum nur, wenn er für alle Kandidaten bekannt ist, vergleicht aktive/kürzliche lokale Anfragen und löst Gleichstände mit der konfigurierten Reihenfolge. Es optimiert weder semantische Qualität noch Kosten. Der lokale 350M-Router hat den unabhängigen Holdout nicht bestanden. Teamwork bleibt separat und ausdrücklich zu wählen.</p></div>
+      <div class="feature-card"><h3>Kontrollierte Aktionen</h3><p>Browser- und Tool-Aktionen folgen dem gewählten Profil und sichtbaren Freigaben. Ein Anbieter, der Daten verarbeitet, wird nicht als lokale oder Offline-Ausführung dargestellt.</p></div>
+    </div>
+
     <!-- Deep Dives / Pillars -->
     <div class="section-header" style="margin-top:80px;">
       <h2>Die 5 Säulen von <span class="grad">Lastbrowser</span></h2>

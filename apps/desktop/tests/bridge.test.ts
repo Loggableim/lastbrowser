@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { buildSidekickPrompt, clampContextText, createTeamworkGroundingContext } from '../src/renderer/bridge.js';
+import { describe, expect, it, vi } from 'vitest';
+import { buildSidekickPrompt, clampContextText, createTeamworkGroundingContext, dispatchSidekickAction, resolveSidekickAction } from '../src/renderer/bridge.js';
 
 const context = {
   url: 'https://example.com/article',
@@ -61,5 +61,26 @@ describe('sidekick bridge prompts', () => {
 
     expect(clamped).toHaveLength(121);
     expect(clamped.endsWith('…')).toBe(true);
+  });
+
+  it('collects active page context and resolves each explicit Research Bar action', async () => {
+    const pageContext = { selectedText: context.selectedText, pageText: context.pageText };
+    const webview = { executeJavaScript: async () => pageContext, getURL: () => context.url, getTitle: () => context.title } as unknown as Electron.WebviewTag;
+    for (const [action, expected] of [['summarize-page', 'Summarize the active browser page'], ['explain-selection', 'Explain the selected text'], ['research-page', 'Research this active browser page']] as const) {
+      const result = await resolveSidekickAction(action, webview, { url: 'fallback:', title: 'fallback' });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.prompt).toContain(expected);
+        expect(result.prompt).toContain(context.url);
+        expect(result.prompt).toContain(context.title);
+      }
+    }
+  });
+
+  it('returns an actionable failure when Explain is clicked without a selection', async () => {
+    const webview = { executeJavaScript: async () => ({ selectedText: '', pageText: 'Readable page' }), getURL: () => context.url, getTitle: () => context.title } as unknown as Electron.WebviewTag;
+    const dispatch = vi.fn();
+    expect(await dispatchSidekickAction('explain-selection', webview, context, dispatch)).toMatchObject({ ok: false, reason: expect.stringContaining('Select text') });
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });

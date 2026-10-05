@@ -1038,6 +1038,9 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
     Returns:
         Tuple of (success, full_output_doc, final_response, error_message)
     """
+    if job.get("job_type") == "independent_agent":
+        # Manual legacy cron APIs must not bypass the scoped enqueue broker.
+        return False, "", "", "independent_agent_requires_scoped_enqueue"
     job_id = job["id"]
     job_name = str(job.get("name") or job.get("prompt") or job_id or "cron job")
 
@@ -1675,6 +1678,15 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
             logger.debug("Job '%s': failed to reap stale auxiliary clients: %s", job_id, e)
 
 
+_independent_enqueue_hook = None
+
+
+def register_independent_enqueue_hook(callback):
+    """Attach the profile-scoped enqueue adapter to the existing Cron clock."""
+    global _independent_enqueue_hook
+    _independent_enqueue_hook = callback
+
+
 def tick(verbose: bool = True, adapters=None, loop=None) -> int:
     """
     Check and run all due jobs.
@@ -1708,11 +1720,19 @@ def tick(verbose: bool = True, adapters=None, loop=None) -> int:
         return 0
 
     try:
+        enqueued = 0
+        if _independent_enqueue_hook is not None:
+            try:
+                from datetime import datetime, timezone
+                enqueued = int(_independent_enqueue_hook(datetime.now(timezone.utc)))
+            except Exception as exc:
+                # No fallback to the ambient profile or legacy agent engine.
+                logger.error("Independent Cron enqueue failed (%s)", type(exc).__name__)
         due_jobs = get_due_jobs()
 
         if verbose and not due_jobs:
             logger.info("%s - No jobs due", _sidekick_now().strftime('%H:%M:%S'))
-            return 0
+            return enqueued
 
         if verbose:
             logger.info("%s - %s job(s) due", _sidekick_now().strftime('%H:%M:%S'), len(due_jobs))
@@ -1751,8 +1771,13 @@ def tick(verbose: bool = True, adapters=None, loop=None) -> int:
 
         def _process_job(job: dict) -> bool:
             """Run one due job end-to-end: execute, save, deliver, mark."""
+            from runtime.independent.governance import LegacyComputeLease
+            compute = LegacyComputeLease("cron:" + str(lock_dir.resolve()) + ":" + str(job["id"]))
             try:
+                if not job.get("no_agent"):
+                    compute.wait_acquire()
                 success, output, final_response, error = run_job(job)
+                compute.release()
 
                 output_file = save_job_output(job["id"], output)
                 if verbose:
@@ -1789,6 +1814,8 @@ def tick(verbose: bool = True, adapters=None, loop=None) -> int:
                 logger.error("Error processing job %s: %s", job['id'], e)
                 mark_job_run(job["id"], False, str(e))
                 return False
+            finally:
+                compute.release()
 
         # Partition due jobs: those with a per-job workdir mutate
         # os.environ["TERMINAL_CWD"] inside run_job, which is process-global —
@@ -1824,7 +1851,7 @@ def tick(verbose: bool = True, adapters=None, loop=None) -> int:
         except Exception as _e:
             logger.debug("Post-tick MCP orphan cleanup failed: %s", _e)
 
-        return sum(_results)
+        return enqueued + sum(_results)
     finally:
         if fcntl:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)

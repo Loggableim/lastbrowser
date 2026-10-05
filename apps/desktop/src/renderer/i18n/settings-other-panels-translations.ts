@@ -1,7 +1,9 @@
-import type { DesktopCatalog, DesktopLocaleId, DesktopTranslationKey } from './keys.js';
+import type { DesktopCatalog, LegacyDesktopLocaleId as DesktopLocaleId, DesktopTranslationKey } from './keys.js';
 
 type Values = Record<DesktopLocaleId, string>;
 const rows: Partial<Record<DesktopTranslationKey, Values>> = {
+  'settings.sections.advanced': { en: 'Advanced', de: 'Erweitert', it: 'Avanzate', es: 'Avanzado', fr: 'Avancé', 'pt-BR': 'Avançado', ru: 'Дополнительно' },
+  'settings.sectionDescriptions.advanced': { en: 'Automatic model selection and usage policy for the active chat and Space.', de: 'Automatische Modellauswahl und Nutzungsrichtlinie für den aktiven Chat und Space.', it: 'Selezione automatica del modello e criteri d’uso per la chat e lo Space attivi.', es: 'Selección automática del modelo y política de uso para el chat y el Space activos.', fr: 'Sélection automatique du modèle et règles d’utilisation pour le chat et le Space actifs.', 'pt-BR': 'Seleção automática de modelo e política de uso para o chat e o Space ativos.', ru: 'Автоматический выбор модели и правила использования для активного чата и Space.' },
   'access.lock.checking': { en: 'Checking the secure session…', de: 'Sichere Sitzung wird geprüft…', it: 'Verifica della sessione sicura…', es: 'Comprobando la sesión segura…', fr: 'Vérification de la session sécurisée…', 'pt-BR': 'Verificando a sessão segura…', ru: 'Проверка защищённого сеанса…' },
   'access.lock.description': { en: 'Enter your access password to open the browser.', de: 'Gib dein Zugriffspasswort ein, um den Browser zu öffnen.', it: 'Inserisci la password di accesso per aprire il browser.', es: 'Introduce la contraseña de acceso para abrir el navegador.', fr: 'Saisissez le mot de passe d’accès pour ouvrir le navigateur.', 'pt-BR': 'Digite sua senha de acesso para abrir o navegador.', ru: 'Введите пароль доступа, чтобы открыть браузер.' },
   'access.lock.password': { en: 'Access password', de: 'Zugriffspasswort', it: 'Password di accesso', es: 'Contraseña de acceso', fr: 'Mot de passe d’accès', 'pt-BR': 'Senha de acesso', ru: 'Пароль доступа' },

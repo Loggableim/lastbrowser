@@ -108,12 +108,29 @@ def test_start_normalizes_resolved_windows_path_before_stream_persistence(monkey
     assert type(request["workspace"]) is str
 
 
+def test_failed_start_preserves_existing_quickchat_session(monkeypatch, tmp_path):
+    handler, body, starts = _setup(monkeypatch, tmp_path)
+    quickchat.start_quickchat(body, handler)
+    existing, _ = starts[0]
+    prior_messages = [{"role": "assistant", "content": "existing private answer"}]
+    existing.messages = prior_messages
+    monkeypatch.setattr("web.api.routes._start_chat_stream_for_session",
+                        lambda *_args, **_kwargs: {"error": "worker temporarily unavailable", "_status": 503})
+
+    result, status = quickchat.start_quickchat(body, handler)
+
+    assert status == 503 and result["ok"] is False
+    assert models.get_session(QUICK_ID) is existing
+    assert existing.messages is prior_messages
+
+
 def test_reset_cancels_only_matching_private_stream_and_rejects_mismatch(monkeypatch, tmp_path):
     handler, body, starts = _setup(monkeypatch, tmp_path)
     quickchat.start_quickchat(body, handler)
     session = starts[0][0]
     cancelled = []
-    monkeypatch.setattr("web.api.streaming.cancel_stream", lambda sid: cancelled.append(sid) or True)
+    monkeypatch.setattr(quickchat, "_stop_and_wait_for_quickchat_worker",
+                        lambda session, sid, actor, scope: cancelled.append((session.session_id, sid, actor, scope)) or True)
 
     wrong = {"quick_chat_id": QUICK_ID, "stream_id": "c" * 32, "space_scope": SCOPE,
              "profile": "default", "workspace": str(tmp_path)}
@@ -124,7 +141,7 @@ def test_reset_cancels_only_matching_private_stream_and_rejects_mismatch(monkeyp
     reset = {**wrong, "stream_id": STREAM_ID}
     result, status = quickchat.cancel_quickchat(reset, handler)
     assert status == 200 and result["reset"] is True and result["cancelled"] is True
-    assert cancelled == [STREAM_ID]
+    assert cancelled == [(QUICK_ID, STREAM_ID, "default", Scope.model_validate(SCOPE))]
     assert session.session_id not in models.SESSIONS
 
 
@@ -132,7 +149,8 @@ def test_reset_rejects_wrong_scope_before_cancelling(monkeypatch, tmp_path):
     handler, body, starts = _setup(monkeypatch, tmp_path)
     quickchat.start_quickchat(body, handler)
     cancelled = []
-    monkeypatch.setattr("web.api.streaming.cancel_stream", lambda sid: cancelled.append(sid) or True)
+    monkeypatch.setattr(quickchat, "_stop_and_wait_for_quickchat_worker",
+                        lambda _session, sid, _actor, _scope: cancelled.append(sid) or True)
     reset = {"quick_chat_id": QUICK_ID, "stream_id": STREAM_ID,
              "space_scope": {**SCOPE, "spaceId": "33333333-3333-4333-8333-333333333333"}, "profile": "default",
              "workspace": str(tmp_path)}
@@ -148,12 +166,12 @@ def test_stop_cancels_stream_but_preserves_private_transcript(monkeypatch, tmp_p
     session.messages = [{"role": "user", "content": "keep this transcript"}]
     cancelled = []
 
-    def stop_stream(stream_id):
+    def stop_stream(_session, stream_id, _actor, _scope):
         cancelled.append(stream_id)
         session.active_stream_id = None
         return True
 
-    monkeypatch.setattr("web.api.streaming.cancel_stream", stop_stream)
+    monkeypatch.setattr(quickchat, "_stop_and_wait_for_quickchat_worker", stop_stream)
     request = {"quick_chat_id": QUICK_ID, "stream_id": STREAM_ID, "space_scope": SCOPE,
                "profile": "default", "workspace": str(tmp_path)}
     result, status = quickchat.stop_quickchat(request, handler)
@@ -166,6 +184,70 @@ def test_stop_cancels_stream_but_preserves_private_transcript(monkeypatch, tmp_p
     reset_result, reset_status = quickchat.cancel_quickchat(reset, handler)
     assert reset_status == 200 and reset_result["reset"] is True
     assert QUICK_ID not in models.SESSIONS
+
+
+def test_reset_requires_accepted_worker_exit_and_writer_release(monkeypatch, tmp_path):
+    from runtime.independent import store as store_module
+    from web.api import native_chats
+
+    scope = Scope.model_validate(SCOPE)
+    context = SimpleNamespace(session_id=QUICK_ID, stream_id=STREAM_ID, profile_name="default",
+        scope=scope, profile_home=str(tmp_path), writer_lease_id="lease-1")
+    exited = [False]
+    cancelled = []
+    lease_active = [True]
+    monkeypatch.setattr(native_chats, "get_native_stream_context", lambda sid: context if sid == STREAM_ID else None)
+    monkeypatch.setattr(native_chats, "native_chat_exit_confirmed", lambda _context: exited[0])
+    monkeypatch.setattr(native_chats, "control_native_chat",
+        lambda sid, stream, **kwargs: cancelled.append((sid, stream, kwargs)) or True)
+
+    class FakeStore:
+        def __init__(self, *_args, **_kwargs): pass
+        def list_leases(self): return ({"leaseId": "lease-1"},) if lease_active[0] else ()
+        def close(self): pass
+
+    monkeypatch.setattr(store_module, "IndependentStore", FakeStore)
+    def tick(_seconds):
+        exited[0] = True
+        lease_active[0] = False
+    monkeypatch.setattr(quickchat.time, "sleep", tick)
+
+    session = SimpleNamespace(session_id=QUICK_ID)
+    assert quickchat._stop_and_wait_for_quickchat_worker(session, STREAM_ID, "default", scope, timeout=1) is True
+    assert cancelled == [(QUICK_ID, STREAM_ID, {"actor": "default", "scope": scope, "command": "cancel"})]
+
+
+def test_reset_fails_closed_when_native_worker_binding_is_missing(monkeypatch, tmp_path):
+    from web.api import native_chats
+    monkeypatch.setattr(native_chats, "get_native_stream_context", lambda _sid: None)
+    monkeypatch.setattr(native_chats, "native_chat_exit_confirmed", lambda _context: False)
+    monkeypatch.setattr(native_chats, "control_native_chat", lambda *_args, **_kwargs: pytest.fail("must not dispatch unbound cancellation"))
+
+    with pytest.raises(quickchat.QuickChatError, match="worker binding"):
+        quickchat._stop_and_wait_for_quickchat_worker(SimpleNamespace(session_id=QUICK_ID), STREAM_ID,
+            "default", Scope.model_validate(SCOPE), timeout=0.01)
+
+
+def test_session_native_context_prefers_active_worker_and_falls_back_to_settled(monkeypatch):
+    from web.api import native_chats
+    scope = Scope.model_validate(SCOPE)
+    active_context = SimpleNamespace(session_id=QUICK_ID, stream_id="d" * 32, scope=scope)
+    settled_context = SimpleNamespace(session_id=QUICK_ID, stream_id="e" * 32, scope=scope)
+    monkeypatch.setattr(native_chats, "_active", {
+        "active": SimpleNamespace(context=active_context),
+    })
+    monkeypatch.setattr(native_chats, "_settled", OrderedDict([("old", settled_context)]))
+    assert native_chats.get_session_native_context(QUICK_ID) is active_context
+    monkeypatch.setattr(native_chats, "_active", {})
+    assert native_chats.get_session_native_context(QUICK_ID) is settled_context
+
+
+def test_scoped_quickchat_cannot_enter_stream_without_accepted_native_context(monkeypatch, tmp_path):
+    from web.api import streaming
+    monkeypatch.setenv("LASTBROWSER_NATIVE_CHAT_WORKER", "1")
+    session = SimpleNamespace(space_scope=SCOPE)
+    with pytest.raises(PermissionError, match="accepted worker binding"):
+        streaming._resolve_native_stream_space(session, QUICK_ID, STREAM_ID, str(tmp_path))
 
 
 def test_quickchat_is_filtered_from_both_session_list_paths(monkeypatch, tmp_path):

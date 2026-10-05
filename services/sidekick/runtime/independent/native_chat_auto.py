@@ -170,7 +170,8 @@ class NativeAutoSessionBroker:
                 if set(payload) - {"decision", "outputTokens", "inputTokensUpperBound", "inputBoundSource", "requestPurpose"} or not {"decision", "outputTokens"}.issubset(payload):
                     raise PolicyDenied("native_auto_claim_payload_invalid")
                 if len(self._claims) >= 128:
-                    raise ResourceBusy("Native AUTO turn receipt capacity exceeded")
+                    raise ResourceBusy("Native AUTO turn receipt capacity exceeded",
+                        diagnostic_reason="auto_receipt_capacity_exhausted")
                 decision = self._owned_decision(payload["decision"])
                 bound = payload.get("inputTokensUpperBound")
                 source = payload.get("inputBoundSource", "context_capacity")
@@ -499,7 +500,8 @@ class NativeAutoBridge:
             if not isinstance(result, dict) or result.get("pending") is not True:
                 break
             if time.monotonic() >= deadline:
-                raise ResourceBusy("Native AUTO provider admission is waiting for resource capacity")
+                raise ResourceBusy("Native AUTO provider admission is waiting for resource capacity",
+                    diagnostic_reason="provider_admission_wait_expired")
             time.sleep(.1)
         claim = ProviderClaim.model_validate(result)
         if claim.scope != self.context.scope or claim.session_id != self.context.session_id or claim.decision_id != decision.decision_id:

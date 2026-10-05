@@ -71,6 +71,76 @@ def test_stream_start_rejects_stale_confirmed_quickchat_capture(setup, monkeypat
     assert session.active_stream_id is None and session.messages == []
 
 
+def test_scoped_quickchat_start_reserves_and_registers_native_worker_binding(setup, monkeypatch):
+    import threading
+    from web.api import config, goals, independent, native_chats, profiles, routes
+    from web.api.models import Session
+
+    hub, scopes, paths, _ = setup
+    monkeypatch.setattr(independent, "_hub", hub)
+    monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
+    monkeypatch.setattr(profiles, "get_profile_home", lambda *_args: hub.get("default").profile_home)
+    monkeypatch.setattr(goals, "consume_goal_continuation", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(goals, "has_active_goal", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(routes, "STREAMS", {})
+    monkeypatch.setattr(routes, "STREAMS_LOCK", threading.RLock())
+    monkeypatch.setattr(routes, "STREAM_GOAL_RELATED", {})
+    monkeypatch.setattr(routes, "STREAM_GOAL_CLAIMS", {})
+    monkeypatch.setattr(routes, "create_stream_channel", lambda: SimpleNamespace(put_nowait=lambda *_: None))
+    monkeypatch.setattr(routes.uuid, "uuid4", lambda: SimpleNamespace(hex="c" * 32))
+
+    threads = []
+    class DeferredThread:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            threads.append(self)
+        def start(self):
+            pass
+
+    monkeypatch.setattr(routes.threading, "Thread", DeferredThread)
+    registered = []
+    native_context = SimpleNamespace(session_id="quickchat_worker", stream_id="c" * 32, scope=scopes[0],
+        workspace=str(paths[0]), profile_home=str(hub.get("default").profile_home))
+
+    def capture_context(session, stream_id, writer, **_kwargs):
+        store, _ = hub.by_scope(scopes[0], "default")
+        assert writer is not None
+        assert any(item["leaseId"] == writer.lease_id for item in store.list_leases())
+        assert session.session_kind == "quickchat" and session.space_scope == scopes[0].model_dump(by_alias=True)
+        assert stream_id == "c" * 32
+        return native_context
+
+    monkeypatch.setattr("runtime.independent.native_chat_protocol.capture_native_chat_context", capture_context)
+    monkeypatch.setattr(native_chats, "register_native_chat", lambda context: registered.append(context))
+    session = Session(session_id="quickchat_worker", title="Quickchat", workspace=str(paths[0]),
+        model="controlled", model_provider="custom", profile="default", space_scope=scopes[0].model_dump(by_alias=True),
+        session_kind="quickchat", quick_chat_id="quickchat_worker", enabled_toolsets=[],
+        chat_execution_mode={"schemaVersion": 1, "mode": "boost", "lifetime": "chat", "revision": 7})
+    captured = capture_chat_profile(session=session, actor="default", workspace=str(paths[0]), profile_hub=hub)
+
+    result = routes._start_chat_stream_for_session(session, msg="Summarize this page", workspace=str(paths[0]),
+        model="controlled", model_provider="custom", goal_related=False, mode="",
+        confirmed_chat_profile=captured)
+
+    assert result["stream_id"] == "c" * 32
+    assert registered == [native_context]
+    assert routes.STREAMS
+    worker_kwargs = threads[0].kwargs["kwargs"]
+    assert worker_kwargs["native_chat_context"] is native_context
+    assert worker_kwargs["native_chat_writer"] is not None
+    assert worker_kwargs["execution_policy"].mode == "action"
+    from runtime.independent.native_chat_protocol import encode_turn
+    assert isinstance(worker_kwargs["goal_claim_profile_home"], type(hub.get("default").profile_home))
+    turn_kwargs = {key:value for key,value in worker_kwargs.items()
+        if key not in {"native_chat_writer", "native_chat_context", "native_chat_session"}}
+    encoded = encode_turn(native_context, threads[0].kwargs["args"], turn_kwargs)
+    assert encoded["kwargs"]["goal_claim_profile_home"] == native_context.profile_home
+    # The deferred thread keeps the accepted lease alive; simulate its normal
+    # process-finalizer release so this test leaves no active store ownership.
+    writer = hub.by_scope(scopes[0], "default")[0].list_leases()[0]
+    hub.by_scope(scopes[0], "default")[0].release_lease(writer["leaseId"], owner_generation=writer["ownerGeneration"])
+
+
 def test_unknown_independent_writer_fails_closed(setup):
     hub, scopes, paths, _ = setup
     session = SimpleNamespace(profile="default", space_scope=None, independent={"scope": scopes[0].model_dump(by_alias=True), "runId": new_id()})

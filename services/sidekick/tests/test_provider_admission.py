@@ -138,8 +138,9 @@ def test_provider_aliases_paths_and_weaker_profile_policy_cannot_split_account_b
         first = admissions[0].claim(proposal(scopes[0], admissions[0]), AdmissionBudget(requests_per_minute=1), validate=lambda: None)
         admissions[0].update(scopes[0], first.claim_id, state="completed", measured_tokens=1)
         alternate = proposal(scopes[1], admissions[1]).model_copy(update={"provider": "alias", "group_key": provider_group_key(stores[1].profile_home, "alias")})
-        with pytest.raises(ResourceBusy, match="request budget"):
+        with pytest.raises(ResourceBusy, match="request budget") as busy:
             admissions[1].claim(alternate, AdmissionBudget(requests_per_minute=100), validate=lambda: None)
+        assert busy.value.diagnostic_reason == "request_budget_exhausted"
     finally:
         for store in stores:
             store.close()
@@ -154,8 +155,9 @@ def test_crashed_reserved_claim_survives_readonly_reopen_and_stale_headers_remai
         with IndependentStore(stores[0].profile_home, stores[0].backend_profile_id, initialize=False) as reopened:
             assert reopened._one("SELECT result_json FROM ia_request_results WHERE operation='provider_claim' AND request_id=?", (first.claim_id,))
         assert admissions[0].limits("controlled")[0]["stale"] is True
-        with pytest.raises(ResourceBusy, match="concurrency"):
+        with pytest.raises(ResourceBusy, match="concurrency") as busy:
             admissions[1].claim(proposal(scopes[1], admissions[1]), AdmissionBudget(), validate=lambda: None)
+        assert busy.value.diagnostic_reason == "provider_concurrency_occupied"
     finally:
         for store in stores:
             store.close()

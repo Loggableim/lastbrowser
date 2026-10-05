@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -213,6 +214,49 @@ def _remove_quickchat_session(session: Any) -> None:
     models._SESSION_LIST_CACHE_AT.clear()
 
 
+def _stop_and_wait_for_quickchat_worker(session: Any, stream_id: str, actor: str, scope, *, timeout: float = 10.0) -> bool:
+    """Cancel only the accepted native worker and wait before deleting its session."""
+    from web.api.native_chats import (
+        control_native_chat,
+        get_native_stream_context,
+        native_chat_exit_confirmed,
+    )
+
+    context = get_native_stream_context(stream_id)
+    if (context is None or context.session_id != session.session_id
+            or context.profile_name != actor or context.scope != scope):
+        raise QuickChatError("Quickchat worker binding could not be verified", 409, "quickchat_worker_binding_missing")
+
+    cancelled = False
+    if not native_chat_exit_confirmed(context):
+        cancelled = bool(control_native_chat(session.session_id, stream_id, actor=actor, scope=scope, command="cancel"))
+        if not cancelled and not native_chat_exit_confirmed(context):
+            raise QuickChatError("Quickchat worker could not be cancelled safely", 409, "quickchat_worker_cancel_rejected")
+
+    deadline = time.monotonic() + timeout
+    while not native_chat_exit_confirmed(context):
+        if time.monotonic() >= deadline:
+            raise QuickChatError("Quickchat worker has not exited; its private session was kept", 503,
+                                 "quickchat_worker_exit_unconfirmed")
+        time.sleep(0.025)
+
+    # The worker-exit registry settles just before the owning route releases
+    # the persisted writer lease. Wait for that release before removing files.
+    from runtime.independent.store import IndependentStore
+    while True:
+        store = IndependentStore(context.profile_home, context.scope.backend_profile_id, initialize=False)
+        try:
+            lease_active = any(item["leaseId"] == context.writer_lease_id for item in store.list_leases())
+        finally:
+            store.close()
+        if not lease_active:
+            return cancelled
+        if time.monotonic() >= deadline:
+            raise QuickChatError("Quickchat writer release was not confirmed; its private session was kept", 503,
+                                 "quickchat_writer_release_unconfirmed")
+        time.sleep(0.025)
+
+
 def stop_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     """Stop the exact active response while retaining its private transcript."""
     if not isinstance(body, dict) or set(body) != {"quick_chat_id", "stream_id", "space_scope", "profile", "workspace"}:
@@ -245,8 +289,9 @@ def stop_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     active = str(getattr(session, "active_stream_id", None) or "")
     if active and active != stream_id:
         raise QuickChatError("Quickchat has another active response", 409, "quickchat_stream_mismatch")
-    from web.api.streaming import cancel_stream
-    cancelled = bool(cancel_stream(stream_id)) if active else False
+    cancelled = False
+    if stream_id:
+        cancelled = _stop_and_wait_for_quickchat_worker(session, stream_id, actor, scope)
     return {"ok": True, "quick_chat_id": quick_id, "stream_id": stream_id, "cancelled": cancelled, "reset": False}, 200
 
 
@@ -282,9 +327,18 @@ def cancel_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     if active and active != stream_id:
         raise QuickChatError("Quickchat has another active response", 409, "quickchat_stream_mismatch")
     cancelled = False
-    if active and stream_id:
-        from web.api.streaming import cancel_stream
-        cancelled = bool(cancel_stream(stream_id))
+    if stream_id:
+        cancelled = _stop_and_wait_for_quickchat_worker(session, stream_id, actor, scope)
+    elif active:
+        raise QuickChatError("Quickchat reset requires its active stream identity", 409, "quickchat_stream_mismatch")
+    else:
+        from web.api.native_chats import get_session_native_context
+        context = get_session_native_context(quick_id)
+        if context is not None:
+            if context.scope != scope or context.profile_name != actor:
+                raise QuickChatError("Quickchat worker binding did not match the active Space", 409,
+                                     "quickchat_worker_binding_mismatch")
+            cancelled = _stop_and_wait_for_quickchat_worker(session, context.stream_id, actor, scope)
     from web.api import models
     _remove_quickchat_session(session)
     return {"ok": True, "quick_chat_id": quick_id, "stream_id": stream_id, "cancelled": cancelled, "reset": True}, 200

@@ -12418,14 +12418,15 @@ def _start_chat_stream_for_session(
         with session_lock:
             diag.stage("save_pending_state") if diag else None
             from runtime.independent.chat_binding import mark_legacy_writer, reserve_chat_writer
-            if not quickchat:
+            if not quickchat or getattr(s, "space_scope", None) is not None:
                 native_writer = reserve_chat_writer(s, actor=str(get_active_profile_name() or "default"), owner_ref=stream_id)
                 mark_legacy_writer(s)
             from runtime.chat_modes import capture_policy
             from web.api.config import get_config
-            if not quickchat and (getattr(s, "space_scope", None) or captured_space_profile is not None or original_mode_settings is not None or mode not in {"", "action"}):
+            if (not quickchat or getattr(s, "space_scope", None) is not None) and (getattr(s, "space_scope", None) or captured_space_profile is not None or original_mode_settings is not None or mode not in {"", "action"}):
                 captured_execution_policy, s.chat_execution_mode = capture_policy(
-                    original_mode_settings, requested_mode=mode, config=get_config())
+                    None if quickchat else original_mode_settings,
+                    requested_mode="action" if quickchat else mode, config=get_config())
             if not quickchat and captured_space_profile is not None:
                 previous_turns = getattr(s, "child_parent_turns", None) or []
                 if not isinstance(previous_turns, list) or len(previous_turns) > 32:
@@ -12474,7 +12475,7 @@ def _start_chat_stream_for_session(
                 "profile_home": continuation_profile_home,
                 "space_slug": continuation_space_slug,
             }
-        if getattr(s, "space_scope", None) is not None and not quickchat:
+        if getattr(s, "space_scope", None) is not None:
             from runtime.independent.native_chat_protocol import capture_native_chat_context
             from web.api.native_chats import register_native_chat
             native_context = capture_native_chat_context(s, stream_id, native_writer,

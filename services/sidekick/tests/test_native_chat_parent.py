@@ -1,5 +1,6 @@
 """Parent SSE detach is separate from actual process and transcript ownership."""
 import json
+import sys
 import threading
 import time
 import uuid
@@ -15,6 +16,7 @@ from test_native_chat_process import ControlledServer, fixture_context, turn
 from test_independent_profile_isolation import isolated_python
 from test_native_chat_fixed_process import captured_fixed
 from runtime.independent.native_sdk_broker import NativeSdkSessionBroker
+from runtime.independent import native_chat_host
 from test_native_goal_ingress import _authorization
 from runtime.chat_modes import ChatExecutionPolicy
 
@@ -101,12 +103,15 @@ def test_parent_control_exact_scope_and_worker_ack_until_real_exit(tmp_path, mon
             config.STREAMS.pop(context.stream_id,None); config.RECENT_CHAT_STREAMS.pop(context.stream_id,None)
 
 
-def test_failed_start_settles_only_without_process_and_retains_actual_error(tmp_path):
+def test_failed_start_reports_safe_spawn_diagnostic_and_settles_only_without_process(tmp_path, monkeypatch):
     context,store=fixture_context(tmp_path,"a")
     channel=config.create_stream_channel()
     with config.STREAMS_LOCK: config.STREAMS[context.stream_id]=channel
+    def fail_spawn(*_args, **_kwargs):
+        raise FileNotFoundError("private path and secret diagnostic text")
+    monkeypatch.setattr(native_chat_host.subprocess, "Popen", fail_spawn)
     try:
-        assert native_chats.run_native_chat(context,*turn(context),python_executable=tmp_path/"missing-python.exe") == 1
+        assert native_chats.run_native_chat(context,*turn(context),python_executable=Path(sys.executable)) == 1
         assert native_chats.native_chat_exit_confirmed(context)
         raw=json.loads((Path(context.sessions_dir)/(context.session_id+".json")).read_text())
         assert raw["active_stream_id"] is None and raw["messages"][-1]["content"]=="READ OWN FILE"
@@ -115,6 +120,14 @@ def test_failed_start_settles_only_without_process_and_retains_actual_error(tmp_
         rows=[]
         while not replay.empty(): rows.append(replay.get_nowait())
         assert any(event=="error" and data.get("error")=="native_chat_start_failed" for event,data in rows)
+        diagnostic=next(data["diagnostic"] for event,data in rows
+            if event=="error" and data.get("error")=="native_chat_start_failed")
+        assert diagnostic == {
+            "stage":"process_spawn", "exceptionClass":"FileNotFoundError",
+            "processStarted":False, "exitCode":None, "stderrBytes":0,
+            "exitConfirmed":True,
+        }
+        assert "private path" not in repr(rows) and "secret diagnostic text" not in repr(rows)
         assert [data for event,data in rows if event=="stream_end"][-1]["processExited"] is True
     finally:
         store.close()

@@ -8,6 +8,27 @@ from runtime.independent.native_chat_worker import ExactPendingBridge, NativeRPC
 from runtime.independent.worker_host import WorkerError
 
 
+def test_native_rpc_resource_busy_receipt_is_allowlisted_and_secret_free():
+    from runtime.independent.native_chat_host import _native_rpc_denial_receipt
+    from runtime.independent.store import ResourceBusy
+
+    error = ResourceBusy("private provider/path/token-value", diagnostic_reason="provider_concurrency_occupied")
+    receipt = _native_rpc_denial_receipt("auto_claim", error)
+
+    assert receipt == {
+        "schemaVersion": 1,
+        "method": "auto_claim",
+        "code": "resource_busy",
+        "admissionReason": "provider_concurrency_occupied",
+    }
+    assert set(receipt) == {"schemaVersion", "method", "code", "admissionReason"}
+    assert "private" not in repr(receipt) and "path" not in repr(receipt) and "token-value" not in repr(receipt)
+    assert _native_rpc_denial_receipt("foreign_method", error)["method"] == "unknown"
+    unsafe = ResourceBusy("sensitive", diagnostic_reason="C:\\private\\profile")
+    assert _native_rpc_denial_receipt("auto_claim", unsafe)["admissionReason"] == "unclassified_resource_busy"
+    assert _native_rpc_denial_receipt("auto_claim", WorkerError("resource_busy")) is None
+
+
 def test_exact_clarify_reply_never_resolves_oldest_or_foreign_request():
     from web.api import clarify
     session = "native_transport_test"

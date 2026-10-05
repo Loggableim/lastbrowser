@@ -239,7 +239,8 @@ def admission_boundary(base_home: Path):
                     break
                 except (OSError, BlockingIOError):
                     if time.monotonic() >= deadline:
-                        raise ResourceBusy("Shared provider admission is busy")
+                        raise ResourceBusy("Shared provider admission is busy",
+                            diagnostic_reason="provider_admission_lock_busy")
                     time.sleep(.02)
             try:
                 yield
@@ -279,7 +280,8 @@ class ProviderAdmission:
                     live, params = "1=1", (operation,)
                 records = connection.execute("SELECT scope_key,result_json FROM ia_request_results WHERE operation=? AND (" + live + ") ORDER BY created_at DESC LIMIT " + ("64" if include_stale else "4097"), params).fetchall()
                 if len(records) > 4096:
-                    raise ResourceBusy("Provider admission requires bounded journal maintenance")
+                    raise ResourceBusy("Provider admission requires bounded journal maintenance",
+                        diagnostic_reason="provider_journal_maintenance_required")
                 for key, encoded in records:
                     value = json.loads(encoded)
                     if operation == "provider_claim":
@@ -326,11 +328,14 @@ class ProviderAdmission:
             costs = [value.max_cost_microusd_per_minute for value in captured_budgets if value.max_cost_microusd_per_minute is not None]
             cost_cap = min(costs) if costs else None
             if len(active) >= min(concurrency_cap, 1 if not known else concurrency_cap):
-                raise ResourceBusy("Shared provider concurrency is occupied")
+                raise ResourceBusy("Shared provider concurrency is occupied",
+                    diagnostic_reason="provider_concurrency_occupied")
             if len(recent) >= request_cap:
-                raise ResourceBusy("Local shared request budget is exhausted")
+                raise ResourceBusy("Local shared request budget is exhausted",
+                    diagnostic_reason="request_budget_exhausted")
             if proposed.reserved_tokens + sum(row.measured_tokens if row.measured_tokens is not None else row.reserved_tokens for row in recent) > token_cap:
-                raise ResourceBusy("Local shared token budget is exhausted")
+                raise ResourceBusy("Local shared token budget is exhausted",
+                    diagnostic_reason="token_budget_exhausted")
             if proposed.reserved_output_tokens > budget.max_output_tokens:
                 raise PolicyDenied("provider_output_budget_exceeded")
             if cost_cap is not None:
@@ -338,12 +343,14 @@ class ProviderAdmission:
                     raise PolicyDenied("provider_cost_metadata_required")
                 cost = sum(row.measured_cost_microusd if row.measured_cost_microusd is not None else row.reserved_cost_microusd for row in recent)
                 if cost + proposed.reserved_cost_microusd > cost_cap:
-                    raise ResourceBusy("Local shared cost budget is exhausted")
+                    raise ResourceBusy("Local shared cost budget is exhausted",
+                        diagnostic_reason="cost_budget_exhausted")
             for snapshot in snapshots:
                 if snapshot.action_required:
                     raise PolicyDenied("provider_billing_action_required")
                 if snapshot.retry_at and _date(snapshot.retry_at) > now:
-                    raise ResourceBusy("Provider Retry-After cooldown is active")
+                    raise ResourceBusy("Provider Retry-After cooldown is active",
+                        diagnostic_reason="retry_after_active")
                 if now - _date(snapshot.observed_at) > timedelta(seconds=60):
                     continue  # Stale means unknown; never refill the limit.
                 pending = [row for row in active if row.claim_id != snapshot.observed_request_id]
@@ -356,7 +363,14 @@ class ProviderAdmission:
                         proposed.reserved_input_tokens + sum(row.reserved_input_tokens for row in pending) if bucket.resource == "input_tokens" else
                         proposed.reserved_tokens + sum(row.reserved_tokens for row in pending))
                     if need > bucket.remaining:
-                        raise ResourceBusy("Known provider " + bucket.resource + " limit is exhausted")
+                        reason = {
+                            "requests": "provider_limit_requests_exhausted",
+                            "input_tokens": "provider_limit_input_tokens_exhausted",
+                            "output_tokens": "provider_limit_output_tokens_exhausted",
+                            "tokens": "provider_limit_tokens_exhausted",
+                        }.get(bucket.resource, "provider_limit_other_exhausted")
+                        raise ResourceBusy("Known provider " + bucket.resource + " limit is exhausted",
+                            diagnostic_reason=reason)
             with self.store.transaction(write=not _probe_only):
                 validate()
                 binding = self.store.get_binding(proposed.scope)

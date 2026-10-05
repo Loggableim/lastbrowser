@@ -158,8 +158,14 @@ def encode_turn(context: NativeChatContext, args, kwargs) -> dict:
     if len(values) < 5 or values[0] != context.session_id or values[3] != context.workspace or values[4] != context.stream_id:
         raise ScopeError("Native turn arguments do not match their accepted context")
     options = dict(kwargs)
-    if options.get("goal_claim_profile_home") is not None and not same_path(options["goal_claim_profile_home"], context.profile_home):
-        raise ScopeError("Native goal claim belongs to another profile")
+    goal_profile_home = options.get("goal_claim_profile_home")
+    if goal_profile_home is not None:
+        if not isinstance(goal_profile_home, (str, Path)) or not same_path(goal_profile_home, context.profile_home):
+            raise ScopeError("Native goal claim belongs to another profile")
+        # Requests may originate in Quickchat, which does not resolve goal
+        # continuation state and therefore retains profiles.get_profile_home()
+        # as a Path. Encode only the already-verified immutable context value.
+        options["goal_claim_profile_home"] = context.profile_home
     if options.get("goal_claim_space_slug") is not None and options["goal_claim_space_slug"] != Path(context.space_root).name:
         raise ScopeError("Native goal claim belongs to another Space")
     policy = options.get("execution_policy")

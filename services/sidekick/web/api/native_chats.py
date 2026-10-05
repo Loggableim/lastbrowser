@@ -105,6 +105,17 @@ def get_native_stream_context(stream_id: str) -> NativeChatContext | None:
         return entry.context if entry is not None else _settled.get(stream_id)
 
 
+def get_session_native_context(session_id: str) -> NativeChatContext | None:
+    """Resolve the latest accepted worker context for a session-owned reset."""
+    with _lock:
+        active = [entry.context for entry in _active.values() if entry.context.session_id == session_id]
+        if len(active) > 1:
+            raise ScopeError("Native session has conflicting active worker bindings")
+        if active:
+            return active[0]
+        return next((context for context in reversed(_settled.values()) if context.session_id == session_id), None)
+
+
 def pending_control_snapshot(session_id: str, stream_id: str, *, actor: str, scope) -> dict | None:
     """Actual registry recovery only; a missing/terminal worker has no requests."""
     context=get_context(session_id,stream_id,actor=actor,scope=scope)
@@ -545,20 +556,25 @@ def run_native_chat(context: NativeChatContext, args, kwargs, *, python_executab
         reconcile_stale(Path(context.profile_home), generation=context.writer_generation,
                         confirmed_worker_turns=(context.stream_id,))
         _invalidate_owned_cache(context)
-    def start_failed(confirmed):
-        if confirmed:
+    def start_failed(diagnostic):
+        if diagnostic.get("exitConfirmed") is True:
             with _lock:
                 entry.settled = True
             _cleanup_saved_pending(context,materialize_pending=kwargs.get("goal_claim_turn") is None and "native_goal_retry" not in kwargs)
-            put("error", {"error":"native_chat_start_failed", "session_id":context.session_id})
+            put("error", {"error":"native_chat_start_failed", "session_id":context.session_id,
+                "diagnostic":diagnostic})
     try:
         return relay_native_chat(context, args, kwargs, put, cancelled=entry.cancelled,
             on_started=started, on_exit=exited, on_start_failed=start_failed, rpc_handler=rpc_handler,
             python_executable=python_executable, before_stop=before_stop, on_goal_result=on_goal_result)
-    except Exception:
+    except Exception as exc:
         # Actual worker/transport/policy failure, never provider exception text.
-        put("error", {"error":"native_chat_worker_failed","session_id":context.session_id,
-            "processExited":entry.settled})
+        data = {"error":"native_chat_worker_failed","session_id":context.session_id,
+            "processExited":entry.settled}
+        diagnostic = getattr(exc, "diagnostic", None)
+        if isinstance(diagnostic, dict):
+            data["diagnostic"] = diagnostic
+        put("error", data)
         return 1
     finally:
         # Never claim completion, unblock writers, or discard ownership before

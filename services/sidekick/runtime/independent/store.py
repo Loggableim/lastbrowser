@@ -35,8 +35,26 @@ class IdempotencyConflict(StoreError):
     code = "idempotency_conflict"
 
 
+RESOURCE_BUSY_DIAGNOSTIC_REASONS = frozenset({
+    "provider_admission_lock_busy", "provider_journal_maintenance_required",
+    "provider_concurrency_occupied", "request_budget_exhausted",
+    "token_budget_exhausted", "cost_budget_exhausted", "retry_after_active",
+    "provider_limit_requests_exhausted", "provider_limit_input_tokens_exhausted",
+    "provider_limit_output_tokens_exhausted", "provider_limit_tokens_exhausted",
+    "provider_limit_other_exhausted", "auto_receipt_capacity_exhausted",
+    "provider_admission_wait_expired", "unclassified_resource_busy",
+})
+
+
 class ResourceBusy(StoreError):
     code = "resource_busy"
+
+    def __init__(self, message: str = "Resource is busy", *, diagnostic_reason: str | None = None):
+        # Optional source-owned enum for the native RPC receipt. Never derive
+        # this value from exception text, provider data, or user input.
+        self.diagnostic_reason = (diagnostic_reason if isinstance(diagnostic_reason, str)
+            and diagnostic_reason in RESOURCE_BUSY_DIAGNOSTIC_REASONS else "unclassified_resource_busy")
+        super().__init__(message)
 
 
 class StateConflict(StoreError):

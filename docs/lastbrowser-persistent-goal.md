@@ -93,3 +93,9 @@ Berichte kurz: tatsächlich umgesetzte Funktionen, ausgeführte Prüfungen, aktu
 ## App-Zielverwaltung
 
 Das aktive App-Ziel verweist inzwischen ausdrücklich auf dieses Repositorydokument. Die frühere Einschränkung beim Ersetzen des Objective-Texts ist damit historisch. Dieses Dokument bleibt die vollständige Auftragsgrundlage; abgeschlossen wird das App-Ziel erst nach nachgewiesener Erfüllung aller verpflichtenden Punkte.
+
+## Verifizierter Release-Zwischenstand, 2026-10-05
+
+Die ausdrücklich beauftragten Installer-, Signierungs- und Veröffentlichungsarbeiten haben Version 0.1.45 erreicht: signiertes Setup und Portable sind auf GitHub veröffentlicht, Widevine-VMP ist verifiziert, 152 native Signaturen wurden erfolgreich geprüft und beide realen Starttests bestanden. Die gepushten Integrations-/Release-Commits liegen auf `codex/release-0.1.45`; fremde Remote-Änderungen wurden nicht überschrieben. Einzelentwickler-Nutzung von Visual Studio Community wurde vom Benutzer bestätigt. Details und verbleibende Nachweisgrenzen stehen in `release-0.1.45-verification.md`.
+
+Das Gesamtziel bleibt offen: insbesondere Clean-Windows-Installation/Upgrade, Store-Zertifizierung und die explizit offenen Funktions-/Qualitätsabnahmen werden nicht durch einen erfolgreichen Release-Start ersetzt. Die Website-Veröffentlichung wird separat gegen die tatsächlich ausgelieferten Downloads geprüft.

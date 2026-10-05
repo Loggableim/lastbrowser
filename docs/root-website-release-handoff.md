@@ -1,29 +1,39 @@
-# Website-Handoff: Release Candidate 0.1.45
+# Website-Handoff: Release 0.1.45
 
-Stand: 2026-10-05. Website-Candidate-Texte aktualisiert; keine Veröffentlichung, kein Git-Index/Commit/Push und keine Produktversionsdatei geändert.
+Stand: 2026-10-05. Website und Download-Proxy auf den veröffentlichten Release v0.1.45 aktualisiert. Keine Veröffentlichung oder Bereitstellung durch diesen Agent; Git-Index, Commit und Push unangetastet.
 
-## Versionsstatus und Websiteaussagen
+## Veröffentlichte Release-Metadaten
 
-- GitHub `v0.1.44` wurde am 3. Oktober 2026 von Root als bereits veröffentlicht bestätigt. Root meldet dafür den älteren Quellcommit `86d7090b` und vier Assets. Das Website-Archiv nennt die historische Veröffentlichung und verlinkt ihre Release-Seite, ohne Assetnamen, Signaturdetails oder Hashes zu behaupten.
-- `v0.1.45` ist der nächste Kandidat in Vorbereitung. Er ist noch nicht als Build oder Download dargestellt.
-- Die Downloadseiten weisen auf die korrekte historische Lage hin, führen aber weiterhin ihre bestehenden v0.1.43 Setup-/Portable-Links und Hashes. Sie sagen ausdrücklich, dass diese Links `.43` liefern; es wurden keine neuen `.44`/`.45` Downloadziele oder Hashes erfunden.
-- Die Feature- und Changelogseiten führen die Quelländerungen als `.45`-Kandidaten. AUTO bevorzugt einen zulässigen verfügbaren konfigurierten Orchestrator; sonst nutzt es frischen beobachteten Limit-Spielraum nur, wenn er für alle Kandidaten vorliegt, danach aktive/kürzliche lokale Anfragen und als Gleichstandsregel die konfigurierte Reihenfolge. Das ist keine semantische Qualitäts- oder Kostenoptimierung. Der lokale 350M-Router bestand den unabhängigen Holdout nicht.
-- Release Notes beschreiben den kontrollierten Drei-Schritt-Teamwork-Loopback als bestanden, ohne daraus Qualität bezahlter Modelle oder externer Anbieter abzuleiten. Die lokale PC-Prüfung und Setupführung sind im Quellstand; produktive lokale Inferenz, Runtime-/Lizenz-/Redistributionsnachweise und Paketabnahme bleiben offen. Der RAM-Guard ist nicht für unterstützte Hardware qualifiziert.
+GitHub-Release [v0.1.45](https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.45) ist am 5. Oktober 2026 um 08:57:03 UTC erschienen. Root bestätigte, dass die öffentlichen Assets mit den lokalen Hashes übereinstimmen und `latest.yml` byteidentisch zum signierten Original ist.
 
-Die Website-Texte sind keine Paketabnahme und kein Nachweis für externe Providerqualität oder lokale Inferenz im veröffentlichten Build.
+| Datei | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `Lastbrowser-0.1.45-x64-setup.exe` | 175,963,336 | `ccf1435947a415fe5a97bb5d908edb79a519106877128c3e4d5f1b210236bc96` |
+| `Lastbrowser-0.1.45-x64-portable.exe` | 175,601,280 | `8078cf5481cf9fa371fdb6da79d39b85741fe97fc15ed30d4fe30b7d37b6a577` |
 
-## Metadatenseams nach Root-Artefaktprüfung
+Die Downloadseiten in DE/EN/ES/FR/IT/PT/JA, Featureseiten, Changelogs, Release-Archiv, RSS und Cloudflare-Download-Proxy verweisen jetzt auf `.45`. Das Archiv führt `.44` und ältere Releases weiterhin historisch auf. Die `.45`-Seiten nennen Signatur und Hashes, bewerben aber weder lokale Modellqualität noch eine Clean-Windows-Abnahme als bestanden.
 
-Wenn Root den finalen `.45`-Release aus genau einem Source-Freeze erstellt und Signaturen, Größen sowie SHA-256 für Setup und Portable geprüft hat, müssen die statischen Websiteangaben zusammen aktualisiert werden:
+## Verifizierte Grenzen
 
-1. `lastbrowser.com/download/index.html` und `lastbrowser.com/{en,es,fr,it,pt,ja}/download/index.html`: JSON-LD `softwareVersion`/`downloadUrl`, Titel, Buttons/Dateinamen, Verifikationsbefehle, Hashdarstellung und Floating Download CTA. Nur Root-geprüfte `.45`-Artefakte eintragen; bestehende `.43`-Links erst dann ersetzen.
-2. `lastbrowser.com/releases/index.html`: `.45` mit Root-verifizierten Dateinamen, Größen, Signaturstatus und Hashes ergänzen; `.44` und `.43` als frühere Versionen belassen. Für `.44` sind hier bislang keine Assetnamen oder Hashes dokumentiert.
-3. `lastbrowser.com/changelog/index.html` und `en/es/fr/it/pt/ja/changelog/index.html`: `.45`-Kandidat erst nach Veröffentlichung auf „veröffentlicht“ ändern und echtes Datum sowie Release-URL nennen. Der RSS-Feed enthält noch `.43`, weil für `.44` bislang nur der Kalendertag, aber kein verifizierter Veröffentlichungszeitpunkt vorliegt; `.44` dort erst mit Root-bestätigtem RFC-822-Datum nachtragen. `.45` ebenfalls erst nach Veröffentlichung ergänzen.
-4. Versionshinweise in den Sprach-Homepages, Getting-Started- und Press-Seiten nur angleichen, wenn sie den letzten veröffentlichten Stand behaupten. Root/Desktop-Paketversionen gehören nicht zu diesem Website-Handoff.
+- Root meldet Authenticode `Valid` mit Zeitstempel, VMP-Verifikation und 152/152 bestandene native Signaturprüfungen.
+- Signierte Direct-App-Probe: PASS. Signierte Portable-Probe: PASS mit echtem `app://`-Renderer, Sidekick `ready`, WebUI `ready`, Exitcode 0 und bereinigtem eigenem Profil. Der erste kontrollierte Portable-Start bis zum Renderer dauerte 113.6 Sekunden; die Website nennt gerundet etwa 114 Sekunden und weist auf mögliche Unterschiede je PC hin. Das ist kein Clean-Windows-Test.
+- Der lokale 350M-Router bestand seinen unabhängigen Holdout nicht. Der RAM-Guard ist nicht für unterstützte Hardware qualifiziert. Lokale Inferenz bleibt offen.
+- Der Drei-Schritt-Teamwork-Loopbacktest lief im kontrollierten lokalen Pfad; das belegt keine Qualität bezahlter Modelle oder externer Provider. Keine Gemini-/Paid-Model-Qualitätsbehauptung ergänzt.
+
+Portable-Probenbericht: `output/portable-exe-3d4dc81b-473d-4279-9b69-044c1d07009e.json`.
+
+## Website-Metadaten und Probe
+
+- `lastbrowser.com/download/index.html` und die sechs lokalisierten Downloads enthalten Dateinamen, Dateigrößen, SHA-256, passende Downloadlinks und den beobachteten Portable-Erststart.
+- `lastbrowser.com/releases/index.html` listet beide `.45`-Assets samt Bytes und SHA-256; `.44` bleibt als ältere veröffentlichte Version geführt.
+- `lastbrowser.com/changelog/feed.xml` führt `.45` mit dem bestätigten Zeitpunkt `Mon, 05 Oct 2026 08:57:03 GMT`.
+- `lastbrowser.com/functions/downloads/[file].js` leitet Setup, Portable und `latest.yml` auf den veröffentlichten Tag `v0.1.45`.
+- `apps/desktop/tests/public-downloads.test.ts`: gezielter Lauf `npm --workspace apps/desktop run test:run -- tests/public-downloads.test.ts` — 5/5 PASS.
+- `git diff --check` — PASS.
 
 ## Produktionsdeploy
 
-Der dokumentierte Cloudflare-Pages-Befehl lautet, aus dem Websiteverzeichnis ausgeführt:
+Das dokumentierte Cloudflare-Pages-Kommando wird aus `lastbrowser.com/` ausgeführt, damit die benachbarte Functions-Directory kompiliert wird:
 
 ```powershell
 Push-Location lastbrowser.com
@@ -33,10 +43,4 @@ try {
 } finally { Pop-Location }
 ```
 
-Das Arbeitsverzeichnis muss `lastbrowser.com/` sein, damit die benachbarte `functions/`-Directory durch Wrangler kompiliert wird. In der Ausgabe müssen `Compiled Worker successfully` und `Uploading Functions bundle` erscheinen. Danach die lokalisierte Website, Download-Proxydateien und `/downloads/latest.yml` prüfen. Kein Deploy wurde von diesem Agent ausgeführt.
-
-Fokussierter bestehender Funktionstest:
-
-```powershell
-node --test lastbrowser.com/tests/download-counter.test.mjs
-```
+In der Ausgabe `Compiled Worker successfully` und `Uploading Functions bundle` prüfen. Anschließend alle lokalisierten Downloadlinks, `/downloads/latest.yml` und Function-Proxyantworten auf die veröffentlichten `.45`-Assets gegenprüfen. Root übernimmt Pflichtsuite, Commit und Deploy.

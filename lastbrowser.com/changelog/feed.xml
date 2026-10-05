@@ -5,9 +5,21 @@
     <link>https://lastbrowser.com/changelog/</link>
     <description>Offizieller Release- und Update-Feed für Lastbrowser – Der AI-native Windows-Browser.</description>
     <language>de</language>
-    <lastBuildDate>Fri, 02 Oct 2026 02:50:59 GMT</lastBuildDate>
+    <lastBuildDate>Mon, 05 Oct 2026 08:57:03 GMT</lastBuildDate>
     <atom:link href="https://lastbrowser.com/changelog/feed.xml" rel="self" type="application/rss+xml"/>
     
+    <item>
+      <title>Lastbrowser v0.1.45 Beta – Compact composer and setup updates</title>
+      <link>https://lastbrowser.com/releases/#v0.1.45</link>
+      <guid isPermaLink="false">lastbrowser-v0.1.45</guid>
+      <pubDate>Mon, 05 Oct 2026 08:57:03 GMT</pubDate>
+      <description><![CDATA[
+        <p>v0.1.45 adds a compact composer with AUTO and “More”, compact goal controls, tighter Space Assistant and Quick Chat flows, and simpler local setup guidance.</p>
+        <p>The 350M router failed its independent quality holdout and the RAM guard is not qualified across supported hardware. A controlled Teamwork loopback test does not establish paid-model quality. The signed portable smoke reached the renderer and ready backend in about 114 seconds; clean-Windows qualification remains open.</p>
+        <p><a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.45">Published release notes and verified downloads</a>.</p>
+      ]]></description>
+    </item>
+
     <item>
       <title>Lastbrowser v0.1.43 Beta – Alibaba workspace and provider fixes</title>
       <link>https://lastbrowser.com/releases/#v0.1.43</link>

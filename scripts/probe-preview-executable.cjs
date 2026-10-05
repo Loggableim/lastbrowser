@@ -4,25 +4,67 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const net = require('node:net');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const assert = require('node:assert/strict');
 assert.equal(typeof globalThis.WebSocket, 'function', 'Use the existing Node WebSocket runtime');
 const root = path.resolve(__dirname, '..');
+const signedReleaseName = 'release-local-0.1.45-20261005-102014';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+function resolveProbeTarget() {
+  const args = process.argv.slice(2);
+  const signedRelease = args[0] === '--signed-release';
+  if ((signedRelease && args.length !== 2) || (!signedRelease && args.length !== 1)) {
+    throw new Error(`Usage: node ${path.basename(__filename)} [--signed-release] <directory>`);
+  }
+  const target = fs.realpathSync(path.resolve(signedRelease ? args[1] : args[0]));
+  const expected = signedRelease
+    ? path.resolve(root, 'apps', 'desktop', signedReleaseName)
+    : fs.realpathSync(path.join(root, 'output'));
+  if (signedRelease) {
+    if (path.basename(target) !== signedReleaseName || path.dirname(target).toLowerCase() !== path.resolve(root, 'apps', 'desktop').toLowerCase()) {
+      throw new Error(`--signed-release accepts only ${expected}`);
+    }
+  } else if (!target.startsWith(expected + path.sep)) {
+    throw new Error(`Unsigned preview directory must be under ${expected}`);
+  }
+  return { target, signedRelease };
+}
+function verifyAuthenticodeTimestamp(executable) {
+  const command = '$ErrorActionPreference="Stop"; $s=Get-AuthenticodeSignature -LiteralPath $env:LASTBROWSER_SIGNED_PROBE_EXE; [pscustomobject]@{status=[string]$s.Status; signer=if($s.SignerCertificate){$s.SignerCertificate.Subject}else{$null}; timestampPresent=($null -ne $s.TimeStamperCertificate); timestampSigner=if($s.TimeStamperCertificate){$s.TimeStamperCertificate.Subject}else{$null}} | ConvertTo-Json -Compress';
+  const powershellEnv = { ...process.env, LASTBROWSER_SIGNED_PROBE_EXE: executable };
+  delete powershellEnv.PSModulePath;
+  const powershell = path.join(process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const result = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', command], {
+    encoding: 'utf8', windowsHide: true,
+    env: powershellEnv
+  });
+  if (result.error || result.status !== 0) throw new Error(`Get-AuthenticodeSignature failed: ${result.error || result.stderr || result.status}`);
+  let signature;
+  try { signature = JSON.parse(result.stdout.trim()); } catch { throw new Error(`Could not parse Get-AuthenticodeSignature result: ${result.stdout}`); }
+  if (signature.status !== 'Valid' || !signature.signer || signature.timestampPresent !== true || !signature.timestampSigner) {
+    throw new Error(`Executable must have a valid Authenticode signature and timestamp; status=${signature.status}, timestampPresent=${signature.timestampPresent}`);
+  }
+  return signature;
+}
 async function freePort() {
   const server = net.createServer(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port; await new Promise(resolve => server.close(resolve)); return port;
 }
 async function main() {
-  const preview = fs.realpathSync(path.resolve(process.argv[2] || ''));
-  assert(preview.startsWith(fs.realpathSync(path.join(root, 'output')) + path.sep));
-  const receipt = JSON.parse(fs.readFileSync(path.join(preview, 'preview-result.json'), 'utf8'));
-  assert(receipt.unsigned && !receipt.published && !receipt.error);
+  const { target: preview, signedRelease } = resolveProbeTarget();
+  if (!signedRelease) {
+    const receipt = JSON.parse(fs.readFileSync(path.join(preview, 'preview-result.json'), 'utf8'));
+    assert(receipt.unsigned && !receipt.published && !receipt.error);
+  }
+  const executable = path.join(preview, 'win-unpacked', 'Lastbrowser.exe');
+  assert(fs.lstatSync(executable).isFile(), `Packaged executable exists at ${executable}`);
+  const signature = signedRelease ? verifyAuthenticodeTimestamp(executable) : null;
   const owned = fs.mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-direct-exe-'));
   const id = randomUUID(), port = await freePort(), pending = new Map();
   const report = { schemaVersion: 1, startedAt: new Date().toISOString(), preview, owned,
     directExecutable: true, passed: false, limits: ['Explicit loopback CDP for controlled smoke only', 'No real model inference or full feature acceptance'] };
+  if (signedRelease) Object.assign(report, { signedRelease: true, signatureVerified: true, signatureStatus: signature.status, signer: signature.signer, timestampSigner: signature.timestampSigner });
   let task, socket, sequence = 0, log = '';
   const env = {};
   for (const name of ['SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATH', 'PATHEXT', 'PROGRAMFILES', 'PROGRAMFILES(X86)', 'PROGRAMDATA']) if (process.env[name]) env[name] = process.env[name];
@@ -41,7 +83,7 @@ async function main() {
     if (value.exceptionDetails) throw Error(JSON.stringify(value.exceptionDetails)); return value.result.value;
   };
   try {
-    task = spawn(path.join(preview, 'win-unpacked', 'Lastbrowser.exe'), [`--user-data-dir=${path.join(owned, 'profile')}`, `--remote-debugging-port=${port}`, '--remote-debugging-address=127.0.0.1'],
+    task = spawn(executable, [`--user-data-dir=${path.join(owned, 'profile')}`, `--remote-debugging-port=${port}`, '--remote-debugging-address=127.0.0.1'],
       { cwd: path.join(preview, 'win-unpacked'), env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     task.once('error', error => { report.spawnError = String(error); });
     for (const pipe of [task.stdout, task.stderr]) pipe.on('data', bytes => { log += bytes; });

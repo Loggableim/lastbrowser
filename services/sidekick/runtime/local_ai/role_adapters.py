@@ -12,6 +12,9 @@ from .contracts import Role
 class RoleRequest(Contract):
     role: Role
     texts: tuple[Annotated[str, Field(min_length=1, max_length=65536)], ...]
+    # Trusted instructions stay separate so the model receives them in the
+    # system role, leaving the request in an untrusted user role.
+    system_text: Annotated[str, Field(max_length=4096)] | None = None
     max_output_tokens: Annotated[int, Field(gt=0, le=2048)] = 256
     image_base64: Annotated[str, Field(max_length=4194304)] | None = None
     input_kind: Literal['query', 'document'] | None = None
@@ -20,6 +23,11 @@ class RoleRequest(Contract):
     def bounded(self):
         if not 1 <= len(self.texts) <= 8 or sum(map(len, self.texts)) > 131072:
             raise ValueError('local_operation_input_budget_exceeded')
+        if self.system_text is not None:
+            if self.role not in ('agent', 'chat', 'extract', 'vision'):
+                raise ValueError('system_instruction_requires_chat_operation')
+            if not self.system_text.strip():
+                raise ValueError('empty_system_instruction')
         if self.role in ('agent', 'chat', 'extract', 'vision') and len(self.texts) != 1:
             raise ValueError('local_chat_requires_one_input')
         if self.role == 'chat' and self.max_output_tokens > 48:
@@ -52,7 +60,9 @@ def operation_payload(request: RoleRequest, artifact_id: str, adapter=None) -> t
     if request.role == 'vision':
         content = [{'type': 'text', 'text': content}, {'type': 'image_url', 'image_url': {'url': 'data:image/' +
             ('png' if base64.b64decode(request.image_base64).startswith(b'\x89PNG') else 'jpeg') + ';base64,' + request.image_base64}}]
-    payload = {'model': artifact_id, 'messages': [{'role': 'user', 'content': content}],
+    messages = [{'role': 'system', 'content': request.system_text}] if request.system_text else []
+    messages.append({'role': 'user', 'content': content})
+    payload = {'model': artifact_id, 'messages': messages,
         'max_tokens': request.max_output_tokens, 'stream': False, 'temperature': 0}
     if request.role == 'extract': payload['response_format'] = {'type': 'json_object'}
     return '/v1/chat/completions', payload

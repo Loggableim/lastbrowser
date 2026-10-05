@@ -94,6 +94,20 @@ def test_start_creates_private_scoped_stream_with_no_goal_or_tool_authority(monk
     assert "untrusted" in request["msg"]
 
 
+def test_start_normalizes_resolved_windows_path_before_stream_persistence(monkeypatch, tmp_path):
+    handler, body, starts = _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr("web.api.workspace.resolve_trusted_workspace",
+                        lambda _value: Path(tmp_path))
+
+    result, status = quickchat.start_quickchat(body, handler)
+
+    assert status == 200
+    assert result["stream_id"] == STREAM_ID
+    _session, request = starts[0]
+    assert request["workspace"] == str(tmp_path)
+    assert type(request["workspace"]) is str
+
+
 def test_reset_cancels_only_matching_private_stream_and_rejects_mismatch(monkeypatch, tmp_path):
     handler, body, starts = _setup(monkeypatch, tmp_path)
     quickchat.start_quickchat(body, handler)

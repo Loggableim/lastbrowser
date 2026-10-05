@@ -292,6 +292,10 @@ export function SidekickSidebar({
               onOpenSettings={onOpenSettings}
               onNewTab={onNewTab}
               onExpandSidebar={() => onSetMode('expanded')}
+              onEnterZenMode={() => {
+                if (isFloatingOverlay && onCloseOverlay) onCloseOverlay();
+                else onSetMode('hidden');
+              }}
               forcedPosition={isFloatingOverlay ? 'left' : undefined}
               spacePath={activeSpacePath}
             />

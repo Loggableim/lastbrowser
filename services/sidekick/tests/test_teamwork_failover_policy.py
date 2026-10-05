@@ -197,7 +197,8 @@ def test_teamwork_emits_sanitized_auth_and_quota_failures_without_cross_provider
         raise ProviderError(status_code)
 
     with patch("runtime.teamwork_orchestrator.resolve_team_plan", return_value=plan), \
-         patch("runtime.auxiliary_client.call_llm", side_effect=fail_provider):
+         patch("runtime.auxiliary_client.call_llm", side_effect=fail_provider), \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=fail_provider):
         with pytest.raises(RuntimeError, match=f"HTTP {status_code}"):
             run_teamwork_turn(
                 MagicMock(messages=[]),
@@ -253,10 +254,16 @@ def test_worker_failure_metadata_is_sanitized_while_another_draft_succeeds(caplo
             raise ProviderError(429)
         return _ok_response("successful worker or critic")
 
+    def stream_model(*, provider, on_content, **_kwargs):
+        if provider == "ollama-cloud":
+            raise ProviderError(429)
+        on_content("successful visible draft")
+        return "successful visible draft"
+
     with patch("runtime.teamwork_orchestrator.resolve_team_plan", return_value=plan), \
          patch("runtime.auxiliary_client.call_llm", side_effect=call_model), \
          patch("runtime.auxiliary_client.extract_content_or_reasoning", side_effect=lambda response: response.choices[0].message.content), \
-         patch("runtime.auxiliary_client.stream_llm", side_effect=_fake_stream):
+         patch("runtime.auxiliary_client.stream_llm", side_effect=stream_model):
         result = run_teamwork_turn(
             MagicMock(messages=[]),
             "Complete the task.",
@@ -338,7 +345,10 @@ def test_synthesis_failures_never_expose_provider_payload(partial_output, caplog
     plan = _pipeline_plan(workers=[worker], pool=[worker])
     events = []
 
-    def fail_stream(*, on_content, **_kwargs):
+    def fail_stream(*, on_content, max_tokens, **_kwargs):
+        if max_tokens <= 384:  # worker draft succeeds; synthesis is the intended failure.
+            on_content("worker draft")
+            return "worker draft"
         if partial_output:
             on_content("partial draft")
         raise ProviderError(429)

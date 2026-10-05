@@ -24,6 +24,7 @@ from runtime.teamwork_orchestrator import (
     _scaled_worker_target,
     _invoke_worker,
     _safe_teamwork_rpc_failure_code,
+    _teamwork_visible_content,
 )
 
 
@@ -218,6 +219,49 @@ def test_worker_reports_hot_swap_even_when_every_candidate_fails():
     assert result["error"] == "provider request failed"
     assert result["model"] == "model-b"
     assert result["swapped"] is True
+
+
+def test_streaming_worker_rejects_reasoning_only_output_without_leaking_it():
+    worker = {
+        "model": "model-a", "call_model": "model-a", "provider": "provider-a",
+        "name": "A", "role": "Pragmatiker", "focus": "Implementation",
+    }
+    events = []
+
+    def reasoning_only(*, on_reasoning, **_kwargs):
+        on_reasoning("private reasoning must never become a worker draft")
+        return ""
+
+    with patch("runtime.auxiliary_client.stream_llm", side_effect=reasoning_only):
+        result = _invoke_worker(
+            worker,
+            "synthetic task",
+            "",
+            [],
+            allow_hot_swap=False,
+            event_put=lambda event, data: events.append((event, data)),
+        )
+
+    assert result["content"] == ""
+    assert result["failure_code"] == "teamwork_worker_reasoning_only"
+    assert "sichtbaren Entwurf" in result["error"]
+    assert "private reasoning" not in repr(result)
+    worker_end = next(data for event, data in events if event == "teamwork_worker_end")
+    assert worker_end["failure_code"] == "teamwork_worker_reasoning_only"
+    assert worker_end["error"] == result["error"]
+    assert "private reasoning" not in repr(events)
+
+
+def test_teamwork_visible_content_strips_think_blocks_and_counts_reasoning_only():
+    response = MagicMock()
+    response.choices[0].message.content = "<think>private</think>Visible draft"
+    response.choices[0].message.reasoning_content = "separate private reasoning"
+    assert _teamwork_visible_content(response) == ("Visible draft", len("separate private reasoning"))
+
+    response.choices[0].message.content = ""
+    visible, reasoning_chars = _teamwork_visible_content(response)
+    assert visible == ""
+    assert reasoning_chars == len("separate private reasoning")
 
 
 def test_worker_hot_swaps_when_provider_returns_empty_completion():
@@ -921,6 +965,78 @@ def test_run_teamwork_turn_flow():
         assert "synthesizing" in stage_names
 
 
+def test_teamwork_workers_stream_in_parallel_and_feed_critic_and_synthesis():
+    """Both provider streams overlap while visible drafts reach later stages."""
+    from types import SimpleNamespace
+
+    pool = [
+        {"id": "@ollama-cloud:model-a", "call_model": "model-a", "provider": "ollama-cloud",
+         "name": "Provider A", "tier": "fast"},
+        {"id": "@openai-codex:model-b", "call_model": "model-b", "provider": "openai-codex",
+         "name": "Provider B", "tier": "balanced"},
+    ]
+    plan = {
+        "strategy": "balanced", "planner": None,
+        "workers": [
+            {"worker_id": "worker-1", "worker_index": 1, "model": pool[0]["id"], "call_model": "model-a",
+             "provider": "ollama-cloud", "name": "Provider A", "role": "Analyst", "focus": "edge cases"},
+            {"worker_id": "worker-2", "worker_index": 2, "model": pool[1]["id"], "call_model": "model-b",
+             "provider": "openai-codex", "name": "Provider B", "role": "Designer", "focus": "contracts"},
+        ],
+        "worker_pool": pool, "pool": pool,
+        "critic": pool[0]["id"], "critic_provider": pool[0]["provider"],
+        "synthesizer": pool[1]["id"], "synthesizer_provider": pool[1]["provider"],
+        "provider_count": 2, "reduced_mode": False,
+    }
+    both_started = threading.Barrier(2, timeout=3)
+    lock = threading.Lock()
+    active = 0
+    max_active = 0
+    phases = []
+    critic_seen = []
+
+    def fake_stream(*, provider, model, messages, on_content, **kwargs):
+        nonlocal active, max_active
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+        try:
+            both_started.wait()
+            answer = f"visible draft from {model}"
+            on_content(answer)
+            phases.append(("worker", model, kwargs.get("max_tokens")))
+            return answer
+        finally:
+            with lock:
+                active -= 1
+
+    def fake_call(*, provider, model, messages, **kwargs):
+        content = messages[0].get("content", "")
+        if "PARALLELEN ENTWÜRFE" in content:
+            critic_seen.append(content)
+            phases.append(("critic", model, kwargs.get("max_tokens")))
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="visible critic review"))])
+        raise AssertionError("unexpected planner or completion")
+
+    with patch("runtime.teamwork_orchestrator.get_teamwork_model_pool", return_value=pool), \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=fake_stream), \
+         patch("runtime.auxiliary_client.call_llm", side_effect=fake_call):
+        import runtime.teamwork_orchestrator as orchestrator
+        result = orchestrator._run_teamwork_turn(
+            MagicMock(messages=[]), "Design a bounded API", config={"enabled": True, "shared_grounding": False,
+            "strategy": "balanced", "auto_scale": False, "max_subagents": 2,
+            "hot_swap": {"enabled": False, "fallback_quorum_min": 2}},
+            stream_put=lambda *_: None, cancel_event=threading.Event(), plan_override=plan)
+
+    assert max_active == 2
+    assert len([draft for draft in result["metadata"]["drafts"] if not draft.get("error")]) == 2
+    assert "visible draft from model-a" in critic_seen[0]
+    assert "visible draft from model-b" in critic_seen[0]
+    assert result["metadata"]["critic"]["review"] == "visible critic review"
+    assert result["content"] in {"visible draft from model-a", "visible draft from model-b"}
+    assert {phase for phase, *_ in phases} == {"worker", "critic"}
+
+
 @pytest.mark.parametrize("failed_stage", ["planner", "critic", "synthesizer"])
 def test_ollama_cloud_teamwork_failure_stages_keep_a_visible_answer(failed_stage):
     from types import SimpleNamespace
@@ -1054,7 +1170,8 @@ def test_singleton_ollama_cloud_quorum_failure_is_actionable_and_does_not_echo_p
             self.status_code = status_code
 
     with patch("runtime.teamwork_orchestrator.resolve_team_plan", return_value=plan), \
-         patch("runtime.auxiliary_client.call_llm", side_effect=ProviderError):
+         patch("runtime.auxiliary_client.call_llm", side_effect=ProviderError), \
+         patch("runtime.auxiliary_client.stream_llm", side_effect=ProviderError):
         with pytest.raises(RuntimeError) as exc_info:
             run_teamwork_turn(
                 session,

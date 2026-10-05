@@ -1020,6 +1020,17 @@ def _load_auth_store(auth_file: Optional[Path] = None) -> Dict[str, Any]:
 
 def _save_auth_store(auth_store: Dict[str, Any]) -> Path:
     auth_file = _auth_file_path()
+    # Status/catalog reads can pass an unchanged store through legacy helpers.
+    # Avoid rewriting auth.json (and its updated_at) unless persisted data
+    # actually changed. This keeps read-only resolution from looking like an
+    # auth mutation while preserving timestamps for real credential updates.
+    proposed = dict(auth_store)
+    proposed["version"] = AUTH_STORE_VERSION
+    existing = _load_auth_store(auth_file)
+    comparable_proposed = {key: value for key, value in proposed.items() if key != "updated_at"}
+    comparable_existing = {key: value for key, value in existing.items() if key != "updated_at"}
+    if auth_file.is_file() and comparable_proposed == comparable_existing:
+        return auth_file
     auth_file.parent.mkdir(parents=True, exist_ok=True)
     # Tighten parent dir to 0o700 so siblings can't traverse to creds.
     # No-op on Windows (POSIX mode bits not enforced); ignore failures.

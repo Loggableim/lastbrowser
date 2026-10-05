@@ -1,8 +1,8 @@
 """Opt-in real Windows CPU inference through the existing private benchmark host.
 
 This never contacts a user profile. Set LASTBROWSER_LOCAL_AI_REAL_INFERENCE=1
-and LASTBROWSER_LOCAL_AI_MODEL_PATH to a pre-downloaded, pinned 230M GGUF to
-run it. The pinned LICENSE is fetched by the existing allowlisted installer.
+and LASTBROWSER_LOCAL_AI_MODEL_PATH to a pre-downloaded, pinned GGUF to run
+it. A sibling pinned LICENSE must be present; the probe refuses network downloads.
 """
 import ctypes
 import hashlib
@@ -10,6 +10,7 @@ import json
 import os
 import platform
 import shutil
+import stat
 import time
 import uuid
 from datetime import datetime, timezone
@@ -52,11 +53,37 @@ def test_real_230m_answer_through_existing_bounded_runtime():
             and item.revision == '9969000761ce34de907bf20017cbfc3d52d6eaf9'), None)
         if artifact is None:
             raise ValueError('real_local_candidate_not_in_pinned_catalog')
+    elif candidate == 'qwen2.5-0.5b-instruct-q4_0-qual-v1':
+        from runtime.local_ai.contracts import ArtifactFile, ModelArtifact
+        repo = 'Qwen/Qwen2.5-0.5B-Instruct-GGUF'
+        revision = '12145bd1d629190a4d44254073650877954d02c9'
+        artifact = ModelArtifact(artifact_id=repo + ':qwen2.5-0.5b-instruct-q4_0.gguf', provider='Qwen',
+            model_id=repo, revision=revision, format='gguf', quantization='Q4_0', architecture='qwen2',
+            roles=('agent',), context_limit=8192, files=(
+                ArtifactFile(relative_path='qwen2.5-0.5b-instruct-q4_0.gguf', bytes=428730208,
+                    sha256='7671c0c304e6ce5a7fc577bcb12aba01e2c155cc2efd29b2213c95b18edaf6ed',
+                    source_url=f'https://huggingface.co/{repo}/resolve/{revision}/qwen2.5-0.5b-instruct-q4_0.gguf', kind='weights'),
+                ArtifactFile(relative_path='LICENSE', bytes=11343,
+                    sha256='832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e',
+                    source_url=f'https://huggingface.co/{repo}/resolve/{revision}/LICENSE', kind='license')),
+            manifest_complete=True, license_ref=f'https://huggingface.co/{repo}/blob/{revision}/LICENSE',
+            license_digest='832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e',
+            evidence_refs=(f'https://huggingface.co/{repo}/blob/{revision}/README.md',
+                f'https://huggingface.co/{repo}/blob/{revision}/LICENSE'))
     else:
         raise ValueError('real_local_candidate_not_allowlisted')
+    license_file = next(item for item in artifact.files if item.kind == 'license')
+    license_source = Path(os.environ.get('LASTBROWSER_LOCAL_AI_LICENSE_PATH', source.with_name('LICENSE')))
+    license_info = license_source.lstat()
+    if (not license_source.is_absolute() or not stat.S_ISREG(license_info.st_mode)
+            or license_source.is_symlink() or getattr(license_info, 'st_file_attributes', 0) & 0x400
+            or license_info.st_size != license_file.bytes):
+        raise ValueError('real_model_license_not_pinned_regular_file')
+    license_digest = hashlib.sha256(license_source.read_bytes()).hexdigest()
+    if license_digest != license_file.sha256:
+        raise ValueError('real_model_license_hash_mismatch')
     expected_bytes, expected_hash = artifact.files[0].bytes, artifact.files[0].sha256
     info = source.lstat()
-    import stat
     if (not source.is_absolute() or not stat.S_ISREG(info.st_mode) or source.is_symlink()
             or getattr(info, 'st_file_attributes', 0) & 0x400 or info.st_size != expected_bytes):
         raise ValueError('real_model_source_not_pinned_regular_file')
@@ -104,9 +131,12 @@ def test_real_230m_answer_through_existing_bounded_runtime():
         identity = hashlib.sha256(artifact.artifact_id.encode()).hexdigest()
         with _cache_directory(cache, (plan.plan_digest, identity)) as artifact_dir:
             shutil.copyfile(source, artifact_dir / artifact.files[0].relative_path)
-        # Installer verifies the preseeded model and fetches only the pinned
-        # license file; its allowlist, size/hash checks, and atomic publish apply.
-        LocalAiInstaller(service, lambda _scope: cache).install(scope, actor='default', plan_digest=plan.plan_digest)
+            shutil.copyfile(license_source, artifact_dir / license_file.relative_path)
+        class NoDownloadTransport:
+            def open(self, *_args, **_kwargs):
+                raise AssertionError('real local inference probe must not download files')
+        LocalAiInstaller(service, lambda _scope: cache, transport=NoDownloadTransport()).install(
+            scope, actor='default', plan_digest=plan.plan_digest)
 
         now = datetime.now(timezone.utc)
         class MEMORYSTATUSEX(ctypes.Structure):
@@ -187,7 +217,7 @@ def test_real_230m_answer_through_existing_bounded_runtime():
             raise AssertionError('pinned_product_chat_adapter_evidence_missing')
         suite_results = result.get('suiteResults', [])
         labels = [item.get('text', '').strip().upper() for item in suite_results[:14]] if test_role=='agent' else []
-        expected_labels = ['SIMPLE'] * 4 + ['COMPLEX'] * 6 + ['UNCLEAR'] * 4
+        expected_labels = ['S'] * 4 + ['E'] * 10
         answer_outputs = ([item.get('text', '').strip() for item in suite_results[14:17]] if test_role=='agent'
             else [item.get('text', '').strip() for item in suite_results])
         import unicodedata

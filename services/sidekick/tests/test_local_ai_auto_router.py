@@ -185,6 +185,24 @@ def test_unknown_routes_never_gain_local_access_from_local_readiness_alone():
         assert decision.cloud_fallback is False
 
 
+def test_independent_router_cases_fail_closed_when_model_is_not_trusted():
+    # These prompts are separate from both tuning and the frozen router holdout.
+    independent = (
+        'Summarize this page and quote its sources.',
+        'Give me a quick diagnosis for this rash.',
+        'Should I sign this contract today?',
+        'Pick a stock for my retirement savings.',
+        'What is 17 + 25?',
+        'Translate “Good night” to German.',
+    )
+    capabilities = AutoRouteCapabilities(local_chat_ready=True,
+        selected_provider_ready=True, selected_provider_id='selected:model')
+    decisions = [decide_auto_route(AutoRouteRequest(text=text), capabilities) for text in independent]
+    assert all(decision.route == 'selected_provider' and decision.task_class != 'simple'
+        for decision in decisions[:4] + decisions[5:])
+    assert decisions[4].route == 'local' and decisions[4].task_class == 'simple'
+
+
 def test_no_verified_route_is_explicitly_unavailable():
     decision = decide_auto_route(AutoRouteRequest(text='Was ist 2 plus 2?'), AutoRouteCapabilities())
     assert decision.route == 'unavailable'

@@ -10699,6 +10699,13 @@ html.theme-light .browser-start-search input {
   color: #ffffff;
 }
 
+.nova-dock-btn:focus-visible {
+  outline: 2px solid rgba(0, 217, 255, 0.95);
+  outline-offset: 2px;
+  position: relative;
+  z-index: 2;
+}
+
 .nova-dock-btn.is-active {
   background: rgba(0, 217, 255, 0.2);
   color: #00d9ff;

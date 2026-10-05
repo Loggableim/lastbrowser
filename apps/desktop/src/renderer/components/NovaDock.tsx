@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Bell,
+  EyeOff,
   HelpCircle,
   Settings,
   Menu,
@@ -36,6 +37,7 @@ export interface NovaDockProps {
   onOpenSettings: () => void;
   onNewTab: (url?: string) => void;
   onExpandSidebar: () => void;
+  onEnterZenMode?: () => void;
   forcedPosition?: NovaDockPosition;
   spacePath?: string;
 }
@@ -53,14 +55,17 @@ export function NovaDock({
   onOpenSettings,
   onNewTab,
   onExpandSidebar,
+  onEnterZenMode,
   forcedPosition,
   spacePath = ''
 }: NovaDockProps): React.JSX.Element {
   const { t } = useDesktopI18n();
   const dockSettings = usePanelStore((s) => s.dockSettings);
   const setDockSettings = usePanelStore((s) => s.setDockSettings);
+  const setSidebarMode = usePanelStore((s) => s.setSidebarMode);
   const pinnedStore = usePinnedAppStore();
   const apps = pinnedStore.apps.filter((app) => !app.spacePath || app.spacePath === spacePath);
+  const enterZenMode = onEnterZenMode ?? (() => setSidebarMode('hidden'));
 
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isRevealed, setIsRevealed] = useState<boolean>(true);
@@ -275,6 +280,7 @@ export function NovaDock({
   const historyIndex = currentIndex++;
   const helpIndex = currentIndex++;
   const settingsIndex = currentIndex++;
+  const zenIndex = currentIndex++;
   const expandIndex = currentIndex++;
 
   // Floating coordinates style
@@ -528,6 +534,27 @@ export function NovaDock({
             </button>
             <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(settingsIndex)}>
               <span className="label-text">{t('sidebar.drawer.settings')}</span>
+            </div>
+          </div>
+
+          {/* One-click, localized entry to Zen / Focus Mode */}
+          <div
+            className="nova-dock-item-wrapper"
+            onMouseEnter={() => setHoveredIndex(zenIndex)}
+            style={getItemStyle(zenIndex)}
+          >
+            <button
+              type="button"
+              className="nova-dock-btn zen-mode-btn"
+              onClick={enterZenMode}
+              aria-label={t('sidebar.drawer.zenMode')}
+              title={t('sidebar.drawer.zenModeTitle')}
+              data-testid="nova-dock-zen-mode"
+            >
+              <EyeOff size={16} />
+            </button>
+            <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(zenIndex)}>
+              <span className="label-text">{t('sidebar.drawer.zenMode')}</span>
             </div>
           </div>
 

@@ -138,7 +138,14 @@ def start_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
         workspace_raw = body.get("workspace")
         if workspace_raw is not None and not isinstance(workspace_raw, str):
             raise ValueError("Invalid Quickchat workspace")
-        workspace = resolve_trusted_workspace(workspace_raw or resolved.binding.workspace_locator or str(resolved.space_root))
+        # The standard chat route normalizes this value to a string before it
+        # persists it on Session. Keep that contract here as well: on Windows,
+        # resolve_trusted_workspace may return a pathlib.WindowsPath, which is
+        # not JSON serializable when _prepare_chat_start_session_for_stream
+        # saves the pending Quickchat turn.
+        workspace = str(resolve_trusted_workspace(
+            workspace_raw or resolved.binding.workspace_locator or str(resolved.space_root)
+        ))
     except Exception as exc:
         raise QuickChatError("Quickchat scope or workspace is not bound to this profile", 409, "quickchat_scope_denied") from exc
 

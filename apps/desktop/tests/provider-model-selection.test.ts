@@ -24,7 +24,16 @@ describe('provider-aware model selection', () => {
     expect(all.find(group=>group.providerId==='configured')?.models).toHaveLength(2);
     expect(all.find(group=>group.providerId==='configured')?.models[0].reasoningEfforts).toEqual(['low','high']);
     expect(all.find(group=>group.providerId==='offline')).toMatchObject({configured:false,disabledReason:'unavailable'});
-    expect(manualModelPickerOptions(all).some(group=>group.providerId==='')).toBe(false);
+    expect(manualModelPickerOptions(all).find(group=>group.providerId==='')?.models.map(model=>model.id)).toEqual(['teamwork']);
+    expect(manualModelPickerOptions([
+      { providerId: '', models: [{ id: 'teamwork' }, { id: 'smart-track-low' }, { id: 'smart-track-medium' }, { id: 'smart-track-high' }] },
+      { providerId: '', models: [{ id: 'unknown-providerless-model' }] },
+      { providerId: '', models: [{ id: 'teamwork' }, { id: 'unknown-providerless-model' }] },
+      { providerId: 'configured-real-provider', models: [{ id: 'real-model' }] }
+    ])).toEqual([
+      { providerId: '', models: [{ id: 'teamwork' }, { id: 'smart-track-low' }, { id: 'smart-track-medium' }, { id: 'smart-track-high' }] },
+      { providerId: 'configured-real-provider', models: [{ id: 'real-model' }] }
+    ]);
     const choice=resolveLiteralCatalogModelSelection('@configured:extra-model',all);
     expect(choice).toEqual({provider:'configured',model:'extra-model'});
   });

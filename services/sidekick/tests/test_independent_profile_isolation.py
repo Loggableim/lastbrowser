@@ -416,3 +416,34 @@ def test_catalog_token_exchange_refresh_and_ambient_keychain_are_denied(monkeypa
     monkeypatch.setattr(anthropic_adapter, "refresh_anthropic_oauth_pure", lambda *a, **kw: calls.append("refresh"))
     assert credential_pool.CredentialPool("anthropic", [entry])._refresh_entry(entry, force=True) is None
     assert calls == []
+
+
+def test_auth_store_noop_save_preserves_bytes_timestamp_and_mtime(tmp_path, monkeypatch):
+    from cli import auth
+    store_path = tmp_path / "private-profile" / "auth.json"
+    store_path.parent.mkdir(parents=True)
+    original = {"version": auth.AUTH_STORE_VERSION, "updated_at": "fixed-test-time", "providers": {},
+        "active_provider": None, "credential_pool": {"controlled": [{"id": "fixture", "token": "synthetic"}]}}
+    store_path.write_text(json.dumps(original, indent=2) + "\n", "utf-8")
+    before_bytes, before_mtime = store_path.read_bytes(), store_path.stat().st_mtime_ns
+    monkeypatch.setattr(auth, "_auth_file_path", lambda: store_path)
+    same = dict(original)
+    same["updated_at"] = "caller-timestamp-must-not-force-write"
+    assert auth._save_auth_store(same) == store_path
+    assert store_path.read_bytes() == before_bytes
+    assert store_path.stat().st_mtime_ns == before_mtime
+
+
+def test_auth_store_real_credential_change_still_persists_new_timestamp(tmp_path, monkeypatch):
+    from cli import auth
+    store_path = tmp_path / "private-profile" / "auth.json"
+    store_path.parent.mkdir(parents=True)
+    original = {"version": auth.AUTH_STORE_VERSION, "updated_at": "fixed-test-time", "providers": {"test": {"access_token": "synthetic-old"}}}
+    store_path.write_text(json.dumps(original, indent=2) + "\n", "utf-8")
+    monkeypatch.setattr(auth, "_auth_file_path", lambda: store_path)
+    changed = dict(original)
+    changed["providers"] = {"test": {"access_token": "synthetic-new"}}
+    auth._save_auth_store(changed)
+    saved = json.loads(store_path.read_text("utf-8"))
+    assert saved["providers"]["test"]["access_token"] == "synthetic-new"
+    assert saved["updated_at"] != "fixed-test-time"

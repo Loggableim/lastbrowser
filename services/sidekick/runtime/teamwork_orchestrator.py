@@ -481,6 +481,74 @@ _TEAMWORK_RPC_DIAGNOSTIC_CODES = frozenset({
     "provider_connection_changed", "provider_admission_denied", "scope_connection_changed",
     "scope_connection_adapter_required", "nova_governance_admission_required",
 })
+_TEAMWORK_WORKER_FAILURE_CODES = frozenset({
+    "teamwork_worker_reasoning_only",
+    "teamwork_worker_empty_visible_output",
+})
+
+
+def _safe_worker_failure_message(code: Optional[str], fallback: str) -> str:
+    """Map local worker failure codes to concise, non-provider-supplied UI text."""
+    if code == "teamwork_worker_reasoning_only":
+        return "Das Modell lieferte keinen sichtbaren Entwurf. Wähle ein Modell mit sichtbarer Antwortausgabe."
+    if code == "teamwork_worker_empty_visible_output":
+        return "Das Modell lieferte keinen sichtbaren Entwurf."
+    return fallback
+
+
+def _teamwork_visible_content(response: Any) -> Tuple[str, int]:
+    """Return visible message content and reasoning length, never reasoning text.
+
+    Teamwork drafts, plans, and critiques must be provider-visible answer text.
+    Structured reasoning is measured only to distinguish a reasoning-only
+    response from an empty response; it is never promoted into shared context.
+    """
+    try:
+        choices = getattr(response, "choices", None) or []
+        message = getattr(choices[0], "message", None) if choices else None
+    except (IndexError, TypeError, KeyError):
+        message = None
+    if message is None:
+        return "", 0
+
+    def text_value(value: Any) -> str:
+        if isinstance(value, str):
+            return value
+        if not isinstance(value, list):
+            return ""
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict) and isinstance(item.get("text"), str):
+                parts.append(item["text"])
+            else:
+                text = getattr(item, "text", None)
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+
+    visible = text_value(getattr(message, "content", None)).strip()
+    visible = re.sub(
+        r"<(?:think|thinking|reasoning|thought|REASONING_SCRATCHPAD)>.*?"
+        r"</(?:think|thinking|reasoning|thought|REASONING_SCRATCHPAD)>",
+        "",
+        visible,
+        flags=re.DOTALL | re.IGNORECASE,
+    ).strip()
+    reasoning_chars = 0
+    for field in ("reasoning", "reasoning_content"):
+        reasoning_chars += len(text_value(getattr(message, field, None)))
+    details = getattr(message, "reasoning_details", None)
+    if isinstance(details, dict):
+        details = [details]
+    if isinstance(details, list):
+        for detail in details:
+            if isinstance(detail, dict):
+                reasoning_chars += len(text_value(
+                    detail.get("summary") or detail.get("content") or detail.get("text")
+                ))
+    return visible, reasoning_chars
 
 
 def _safe_teamwork_rpc_failure_code(error: Any) -> Optional[str]:
@@ -759,7 +827,7 @@ def _invoke_worker(
     through to another provider after those responses could silently consume
     a different (potentially paid) account or model.
     """
-    from runtime.auxiliary_client import call_llm, extract_content_or_reasoning, stream_llm
+    from runtime.auxiliary_client import call_llm, stream_llm
 
     current_worker = dict(worker)
     tried_models = {current_worker["model"]}
@@ -788,6 +856,7 @@ def _invoke_worker(
 
     while True:
         attempt_content: List[str] = []
+        attempt_reasoning_chars = 0
         try:
             attempt += 1
             if call_budget is not None and not call_budget.reserve(TEAMWORK_STAGE_OUTPUT_TOKENS["worker"]):
@@ -809,6 +878,13 @@ def _invoke_worker(
                             "content": text,
                         })
 
+                def observe_worker_reasoning(text: str) -> None:
+                    # Track only whether reasoning arrived. Never retain, log,
+                    # or promote private reasoning to a visible worker draft.
+                    nonlocal attempt_reasoning_chars
+                    if isinstance(text, str):
+                        attempt_reasoning_chars += len(text)
+
                 if event_put:
                     event_put("teamwork_worker_start", {
                         "worker_id": worker_id,
@@ -824,7 +900,7 @@ def _invoke_worker(
                         model=current_worker.get("call_model", current_worker["model"]),
                         messages=messages,
                         on_content=emit_worker_delta,
-                        on_reasoning=lambda _text: None,
+                        on_reasoning=observe_worker_reasoning,
                         timeout=_stage_timeout(deadline, timeout) if deadline is not None else timeout,
                         cancel_event=cancel_event,
                         max_tokens=TEAMWORK_STAGE_OUTPUT_TOKENS["worker"],
@@ -844,16 +920,16 @@ def _invoke_worker(
                         timeout=_stage_timeout(deadline, timeout) if deadline is not None else timeout,
                         max_tokens=TEAMWORK_STAGE_OUTPUT_TOKENS["worker"],
                     )
-                    content = extract_content_or_reasoning(resp)
-                    if not content:
-                        content = str(resp.choices[0].message.content or "").strip()
-                    else:
-                        content = str(content).strip()
+                    content, response_reasoning_chars = _teamwork_visible_content(resp)
+                    if not content and response_reasoning_chars:
+                        raise RuntimeError("teamwork_worker_reasoning_only")
             if not content:
                 # An empty completion is not a usable draft. Treat it like an
                 # operational provider failure so the configured hot-swap
                 # policy can try another currently available model.
-                raise RuntimeError("provider returned an empty response")
+                if attempt_reasoning_chars:
+                    raise RuntimeError("teamwork_worker_reasoning_only")
+                raise RuntimeError("teamwork_worker_empty_visible_output")
             if event_put:
                 event_put("teamwork_worker_end", {
                     "worker_id": worker_id, "worker_index": current_worker.get("worker_index"),
@@ -886,8 +962,10 @@ def _invoke_worker(
             raise
         except Exception as e:
             failure_status = _provider_failure_kind(e)
-            safe_failure = _safe_provider_failure(e)
             failure_code = _safe_teamwork_rpc_failure_code(e)
+            if failure_code is None and str(e) in _TEAMWORK_WORKER_FAILURE_CODES:
+                failure_code = str(e)
+            safe_failure = _safe_worker_failure_message(failure_code, _safe_provider_failure(e))
             logger.warning("Worker %s failed: %s", current_worker["model"], safe_failure)
             if event_put:
                 emitted_partial = bool(attempt_content)
@@ -897,6 +975,7 @@ def _invoke_worker(
                     "model_id": current_worker.get("call_model", current_worker["model"]),
                     "role": current_worker["role"],
                     "status": "partial_failed" if emitted_partial else "failed",
+                    "error": safe_failure,
                 }
                 if failure_code:
                     worker_end["failure_code"] = failure_code
@@ -955,6 +1034,7 @@ def _invoke_worker(
                 "execution_ms": elapsed_ms,
                 "error": safe_failure,
                 "http_status": failure_status,
+                "failure_code": failure_code,
                 "swapped": swapped,
             }
 
@@ -1074,7 +1154,7 @@ def _run_teamwork_turn(
     plan_override: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Execute a complete Consensus & Debate Teamwork turn with live SSE event emission."""
-    from runtime.auxiliary_client import call_llm, extract_content_or_reasoning, stream_llm
+    from runtime.auxiliary_client import call_llm, stream_llm
 
     start_total_t = time.time()
     deadline = time.monotonic() + TEAMWORK_TURN_TIMEOUT_SECONDS
@@ -1196,9 +1276,9 @@ def _run_teamwork_turn(
                     planner_model.get("call_model", planner_model["id"]), 1,
                 ) if native_teamwork_bridge is not None else None),
             )
-            planner_context = extract_content_or_reasoning(planner_resp)
-            if not planner_context:
-                planner_context = str(planner_resp.choices[0].message.content or "").strip()
+            planner_context, planner_reasoning_chars = _teamwork_visible_content(planner_resp)
+            if not planner_context and planner_reasoning_chars:
+                planner_failure = "Das Modell lieferte keinen sichtbaren Arbeitsplan."
             if planner_context:
                 put_event("teamwork_plan", {
                     "model": planner_model["id"], "provider": planner_model.get("provider"),
@@ -1260,7 +1340,7 @@ def _run_teamwork_turn(
                     call_budget=call_budget,
                     profile_name=profile_name,
                     deadline=deadline,
-                    event_put=put_event,
+                    event_put=put_event if stream_put else None,
                     cancel_event=cancel_event,
                     native_teamwork_bridge=native_teamwork_bridge,
                 )
@@ -1307,7 +1387,10 @@ def _run_teamwork_turn(
                             # normalized status category in the UI event.
                             "error": (
                                 f"HTTP {status}" if status in (401, 403, 429)
-                                else "Anbieteraufruf fehlgeschlagen"
+                                else _safe_worker_failure_message(
+                                    res.get("failure_code"),
+                                    "Anbieteraufruf fehlgeschlagen",
+                                )
                             ),
                             "skipped": True,
                         }
@@ -1390,9 +1473,11 @@ def _run_teamwork_turn(
                 critic_entry.get("call_model", critic_model) if critic_entry else critic_model, 1,
             ) if native_teamwork_bridge is not None else None),
         )
-        critic_review = extract_content_or_reasoning(critic_resp)
-        if not critic_review:
-            critic_review = str(critic_resp.choices[0].message.content or "").strip()
+        critic_review, critic_reasoning_chars = _teamwork_visible_content(critic_resp)
+        if not critic_review and critic_reasoning_chars:
+            critic_review = "Der Critic lieferte keinen sichtbaren Review. Die Synthese stützt sich auf die Entwürfe."
+        elif not critic_review:
+            critic_review = "Der Critic lieferte keinen sichtbaren Review. Die Synthese stützt sich auf die Entwürfe."
     except InterruptedError:
         raise
     except Exception as e:

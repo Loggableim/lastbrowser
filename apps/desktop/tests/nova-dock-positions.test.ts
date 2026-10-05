@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { desktopLocaleIds, desktopLocaleOverrides } from '../src/renderer/i18n.js';
 
 const rendererDir = resolve(__dirname, '../src/renderer');
 const app = readFileSync(resolve(rendererDir, 'App.tsx'), 'utf8');
 const sidebar = readFileSync(resolve(rendererDir, 'components/SidekickSidebar.tsx'), 'utf8');
+const novaDock = readFileSync(resolve(rendererDir, 'components/NovaDock.tsx'), 'utf8');
 const css = readFileSync(resolve(rendererDir, 'styles.css'), 'utf8');
 
 describe('Nova Dock shell-level decoupling (goal.md Paket 5)', () => {
@@ -22,6 +24,19 @@ describe('Nova Dock shell-level decoupling (goal.md Paket 5)', () => {
 
   it('keeps the zen floating overlay dock forced to the left edge', () => {
     expect(sidebar).toContain("forcedPosition={isFloatingOverlay ? 'left' : undefined}");
+  });
+
+  it('offers a one-click, localized and keyboard-visible Focus Mode action in the dock', () => {
+    expect(novaDock).toContain('data-testid="nova-dock-zen-mode"');
+    expect(novaDock).toContain("aria-label={t('sidebar.drawer.zenMode')}");
+    expect(novaDock).toContain("title={t('sidebar.drawer.zenModeTitle')}");
+    expect(novaDock).toContain("setSidebarMode('hidden')");
+    expect(sidebar).toContain('onEnterZenMode={() =>');
+    expect(css).toContain('.nova-dock-btn:focus-visible');
+    for (const locale of desktopLocaleIds) {
+      expect(desktopLocaleOverrides[locale]['sidebar.drawer.zenMode'], `${locale} Focus Mode label`).toBeTruthy();
+      expect(desktopLocaleOverrides[locale]['sidebar.drawer.zenModeTitle'], `${locale} Focus Mode title`).toBeTruthy();
+    }
   });
 });
 

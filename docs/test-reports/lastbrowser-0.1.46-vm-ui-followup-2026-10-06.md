@@ -1,6 +1,6 @@
 # LastBrowser 0.1.46 – VM-UI-Nachprüfung mit eingerichteten Providern
 
-**Datum/Zeit:** 6. Oktober 2026, 20:29–20:59 Uhr, America/Los_Angeles (UTC−07:00).
+**Datum/Zeit:** 6. Oktober 2026, 20:29–20:59 Uhr; erneute Prüfung 21:04–21:08 Uhr, America/Los_Angeles (UTC−07:00).
 **Auftrag:** [VM-NEXT-TEST-ORDER.md](VM-NEXT-TEST-ORDER.md), Prioritäten 1–3.
 **Methode:** echte sichtbare LastBrowser-App über Windows Computer Use (`node_repl`, `@oai/sky`). Keine API-/Harness-Abnahme, keine Produktreparaturen, Releases oder Store-Aktionen. Ausschließlich synthetische Aufgaben und Einstellungen.
 
@@ -14,6 +14,8 @@
 - Die frühere PC-Zugriffsblockade war ein Fehler bei der Wahl des JavaScript-Runtimes. Mit dem vom Skill vorgesehenen `node_repl` funktionieren Fensterliste, Aktivierung, UI-Eingaben und Screenshots. Bei überdecktem Fenster wurde LastBrowser vor der Aufnahme aktiviert.
 
 ## Provider und Testbegrenzung
+
+**Der Nutzer hat Ollama, Google und GPT für diese VM verbunden und die Einrichtung ausdrücklich bestätigt. Trotzdem funktionieren die unten dokumentierten Modellaufrufe im installierten Testpaket 0.1.46 nicht. Die Befunde dürfen nicht als fehlende Einrichtung durch den Nutzer zusammengefasst werden.** Die UI zeigt die auswählbaren Modelle und den bestehenden Google-Account; ein erfolgreicher Modellaufruf oder eine bestimmte technische Fehlerursache ist damit noch nicht bewiesen. Zugangsdaten wurden nicht verändert oder übernommen.
 
 Zu Beginn war `openai-codex` aktiv, der Settings-Katalog zeigte drei Gruppen und keinen Default. Die UI bot **GPT 6 Luna**, Google-Flash-Modelle und Ollama Cloud **Deepseek V4.1 Flash** an. OpenAI Codex zeigte dennoch eine **Connect**-Aktion. Es wurde keine Anmeldung automatisiert und kein Schlüssel gelesen oder eingegeben. [Katalog](evidence-0.1.46-ui-2026-10-06/02-provider-catalog-no-default.png), [GPT-Karte](evidence-0.1.46-ui-2026-10-06/03-gpt-active-connect.png).
 
@@ -62,6 +64,18 @@ Zeitangaben beziehen sich auf lokale Evidence-Speicherzeiten; sie liegen unmitte
 ## Repository-Prüfungen vor dem Dokumentationscommit
 
 Die von AGENTS.md vorgeschriebenen Befehle wurden versucht. `npm test`, `npm run verify:store` und `npm --workspace apps/desktop run build` sind **blockiert**, weil `npm`/`npm.cmd` im Guest fehlt; auch `node_modules` fehlt. Keine Abhängigkeiten installiert und keine Produktdateien geändert. Der Store-Prüfskript wurde zusätzlich direkt ausgeführt: 26 statische PASS-Befunde, dann Abbruch beim Vitest-Aufruf wegen fehlendem `npm.cmd`; vollständiges Gate daher nicht bestanden. `python -m compileall -q services/sidekick` wurde mit dem vorhandenen gebündelten Python wiederholt und endete mit **Exit 0**. Diese Quellcode-Prüfungen ersetzen keine UI-Abnahme des installierten Pakets.
+
+## Erneute Prüfung auf Nutzerwunsch (21:04–21:08)
+
+Vor dieser Berichtsergänzung wurden tatsächliche UI-Aufrufe wiederholt, weiterhin am unveränderten Kandidaten 0.1.46. Keine erfolgreiche Antwort und kein Streaming; Stop-Abnahmen bleiben blockiert.
+
+| Fall | Status | Schritte / Erwartung | Beobachtung / Evidence |
+|---|---|---|---|
+| GPT 6 Luna nach bestätigter Einrichtung | **Fehlgeschlagen** | OpenAI Codex war sichtbar ACTIVE. Im Space `VM-UI-046-LLM` Quickchat aus Nova Chat öffnen; terminalen alten Verlauf mit **+ Add** zurücksetzen. GPT 6 Luna wählen/beibehalten. „Antworte nur mit VM-GPT-RECHECK-OK. Keine Tools verwenden.“ Erwartet: kurze tatsächliche Antwort. | „Working on it…“, anschließend erneut `Error invoking remote method 'lastbrowser:quickchat:start': SidekickApiError: native_fixed_model_not_in_bound_catalog`. Kein Antwortmarker. 21:06, [Screenshot](evidence-0.1.46-ui-2026-10-06/33-gpt-recheck-connected-but-fails.png). |
+| Gemini 2.5 Flash nach bestätigter Einrichtung | **Fehlgeschlagen** | Bestehender Google-Account sichtbar; Antigravity über **Use** aktiviert und ACTIVE beobachtet. In Quickchat **+ Add**, Gemini 2.5 Flash wählen. „Antworte nur mit VM-GOOGLE-RECHECK-OK. Keine Tools verwenden.“ Erwartet: kurze tatsächliche Antwort. | „Working on it…“, anschließend erneut `Error invoking remote method 'lastbrowser:quickchat:start': SidekickApiError: native_fixed_sdk_adapter_unavailable`. Kein Antwortmarker. 21:07, [Screenshot](evidence-0.1.46-ui-2026-10-06/34-google-recheck-connected-but-fails.png). Keine Accountdaten im gespeicherten Screenshot. |
+| Ollama – weitere Wiederholung | **Nicht geprüft in dieser Wiederholungsrunde** | Nach Google zur vorhandenen Ollama-Konfiguration wechseln und Test connection erneut verwenden. | Computer Use meldete zweimal `user input was detected in this window; call get_window_state before continuing`. Nach der ersten Meldung wurde neu beobachtet; der Modellpicker zeigte inzwischen GPT 6 Luna. Weitere UI-Eingaben wurden beendet, um die direkte Nutzerbedienung nicht zu übersteuern. Der vorherige Ollama-Verbindungsfehler um 20:59 bleibt dokumentiert, zählt aber nicht als neue Ausführung. |
+
+Zusätzliche Einstiegsbeobachtung: In Browser-Home öffneten Toolbar-Nova und Home-Nova zunächst keine sichtbare Seitenleiste. Aus Nova Chat ließ sich Quickchat anschließend öffnen. Dies ist kein Modellaufruf und ändert die beiden erneuten terminalen Fehler nicht. Am Ende wurde Antigravity als letzter vom Tester aktivierter Provider beibehalten; der Quickchat-Modellpicker wechselte während erkannter Nutzereingabe zu GPT 6 Luna.
 
 ## Verbleibende Voraussetzungen (aktualisiert)
 

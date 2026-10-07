@@ -155,6 +155,22 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
 
   <div class="timeline">
 
+    <!-- v0.1.47 signed test prerelease -->
+    <div class="release-entry">
+      <div class="release-bullet"></div>
+      <article class="release-card">
+        <div class="release-header"><span class="release-tag">v0.1.47 · TEST prerelease</span><span class="release-date">October 7, 2026</span></div>
+        <p style="color:var(--text);font-size:14px;font-weight:600">These items describe focused source corrections in this separate test version. The signed test package is available; practical runtime and provider acceptance remain open. <a href="https://github.com/Loggableim/lastbrowser/releases/tag/test-v0.1.47-20261007-f67320f">Test release on GitHub</a>.</p>
+        <ul class="release-list">
+          <li><strong>Providers and model catalog:</strong> Requests are bound to the saved Space/profile context and payloads receive strict validation. Additional bridge diagnostics help locate early chat-start failures; they do not confirm the cause of the earlier guest timeout.</li>
+          <li><strong>Quick Chat:</strong> Transcript and status remain associated with their original context after a Space switch. Reset is complete only after a positive acknowledgment; stale or unavailable model selections are blocked.</li>
+          <li><strong>MiMo settings:</strong> Provider-specific labeling and confirmation-based key status prevent an unverified state from appearing as a saved connection. Successful inference has not been demonstrated.</li>
+          <li><strong>Other UI changes:</strong> Update notice and “Update now”, post-update notice, log alias, and hiding the ineffective Trust switch are included in the test package; visible runtime behavior has not been accepted.</li>
+        </ul>
+        <p style="font-size:13px;color:var(--muted)">This is a test prerelease, not a stable version. The v0.1.45 stable-download and update targets remain unchanged. VM, provider, and two-profile acceptance remain open; not Store-certified.</p>
+      </article>
+    </div>
+
     <!-- v0.1.45 published release -->
     <div class="release-entry">
       <div class="release-bullet"></div>

@@ -155,6 +155,22 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
 
   <div class="timeline">
 
+    <!-- v0.1.47 signed test prerelease -->
+    <div class="release-entry">
+      <div class="release-bullet"></div>
+      <article class="release-card">
+        <div class="release-header"><span class="release-tag">v0.1.47 · TEST-Vorabversion</span><span class="release-date">7. Oktober 2026</span></div>
+        <p style="color:var(--text);font-size:14px;font-weight:600">Die folgenden Punkte beschreiben gezielte Quellkorrekturen dieser separaten Testversion. Das signierte Testpaket ist verfügbar; praktische Laufzeit- und Providerabnahmen stehen noch aus. <a href="https://github.com/Loggableim/lastbrowser/releases/tag/test-v0.1.47-20261007-f67320f">Test-Release auf GitHub</a>.</p>
+        <ul class="release-list">
+          <li><strong>Provider und Modellkatalog:</strong> Requests werden an den gespeicherten Space-/Profilkontext gebunden und Payloads eng validiert. Zusätzliche Bridge-Diagnostik grenzt frühe Chatstartfehler ein; die Ursache des früheren Gast-Timeouts ist damit nicht bestätigt.</li>
+          <li><strong>Schnellchat:</strong> Verlauf und Status bleiben beim Spacewechsel dem ursprünglichen Kontext zugeordnet. Ein Zurücksetzen gilt erst nach positiver Bestätigung als abgeschlossen; veraltete oder nicht verfügbare Modellauswahlen werden blockiert.</li>
+          <li><strong>MiMo-Einstellungen:</strong> Eigene Beschriftung und ein bestätigungsabhängiger Schlüsselstatus verhindern, dass ein ungeprüfter Status als gespeicherte Verbindung erscheint. Eine erfolgreiche Inferenz ist nicht belegt.</li>
+          <li><strong>Weitere UI-Änderungen:</strong> Update-Hinweis und „Jetzt aktualisieren“, Post-Update-Hinweis, Logalias und ausgeblendeter wirkungsloser Trust-Schalter sind im Testpaket enthalten; ihr sichtbares Laufzeitverhalten ist nicht abgenommen.</li>
+        </ul>
+        <p style="font-size:13px;color:var(--muted)">Dies ist ein Test-Prerelease, keine stabile Version. Die v0.1.45-Update- und Stable-Downloadziele bleiben unverändert. VM-, Provider- und Zwei-Profil-Abnahme sind offen; keine Store-Zertifizierung.</p>
+      </article>
+    </div>
+
     <!-- v0.1.45 published release -->
     <div class="release-entry">
       <div class="release-bullet"></div>

@@ -5,7 +5,7 @@ import { createAntigravityAuthUrlOpener } from '../src/renderer/panels/antigravi
 
 describe('Antigravity multi-account panel', () => {
   it('wires the functional OAuth flow: start, poll, list, and remove accounts', () => {
-    const source = readFileSync(new URL('../src/renderer/panels/GeminiAccountsPanel.tsx', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../src/renderer/panels/GeminiAccountsPanel.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
     // The panel is functional again: it starts the backend OAuth flow and
     // polls for completion instead of only showing migration links.
     expect(source).toContain("startOAuth({ provider: 'antigravity' })");
@@ -81,7 +81,7 @@ describe('Antigravity multi-account panel', () => {
   });
 
   it('keeps the OAuth poll alive after a temporary system-browser launch failure', () => {
-    const source = readFileSync(new URL('../src/renderer/panels/GeminiAccountsPanel.tsx', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../src/renderer/panels/GeminiAccountsPanel.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
     const openFailedBody = source.match(
       /\(\) => \{\s*if \(flowFinished\) return;([\s\S]*?)\n\s*\}\n\s*\);/
     )?.[1] || '';

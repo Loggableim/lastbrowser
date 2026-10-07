@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { brandAssets, sidebarIconForPanel } from '../src/renderer/brand.js';
 
 function readRendererFile(fileName: string): string {
-  return readFileSync(path.resolve(process.cwd(), 'src/renderer', fileName), 'utf8');
+  return readFileSync(path.resolve(process.cwd(), 'src/renderer', fileName), 'utf8').replace(/\r\n/g, '\n');
 }
 
 function cssBlock(css: string, selector: string): string {

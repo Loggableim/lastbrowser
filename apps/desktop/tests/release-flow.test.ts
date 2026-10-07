@@ -39,7 +39,7 @@ describe('GitHub release auto-update flow', () => {
 
   it('builds and publishes Windows updater artifacts from version tags', () => {
     expect(existsSync(releaseWorkflowPath)).toBe(true);
-    const workflow = readFileSync(releaseWorkflowPath, 'utf8');
+    const workflow = readFileSync(releaseWorkflowPath, 'utf8').replace(/\r\n/g, '\n');
 
     expect(workflow).toContain("tags: ['v*']");
     expect(workflow).not.toContain('workflow_dispatch:');
@@ -59,7 +59,7 @@ describe('GitHub release auto-update flow', () => {
   });
 
   it('keeps signing credentials out of setup and test steps and write access out of the build job', () => {
-    const workflow = readFileSync(releaseWorkflowPath, 'utf8');
+    const workflow = readFileSync(releaseWorkflowPath, 'utf8').replace(/\r\n/g, '\n');
     const setupIndex = workflow.indexOf('- name: Setup Node');
     const runtimeIndex = workflow.indexOf('- name: Prepare Python runtime');
     const installerAssetsIndex = workflow.indexOf('- name: Build installer assets');
@@ -112,7 +112,7 @@ describe('GitHub release auto-update flow', () => {
   });
 
   it('fails before build and publication when Trusted Signing secrets are missing', () => {
-    const workflow = readFileSync(releaseWorkflowPath, 'utf8');
+    const workflow = readFileSync(releaseWorkflowPath, 'utf8').replace(/\r\n/g, '\n');
     const tagValidationIndex = workflow.indexOf('Require a version-matched release tag');
     const validationIndex = workflow.indexOf('Require signing credentials before release setup');
     const pythonDependencyIndex = workflow.indexOf('Install Sidekick backend test dependencies');

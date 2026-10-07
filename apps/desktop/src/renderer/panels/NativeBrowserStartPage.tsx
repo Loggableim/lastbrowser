@@ -20,7 +20,7 @@ import {
 import { brandAssets } from '../brand.js';
 import type { BrowserBookmark } from '../bookmarks.js';
 import type { BrowserVisit } from '../history.js';
-import { normalizeNavigationInput } from '../tabs.js';
+import { normalizeNavigationInput, type BrowserTab } from '../tabs.js';
 import { spaceDisplayName, type SpaceSummary } from '../shell-state.js';
 import { getSpaceTabCount } from '../tab-sessions.js';
 import { useDesktopI18n } from '../i18n.js';
@@ -112,8 +112,22 @@ export interface NativeBrowserStartPageProps {
   spaces?: SpaceSummary[];
   activeSpacePath?: string;
   activeProfileId?: string;
+  activeSpaceTabs?: BrowserTab[];
   onSelectSpace?: (spacePath: string) => void;
   onAddSpace?: (path: string, name: string) => void;
+}
+
+export function getStartPageSpaceTabCount(
+  spacePath: string,
+  activeSpacePath: string,
+  activeSpaceTabs: BrowserTab[],
+  activeProfileId: string,
+  storage: Storage = window.localStorage
+): number {
+  if (spacePath === activeSpacePath) {
+    return activeSpaceTabs.filter((tab) => !tab.incognito).length;
+  }
+  return getSpaceTabCount(activeProfileId, spacePath, storage);
 }
 /** Keep Unicode names distinct while excluding path separators and controls. */
 export function startPageSpaceWorkspacePath(name:string):string {
@@ -131,6 +145,7 @@ export function NativeBrowserStartPage({
   spaces = [],
   activeSpacePath = '',
   activeProfileId = 'default',
+  activeSpaceTabs = [],
   onSelectSpace,
   onAddSpace
 }: NativeBrowserStartPageProps): JSX.Element {
@@ -336,7 +351,12 @@ export function NativeBrowserStartPage({
           {displayedSpaces.map((space) => {
             const isActive = isSpaceActive(space);
             const name = spaceDisplayName(space);
-            const tabCount = getSpaceTabCount(activeProfileId || 'default', space.path);
+            const tabCount = getStartPageSpaceTabCount(
+              space.path,
+              activeSpacePath,
+              activeSpaceTabs,
+              activeProfileId || 'default'
+            );
             const avatarChar = space.emoji || (space.path === '' ? '🏠' : name.charAt(0).toUpperCase());
 
             return (

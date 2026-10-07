@@ -15,6 +15,7 @@ import { sidekickUxTranslations } from '../src/renderer/i18n/sidekick-ux-transla
 import { teamworkUxTranslations } from '../src/renderer/i18n/teamwork-ux-translations.js';
 import { agentPanelsTranslations } from '../src/renderer/i18n/agent-panels-translations.js';
 import { spaceAssistantTranslations } from '../src/renderer/i18n/space-assistant-translations.js';
+import { whatsNewTranslations } from '../src/renderer/i18n/whats-new-translations.js';
 
 // Raw English sources: parity must not be hidden by the runtime's fallback.
 const english: Record<string, string> = {
@@ -26,6 +27,7 @@ const english: Record<string, string> = {
   ...sidekickUxTranslations.en, ...agentPanelsTranslations.en,
   ...teamworkUxTranslations.en,
   ...spaceAssistantTranslations.en,
+  ...whatsNewTranslations.en,
 };
 
 describe('complete Japanese raw UI catalog', () => {

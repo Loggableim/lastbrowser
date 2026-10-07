@@ -7,7 +7,7 @@ const rendererDir = resolve(__dirname, '../src/renderer');
 const app = readFileSync(resolve(rendererDir, 'App.tsx'), 'utf8');
 const sidebar = readFileSync(resolve(rendererDir, 'components/SidekickSidebar.tsx'), 'utf8');
 const novaDock = readFileSync(resolve(rendererDir, 'components/NovaDock.tsx'), 'utf8');
-const css = readFileSync(resolve(rendererDir, 'styles.css'), 'utf8');
+const css = readFileSync(resolve(rendererDir, 'styles.css'), 'utf8').replace(/\r\n/g, '\n');
 
 describe('Nova Dock shell-level decoupling (goal.md Paket 5)', () => {
   it('App.tsx renders NovaDock at shell level for non-left positions', () => {

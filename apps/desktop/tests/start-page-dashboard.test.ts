@@ -6,13 +6,38 @@ import {
   formatDashboardTime,
   formatDashboardDate,
   DASHBOARD_QUICK_ACTIONS,
-  DEFAULT_SPEED_DIAL_ITEMS
-  , startPageSpaceWorkspacePath
+  DEFAULT_SPEED_DIAL_ITEMS,
+  startPageSpaceWorkspacePath,
+  getStartPageSpaceTabCount
 } from '../src/renderer/panels/NativeBrowserStartPage.js';
 import { browserStartSpaceCopy,browserStartHistoryCopy } from '../src/renderer/i18n/browser-start-space-copy.js';
 import { desktopLocaleIds } from '../src/renderer/i18n/keys.js';
+import { saveSpaceTabs } from '../src/renderer/tab-sessions.js';
 
 describe('startpage atmospheric dashboard helpers', () => {
+  it('counts the live tabs for the active Space and persisted tabs for other Spaces', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value)
+    } as unknown as Storage;
+    saveSpaceTabs('profile', 'workspaces/saved', {
+      tabs: [
+        { id: 'saved-1', url: 'https://example.com', title: 'Saved one', pinned: false },
+        { id: 'saved-2', url: 'https://example.org', title: 'Saved two', pinned: false }
+      ],
+      activeTabId: 'saved-1'
+    }, storage);
+    const liveTabs = [
+      { id: 'live-1', url: 'https://one.example', title: 'One', pinned: false },
+      { id: 'live-2', url: 'https://two.example', title: 'Two', pinned: false },
+      { id: 'private', url: 'https://private.example', title: 'Private', pinned: false, incognito: true }
+    ];
+
+    expect(getStartPageSpaceTabCount('', '', liveTabs, 'profile', storage)).toBe(2);
+    expect(getStartPageSpaceTabCount('workspaces/saved', '', liveTabs, 'profile', storage)).toBe(2);
+  });
+
   it('keeps different Japanese Space names distinct and excludes traversal separators',()=>{
     expect(startPageSpaceWorkspacePath('調査')).toBe('workspaces/調査');
     expect(startPageSpaceWorkspacePath('仕事')).toBe('workspaces/仕事');

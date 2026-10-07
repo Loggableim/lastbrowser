@@ -84,3 +84,8 @@ Neuer Bericht: `docs/test-reports/lastbrowser-0.1.47-vm-resumption-2026-10-07.md
 Je Fall **PASS / FAIL / BLOCKED / NOT_TESTED**, Guest-Zeit, Artefakt-/ASAR-Pin und minimalen redigierten Belegpfad nennen. Screenshots vor Zustellung auf private Daten prüfen. Keine rohen Requests/Responses, Keys, Tokens oder persönlichen Nachrichten. Ein Klick, Katalogstatus oder Sourcecheck ist kein praktischer PASS.
 
 Bericht über den vorhandenen autorisierten Docs-Kanal unter `docs/test-reports/` zustellen. Keine Produktänderungen, Signierung, Veröffentlichung, Storeeinreichung oder Runtime-Migration aus diesem Guest-Auftrag ableiten. Lokale Modellqualität, Clean-Windows-Abhängigkeitsabschluss und echte Teamwork-Mehrprovider-Abnahme bleiben getrennte offene Gates.
+
+
+## Separate synthetic update pair: 2026-10-07
+
+For normal-quit/restart update acceptance, use [the dedicated synthetic update order](VM-SYNTHETIC-UPDATE-PAIR-20261007.md). Its exact signed baseline/target and public bundle are distinct from the older public 0.1.47 and cec9 design candidate above. The complete procedure is referenced once; do not substitute installers by version number alone. Run only inside the actual Guest Codex, never a replacement host chat. Existing non-update UI test evidence remains separate.

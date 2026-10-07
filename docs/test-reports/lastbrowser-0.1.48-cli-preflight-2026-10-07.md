@@ -17,7 +17,7 @@ Kein vollständiger Funktions-PASS. Der hashgeprüfte Portable-Wrapper entpackte
 | Isolierter Portable-Appstart | **BLOCKED** | Wrapperprozess blieb ohne Fenster; kein `Lastbrowser.exe` aus dem extrahierten Paket nachgewiesen; frisches synthetisches Profil blieb leer. `CloseMainWindow()` meldete kein schließbares Fenster. Nur der selbst gestartete Wrapperprozess wurde anschließend beendet. |
 | Profil-/Runtimeisolation | **NOT_TESTED** | Ohne bestätigten Appstart keine Aussage über tatsächliche `userData`-/Sidekick-Pfade oder Trennung zur installierten Instanz. |
 | Installations-/Design-/Quickchat-/Teamwork- und übrige UI-Fälle | **NOT_TESTED** | Keine UI-Steuerung und keine Providerturns; Teamwork bleibt gemäß Auftrag read-only vorbereitet. |
-| Quelltests | **BLOCKED** | Auf diesem Arbeitsverzeichnis fehlen `npm`, `node_modules` und eine ausführbare Python-Installation. `python` löst nur den deaktivierten Windows-Store-App-Alias aus; Unit-/Buildtests liefen nicht. |
+| Quelltests | **TEILWEISE PASS; Hauptsuite BLOCKED** | Späterer Nachtrag: cec9-Python-Syntaxcheck und 56 abhängigkeitfreie Tests liefen mit gebündelten Runtimes; vollständige Vitest-/pytest-Suiten mangels installierter Testabhängigkeiten nicht ausgeführt. Details unten. |
 
 **Kandidatenbezug:** Die Portable-Datei war bereits zuvor gegen den Auftrag geprüft worden; diese Prüfung wurde erneut bestätigt: SHA-256 `0C3B0855DFDF2B4C2E5CC37EFA4421A6A94599EBBBEB3479E0FAC0B1AC68B357` — vollständiger Wert steht im ursprünglichen Guest-Bericht. Der Setup-Installer wurde in dieser Runde nicht gestartet.
 
@@ -33,3 +33,16 @@ Es gibt keine Screenshots, weil kein sichtbarer UI-Test stattfand. Der Auftrag v
 
 Für die vollständige Abnahme ist ein sichtbarer Start des gepinnten Portable-Kandidaten in einem frischen synthetischen Profil erforderlich. Der Startpfad muss vor Funktionsprüfungen die tatsächliche cec9-Version, den laufenden/extrahierten ASAR sowie die benutzten Profil- und Runtimepfade bestätigen. Anschließend sind die Szenarien aus dem Masterauftrag einzeln mit UI-Belegen zu prüfen. Bis dahin bleiben Funktionsfälle offen; dieser Bericht gibt keine Produktfreigabe.
 
+
+## Nachtrag – Tests auf dem gepinnten Quellstand
+
+Ein gebündelter Python-/Node-Laufzeitpfad des Codex-Workspaces war verfügbar, obwohl `python`/`npm` nicht direkt im PATH lagen. Das cec9-Quellarchiv wurde ausschließlich in `%TEMP%` ausgepackt. Ohne Abhängigkeitsinstallation liefen dort:
+
+- `python -m compileall -q services/sidekick` mit Python 3.12.14: **PASS**.
+- `python -m unittest test_verify_independent_bundle -v`: **2/2 PASS**.
+- Node.js v24.19.0 `--test services/sidekick/tests/space_navigation.test.cjs`: **39/39 PASS**.
+- Node.js `--test lastbrowser.com/tests/download-counter.test.mjs`: **15/15 PASS**.
+
+Diese **56 Source-/Harness-Tests** betreffen Python-Syntax, Bundle-Snapshot, Space-/Session-Navigationsschutz sowie die Downloadzähler-Webfunktion. Sie laufen gegen den Quellstand `cec9d2f5ac8a22b8c492c138b7efcbef6d329aba`, nicht gegen die sichtbare Desktop-Laufzeit.
+
+Die übrigen Desktop-Tests (202 Testdateien mit Vitest) und die breite Sidekick-Pytest-Suite liefen nicht: `node_modules`, Vitest und pytest fehlen. Der Testauftrag untersagt die Abhängigkeitsinstallation. Diese Source-Tests ändern den UI-Startblocker nicht; alle Guest-UI-Fälle bleiben `NOT_TESTED`/`BLOCKED`.

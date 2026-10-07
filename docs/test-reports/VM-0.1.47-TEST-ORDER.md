@@ -1,5 +1,7 @@
 # LastBrowser 0.1.47 — Auftrag für die dedizierte Windows-Test-VM
 
+**Getrennter Folgeauftrag:** Der aktuelle 0.1.48-First-Run-AI-Choice-Test steht in [VM-FIRST-LAUNCH-AI-CHOICE-SCENARIOS.md](VM-FIRST-LAUNCH-AI-CHOICE-SCENARIOS.md) und hat eigene Wrapper-/ASAR-Pins. Dieser 0.1.47-Auftrag, seine Providerbudgets und seine bereits protokollierten Ergebnisse bleiben unverändert und dürfen nicht zur Identifizierung oder zum Ersatz des 0.1.48-Kandidaten verwendet werden. Der Guest-Runner ergänzt die Deduplizierung; kein Budgetreset.
+
 Für die vom Human stündlich eingerichtete Wiederaufnahme gilt zusätzlich [VM-HOURLY-TEST-RUNNER.md](VM-HOURLY-TEST-RUNNER.md): nur neue/geänderte passende Szenarien, keine parallelen Läufe, keine unveränderten Wiederholungen und kein stündlicher Providerbudgetreset.
 
 **Aktualisierung 7. Oktober 2026:** Direkter Humanauftrag: laufende VM-Abnahme wieder aufnehmen und neue Tests durchführen. Dieser aktualisierte Repo-Auftrag ersetzt den alten VM-NEXT-Auftrag für 0.1.46. Der unveränderte frühere Release-MD-Download bleibt historisch und enthält diese Ergänzungen nicht. Den aktuellen Repo-Stand benutzen. Kandidatpins unten bleiben unverändert.

@@ -24,6 +24,11 @@ export function filterChatCommands(query: string): ChatCommandDefinition[] {
   const needle = query.replace(/^\//, '').trim().toLowerCase();
   return CHAT_COMMANDS.filter(item => [item.name, ...item.aliases].some(name => name.includes(needle)));
 }
+const persistentGoalActions = new Set(['status', 'pause', 'resume', 'clear', 'cancel', 'complete', 'stop', 'done']);
+function canonicalGoalArgs(args: string): string {
+  const action = args.toLowerCase();
+  return persistentGoalActions.has(action) ? action : args;
+}
 export function commandAvailable(id: ChatCommandId, capabilities: CommandCapabilities): boolean {
   return !(id in capabilities) || capabilities[id as keyof CommandCapabilities] === true;
 }
@@ -42,7 +47,7 @@ export function createChatCommandAction(input: string, source: 'composer' | 'att
   if (id === 'goal') {
     if (!args) return { kind: 'open_goal_editor', context: captured };
     if (!captured.sessionId) return unavailable('missing_session');
-    return { kind: 'goal_command', args, clientRequestId: requestId(), context: captured };
+    return { kind: 'goal_command', args: canonicalGoalArgs(args), clientRequestId: requestId(), context: captured };
   }
   if (id === 'plan' || id === 'grill_me' || id === 'boost') {
     if (!captured.sessionId) return unavailable('missing_session');

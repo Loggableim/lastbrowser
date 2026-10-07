@@ -412,6 +412,128 @@ def test_teamwork_cancellation_does_not_wait_for_blocked_worker():
     assert not runner.is_alive()
 
 
+def test_teamwork_worker_ignores_late_callback_and_return_after_stop(monkeypatch):
+    from runtime import auxiliary_client
+    from runtime.teamwork_orchestrator import _invoke_worker
+
+    cancel = threading.Event()
+    provider_started = threading.Event()
+    release_provider = threading.Event()
+    callbacks = []
+    calls = []
+    events = []
+    worker = {
+        "id": "model-a", "model": "model-a", "call_model": "model-a", "provider": "fixture",
+        "name": "Fixture", "role": "analyst", "focus": "stop race",
+        "worker_id": "worker-1", "worker_index": 0,
+    }
+    backup = [{"id": "model-b", "call_model": "model-b", "provider": "fixture-b"}]
+
+    def fake_stream_llm(*, provider, on_content, **_kwargs):
+        calls.append(provider)
+        callbacks.append(on_content)
+        provider_started.set()
+        assert release_provider.wait(timeout=2)
+        on_content("late provider delta")
+        return "late provider result"
+
+    monkeypatch.setattr(auxiliary_client, "stream_llm", fake_stream_llm)
+    result = []
+    thread = threading.Thread(target=lambda: result.append(_invoke_worker(
+        worker, "synthetic prompt", "", backup, allow_hot_swap=True,
+        event_put=lambda event, data: events.append((event, data)),
+        cancel_event=cancel,
+    )))
+    thread.start()
+    assert provider_started.wait(timeout=2)
+
+    cancel.set()
+    release_provider.set()
+    thread.join(timeout=2)
+
+    assert not thread.is_alive()
+    assert calls == ["fixture"]
+    assert not any(event == "teamwork_worker_delta" for event, _data in events)
+    assert not any(event == "teamwork_worker_end" and data["status"] == "complete"
+                   for event, data in events)
+    assert any(event == "teamwork_worker_end" and data["status"] == "aborted"
+               for event, data in events)
+    assert result[0]["error"] is not None
+
+
+def test_teamwork_worker_does_not_accept_or_retry_after_deadline(monkeypatch):
+    from runtime import auxiliary_client
+
+    calls = []
+    events = []
+    worker = {
+        "id": "model-a", "model": "model-a", "call_model": "model-a", "provider": "fixture-a",
+        "name": "Fixture A", "role": "analyst", "focus": "deadline race",
+        "worker_id": "worker-1", "worker_index": 0,
+    }
+    backup = [{"id": "model-b", "call_model": "model-b", "provider": "fixture-b"}]
+
+    def fake_stream_llm(*, provider, on_content, **_kwargs):
+        calls.append(provider)
+        time.sleep(0.03)
+        on_content("late provider delta")
+        return "late provider result"
+
+    monkeypatch.setattr(auxiliary_client, "stream_llm", fake_stream_llm)
+    result = _invoke_worker(
+        worker, "synthetic prompt", "", backup, allow_hot_swap=True,
+        deadline=time.monotonic() + 0.01,
+        event_put=lambda event, data: events.append((event, data)),
+    )
+
+    assert calls == ["fixture-a"]
+    assert not any(event == "teamwork_worker_delta" for event, _data in events)
+    assert any(event == "teamwork_worker_end" and data["status"] == "aborted"
+               for event, data in events)
+    assert result["failure_code"] == "teamwork_turn_deadline_exceeded"
+
+
+def test_teamwork_planner_deadline_is_an_error_and_stops_later_stages(monkeypatch):
+    from types import SimpleNamespace
+    from runtime import auxiliary_client, teamwork_orchestrator as orchestrator
+
+    monkeypatch.setattr(orchestrator, "TEAMWORK_TURN_TIMEOUT_SECONDS", 0.02)
+    calls = []
+    events = []
+    provider_finished = threading.Event()
+    session = MagicMock(messages=[])
+    model = {"id": "model-a", "call_model": "model-a", "provider": "fixture-a", "name": "Fixture A"}
+    plan = {
+        "planner": model,
+        "workers": [{**model, "worker_id": "worker-1", "worker_index": 0,
+                      "model": "model-a", "role": "analyst", "focus": "deadline"}],
+        "worker_pool": [model], "pool": [model],
+        "critic": "model-a", "critic_provider": "fixture-a",
+        "synthesizer": "model-a", "synthesizer_provider": "fixture-a",
+        "provider_count": 1, "reduced_mode": False,
+    }
+
+    def fake_call_llm(*, model, **_kwargs):
+        calls.append(model)
+        time.sleep(0.04)
+        provider_finished.set()
+        return SimpleNamespace(choices=[])
+
+    monkeypatch.setattr(auxiliary_client, "call_llm", fake_call_llm)
+    with pytest.raises(TimeoutError, match="teamwork_turn_deadline_exceeded"):
+        orchestrator._run_teamwork_turn(
+            session, "synthetic prompt", config={"enabled": True, "strategy": "balanced"},
+            stream_put=lambda event, data: events.append((event, data)),
+            plan_override=plan,
+        )
+
+    assert provider_finished.wait(timeout=1)
+    assert calls == ["model-a"]
+    assert not any(event in {"teamwork_worker_start", "teamwork_critic", "teamwork_complete"}
+                   for event, _data in events)
+    assert session.messages == []
+
+
 def test_repeated_worker_cancellation_keeps_executor_threads_within_global_bound(monkeypatch):
     from runtime import teamwork_orchestrator as orchestrator
 

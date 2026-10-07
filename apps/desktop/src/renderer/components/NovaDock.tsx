@@ -23,6 +23,7 @@ import {
 } from '../stores/usePinnedAppStore.js';
 import { renderAppIcon } from './PinnedAppGrid.js';
 import { useDesktopI18n } from '../i18n.js';
+import { canDragFloatingDock, createDockAutoHideController, resolveDockOrientationForPanel } from '../dock-auto-hide.js';
 
 export interface NovaDockProps {
   botName?: string;
@@ -69,7 +70,11 @@ export function NovaDock({
 
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isRevealed, setIsRevealed] = useState<boolean>(true);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoHideControllerRef = useRef<ReturnType<typeof createDockAutoHideController> | null>(null);
+  if (!autoHideControllerRef.current) {
+    autoHideControllerRef.current = createDockAutoHideController(setIsRevealed);
+  }
+  const autoHideController = autoHideControllerRef.current;
 
   // Dragging state for floating mode
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -77,9 +82,10 @@ export function NovaDock({
   const dockRef = useRef<HTMLDivElement | null>(null);
 
   const effectivePosition = forcedPosition ?? dockSettings.position;
+  const floatingInSettings = activePanel === 'settings' && effectivePosition === 'floating';
   const effectiveOrientation =
     effectivePosition === 'floating'
-      ? dockSettings.orientation
+      ? resolveDockOrientationForPanel(activePanel, effectivePosition, dockSettings.orientation)
       : effectivePosition === 'top' || effectivePosition === 'bottom'
         ? 'horizontal'
         : 'vertical';
@@ -88,39 +94,39 @@ export function NovaDock({
 
   // Clear hide timer when entering dock
   const handleMouseEnter = useCallback(() => {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
-    setIsRevealed(true);
-  }, []);
+    autoHideController.pointerEnter();
+  }, [autoHideController]);
 
   // Schedule auto-hide on mouse leave if enabled
   const handleMouseLeave = useCallback(() => {
     setHoveredIndex(null);
     // A floating dock has no edge trigger zone to reveal it after hiding.
-    if (dockSettings.autoHide && effectivePosition !== 'floating') {
-      if (hideTimerRef.current) {
-        clearTimeout(hideTimerRef.current);
-      }
-      hideTimerRef.current = setTimeout(() => {
-        setIsRevealed(false);
-      }, 350);
-    }
-  }, [dockSettings.autoHide, effectivePosition]);
+    autoHideController.pointerLeave(dockSettings.autoHide, effectivePosition);
+  }, [autoHideController, dockSettings.autoHide, effectivePosition]);
+
+  const handleFocus = useCallback(() => {
+    autoHideController.focusEnter();
+  }, [autoHideController]);
+
+  const handleBlur = useCallback((event: React.FocusEvent<HTMLElement>) => {
+    const focusRemainsWithinDock = event.currentTarget.contains(event.relatedTarget as Node | null);
+    autoHideController.focusLeave(dockSettings.autoHide, effectivePosition, focusRemainsWithinDock);
+  }, [autoHideController, dockSettings.autoHide, effectivePosition]);
 
   useEffect(() => {
-    return () => {
-      if (hideTimerRef.current) {
-        clearTimeout(hideTimerRef.current);
-      }
-    };
-  }, []);
+    autoHideController.sync(
+      dockSettings.autoHide,
+      effectivePosition,
+      Boolean(dockRef.current?.matches(':hover')),
+      Boolean(dockRef.current?.contains(document.activeElement))
+    );
+    return () => autoHideController.dispose();
+  }, [autoHideController, dockSettings.autoHide, effectivePosition]);
 
   // Drag handlers for floating mode
   const handleDragMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      if (effectivePosition !== 'floating' || !dockRef.current) return;
+      if (!canDragFloatingDock(effectivePosition, activePanel) || !dockRef.current) return;
       e.preventDefault();
       setIsDragging(true);
       const rect = dockRef.current.getBoundingClientRect();
@@ -129,13 +135,21 @@ export function NovaDock({
         y: e.clientY - rect.top
       };
     },
-    [effectivePosition]
+    [activePanel, effectivePosition]
   );
 
   useEffect(() => {
-    if (!isDragging) return;
+    if (floatingInSettings) setIsDragging(false);
+  }, [floatingInSettings]);
+
+  useEffect(() => {
+    if (!isDragging || floatingInSettings) return;
 
     function handleMouseMove(e: MouseEvent) {
+      if (!canDragFloatingDock(effectivePosition, activePanel)) {
+        setIsDragging(false);
+        return;
+      }
       const maxX = Math.max(0, window.innerWidth - (dockRef.current?.offsetWidth || 100));
       const maxY = Math.max(0, window.innerHeight - (dockRef.current?.offsetHeight || 100));
       const nextX = Math.min(maxX, Math.max(0, e.clientX - dragStartOffset.current.x));
@@ -156,7 +170,7 @@ export function NovaDock({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, setDockSettings]);
+  }, [activePanel, effectivePosition, floatingInSettings, isDragging, setDockSettings]);
 
   // Fisheye scale calculator
   const getItemScale = useCallback(
@@ -286,7 +300,15 @@ export function NovaDock({
   // Floating coordinates style
   const floatingStyle: React.CSSProperties =
     effectivePosition === 'floating'
-      ? {
+      ? floatingInSettings
+        ? {
+          position: 'fixed',
+          left: 'auto',
+          right: '8px',
+          top: '62px',
+          zIndex: 9990
+        }
+        : {
           position: 'fixed',
           left: `${dockSettings.floatingPos.x}px`,
           top: `${dockSettings.floatingPos.y}px`,
@@ -314,7 +336,7 @@ export function NovaDock({
       {/* Main Nova Dock Container */}
       <nav
         ref={dockRef}
-        className={`nova-dock pos-${effectivePosition} ${isHorizontal ? 'is-horizontal' : 'is-vertical'} anim-${dockSettings.animation} ${isRevealed ? 'is-revealed' : 'is-hidden'} ${isDragging ? 'is-dragging' : ''}`}
+        className={`nova-dock pos-${effectivePosition} ${floatingInSettings ? 'settings-safe-position' : ''} ${isHorizontal ? 'is-horizontal' : 'is-vertical'} anim-${dockSettings.animation} ${isRevealed ? 'is-revealed' : 'is-hidden'} ${isDragging ? 'is-dragging' : ''}`}
         style={{ ...floatingStyle, ...animDurationStyle }}
         aria-label="Nova Dock"
         onMouseEnter={handleMouseEnter}
@@ -328,9 +350,11 @@ export function NovaDock({
           if (index >= 0) setHoveredIndex(index);
         }}
         onMouseLeave={handleMouseLeave}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
       >
         {/* Drag handle for floating mode */}
-        {effectivePosition === 'floating' && (
+        {effectivePosition === 'floating' && !floatingInSettings && (
           <div
             className="nova-dock-drag-handle"
             onMouseDown={handleDragMouseDown}

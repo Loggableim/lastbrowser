@@ -3,6 +3,12 @@
   font-family: Inter, Outfit, "Segoe UI", system-ui, sans-serif;
   --lb-bg: #07111f;
   --lb-bg-alt: #0a1324;
+  --lb-accent: var(--accent-primary, #00d9ff);
+  --lb-accent-hover: var(--accent-hover, var(--accent-primary, #00d9ff));
+  --lb-accent-text: var(--accent-text, #03111b);
+  --lb-accent-soft: color-mix(in srgb, var(--lb-accent) 13%, transparent);
+  --lb-accent-border: color-mix(in srgb, var(--lb-accent) 42%, var(--lb-border));
+  --lb-accent-glow: var(--accent-glow, rgba(0, 217, 255, .4));
   --lb-surface: rgba(7, 17, 31, .76);
   --lb-surface-strong: rgba(8, 11, 25, .92);
   --lb-surface-panel: rgba(16, 15, 32, .94);
@@ -3890,6 +3896,12 @@ html.theme-light select optgroup {
   overflow: auto;
 }
 
+/* Reserve a slim gutter when the user-configured floating dock is temporarily
+   anchored beside Settings, keeping both the panel content and dock usable. */
+body:has(.nova-dock.pos-floating.settings-safe-position) .settings-main {
+  padding-right: 72px;
+}
+
 .settings-editor-head {
   display: flex;
   align-items: flex-start;
@@ -4040,7 +4052,7 @@ html.theme-light select optgroup {
 .settings-size-grid {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
 }
 
 .settings-skin-grid {
@@ -4194,6 +4206,10 @@ html.theme-light select optgroup {
 
 .settings-size-btn strong {
   color: inherit;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
 }
 
 .settings-badge {
@@ -5939,6 +5955,50 @@ html.theme-light .browser-start-search input {
   border-radius: 16px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65), 0 0 40px rgba(0, 217, 255, 0.08);
   padding: 24px 32px;
+}
+
+.first-run-ai-choice-screen {
+  min-height: min(560px, calc(100vh - 100px));
+  justify-content: center;
+}
+
+.first-run-ai-choice-card {
+  width: min(100%, 620px);
+  margin: auto;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.first-run-ai-choice-card h1 {
+  margin: 0;
+  color: #f3f8ff;
+  font-size: clamp(24px, 4vw, 34px);
+}
+
+.first-run-ai-choice-card > p {
+  max-width: 480px;
+  margin: 0;
+  color: rgba(232, 242, 255, 0.72);
+  line-height: 1.6;
+}
+
+.first-run-ai-choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.first-run-no-ai-note {
+  margin: 0;
+  color: rgba(232, 242, 255, 0.62);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .first-run-topbar {
@@ -15645,8 +15705,9 @@ html[data-message-layout="expanded"] .copilot-bubble.user {
   top: 50%;
   left: 0;
   transform: translateY(-50%);
-  width: 580px;
-  max-width: 90vw;
+  width: max-content;
+  max-width: min(90vw, 820px);
+  overflow-x: auto;
   z-index: 60;
   display: inline-flex;
   align-items: center;
@@ -15682,6 +15743,13 @@ html[data-message-layout="expanded"] .copilot-bubble.user {
   padding: 0 4px 0 2px;
   user-select: none;
   white-space: nowrap;
+}
+
+.action-strip-overlay-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
 }
 
 .titlebar-research-flyout .flyout-close-btn {
@@ -15815,16 +15883,6 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
 .dock-check-badge {
   font-size: 12px;
   color: #00e5ff;
-}
-
-.browser-page-corner-actions {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 8;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 /* Copilot Model Picker */
@@ -18901,6 +18959,18 @@ html.theme-light .settings-toggle-card {
   background: rgba(12, 22, 36, .035);
 }
 
+html.theme-light .settings-accent-btn {
+  color: var(--lb-text);
+  border-color: var(--lb-border);
+  background: rgba(12, 22, 36, .035);
+}
+
+html.theme-light .settings-accent-btn:hover:not(.active) {
+  color: #075985;
+  border-color: rgba(3, 105, 161, .38);
+  background: rgba(14, 165, 233, .12);
+}
+
 /* Secondary actions inherit a white-on-dark palette outside Settings. Keep
    their labels and borders readable in every light-theme Settings section. */
 html.theme-light .settings-editor .secondary-action {
@@ -18928,6 +18998,13 @@ html.theme-light .settings-theme-btn.active,
 html.theme-light .settings-skin-btn.active,
 html.theme-light .settings-size-btn.active,
 html.theme-light .settings-dock-btn.active {
+  color: #075985;
+  border-color: rgba(3, 105, 161, .38);
+  background: rgba(14, 165, 233, .12);
+  box-shadow: inset 0 0 0 1px rgba(3, 105, 161, .08);
+}
+
+html.theme-light .settings-accent-btn.active {
   color: #075985;
   border-color: rgba(3, 105, 161, .38);
   background: rgba(14, 165, 233, .12);
@@ -19579,4 +19656,91 @@ html[data-a11y-reduced-motion='true'] body *:not(webview):not(webview *) {
 .a11y-test-palette-btn.active {
   border-color: #FFD700;
   box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.4);
+}
+
+/* Keep the selected accent in the default skin ahead of its base gold token. */
+html[data-skin="default"][data-theme-accent="neon-cyan"] { --accent-primary: #00d9ff; --accent-glow: rgba(0, 217, 255, .4); --accent-text: #03111b; }
+html[data-skin="default"][data-theme-accent="electric-violet"] { --accent-primary: #a855f7; --accent-glow: rgba(168, 85, 247, .4); --accent-text: #ffffff; }
+html[data-skin="default"][data-theme-accent="emerald-flow"] { --accent-primary: #10b981; --accent-glow: rgba(16, 185, 129, .35); --accent-text: #052e1b; }
+html[data-skin="default"][data-theme-accent="solar-amber"] { --accent-primary: #f59e0b; --accent-glow: rgba(245, 158, 11, .35); --accent-text: #271600; }
+html[data-skin="default"][data-theme-accent="monochrome-slate"] { --accent-primary: #94a3b8; --accent-glow: rgba(148, 163, 184, .32); --accent-text: #0f172a; }
+
+/* Accent only the browser's own chrome; embedded web pages keep their own colors. */
+html:not(.theme-vision-impaired) .tab.active {
+  border-color: var(--lb-accent-border);
+  box-shadow: inset 0 2px 0 var(--lb-accent);
+}
+
+html:not(.theme-vision-impaired) .space-list button:hover,
+html:not(.theme-vision-impaired) .space-list button.active,
+html:not(.theme-vision-impaired) .native-space-list div.active,
+html:not(.theme-vision-impaired) .workspace-picker-item.active,
+html:not(.theme-vision-impaired) .control-center-tabs button.active,
+html:not(.theme-vision-impaired) .sidebar-session-item.is-active,
+html:not(.theme-vision-impaired) .drawer-tab-btn.active,
+html:not(.theme-vision-impaired) .sidebar-drawer-card.is-active {
+  background-color: var(--lb-accent-soft);
+  border-color: var(--lb-accent-border);
+}
+
+html:not(.theme-vision-impaired) .sidebar-session-item.is-active,
+html:not(.theme-vision-impaired) .drawer-tab-btn.active,
+html:not(.theme-vision-impaired) .sidebar-drawer-card.is-active {
+  box-shadow: 0 0 10px color-mix(in srgb, var(--lb-accent) 20%, transparent);
+}
+
+html:not(.theme-vision-impaired) .space-list button.active,
+html:not(.theme-vision-impaired) .native-space-list div.active,
+html:not(.theme-vision-impaired) .workspace-picker-item.active,
+html:not(.theme-vision-impaired) .workspace-active-check,
+html:not(.theme-vision-impaired) .control-center-tabs button.active,
+html:not(.theme-vision-impaired) .sidebar-session-item.is-active,
+html:not(.theme-vision-impaired) .drawer-tab-btn.active,
+html:not(.theme-vision-impaired) .sidebar-drawer-card.is-active,
+html:not(.theme-vision-impaired) .workspace.left-collapsed .rail-button.active,
+html:not(.theme-vision-impaired) .vertical-tab-item.active .vtab-title {
+  color: var(--lb-accent);
+}
+
+html:not(.theme-vision-impaired) .workspace-picker-item.active .workspace-item-letter {
+  background: var(--lb-accent);
+  color: var(--lb-accent-text);
+}
+
+html:not(.theme-vision-impaired) .workspace.left-collapsed .rail-button.active {
+  box-shadow: inset 0 -3px 0 var(--lb-accent), 0 0 18px var(--lb-accent-glow);
+}
+
+html:not(.theme-vision-impaired) .settings-dock-btn.active {
+  border-color: var(--lb-accent-border);
+  background: var(--lb-accent-soft);
+  color: var(--lb-accent);
+}
+
+html:not(.theme-vision-impaired) .primary-action {
+  background: linear-gradient(135deg, var(--accent-primary, #00d9ff), color-mix(in srgb, var(--accent-primary, #00d9ff) 78%, #ffffff));
+  color: var(--lb-accent-text);
+  box-shadow: 0 0 20px var(--lb-accent-glow);
+}
+
+html:not(.theme-vision-impaired) .extension-toggle-switch.active {
+  background: var(--lb-accent);
+  border-color: var(--lb-accent);
+  box-shadow: 0 0 8px var(--lb-accent-glow);
+}
+
+html:not(.theme-vision-impaired) input[type="checkbox"],
+html:not(.theme-vision-impaired) input[type="radio"],
+html:not(.theme-vision-impaired) input[type="range"],
+html:not(.theme-vision-impaired) progress {
+  accent-color: var(--lb-accent);
+}
+
+html:not(.theme-vision-impaired) button:focus-visible,
+html:not(.theme-vision-impaired) input:focus-visible,
+html:not(.theme-vision-impaired) select:focus-visible,
+html:not(.theme-vision-impaired) textarea:focus-visible,
+html:not(.theme-vision-impaired) a[href]:focus-visible,
+html:not(.theme-vision-impaired) [tabindex]:focus-visible {
+  outline-color: var(--lb-accent) !important;
 }

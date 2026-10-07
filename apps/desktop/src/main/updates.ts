@@ -125,6 +125,11 @@ export function startAutoUpdateChecks(): void {
   }, 15000);
 }
 
+/** Returns the current update status and starts install/relaunch only when the download is complete. */
+export function installDownloadedUpdateForAppRestart(): LastbrowserUpdateStatus | null {
+  return controller?.quitAndInstall() ?? null;
+}
+
 function scheduleAutoUpdateCheck(): void {
   if (!controller || !autoCheckPreferenceReceived || !autoChecksEnabled || autoCheckTimer) return;
   autoCheckTimer = windowDelay(() => {

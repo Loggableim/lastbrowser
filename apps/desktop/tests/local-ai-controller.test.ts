@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, readdir, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 vi.mock('electron', () => ({}));
@@ -186,6 +186,58 @@ describe('installation-wide Local AI first-run bootstrap', () => {
     await expect(controller.bootstrap({ action: 'cancel', jobId: randomUUID() }, () => owner)).rejects.toThrow();
     await expect(controller.bootstrap({ action: 'start', clientRequestId: randomUUID(), cacheRoot: directory }, () => owner)).rejects.toThrow();
     expect(api).not.toHaveBeenCalled();
+  });
+});
+
+describe('hardware inventory trusted user-data path', () => {
+  it('accepts a stable user-data path beneath a redirected parent while retaining the canonical target', async () => {
+    const realParent = path.join(directory, 'roaming-real');
+    const aliasParent = path.join(directory, 'roaming-alias');
+    const realUserData = path.join(realParent, 'LastBrowser');
+    const aliasedUserData = path.join(aliasParent, 'LastBrowser');
+    await mkdir(realUserData, { recursive: true });
+    await symlink(realParent, aliasParent, 'junction');
+    const expectedCanonical = await realpath(realUserData);
+    expect(expectedCanonical).not.toBe(path.resolve(aliasedUserData));
+    const observed: string[] = [];
+    const validInventory: any = { schemaVersion: 1,
+      hardware: { scanId: 'stable-scan', observedAt: new Date().toISOString() },
+      gpuFeatureStatus: {}, probeIssues: [] };
+    controller = new LocalAiController({ userDataDir: aliasedUserData, apiRequest: api,
+      inventory: vi.fn(async ({ cacheDirectory }) => { observed.push(cacheDirectory); return validInventory; }) as any });
+
+    await expect(controller.hardwareInventory({}, () => undefined)).resolves.toEqual(validInventory);
+    expect(observed).toEqual([expectedCanonical]);
+  });
+
+  it('still rejects a user-data directory whose final path component is a junction', async () => {
+    const realUserData = path.join(directory, 'outside-user-data');
+    const linkedUserData = path.join(directory, 'linked-user-data');
+    await mkdir(realUserData);
+    await symlink(realUserData, linkedUserData, 'junction');
+    controller = new LocalAiController({ userDataDir: linkedUserData, apiRequest: api,
+      inventory: vi.fn() as any });
+
+    await expect(controller.hardwareInventory({}, () => undefined)).rejects.toThrow(/not a regular directory/);
+  });
+
+  it('rejects a redirected parent that changes while the hardware scan is running', async () => {
+    const firstParent = path.join(directory, 'roaming-first');
+    const secondParent = path.join(directory, 'roaming-second');
+    const aliasParent = path.join(directory, 'roaming-changing-alias');
+    const aliasedUserData = path.join(aliasParent, 'LastBrowser');
+    await mkdir(path.join(firstParent, 'LastBrowser'), { recursive: true });
+    await mkdir(path.join(secondParent, 'LastBrowser'), { recursive: true });
+    await symlink(firstParent, aliasParent, 'junction');
+    controller = new LocalAiController({ userDataDir: aliasedUserData, apiRequest: api,
+      inventory: vi.fn(async () => {
+        await rm(aliasParent);
+        await symlink(secondParent, aliasParent, 'junction');
+        return { schemaVersion: 1, hardware: { scanId: 'changing-scan', observedAt: new Date().toISOString() },
+          gpuFeatureStatus: {}, probeIssues: [] } as any;
+      }) as any });
+
+    await expect(controller.hardwareInventory({}, () => undefined)).rejects.toThrow(/changed during the scan/);
   });
 });
 

@@ -435,8 +435,8 @@ def test_enabled_orchestration_stream_runs_persistent_goal_hook(
         ("smart-track", "smart-track-medium", "runtime.smart_track_orchestrator", "load_smart_track_config", "run_smart_track_turn"),
     ],
 )
-@pytest.mark.parametrize("terminal", ["cancel", "error"])
-def test_orchestration_cancel_and_error_clear_pending_session_state(
+@pytest.mark.parametrize("terminal", ["cancel", "error", "deadline"])
+def test_orchestration_terminal_events_clear_pending_session_state(
     monkeypatch, tmp_path, orchestration, model, config_module, config_loader, runner_name, terminal
 ):
     import importlib
@@ -486,6 +486,8 @@ def test_orchestration_cancel_and_error_clear_pending_session_state(
     def terminate(*_args, **_kwargs):
         if terminal == "cancel":
             raise InterruptedError("cancelled")
+        if terminal == "deadline":
+            raise TimeoutError("teamwork_turn_deadline_exceeded")
         raise RuntimeError("provider failed")
 
     monkeypatch.setattr(orchestrator_module, runner_name, terminate)
@@ -505,6 +507,8 @@ def test_orchestration_cancel_and_error_clear_pending_session_state(
         session.save.assert_called_once()
         events = [event for event, _payload in channel._offline_buffer]
         assert events[-1] == ("cancel" if terminal == "cancel" else "error")
+        if terminal == "deadline":
+            assert channel._offline_buffer[-1][1]["error"] == "teamwork_turn_deadline_exceeded"
     finally:
         with STREAMS_LOCK:
             STREAMS.pop(stream_id, None)

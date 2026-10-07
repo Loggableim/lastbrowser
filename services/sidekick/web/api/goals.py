@@ -539,6 +539,8 @@ class _ProfileGoalManager:
         self._resume_stale = False
         if not self._state:
             return None
+        if self._state.status in ("done", "cleared"):
+            return None
         if self._state.status == "active" and not reset_budget:
             return self._state
         pending_response = getattr(self._state, "pending_judge_response", None)
@@ -607,6 +609,19 @@ class _ProfileGoalManager:
         self._state.status = "cleared"
         self._save(self._state)
         self._state = None
+
+    def complete(self):
+        """Persist explicit user completion through the existing revision CAS."""
+        if self._state is None or self._state.status == "cleared":
+            return None
+        if self._state.status == "done":
+            return self._state
+        self._state.status = "done"
+        self._state.paused_reason = None
+        self._state.pending_judge_response = None
+        self._state.pending_judge_user_initiated = True
+        self._save(self._state)
+        return self._state
 
     def apply_pending_judge_result(self, *, expected_digest, verdict, reason, parse_failed):
         """Apply a validated private judge result with the existing durable CAS."""
@@ -1226,7 +1241,8 @@ def _goal_command_payload(
     - /goal pause pauses
     - /goal resume resumes and can return a kickoff_prompt so the caller can
       continue immediately when the session is idle
-    - /goal clear|stop|done clears
+    - /goal complete marks the goal done without a model verdict
+    - /goal clear|cancel|stop|done clears
     - /goal <text> sets a new active goal and returns kickoff_prompt so the
       caller can start the first normal user-role turn immediately.
     """
@@ -1367,7 +1383,27 @@ def _goal_command_payload(
             space_slug=space_slug,
         )
 
-    if lower in ("clear", "stop", "done"):
+    if lower == "complete":
+        if stream_running:
+            return _payload(ok=False, action="complete", error="agent_running",
+                message="Wait for the active stream to stop before completing this goal.",
+                state=getattr(mgr, "state", None), session_id=sid, space_slug=space_slug)
+        try:
+            with _CONTINUATION_LOCK:
+                cancel_goal_continuation(sid, profile_home=profile_home, space_slug=space_slug)
+                state = mgr.complete()
+        except GoalRevisionConflict:
+            return _payload(ok=False, action="complete", error="goal_revision_conflict", message="Goal changed; refresh before retrying.", session_id=sid)
+        except Exception as exc:
+            logger.warning("Could not persist goal completion for session %s: %s", sid, exc)
+            return _payload(ok=False, action="complete", error="persistence_failed", message="Goal state could not be saved.", retryable=True, session_id=sid, space_slug=space_slug)
+        if state is None:
+            return _payload(ok=False, action="complete", error="no_goal", message="No goal to complete.", session_id=sid, space_slug=space_slug)
+        return _payload(action="complete", revision=state.revision,
+            message=f"✓ Goal marked complete: {state.goal}", state=state,
+            session_id=sid, space_slug=space_slug)
+
+    if lower in ("clear", "cancel", "stop", "done"):
         had = bool(mgr.has_goal())
         try:
             with _CONTINUATION_LOCK:
@@ -1540,7 +1576,7 @@ def goal_command_payload(
                 if current and current.continuation_owner != "legacy_chat":
                     conn.execute("COMMIT")
                     return _payload(ok=False, action="error", error="goal_owned_by_run", message="Use the owning agent run controls.", state=current, session_id=sid, space_slug=space_slug)
-                action = text.lower() if text.lower() in ("pause", "resume") else "clear" if text.lower() in ("clear", "stop", "done") else "set"
+                action = text.lower() if text.lower() in ("pause", "resume", "complete") else "clear" if text.lower() in ("clear", "cancel", "stop", "done") else "set"
                 receipt = {"digest": digest, "state": "pending", "action": action, "started_at": time.time()}
                 if human_authorization is not None:
                     receipt["humanAuthorization"] = human_authorization

@@ -57,6 +57,7 @@ import {
   X
 } from 'lucide-react';
 import { hideWebviewScrollbars } from './browser-view.js';
+import { subscribeDevToolsState, toggleWebviewDevTools } from './devtools-state.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
@@ -160,9 +161,10 @@ import {
   canSubmitCloudSetup,
   canShowWhatsNewModal,
   cloudProviderOptions,
+  firstRunAiChoiceForSetup,
   defaultSetupState,
   firstRunStatus,
-  isFirstRunRequired,
+  shouldShowFirstRunSetup,
   modelsForProvider,
   normalizeSetupState
 } from './setup-state.js';
@@ -587,8 +589,12 @@ export function computeAccentTokens(hexColor: string) {
   const rgb = hexToRgb(hexColor);
   if (!rgb) return null;
   const { r, g, b } = rgb;
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  const contrastText = luminance > 0.55 ? '#000000' : '#ffffff';
+  const linear = (channel: number): number => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+  const contrastText = (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? '#000000' : '#ffffff';
   const glow = `rgba(${r}, ${g}, ${b}, 0.45)`;
   const hoverR = Math.min(255, Math.round(r + (255 - r) * 0.18));
   const hoverG = Math.min(255, Math.round(g + (255 - g) * 0.18));
@@ -858,6 +864,8 @@ function AppContent(): JSX.Element {
     setSidebarMode,
     downloadsOpen,
     setDownloadsOpen,
+    permissionsOpen,
+    setPermissionsOpen,
     cycleSidebarMode,
     copilotOpen,
     setCopilotOpen,
@@ -1006,6 +1014,7 @@ function AppContent(): JSX.Element {
       return false;
     }
   });
+  const [setupReopenRequested, setSetupReopenRequested] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null);
   const [onboardingStatusChecked, setOnboardingStatusChecked] = useState(false);
   const [setupLoading, setSetupLoading] = useState(true);
@@ -1329,6 +1338,10 @@ function AppContent(): JSX.Element {
   const createSessionRequestRef = useRef(0);
   const browserFrameRef = useRef<HTMLDivElement | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
+  const [devToolsOpen, setDevToolsOpen] = useState(false);
+  const toggleDevTools = useCallback(() => {
+    toggleWebviewDevTools(webviewRef.current, setDevToolsOpen);
+  }, []);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const resizeStateRef = useRef<SidebarResizeState | null>(null);
   const contextSidebarWidthRef = useRef(contextSidebarWidth);
@@ -1336,7 +1349,10 @@ function AppContent(): JSX.Element {
   const contextSidebarCollapsedRef = useRef(contextSidebarCollapsed);
   const workspacePanelCollapsedRef = useRef(workspacePanelCollapsed);
   const leftSidebarCollapsedRef = useRef(leftSidebarCollapsed);
-  const setupRequired = isFirstRunRequired(setupState, onboardingStatus) && !setupDismissed;
+  const setupRequired = shouldShowFirstRunSetup(setupState, onboardingStatus, {
+    dismissed: setupDismissed,
+    reopenRequested: setupReopenRequested
+  });
   const canPresentWhatsNew = canShowWhatsNewModal({
     setupLoading,
     setupRequired,
@@ -1587,18 +1603,7 @@ function AppContent(): JSX.Element {
 
   useEffect(() => {
     const handleToggleDevtools = () => {
-      try {
-        const view = webviewRef.current;
-        if (view && typeof view.openDevTools === 'function') {
-          if (view.isDevToolsOpened()) {
-            view.closeDevTools();
-          } else {
-            view.openDevTools();
-          }
-        }
-      } catch {
-        // ignore
-      }
+      toggleDevTools();
     };
     const handlePrint = () => {
       try {
@@ -1613,7 +1618,7 @@ function AppContent(): JSX.Element {
       window.removeEventListener('lastbrowser:toggle-devtools', handleToggleDevtools);
       window.removeEventListener('lastbrowser:print-page', handlePrint);
     };
-  }, []);
+  }, [toggleDevTools]);
 
   useEffect(() => {
     if (!window.lastbrowser?.browser?.onShortcut) return;
@@ -1744,18 +1749,7 @@ function AppContent(): JSX.Element {
           toggleCopilot();
           break;
         case 'toggle-devtools':
-          try {
-            const view = webviewRef.current;
-            if (view && typeof view.openDevTools === 'function') {
-              if (view.isDevToolsOpened()) {
-                view.closeDevTools();
-              } else {
-                view.openDevTools();
-              }
-            }
-          } catch {
-            // ignore
-          }
+          toggleDevTools();
           break;
         case 'zoom-in': {
           const view = webviewRef.current;
@@ -1780,7 +1774,7 @@ function AppContent(): JSX.Element {
         }
       }
     });
-  }, [addTab, closeTab, reopenClosedTab, setActiveTabId, setActivePanel, setContextSidebarCollapsed]);
+  }, [addTab, closeTab, reopenClosedTab, setActiveTabId, setActivePanel, setContextSidebarCollapsed, toggleDevTools]);
 
   useEffect(() => {
     saveActivePanel(undefined, activePanel);
@@ -2790,6 +2784,10 @@ function AppContent(): JSX.Element {
 
   async function completeSetup(form: SetupForm): Promise<void> {
     setSetupError('');
+    if (firstRunAiChoiceForSetup(setupState) !== 'enabled') {
+      setSetupError('Choose whether to use AI before configuring a provider.');
+      return;
+    }
     if (!form.provider || !form.model) {
       setSetupError('Choose a provider and model before continuing.');
       return;
@@ -2826,12 +2824,62 @@ function AppContent(): JSX.Element {
         personality: personality
       });
       setSetupState(nextState);
+      setSetupReopenRequested(false);
       setOnboardingStatus((completeStatus || nextStatus) as OnboardingStatus);
       void refreshSessions();
     } catch (error) {
       setSetupError(error instanceof Error ? error.message : String(error));
     } finally {
       setSetupSaving(false);
+    }
+  }
+
+  async function saveFirstRunAiChoice(choice: SetupState['aiChoice']): Promise<boolean> {
+    if (choice !== 'enabled' && choice !== 'disabled') return false;
+    setSetupError('');
+    setSetupSaving(true);
+    try {
+      const nextState = await window.lastbrowser.setup.save({ aiChoice: choice });
+      const normalized = normalizeSetupState(nextState);
+      if (normalized.aiChoice !== choice) throw new Error('The AI preference was not saved.');
+      setSetupState(normalized);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setSetupSaving(false);
+    }
+  }
+
+  async function completeBrowserOnlySetup(): Promise<boolean> {
+    setSetupError('');
+    setSetupSaving(true);
+    try {
+      const nextState = await window.lastbrowser.setup.save({
+        aiChoice: 'disabled',
+        browserSetupComplete: true
+      });
+      const normalized = normalizeSetupState(nextState);
+      if (normalized.aiChoice !== 'disabled' || normalized.browserSetupComplete !== true) {
+        throw new Error('The browser setup was not saved.');
+      }
+      setSetupState(normalized);
+      setSetupReopenRequested(false);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setSetupSaving(false);
+    }
+  }
+
+  function reopenSetupFromSettings(): void {
+    setSetupReopenRequested(true);
+    setSetupDismissed(false);
+    try {
+      window.localStorage.removeItem('lastbrowser.setupDismissed');
+    } catch {
+      // The in-memory request still opens the setup for this session.
     }
   }
 
@@ -4734,6 +4782,31 @@ function AppContent(): JSX.Element {
                   }}
                   dockMode={actionBarDock}
                   onSetDockMode={setActionBarDock}
+                  overlayTools={(
+                    <>
+                      <button
+                        type="button"
+                        className={`devtools-trigger ${devToolsOpen ? 'active' : ''}`}
+                        title="Toggle DevTools (F12)"
+                        aria-label="Toggle DevTools (F12)"
+                        aria-pressed={devToolsOpen}
+                        onClick={toggleDevTools}
+                      >
+                        <Code2 size={14} />
+                      </button>
+                      <SitePermissionButton url={activeTab.url} />
+                      <button
+                        type="button"
+                        className="permissions-trigger"
+                        title="Site permissions"
+                        aria-label="Site permissions"
+                        aria-expanded={permissionsOpen}
+                        onClick={() => usePanelStore.getState().setPermissionsOpen(!usePanelStore.getState().permissionsOpen)}
+                      >
+                        <ShieldCheck size={14} />
+                      </button>
+                    </>
+                  )}
                 />
               ) : undefined
             }
@@ -5001,6 +5074,8 @@ function AppContent(): JSX.Element {
                   activeSession={activeSession}
                   activeSessionId={activeSessionId}
                   activeTab={activeTab}
+                  onToggleDevTools={toggleDevTools}
+                  onDevToolsOpenChange={setDevToolsOpen}
                   activeProfile={activeProfile}
                   profiles={profiles}
                   activeProfileId={activeProfileId}
@@ -5032,14 +5107,7 @@ function AppContent(): JSX.Element {
                   onAddSplitTab={addSplitTab}
                   onRemoveSplitTab={removeSplitTab}
                   onSetSplitLayout={setSplitLayout}
-                  onReopenSetup={() => {
-                    setSetupDismissed(false);
-                    try {
-                      window.localStorage.removeItem('lastbrowser.setupDismissed');
-                    } catch {
-                      // Storage unavailable — the wizard still opens for this session.
-                    }
-                  }}
+                  onReopenSetup={reopenSetupFromSettings}
                   busy={sidekickBusy}
                   chatError={chatError}
                   chatMessages={chatMessages}
@@ -5345,6 +5413,8 @@ function AppContent(): JSX.Element {
               activeSession={activeSession}
               activeSessionId={activeSessionId}
               activeTab={activeTab}
+              onToggleDevTools={toggleDevTools}
+              onDevToolsOpenChange={setDevToolsOpen}
               activeProfile={activeProfile}
               profiles={profiles}
               activeProfileId={activeProfileId}
@@ -5373,14 +5443,7 @@ function AppContent(): JSX.Element {
               onAddSplitTab={addSplitTab}
               onRemoveSplitTab={removeSplitTab}
               onSetSplitLayout={setSplitLayout}
-              onReopenSetup={() => {
-                setSetupDismissed(false);
-                try {
-                  window.localStorage.removeItem('lastbrowser.setupDismissed');
-                } catch {
-                  // Storage unavailable — the wizard still opens for this session.
-                }
-              }}
+              onReopenSetup={reopenSetupFromSettings}
               busy={sidekickBusy}
               chatError={chatError}
               chatMessages={chatMessages}
@@ -5463,18 +5526,23 @@ function AppContent(): JSX.Element {
           </main>
         </>
       )}
-        {setupRequired && (
+        {!setupLoading && setupRequired && (
           <FirstRunSetupPane
             browserProfileId={activeProfileId}
             workspacePath={activeSpacePath}
+            backendProfileName={activeBackendProfileName || activeSession?.profile || null}
+            aiChoice={firstRunAiChoiceForSetup(setupState)}
             status={status}
             onboardingStatus={onboardingStatus}
             setupLoading={setupLoading}
             error={setupError}
             saving={setupSaving}
             onRefreshOnboarding={refreshOnboardingStatus}
+            onChooseAi={saveFirstRunAiChoice}
+            onCompleteBrowserSetup={completeBrowserOnlySetup}
             onSubmit={completeSetup}
             onDismiss={() => {
+              setSetupReopenRequested(false);
               setSetupDismissed(true);
               try {
                 window.localStorage.setItem('lastbrowser.setupDismissed', '1');
@@ -5547,6 +5615,8 @@ function BrowserMain({
   activeSession,
   activeSessionId,
   activeTab,
+  onToggleDevTools,
+  onDevToolsOpenChange,
   activeProfile,
   profiles,
   activeProfileId,
@@ -5629,6 +5699,8 @@ function BrowserMain({
   activeSession: DesktopSessionDetail | null;
   activeSessionId: string | null;
   activeTab: BrowserTab;
+  onToggleDevTools: () => void;
+  onDevToolsOpenChange: (isOpen: boolean) => void;
   activeProfile: BrowserProfile;
   profiles: BrowserProfile[];
   activeProfileId: string;
@@ -6138,26 +6210,7 @@ function BrowserMain({
   // ── DevTools + per-tab mute ──────────────────────────────────────────────
   // Both are per-guest: the webContents is recreated on profile/tab switch, so
   // the state must be re-read whenever the element is (re)created.
-  const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [muted, setMuted] = useState(false);
-
-  const toggleDevTools = useCallback(() => {
-    const view = webviewRef.current;
-    if (!view || typeof view.openDevTools !== 'function') return;
-    try {
-      if (view.isDevToolsOpened()) {
-        view.closeDevTools();
-        setDevToolsOpen(false);
-      } else {
-        // 'right' keeps the page visible — a bottom dock eats the viewport on
-        // a laptop screen.
-        view.openDevTools();
-        setDevToolsOpen(true);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
 
   const toggleMute = useCallback(() => {
     const view = webviewRef.current;
@@ -6176,21 +6229,24 @@ function BrowserMain({
   // Re-read both flags when the guest is recreated.
   useEffect(() => {
     const view = webviewRef.current;
-    if (!view) return;
-    try {
-      setMuted(typeof view.isAudioMuted === 'function' ? view.isAudioMuted() : false);
-      setDevToolsOpen(typeof view.isDevToolsOpened === 'function' ? view.isDevToolsOpened() : false);
-    } catch {
-      // ignore
+    if (!view) {
+      onDevToolsOpenChange(false);
+      return;
     }
-  }, [webviewMountKey, webviewReady, activeTab.id]);
+    setMuted(typeof view.isAudioMuted === 'function' ? view.isAudioMuted() : false);
+    return subscribeDevToolsState(
+      view,
+      () => webviewRef.current === view,
+      onDevToolsOpenChange
+    );
+  }, [webviewMountKey, webviewReady, activeTab.id, onDevToolsOpenChange]);
 
   // F12 toggles DevTools; Ctrl/Cmd+M mutes the tab.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'F12') {
         event.preventDefault();
-        toggleDevTools();
+        onToggleDevTools();
         return;
       }
       if ((event.ctrlKey || event.metaKey) && (event.key === 'm' || event.key === 'M')) {
@@ -6206,7 +6262,7 @@ function BrowserMain({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toggleDevTools, toggleMute]);
+  }, [onToggleDevTools, toggleMute]);
 
   // ── Find in page ─────────────────────────────────────────────────────────
   // Ctrl+F is muscle memory; without it long pages are unnavigable. The guest
@@ -6480,28 +6536,6 @@ function BrowserMain({
         />
       )}
 
-      {!isHomeOrSearch && (
-        <div className="browser-page-corner-actions">
-          <button
-            type="button"
-            className={`devtools-trigger ${devToolsOpen ? 'active' : ''}`}
-            title="Toggle DevTools (F12)"
-            aria-pressed={devToolsOpen}
-            onClick={toggleDevTools}
-          >
-            <Code2 size={14} />
-          </button>
-          <SitePermissionButton url={activeTab.url} />
-          <button
-            type="button"
-            className="permissions-trigger"
-            title="Site permissions"
-            onClick={() => usePanelStore.getState().setPermissionsOpen(!usePanelStore.getState().permissionsOpen)}
-          >
-            <ShieldCheck size={14} />
-          </button>
-        </div>
-      )}
       <PermissionsPanel open={permissionsOpen} onClose={() => setPermissionsOpen(false)} />
       <HistoryPanel
         open={historyOpen}

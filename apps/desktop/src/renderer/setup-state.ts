@@ -4,7 +4,11 @@ export type SetupState = {
   model: string;
   botName?: string;
   personality?: string;
+  aiChoice?: FirstRunAiChoice;
+  browserSetupComplete?: boolean;
 };
+
+export type FirstRunAiChoice = 'enabled' | 'disabled';
 
 export type OnboardingProvider = {
   id: string;
@@ -166,17 +170,27 @@ export function normalizeSetupState(raw: unknown): SetupState {
   const data = raw as Partial<SetupState>;
   const botName = typeof data.botName === 'string' ? data.botName.trim() : '';
   const personality = typeof data.personality === 'string' ? data.personality.trim() : '';
+  const aiChoice = data.aiChoice === 'enabled' || data.aiChoice === 'disabled' ? data.aiChoice : undefined;
   return {
     cloudSetupComplete: data.cloudSetupComplete === true,
     provider: String(data.provider || '').trim(),
     model: String(data.model || '').trim(),
+    ...(aiChoice ? { aiChoice } : {}),
+    ...(typeof data.browserSetupComplete === 'boolean' ? { browserSetupComplete: data.browserSetupComplete } : {}),
     ...(botName ? { botName } : {}),
     ...(personality ? { personality } : {})
   };
 }
 
+/** Legacy configured installations opted into AI before the explicit first-run choice existed. */
+export function firstRunAiChoiceForSetup(state: SetupState): FirstRunAiChoice | null {
+  if (state.aiChoice) return state.aiChoice;
+  return state.cloudSetupComplete ? 'enabled' : null;
+}
+
 export function isFirstRunRequired(state: SetupState, onboardingStatus: unknown): boolean {
   const status = onboardingStatus as OnboardingStatus | null;
+  if (state.aiChoice === 'disabled') return state.browserSetupComplete !== true;
   // The wizard is done once the user completed setup AND the runtime reports a
   // usable chat provider. `chat_ready` is the authoritative signal, but the
   // newer FastAPI WebUI may omit it while still being fully configured — in
@@ -190,6 +204,15 @@ export function isFirstRunRequired(state: SetupState, onboardingStatus: unknown)
     return false;
   }
   return true;
+}
+
+/** The Settings entry point may reopen onboarding after a browser-only finish. */
+export function shouldShowFirstRunSetup(
+  state: SetupState,
+  onboardingStatus: unknown,
+  options: { dismissed: boolean; reopenRequested: boolean }
+): boolean {
+  return !options.dismissed && (options.reopenRequested || isFirstRunRequired(state, onboardingStatus));
 }
 
 export function canShowWhatsNewModal(input: {

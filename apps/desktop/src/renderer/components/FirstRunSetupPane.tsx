@@ -58,6 +58,7 @@ import {
   cloudProviderOptions,
   firstRunStatus,
   openProviderOAuthUrl,
+  type FirstRunAiChoice,
   type ProviderOption
 } from '../setup-state.js';
 
@@ -96,12 +97,16 @@ type CodexOAuthState = {
 export type FirstRunSetupPaneProps = {
   browserProfileId?:string;
   workspacePath?:string;
+  backendProfileName?:string|null;
+  aiChoice:FirstRunAiChoice|null;
   status: ServiceStatus | null;
   onboardingStatus: OnboardingStatus | null;
   setupLoading: boolean;
   error: string;
   saving: boolean;
   onRefreshOnboarding: () => Promise<void>;
+  onChooseAi: (choice:FirstRunAiChoice) => Promise<boolean>;
+  onCompleteBrowserSetup: () => Promise<boolean>;
   onSubmit: (form: SetupForm) => Promise<void>;
   onDismiss: () => void;
 };
@@ -111,16 +116,21 @@ const idleCodexOAuth: CodexOAuthState = { status: 'idle' };
 export function FirstRunSetupPane({
   browserProfileId,
   workspacePath='',
+  backendProfileName,
+  aiChoice,
   status,
   onboardingStatus,
   setupLoading,
   error,
   saving,
   onRefreshOnboarding,
+  onChooseAi,
+  onCompleteBrowserSetup,
   onSubmit,
   onDismiss
 }: FirstRunSetupPaneProps): React.JSX.Element {
   const { locale, t } = useDesktopI18n();
+  const [flowError, setFlowError] = useState('');
   const providers = cloudProviderOptions(onboardingStatus);
   const [liveProviderModels, setLiveProviderModels] = useState<Record<string, Array<{ id: string; label: string }>>>({});
   const [modelProbeLoading, setModelProbeLoading] = useState(false);
@@ -173,6 +183,15 @@ export function FirstRunSetupPane({
   const keyRequired = Boolean(activeProviderOption && !activeProviderOption.oauthProvider && !activeProviderOption.keyOptional);
   const credentialsReady = !keyRequired || Boolean(apiKey.trim());
   const canSubmitForm = canSubmit && oauthLoginReady && providerModelsReady && credentialsReady && Boolean(model);
+
+  const chooseAi = async (choice: FirstRunAiChoice) => {
+    setFlowError('');
+    if (!await onChooseAi(choice)) setFlowError(t('firstRun.aiChoiceSaveError'));
+  };
+  const completeBrowserSetup = async () => {
+    setFlowError('');
+    if (!await onCompleteBrowserSetup()) setFlowError(t('firstRun.browserSetupSaveError'));
+  };
 
   useEffect(() => {
     if (!providers.some((item) => item.id === provider) && providers[0]) {
@@ -237,6 +256,7 @@ export function FirstRunSetupPane({
   }, []);
 
   const loadLiveModels = useCallback(async () => {
+    if (aiChoice !== 'enabled') return;
     if (!['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek', 'gemini'].includes(provider)) return;
     if (!apiKey.trim()) return;
     setModelProbeLoading(true);
@@ -262,7 +282,7 @@ export function FirstRunSetupPane({
     } finally {
       setModelProbeLoading(false);
     }
-  }, [apiKey, baseUrl, provider]);
+  }, [aiChoice, apiKey, baseUrl, provider]);
 
   useEffect(() => {
     void loadLiveModels();
@@ -553,11 +573,46 @@ export function FirstRunSetupPane({
 
   // Identify top featured recommendation cards
   const featuredIds = ['openai-codex', 'ollama', 'openrouter'] as const;
+  const browserOnly = aiChoice === 'disabled';
+
+  if (aiChoice === null) {
+    return (
+      <div className="first-run-fullscreen-wrap" role="dialog" aria-modal="true" aria-label={t('firstRun.aiChoiceTitle')}>
+        <aside className="first-run-fullscreen first-run-ai-choice-screen">
+          <header className="first-run-topbar">
+            <div className="first-run-topbar-brand">
+              <img src={brandAssets.logo} alt="LastBrowser" className="first-run-brand-logo" />
+              <span className="first-run-badge">Willkommen</span>
+            </div>
+          </header>
+          <div className="first-run-ai-choice-card">
+            <div className="hero-avatar-wrap">
+              <img src={brandAssets.sidekickAvatar} alt="" className="hero-avatar" />
+              <span className="hero-glow" />
+            </div>
+            <h1>{t('firstRun.aiChoiceTitle')}</h1>
+            <p>{t('firstRun.aiChoiceDescription')}</p>
+            {(flowError || error) && <p role="alert" className="setup-error-banner">{flowError || error}</p>}
+            <div className="first-run-ai-choice-actions">
+              <button type="button" className="primary-btn" disabled={saving} onClick={() => void chooseAi('enabled')}>
+                <Sparkles size={16} />
+                <span>{t('firstRun.aiChoiceYes')}</span>
+              </button>
+              <button type="button" className="secondary-btn" disabled={saving} onClick={() => void chooseAi('disabled')}>
+                <Globe size={16} />
+                <span>{t('firstRun.aiChoiceNo')}</span>
+              </button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    );
+  }
 
   return (
     <div className="first-run-fullscreen-wrap" role="dialog" aria-modal="true" aria-label="First-run setup">
       <aside className="first-run-fullscreen">
-        {/* Top bar with branding & skip button */}
+        {/* Top bar with branding and a clear route to the browser-only setup. */}
         <header className="first-run-topbar">
           <div className="first-run-topbar-brand">
             <img src={brandAssets.logo} alt="LastBrowser" className="first-run-brand-logo" />
@@ -566,11 +621,12 @@ export function FirstRunSetupPane({
           <button
             type="button"
             className="first-run-skip-btn"
-            aria-label={t('firstRun.skipWithoutAi')}
-            title={t('firstRun.skipWithoutAiHint')}
-            onClick={onDismiss}
+            aria-label={browserOnly ? t('firstRun.startLastbrowser') : t('firstRun.skipWithoutAi')}
+            title={browserOnly ? t('firstRun.startLastbrowser') : t('firstRun.skipWithoutAiHint')}
+            disabled={saving}
+            onClick={() => void (browserOnly ? completeBrowserSetup() : chooseAi('disabled'))}
           >
-            <span>{t('firstRun.skipWithoutAi')}</span>
+            <span>{browserOnly ? t('firstRun.startLastbrowser') : t('firstRun.skipWithoutAi')}</span>
             <X size={15} />
           </button>
         </header>
@@ -583,10 +639,10 @@ export function FirstRunSetupPane({
           </div>
           <div className="hero-content">
             <span className="hero-eyebrow">
-              <Sparkles size={14} /> {t('firstRun.heroEyebrow')}
+              <Sparkles size={14} /> {browserOnly ? t('firstRun.aiChoiceNo') : t('firstRun.heroEyebrow')}
             </span>
-            <h1>{t('firstRun.heroTitle')}</h1>
-            <p>{t('firstRun.heroSubtitle')}</p>
+            <h1>{browserOnly ? t('firstRun.noAiTitle') : t('firstRun.heroTitle')}</h1>
+            <p>{browserOnly ? t('firstRun.noAiDescription') : t('firstRun.heroSubtitle')}</p>
           </div>
         </div>
 
@@ -649,10 +705,11 @@ export function FirstRunSetupPane({
           </div>
         )}
 
-        {browserProfileId&&<LocalAiSetupPane key={JSON.stringify([browserProfileId,workspacePath])} browserProfileId={browserProfileId} workspacePath={workspacePath}
+        {aiChoice === 'enabled' && browserProfileId&&<LocalAiSetupPane key={JSON.stringify([browserProfileId,workspacePath,backendProfileName||''])} browserProfileId={browserProfileId} workspacePath={workspacePath} backendProfileName={backendProfileName}
           ready={status?.sidekick==='ready'&&Boolean(status.webuiUrl)}/>}
         {/* Form container */}
-        <form className="setup-fullscreen-form" onSubmit={submit}>
+        <form className="setup-fullscreen-form" onSubmit={aiChoice === 'enabled' ? submit : event => event.preventDefault()}>
+          {aiChoice === 'enabled' && <>
           {/* ── SECTION 1: IDENTITY & PERSONALITY ── */}
           <div className="setup-section-block">
             <div className="setup-section-header">
@@ -1101,10 +1158,12 @@ export function FirstRunSetupPane({
             </div>
           </div>
 
+          </>}
+
           {/* ── SECTION 3: BROWSER DATA & BOOKMARK IMPORT ── */}
           <div className="setup-section-block">
             <div className="setup-section-header">
-              <span className="setup-step-number">3</span>
+              <span className="setup-step-number">{browserOnly ? '1' : '3'}</span>
               <div>
                 <h2>{t('firstRun.section3Title')}</h2>
                 <p>{t('firstRun.section3Desc')}</p>
@@ -1203,7 +1262,7 @@ export function FirstRunSetupPane({
           {/* ── SECTION 4: PINNED APPS FAVORITEN-AUSWAHL ── */}
           <div className="setup-section-block">
             <div className="setup-section-header">
-              <span className="setup-step-number">4</span>
+              <span className="setup-step-number">{browserOnly ? '2' : '4'}</span>
               <div>
                 <h2>{t('firstRun.section4Title')}</h2>
                 <p>{t('firstRun.section4Desc')}</p>
@@ -1244,7 +1303,7 @@ export function FirstRunSetupPane({
           {/* ── SECTION 5: WINDOWS STANDARD-BROWSER ── */}
           <div className="setup-section-block default-browser-section">
             <div className="setup-section-header">
-              <span className="setup-step-number">5</span>
+              <span className="setup-step-number">{browserOnly ? '3' : '5'}</span>
               <div>
                 <h2>LastBrowser als Windows Standard-Browser</h2>
                 <p>Öffne Webseiten, HTML-Dateien und Links aus externen Apps wie Outlook, Teams oder Discord standardmäßig mit LastBrowser.</p>
@@ -1258,7 +1317,7 @@ export function FirstRunSetupPane({
                 </div>
                 <div>
                   <strong>{isDefaultBrowser ? t('firstRun.defaultBrowserCardTitleActive') : t('firstRun.defaultBrowserCardTitle')}</strong>
-                  <p>{t('firstRun.defaultBrowserCardDesc')}</p>
+                  <p>{browserOnly ? t('firstRun.defaultBrowserCardDescNoAi') : t('firstRun.defaultBrowserCardDesc')}</p>
                 </div>
               </div>
 
@@ -1283,18 +1342,39 @@ export function FirstRunSetupPane({
             </div>
           </div>
 
-          {error && <div className="setup-error-banner">{error}</div>}
+          {(flowError || error) && <div role="alert" className="setup-error-banner">{flowError || error}</div>}
+          {browserOnly && <p className="first-run-no-ai-note" role="status">{t('firstRun.noAiDescription')}</p>}
 
           {/* ── ACTION FOOTER ── */}
           <div className="setup-action-footer">
             <div className="footer-left">
-              <span className={`runtime-status-indicator ${status?.sidekick === 'ready' ? 'ready' : 'starting'}`}>
+              {!browserOnly && <span className={`runtime-status-indicator ${status?.sidekick === 'ready' ? 'ready' : 'starting'}`}>
                 <span className="dot" />
                 <span>{status?.sidekick === 'ready' ? t('firstRun.runtimeReady') : t('firstRun.runtimeStarting')}</span>
-              </span>
+              </span>}
             </div>
 
             <div className="footer-actions">
+              {browserOnly ? <>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  disabled={saving}
+                  onClick={() => void chooseAi('enabled')}
+                >
+                  <Sparkles size={16} />
+                  <span>{t('firstRun.aiChoiceYes')}</span>
+                </button>
+                <button
+                  type="button"
+                  className="primary-btn launch-btn"
+                  disabled={saving}
+                  onClick={() => void completeBrowserSetup()}
+                >
+                  {saving ? <Loader2 size={16} className="spin" /> : <Globe size={16} />}
+                  <span>{saving ? t('firstRun.configuring') : t('firstRun.startLastbrowser')}</span>
+                </button>
+              </> : <>
               <button
                 type="button"
                 className="secondary-btn"
@@ -1319,6 +1399,7 @@ export function FirstRunSetupPane({
                 </span>
                 {canSubmitForm && !saving && <ArrowRight size={15} />}
               </button>
+              </>}
             </div>
           </div>
         </form>

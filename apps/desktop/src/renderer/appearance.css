@@ -3,26 +3,31 @@
 html[data-skin="default"][data-theme-accent="neon-cyan"] {
   --accent-primary: #00d9ff;
   --accent-glow: rgba(0, 217, 255, 0.4);
+  --accent-text: #03111b;
 }
 
 html[data-skin="default"][data-theme-accent="electric-violet"] {
   --accent-primary: #a855f7;
   --accent-glow: rgba(168, 85, 247, 0.4);
+  --accent-text: #ffffff;
 }
 
 html[data-skin="default"][data-theme-accent="emerald-flow"] {
   --accent-primary: #10b981;
-  --accent-glow: rgba(16, 185, 129, 0.4);
+  --accent-glow: rgba(16, 185, 129, 0.35);
+  --accent-text: #052e1b;
 }
 
 html[data-skin="default"][data-theme-accent="solar-amber"] {
   --accent-primary: #f59e0b;
-  --accent-glow: rgba(245, 158, 11, 0.4);
+  --accent-glow: rgba(245, 158, 11, 0.35);
+  --accent-text: #271600;
 }
 
 html[data-skin="default"][data-theme-accent="monochrome-slate"] {
   --accent-primary: #94a3b8;
-  --accent-glow: rgba(148, 163, 184, 0.4);
+  --accent-glow: rgba(148, 163, 184, 0.32);
+  --accent-text: #0f172a;
 }
 
 html[data-syntax-theme="tomorrow-night"] .rich-code-block,

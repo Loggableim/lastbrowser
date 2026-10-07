@@ -5,10 +5,21 @@ export interface CommandCopy {
   menu: string; search: string; empty: string; unavailable: string;
   ui: string; next_turn: string; chat: string;
   goal: string; start: string; edit: string; pause: string; resume: string; clear: string; refresh: string;
+  completeAction: string; cancelAction: string;
   active: string; paused: string; done: string; cleared: string; unknown: string; unlimited: string; turns: string;
   pendingJudge: string; runOwned: string; goalPlaceholder: string; details: string; revision: string;
   commands: Record<ChatCommandId, string>;
 }
+const goalActionLabels: Record<CommandLocale, Pick<CommandCopy, 'completeAction' | 'cancelAction'>> = {
+  de: { completeAction: 'Abschließen', cancelAction: 'Abbrechen' },
+  en: { completeAction: 'Complete', cancelAction: 'Cancel' },
+  it: { completeAction: 'Completa', cancelAction: 'Annulla' },
+  es: { completeAction: 'Completar', cancelAction: 'Cancelar' },
+  fr: { completeAction: 'Terminer', cancelAction: 'Annuler' },
+  'pt-BR': { completeAction: 'Concluir', cancelAction: 'Cancelar' },
+  ru: { completeAction: 'Завершить', cancelAction: 'Отменить' },
+  ja: { completeAction: '完了する', cancelAction: 'キャンセル' },
+};
 const rows: Record<CommandLocale, readonly string[]> = {
   de: ['Chatbefehle','Befehl suchen','Keine Befehle gefunden','Backendfunktion nicht verfügbar','Oberfläche','Nächster Turn','Dieser Chat','Persistentes Ziel','Starten','Ändern','Pausieren','Fortsetzen','Beenden','Aktualisieren','Aktiv','Pausiert','Erledigt','Beendet','Unbekannt','Unbegrenzt','Turns','Zielbewertung wartet','Fortsetzung wird vom Agentenlauf gesteuert','Ziel für diesen Chat','Modell auswählen','Nur analysieren und lesen','Persistentes Ziel steuern','Fragen und Annahmen gemeinsam prüfen','Mehr Qualität innerhalb des verfügbaren Budgets','Neue Unterhaltung erstellen','Aktuellen Turn stoppen','Befehle anzeigen','Google-Kontingent anzeigen','Pluginsteuerung öffnen','Details','Revision'],
   en: ['Chat commands','Search commands','No commands found','Backend feature unavailable','Interface','Next turn','This chat','Persistent goal','Start','Edit','Pause','Resume','End','Refresh','Active','Paused','Done','Ended','Unknown','Unlimited','Turns','Goal evaluation pending','Continuation is controlled by the agent run','Goal for this chat','Choose model','Analyze and read only','Control persistent goal','Explore questions and assumptions together','Higher quality within the available budget','Create new conversation','Stop current turn','Show commands','Show Google quota','Open plugin controls','Details','Revision'],
@@ -25,6 +36,7 @@ export function chatCommandCopy(locale: string): CommandCopy {
   const row = rows[locale as CommandLocale] || rows.en;
   return { ...Object.fromEntries(keys.map((key, index) => [key, row[index]])),
     details: row[row.length - 2], revision: row[row.length - 1],
+    ...(goalActionLabels[locale as CommandLocale] || goalActionLabels.en),
     commands: Object.fromEntries(commandIds.map((key, index) => [key, row[keys.length + index]])) } as CommandCopy;
 }
 const budgetLabels: Record<CommandLocale, readonly [string, string]> = {

@@ -701,6 +701,8 @@ class GoalManager:
         self._resume_stale = False
         if not self._state:
             return None
+        if self._state.status in {"done", "cleared"}:
+            return None
         if self._state.status == "active" and not reset_budget:
             return self._state
         pending_response = self._state.pending_judge_response
@@ -837,6 +839,19 @@ class GoalManager:
         self._state.status = "cleared"
         save_goal(self.session_id, self._state)
         self._state = None
+
+    def complete(self) -> Optional[GoalState]:
+        """Persist an explicit user completion without fabricating a judge verdict."""
+        if self._state is None or self._state.status == "cleared":
+            return None
+        if self._state.status == "done":
+            return self._state
+        self._state.status = "done"
+        self._state.paused_reason = None
+        self._state.pending_judge_response = None
+        self._state.pending_judge_user_initiated = True
+        save_goal(self.session_id, self._state)
+        return self._state
 
     def mark_done(self, reason: str) -> None:
         if not self._state:

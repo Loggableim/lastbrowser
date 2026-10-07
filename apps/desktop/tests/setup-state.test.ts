@@ -3,13 +3,15 @@ import {
   canSubmitCloudSetup,
   cloudProviderOptions,
   defaultSetupState,
+  firstRunAiChoiceForSetup,
   firstRunStatus,
   isGeminiCliProvider,
   isFirstRunRequired,
   modelsForProvider,
   openProviderOAuthUrl,
   normalizeSetupState,
-  reconcileGeminiCliModelSelection
+  reconcileGeminiCliModelSelection,
+  shouldShowFirstRunSetup
 } from '../src/renderer/setup-state.js';
 
 describe('cloud first-run setup state', () => {
@@ -114,6 +116,35 @@ describe('cloud first-run setup state', () => {
       provider: 'openrouter',
       model: 'model-a'
     });
+  });
+
+  it('preserves explicit AI choice while leaving legacy installs without synthesized fields', () => {
+    expect(normalizeSetupState({ cloudSetupComplete: false })).toEqual(defaultSetupState);
+    expect(normalizeSetupState({ cloudSetupComplete: true, aiChoice: 'disabled', browserSetupComplete: true })).toMatchObject({
+      cloudSetupComplete: true,
+      aiChoice: 'disabled',
+      browserSetupComplete: true
+    });
+    expect(normalizeSetupState({ cloudSetupComplete: false, aiChoice: 'maybe', browserSetupComplete: 'yes' })).toEqual(defaultSetupState);
+  });
+
+  it('restores a no-AI choice across browser setup completion and treats legacy configured installs as enabled', () => {
+    const readyStatus = { system: { chat_ready: true } };
+    expect(firstRunAiChoiceForSetup({ cloudSetupComplete: false, provider: '', model: '', aiChoice: 'disabled' })).toBe('disabled');
+    expect(firstRunAiChoiceForSetup({ cloudSetupComplete: true, provider: 'openrouter', model: 'model-a' })).toBe('enabled');
+    expect(firstRunAiChoiceForSetup(defaultSetupState)).toBeNull();
+    expect(isFirstRunRequired({ cloudSetupComplete: false, provider: '', model: '', aiChoice: 'disabled' }, readyStatus)).toBe(true);
+    expect(isFirstRunRequired({ cloudSetupComplete: false, provider: '', model: '', aiChoice: 'disabled', browserSetupComplete: true }, readyStatus)).toBe(false);
+    expect(isFirstRunRequired({ cloudSetupComplete: true, provider: 'openrouter', model: 'model-a' }, readyStatus)).toBe(false);
+  });
+
+  it('allows Settings to reopen completed browser-only setup without changing the saved opt-out', () => {
+    const completedNoAi = { cloudSetupComplete: false, provider: '', model: '', aiChoice: 'disabled' as const, browserSetupComplete: true };
+    expect(isFirstRunRequired(completedNoAi, { system: { chat_ready: true } })).toBe(false);
+    expect(firstRunAiChoiceForSetup(completedNoAi)).toBe('disabled');
+    expect(shouldShowFirstRunSetup(completedNoAi, null, { dismissed: false, reopenRequested: false })).toBe(false);
+    expect(shouldShowFirstRunSetup(completedNoAi, null, { dismissed: false, reopenRequested: true })).toBe(true);
+    expect(shouldShowFirstRunSetup(completedNoAi, null, { dismissed: true, reopenRequested: true })).toBe(false);
   });
 
   it('surfaces every provider the onboarding API offers, including local ones', () => {
@@ -409,16 +440,74 @@ describe('cloud first-run setup state', () => {
       DesktopI18nProvider,
       null,
       React.createElement(FirstRunSetupPane, {
+        aiChoice: 'enabled',
         status: null,
         onboardingStatus: { setup: { providers: [{ id: 'openrouter', label: 'OpenRouter' }] } },
         setupLoading: false,
         error: '',
         saving: false,
+        onChooseAi: async () => true,
+        onCompleteBrowserSetup: async () => true,
         onRefreshOnboarding: async () => {},
         onSubmit: async () => {},
         onDismiss: () => {}
       })
     ));
     expect(html).toContain('OpenRouter');
+  });
+
+  it('shows the explicit AI choice before any provider setup UI', async () => {
+    const React = await import('react');
+    const { renderToString } = await import('react-dom/server');
+    const { DesktopI18nProvider } = await import('../src/renderer/i18n.js');
+    const { FirstRunSetupPane } = await import('../src/renderer/components/FirstRunSetupPane.js');
+    const html = renderToString(React.createElement(DesktopI18nProvider, null, React.createElement(FirstRunSetupPane, {
+      aiChoice: null,
+      status: null,
+      onboardingStatus: { setup: { providers: [{ id: 'openrouter', label: 'OpenRouter' }] } },
+      setupLoading: false,
+      error: '',
+      saving: false,
+      onRefreshOnboarding: async () => {},
+      onChooseAi: async () => true,
+      onCompleteBrowserSetup: async () => true,
+      onSubmit: async () => {},
+      onDismiss: () => {}
+    })));
+    expect(html).toContain('Möchtest du KI-Funktionen nutzen?');
+    expect(html).toContain('Ja, KI einrichten');
+    expect(html).toContain('Nein, ohne KI fortfahren');
+    expect(html).not.toContain('OpenRouter');
+    expect(html).not.toContain('API-Schlüssel');
+  });
+
+  it('keeps browser setup visible while the disabled choice hides AI setup', async () => {
+    const React = await import('react');
+    const { renderToString } = await import('react-dom/server');
+    const { DesktopI18nProvider } = await import('../src/renderer/i18n.js');
+    const { FirstRunSetupPane } = await import('../src/renderer/components/FirstRunSetupPane.js');
+    const html = renderToString(React.createElement(DesktopI18nProvider, null, React.createElement(FirstRunSetupPane, {
+      aiChoice: 'disabled',
+      browserProfileId: 'profile-a',
+      status: null,
+      onboardingStatus: { setup: { providers: [{ id: 'openrouter', label: 'OpenRouter' }] } },
+      setupLoading: false,
+      error: '',
+      saving: false,
+      onRefreshOnboarding: async () => {},
+      onChooseAi: async () => true,
+      onCompleteBrowserSetup: async () => true,
+      onSubmit: async () => {},
+      onDismiss: () => {}
+    })));
+    expect(html).toContain('Die KI-Einrichtung wurde übersprungen');
+    expect(html).toContain('Ja, KI einrichten');
+    expect(html).toContain('Lesezeichen &amp; Favoriten');
+    expect(html).toContain('LastBrowser als Windows Standard-Browser');
+    expect(html).toContain('LastBrowser starten');
+    expect(html).not.toContain('OpenRouter');
+    expect(html).not.toContain('API-Schlüssel');
+    expect(html).not.toContain('local-ai-setup-pane');
+    expect(html).not.toContain('KI-Runtime');
   });
 });

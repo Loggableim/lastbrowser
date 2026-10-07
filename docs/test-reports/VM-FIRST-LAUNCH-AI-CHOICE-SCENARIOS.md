@@ -1,5 +1,11 @@
 # First-run AI choice — guest scenario plan
 
+
+## Öffentlich bereitgestellter cec9-Testkandidat
+
+Die separat autorisierte, **unsignierte** [Test-Vorabversion 0.1.48](https://github.com/Loggableim/lastbrowser/releases/tag/test-v0.1.48-20261007-cec9d2f) ist veröffentlicht. [Setup herunterladen](https://github.com/Loggableim/lastbrowser/releases/download/test-v0.1.48-20261007-cec9d2f/Lastbrowser-0.1.48-x64-setup.exe) oder [Portable herunterladen](https://github.com/Loggableim/lastbrowser/releases/download/test-v0.1.48-20261007-cec9d2f/Lastbrowser-0.1.48-x64-portable.exe). Beide öffentlichen Dateien wurden vollständig auf Bytegröße und SHA-256 gegen die untenstehenden cec9-Pins geprüft (Receipt: `output/dock-public-download-receipt.json`). Diese tatsächlichen URLs ersetzen für cec9 das bisher offene öffentliche Transportgate. Vor Ausführung im Guest erneut Wrapper-Hash bestätigen, dann gemäß bestehender Humanfreigabe installieren/testen und installierten ASAR-Hash prüfen. Guest-Verfügbarkeit und Laufzeit sind weiterhin nicht bestätigt; bei fehlender Datei `PACKAGE_NOT_AVAILABLE` melden. Updates bleiben in diesem Offline-Testbuild deaktiviert; keine Signierung, Stable-Feed-Promotion oder Store-Abnahme ableiten.
+
+
 Status: **PREPARED / NOT EXECUTED** (2026-10-07). Current Guest scenario revision: **2**. This document is a test-plan addition only. It does not activate a runner, authorize a build, or establish package/guest acceptance.
 
 ## Current candidate binding — revision 2

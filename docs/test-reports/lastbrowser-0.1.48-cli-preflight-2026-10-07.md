@@ -28,7 +28,7 @@ Ein früherer Direktstart wurde fälschlich als Paketfehler gewertet: Dabei wurd
 
 Beim vollständigen Lauf stimmten ASAR-Hash, App-/Python-Prozesspfade und Sidekick-Healthcheck. Der rohe Bundle-Verifier vergleicht SHA-256 bytegenau. Der cec9-Quellarchivinhalt und das Windows-Paket unterscheiden sich bei den geprüften Python-Modulen in Zeilenenden; nach Normalisierung stimmen alle 43 erwarteten Inhalte überein. Der isolierte Importteil des Verifiers bestand separat.
 
-Die rein lesende Paketinventur erfasste 2.317 Dateien, davon 417 testähnliche Pfade; sie fand 0 Datenbankdateien und 0 Dateien mit den Namen uth.json oder config.yaml. Dafür wurden nur Pfadnamen gezählt, keine Dateiinhalte gelesen. Das ist eine Inventurbeobachtung, kein Funktions-PASS.
+Die rein lesende Paketinventur erfasste 2.317 Dateien, davon 417 testähnliche Pfade; sie fand 0 Datenbankdateien und 0 Dateien mit den Namen `auth.json` oder `config.yaml`. Dafür wurden nur Pfadnamen gezählt, keine Dateiinhalte gelesen. Das ist eine Inventurbeobachtung, kein Funktions-PASS.
 
 ## Quelltests
 

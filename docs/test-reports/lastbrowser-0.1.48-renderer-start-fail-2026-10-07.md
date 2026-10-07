@@ -23,6 +23,11 @@ Der cec9-Renderer zeigte in einem frischen synthetischen Testprofil nach dem Sta
 
 Als Vorlage diente `apps/desktop/scripts/smoke-appearance-matrix.mjs` aus dem exakt gepinnten cec9-Quellstand. Der nur temporär angepasste Harness (SHA-256 `A044818D66535DE5E36C318A27E4585797C65AC2CD0013E8869D556B511367C8`) verlängerte die Bereitschaftsfrist, speicherte den Screenshot und prüfte zusätzlich den im Error-Bildschirm angebotenen Reset des **synthetischen** Test-Tabs. Keine Produktdatei wurde geändert. Die Fehlermeldung war auch beim Start über den Portable-Wrapper und beim anschließenden Lauf des daraus extrahierten, hashgleichen App-Payloads sichtbar.
 
+## Renderer-Stacktrace und Quellkorrelation
+
+Der CDP-Rendererkonsolenmitschnitt zeigte denselben Fehler direkt aus `WebViewElement.getWebContentsId`, aufgerufen durch Electron `isAudioMuted`; danach meldet `[RootErrorBoundary] Uncaught renderer error`. Der minifizierte Frame war `app://bundle/assets/index-Di6L39UJ.js:497:50085`.
+
+Im gepinnten cec9-Quellstand liest der Effect in `apps/desktop/src/renderer/App.tsx` bei Zeile 6236 `view.isAudioMuted()` nach Prüfung, dass lediglich `webviewRef.current` existiert. Der Aufruf liegt vor einem nachgewiesenen `dom-ready`-Zustand und ist an dieser Stelle nicht von `try/catch` umschlossen. **Quellkorrelation, als Diagnoseinferenz:** Das passt zur beobachteten Mount-/Readiness-Racebedingung und zum Electron-Fehler. Es beweist nicht, dass dies die einzige Fehlerquelle ist; der Produktcode wurde nicht geändert.
 ## Beleg
 
 [Renderer-Startfehler im cec9-Gastprofil](evidence-0.1.48-appearance-smoke-2026-10-07/01-renderer-start.png)

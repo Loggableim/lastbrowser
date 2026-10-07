@@ -1,5 +1,7 @@
 # LastBrowser 0.1.46 – VM-UI-Test Quickchat und Teamwork
 
+> **Korrektur nach erneuter Diagnose:** Die unten beschriebene Blockade entstand durch Verwendung des falschen JavaScript-Runtimes (`cua_repl`). Der Computer-Use-Skill verlangt `node_repl`. Mit dem verfügbaren `mcp__node_repl__js` ließ sich `@oai/sky` erfolgreich initialisieren, das LastBrowser-Fenster auflisten und nach Aktivierung dessen sichtbare Einstellungen per Screenshot erfassen. Der VM-Dienst muss daher nicht repariert oder neu konfiguriert werden. Die frühere Schlussfolgerung eines generell fehlenden Windows-Zugriffs ist zurückgenommen. Quickchat und Teamwork wurden in diesem Bericht weiterhin nicht ausgeführt; ihre damaligen Statusangaben beschreiben den abgebrochenen Versuch. Die UI-Prüfung kann nun fortgesetzt werden.
+
 **Datum:** 6. Oktober 2026 (America/Los_Angeles)  
 **Auftrag:** `docs/test-reports/VM-NEXT-TEST-ORDER.md`  
 **Umgebung:** Windows 10 Enterprise Evaluation, Build 26300; synthetische Testdaten  

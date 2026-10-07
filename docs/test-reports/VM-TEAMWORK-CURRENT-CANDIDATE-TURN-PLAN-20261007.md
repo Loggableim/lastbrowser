@@ -1,0 +1,57 @@
+# LastBrowser — minimaler Teamwork-Guest-Turnplan, 2026-10-07
+
+Status: **PREPARATION_ONLY / P_READ_ONLY_ALLOWED / S_C_D_NOT_AUTHORIZED / NOT_TESTED**. CEO hat die korrigierte Vorbereitung akzeptiert; dies ist keine Livefreigabe. Nur Stufe P ist als lesender Guest-Auftrag erlaubt. Kein Senden, keine Testconnection-Inferenz, kein Settingssave, kein Budgetreset und kein Credentialexport. Dieser Plan erweitert kein vorhandenes Turnbudget. Bezug: VM-HOURLY-TEST-RUNNER.md, VM-TEAMWORK-PREP und VM-0.1.48-TEST-ORDER.md.
+
+## Exakter Kandidat
+
+Source `cec9d2f5ac8a22b8c492c138b7efcbef6d329aba`, öffentlicher unsigned Offline-Testrelease `test-v0.1.48-20261007-cec9d2f`.
+Setup: 175525209 Bytes, SHA-256 `367a22080063833e1ce911d87a6c4f6d7bace9527abbe3bf01142af98ba18c0f`.
+Portable: 175170969 Bytes, SHA-256 `0c3b0855dfdf2b4c2e5cc37efa4421a6a94599ebbbeb3479e0fac0b1ac68b357`.
+Installierter ASAR: 64012655 Bytes, SHA-256 `918330622b3cc5f2d925ae2c31e2b24b1406dbafca6230c8cc7c7b038abb663c`.
+Wrapper UND tatsächlich laufenden ASAR im Guest prüfen. Hashabweichung: BLOCKED. Das signierte synthetische d6b-Updatepaar ist ein anderer Kandidat und kein Ersatz.
+
+## Stufe P — Vorbereitung, null Inferenz
+
+Guest-Owner arbeitet ausschließlich per sichtbarer App im autorisierten Testprofil/Space. Vorhandene Konten nicht kopieren, neu anmelden oder ändern. Teamwork im Composer sichtbar wählen; gespeicherte Scopebindung, Modellkatalog, konfigurierte Rollen und Policy nur lesend erfassen. Fehlt die Auswahl oder Einrichtung: BLOCKED; kein verborgenes IPC/startChat als Ersatz.
+
+Minimaler Vorschlag, **keine bestätigten Entitlements**: genau zwei Providerbindungen. GPT/Codex `gpt-6-luna` übernimmt Lead/Planner, Worker 1, Reviewer/Critic und Synthese; OllamaCloud `gpt-oss:20b` übernimmt Worker 2. `gpt-oss:20b` ist der vom Human genannte Free-Allowlistkandidat, keine garantierte Kontoberechtigung, kostenlose Abrechnung oder Capability. Beide tatsächlichen Provider-/Katalog-IDs und Rollenfähigkeiten erst im Guest-scoped Katalog bestätigen. Gemini ist keine Voraussetzung dieses Plans. Kein Ersatzmodell bei Fehlen, keine Account-/Modellrotation.
+
+Stufe P bleibt ausschließlich read-only: Guest meldet bestätigte IDs, vorhandenen Budgetrest, gespeicherten Setupstand und nötige Änderungen zurück, bevor das Live-Popup gestellt wird. Noch nichts speichern. Die anschließend konkrete Teamwork-Humanfreigabe kann die exakt genannten Setupänderungen und Wiederherstellung enthalten; keine zweite bereits vorhandene Setupfreigabe behaupten. Ohne konkrete Freigabe keine Konfigurationsmutation.
+
+Vorgeschlagen nach Freigabe: auto_scale=false, max_subagents=2, explizite Worker-Pool-Allowlist mit exakt GPT `gpt-6-luna` und OllamaCloud `gpt-oss:20b`; Planner/Critic/Synthese explizit auf dieselbe bestätigte GPT-Katalog-ID. Der gelesene Vertrag erlaubt manuell gewählte Poolmodelle für diese Rollen und bindet Worker getrennt über worker_id; Modellwiederverwendung ist keine zusätzliche Providerbindung. Guest muss dennoch prüfen, dass der tatsächlich aufgelöste Zweierpool zwei Worker unterschiedlicher Provider und die gewünschten GPT-Rollen zulässt. Bei Ablehnung oder abweichender Auflösung: BLOCKED mit konkretem Vertrags-/Capabilitygrund, kein improvisiertes Modell. Nach autorisiertem Speichern Konfiguration zurücklesen; tatsächlichen `teamwork_plan` und Requests später vergleichen. Erweiterte Einstellungen nur gemäß freigegebenem Rücksetzplan wiederherstellen.
+
+## Tatsächlich vorhandene Grenzen und Retryrechnung
+
+Geprüfter cec9-Vertrag: `runtime/teamwork_orchestrator.py` und `runtime/independent/native_teamwork.py`; keine Quelländerung. ParentBridge `_reserve_call` begrenzt pro Turn **8 zugelassene SDK-Dispatches** und **4096 reservierte Outputtokens**. Stagehöchstwerte: Planner128, Worker384 je Versuch, Critic512, Synthese1024; Single-provider-Fallback768. Claims bleiben nach tatsächlicher Admission bei Fehler/Cancel verbraucht; nur gescheiterte Pre-Claim-Admission wird erstattet. Pending-Concurrency-Polls sind keine gestarteten Provideraufrufe.
+
+Zwei Worker ohne Retry: 1 Planner + 2 Worker + 1 Critic + 1 Synthese = **5 Dispatches /2432 reservierte Outputtokens**. Drei Zusatz-Worker-Versuche würden den Gesamtdeckel erreichen: **8 Dispatches /3584 reservierte Outputtokens**, sofern Reviewer/Synthese überhaupt erreicht werden. Größere Pools, Hotswap und andere Fehlerpfade dürfen nicht mit diesem nominalen Fünferplan verwechselt werden; global bleibt 8/4096. Maximal vier Worker im Produkt; bei vier primären Workern wären 7 Dispatches/3200 Tokens nominal, mit einem weiteren Worker-Versuch 8/3584.
+
+Workerstream und Synthese setzen `retry_transient_before_first_token=False`; native Auxiliary-Calls verweigern generischen Same-provider-Retry/Fallback. Worker-Hotswap versucht nur unverbrauchte zulässige Backupmodelle bei operativen Fehlern; 401/403/429 und sichtbare partielle Fehler lösen keinen solchen Swap aus. Exakte Zweier-Allowlist soll Backupmodelle ausschließen; vor Start prüfen, nicht garantieren. Reale SDK-interne HTTP-Retries/Providerabrechnung sind damit **nicht als harte HTTP-Anzahl bewiesen**. 8 ist eine Parent-Dispatch-/Claimgrenze, keine Zusage von höchstens acht Netzwerkversuchen oder Rechnungspositionen.
+
+Inputtokens hängen von Prompt, Systemrollen, Plänen und weitergereichten Entwürfen ab. Es gibt keinen hier bewiesenen festen summierten Inputtoken-/Gelddeckel. ProviderAdmission kennt `max_cost_microusd_per_minute`; bei gesetztem Cap und fehlender belastbarer Kostenmetadaten wird abgewiesen. Das ist keine belegte UI-konfigurierbare Turnkostenbegrenzung. Preise, Quoten und actual usage: UNKNOWN bis verifizierbar geliefert. **Keinen USDpreis erfinden.** Vor Livefreigabe muss Human entweder einen tatsächlich erzwingbaren Kostenrahmen mit belegten Metadaten bestätigen oder ausdrücklich die begrenzte Nutzung mit unbekannter monetärer Summe akzeptieren; verlangt Human einen garantierten Gelddeckel und ist dieser nicht erzwingbar: BLOCKED. Ebenso ist ein Wunsch von nur 5 Dispatches/2432 Tokens kein garantierter Parentdeckel: Produkt erzwingt 8/4096, keine niedrigere Testoverride behaupten.
+
+Produktdeadline: 190 Sekunden pro Turn; Stagetimeouts Planner30s, Worker45s, Critic50s, Synthese65s jeweils durch verbleibende Deadline begrenzt. Synchronous HTTP kann Timeout/Cancel ignorieren; Host-/Guest-Anbieterbeendigung und sofortiger Abrechnungsstopp sind nicht garantiert. Abbruch beendet Admission/Publikation gemäß Vertrag; tatsächliche ACKs und verbliebene Handles gesondert beobachten.
+
+## Stufe S — ein erfolgreicher Rollenlauf (separate Humanfreigabe)
+
+Vor Start: P-readonly bestätigt zuerst genaue Guest-IDs, Budgetreste und nötige Setupänderungen. Danach CEO-Review und konkrete Humanfreigabe für **genau einen Teamwork-Composerturn**, die zwei bestätigten Providerbindungen mit GPT `gpt-6-luna` als Planner/Worker1/Critic/Synthese und OllamaCloud `gpt-oss:20b` als Worker2, maximal 8 Parentdispatches/4096 reservierte Outputtokens, kein manuelles Retry, Deadline190s und obigen Geld-/HTTP-Grenzvorbehalt einholen. Nötige konkrete Setupänderungen samt Wiederherstellung können Teil derselben Freigabe sein. Bestehende allgemeine zwei-Providerturn-Grenze ist keine Mehrproviderfreigabe. Restbudgetjournal übernehmen; kein Reset durch diesen Plan.
+
+Synthetischer Prompt: „Entwirf für eine erfundene Bücherliste mit den Feldern Titel und gelesen drei knappe Regeln für Eingabeprüfung. Vergleicht zwei einfache Lösungsansätze, prüft einen Randfall und nennt gemeinsam eine Empfehlung. Keine Tools, Dateien, Browserdaten, Netzwerkrecherche oder Codeausführung. Finale Antwort maximal 120 Wörter.“ Leere künstliche Kontextreferenz, keine angehängten Tabs/privaten Inhalte; Tools und Browsingrechte nicht erteilen, persistentes Ziel/Boost/AUTO aus.
+
+Start nur per sichtbarem Senden. Evidence: Kandidat/ASAR, pseudonymes Profil/Space, Scope-/Bindingrevision, session_id/turn_id/stream_id und run_id wenn Vertrag eine liefert (fehlende Run-ID als nicht vorhanden dokumentieren), Beginn/Ende, konfigurierter Pool und tatsächliche Modelle. `teamwork_plan`, zwei verschiedene `teamwork_worker_start/delta/end` mit worker_id, attempt, provider_id/model_id, getrenntes `teamwork_critic`, `teamwork_complete`, finaler Abschluss/done; echte Providerclaim-/Requestbelege mit demselben Turn korrelieren. Planner muss sichtbar/belegt sein; Rollen dürfen dasselbe Modell nutzen, bleiben getrennte Dispatches. Keine private Reasoningtexte speichern; sichtbare Beiträge und sichere Metadaten genügen.
+
+PASS nur bei zwei echten sichtbaren Workerbeiträgen unterschiedlicher Provider, separat belegtem Reviewer, finaler Synthese, korrekter Scopezuordnung und Cleanup. Ein degraded/single-provider-Ergebnis ist kein Mehrprovider-PASS. Katalogbeleg allein genügt nicht. Bei 401/403/429, unerwartetem Modell/Scope, Admissionfehler, privatem Kontext oder überschrittenem Beobachtungslimit sofort Stop; keine Wiederholung. Spätestens bei190s stoppen/Status sichern; keine weiteren Turns bei unklarem aktiven Writer. Outputqualität anhand der drei Regeln, zwei Ansätze, eines Randfalls und Empfehlung separat notieren.
+
+## Stufe C — Stop; erst nach gesonderter Freigabe
+
+**Zweiter**, unabhängig genehmigter Turn, gleiche synthetische Aufgabe und geprüfte Konfiguration; wiederum konservativ maximal8 Dispatches/4096 reservierte Outputtokens, weil Stop nicht rückwirkend gestartete Requests erstattet. Bei erstem sichtbaren Worker-Delta unmittelbar Stop klicken und Zeitpunkt/aktive Rollen erfassen. Bei fehlendem Delta spätestens30s Stop, dann keine Behauptung „aktive Worker erfolgreich gestoppt“. Stop-/Cancel-ACK, Streamabschluss, Workerterminalzustände, keine spätere Transcriptmutation, wieder nutzbarer Composer und sichere Claims-/Handles-Cleanupbelege erfassen. ACK ohne Providerbeendigung nicht gleichsetzen; Restprozess/unsicherer Writer: BLOCKED für Folgeturns. S-Erfolg und C-Abbruch niemals als derselbe Test ausweisen.
+
+## Stufe D — Deadline optional, nicht in S/C enthalten
+
+Keine künstliche Providerverzögerung oder neue Inferenz aus diesem Plan. Echter Deadlinefall braucht eigenen Humanauftrag mit exaktem reproduzierbarem sicheren Trigger und erneutem 8/4096-Maximum. Ohne vorhandenen Trigger bleibt NOT_TESTED; normale schnelle Antwort und manueller Stop beweisen keine automatische Deadline. Source-/Fixturetests getrennt erwähnen. S+C wären zusammen höchstens16 Parentdispatches/8192 reservierte Outputtokens, S+C+D höchstens24/12288; diese Summen sind **Anträge**, keine bereits genehmigten Budgets und keine HTTP-/Geldgarantie.
+
+## Auswertung / Freigabeformular
+
+Aktuell P/S/C/D: **NOT_TESTED**, keine echte Anfrage ausgelöst. Guest ergänzt für jede Stufe PASS/FAIL/BLOCKED/NOT_TESTED, Zeit, Kandidat, Evidencepfad, tatsächliche Dispatches/Versuche, bestätigte Output-/Input-/Cost-/Quota-Metadaten oder UNKNOWN. Ein unbekanntes Usagefeld ist nicht0. Schutzdateien nur sichere Metadaten vor/nachher vergleichen, keine Credentials/OTP/Cookies aufnehmen.
+
+Humanentscheidung erst nach CEO-Review: genaue Modell-IDs ___; Setupänderungen ___; freigegebene Stufen S/C/D ___; zugelassene Turns/Dispatch-/Tokenobergrenzen ___; vorhandene Budgetreste ___; Kostenrahmen und tatsächliche Erzwingbarkeit bzw. ausdrückliche UNKNOWN-Kostenakzeptanz ___; Abbruch-/Deadlinegrenzen ___; Guest-Owner ___. Leere Pflichtfelder bedeuten keine Livefreigabe. Danach keine automatische Wiederholung/weitere Tests.

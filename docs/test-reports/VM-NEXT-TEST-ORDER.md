@@ -19,3 +19,11 @@ Kandidat: **d6b61f3**, getrenntes signiertes Paar **0.1.47 → 0.1.48**, Release
 Nur Codex innerhalb der tatsächlichen isolierten Windows-VM führt die Tests aus. Kein Host-Ersatzchat, keine Produktreparaturen, neuen Pakete, Signierung oder Veröffentlichung. Zugangsdaten nicht in Berichte übernehmen. Konkrete Provider- und Zugriffsgates aus den jeweiligen Aufträgen gelten weiter.
 
 Ergebnisse eindeutig nach Quellstand, Paket-/ASAR-Hash und Szenario trennen. Bestehende Gastberichte erhalten; neue Nachweise separat ablegen. Ältere 0.1.46-/0.1.47-Berichte sind historische Ergebnisse und keine aktuelle Abnahme dieser Kandidaten. Statische Paketprüfungen ersetzen keine tatsächliche Guest-Installation oder Laufzeitprüfung.
+
+## Teamwork: ausschließlich lesende Vorbereitung Stufe P
+
+[Konkreter Zweiprovider-Plan](VM-TEAMWORK-CURRENT-CANDIDATE-TURN-PLAN-20261007.md): **PREPARATION_ONLY / P_READ_ONLY_ALLOWED / S_C_D_NOT_AUTHORIZED**.
+
+Im exakt oben zugeordneten cec9-Guest-Kandidaten scoped Modell-IDs/Katalogbereitschaft für GPT/Codex gpt-6-luna und OllamaCloud gpt-oss:20b, vorhandene Rollen/Policy, bestehendes Budgetjournal und notwendige Setupänderungen ausschließlich read-only erfassen. Kandidaten sind keine Entitlementbehauptung. Exakte Provider-/Modell-ID, Scopebindung, tatsächlichen Kandidaten-/ASAR-Pin und vorhandene Budgetreste bzw. UNKNOWN melden; keine Secrets exportieren. Fehlt eine Voraussetzung, konkret BLOCKED/UNKNOWN berichten, kein Ersatzmodell improvisieren.
+
+**Kein Senden, keine Testconnection-Inferenz, kein Settingssave, kein Budgetreset, keine Anmeldung und kein Credentialexport.** S/C/D sind nur Vorschläge zur späteren konkreten Humanfreigabe. Dieser Auftrag autorisiert keinen echten Mehrproviderturn, Stop-/Deadlineturn oder Setupmutation. Vorhandene gefrorene Funktions-/Updateverträge und Guest-Berichte bleiben erhalten. Ergebnis der Stufe P mit bereinigtem Evidencepfad an den CEO melden.

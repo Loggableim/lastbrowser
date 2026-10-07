@@ -38,3 +38,19 @@ Es wurden keine Pakete heruntergeladen oder gestartet, nichts installiert oder g
 Der exakt gepinnte 0.1.48-Setup-/Portable-Kandidat muss dem Guest über einen autorisierten Weg bereitgestellt werden. Für die First-run-Fälle werden außerdem die im Szenarioplan geforderten getrennten synthetischen Profile/Fixtures benötigt. Nach Bereitstellung sind Downloadgröße, SHA-256 und Authenticode am Guest erneut zu prüfen, bevor ein Installer gestartet wird. Die vollständige Funktionsabnahme muss zusätzlich die in den Release Notes genannten Änderungen jeweils mit eigenen sichtbaren Laufzeitfällen abdecken.
 
 Berichtsquelle im Repo: Remote-Branch `codex/integration-test-0.1.48-20261007`, Dateien `docs/test-reports/VM-FIRST-LAUNCH-AI-CHOICE-SCENARIOS.md` und `docs/release-0.1.48-notes.md`. Dieser Bericht dokumentiert nur den Guest-Zugriffsstatus; er behauptet keine 0.1.48-Abnahme.
+
+## Nachtrag – Kandidat inzwischen im Guest verfügbar
+
+**Zeit:** 7. Oktober 2026, 11:50 Uhr America/Los_Angeles. Der spätere verbindliche Einstiegsauftrag `docs/test-reports/VM-NEXT-TEST-ORDER.md` (Remote-Commit `68290cd`) verweist auf den Masterauftrag auf Dokumentationscommit `9079d3be5793a9d2452862fe72ad58e4949a95ac`. Dieser pinnt den aktuellen cec9-Kandidaten und seine öffentlichen Release-URLs; die frühere Aussage oben, ein öffentlicher Bezugsweg fehle, beschreibt nur den damaligen Planstand und ist damit überholt.
+
+Beide exakten öffentlichen Artefakte wurden in der dedizierten VM bezogen und vollständig geprüft:
+
+| Artefakt | Tatsächliche Guest-Prüfung | Ergebnis |
+|---|---|---|
+| `Lastbrowser-0.1.48-x64-setup.exe` | 175,525,209 Bytes; SHA-256 `367A22080063833E1CE911D87A6C4F6D7BACE9527ABBE3BF01142AF98BA18C0F`; Authenticode `NotSigned` | **PASS – Paketidentität**, nicht Installationsabnahme |
+| `Lastbrowser-0.1.48-x64-portable.exe` | 175,170,969 Bytes; SHA-256 `0C3B0855DFDF2B4C2E5CC37EFA4421A6A94599EBBBEB3479E0FAC0B1AC68B357`; Authenticode `NotSigned` | **PASS – Paketidentität**, nicht Laufzeitabnahme |
+| Erwarteter installierter `app.asar` | 64,012,655 Bytes; SHA-256 `918330622B3CC5F2D925AE2C31E2B24B1406DBAFCA6230C8CC7C7B038ABB663C` | Noch nicht aus dem Guest-Lauf gemessen |
+
+Die bestehende installierte App bleibt auf dem zuvor verifizierten 0.1.46-Payload (`app.asar` SHA-256 `2AF4FBF50DEA383DD0A2CD2EE36236F53F967CF3904CC01B6559647C04B08D07`). Kein Setup wurde gestartet. Der Portable-Kandidat liegt zum isolierten Teststart bereit; er wurde noch nicht ausgeführt. **Alle 0.1.48-Laufzeitszenarien bleiben NOT_TESTED.** Der Testauftrag begrenzt den Setup-Installationsfall auf einen rücksetzbaren Guest-Snapshot; ein solcher Snapshot wurde in dieser Sitzung nicht bestätigt. Deshalb wird die vorhandene Installation/das vorhandene Profil nicht überschrieben. Providerturns wurden für cec9 nicht ausgelöst.
+
+Nächster sicherer Schritt ist der Start des hashgeprüften Portable-Artefakts mit einem frischen synthetischen Profil. Die Bestätigung dafür ist im Chat angefragt und steht noch aus. Nach Start werden erst Version und installierter/extrahierter ASAR geprüft; bei Abweichung Abbruch und `BLOCKED`. Der umfassende Masterauftrag und die getrennten Design-/First-Launch-Register bestimmen danach die einzelnen Szenariostatus; fehlende Fixtures und separat freizugebende Provider-/Teamworkfälle bleiben `BLOCKED`/`NOT_TESTED`.

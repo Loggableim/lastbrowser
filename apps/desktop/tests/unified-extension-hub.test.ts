@@ -59,6 +59,19 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
       expect(source).toContain('Ctrl+Shift+X');
       expect(source).toContain('onOpenExtensions');
     });
+
+    it('switches from tool panels back to BrowserMain before opening the hub', () => {
+      const source = readRendererFile('App.tsx');
+      const opener = source.slice(source.indexOf('const openExtensionHub = useCallback'), source.indexOf('const toggleExtensionHub = useCallback'));
+      const toggler = source.slice(source.indexOf('const toggleExtensionHub = useCallback'), source.indexOf('const [layoutMode'));
+
+      expect(opener.indexOf("setActivePanel('browser')")).toBeGreaterThanOrEqual(0);
+      expect(opener.indexOf("setActivePanel('browser')")).toBeLessThan(opener.indexOf('setExtensionHubOpen(true)'));
+      expect(toggler).toContain("if (store.extensionHubOpen)");
+      expect(toggler).toContain("setActivePanel('browser')");
+      expect(source).toMatch(/case 'open-extensions':\s*toggleExtensionHub\(\);/);
+      expect(source.match(/onOpenExtensions=\{\(\) => \{\s*openExtensionHub\(\);/g)).toHaveLength(2);
+    });
   });
 
   describe('2. Säule 1: Chrome MV3 WebExtensions & CRX3 Engine', () => {
@@ -124,17 +137,24 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
       expect(MCP_PERMISSION_LABELS.agent_autonomy.level).toBe('warn');
     });
 
-    it('implements Pillar 2 UI with MCP servers config, search, and sandboxing toggles', () => {
+    it('keeps skill cards and workspace/activation controls visible without exposing unsupported auto-approval', () => {
       const source = readRendererFile('components/UnifiedExtensionHub.tsx');
 
       expect(source).toContain('Nova AI Skills & Tools (MCP)');
       expect(source).toContain('mcp_servers.json');
       expect(source).toContain('mcp-json-editor');
       expect(source).toContain('Granulares Sandboxing & Berechtigungsmanagement');
-      expect(source).toContain('auto-approve-toggle');
-      expect(source).toContain('Interaktiv bestätigen');
-      expect(source).toContain('Immer vertrauen (Auto-Approve)');
       expect(source).toContain('skills-scope-chips');
+      expect(source).toContain('filteredSkills.map((skill)');
+      expect(source).toContain('skill.name');
+      expect(source).toContain('skill-main-switch');
+      expect(source).toContain('skill-workspace-picker');
+      expect(source).not.toContain('auto-approve-toggle');
+      expect(source).not.toContain('Interaktiv bestätigen');
+      expect(source).not.toContain('Immer vertrauen (Auto-Approve)');
+      expect(source).not.toContain('trust switch unavailable');
+      expect(source).toContain("localStorage.setItem('lastbrowser.mcp_skills.v1', JSON.stringify(next))");
+      expect(source).toContain('(s.id === id ? { ...s, ...updates } : s)');
     });
 
     it('persists WebExtension workspace scoping and updates state per extension', () => {

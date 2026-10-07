@@ -786,7 +786,7 @@ export function UnifiedExtensionHub({
                     </div>
                   </div>
 
-                  {/* Scoping and Auto-Approve Controls */}
+                  {/* Workspace scope control. Legacy autoApprove data stays preserved but is not exposed until runtime support exists. */}
                   <div className="skill-card-footer">
                     <div className="skill-workspace-picker">
                       <label>Workspace:</label>
@@ -801,14 +801,6 @@ export function UnifiedExtensionHub({
                       </select>
                     </div>
 
-                    <label className="auto-approve-toggle" title="Ohne vorherige Bestätigung im Chat ausführen">
-                      <input
-                        type="checkbox"
-                        checked={skill.autoApprove}
-                        onChange={(e) => updateSkill(skill.id, { autoApprove: e.target.checked })}
-                      />
-                      <span>{skill.autoApprove ? 'Immer vertrauen (Auto-Approve)' : 'Interaktiv bestätigen'}</span>
-                    </label>
                   </div>
                 </div>
               ))}

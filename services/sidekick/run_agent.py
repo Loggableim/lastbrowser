@@ -1427,6 +1427,8 @@ class AIAgent:
         # Interrupt mechanism for breaking out of tool loops
         self._interrupt_requested = False
         self._interrupt_message = None  # Optional message that triggered interrupt
+        self._active_request_clients = set()
+        self._active_request_clients_lock = threading.Lock()
         self._execution_thread_id: int | None = None  # Set at run_conversation() start
         self._interrupt_thread_signal_pending = False
         self._client_lock = threading.RLock()
@@ -5292,6 +5294,18 @@ class AIAgent:
         """
         self._interrupt_requested = True
         self._interrupt_message = message
+        # Native workers own a request-scoped client for every provider call.
+        # Closing only from the polling loop can leave an HTTP read blocked for
+        # the provider timeout, so stop must close the exact in-flight clients
+        # from the control thread. Never close the shared client here: it may
+        # be reused by a later turn after a normal, non-native interruption.
+        with getattr(self, "_active_request_clients_lock", threading.Lock()):
+            active_request_clients = tuple(getattr(self, "_active_request_clients", ()))
+        for request_client in active_request_clients:
+            try:
+                self._close_request_openai_client(request_client, reason="interrupt_signal")
+            except Exception:
+                pass
         # Signal all tools to abort any in-flight operations immediately.
         # Scope the interrupt to this agent's execution thread so other
         # agents running in the same process (gateway) are not affected.
@@ -6546,6 +6560,16 @@ class AIAgent:
                 k: v for k, v in client_kwargs.items()
                 if k in {"api_key", "base_url", "default_headers", "timeout", "account_email", "project_id"}
             }
+            fixed_bridge = getattr(self, "_native_sdk_bridge", None)
+            if fixed_bridge is not None and self.provider == "antigravity":
+                capture = fixed_bridge.capture
+                binding = getattr(capture, "antigravity_binding", None)
+                if binding is None:
+                    raise PermissionError("native_antigravity_account_binding_required")
+                safe_kwargs.update({"project_id": binding.project_id,
+                    "native_account_id": binding.account_id,
+                    "native_project_id": binding.project_id,
+                    "native_account_digest": binding.digest})
             client = AntigravityCloudCodeClient(**safe_kwargs)
             logger.info(
                 "Antigravity Cloud Code client created (%s, shared=%s) %s",
@@ -6553,7 +6577,7 @@ class AIAgent:
                 shared,
                 self._client_log_context(),
             )
-            return client
+            return fixed_bridge.wrap(client, agent=self) if fixed_bridge is not None else client
         _validate_proxy_env_urls()
         _validate_base_url(client_kwargs.get("base_url"))
         if self.provider == "copilot-acp" or str(client_kwargs.get("base_url", "")).startswith("acp://copilot"):
@@ -6866,6 +6890,32 @@ class AIAgent:
 
     def _close_request_openai_client(self, client: Any, *, reason: str) -> None:
         self._close_openai_client(client, reason=reason, shared=False)
+
+    def _track_active_request_client(self, client: Any) -> Any:
+        if client is not None:
+            lock = getattr(self, "_active_request_clients_lock", None)
+            if lock is None:
+                lock = threading.Lock()
+                self._active_request_clients_lock = lock
+            with lock:
+                clients = getattr(self, "_active_request_clients", None)
+                if clients is None:
+                    clients = set()
+                    self._active_request_clients = clients
+                clients.add(client)
+            if self._interrupt_requested:
+                try:
+                    self._close_request_openai_client(client, reason="interrupt_during_request_start")
+                except Exception:
+                    pass
+        return client
+
+    def _untrack_active_request_client(self, client: Any) -> None:
+        lock = getattr(self, "_active_request_clients_lock", None)
+        if lock is None or client is None:
+            return
+        with lock:
+            getattr(self, "_active_request_clients", set()).discard(client)
 
     def _run_codex_stream(self, api_kwargs: dict, client: Any = None, on_first_delta: callable = None):
         """Execute one streaming Responses API request and return the final response."""
@@ -7931,10 +7981,10 @@ class AIAgent:
                     pool=30.0,
                 ),
             }
-            request_client_holder["client"] = self._create_request_openai_client(
+            request_client_holder["client"] = self._track_active_request_client(self._create_request_openai_client(
                 reason="chat_completion_stream_request",
                 api_kwargs=stream_kwargs,
-            )
+            ))
             # Reset stale-stream timer so the detector measures from this
             # attempt's start, not a previous attempt's last chunk.
             last_chunk_time["t"] = time.time()
@@ -8312,6 +8362,7 @@ class AIAgent:
                                 self._close_request_openai_client(
                                     stale, reason="unsupported_sampling_parameter_retry"
                                 )
+                                self._untrack_active_request_client(stale)
                                 request_client_holder["client"] = None
                             continue
 
@@ -8412,6 +8463,7 @@ class AIAgent:
                                 self._close_request_openai_client(
                                     stale, reason="stream_mid_tool_retry_cleanup"
                                 )
+                                self._untrack_active_request_client(stale)
                                 request_client_holder["client"] = None
                             try:
                                 self._replace_primary_openai_client(
@@ -8468,6 +8520,7 @@ class AIAgent:
                                     self._close_request_openai_client(
                                         stale, reason="stream_retry_cleanup"
                                     )
+                                    self._untrack_active_request_client(stale)
                                     request_client_holder["client"] = None
                                 # Also rebuild the primary client to purge
                                 # any dead connections from the pool.
@@ -8534,6 +8587,7 @@ class AIAgent:
                 request_client = request_client_holder.get("client")
                 if request_client is not None:
                     self._close_request_openai_client(request_client, reason="stream_request_complete")
+                    self._untrack_active_request_client(request_client)
 
         _stream_stale_timeout_base = float(os.getenv("SIDEKICK_STREAM_STALE_TIMEOUT", 180.0))
         # Local providers (Ollama, oMLX, llama-cpp) can take 300+ seconds
@@ -8601,6 +8655,7 @@ class AIAgent:
                     rc = request_client_holder.get("client")
                     if rc is not None:
                         self._close_request_openai_client(rc, reason="stale_stream_kill")
+                        self._untrack_active_request_client(rc)
                 except Exception:
                     pass
                 # Rebuild the primary client too — its connection pool
@@ -8625,6 +8680,7 @@ class AIAgent:
                         request_client = request_client_holder.get("client")
                         if request_client is not None:
                             self._close_request_openai_client(request_client, reason="stream_interrupt_abort")
+                            self._untrack_active_request_client(request_client)
                 except Exception:
                     pass
                 raise InterruptedError("Agent interrupted during streaming API call")

@@ -641,21 +641,34 @@ describe('work admission after a failed boot handshake', () => {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ runnerGeneration: 'delayed-http-ready' }));
     });
-    const startListening = setTimeout(() => delayedService.listen(port, '127.0.0.1'), 450);
+    let refusedBeforeListening = 0;
+    let listeningConfirmed = false;
     const original = api.getMockImplementation()!;
     const { independentApiRequest } = await import('../src/main/sidekick-api.js');
-    api.mockImplementation((operation: string, selected: unknown, payload: unknown, profile: string) =>
-      operation === 'browser.handshake'
-        ? independentApiRequest(`http://127.0.0.1:${port}`, operation, null, payload, profile, 'controlled-private-nonce')
-        : original(operation, selected, payload, profile));
-    const began = Date.now();
+    api.mockImplementation(async (operation: string, selected: unknown, payload: unknown, profile: string) => {
+      if (operation !== 'browser.handshake') return original(operation, selected, payload, profile);
+      try {
+        const result = await independentApiRequest(`http://127.0.0.1:${port}`, operation, null, payload, profile, 'controlled-private-nonce');
+        expect(listeningConfirmed).toBe(true);
+        return result;
+      } catch (error) {
+        expect(delayedService.listening).toBe(false);
+        expect(error).toMatchObject({ code: 'sidekick_not_ready', retryable: true });
+        refusedBeforeListening++;
+        await new Promise<void>((resolve, reject) => {
+          delayedService.once('error', reject);
+          delayedService.listen(port, '127.0.0.1', () => { listeningConfirmed = true; resolve(); });
+        });
+        throw error;
+      }
+    });
     try {
       await controller.start();
     } finally {
-      clearTimeout(startListening);
       if (delayedService.listening) await new Promise<void>(resolve => delayedService.close(() => resolve()));
     }
-    expect(Date.now() - began).toBeGreaterThanOrEqual(400);
+    expect(refusedBeforeListening).toBe(1);
+    expect(listeningConfirmed).toBe(true);
     expect(api.mock.calls.filter(call => call[0] === 'browser.handshake').length).toBeGreaterThan(1);
     expect(received).toBe(1);
     expect(api.mock.calls.some(call => call[0] === 'assistantTurn' || call[0] === 'dispatch')).toBe(false);

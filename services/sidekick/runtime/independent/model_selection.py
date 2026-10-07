@@ -71,7 +71,7 @@ class SelectionDecision(Contract):
     selected_model: ModelPair
     reason: Literal["configured_orchestrator", "first_eligible_allowed_model",
         "observed_provider_headroom", "fewest_active_claims", "fewest_recent_local_claims",
-        "fallback_after_admission_unavailable"]
+        "fallback_after_admission_unavailable", "subscription_required_fallback"]
     route: Literal["orchestrator", "model"]
     locality: Literal["local", "remote"]
     active_claims: Annotated[int, Field(ge=0, le=4096)] = 0
@@ -324,6 +324,67 @@ class AutoSelectionService:
                 return SelectionDecision.model_validate(cached)
             self.store._remember(scope, "auto_turn", turn_id, request, decision)
         return decision
+
+    def select_ollama_subscription_fallback(self, decision: SelectionDecision) -> SelectionDecision:
+        """Persist one same-provider fallback from the fixed Ollama allowlist."""
+        self.validate_decision(decision)
+        if decision.selected_model.provider != "ollama-cloud":
+            raise PolicyDenied("ollama_subscription_fallback_provider_required")
+        request = {"decisionId": decision.decision_id, "reason": "ollama_subscription_required"}
+        cached = self.store.get_request_result(decision.scope, "auto_subscription_fallback", decision.turn_id, request)
+        if cached is not None:
+            fallback = SelectionDecision.model_validate(cached)
+            self.validate_decision(fallback)
+            return fallback
+        policy = self.policies.get(decision.scope, decision.session_id)
+        self.manager.capabilities.catalog(decision.scope, refresh=True)
+        catalog = self._catalog(decision.scope)
+        resolved, entries = self._entries(decision.scope, catalog)
+        if catalog.get("providerConfigurationDigest") != decision.context.provider.provider_config_ref:
+            raise PolicyDenied("provider_connection_changed")
+        endpoint = provider_endpoint(resolved.profile_home, "ollama-cloud")
+        parsed = urlsplit(endpoint or "")
+        if (parsed.scheme.lower() != "https" or parsed.hostname != "ollama.com"
+                or parsed.port not in {None, 443} or parsed.username or parsed.password
+                or parsed.query or parsed.fragment or parsed.path.rstrip("/") not in {"", "/v1"}):
+            raise PolicyDenied("ollama_subscription_fallback_endpoint_untrusted")
+        from .native_model_resolution import OLLAMA_SUBSCRIPTION_FALLBACK_MODELS
+        pair = next((candidate for model in ("gpt-oss:20b", "gemma4:31b", "nemotron-3-nano:30b",
+                "nemotron-3-super", "nemotron-3-ultra", "gpt-oss:120b")
+            if model in OLLAMA_SUBSCRIPTION_FALLBACK_MODELS
+            for candidate in policy.allowed_models
+            if candidate.provider == "ollama-cloud" and candidate.model == model
+            and candidate != decision.selected_model and candidate in entries
+            and type(entries[candidate].get("contextLength")) is int
+            and entries[candidate]["contextLength"] >= decision.requirements.minimum_context_tokens
+            and ("vision" not in decision.requirements.required_capabilities or entries[candidate].get("supportsVision") is True)
+            and ("tools" not in decision.requirements.required_capabilities or entries[candidate].get("supportsTools") is True)), None)
+        if pair is None:
+            raise PolicyDenied("ollama_subscription_fallback_unavailable")
+        data_classes = (decision.requirements.data_class, *decision.requirements.data_classes)
+        if policy.cloud_policy != "allow" or any(value not in policy.allowed_cloud_data_classes for value in data_classes):
+            raise PolicyDenied("ollama_subscription_fallback_cloud_denied")
+        length = entries[pair]["contextLength"]
+        provider = ProviderSelection(provider_config_ref=catalog["providerConfigurationDigest"],
+            model=pair.model, provider=pair.provider, context_length=length)
+        refs = self._refs(decision.scope, pair)
+        context = self.manager.make_context(decision.scope, provider, connection_bindings=refs, interactive=True)
+        self.manager._validate_connections(context)
+        self.manager._governance(context, prepare=True)
+        current = self.store.get_permission_state(decision.scope)
+        context = context.model_copy(update={"control_epoch": current["controlEpoch"]})
+        fallback = SelectionDecision(decision_id=new_id(), turn_id=decision.turn_id,
+            scope=decision.scope, session_id=decision.session_id, policy_revision=policy.revision,
+            selected_model=pair, reason="subscription_required_fallback", route="model",
+            locality="remote", requirements=decision.requirements, context=context, captured_at=utc_now())
+        with self.store.transaction():
+            self.validate_decision(decision)
+            cached = self.store.get_request_result(decision.scope, "auto_subscription_fallback", decision.turn_id, request)
+            if cached is not None:
+                return SelectionDecision.model_validate(cached)
+            self.validate_decision(fallback)
+            self.store._remember(decision.scope, "auto_subscription_fallback", decision.turn_id, request, fallback)
+        return fallback
 
     def validate_decision(self, decision: SelectionDecision):
         if decision.context.scope != decision.scope or decision.context.provider.model != decision.selected_model.model or decision.context.provider.provider != decision.selected_model.provider:

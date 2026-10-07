@@ -70,7 +70,7 @@ describe('update controller', () => {
     updater.emit('update-downloaded', { version: '0.1.4' });
 
     expect(updater.autoDownload).toBe(true);
-    expect(updater.autoInstallOnAppQuit).toBe(false);
+    expect(updater.autoInstallOnAppQuit).toBe(true);
     expect(updater.checkCalls).toBe(1);
     expect(controller.getStatus()).toMatchObject({
       state: 'downloaded',
@@ -79,6 +79,21 @@ describe('update controller', () => {
       percent: 100
     });
     expect(states).toEqual(['checking', 'available', 'downloading', 'downloaded']);
+  });
+
+  it('records the downloaded from/to versions for the next successful launch', () => {
+    const updater = fakeUpdater();
+    const downloaded: Array<[string, string]> = [];
+    createUpdateController({
+      updater,
+      isPackaged: true,
+      currentVersion: '0.1.45',
+      onUpdateDownloaded: (fromVersion, targetVersion) => downloaded.push([fromVersion, targetVersion])
+    });
+
+    updater.emit('update-downloaded', { version: '0.1.46' });
+
+    expect(downloaded).toEqual([['0.1.45', '0.1.46']]);
   });
 
   it('allows installing only after an update has been downloaded', () => {

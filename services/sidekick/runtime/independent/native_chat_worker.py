@@ -14,7 +14,7 @@ from .contracts import canonical_json
 from .native_chat_protocol import NativeChatContext, decode_turn, verify_native_context
 from .worker_host import MAX_EVENTS, MAX_LINE_BYTES, WorkerError
 
-_RPC_METHODS = frozenset({"auto_validate", "auto_policy", "auto_claim", "auto_observe", "auto_usage",
+_RPC_METHODS = frozenset({"auto_validate", "auto_policy", "auto_claim", "auto_observe", "auto_usage", "auto_subscription_fallback",
     "fixed_validate", "fixed_claim", "fixed_observe", "fixed_usage", "compute_acquire", "compute_release",
     "teamwork_plan", "teamwork_validate", "teamwork_claim", "teamwork_authorize",
     "teamwork_compute_acquire", "teamwork_compute_release", "teamwork_observe", "teamwork_usage"})
@@ -345,6 +345,10 @@ def main():
                     auto_bridge = get_bound_native_auto_bridge()
                     if auto_bridge is None or auto_bridge.decision is None:
                         raise WorkerError("native_auto_decision_missing")
+                    from .native_model_resolution import publish_native_model_resolution
+                    from .model_selection import ModelPair
+                    selected = auto_bridge.decision.selected_model
+                    publish_native_model_resolution(context, selected, selected)
                     # Safe user-visible routing receipt: public_view deliberately
                     # excludes the captured RunContext and any prompt/provider secrets.
                     channel.put_nowait(("auto_route", auto_bridge.decision.public_view()))
@@ -352,6 +356,12 @@ def main():
                     from .native_sdk_broker import prepare_native_fixed_turn
                     _stage = "fixed_prepare"
                     actual_args, actual_kwargs = prepare_native_fixed_turn(args, kwargs)
+                    if context.provider_capture is not None:
+                        from .native_model_resolution import publish_native_model_resolution
+                        from .model_selection import ModelPair
+                        selected = ModelPair(provider=context.provider_capture.provider.provider,
+                            model=context.provider_capture.provider.model)
+                        publish_native_model_resolution(context, selected, selected)
                 _stage = "engine"
                 if judge_retry:
                     _stage = "goal_judge_retry"

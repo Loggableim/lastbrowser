@@ -1034,6 +1034,27 @@ app.router.on_startup.append(_release_game_mode_resources_on_startup)
 app.router.on_startup.append(_schedule_smart_track_model_scan_on_startup)
 
 
+def _initialize_file_logging_on_startup() -> None:
+    """Configure Sidekick's shared file handlers for direct ASGI launches.
+
+    The CLI entry point initializes logging before importing this module, but
+    ``uvicorn cli.web_server:app`` imports the ASGI app directly and bypasses
+    that setup. The shared initializer is idempotent, so this also remains
+    safe when the CLI already configured the same handlers.
+    """
+    try:
+        from runtime._compat.shim_logging import setup_logging
+
+        setup_logging()
+    except Exception:
+        # Logging is best-effort in the CLI too; keep the dashboard available
+        # if the user's log directory is temporarily unwritable.
+        _log.exception("Sidekick file logging initialization failed")
+
+
+app.router.on_startup.insert(0, _initialize_file_logging_on_startup)
+
+
 # ---------------------------------------------------------------------------
 # Shell render cache.
 #
@@ -2538,6 +2559,17 @@ def _workspace_path_matches(session: dict[str, Any], workspace_path: Path) -> bo
         return False
 
 
+def _is_private_quickchat_session(row: Any) -> bool:
+    """Recognize only sessions with an explicit canonical Quickchat marker.
+
+    Missing kind/ID metadata is common in legacy chats and must not be used to
+    infer that a conversation is private.
+    """
+    return isinstance(row, dict) and (
+        row.get("session_kind") == "quickchat" or bool(row.get("quick_chat_id"))
+    )
+
+
 def _bound_workspace_spaces(workspace_path: Path):
     from web.api import independent
     from web.api.profiles import get_active_profile_name
@@ -2610,6 +2642,8 @@ def _bound_workspace_sessions(workspace_path: Path):
                 continue
             raw = _bound_session_metadata(path, space_root, actor, expected, workspace_path)
             if raw is None:
+                continue
+            if _is_private_quickchat_session(raw):
                 continue
             sid = raw["session_id"]
             if sid in rows:
@@ -2689,6 +2723,8 @@ def _load_space_sessions(slug: str) -> list[dict[str, Any]]:
     sessions: list[dict[str, Any]] = []
     for item in raw:
         if not isinstance(item, dict):
+            continue
+        if _is_private_quickchat_session(item):
             continue
         sid = str(item.get("session_id") or "").strip()
         if not sid:
@@ -3440,6 +3476,7 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
             sessions = [
                 row for row in _load_space_sessions(DEFAULT_SPACE_SLUG)
                 if _workspace_path_matches(row, workspace_path)
+                and not _is_private_quickchat_session(row)
             ]
             # Keep legacy chats while adding only verified original transcripts.
             own_rows = _bound_workspace_sessions(workspace_path)
@@ -3461,7 +3498,8 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
                 {"sessions": page, "total": total, "archived_count": archived_count, "limit": limit, "offset": offset},
             )
         if workspace_slug:
-            sessions = _load_space_sessions(workspace_slug)
+            sessions = [row for row in _load_space_sessions(workspace_slug)
+                if not _is_private_quickchat_session(row)]
             archived_count = sum(1 for s in sessions if s.get("archived"))
             visible_sessions = sessions if include_archived else [s for s in sessions if not s.get("archived")]
             total = len(visible_sessions)
@@ -3506,6 +3544,7 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
                     )
                 except Exception:
                     pass
+            sessions = [row for row in sessions if not _is_private_quickchat_session(row)]
             if startup_fallback:
                 # A missing space during first paint must not serialize the
                 # entire global store. Normal unscoped callers keep the
@@ -5289,18 +5328,33 @@ async def delete_session_endpoint(session_id: str):
 async def get_logs(
     file: str = "agent",
     lines: int = 100,
+    tail: Optional[int] = None,
     level: Optional[str] = None,
     component: Optional[str] = None,
     search: Optional[str] = None,
 ):
     from cli.logs import _read_tail, LOG_FILES
 
-    log_name = LOG_FILES.get(file)
+    # The native LastBrowser panel historically sends `tail`, while the
+    # Sidekick WebUI contract uses `lines`. Keep both names and bound the
+    # requested work before reading any log data.
+    requested_lines = tail if tail is not None else lines
+    try:
+        requested_lines = int(requested_lines)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid log tail") from None
+    requested_lines = max(1, min(requested_lines, 500))
+
+    # The dashboard process logs through the shared Sidekick logger, which
+    # writes agent.log. There is no separate webui.log file.
+    requested_file = file
+    log_file_key = "agent" if requested_file == "webui" else requested_file
+    log_name = LOG_FILES.get(log_file_key)
     if not log_name:
         raise HTTPException(status_code=400, detail=f"Unknown log file: {file}")
     log_path = get_sidekick_home() / "logs" / log_name
     if not log_path.exists():
-        return {"file": file, "lines": []}
+        return {"file": requested_file, "lines": []}
 
     try:
         from runtime._compat.shim_logging import COMPONENT_PREFIXES
@@ -5324,7 +5378,7 @@ async def get_logs(
 
     has_filters = bool(min_level or comp_prefixes or search)
     result = _read_tail(
-        log_path, min(lines, 500) if not search else 2000,
+        log_path, requested_lines if not search else 2000,
         has_filters=has_filters,
         min_level=min_level,
         component_prefixes=comp_prefixes,
@@ -5334,8 +5388,8 @@ async def get_logs(
     # trim to the requested line count afterward.
     if search:
         needle = search.lower()
-        result = [l for l in result if needle in l.lower()][-min(lines, 500):]
-    return {"file": file, "lines": result}
+        result = [l for l in result if needle in l.lower()][-requested_lines:]
+    return {"file": requested_file, "lines": result}
 
 
 # ---------------------------------------------------------------------------

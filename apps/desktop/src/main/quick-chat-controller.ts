@@ -2,6 +2,7 @@ import type { IpcMainInvokeEvent, WebContents } from 'electron';
 import { captureTrustedShellSender } from './ipc-sender.js';
 import type { ChatStreamEvent, ChatStreamHandle } from './chat-stream.js';
 import type { BrowserScope } from './independent-browser-host.js';
+import { quickChatBackendFailure, quickChatFailure } from './quick-chat-errors.js';
 
 const ID = /^[a-f0-9]{32}$/;
 const MAX_PROMPT = 12_000;
@@ -32,7 +33,7 @@ export type QuickChatStreamEvent = Readonly<{ quickChatId: string; streamId: str
 type CapturedBinding = Readonly<{ scope: BrowserScope; backendProfileName: string }>;
 type StartResult = Readonly<{ quickChatId: string; streamId: string; sessionId: string; scope: BrowserScope }>;
 type RecordEntry = { owner: WebContents; check: () => WebContents; scope: BrowserScope; profile: string; workspacePath: string | null;
-  sessionId: string; streamId: string; handle: ChatStreamHandle | null; resetting: boolean };
+  sessionId: string; streamId: string; handle: ChatStreamHandle | null; resetting: boolean; lifecycleBusy: boolean };
 type SenderEvent = Pick<IpcMainInvokeEvent, 'sender' | 'senderFrame'>;
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -121,7 +122,7 @@ export class QuickChatController {
     if (prior && (prior.owner !== owner || !sameScope(prior.scope, binding.scope) || prior.resetting)) throw new Error('Quickchat identity is already bound elsewhere');
     if (prior?.handle) throw new Error('This Quickchat already has an active response');
     const record: RecordEntry = { owner, check, scope: binding.scope, profile: binding.backendProfileName, workspacePath: request.workspacePath,
-      sessionId: prior?.sessionId ?? '', streamId: '', handle: null, resetting: false };
+      sessionId: prior?.sessionId ?? '', streamId: '', handle: null, resetting: false, lifecycleBusy: false };
     this.chats.set(request.quickChatId, record);
     this.observe(owner);
     let started: StartResult | undefined;
@@ -163,45 +164,89 @@ export class QuickChatController {
   }
 
   async cancel(event: SenderEvent, raw: unknown): Promise<{ ok: true; cancelled: boolean }> {
-    const check = captureTrustedShellSender(event, this.options.isShell), owner = check(), request = object(raw);
+    let check: () => WebContents;
+    let owner: WebContents;
+    try {
+      check = captureTrustedShellSender(event, this.options.isShell);
+      owner = check();
+    } catch {
+      throw quickChatFailure('cancel', 'quickchat_ipc_sender_rejected');
+    }
+    const request = object(raw);
     if (!request || Object.keys(request).some(key => !['quickChatId', 'streamId', 'scope'].includes(key))
       || typeof request.quickChatId !== 'string' || !ID.test(request.quickChatId)
-      || typeof request.streamId !== 'string' || request.streamId !== '' && !ID.test(request.streamId)) throw new Error('Invalid Quickchat reset request');
+      || typeof request.streamId !== 'string' || request.streamId !== '' && !ID.test(request.streamId))
+      throw quickChatFailure('cancel', 'quickchat_cancel_request_invalid');
     const record = this.chats.get(request.quickChatId);
     if (!record || record.owner !== owner || (record.streamId ? record.streamId !== request.streamId : request.streamId !== '')
       || !sameScope(record.scope, request.scope))
-      throw new Error('Quickchat reset does not match its owner and active scope');
-    record.resetting = true;
-    record.handle?.close(); record.handle = null;
-    if (!record.streamId && !record.sessionId) {
-      this.chats.delete(request.quickChatId);
-      return { ok: true, cancelled: false };
+      throw quickChatFailure('cancel', 'quickchat_cancel_binding_rejected');
+    if (record.lifecycleBusy) throw quickChatFailure('cancel', 'quickchat_cancel_failed');
+    record.lifecycleBusy = true;
+    try {
+      record.resetting = true;
+      try { record.handle?.close(); } catch { throw quickChatFailure('cancel', 'quickchat_cancel_failed'); }
+      record.handle = null;
+      if (!record.streamId && !record.sessionId) {
+        this.chats.delete(request.quickChatId);
+        return { ok: true, cancelled: false };
+      }
+      let result: unknown;
+      try {
+        result = await this.options.cancel({ quickChatId: request.quickChatId, streamId: request.streamId, scope: record.scope,
+          profile: record.profile, workspacePath: record.workspacePath });
+      } catch (error) {
+        throw quickChatBackendFailure('cancel', error);
+      }
+      if (object(result)?.ok !== true) throw quickChatFailure('cancel', 'quickchat_cancel_failed');
+      try { check(); } catch { throw quickChatFailure('cancel', 'quickchat_ipc_sender_rejected'); }
+      if (this.chats.get(request.quickChatId) === record) this.chats.delete(request.quickChatId);
+      return { ok: true, cancelled: Boolean(object(result)?.cancelled) };
+    } finally {
+      record.lifecycleBusy = false;
     }
-    const result = await this.options.cancel({ quickChatId: request.quickChatId, streamId: request.streamId, scope: record.scope,
-      profile: record.profile, workspacePath: record.workspacePath });
-    this.chats.delete(request.quickChatId);
-    check();
-    return { ok: true, cancelled: Boolean(object(result)?.cancelled) };
   }
 
   async stop(event: SenderEvent, raw: unknown): Promise<{ ok: true; cancelled: boolean }> {
-    const check = captureTrustedShellSender(event, this.options.isShell), owner = check(), request = object(raw);
+    let check: () => WebContents;
+    let owner: WebContents;
+    try {
+      check = captureTrustedShellSender(event, this.options.isShell);
+      owner = check();
+    } catch {
+      throw quickChatFailure('stop', 'quickchat_ipc_sender_rejected');
+    }
+    const request = object(raw);
     if (!request || Object.keys(request).some(key => !['quickChatId', 'streamId', 'scope'].includes(key))
       || typeof request.quickChatId !== 'string' || !ID.test(request.quickChatId)
-      || typeof request.streamId !== 'string' || !ID.test(request.streamId)) throw new Error('Invalid Quickchat stop request');
+      || typeof request.streamId !== 'string' || !ID.test(request.streamId))
+      throw quickChatFailure('stop', 'quickchat_stop_request_invalid');
     const record = this.chats.get(request.quickChatId);
     if (!record || record.owner !== owner || record.streamId !== request.streamId || !sameScope(record.scope, request.scope))
-      throw new Error('Quickchat stop does not match its owner and active scope');
-    record.resetting = true;
-    record.handle?.close(); record.handle = null;
-    const result = await this.options.stop({ quickChatId: request.quickChatId, streamId: request.streamId, scope: record.scope,
-      profile: record.profile, workspacePath: record.workspacePath });
-    check();
-    if (this.chats.get(request.quickChatId) === record) {
-      record.streamId = '';
-      record.resetting = false;
+      throw quickChatFailure('stop', 'quickchat_stop_binding_rejected');
+    if (record.lifecycleBusy) throw quickChatFailure('stop', 'quickchat_stop_failed');
+    record.lifecycleBusy = true;
+    try {
+      record.resetting = true;
+      try { record.handle?.close(); } catch { throw quickChatFailure('stop', 'quickchat_stop_failed'); }
+      record.handle = null;
+      let result: unknown;
+      try {
+        result = await this.options.stop({ quickChatId: request.quickChatId, streamId: request.streamId, scope: record.scope,
+          profile: record.profile, workspacePath: record.workspacePath });
+      } catch (error) {
+        throw quickChatBackendFailure('stop', error);
+      }
+      if (object(result)?.ok !== true) throw quickChatFailure('stop', 'quickchat_stop_failed');
+      try { check(); } catch { throw quickChatFailure('stop', 'quickchat_ipc_sender_rejected'); }
+      if (this.chats.get(request.quickChatId) === record) {
+        record.streamId = '';
+        record.resetting = false;
+      }
+      return { ok: true, cancelled: Boolean(object(result)?.cancelled) };
+    } finally {
+      record.lifecycleBusy = false;
     }
-    return { ok: true, cancelled: Boolean(object(result)?.cancelled) };
   }
 
   private observe(owner: WebContents): void {

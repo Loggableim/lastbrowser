@@ -4,7 +4,7 @@ import type {
   IndependentRequest, IndependentResult, IndependentScope, IndependentTransport, InterviewAnswerRecord,
   InterviewQuestion, InterviewReview, InterviewState, PermissionView, ProfilePatch, ResolvedAssistantScope,
   BackendProfileEntry, BackendProfilesResponse, ProfileBindingEntry, ProfileBindingsResponse,
-  RunEvent, RunView, AgentDefinitionView, DefinitionResult, ConnectionSetupFlow, ConnectionConfigureAck, BrowserAccountFlow, CapabilityConnection, ScopedModelSelection, ScopedModelEntry, ScopedModelGroup, ScopedModelProvider, LocalAiBootstrapStatus, SpaceAssistantProfile, TaskDispatchView, UnderstoodTopic
+  RunEvent, RunView, AgentDefinitionView, DefinitionResult, ConnectionSetupFlow, ConnectionConfigureAck, BrowserAccountFlow, CapabilityConnection, ScopedModelSelection, ScopedModelEntry, ScopedModelGroup, ScopedModelProvider, LocalAiBootstrapStatus, SpaceAssistantProfile, TaskDispatchView, UnderstoodTopic, NativeModelAvailability, NativeAvailabilityReason, NativeModelResolution
 } from './independent-contracts.js';
 import { sameAssistantScope } from './independent-contracts.js';
 import { isSafePluginStartUrl } from './plugin-browser-navigation.js';
@@ -279,12 +279,37 @@ const decodeNativePreview=decode<NativeBrowserPreview>((v):v is NativeBrowserPre
 const decodeNativeTakeover=decode<NativeBrowserTakeover>((v):v is NativeBrowserTakeover=>isNativeBrowserDetails(v)&&v.kind==='native_browser_takeover'
   &&v.state==='paused'&&v.automationPaused===true&&v.visible===true);
 const isModelEntry: Guard<ScopedModelEntry> = (v): v is ScopedModelEntry => isIndependentRecord(v) && ref(v.id) && ref(v.label)
-  && boolean(v.supportsIndependent) && optional(v.reasoning_efforts, values => list(values, ref));
+  && boolean(v.supportsIndependent) && optional(v.reasoning_efforts, values => list(values, ref))
+  && optional(v.nativeAvailability, isNativeModelAvailability);
 const isModelGroup: Guard<ScopedModelGroup> = (v): v is ScopedModelGroup => isIndependentRecord(v) && ref(v.provider) && text(v.provider_id)
   && boolean(v.configured) && list(v.models, isModelEntry) && optional(v.extra_models, values => list(values, isModelEntry));
 const isModelProvider: Guard<ScopedModelProvider> = (v): v is ScopedModelProvider => isIndependentRecord(v) && ref(v.id)
   && ref(v.display_name) && boolean(v.has_key) && boolean(v.oauth_connected) && ref(v.auth_state)
   && boolean(v.provider_available) && list(v.models, ref);
+const nativeAvailabilityReasons: readonly NativeAvailabilityReason[] = ['adapter_unsupported','provider_unconfigured','pair_absent',
+  'independent_unsupported','context_missing','cloud_denied','binding_mismatch'];
+export const isNativeModelAvailability: Guard<NativeModelAvailability> = (v): v is NativeModelAvailability => versioned(v)
+  && boolean(v.supported) && boolean(v.available) && nullable(v.reasonCode, value => nativeAvailabilityReasons.includes(value as NativeAvailabilityReason))
+  // Empty provider is reserved for the fixed virtual orchestration group
+  // (Teamwork / Smart Track); those entries are never native model choices.
+  && text(v.provider) && (v.provider === '' || ref(v.provider)) && ref(v.model) && isIndependentScope(v.scope) && revision(v.selectionRevision)
+  && (v.available ? v.supported && v.reasonCode === null : v.reasonCode !== null);
+export function isNativeModelResolution(value: unknown): value is NativeModelResolution {
+  const pair = (candidate: unknown): candidate is { provider: string; model: string } => isIndependentRecord(candidate)
+    && text(candidate.provider) && ref(candidate.model);
+  const fallbackModels = new Set(['gemma4:31b','gpt-oss:120b','gpt-oss:20b','nemotron-3-nano:30b','nemotron-3-super','nemotron-3-ultra']);
+  if (!(versioned(value) && isIndependentScope(value.scope) && uuid(value.streamId)
+    && pair(value.requested) && pair(value.effective) && boolean(value.fallbackApplied)
+    && nullable(value.fallbackReasonCode, reason => reason === 'ollama_subscription_required')
+    && (value.fallbackAttempts === 0 || value.fallbackAttempts === 1)
+    && (value.fallbackApplied === (value.fallbackAttempts === 1))
+    && (value.fallbackApplied === (value.fallbackReasonCode !== null)))) return false;
+  const resolution = value as NativeModelResolution;
+  if (!resolution.fallbackApplied) return resolution.requested.provider === resolution.effective.provider
+    && resolution.requested.model === resolution.effective.model;
+  return resolution.requested.provider === 'ollama-cloud' && resolution.effective.provider === resolution.requested.provider
+    && fallbackModels.has(resolution.effective.model);
+}
 const isLocalAiBootstrapStatus: Guard<LocalAiBootstrapStatus> = (v):v is LocalAiBootstrapStatus => versioned(v)
   && v.installKey==='router-lfm2.5-230m-qad-q4_0-v1'&&revision(v.revision)
   && oneOf(v.state,['idle','pending','downloading','verifying','cancelling','complete','cancelled','offline','failed'])
@@ -358,10 +383,16 @@ const decoders: { [K in IndependentOperation]: (value: unknown) => IndependentOp
       && sameAssistantScope(row.scope, row.activity.scope) && row.scope.backendProfileId === v.backendProfileId
       && optional(row.workspacePath, value => nullable(value, text)))
     && Array.isArray(v.spaces) && unique(v.spaces.map(row => isIndependentRecord(row) && isIndependentScope(row.scope) ? JSON.stringify(row.scope) : ''))),
-  modelSelection: decode((v): v is ScopedModelSelection => versioned(v) && isIndependentScope(v.scope) && revision(v.revision)
-    && text(v.model) && text(v.provider) && boolean(v.configured) && boolean(v.supportsIndependent)
-      && optional(v.reasonCode, ref) && optional(v.groups, values => list(values, isModelGroup))
-      && optional(v.providers, values => list(values, isModelProvider))),
+  modelSelection: decode((v): v is ScopedModelSelection => {
+    if (!versioned(v) || !isIndependentScope(v.scope) || !revision(v.revision) || !text(v.model) || !text(v.provider)
+      || !boolean(v.configured) || !boolean(v.supportsIndependent) || !optional(v.reasonCode, ref)
+      || !optional(v.groups, values => list(values, isModelGroup)) || !optional(v.providers, values => list(values, isModelProvider))) return false;
+    return (v.groups ?? []).every(group => [...group.models, ...(group.extra_models ?? [])].every(entry => {
+      const availability = entry.nativeAvailability;
+      return availability === undefined || availability.provider === group.provider_id && availability.model === entry.id
+        && availability.selectionRevision === v.revision && sameAssistantScope(availability.scope, v.scope as IndependentScope);
+    }));
+  }),
   definitions: decode((v): v is DefinitionResult => versioned(v) && isIndependentScope(v.scope)
     && (list(v.definitions, isDefinition) && v.definitions.every(row => isIndependentScope(v.scope) && sameAssistantScope(row.scope, v.scope))
       && timestamp(v.observedAt) && list(v.schedules, row => isIndependentRecord(row) && uuid(row.definitionId) && revision(row.definitionRevision) && nullable(row.nextRunAt, timestamp) && boolean(row.enabled))

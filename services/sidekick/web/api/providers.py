@@ -462,7 +462,8 @@ def _load_env_file(env_path: Path) -> dict[str, str]:
     return values
 
 
-def _write_env_file(env_path: Path, updates: dict[str, str | None]) -> None:
+def _write_env_file(env_path: Path, updates: dict[str, str | None], *,
+                    update_process_env: bool = True) -> None:
     """Write key=value pairs to the .env file.
 
     Values of ``None`` cause the key to be removed.
@@ -501,7 +502,8 @@ def _write_env_file(env_path: Path, updates: dict[str, str | None]) -> None:
         for key, value in updates.items():
             if value is None:
                 # Mark the line for removal (None sentinel) and clear env.
-                os.environ.pop(key, None)
+                if update_process_env:
+                    os.environ.pop(key, None)
                 if key in existing_key_indices:
                     output_lines[existing_key_indices[key]] = None  # type: ignore[assignment]
                 continue
@@ -511,7 +513,8 @@ def _write_env_file(env_path: Path, updates: dict[str, str | None]) -> None:
             # Reject embedded newlines/carriage returns to prevent .env injection
             if "\n" in clean or "\r" in clean:
                 raise ValueError("API key must not contain newline characters.")
-            os.environ[key] = clean
+            if update_process_env:
+                os.environ[key] = clean
 
             if key in existing_key_indices:
                 output_lines[existing_key_indices[key]] = f"{key}={clean}"
@@ -570,6 +573,13 @@ def _provider_has_key(provider_id: str) -> bool:
     4. ``config.yaml → providers.<id>.api_key``
     5. ``config.yaml → custom_providers[].api_key`` (for custom providers)
     """
+    if provider_id == "xiaomi":
+        # Xiaomi credentials are deliberately profile-scoped. Do not let a
+        # machine-wide XIAOMI_API_KEY make unrelated profiles appear connected.
+        from runtime.mimo_settings import load_profile_mimo_settings
+        key, _base_url = load_profile_mimo_settings()
+        return bool(key)
+
     env_var = _PROVIDER_ENV_VAR.get(provider_id)
     if env_var:
         env_path = _get_sidekick_home() / ".env"
@@ -616,6 +626,10 @@ def _provider_has_key(provider_id: str) -> bool:
 def _get_provider_api_key(provider_id: str) -> str | None:
     """Return a configured provider API key without exposing it to callers."""
     provider_id = (provider_id or "").strip().lower()
+    if provider_id == "xiaomi":
+        from runtime.mimo_settings import load_profile_mimo_settings
+        key, _base_url = load_profile_mimo_settings()
+        return key or None
     env_var = _PROVIDER_ENV_VAR.get(provider_id)
     if env_var:
         env_path = _get_sidekick_home() / ".env"
@@ -1335,6 +1349,11 @@ def get_providers() -> dict[str, Any]:
         alibaba_base_url = str(get_env_value("DASHSCOPE_BASE_URL") or "").strip()
     except Exception:
         alibaba_base_url = os.environ.get("DASHSCOPE_BASE_URL", "").strip()
+    try:
+        from runtime.mimo_settings import load_profile_mimo_settings
+        _mimo_key, mimo_base_url = load_profile_mimo_settings()
+    except Exception:
+        mimo_base_url = ""
 
     # Collect all known provider IDs from multiple sources
     known_ids = set(_PROVIDER_DISPLAY.keys()) | set(_PROVIDER_MODELS.keys())
@@ -1608,6 +1627,7 @@ def get_providers() -> dict[str, Any]:
             "provider_available": provider_available,
             "legacy_credentials_present": legacy_credentials_present,
             **({"base_url": alibaba_base_url} if pid == "alibaba" else {}),
+            **({"base_url": mimo_base_url} if pid == "xiaomi" and mimo_base_url else {}),
             "models": models,
             "models_configured": models_configured,
             # models_total reflects the complete catalog size (e.g. 396 for
@@ -1665,7 +1685,8 @@ def get_providers() -> dict[str, Any]:
     }
 
 
-def set_provider_key(provider_id: str, api_key: str | None, base_url: str | None = None) -> dict[str, Any]:
+def set_provider_key(provider_id: str, api_key: str | None, base_url: str | None = None,
+                     *, preserve_api_key: bool = False) -> dict[str, Any]:
     """Set or update the API key for a provider.
 
     Writes the key to ``~/.sidekick/.env`` using the standard env var name.
@@ -1677,6 +1698,56 @@ def set_provider_key(provider_id: str, api_key: str | None, base_url: str | None
 
     if not provider_id:
         return {"ok": False, "error": "Provider ID is required."}
+
+    if provider_id == "xiaomi":
+        from runtime.mimo_settings import (
+            classify_mimo_key, load_profile_mimo_settings,
+            validate_mimo_base_url, validate_mimo_settings,
+        )
+        saved_key, saved_url = load_profile_mimo_settings()
+        submitted_key = str(api_key or "").strip()
+        deleting = api_key is None and not preserve_api_key and base_url is None
+        effective_key = submitted_key or (saved_key if preserve_api_key else "")
+        effective_url = str(base_url or "").strip() if base_url is not None else saved_url
+        if not effective_url and classify_mimo_key(effective_key) == "pay_as_you_go":
+            effective_url = "https://api.xiaomimimo.com/v1"
+        if deleting:
+            updates = {"XIAOMI_API_KEY": None, "XIAOMI_BASE_URL": None}
+        else:
+            if effective_key:
+                _key, normalized, error = validate_mimo_settings(
+                    effective_key, effective_url, require_explicit=bool(base_url))
+                if error:
+                    return {"ok": False, "error": error}
+                effective_url = normalized
+            elif effective_url:
+                normalized, error = validate_mimo_base_url(effective_url)
+                if error:
+                    return {"ok": False, "error": error}
+                effective_url = normalized
+            updates = {}
+            if submitted_key:
+                updates["XIAOMI_API_KEY"] = submitted_key
+            if base_url is not None or (effective_key and effective_url and not saved_url):
+                updates["XIAOMI_BASE_URL"] = effective_url
+        try:
+            if updates:
+                _write_env_file(_get_sidekick_home() / ".env", updates, update_process_env=False)
+        except ValueError as exc:
+            logger.debug("Invalid Xiaomi MiMo settings input: %s", type(exc).__name__)
+            return {"ok": False, "error": "mimo_settings_invalid"}
+        except Exception:
+            logger.exception("Failed to save profile-scoped Xiaomi MiMo settings")
+            return {"ok": False, "error": "mimo_settings_save_failed"}
+        invalidate_models_cache()
+        try:
+            _evict_cached_clients("xiaomi")
+        except Exception:
+            logger.debug("Failed to evict Xiaomi client cache", exc_info=True)
+        url_changed = base_url is not None and effective_url != saved_url
+        action = "removed" if deleting else ("updated" if submitted_key or url_changed else "preserved")
+        return {"ok": True, "provider": provider_id, "display_name": _PROVIDER_DISPLAY.get(provider_id, "Xiaomi MiMo"),
+                "action": action, "has_key": bool(effective_key), "base_url": effective_url}
 
     if _provider_is_oauth(provider_id):
         return {

@@ -8,11 +8,28 @@ import pytest
 from openai import OpenAI
 
 from runtime.independent.auto_provider_proxy import AutoProviderProxy
+from runtime.independent.auto_provider_proxy import _ollama_subscription_rejection
 from runtime.independent.contracts import new_id
 from runtime.independent.model_selection import ModelRequirements
 from runtime.independent.policy import PolicyDenied
 from runtime.independent.store import ResourceBusy
 from test_model_selection_policy import auto_fixture, draft
+
+
+@pytest.mark.parametrize("status,code,endpoint,expected", [
+    (403, "subscription_required", "https://ollama.com/v1", True),
+    (403, "insufficient_quota", "https://ollama.com/v1", False),
+    (401, "subscription_required", "https://ollama.com/v1", False),
+    (403, "subscription_required", "https://api.ollama.com/v1", False),
+])
+def test_subscription_fallback_requires_typed_ollama_cloud_403(monkeypatch, tmp_path, status, code, endpoint, expected):
+    from types import SimpleNamespace
+    from runtime.independent import provider_admission
+    monkeypatch.setattr(provider_admission, "provider_endpoint", lambda *_: endpoint)
+    decision = SimpleNamespace(selected_model=SimpleNamespace(provider="ollama-cloud"),
+        context=SimpleNamespace(resolved_profile_home=str(tmp_path)))
+    error = SimpleNamespace(status_code=status, body={"error": {"code": code}})
+    assert _ollama_subscription_rejection(error, decision) is expected
 
 
 @contextmanager
@@ -55,6 +72,35 @@ def actual_provider(*, stream_failure=False, stream_text=None, status=200):
         server.shutdown()
         server.server_close()
         thread.join(2)
+
+
+@contextmanager
+def subscription_then_success_provider(*, always_reject=False):
+    requests = []
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+        def do_POST(self):
+            requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"])) ))
+            if len(requests) == 1 or always_reject:
+                self.send_response(403)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error":{"code":"subscription_required"}}')
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"id":"controlled","object":"chat.completion","created":1,
+                "model":"small","choices":[{"message":{"role":"assistant","content":"retried"},
+                "finish_reason":"stop"}]}).encode())
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield "http://127.0.0.1:" + str(server.server_port) + "/v1", requests
+    finally:
+        server.shutdown(); server.server_close(); thread.join(2)
 
 
 def make_proxy(service, scope, sid, url):
@@ -100,6 +146,84 @@ def test_actual_sdk_route_headers_usage_and_output_cap_are_visible_without_promp
     finally:
         manager.shutdown()
         store.close()
+
+
+def test_subscription_retry_callback_runs_once_and_keeps_one_turn_identity(tmp_path, monkeypatch):
+    from runtime.independent import auto_provider_proxy
+    _, scope, sid, store, manager, service = auto_fixture(tmp_path, monkeypatch)
+    try:
+        service.set_policy(scope, sid, draft(), expected_revision=0, client_request_id=new_id())
+        with subscription_then_success_provider() as (url, requests):
+            decision = service.select_turn(scope, sid, new_id(), ModelRequirements())
+            client = OpenAI(api_key="controlled-local-fixture", base_url=url, max_retries=0)
+            calls = []
+            monkeypatch.setattr(auto_provider_proxy, "_ollama_subscription_rejection", lambda *_: True)
+            proxy = AutoProviderProxy(client, service, decision,
+                client_binding_validator=lambda actual, context: actual is client and context == decision.context,
+                subscription_fallback=lambda current, claim: (calls.append((current, claim)) or current))
+            try:
+                response = proxy.chat.completions.create(model="small", messages=[])
+                assert response.choices[0].message.content == "retried"
+                assert [row["model"] for row in requests] == ["small", "small"]
+                assert len(calls) == 1 and calls[0][0].turn_id == decision.turn_id
+                receipts = claims(store)
+                assert len(receipts) == 2
+                assert receipts[0]["errorCode"] == "ollama_subscription_required"
+                assert receipts[1]["state"] == "completed"
+            finally:
+                proxy.close()
+    finally:
+        manager.shutdown(); store.close()
+
+
+def test_subscription_retry_stops_after_one_retry(tmp_path, monkeypatch):
+    from runtime.independent import auto_provider_proxy
+    _, scope, sid, store, manager, service = auto_fixture(tmp_path, monkeypatch)
+    try:
+        service.set_policy(scope, sid, draft(), expected_revision=0, client_request_id=new_id())
+        with subscription_then_success_provider(always_reject=True) as (url, requests):
+            decision = service.select_turn(scope, sid, new_id(), ModelRequirements())
+            client = OpenAI(api_key="controlled-local-fixture", base_url=url, max_retries=0)
+            calls = []
+            monkeypatch.setattr(auto_provider_proxy, "_ollama_subscription_rejection", lambda *_: True)
+            proxy = AutoProviderProxy(client, service, decision,
+                client_binding_validator=lambda actual, context: actual is client and context == decision.context,
+                subscription_fallback=lambda current, claim: (calls.append(claim.claim_id) or current))
+            try:
+                with pytest.raises(Exception):
+                    proxy.chat.completions.create(model="small", messages=[])
+                assert len(requests) == 2 and len(calls) == 1
+                receipts = claims(store)
+                assert len(receipts) == 2 and receipts[0]["errorCode"] == "ollama_subscription_required"
+                assert receipts[1]["errorCode"] == "ollama_subscription_required"
+            finally:
+                proxy.close()
+    finally:
+        manager.shutdown(); store.close()
+
+
+def test_subscription_fallback_does_not_run_after_visible_output(tmp_path, monkeypatch):
+    from runtime.independent import auto_provider_proxy
+    _, scope, sid, store, manager, service = auto_fixture(tmp_path, monkeypatch)
+    try:
+        service.set_policy(scope, sid, draft(), expected_revision=0, client_request_id=new_id())
+        with subscription_then_success_provider() as (url, requests):
+            decision = service.select_turn(scope, sid, new_id(), ModelRequirements())
+            client = OpenAI(api_key="controlled-local-fixture", base_url=url, max_retries=0)
+            calls = []
+            monkeypatch.setattr(auto_provider_proxy, "_ollama_subscription_rejection", lambda *_: True)
+            proxy = AutoProviderProxy(client, service, decision,
+                client_binding_validator=lambda actual, context: actual is client and context == decision.context,
+                subscription_fallback=lambda *_: calls.append(True))
+            try:
+                proxy.mark_visible_delta()
+                with pytest.raises(Exception):
+                    proxy.chat.completions.create(model="small", messages=[])
+                assert len(requests) == 1 and calls == []
+            finally:
+                proxy.close()
+    finally:
+        manager.shutdown(); store.close()
 
 
 def test_actual_429_is_one_request_no_sdk_retry_and_shared_durable_cooldown(tmp_path, monkeypatch):

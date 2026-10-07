@@ -57,11 +57,15 @@ $releaseConfig = $desktopManifest.build
 $releaseConfig.directories.output = $releaseOutput
 $releaseConfig | Add-Member -NotePropertyName forceCodeSigning -NotePropertyValue $true -Force
 $releaseConfig.win.PSObject.Properties.Remove('azureSignOptions')
-$releaseConfig.win | Add-Member -NotePropertyName signtoolOptions -NotePropertyValue ([pscustomobject]@{
-    certificateSha1 = $signingThumbprint
-    signingHashAlgorithms = @('sha256')
-    rfc3161TimeStampServer = 'http://timestamp.digicert.com'
-}) -Force
+# Keep package.json's custom `sign` hook (preserve-valid-windows-signatures.cjs)
+# and merge the certificate/hash/timestamp settings into its existing options.
+if (-not $releaseConfig.win.signtoolOptions) {
+    $releaseConfig.win | Add-Member -NotePropertyName signtoolOptions -NotePropertyValue ([pscustomobject]@{})
+}
+$releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName certificateSha1 -NotePropertyValue $signingThumbprint -Force
+$releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName signingHashAlgorithms -NotePropertyValue @('sha256') -Force
+$releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName rfc3161TimeStampServer -NotePropertyValue 'http://timestamp.digicert.com' -Force
+if (-not $releaseConfig.afterSign) { throw 'Package afterSign hook is missing' }
 $releaseConfig | ConvertTo-Json -Depth 40 | Set-Content -LiteralPath $releaseConfigPath -Encoding utf8
 
 # EVS_REQUIRED makes VMP signing and verification failures abort packaging.

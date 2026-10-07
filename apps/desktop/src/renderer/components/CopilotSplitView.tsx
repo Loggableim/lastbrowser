@@ -44,6 +44,8 @@ import { useChatStore } from '../stores/useChatStore.js';
 import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
+import { isModelCatalogResponseCurrent } from '../model-picker-options.js';
+import { quickChatModelGateCopy, quickChatModelGateReason } from '../quick-chat-model-gate.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
 
@@ -113,6 +115,7 @@ export interface CopilotSplitViewProps {
   messages: DesktopChatMessage[];
   busy: boolean;
   error?: string;
+  status?: string;
   allowWorkflows?: boolean;
   onSwitchToSpaceAssistant?: () => void;
   onSendMessage: (text: string, reasoningEffort?: string) => void;
@@ -142,6 +145,7 @@ export function CopilotSplitView({
   messages,
   busy,
   error,
+  status,
   allowWorkflows = true,
   onSwitchToSpaceAssistant,
   onSendMessage,
@@ -160,7 +164,7 @@ export function CopilotSplitView({
   onSelectSession,
   onOpenSettings
 }: CopilotSplitViewProps): React.JSX.Element | null {
-  const { t } = useDesktopI18n();
+  const { t, locale } = useDesktopI18n();
   const [inputText, setInputText] = useState('');
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [workflowsMenuOpen, setWorkflowsMenuOpen] = useState(false);
@@ -182,6 +186,9 @@ export function CopilotSplitView({
   // Provider models are selectable only after the live backend catalog returns them.
   const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS);
   const [modelCapabilitiesLoaded, setModelCapabilitiesLoaded] = useState(false);
+  const [modelCatalogFailureScopeKey, setModelCatalogFailureScopeKey] = useState<string | null>(null);
+  const modelCatalogLoadedScopeKeyRef = useRef<string | null>(null);
+  const modelCatalogFailureScopeKeyRef = useRef<string | null>(null);
   const [teamworkEnabled, setTeamworkEnabled] = useState(false);
   const [smartTrackEnabled, setSmartTrackEnabled] = useState(true);
   const orchestrationScope = useMemo(() => ({ browserProfileId, workspacePath,
@@ -204,7 +211,8 @@ export function CopilotSplitView({
           backendProfileName ? window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/teamwork/config', scopeSelection: orchestrationScope }) : Promise.resolve(null),
           window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/smart-track/config' })
         ]);
-        if (!alive || generation !== orchestrationScopeGenerationRef.current || orchestrationScopeKeyRef.current !== orchestrationScopeKey) return;
+        if (!alive || generation !== orchestrationScopeGenerationRef.current
+          || !isModelCatalogResponseCurrent(orchestrationScopeKey, orchestrationScopeKeyRef.current)) return;
         if (teamwork && typeof teamwork === 'object' && typeof (teamwork as any).enabled === 'boolean') {
           setTeamworkEnabled((teamwork as any).enabled);
         }
@@ -227,20 +235,31 @@ export function CopilotSplitView({
   // Phase 13.6: Dynamic live discovery via /api/models with quota status
   useEffect(() => {
     let alive = true;
+    const generation = orchestrationScopeGenerationRef.current;
+    setModelList(AVAILABLE_MODELS);
+    setModelCapabilitiesLoaded(false);
+    modelCatalogLoadedScopeKeyRef.current = null;
+    modelCatalogFailureScopeKeyRef.current = null;
+    setModelCatalogFailureScopeKey(null);
     async function loadLiveModels() {
       try {
         if (!window?.lastbrowser?.sidekick?.requestWebui) {
           setModelList(AVAILABLE_MODELS);
+          modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
+          setModelCatalogFailureScopeKey(orchestrationScopeKey);
           return;
         }
         const res = (await window.lastbrowser.sidekick.requestWebui({
           method: 'GET',
-          path: '/api/models'
+          path: '/api/models',
+          scopeSelection: orchestrationScope
         })) as { groups?: Array<{ provider_id?: string; provider?: string; account?: string; models?: Array<any> }> } | null;
-        if (!alive) return;
+        if (!alive || generation !== orchestrationScopeGenerationRef.current || orchestrationScopeKeyRef.current !== orchestrationScopeKey) return;
         if (!res || !Array.isArray(res.groups)) {
           setModelList(AVAILABLE_MODELS);
           setModelCapabilitiesLoaded(false);
+          modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
+          setModelCatalogFailureScopeKey(orchestrationScopeKey);
           return;
         }
 
@@ -326,12 +345,18 @@ export function CopilotSplitView({
         }
         setModelList(nextModelList);
         setModelCapabilitiesLoaded(true);
+        modelCatalogLoadedScopeKeyRef.current = orchestrationScopeKey;
+        modelCatalogFailureScopeKeyRef.current = null;
+        setModelCatalogFailureScopeKey(null);
       } catch {
         // On discovery failure, retain only built-in orchestrators; cached model IDs
         // must not imply that a provider is configured or currently available.
-        if (alive) {
+        if (alive && generation === orchestrationScopeGenerationRef.current
+          && isModelCatalogResponseCurrent(orchestrationScopeKey, orchestrationScopeKeyRef.current)) {
           setModelList(AVAILABLE_MODELS);
           setModelCapabilitiesLoaded(false);
+          modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
+          setModelCatalogFailureScopeKey(orchestrationScopeKey);
         }
       }
     }
@@ -339,7 +364,7 @@ export function CopilotSplitView({
     return () => {
       alive = false;
     };
-  }, [modelProvider, setSelectedModel, setSelectedModelProvider]);
+  }, [modelProvider, setSelectedModel, setSelectedModelProvider, orchestrationScope, orchestrationScopeKey]);
 
   const visibleModelList = useMemo(() => modelList.filter((model) => {
     if (model.id === 'teamwork') return teamworkEnabled;
@@ -355,6 +380,9 @@ export function CopilotSplitView({
 
   const activeModelId = modelName || selectedModel;
   const activeModelProvider = modelProvider || selectedModelProvider;
+  const modelGateReason = quickChatModelGateReason({ selectedModel: activeModelId, selectedProvider: activeModelProvider,
+    activeScopeKey: orchestrationScopeKey, loadedCatalogScopeKey: modelCatalogLoadedScopeKeyRef.current,
+    failedCatalogScopeKey: modelCatalogFailureScopeKey, availableModels: visibleModelList });
   const reasoningPreferenceKey = activeSessionId || `draft:${activeModelProvider}:${activeModelId}`;
   const [reasoningEffort, setReasoningEffort] = useState(() => loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage));
   useEffect(() => {
@@ -598,7 +626,7 @@ export function CopilotSplitView({
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const trimmed = inputText.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed || busy || modelGateReason !== null) return;
     onSendMessage(trimmed, effectiveReasoningEffort || undefined);
     setInputText('');
   }
@@ -942,6 +970,7 @@ export function CopilotSplitView({
         {messages.length === 0 ? (
           <div className="copilot-empty-state">
             {error && <div className="copilot-stream-error" role="alert">{error}</div>}
+            {status && <div className="copilot-reset-status" role="status">{status}</div>}
             <div className="copilot-empty-icon">
               <img src={brandAssets.sidekickAvatar} alt={botName} className="copilot-empty-avatar" draggable={false} />
             </div>
@@ -967,6 +996,7 @@ export function CopilotSplitView({
         ) : (
           <div className="copilot-messages-list">
             {error && <div className="copilot-stream-error" role="alert">{error}</div>}
+            {status && <div className="copilot-reset-status" role="status">{status}</div>}
             {messages.map((msg, index) => {
               const isUser = msg.role === 'user';
               const isAssistant = msg.role === 'assistant';
@@ -1077,6 +1107,9 @@ export function CopilotSplitView({
 
       {/* Bottom Controls: Dynamic Model Selector & Input */}
       <div className="copilot-footer">
+        {modelGateReason && <div className="copilot-model-gate-notice" role={modelGateReason === 'loading' ? 'status' : 'alert'}>
+          {quickChatModelGateCopy[locale][modelGateReason]}
+        </div>}
         <div className="copilot-model-row" ref={footerModelRef} style={{ position: 'relative' }}>
           <span className="copilot-model-label">Modell:</span>
           <div
@@ -1132,7 +1165,7 @@ export function CopilotSplitView({
               type="submit"
               className={`copilot-send-btn ${inputText.trim() ? 'active' : ''}`}
               title={t('chat.send')}
-              disabled={!inputText.trim()}
+              disabled={!inputText.trim() || modelGateReason !== null}
             >
               <span>{t('chat.send')}</span>
               <Send size={13} />

@@ -28,6 +28,7 @@ import { sidekickUxTranslations } from './i18n/sidekick-ux-translations.js';
 import { teamworkUxTranslations } from './i18n/teamwork-ux-translations.js';
 import { agentPanelsTranslations } from './i18n/agent-panels-translations.js';
 import { spaceAssistantTranslations } from './i18n/space-assistant-translations.js';
+import { whatsNewTranslations } from './i18n/whats-new-translations.js';
 
 for (const locale of legacyDesktopLocaleIds) {
   Object.assign(visionImpairedTranslations[locale], splitMagnifierTranslations[locale]);
@@ -85,6 +86,11 @@ export const desktopLocaleOverrides: Record<DesktopLocaleId, Readonly<DesktopCat
 for (const locale of legacyDesktopLocaleIds) {
   desktopLocaleCatalogs[locale] = Object.freeze({ ...desktopLocaleCatalogs[locale], ...spaceAssistantTranslations[locale] });
   desktopLocaleOverrides[locale] = Object.freeze({ ...desktopLocaleOverrides[locale], ...spaceAssistantTranslations[locale] });
+}
+
+for (const locale of desktopLocaleIds) {
+  desktopLocaleCatalogs[locale] = Object.freeze({ ...desktopLocaleCatalogs[locale], ...whatsNewTranslations[locale] });
+  desktopLocaleOverrides[locale] = Object.freeze({ ...desktopLocaleOverrides[locale], ...whatsNewTranslations[locale] });
 }
 
 export function normalizeDesktopLocale(value: unknown): DesktopLocaleId | null {

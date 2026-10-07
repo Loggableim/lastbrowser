@@ -11,6 +11,7 @@ from runtime.independent.provider_admission import ProviderAdmission
 from runtime.independent.runner import provider_configuration_digest
 from runtime.independent.policy import PolicyDenied
 from runtime.independent.store import RevisionConflict
+from runtime.independent.runner import provider_configuration_digest
 from test_independent_dispatch import manager_fixture
 
 
@@ -49,6 +50,39 @@ def auto_fixture(tmp_path, monkeypatch):
 def draft(**changes):
     return {"mode": "auto", "allowedModels": [{"provider": "local-a", "model": "small"}, {"provider": "remote-b", "model": "large"}],
             "cloudPolicy": "deny", **changes}
+
+
+def _ollama_fallback_fixture(tmp_path, monkeypatch, *, candidate_tools=True, allow_fallback=True):
+    home, scope, sid, store, manager, service = auto_fixture(tmp_path, monkeypatch)
+    (home / "config.yaml").write_text("providers:\n  ollama-cloud:\n    base_url: https://ollama.com/v1\n", "utf-8")
+    primary = ModelPair(provider="ollama-cloud", model="deepseek-v4.1-flash")
+    fallback = ModelPair(provider="ollama-cloud", model="gpt-oss:20b")
+    raw = {"providerConfigurationDigest": provider_configuration_digest(home), "groups": [
+        {"provider_id": "ollama-cloud", "configured": True, "models": [
+            {"id": primary.model, "contextLength": 131072, "supportsIndependent": True, "supportsTools": True},
+            {"id": fallback.model, "contextLength": 131072, "supportsIndependent": True, "supportsTools": candidate_tools},
+        ]}], "providers": []}
+    service.catalog_provider = lambda *_args, **_kwargs: raw
+    binding_catalog = {"scope": scope.model_dump(mode="json", by_alias=True), "entries": [{
+        "capabilityId": "assistant.conversation", "connectionKind": "provider",
+        "supportedTasks": ["conversation"], "connections": [{
+            "connectionId": "provider:ollama-cloud", "status": "configured", "revision": 1}],
+    }]}
+    monkeypatch.setattr(manager.capabilities, "catalog", lambda *_args, **_kwargs: binding_catalog)
+    manager.connection_validator = lambda _context: True
+    ConnectionRepository(store).bind(scope, {"capabilityId": "assistant.conversation",
+        "connectionId": "provider:ollama-cloud", "permittedUse": ["conversation"],
+        "expectedRevision": 0, "clientRequestId": new_id()}, binding_catalog)
+    allowed = [primary, *([fallback] if allow_fallback else [])]
+    policy = service.set_policy(scope, sid, {"mode": "auto",
+        "allowedModels": [pair.model_dump(mode="json", by_alias=True) for pair in allowed],
+        "cloudPolicy": "allow", "allowedCloudDataClasses": ["private", "workspace"]},
+        expected_revision=0, client_request_id=new_id())
+    requirement = ModelRequirements(data_class="private", data_classes=("workspace",),
+        minimum_context_tokens=65536, required_capabilities=("text", "tools"))
+    decision = service.select_turn(scope, sid, new_id(), requirement)
+    assert decision.selected_model == primary
+    return home, scope, sid, store, manager, service, policy, decision, fallback
 
 
 def test_legacy_absence_fixed_and_policy_cas_idempotency_have_no_model_alias(tmp_path, monkeypatch):
@@ -217,3 +251,44 @@ def test_auto_falls_back_when_active_claim_uses_global_admission_capacity(tmp_pa
     finally:
         manager.shutdown()
         store.close()
+
+
+def test_ollama_subscription_fallback_reselects_same_scoped_turn_from_policy_and_live_catalog(tmp_path, monkeypatch):
+    _, scope, sid, store, manager, service, _policy, decision, allowed_fallback = _ollama_fallback_fixture(tmp_path, monkeypatch)
+    try:
+        replacement = service.select_ollama_subscription_fallback(decision)
+        assert replacement.selected_model == allowed_fallback
+        assert replacement.selected_model.provider == decision.selected_model.provider == "ollama-cloud"
+        assert replacement.scope == decision.scope == scope and replacement.session_id == sid
+        assert replacement.turn_id == decision.turn_id and replacement.requirements == decision.requirements
+        assert replacement.context.provider.model == replacement.selected_model.model
+        assert replacement.context.provider.provider_config_ref == decision.context.provider.provider_config_ref
+        assert service.select_ollama_subscription_fallback(decision) == replacement
+    finally:
+        manager.shutdown(); store.close()
+
+
+@pytest.mark.parametrize("candidate_tools,allow_fallback,expected", [
+    (False, True, "ollama_subscription_fallback_unavailable"),
+    (True, False, "ollama_subscription_fallback_unavailable"),
+])
+def test_ollama_fallback_rejects_candidate_outside_live_capabilities_or_policy(tmp_path, monkeypatch,
+        candidate_tools, allow_fallback, expected):
+    _, _scope, _sid, store, manager, service, _policy, decision, _fallback = _ollama_fallback_fixture(
+        tmp_path, monkeypatch, candidate_tools=candidate_tools, allow_fallback=allow_fallback)
+    try:
+        with pytest.raises(PolicyDenied, match=expected):
+            service.select_ollama_subscription_fallback(decision)
+    finally:
+        manager.shutdown(); store.close()
+
+
+def test_ollama_fallback_rechecks_all_data_classes_before_replacement(tmp_path, monkeypatch):
+    _, scope, sid, store, manager, service, policy, decision, _fallback = _ollama_fallback_fixture(tmp_path, monkeypatch)
+    try:
+        narrowed = policy.model_copy(update={"allowed_cloud_data_classes": ("private",)})
+        monkeypatch.setattr(service.policies, "get", lambda _scope, _sid: narrowed)
+        with pytest.raises(PolicyDenied, match="ollama_subscription_fallback_cloud_denied"):
+            service.select_ollama_subscription_fallback(decision)
+    finally:
+        manager.shutdown(); store.close()

@@ -31,6 +31,7 @@ style for the gemini-cli client below them in this file's sibling module.
 from __future__ import annotations
 
 import http.server
+import hashlib
 import json
 import logging
 import os
@@ -221,6 +222,52 @@ def _read_pool_entries() -> List[Dict[str, Any]]:
     from runtime.credential_pool import read_credential_pool
     entries = read_credential_pool(POOL_PROVIDER_ID)
     return [e for e in entries if isinstance(e, dict)]
+
+
+def resolve_native_account_binding(profile_home: str | Path, account_id: str | None = None) -> Dict[str, str] | None:
+    """Resolve one explicit Antigravity account from this profile's auth.json.
+
+    This native-chat path intentionally does not use ``read_credential_pool``:
+    that convenience API can inherit the global pool. A missing profile-local
+    account, an ambiguous pool, or an account without its saved project fails
+    closed. The returned email is private worker input; callers must only put
+    account_id/project_id/digest into captured context or receipts.
+    """
+    home = Path(profile_home).expanduser().resolve(strict=False)
+    auth_path = home / "auth.json"
+    try:
+        if auth_path.is_symlink() or not auth_path.is_file():
+            return None
+        payload = json.loads(auth_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    pool = payload.get("credential_pool") if isinstance(payload, dict) else None
+    entries = pool.get(POOL_PROVIDER_ID) if isinstance(pool, dict) else None
+    if not isinstance(entries, list):
+        return None
+    usable = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        account = str(entry.get("id") or "").strip()
+        email = _pool_entry_email(entry)
+        refresh = str(entry.get("refresh_token") or "").strip()
+        project = str(entry.get("project_id") or "").strip()
+        if (account and email and refresh and project
+                and str(entry.get("last_error_reason") or "").casefold() != "invalid_grant"):
+            usable.append((account, email, project))
+    if account_id is None:
+        if len(usable) != 1:
+            return None
+        selected = usable[0]
+    else:
+        matches = [row for row in usable if row[0] == account_id]
+        if len(matches) != 1:
+            return None
+        selected = matches[0]
+    account, email, project = selected
+    digest = hashlib.sha256(json.dumps([account, email, project], separators=(",", ":"), ensure_ascii=True).encode()).hexdigest()
+    return {"account_id": account, "email": email, "project_id": project, "digest": digest}
 
 
 def _write_pool_entries(entries: List[Dict[str, Any]]) -> None:

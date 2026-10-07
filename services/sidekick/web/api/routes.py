@@ -7321,8 +7321,18 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
 
     # â”€â”€ Providers (POST) â”€â”€
     if parsed.path == "/api/providers/test":
+        provider_id = str(body.get("provider") or "").strip().lower()
+        if provider_id == "xiaomi":
+            from runtime.mimo_settings import load_profile_mimo_settings, probe_mimo_connection
+            saved_key, _saved_url = load_profile_mimo_settings()
+            supplied_key = str(body.get("api_key") or "").strip()
+            result = probe_mimo_connection(
+                supplied_key or saved_key,
+                str(body.get("base_url") or ""),
+            )
+            return j(handler, result)
         result = probe_ollama_connection(
-            str(body.get("provider") or ""),
+            provider_id,
             str(body.get("base_url") or ""),
             str(body.get("api_key") or ""),
         )
@@ -7339,7 +7349,7 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
         provider_id = _resolve_provider_alias(provider_id)
         has_api_key = "api_key" in body
         has_models = "models" in body
-        has_base_url = provider_id == "alibaba" and "base_url" in body
+        has_base_url = provider_id in {"alibaba", "xiaomi"} and "base_url" in body
         if not has_api_key and not has_models and not has_base_url:
             return bad(handler, "api_key, base_url, or models is required")
         # Validate the allowlist before persisting a key so a malformed model
@@ -7352,11 +7362,18 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
         result = {"ok": True, "provider": provider_id}
         if has_api_key or has_base_url:
             api_key = str(body.get("api_key") or "").strip() or None if has_api_key else None
-            result = set_provider_key(
-                provider_id,
-                api_key,
-                str(body.get("base_url") or "") if has_base_url else None,
-            )
+            if provider_id == "xiaomi":
+                result = set_provider_key(
+                    provider_id, api_key,
+                    str(body.get("base_url") or "") if has_base_url else None,
+                    preserve_api_key=not bool(api_key),
+                )
+            else:
+                result = set_provider_key(
+                    provider_id,
+                    api_key,
+                    str(body.get("base_url") or "") if has_base_url else None,
+                )
             if not result.get("ok"):
                 return bad(handler, result.get("error", "Unknown error"))
         if has_models:

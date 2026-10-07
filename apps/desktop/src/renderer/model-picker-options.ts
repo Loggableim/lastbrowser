@@ -1,22 +1,53 @@
-import type { ScopedModelSelection } from './independent-contracts.js';
+import type { NativeAvailabilityReason, NativeModelAvailability, ScopedModelSelection } from './independent-contracts.js';
 
 export type ModelPickerOptionGroup = Readonly<{
   provider: string;
   providerId: string;
   configured: boolean;
   disabledReason?: 'unavailable' | 'notConfigured';
-  models: readonly Readonly<{ id: string; label: string; reasoningEfforts: string[]; supportsIndependent: boolean }>[];
+  models: readonly Readonly<{ id: string; label: string; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability }>[];
 }>;
+
+export function isModelCatalogResponseCurrent(capturedScopeKey: string, activeScopeKey: string): boolean {
+  return capturedScopeKey === activeScopeKey;
+}
 
 export function mapScopedModelPickerOptions(selection: ScopedModelSelection): ModelPickerOptionGroup[] {
   const providers = new Map((selection.providers ?? []).map(provider => [provider.id, provider]));
   return (selection.groups ?? []).map(group => {
     const provider = providers.get(group.provider_id);
     const models = [...new Map([...group.models, ...(group.extra_models ?? [])].map(entry => [entry.id, entry])).values()]
-      .map(entry => ({ id: entry.id, label: entry.label, reasoningEfforts: [...(entry.reasoning_efforts ?? [])], supportsIndependent: entry.supportsIndependent }));
+      .map(entry => {
+        const availability = entry.nativeAvailability;
+        const identityMatches = !availability || nativeModelAvailabilityMatchesIdentity(availability, {
+          provider: group.provider_id, model: entry.id, scope: selection.scope, selectionRevision: selection.revision
+        });
+        return { id: entry.id, label: entry.label, reasoningEfforts: [...(entry.reasoning_efforts ?? [])], supportsIndependent: entry.supportsIndependent,
+          ...(availability ? { nativeAvailability: identityMatches ? availability : { ...availability, supported: false, available: false, reasonCode: 'binding_mismatch' as const } } : {}) };
+      });
     return { provider: group.provider, providerId: group.provider_id, configured: group.configured,
       ...(!group.configured ? { disabledReason: provider?.provider_available === false ? 'unavailable' as const : 'notConfigured' as const } : {}), models };
   }).filter(group => group.models.length > 0);
+}
+
+export function nativeModelAvailabilityMatchesIdentity(
+  availability: NativeModelAvailability,
+  expected: Readonly<{ provider: string; model: string; scope: ScopedModelSelection['scope']; selectionRevision: number }>
+): boolean {
+  return availability.provider === expected.provider && availability.model === expected.model
+    && availability.scope.backendProfileId === expected.scope.backendProfileId
+    && availability.scope.spaceId === expected.scope.spaceId
+    && availability.scope.browserProfileId === expected.scope.browserProfileId
+    && availability.selectionRevision === expected.selectionRevision;
+}
+
+export function nativeModelUnavailableReason(availability: NativeModelAvailability | undefined): NativeAvailabilityReason | 'binding_mismatch' {
+  if (!availability || !availability.supported || !availability.available) return availability?.reasonCode ?? 'binding_mismatch';
+  return 'binding_mismatch';
+}
+
+export function canSelectNativeModel(providerId: string | undefined, availability: NativeModelAvailability | undefined): boolean {
+  return !providerId || Boolean(availability?.supported && availability.available && availability.reasonCode === null);
 }
 
 const VIRTUAL_ORCHESTRATION_MODEL_IDS = new Set([

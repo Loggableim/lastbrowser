@@ -68,6 +68,9 @@ class AntigravityCloudCodeClient:
         default_headers: Optional[Dict[str, str]] = None,
         project_id: str = "",
         account_email: Optional[str] = None,
+        native_account_id: Optional[str] = None,
+        native_project_id: Optional[str] = None,
+        native_account_digest: Optional[str] = None,
         **_: Any,
     ) -> None:
         self.api_key = api_key or "antigravity-oauth"
@@ -75,6 +78,14 @@ class AntigravityCloudCodeClient:
         self._default_headers = dict(default_headers or {})
         self._configured_project_id = project_id
         self.account_email = str(account_email or "").strip()
+        self._native_account_id = str(native_account_id or "").strip()
+        self._native_project_id = str(native_project_id or "").strip()
+        self._native_account_digest = str(native_account_digest or "").strip()
+        if any((self._native_account_id, self._native_project_id, self._native_account_digest)) and not all(
+            (self._native_account_id, self._native_project_id, self._native_account_digest)
+        ):
+            raise antigravity_oauth.AntigravityOAuthError(
+                "The captured Antigravity account binding is incomplete.", code="antigravity_native_binding_invalid")
         self._project_id: Optional[str] = None
         self.chat = _AntigravityChatNamespace(self)
         self.is_closed = False
@@ -97,6 +108,11 @@ class AntigravityCloudCodeClient:
 
     def _ensure_project_id(self, access_token: str) -> str:
         """Resolve and cache the consumer project for the selected account."""
+        if self._native_account_id:
+            if not self._native_project_id or self._configured_project_id != self._native_project_id:
+                raise antigravity_oauth.AntigravityOAuthError(
+                    "The captured Antigravity project binding is missing.", code="antigravity_native_binding_changed")
+            return self._native_project_id
         if self._project_id:
             return self._project_id
         if self._configured_project_id:
@@ -122,6 +138,19 @@ class AntigravityCloudCodeClient:
         self._project_id = discovered or antigravity_oauth.DEFAULT_ANTIGRAVITY_PROJECT
         return self._project_id
 
+    def _validate_native_account_binding(self) -> Dict[str, str] | None:
+        if not self._native_account_id:
+            return None
+        from pathlib import Path
+        import os
+        home = os.getenv("SIDEKICK_HOME", "").strip()
+        binding = antigravity_oauth.resolve_native_account_binding(home, self._native_account_id) if home else None
+        if (binding is None or binding.get("project_id") != self._native_project_id
+                or binding.get("digest") != self._native_account_digest):
+            raise antigravity_oauth.AntigravityOAuthError(
+                "The captured Antigravity account binding changed.", code="antigravity_native_binding_changed")
+        return binding
+
     def _create_chat_completion(
         self,
         *,
@@ -138,9 +167,17 @@ class AntigravityCloudCodeClient:
         timeout: Any = None,
         **_: Any,
     ) -> Any:
-        access_token = antigravity_oauth.get_valid_access_token(
-            account_email=self.account_email or None
-        )
+        binding = self._validate_native_account_binding()
+        pinned_email = binding["email"] if binding is not None else self.account_email
+        access_token = antigravity_oauth.get_valid_access_token(account_email=pinned_email or None)
+        binding_after_refresh = self._validate_native_account_binding()
+        if binding is not None and (binding_after_refresh is None
+                or binding_after_refresh.get("digest") != binding.get("digest")):
+            raise antigravity_oauth.AntigravityOAuthError(
+                "The captured Antigravity account binding changed during token refresh.",
+                code="antigravity_native_binding_changed")
+        if binding is not None:
+            self.account_email = pinned_email
         project_id = self._ensure_project_id(access_token)
 
         thinking_config = None
@@ -205,6 +242,7 @@ class AntigravityCloudCodeClient:
                         raise _gemini_http_error(response)
                     tool_call_counter: List[int] = [0]
                     for event in _iter_sse_events(response):
+                        self._validate_native_account_binding()
                         for chunk in _translate_stream_event(event, model, tool_call_counter):
                             yield chunk
             except httpx.HTTPError as exc:

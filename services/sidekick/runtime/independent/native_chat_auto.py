@@ -81,6 +81,7 @@ class NativeAutoSessionBroker:
             raise PolicyDenied("native_chat_host_shutdown")
         self._lock = threading.RLock()
         self._decision = None
+        self._subscription_fallback_used = False
         self._claims = {}
         self._compute = set()
         self._closed = False
@@ -158,6 +159,24 @@ class NativeAutoSessionBroker:
                 decision = self._owned_decision(self._decision.decision_id)
                 return {"policy": self.service.get_policy(context.scope, context.session_id).model_dump(mode="json", by_alias=True),
                     "decision": decision.model_dump(mode="json", by_alias=True)}
+            if method == "auto_subscription_fallback":
+                if set(payload) != {"decision", "claimId"} or self._subscription_fallback_used:
+                    raise PolicyDenied("native_auto_fallback_payload_invalid")
+                decision = self._owned_decision(payload["decision"])
+                claim = self._owned_claim(payload["claimId"])
+                if (decision.selected_model.provider != "ollama-cloud" or len(self._claims) != 1
+                        or claim.decision_id != decision.decision_id or claim.request_purpose != "conversation"
+                        or claim.state != "completed" or claim.error_code != "ollama_subscription_required"
+                        or claim.delivered_delta):
+                    raise PolicyDenied("native_auto_fallback_not_eligible")
+                fallback = self.service.select_ollama_subscription_fallback(decision)
+                if (fallback.selected_model.provider != decision.selected_model.provider
+                        or fallback.turn_id != decision.turn_id or fallback.scope != decision.scope
+                        or fallback.session_id != decision.session_id):
+                    raise PolicyDenied("native_auto_fallback_identity_changed")
+                self._subscription_fallback_used = True
+                self._decision = fallback
+                return {"decision": fallback.model_dump(mode="json", by_alias=True)}
             if method == "auto_validate":
                 if set(payload) != {"decision"}:
                     raise PolicyDenied("native_auto_validation_payload_invalid")
@@ -336,6 +355,7 @@ class NativeAutoBridge:
         self.decision = self.policy = None
         self._clients = []
         self._builders = {}
+        self._requested_model = None
         self.admission = _RemoteAdmission(self)
         self.manager = SimpleNamespace(_governance=self._governance)
         self._require_private()
@@ -379,6 +399,8 @@ class NativeAutoBridge:
             if self.decision is not None and self.decision != decision:
                 raise PolicyDenied("native_auto_decision_changed")
             self.decision, self.policy = decision, policy
+            if self._requested_model is None:
+                self._requested_model = decision.selected_model
         values[2] = decision.selected_model.model
         options = dict(kwargs)
         options["model_provider"] = decision.selected_model.provider
@@ -417,8 +439,21 @@ class NativeAutoBridge:
         from openai import OpenAI
         from anthropic import Anthropic
         from runtime.gemini_native_adapter import GeminiNativeClient
+        from runtime.antigravity_cloudcode_adapter import AntigravityCloudCodeClient
         self.validate_selection(agent.model, agent.provider, api_mode=agent.api_mode)
-        if type(client) not in {OpenAI, Anthropic, GeminiNativeClient}:
+        accepted_types = {OpenAI, Anthropic, GeminiNativeClient}
+        antigravity_binding = None
+        try:
+            from .native_sdk_broker import get_bound_native_sdk_bridge
+            fixed_bridge = get_bound_native_sdk_bridge()
+            if (fixed_bridge is not None and type(fixed_bridge).__name__ == "NativeFixedSdkBridge"
+                    and fixed_bridge.capture.provider.provider == "antigravity"):
+                antigravity_binding = fixed_bridge.capture.antigravity_binding
+                if antigravity_binding is not None:
+                    accepted_types.add(AntigravityCloudCodeClient)
+        except Exception:
+            antigravity_binding = None
+        if type(client) not in accepted_types:
             raise PolicyDenied("native_auto_sdk_adapter_unavailable")
         endpoint = provider_endpoint(Path(self.context.profile_home), agent.provider)
         actual_endpoint = str(client.base_url).rstrip("/")
@@ -441,15 +476,27 @@ class NativeAutoBridge:
             raise PolicyDenied("native_auto_sdk_endpoint_mismatch")
         if credential != agent.api_key:
             raise PolicyDenied("native_auto_sdk_credential_mismatch")
+        if type(client) is AntigravityCloudCodeClient:
+            if (antigravity_binding is None
+                    or getattr(client, "_native_account_id", None) != antigravity_binding.account_id
+                    or getattr(client, "_native_project_id", None) != antigravity_binding.project_id
+                    or getattr(client, "_native_account_digest", None) != antigravity_binding.digest
+                    or client._validate_native_account_binding() is None):
+                raise PolicyDenied("native_antigravity_binding_changed")
         proof = (agent, client, actual_endpoint, agent.api_key, gemini_headers)
         with self._lock: self._builders[id(client)] = proof
         def validate(actual, captured):
-            self.validate_selection(agent.model, agent.provider, api_mode=agent.api_mode)
+            current = self.decision
+            if current is None or current.selected_model.provider != agent.provider:
+                raise PolicyDenied("native_auto_agent_selection_changed")
+            self.validate_selection(current.selected_model.model, current.selected_model.provider, api_mode=agent.api_mode)
             return (self._builders.get(id(actual)) is proof and actual is client
-                and captured == self.decision.context and str(actual.base_url).rstrip("/") == proof[2]
+                and captured == current.context and str(actual.base_url).rstrip("/") == proof[2]
                 and (getattr(actual, "api_key", None) or getattr(actual, "auth_token", None)) == proof[3]
                 and (type(actual) is not GeminiNativeClient
-                    or getattr(actual, "_default_headers", None) == proof[4]))
+                    or getattr(actual, "_default_headers", None) == proof[4])
+                and (type(actual) is not AntigravityCloudCodeClient
+                    or actual._validate_native_account_binding() is not None))
         purpose = purpose or getattr(agent, "_native_auto_purpose", "conversation")
         if purpose not in {"conversation", "child", "goal_judge", "teamwork:planner",
                            "teamwork:worker", "teamwork:critic", "teamwork:synthesizer",
@@ -459,10 +506,36 @@ class NativeAutoBridge:
         def request_metadata(request, path):
             return {"input_tokens_upper_bound": serialized_text_bound(request, path),
                 "input_bound_source": "serialized_text_bytes", "request_purpose": purpose}
+        def subscription_fallback(decision, claim):
+            result = self.rpc.call("auto_subscription_fallback", {
+                "decision": decision.decision_id, "claimId": claim.claim_id})
+            if not isinstance(result, dict):
+                raise PolicyDenied("native_auto_fallback_result_invalid")
+            replacement = SelectionDecision.model_validate(result.get("decision"))
+            from .native_model_resolution import OLLAMA_SUBSCRIPTION_FALLBACK_MODELS, publish_native_model_resolution
+            if (replacement.selected_model.provider != "ollama-cloud"
+                    or replacement.selected_model.model not in OLLAMA_SUBSCRIPTION_FALLBACK_MODELS
+                    or replacement.scope != self.context.scope or replacement.session_id != self.context.session_id
+                    or replacement.turn_id != decision.turn_id):
+                raise PolicyDenied("native_auto_fallback_result_invalid")
+            with self._lock:
+                previous = self.decision
+                self.decision = replacement
+            try:
+                self.validate_decision(replacement)
+            except BaseException:
+                with self._lock:
+                    self.decision = previous
+                raise
+            publish_native_model_resolution(self.context, self._requested_model or decision.selected_model,
+                replacement.selected_model, fallback_applied=True,
+                fallback_reason_code="ollama_subscription_required", fallback_attempts=1)
+            return replacement
         proxy = AutoProviderProxy(client, self, self.decision,
             client_binding_validator=validate, call_authorizer=lambda *_: True,
             compute_acquire=self._compute_acquire, compute_release=self._compute_release,
             request_metadata=request_metadata,
+            subscription_fallback=subscription_fallback,
             stream_complete=agent._flush_stream_delivery_tails if purpose != "goal_judge" else None)
         proxy._native_delivery_owner = agent
         proxy._native_delivery_purpose = purpose

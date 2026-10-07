@@ -19,6 +19,10 @@ from .store import RevisionConflict
 _META = "lastbrowser_independent_selection"
 _VIRTUAL = {"teamwork": "Teamwork", "smart-track-low": "Smart Track Low",
             "smart-track-medium": "Smart Track Medium", "smart-track-high": "Smart Track High"}
+NATIVE_AVAILABILITY_REASONS = frozenset({
+    "adapter_unsupported", "provider_unconfigured", "pair_absent",
+    "independent_unsupported", "context_missing", "cloud_denied", "binding_mismatch",
+})
 
 
 def _text(value, maximum=512):
@@ -163,7 +167,71 @@ def _entry(catalog, model, provider):
     return None, None
 
 
-def _response(scope, revision, model, provider, catalog):
+def _native_availability(scope, revision, catalog, provider, model, *, profile_home=None):
+    """Compute a model-row capability from this exact bound Space catalog."""
+    from .native_chat_auto import native_sdk_supported
+    from runtime.model_metadata import MINIMUM_CONTEXT_LENGTH
+
+    antigravity_binding_available = False
+    if provider == "antigravity" and profile_home is not None:
+        try:
+            from runtime.antigravity_oauth import resolve_native_account_binding
+            antigravity_binding_available = bool(resolve_native_account_binding(profile_home))
+        except Exception:
+            antigravity_binding_available = False
+
+    group, entry = _entry(catalog, model, provider)
+    if model in _VIRTUAL:
+        supported, reason = False, "independent_unsupported"
+    else:
+        supported = bool(provider and (native_sdk_supported(provider)
+            or provider == "antigravity"))
+        reason = None
+    if reason is not None:
+        pass
+    elif not supported:
+        reason = "adapter_unsupported"
+    elif not group or not entry:
+        reason = "pair_absent"
+    elif group.get("configured") is not True:
+        reason = "provider_unconfigured"
+    elif provider == "antigravity" and not antigravity_binding_available:
+        reason = "binding_mismatch"
+    elif entry.get("supportsIndependent") is not True:
+        reason = "independent_unsupported"
+    elif type(entry.get("contextLength")) is not int or entry["contextLength"] < MINIMUM_CONTEXT_LENGTH:
+        reason = "context_missing"
+    else:
+        reason = None
+    if reason is not None and reason not in NATIVE_AVAILABILITY_REASONS:
+        reason = "pair_absent"
+    return {
+        "schemaVersion": 1,
+        "supported": supported,
+        "available": reason is None,
+        "reasonCode": reason,
+        "provider": provider,
+        "model": model,
+        "scope": scope.model_dump(mode="json", by_alias=True),
+        "selectionRevision": revision,
+    }
+
+
+def _catalog_with_native_availability(scope, revision, catalog, *, profile_home=None):
+    groups = copy.deepcopy(catalog.get("groups") or [])
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        provider = group.get("provider_id")
+        for bucket in ("models", "extra_models"):
+            for row in group.get(bucket, []) if isinstance(group.get(bucket), list) else []:
+                if isinstance(row, dict) and isinstance(row.get("id"), str):
+                    row["nativeAvailability"] = _native_availability(
+                        scope, revision, catalog, provider, row["id"], profile_home=profile_home)
+    return groups
+
+
+def _response(scope, revision, model, provider, catalog, *, profile_home=None):
     group, entry = _entry(catalog, model, provider)
     configured = bool(model and group and group.get("configured"))
     supported = configured and bool(entry and entry.get("supportsIndependent", True))
@@ -172,7 +240,12 @@ def _response(scope, revision, model, provider, catalog):
         "model_not_in_bound_catalog" if model and not entry else "provider_not_configured" if not configured else None)
     return {"schemaVersion": 1, "scope": scope.model_dump(mode="json", by_alias=True), "revision": revision,
             "model": model, "provider": provider, "configured": configured, "supportsIndependent": supported,
-            **({"reasonCode": reason} if reason else {}), "groups": catalog["groups"], "providers": catalog.get("providers", [])}
+            "nativeAvailability": _native_availability(scope, revision, catalog, provider, model,
+                profile_home=profile_home),
+            **({"reasonCode": reason} if reason else {}),
+            "groups": _catalog_with_native_availability(scope, revision, catalog,
+                profile_home=profile_home),
+            "providers": catalog.get("providers", [])}
 
 
 def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict[str, Any]) -> dict:
@@ -183,6 +256,8 @@ def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict
     if "includeCatalog" in payload and (action != "get" or type(payload["includeCatalog"]) is not bool):
         raise PolicyDenied("invalid_model_selection_request")
     resolved = resolver.resolve(scope)
+    if resolved.binding.scope != scope:
+        raise PolicyDenied("scope_mismatch")
     if action == "get" and payload.get("includeCatalog") is False:
         config = resolved.space.load_config()
         if config.get("_space_config_malformed"):
@@ -214,7 +289,8 @@ def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict
         current_model, current_provider = _choice(resolved, config)
         revision = _revision(config, current_model, current_provider)
         if action == "get":
-            return _response(scope, revision, current_model, current_provider, catalog)
+            return _response(scope, revision, current_model, current_provider, catalog,
+                profile_home=resolved.profile_home)
         metadata = (config.get("model") or {}).get(_META) or {}
         cached = metadata.get("requests", {}).get(request_id)
         if cached:
@@ -225,12 +301,22 @@ def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict
             raise RevisionConflict("Space model changed; reload before selecting")
         if provider_configuration_digest(resolved.profile_home) != catalog["providerConfigurationDigest"]:
             raise PolicyDenied("provider_connection_changed")
-        group, entry = _entry(catalog, model, provider)
-        if not entry:
-            raise PolicyDenied("model_not_in_bound_catalog")
-        if provider == "google-gemini-cli" or not group.get("configured"):
-            raise PolicyDenied("provider_not_configured")
-        response = _response(scope, revision + 1, model, provider, catalog)
+        availability = _native_availability(scope, revision + 1, catalog, provider, model,
+            profile_home=resolved.profile_home)
+        if not availability["available"] and model not in _VIRTUAL:
+            # Keep the established model-selection mutation error stable for
+            # API callers. The more granular nativeAvailability reason is a
+            # picker/catalog hint, not a replacement for the mutation contract.
+            legacy_error = {
+                "pair_absent": "model_not_in_bound_catalog",
+                "provider_unconfigured": "provider_not_configured",
+                "context_missing": "context_metadata_required",
+            }.get(availability["reasonCode"], availability["reasonCode"])
+            raise PolicyDenied(legacy_error)
+        original_config = copy.deepcopy(config)
+        next_revision = revision + 1
+        response = _response(scope, next_revision, model, provider, catalog,
+            profile_home=resolved.profile_home)
         requests = dict(metadata.get("requests") or {})
         # Keep the idempotency record in the same atomic config write as choice.
         # Catalogs can be large; retain only the small acknowledgement per key.
@@ -238,6 +324,15 @@ def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict
         while len(requests) > 64:
             del requests[next(iter(requests))]
         config["model"] = {**(config.get("model") or {}), "default": model, "model": model, "provider": provider,
-                           _META: {"revision": revision + 1, "fingerprint": _fingerprint(model, provider), "requests": requests}}
+                           _META: {"revision": next_revision, "fingerprint": _fingerprint(model, provider), "requests": requests}}
         resolved.space.save_config(config)
+        readback = resolved.space.load_config()
+        readback_model, readback_provider = _choice(resolved, readback)
+        readback_revision = _revision(readback, readback_model, readback_provider)
+        if (readback_model, readback_provider, readback_revision) != (model, provider, next_revision):
+            # Roll back only while the config still equals our just-written
+            # value; never overwrite a concurrent external writer.
+            if canonical_json(readback) == canonical_json(config):
+                resolved.space.save_config(original_config)
+            raise PolicyDenied("config_changed")
         return response

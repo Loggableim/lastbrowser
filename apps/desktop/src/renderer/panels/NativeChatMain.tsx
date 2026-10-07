@@ -37,12 +37,13 @@ import { useChatStore } from '../stores/useChatStore.js';
 import { saveSpaceModel } from '../space-models.js';
 import { resolveLiteralCatalogModelSelection, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
 import { IndependentAssistantClient } from '../independent-assistant-client.js';
-import { assistantScopeKey, sameAssistantScope, newIndependentRequestId, type ScopedModelSelection } from '../independent-contracts.js';
+import { assistantScopeKey, sameAssistantScope, newIndependentRequestId, type ScopedModelSelection, type NativeModelAvailability } from '../independent-contracts.js';
 import { useSpaceAssistantStore } from '../stores/useSpaceAssistantStore.js';
 import type { NativeChatTurnUsage } from '../chat-usage.js';
 import { useDesktopI18n } from '../i18n.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, resolveSessionReasoningEffort, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { mapScopedModelPickerOptions } from '../model-picker-options.js';
+import { canSelectNativeModel } from '../model-picker-options.js';
 import { isIndependentOwnedSession, isIndependentWriterProtected, readIndependentSessionRun } from '../independent-work-chat.js';
 import { captureCommandContext,isCommandContextCurrent,type CommandAction,type CommandCapabilities,type CommandContext } from '../CommandActionContracts.js';
 import { CHAT_COMMANDS } from '../chat-command-registry.js';
@@ -93,6 +94,7 @@ export type NativeChatMainProps = {
   showThinking: boolean;
   simplifiedToolCalling: boolean;
   latestTurnUsage: NativeChatTurnUsage | null;
+  modelFallbackNotice?: string | null;
   onComposerMode: (mode: ComposerMode) => void;
   onComposerText: (text: string) => void;
   onCreateSession: () => void;
@@ -122,6 +124,7 @@ export function NativeChatMain({
   showThinking,
   simplifiedToolCalling,
   latestTurnUsage,
+  modelFallbackNotice = null,
   onComposerMode,
   onComposerText,
   onCreateSession,
@@ -171,7 +174,7 @@ export function NativeChatMain({
   }, [activeSessionId, reasoningPreferenceKey]);
 
   // Discovery runs in the captured profile worker. No global model default is written.
-  const [modelCatalog, setModelCatalog] = useState<Array<{ provider: string; providerId: string; configured: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts: string[];supportsIndependent:boolean }> }>>([]);
+  const [modelCatalog, setModelCatalog] = useState<Array<{ provider: string; providerId: string; configured: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts: string[];supportsIndependent:boolean; nativeAvailability?: NativeModelAvailability }> }>>([]);
   const [modelCatalogLoaded, setModelCatalogLoaded] = useState(false);
   const [modelCatalogError, setModelCatalogError] = useState(false);
   const [modelCatalogRetry, setModelCatalogRetry] = useState(0);
@@ -219,6 +222,9 @@ export function NativeChatMain({
     if (!selection || !spaceModelSelection) return;
     const candidate = resolveLiteralCatalogModelSelection(selection, modelCatalog);
     if (!candidate) return;
+    const selectedEntry = modelCatalog.find(group => group.providerId === (candidate.provider ?? '') && group.models.some(entry => entry.id === candidate.model))
+      ?.models.find(entry => entry.id === candidate.model);
+    if (!canSelectNativeModel(candidate.provider, selectedEntry?.nativeAvailability)) return;
     const nextModel = candidate.model, provider = candidate.provider ?? '';
     if (nextModel === model && provider === modelProvider) return;
     const capturedKey = modelViewKey;
@@ -721,6 +727,7 @@ export function NativeChatMain({
         onStop={onStop}
         onText={onComposerText}
       />
+            {modelFallbackNotice && <div className="chat-status-message" role="status">{modelFallbackNotice}</div>}
             {statusMessage && <div className="chat-status-message" onClick={() => setStatusMessage('')}>{statusMessage}</div>}
           {spaceModelSelection?.reasonCode === 'independent_orchestration_not_supported' && <p className="chat-status-message">{t('spaceAssistant.independent_orchestration_not_supported')}</p>}
             {modelCatalogError && (

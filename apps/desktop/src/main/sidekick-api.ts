@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve, relative, sep } from 'node:path';
 import type { NativeStreamReadProof } from './native-chat-stream-controller.js';
+import { isQuickChatBackendErrorCode, SidekickApiError } from './quick-chat-errors.js';
 
 export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -622,7 +623,8 @@ async function jsonRequest<T>(webuiUrl: string, path: string, init: RequestInit 
     } else {
       message = `HTTP ${response.status}`;
     }
-    throw new Error(String(message));
+    const safeCode = isQuickChatBackendErrorCode(payload?.error_code) ? payload.error_code : undefined;
+    throw new SidekickApiError(String(message), response.status, safeCode);
   }
   return payload as T;
 }

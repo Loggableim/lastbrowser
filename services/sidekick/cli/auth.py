@@ -554,6 +554,15 @@ def _resolve_api_key_provider_secret(
             pass
         return "", ""
 
+    if provider_id == "xiaomi":
+        # MiMo credentials are profile-scoped; a machine-wide environment
+        # variable must never cross the active Sidekick profile boundary.
+        from cli.config import load_env
+        value = str(load_env().get("XIAOMI_API_KEY") or "").strip()
+        if has_usable_secret(value):
+            return value, "XIAOMI_API_KEY"
+        return "", ""
+
     from cli.config import get_env_value
     for env_var in pconfig.api_key_env_vars:
         # Check both os.environ and ~/.sidekick/.env file
@@ -2958,10 +2967,21 @@ def get_api_key_provider_status(provider_id: str) -> Dict[str, Any]:
 
     env_url = ""
     if pconfig.base_url_env_var:
-        env_url = str(get_env_value(pconfig.base_url_env_var) or "").strip()
+        if provider_id == "xiaomi":
+            from cli.config import load_env
+            env_url = str(load_env().get("XIAOMI_BASE_URL") or "").strip()
+        else:
+            env_url = str(get_env_value(pconfig.base_url_env_var) or "").strip()
 
     if provider_id in {"kimi-coding", "kimi-coding-cn"}:
         base_url = _resolve_kimi_base_url(api_key, pconfig.inference_base_url, env_url)
+    elif provider_id == "xiaomi":
+        from runtime.mimo_settings import validate_mimo_settings
+        _key, base_url, error = validate_mimo_settings(api_key, env_url)
+        if error:
+            return {"configured": False, "provider": provider_id, "name": pconfig.name,
+                    "key_source": key_source, "base_url": "", "logged_in": False,
+                    "error_code": error}
     elif env_url:
         base_url = env_url
     else:
@@ -3065,12 +3085,25 @@ def resolve_api_key_provider_credentials(provider_id: str) -> Dict[str, Any]:
 
     env_url = ""
     if pconfig.base_url_env_var:
-        env_url = str(get_env_value(pconfig.base_url_env_var) or "").strip()
+        if provider_id == "xiaomi":
+            from cli.config import load_env
+            env_url = str(load_env().get("XIAOMI_BASE_URL") or "").strip()
+        else:
+            env_url = str(get_env_value(pconfig.base_url_env_var) or "").strip()
 
     if provider_id in {"kimi-coding", "kimi-coding-cn"}:
         base_url = _resolve_kimi_base_url(api_key, pconfig.inference_base_url, env_url)
     elif provider_id == "zai":
         base_url = _resolve_zai_base_url(api_key, pconfig.inference_base_url, env_url)
+    elif provider_id == "xiaomi":
+        from runtime.mimo_settings import validate_mimo_settings
+        _key, base_url, error = validate_mimo_settings(api_key, env_url)
+        if error:
+            raise AuthError(
+                "Xiaomi MiMo credentials or endpoint are not configured for this profile.",
+                provider=provider_id,
+                code=error,
+            )
     elif env_url:
         if provider_id == "ollama-cloud" and (
             urlparse(env_url).scheme.lower() != "https"

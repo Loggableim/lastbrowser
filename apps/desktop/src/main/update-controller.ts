@@ -54,24 +54,32 @@ export type UpdateControllerOptions = {
   isPackaged: boolean;
   currentVersion: string;
   forceDevUpdates?: boolean;
+  offlineTestBuild?: boolean;
   allowPrerelease?: boolean;
   onStatusChange?: (status: LastbrowserUpdateStatus) => void;
+  onUpdateDownloaded?: (fromVersion: string, targetVersion: string) => void;
 };
 
 export function createUpdateController(options: UpdateControllerOptions): UpdateController {
   const { updater } = options;
-  const enabled = options.isPackaged || options.forceDevUpdates === true;
+  const offlineTestBuild = options.offlineTestBuild === true;
+  const enabled = !offlineTestBuild && (options.isPackaged || options.forceDevUpdates === true);
   let status: LastbrowserUpdateStatus = {
     state: enabled ? 'idle' : 'disabled',
     currentVersion: options.currentVersion,
     availableVersion: null,
     percent: null,
     lastCheckedAt: null,
-    message: enabled ? null : 'Auto updates are available only in packaged Lastbrowser builds.'
+    message: offlineTestBuild
+      ? 'Updates are unavailable in offline test builds.'
+      : enabled ? null : 'Auto updates are available only in packaged Lastbrowser builds.'
   };
 
   updater.autoDownload = true;
-  updater.autoInstallOnAppQuit = false;
+  // electron-updater installs an already-downloaded update silently on a
+  // successful app quit when this is enabled. Its quit handler uses
+  // install(true, false), so the app is not relaunched unexpectedly.
+  updater.autoInstallOnAppQuit = true;
   updater.allowPrerelease = options.allowPrerelease === true;
 
   function publish(next: Partial<LastbrowserUpdateStatus>): LastbrowserUpdateStatus {
@@ -111,6 +119,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     });
   });
   updater.on('update-downloaded', (info: UpdateInfoLike) => {
+    if (info.version) options.onUpdateDownloaded?.(options.currentVersion, info.version);
     publish({
       state: 'downloaded',
       availableVersion: info.version || status.availableVersion,

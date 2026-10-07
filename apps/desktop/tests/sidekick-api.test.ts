@@ -6,6 +6,7 @@ import {
   applyCloudSetup,
   banDiscordMember,
   cancelChatStream,
+  cancelQuickChat,
   WEBUI_REQUEST_TIMEOUT_MS,
   cancelOnboardingOAuth,
   addSpace,
@@ -117,6 +118,7 @@ import {
   startAgentWorkspaceProcess,
   startSidekickChat,
   startOnboardingOAuth,
+  stopQuickChat,
   stopAgentWorkspace,
   submitAppstoreApp,
   summarizeGmailThread,
@@ -134,6 +136,41 @@ import {
   warnDiscordMember,
   writeMemory
 } from '../src/main/sidekick-api.js';
+import { SidekickApiError } from '../src/main/quick-chat-errors.js';
+
+describe('quickchat stop backend error contract', () => {
+  const request = {
+    quickChatId: 'a'.repeat(32), streamId: 'b'.repeat(32),
+    scope: { spaceId: 'space-a', backendProfileId: 'backend-a', browserProfileId: 'browser-a' },
+    profile: 'profile-a', workspacePath: 'C:\\spaces\\space-a', nativeBridgeNonce: 'bound-bridge-nonce'
+  };
+
+  it('retains only an allowlisted backend code and status on the internal typed error', async () => {
+    let sentBody: unknown;
+    const fetchImpl = vi.fn(async (_url: string | URL, init?: RequestInit) => {
+      sentBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ ok: false, error: 'private backend detail',
+        error_code: 'quickchat_worker_exit_unconfirmed' }), {
+        status: 503, headers: { 'content-type': 'application/json' }
+      });
+    });
+    await expect(stopQuickChat('http://127.0.0.1:8787', request, fetchImpl as any))
+      .rejects.toMatchObject({ name: 'SidekickApiError', status: 503, safeCode: 'quickchat_worker_exit_unconfirmed' });
+    expect(sentBody).toEqual({ quick_chat_id: request.quickChatId, stream_id: request.streamId,
+      space_scope: request.scope, profile: request.profile, workspace: request.workspacePath });
+  });
+
+  it('drops unknown backend codes while retaining the response status', async () => {
+    const fetchImpl = async () => new Response(JSON.stringify({ ok: false,
+      error: 'private backend detail', error_code: 'private_exception_text' }), {
+      status: 409, headers: { 'content-type': 'application/json' }
+    });
+    let failure: unknown;
+    try { await cancelQuickChat('http://127.0.0.1:8787', request, fetchImpl as any); } catch (error) { failure = error; }
+    expect(failure).toBeInstanceOf(SidekickApiError);
+    expect(failure).toMatchObject({ status: 409, safeCode: undefined });
+  });
+});
 
 describe('sidekick api client', () => {
   it('classifies only a refused local startup connection as retryable', async () => {

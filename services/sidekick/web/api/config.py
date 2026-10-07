@@ -1163,6 +1163,10 @@ _PROVIDER_MODELS = {
     ],
     # Xiaomi MiMo — direct API via api.xiaomimimo.com
     "xiaomi": [
+        {"id": "mimo-v2.5", "label": "MiMo V2.5"},
+        {"id": "mimo-v2.5-pro", "label": "MiMo V2.5 Pro"},
+        {"id": "mimo-v2.6-flash", "label": "MiMo V2.6 Flash"},
+        {"id": "mimo-v2.6-pro", "label": "MiMo V2.6 Pro"},
     ],
     # xAI — prefix used in OpenRouter model IDs (x-ai/grok-4-20)
     "x-ai": [
@@ -3147,6 +3151,18 @@ def _configured_model_probe_api_key(
     is actually ``ollama.com`` (including its subdomains).
     """
     provider_id = str(provider or "").strip().lower()
+    if provider_id == "xiaomi":
+        # Never forward a process-wide MiMo key. Use only the active profile's
+        # parsed .env value and the already selected, explicitly configured URL.
+        from runtime.mimo_settings import validate_mimo_settings
+        scoped_key = str(env_values.get("XIAOMI_API_KEY") or "").strip()
+        if not scoped_key:
+            return ""
+        _key, normalized_url, error = validate_mimo_settings(
+            scoped_key, base_url, require_explicit=True)
+        if error or normalized_url != str(base_url or "").strip().rstrip("/"):
+            return ""
+        return scoped_key
     if provider_id == "ollama":
         providers_cfg = config.get("providers", {})
         ollama_cfg = providers_cfg.get("ollama", {}) if isinstance(providers_cfg, dict) else {}
@@ -3559,7 +3575,6 @@ def get_available_models() -> dict:
                 "GLM_API_KEY",
                 "KIMI_API_KEY",
                 "DEEPSEEK_API_KEY",
-                "XIAOMI_API_KEY",
                 "OPENCODE_ZEN_API_KEY",
                 "OPENCODE_GO_API_KEY",
                 "MINIMAX_API_KEY",

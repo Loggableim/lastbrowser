@@ -1,8 +1,12 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import electronUpdater, { type AppUpdater } from 'electron-updater';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
 import { createUpdateController, type LastbrowserUpdateStatus, type UpdateController } from './update-controller.js';
+import { isOfflineTestBuild } from './update-build-variant.js';
+import { acknowledgeUpdateNotice, decideUpdateNotice, parseUpdateNoticeState, recordDownloadedUpdate } from './update-notice-state.js';
 
 const { autoUpdater } = electronUpdater;
 
@@ -31,20 +35,66 @@ function patchHttpExecutor(updater: unknown): void {
 }
 
 export function registerUpdateIpc(getMainWindow: () => BrowserWindow | null): void {
+  const noticeStatePath = path.join(app.getPath('userData'), 'update-notice.json');
+  const readNoticeState = () => {
+    try {
+      return parseUpdateNoticeState(JSON.parse(readFileSync(noticeStatePath, 'utf8')));
+    } catch {
+      return parseUpdateNoticeState(null);
+    }
+  };
+  const writeNoticeState = (state: ReturnType<typeof parseUpdateNoticeState>) => {
+    mkdirSync(path.dirname(noticeStatePath), { recursive: true });
+    const temporaryPath = `${noticeStatePath}.${process.pid}.tmp`;
+    writeFileSync(temporaryPath, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    renameSync(temporaryPath, noticeStatePath);
+  };
+
   patchHttpExecutor(autoUpdater);
+  const currentVersion = app.getVersion();
+  const offlineTestBuild = app.isPackaged && isOfflineTestBuild(process.resourcesPath, currentVersion);
   controller = createUpdateController({
     updater: autoUpdater as AppUpdater,
     isPackaged: app.isPackaged,
-    currentVersion: app.getVersion(),
+    currentVersion,
+    offlineTestBuild,
     forceDevUpdates: process.env.LASTBROWSER_FORCE_DEV_UPDATES === '1',
     allowPrerelease: process.env.LASTBROWSER_ALLOW_PRERELEASE_UPDATES === '1',
-    onStatusChange: (status) => broadcastUpdateStatus(getMainWindow(), status)
+    onStatusChange: (status) => broadcastUpdateStatus(getMainWindow(), status),
+    onUpdateDownloaded: (fromVersion, targetVersion) => {
+      try {
+        writeNoticeState(recordDownloadedUpdate(readNoticeState(), fromVersion, targetVersion));
+      } catch (error) {
+        console.warn('[updates] Could not persist downloaded update marker:', error);
+      }
+    }
   });
 
   ipcMain.handle('lastbrowser:updates:status', () => controller?.getStatus());
   ipcMain.handle('lastbrowser:updates:check', () => controller?.checkForUpdates());
   ipcMain.handle('lastbrowser:updates:download', () => controller?.downloadUpdate());
   ipcMain.handle('lastbrowser:updates:install', () => controller?.quitAndInstall());
+  ipcMain.handle('lastbrowser:updates:whats-new-candidate', () => {
+    const decision = decideUpdateNotice(readNoticeState(), app.getVersion(), process.argv.includes('--updated'));
+    if (!decision.candidate) {
+      try { writeNoticeState(decision.state); } catch (error) {
+        console.warn('[updates] Could not persist successful startup version:', error);
+      }
+    }
+    return decision.candidate;
+  });
+  ipcMain.handle('lastbrowser:updates:whats-new-acknowledge', (_event, shownVersion: unknown) => {
+    if (typeof shownVersion !== 'string') return { acknowledged: false };
+    const state = acknowledgeUpdateNotice(readNoticeState(), app.getVersion(), shownVersion, process.argv.includes('--updated'));
+    if (!state) return { acknowledged: false };
+    try {
+      writeNoticeState(state);
+      return { acknowledged: true };
+    } catch (error) {
+      console.warn('[updates] Could not persist dismissed release notes:', error);
+      return { acknowledged: false };
+    }
+  });
   ipcMain.handle('lastbrowser:updates:set-auto-check-enabled', (_event, enabled: unknown) => {
     autoCheckPreferenceReceived = true;
     if (autoCheckPreferenceTimer) {

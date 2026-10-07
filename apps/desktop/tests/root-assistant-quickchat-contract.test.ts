@@ -9,6 +9,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SpaceAssistantPanel } from '../src/renderer/components/SpaceAssistantPanel.js';
 import { DesktopI18nProvider } from '../src/renderer/i18n.js';
+import { isQuickChatScopeVisible } from '../src/renderer/quick-chat-view-state.js';
 
 vi.mock('../src/main/ipc-sender.js', () => ({
   captureTrustedShellSender: vi.fn((event: any) => () => {
@@ -56,7 +57,7 @@ describe('Assistant and Quickchat identity boundary', () => {
       start: async request => ({ quickChatId: request.quickChatId, sessionId: request.quickChatId,
         streamId: 'b'.repeat(32), scope }),
       stop: async () => ({ cancelled: true }),
-      cancel: async () => ({ cancelled: true }),
+      cancel: async () => ({ ok: true, cancelled: true }),
       subscribe: vi.fn((_id, _binding, callback) => {
         emitQuickchat = callback;
         return { close: vi.fn(), done: new Promise<void>(() => {}) } as ChatStreamHandle;
@@ -88,10 +89,25 @@ describe('Assistant and Quickchat identity boundary', () => {
     expect(appSource).toContain('onSwitchToQuickChat={() => setQuickChatMode(true)}');
     const quickchatMessages = appSource.match(/const \[quickChatMessages, setQuickChatMessages\] = useState<DesktopChatMessage\[]>\(\[\]\)/);
     expect(quickchatMessages).not.toBeNull();
-    expect(appSource).toContain('messages={quickChatMessages}');
-    expect(appSource).toContain('busy={quickChatBusy}');
+    expect(appSource).toContain('messages={isQuickChatScopeVisible(quickChatTranscriptScopeKeyRef.current, `${activeProfileId}::${activeSpacePath}::${activeBackendProfileName || \'\'}`)');
+    expect(appSource).toContain('? quickChatMessages : []}');
+    expect(isQuickChatScopeVisible('profile-a::space-a::backend-a', 'profile-a::space-a::backend-a')).toBe(true);
+    expect(isQuickChatScopeVisible('profile-a::space-a::backend-a', 'profile-b::space-b::backend-b')).toBe(false);
+    expect(isQuickChatScopeVisible(null, 'profile-a::space-a::backend-a')).toBe(false);
+    expect(appSource).toContain('busy={quickChatBusy && isQuickChatScopeVisible(quickChatBindingScopeKeyRef.current ?? quickChatStartPromiseRef.current?.scopeKey ?? null,');
     expect(appSource).toContain('const [assistantController] = useState(() => new IndependentAssistantController(');
     expect(appSource).toContain('controller={assistantController}');
     expect(appSource).not.toMatch(/onSwitchTo(?:SpaceAssistant|QuickChat)=\{[^\n]*(?:resetQuickChat|assistantController\.(?:reset|send)|createSession)/);
+  });
+
+  it('keeps the Quickchat binding until acknowledged cleanup and prevents cross-scope transcript reuse', async () => {
+    const source = await import('node:fs/promises');
+    const appSource = await source.readFile(new URL('../src/renderer/App.tsx', import.meta.url), 'utf8');
+    expect(appSource).toContain('return runQuickChatResetOnce(quickChatResetPromiseRef, async () =>');
+    expect(appSource).toContain('return await confirmQuickChatReset(');
+    expect(appSource).toContain('onNewChat={() => resetQuickChat(true)}');
+    expect(appSource).toContain('quickChatResetFailureCopy[locale]');
+    expect(appSource).toContain('quickChatBindingScopeKeyRef.current !== activeScopeKey');
+    expect(appSource).toContain('quickChatTranscriptScopeKeyRef.current !== activeScopeKey');
   });
 });

@@ -13,11 +13,14 @@ import asyncio
 import concurrent.futures
 import io
 import json
+import logging
 import os
 import queue
 import sys
 import threading
+import time
 import traceback
+import uuid
 from email.message import Message
 from typing import Any, AsyncIterator, Callable
 from urllib.parse import urlparse
@@ -29,6 +32,7 @@ from starlette.requests import ClientDisconnect
 
 _END = object()
 _HEADER_WAIT_SECONDS = 20.0
+_CHAT_START_BRIDGE_DIAGNOSTIC_INTERVAL_SECONDS = 5.0
 _RUNTIME_INIT_LOCK = threading.Lock()
 _RUNTIME_STATE_DIR: str | None = None
 
@@ -46,6 +50,59 @@ def _chat_transport_trace(trace: int | None, stage: str, **fields: int | str | b
         file=sys.stderr,
         flush=True,
     )
+
+
+class _ChatStartBridgeDiagnostics:
+    """Log only static phase names and elapsed time while chat-start headers are pending."""
+
+    def __init__(self) -> None:
+        self.request_id = uuid.uuid4().hex[:10]
+        self.started = time.monotonic()
+        self.phase_started = self.started
+        self.phase = "bridge_queued"
+        self._lock = threading.Lock()
+        self._finished = False
+        self._timer: threading.Timer | None = None
+        self._schedule_locked()
+
+    def _schedule_locked(self) -> None:
+        timer = threading.Timer(_CHAT_START_BRIDGE_DIAGNOSTIC_INTERVAL_SECONDS, self._emit)
+        timer.daemon = True
+        self._timer = timer
+        timer.start()
+
+    def _emit(self) -> None:
+        with self._lock:
+            if self._finished:
+                return
+            now = time.monotonic()
+            record = {
+                "request_id": self.request_id,
+                "phase": self.phase,
+                "elapsed_ms": round((now - self.started) * 1000, 1),
+                "phase_ms": round((now - self.phase_started) * 1000, 1),
+            }
+            self._schedule_locked()
+        logging.getLogger(__name__).warning(
+            "Slow chat-start bridge before response headers: %s",
+            json.dumps(record, sort_keys=True),
+        )
+
+    def stage(self, phase: str) -> None:
+        with self._lock:
+            if self._finished:
+                return
+            self.phase = phase
+            self.phase_started = time.monotonic()
+
+    def finish(self) -> None:
+        with self._lock:
+            if self._finished:
+                return
+            self._finished = True
+            timer = self._timer
+        if timer is not None:
+            timer.cancel()
 
 # Bounded worker pool for the legacy route bridge.
 #
@@ -367,6 +424,7 @@ class _RouteHandler:
         self.status_code: int | None = None
         self.response_headers: list[tuple[str, str]] = []
         self.headers_ready = threading.Event()
+        self.chat_start_diagnostics: _ChatStartBridgeDiagnostics | None = None
 
     def send_response(self, status: int, _message: str | None = None) -> None:
         self.status_code = int(status)
@@ -375,6 +433,8 @@ class _RouteHandler:
         self.response_headers.append((str(name), str(value)))
 
     def end_headers(self) -> None:
+        if self.chat_start_diagnostics is not None:
+            self.chat_start_diagnostics.finish()
         self.headers_ready.set()
 
 
@@ -382,6 +442,12 @@ class _RouteExecution:
     def __init__(self, request: Request, body: bytes) -> None:
         self.request = request
         self.handler = _RouteHandler(request, body)
+        self.chat_start_diagnostics = (
+            _ChatStartBridgeDiagnostics()
+            if _is_chat_start_path(self.handler.command, self.handler.path)
+            else None
+        )
+        self.handler.chat_start_diagnostics = self.chat_start_diagnostics
         self.completed = threading.Event()
         self.thread: threading.Thread | None = None
         self._pool_future: concurrent.futures.Future | None = None
@@ -407,6 +473,8 @@ class _RouteExecution:
         with pending_lock:
             pending = _chat_start_pool_pending if chat_start else _bridge_pool_pending
             if pending >= pending_limit:
+                if self.chat_start_diagnostics is not None:
+                    self.chat_start_diagnostics.finish()
                 return False
             if chat_start:
                 _chat_start_pool_pending += 1
@@ -421,6 +489,8 @@ class _RouteExecution:
                     _chat_start_pool_pending -= 1
                 else:
                     _bridge_pool_pending -= 1
+            if self.chat_start_diagnostics is not None:
+                self.chat_start_diagnostics.finish()
             return False
 
         def _release(_future: concurrent.futures.Future) -> None:
@@ -431,6 +501,8 @@ class _RouteExecution:
                     _chat_start_pool_pending -= 1
                 else:
                     _bridge_pool_pending -= 1
+            if self.chat_start_diagnostics is not None:
+                self.chat_start_diagnostics.finish()
 
         self._pool_future.add_done_callback(_release)
         return True
@@ -441,41 +513,53 @@ class _RouteExecution:
         # initializes global Agent/Space state and can create files.
         parsed = urlparse(self.handler.path)
         pure_swarm_get = _is_pure_swarm_get(self.handler.command, parsed.path)
-        if not pure_swarm_get:
-            _prepare_webui_runtime()
-        from web.api.auth import check_auth
-        from web.api.helpers import get_profile_cookie, j
-        from web.api.profiles import clear_request_profile, set_request_profile
-        from web.api.routes import (
-            _setup_workspace_from_request,
-            _teardown_workspace_context,
-            handle_delete,
-            handle_get,
-            handle_patch,
-            handle_post,
-        )
-
-        route_for_method: dict[str, Callable[[Any, Any], bool]] = {
-            "GET": handle_get,
-            "POST": handle_post,
-            "PATCH": handle_patch,
-            "DELETE": handle_delete,
-        }
+        diagnostics = self.chat_start_diagnostics
         workspace_context_attempted = False
         profile_token = None
+        clear_request_profile = None
+        teardown_workspace_context = None
+        j = None
         try:
+            if diagnostics is not None:
+                diagnostics.stage("runtime_bootstrap")
+            if not pure_swarm_get:
+                _prepare_webui_runtime()
+            from web.api.auth import check_auth
+            from web.api.helpers import get_profile_cookie, j
+            from web.api.profiles import clear_request_profile, set_request_profile
+            from web.api.routes import (
+                _setup_workspace_from_request,
+                _teardown_workspace_context,
+                handle_delete,
+                handle_get,
+                handle_patch,
+                handle_post,
+            )
+            teardown_workspace_context = _teardown_workspace_context
+            route_for_method: dict[str, Callable[[Any, Any], bool]] = {
+                "GET": handle_get,
+                "POST": handle_post,
+                "PATCH": handle_patch,
+                "DELETE": handle_delete,
+            }
             # Swarm GET/SSE skips the legacy workspace/bootstrap path, but its
             # project trust resolver is still profile-aware.  Setting only
             # this thread-local context is pure: it neither creates profile
             # state nor changes the process-wide active profile.
+            if diagnostics is not None:
+                diagnostics.stage("profile_context")
             cookie_profile = get_profile_cookie(self.handler)
             if cookie_profile:
                 profile_token = set_request_profile(cookie_profile)
             if not pure_swarm_get:
                 # Preserve normal route cleanup even if setup raises midway.
                 workspace_context_attempted = True
+                if diagnostics is not None:
+                    diagnostics.stage("workspace_setup")
                 _setup_workspace_from_request(self.handler, parsed)
 
+            if diagnostics is not None:
+                diagnostics.stage("authentication")
             if not check_auth(self.handler, parsed, read_only=pure_swarm_get):
                 return
             if _requires_dashboard_actor_post(self.handler.command, parsed.path):
@@ -490,6 +574,8 @@ class _RouteExecution:
             if route is None:
                 j(self.handler, {"error": "method not allowed"}, status=405)
                 return
+            if diagnostics is not None:
+                diagnostics.stage("route_dispatch")
             if route(self.handler, parsed) is False:
                 j(self.handler, {"error": "not found"}, status=404)
         except Exception:
@@ -498,13 +584,20 @@ class _RouteExecution:
             traceback.print_exc()
             if not self.handler.headers_ready.is_set():
                 try:
-                    j(self.handler, {"error": "Internal server error"}, status=500)
+                    if j is not None:
+                        j(self.handler, {"error": "Internal server error"}, status=500)
+                    else:
+                        self.handler.send_response(500)
+                        self.handler.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.handler.end_headers()
+                        self.handler.wfile.write(b'{"error":"Internal server error"}')
                 except Exception:
                     pass
         finally:
-            clear_request_profile(profile_token)
-            if workspace_context_attempted:
-                _teardown_workspace_context()
+            if clear_request_profile is not None:
+                clear_request_profile(profile_token)
+            if workspace_context_attempted and teardown_workspace_context is not None:
+                teardown_workspace_context()
             if not self.handler.headers_ready.is_set():
                 self.handler.send_response(204)
                 self.handler.end_headers()
@@ -555,6 +648,8 @@ async def dispatch_route(request: Request) -> Response:
         execution.handler.headers_ready.wait, _HEADER_WAIT_SECONDS
     )
     if not headers_ready:
+        if execution.chat_start_diagnostics is not None:
+            execution.chat_start_diagnostics.finish()
         execution.handler.wfile.close()
         return JSONResponse(
             {"error": "route handler did not start a response in time"},

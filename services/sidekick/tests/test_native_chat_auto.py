@@ -80,6 +80,55 @@ def setup_auto(tmp_path, server, *, name="a", toolsets=None, max_concurrent=1):
         raise
 
 
+def _subscription_fallback_broker(*, claim_count=1, delivered=False):
+    import threading
+    from runtime.independent.contracts import Scope
+    from runtime.independent.model_selection import ModelPair
+    scope = Scope(backend_profile_id=new_id(), space_id=new_id(), browser_profile_id="browser-a")
+    decision = SimpleNamespace(decision_id=new_id(), selected_model=ModelPair(provider="ollama-cloud", model="deepseek-v4.1-flash"),
+        turn_id=new_id(), scope=scope, session_id="session-a")
+    replacement = SimpleNamespace(decision_id=new_id(), selected_model=ModelPair(provider="ollama-cloud", model="gpt-oss:20b"),
+        turn_id=decision.turn_id, scope=scope, session_id=decision.session_id,
+        model_dump=lambda **_kwargs: {"decisionId": new_id()})
+    claim = SimpleNamespace(claim_id=new_id(), decision_id=decision.decision_id, request_purpose="conversation",
+        state="completed", error_code="ollama_subscription_required", delivered_delta=delivered)
+    broker = object.__new__(NativeAutoSessionBroker)
+    broker.context = SimpleNamespace()
+    broker._closed = False
+    broker._lock = threading.RLock()
+    broker._stopping = threading.Event()
+    broker._decision = decision
+    broker._subscription_fallback_used = False
+    broker._claims = {new_id(): True for _ in range(claim_count)}
+    broker._owned_decision = lambda _identity: decision
+    broker._owned_claim = lambda _identity: claim
+    broker._validate = lambda: None
+    calls = []
+    broker.service = SimpleNamespace(select_ollama_subscription_fallback=lambda value: calls.append(value) or replacement)
+    return broker, decision, replacement, claim, calls
+
+
+@pytest.mark.parametrize("claim_count,delivered", [(2, False), (1, True)])
+def test_native_auto_fallback_is_denied_after_tool_or_visible_output(claim_count, delivered):
+    broker, decision, _replacement, claim, calls = _subscription_fallback_broker(
+        claim_count=claim_count, delivered=delivered)
+    with pytest.raises(PolicyDenied, match="native_auto_fallback_not_eligible"):
+        broker(broker.context, "auto_subscription_fallback", {
+            "decision": decision.decision_id, "claimId": claim.claim_id})
+    assert calls == []
+
+
+def test_native_auto_fallback_replacement_is_single_attempt_per_turn():
+    broker, decision, _replacement, claim, calls = _subscription_fallback_broker()
+    payload = {"decision": decision.decision_id, "claimId": claim.claim_id}
+    result = broker(broker.context, "auto_subscription_fallback", payload)
+    assert result["decision"]["decisionId"]
+    assert len(calls) == 1
+    with pytest.raises(PolicyDenied, match="native_auto_fallback_payload_invalid"):
+        broker(broker.context, "auto_subscription_fallback", payload)
+    assert len(calls) == 1
+
+
 def drain_rpc(handle, context, broker, *, timeout=30):
     events, deadline = [], time.monotonic() + timeout
     while time.monotonic() < deadline:

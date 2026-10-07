@@ -232,7 +232,10 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
         "deepseek-reasoner",
     ],
     "xiaomi": [
-        "miai-pro",
+        "mimo-v2.5",
+        "mimo-v2.5-pro",
+        "mimo-v2.6-flash",
+        "mimo-v2.6-pro",
     ],
     "tencent-tokenhub": [
     ],

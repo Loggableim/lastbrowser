@@ -4,6 +4,8 @@ import json
 import os
 import subprocess
 import queue
+import select
+import socket
 import threading
 import time
 from pathlib import Path
@@ -170,10 +172,13 @@ def test_capture_reads_actual_own_selection_policy_not_session_model_pseudofield
 
 
 class ControlledServer:
-    def __init__(self, *, hold=False, tool="read_file", parties=3, fail_second=False):
+    def __init__(self, *, hold=False, tool="read_file", parties=3, fail_second=False, text_only=False):
         self.requests, self.arrived, self.release = [], threading.Barrier(parties), threading.Event()
         self.all_requests=[]
         self.hold = hold
+        self.text_only = text_only
+        self.held_started = threading.Event()
+        self.held_aborted = threading.Event()
         owner = self
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args): pass
@@ -203,7 +208,24 @@ class ControlledServer:
                 try:
                     if owner.hold:
                         chunk({"role":"assistant", "content":"partial-"+own})
-                        owner.release.wait(timeout=20)
+                        owner.held_started.set()
+                        deadline = time.monotonic() + 20
+                        while not owner.release.is_set() and time.monotonic() < deadline:
+                            readable, _, _ = select.select([self.connection], [], [], .025)
+                            if readable:
+                                try:
+                                    if self.connection.recv(1, socket.MSG_PEEK) == b"":
+                                        owner.held_aborted.set()
+                                        return
+                                except (ConnectionResetError, OSError):
+                                    owner.held_aborted.set()
+                                    return
+                        if not owner.release.is_set():
+                            owner.held_aborted.set()
+                            return
+                        chunk({}, "stop")
+                    elif owner.text_only:
+                        chunk({"role":"assistant", "content":"controlled-answer-"+own})
                         chunk({}, "stop")
                     elif tool_result is None:
                         chunk({"role":"assistant", **({"content":"first-visible-"+own} if fail_second else {}), "tool_calls":[{"index":0,"id":"call-own-file","type":"function",

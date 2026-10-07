@@ -47,7 +47,8 @@ import type { RunState } from '../independent-contracts.js';
 import type { CommandAction, CommandCapabilities, CommandContext } from '../CommandActionContracts.js';
 import { createChatCommandAction, parseChatCommand } from '../chat-command-registry.js';
 import { chatCommandCopy } from '../chat-command-copy.js';
-import { manualModelPickerOptions } from '../model-picker-options.js';
+import { canSelectNativeModel, manualModelPickerOptions } from '../model-picker-options.js';
+import type { NativeModelAvailability } from '../independent-contracts.js';
 import { SlashCommandMenu } from './SlashCommandMenu.js';
 import { ChildRunBubbles,childRunLabels } from '../components/ChildRunBubbles.js';
 import type { ChildRunState } from '../child-run-controller.js';
@@ -411,7 +412,7 @@ export type ChatComposerProps = {
   mode: ComposerMode;
   model: string;
   /** Selectable models, grouped by provider. The current model remains visible when empty. */
-  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts?: string[] }> }>;
+  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability }> }>;
   modelCatalogError?: boolean;
   onRetryModelCatalog?: () => void;
   modelProvider?: string;
@@ -585,7 +586,7 @@ export function ChatComposer({
                 {modelOptions.filter(group=>!group.providerId).map((group) => (
                   <optgroup key={group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
                     {group.models.map((m) => (
-                      <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                      <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={!canSelectNativeModel(group.providerId,m.nativeAvailability)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
                         {m.label}
                       </option>
                     ))}
@@ -622,11 +623,11 @@ export function ChatComposer({
         <label>{t('chat.modelSearch')}<input ref={manualModelSearchInput} type="search" value={manualModelSearch} onChange={event=>setManualModelSearch(event.target.value)}/></label>
         {manualModelGroups.map(group=><fieldset key={group.providerId||group.provider} disabled={group.configured===false}>
           <legend>{group.provider}{group.configured===false&&` · ${t(group.disabledReason==='unavailable'?'chat.modelProviderUnavailable':'chat.modelProviderNotConfigured')}`}</legend>
-          {group.models.map(entry=><button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||!ready||running}
+          {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);return <button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||entry.supportsIndependent===false||unavailable||!ready||running}
             title={`${entry.label} · ${entry.id}`}
             aria-pressed={model===entry.id&&modelProvider===group.providerId} onClick={()=>{onModelChange(qualifyModelForProvider(entry.id,group.providerId));setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}>
-            <span className="composer-manual-model-name">{entry.label}</span><small>{entry.id}</small>
-          </button>)}
+            <span className="composer-manual-model-name">{entry.label}</span><small>{entry.id}{unavailable?` · ${t('chat.modelUnavailableInSpace')}`:entry.supportsIndependent===false?` · ${t('chat.modelIndependentUnsupported')}`:''}</small>
+          </button>;})}
         </fieldset>)}
         {!manualModelGroups.some(group=>group.models.length>0)&&<p role="status">{t('chat.noManualModels')}</p>}
       </section>}

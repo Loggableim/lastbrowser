@@ -3564,6 +3564,63 @@ def test_logs_lines_belong_to_horizontal_scroll_surface():
     assert ".logs-output.wrap .log-line{width:100%;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;}" in style_css
 
 
+def test_native_logs_tail_contract_reads_real_webui_log_alias(monkeypatch, tmp_path):
+    from cli import web_server
+    from test_fastapi_route_bridge import _headers
+
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "agent.log").write_text("first\nsecond\nthird\n", encoding="utf-8")
+    monkeypatch.setattr(web_server, "get_sidekick_home", lambda: tmp_path)
+
+    response = TestClient(web_server.app).get(
+        "/api/logs",
+        params={"file": "webui", "tail": 2},
+        headers=_headers(web_server),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"file": "webui", "lines": ["second\n", "third\n"]}
+
+
+def test_native_logs_tail_contract_returns_empty_for_missing_and_rejects_unknown(monkeypatch, tmp_path):
+    from cli import web_server
+    from test_fastapi_route_bridge import _headers
+
+    monkeypatch.setattr(web_server, "get_sidekick_home", lambda: tmp_path)
+    client = TestClient(web_server.app)
+
+    headers = _headers(web_server)
+    missing = client.get("/api/logs", params={"file": "webui", "tail": 200}, headers=headers)
+    assert missing.status_code == 200
+    assert missing.json() == {"file": "webui", "lines": []}
+    assert client.get("/api/logs", params={"file": "../config.yaml"}, headers=headers).status_code == 400
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "logs" / "agent.log").write_text("legacy-line\n", encoding="utf-8")
+    legacy = client.get("/api/logs", params={"file": "agent", "lines": 1}, headers=headers)
+    assert legacy.status_code == 200
+    assert legacy.json() == {"file": "agent", "lines": ["legacy-line\n"]}
+
+
+def test_native_logs_tail_contract_caps_requested_lines(monkeypatch, tmp_path):
+    from cli import web_server
+    from test_fastapi_route_bridge import _headers
+
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "agent.log").write_text("".join(f"line-{index}\n" for index in range(550)), encoding="utf-8")
+    monkeypatch.setattr(web_server, "get_sidekick_home", lambda: tmp_path)
+
+    response = TestClient(web_server.app).get(
+        "/api/logs",
+        params={"file": "webui", "tail": 50000},
+        headers=_headers(web_server),
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["lines"]) == 500
+
+
 def test_root_layout_blocks_window_horizontal_scroll():
     style_css = Path("web/static/style.css").read_text(encoding="utf-8")
 

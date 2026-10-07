@@ -192,6 +192,20 @@ export function isFirstRunRequired(state: SetupState, onboardingStatus: unknown)
   return true;
 }
 
+export function canShowWhatsNewModal(input: {
+  setupLoading: boolean;
+  setupRequired: boolean;
+  onboardingStatusChecked: boolean;
+  accessAuthChecked: boolean;
+  accessAuthRequired: boolean;
+}): boolean {
+  return input.onboardingStatusChecked
+    && !input.setupLoading
+    && !input.setupRequired
+    && input.accessAuthChecked
+    && !input.accessAuthRequired;
+}
+
 export function firstRunStatus(serviceStatus: FirstRunServiceStatus, onboardingStatus: OnboardingStatus | null | undefined): FirstRunStatus {
   if (serviceStatus?.sidekick === 'error' || serviceStatus?.sidekick === 'missing') {
     return {

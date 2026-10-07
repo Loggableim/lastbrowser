@@ -41,7 +41,7 @@ import { TeamworkSettingsPanel } from './TeamworkSettingsPanel.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { cloudProviderOptions, openProviderOAuthUrl, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
 import { providerPresentation } from '../provider-presentation.js';
-import { requestProviderModelCatalog } from '../provider-settings.js';
+import { isProviderSettingsScopeCurrent, isXiaomiProviderSaveAck, readXiaomiProviderStatus, requestProviderModelCatalog, requestProviderSettingsInScope, safeXiaomiErrorCode, saveAndLoadXiaomiModels, testXiaomiConnection, validateXiaomiBaseUrl, type ProviderSettingsRequest } from '../provider-settings.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
 import { getProviderChatEvidence } from '../provider-chat-evidence.js';
@@ -68,6 +68,9 @@ import {
 import { DEFAULT_VISION_IMPAIRED_CONFIG } from '../stores/a11y-config.js';
 import { AccessibilityTestCard } from '../components/AccessibilityTestCard.js';
 import { ProfileSwitcher } from '../components/HeaderComponents.js';
+import { UpdateNowButton } from '../components/UpdateNowButton.js';
+import { installDownloadedUpdate, observeDesktopUpdateStatus, type DesktopUpdateStatus } from '../update-settings-actions.js';
+import { normalizeLogLines } from '../log-lines.js';
 import type { BrowserProfile } from '../profiles.js';
 import { ModelPolicyControls, type ModelPolicyCandidate } from '../components/ModelPolicyControls.js';
 import { IndependentAssistantClient } from '../independent-assistant-client.js';
@@ -131,6 +134,16 @@ function normalizeOpenRouterModels(value: unknown): OpenRouterModelOption[] {
     seen.add(id);
     return [{ id, label: text(entry.label || entry.name || id).trim() || id }];
   });
+}
+
+function xiaomiErrorTranslationKey(code: string): DesktopTranslationKey {
+  const map: Record<string, DesktopTranslationKey> = {
+    mimo_api_key_required: 'settings.panels.providers.xiaomiKeyRequired', mimo_key_type_invalid: 'settings.panels.providers.xiaomiKeyTypeInvalid',
+    mimo_token_plan_base_url_required: 'settings.panels.providers.xiaomiTokenPlanUrlRequired', mimo_base_url_invalid: 'settings.panels.providers.xiaomiBaseUrlInvalid',
+    mimo_auth_failed: 'settings.panels.providers.xiaomiAuthFailed', mimo_rate_limited: 'settings.panels.providers.xiaomiRateLimited',
+    mimo_provider_unavailable: 'settings.panels.providers.xiaomiUnavailable', mimo_invalid_response: 'settings.panels.providers.xiaomiInvalidResponse'
+  };
+  return map[code] ?? map.mimo_provider_unavailable;
 }
 
 type NormalizedAppstoreRecord = {
@@ -680,7 +693,7 @@ export function NativeLogsMain({ serviceStatus, activeContextItem }: { serviceSt
   const [auto, setAuto] = useState(false);
   const [section, setSection] = useState(activeContextItem || 'Agent');
   const logs = useApiState(() => window.lastbrowser.sidekick.getLogs({ file, tail }), [ready, file, tail], ready);
-  const lines = text(logs.data?.text || logs.data?.logs || logs.data?.content).split(/\r?\n/).filter((line) => !severity || line.toLowerCase().includes(severity.toLowerCase()));
+  const lines = normalizeLogLines(logs.data).filter((line) => !severity || line.toLowerCase().includes(severity.toLowerCase()));
   const logSections = [
     { id: 'Agent', label: t('logs.agent') },
     { id: 'WebUI', label: t('logs.webUi') },
@@ -2295,11 +2308,28 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
 export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
   const ready = isReady(serviceStatus);
+  const activeProviderScope = { browserProfileId: activeProfileId, workspacePath: activeSpacePath || null,
+    ...(activeBackendProfileName ? { backendProfileName: activeBackendProfileName } : {}) };
+  const isActiveProviderScope = (scope: { browserProfileId: string; workspacePath: string | null; backendProfileName?: string }): boolean =>
+    isProviderSettingsScopeCurrent(scope, activeProviderScope, 0, 0);
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
-  const modelsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' }), [ready], ready);
+  const modelsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models', scopeSelection: activeProviderScope }),
+    [ready, activeProfileId, activeSpacePath, activeBackendProfileName], ready);
   const authState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/auth/status' }), [ready], ready);
   const pluginsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/plugins' }), [ready], ready);
-  const updatesState = useApiState(() => window.lastbrowser.updates.status(), [], true);
+  const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null);
+  const updateStatusRef = useRef<DesktopUpdateStatus | null>(null);
+  const updateInstallPendingRef = useRef(false);
+  const [updateInstallPending, setUpdateInstallPending] = useState(false);
+  const [updateInstallError, setUpdateInstallError] = useState('');
+  const [updateStatusReadError, setUpdateStatusReadError] = useState('');
+  useEffect(() => observeDesktopUpdateStatus(window.lastbrowser.updates, (status) => {
+    updateStatusRef.current = status;
+    setUpdateStatus(status);
+    setUpdateStatusReadError('');
+  }, (error) => {
+    setUpdateStatusReadError(error instanceof Error ? error.message : String(error));
+  }), []);
   const [section, setSection] = useState<SettingsSectionId>('conversation');
   const [draft, setDraft] = useState<AnyRecord>({});
   const draftRef = useRef<AnyRecord>({});
@@ -2311,7 +2341,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const [ollamaUrl, setOllamaUrl] = useState('');
   const [ollamaKey, setOllamaKey] = useState('');
   const [ollamaTestResult, setOllamaTestResult] = useState('');
+  const [ollamaScope, setOllamaScope] = useState<typeof activeProviderScope | null>(null);
   const [openRouterModalOpen, setOpenRouterModalOpen] = useState(false);
+  const [openRouterScope, setOpenRouterScope] = useState<typeof activeProviderScope | null>(null);
   const [openRouterConfigProvider, setOpenRouterConfigProvider] = useState<'openrouter' | 'alibaba'>('openrouter');
   const [alibabaBaseUrl, setAlibabaBaseUrl] = useState('');
   const [openRouterKey, setOpenRouterKey] = useState('');
@@ -2323,6 +2355,38 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const [openRouterLoading, setOpenRouterLoading] = useState(false);
   const [openRouterSaving, setOpenRouterSaving] = useState(false);
   const [openRouterError, setOpenRouterError] = useState('');
+  const [xiaomiModalOpen, setXiaomiModalOpen] = useState(false);
+  const [xiaomiKey, setXiaomiKey] = useState('');
+  const [xiaomiBaseUrl, setXiaomiBaseUrl] = useState('');
+  const [xiaomiHasSavedKey, setXiaomiHasSavedKey] = useState<boolean | null>(null);
+  const [xiaomiLoading, setXiaomiLoading] = useState(false);
+  const [xiaomiSaving, setXiaomiSaving] = useState(false);
+  const [xiaomiTesting, setXiaomiTesting] = useState(false);
+  const [xiaomiTested, setXiaomiTested] = useState(false);
+  const [xiaomiError, setXiaomiError] = useState('');
+  const [xiaomiModels, setXiaomiModels] = useState<OpenRouterModelOption[]>([]);
+  const [xiaomiScope, setXiaomiScope] = useState<{ browserProfileId: string; workspacePath: string | null; backendProfileName?: string } | null>(null);
+  const xiaomiGenerationRef = useRef(0);
+  const xiaomiScopeRef = useRef(xiaomiScope);
+  xiaomiScopeRef.current = xiaomiScope;
+  const xiaomiCurrentContextRef = useRef({ browserProfileId: activeProfileId, workspacePath: activeSpacePath || null, backendProfileName: activeBackendProfileName || undefined });
+  xiaomiCurrentContextRef.current = { browserProfileId: activeProfileId, workspacePath: activeSpacePath || null, backendProfileName: activeBackendProfileName || undefined };
+  useEffect(() => {
+    if (!xiaomiModalOpen || !xiaomiScope) return;
+    const stillBound = activeProfileId === xiaomiScope.browserProfileId && (activeSpacePath || null) === xiaomiScope.workspacePath
+      && (activeBackendProfileName || undefined) === xiaomiScope.backendProfileName;
+    if (!stillBound) {
+      xiaomiGenerationRef.current += 1;
+      setXiaomiModalOpen(false);
+      setXiaomiKey('');
+      setXiaomiTesting(false);
+      setXiaomiSaving(false);
+      setXiaomiLoading(false);
+      setXiaomiTested(false);
+      setXiaomiError('');
+      setXiaomiModels([]);
+    }
+  }, [activeProfileId, activeSpacePath, activeBackendProfileName, xiaomiModalOpen, xiaomiScope]);
   const [codexConnect, setCodexConnect] = useState<{
     status: 'starting' | 'pending' | 'success' | 'error' | 'expired' | 'cancelled';
     flowId?: string;
@@ -2456,12 +2520,16 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const defaultModel = settingsText(draft.default_model ?? settings.default_model ?? modelsState.data?.default_model, '');
   const webuiVersion = settingsText(settings.webui_version, 'not detected');
   const agentVersion = settingsText(settings.agent_version, 'not detected');
-  const updateState = settingsText(updatesState.data?.state, 'idle');
-  const updateCurrentVersion = settingsText(updatesState.data?.currentVersion, '');
-  const updateAvailableVersion = settingsText(updatesState.data?.availableVersion, '');
-  const updateMessage = settingsText(updatesState.data?.message, '');
+  const updateState = settingsText(updateStatus?.state, '');
+  const updateCurrentVersion = settingsText(updateStatus?.currentVersion, '');
+  const updateAvailableVersion = settingsText(updateStatus?.availableVersion, '');
+  const updateMessage = settingsText(updateStatus?.message, '');
   const pluginList = arrayFrom(pluginsState.data, ['plugins', 'items']);
-  const providerOptions = useMemo(() => cloudProviderOptions(onboardingStatus), [onboardingStatus]);
+  const providerOptions = useMemo(() => {
+    const options = cloudProviderOptions(onboardingStatus);
+    return options.some(option => option.id === 'xiaomi') ? options : [...options,
+      { id: 'xiaomi', label: 'Xiaomi MiMo', keyOptional: false, requiresBaseUrl: true }];
+  }, [onboardingStatus]);
   const fallbackState = useApiState(() => window.lastbrowser.sidekick.getFallbackModel(), [ready], ready);
   const fallbackModelConfig = isRecord(fallbackState.data?.fallback_model) ? fallbackState.data.fallback_model : {};
   const fallbackModel = settingsText(fallbackModelConfig.model, '');
@@ -2671,13 +2739,23 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   }
 
   async function checkUpdates(): Promise<void> {
-    await updatesState.refresh();
     try {
       await window.lastbrowser.updates.check();
-      await updatesState.refresh();
     } catch (error) {
       showToast(`Update check failed: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  async function installUpdateNow(): Promise<void> {
+    await installDownloadedUpdate({
+      getStatus: () => updateStatusRef.current,
+      install: () => window.lastbrowser.updates.install(),
+      pending: updateInstallPendingRef,
+      setPending: setUpdateInstallPending,
+      setError: setUpdateInstallError,
+      formatError: (error) => `${t('settings.panels.system.updateInstallFailed')} ${error instanceof Error ? error.message : String(error)}`,
+      formatUnavailable: () => t('settings.panels.system.updateInstallUnavailable')
+    });
   }
 
   useEffect(() => {
@@ -2786,23 +2864,158 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     }
   }
 
+  async function openXiaomiSettings(): Promise<void> {
+    const generation = ++xiaomiGenerationRef.current;
+    const scope = { browserProfileId: activeProfileId, workspacePath: activeSpacePath || null,
+      ...(activeBackendProfileName ? { backendProfileName: activeBackendProfileName } : {}) };
+    xiaomiScopeRef.current = scope;
+    setXiaomiScope(scope);
+    setXiaomiModalOpen(true);
+    setXiaomiKey('');
+    setXiaomiHasSavedKey(null);
+    setXiaomiError('');
+    setXiaomiTested(false);
+    setXiaomiTesting(false);
+    setXiaomiSaving(false);
+    setXiaomiLoading(false);
+    setXiaomiModels([]);
+    setXiaomiLoading(true);
+    try {
+      const response = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection: scope });
+      if (!isXiaomiOperationCurrent(scope, generation)) return;
+      const status = await readXiaomiProviderStatus(async () => response);
+      if (!isXiaomiOperationCurrent(scope, generation)) return;
+      const entries = Array.isArray(response.providers) ? response.providers.filter(isRecord) : [];
+      const provider = entries.find(entry => settingsText(entry.id).toLowerCase() === 'xiaomi');
+      const baseUrl = settingsText(provider?.base_url, '');
+      setXiaomiBaseUrl(status?.baseUrl ?? baseUrl);
+      setXiaomiHasSavedKey(status?.hasKey ?? null);
+      const currentModels = normalizeOpenRouterModels(provider?.models);
+      if (currentModels.length) setXiaomiModels(currentModels);
+    } catch {
+      if (isXiaomiOperationCurrent(scope, generation)) setXiaomiError('mimo_provider_unavailable');
+    } finally {
+      if (isXiaomiOperationCurrent(scope, generation)) setXiaomiLoading(false);
+    }
+  }
+
+  function currentXiaomiScopeMatches(scope: NonNullable<typeof xiaomiScope>, generation = xiaomiGenerationRef.current): boolean {
+    const current = xiaomiCurrentContextRef.current;
+    return isProviderSettingsScopeCurrent(scope, current, generation, xiaomiGenerationRef.current);
+  }
+
+  function isXiaomiOperationCurrent(scope: NonNullable<typeof xiaomiScope>, generation: number): boolean {
+    return xiaomiScopeRef.current === scope && currentXiaomiScopeMatches(scope, generation);
+  }
+
+  function requestXiaomiWebui(request: ProviderSettingsRequest, generation: number): Promise<any> {
+    const scope = xiaomiScopeRef.current;
+    if (!scope || !isXiaomiOperationCurrent(scope, generation)) return Promise.reject(new Error('xiaomi_scope_changed'));
+    return requestProviderSettingsInScope(request => window.lastbrowser.sidekick.requestWebui(request), request, scope,
+      () => isXiaomiOperationCurrent(scope, generation));
+  }
+
+  function closeXiaomiSettings(): void {
+    xiaomiGenerationRef.current += 1;
+    setXiaomiModalOpen(false);
+    setXiaomiKey('');
+    setXiaomiTesting(false);
+    setXiaomiSaving(false);
+    setXiaomiLoading(false);
+  }
+
+  async function loadXiaomiModelCatalog(): Promise<void> {
+    if (xiaomiLoading) return;
+    const scope = xiaomiScopeRef.current;
+    const generation = xiaomiGenerationRef.current;
+    if (!scope || !isXiaomiOperationCurrent(scope, generation)) return;
+    setXiaomiLoading(true);
+    setXiaomiError('');
+    setXiaomiTested(false);
+    try {
+      const models = await saveAndLoadXiaomiModels({ apiKey: xiaomiKey, hasSavedKey: xiaomiHasSavedKey === true, baseUrl: xiaomiBaseUrl },
+        request => requestXiaomiWebui(request, generation));
+      if (!isXiaomiOperationCurrent(scope, generation)) return;
+      const normalized = normalizeOpenRouterModels(models);
+      setXiaomiModels(normalized);
+      if (xiaomiKey.trim()) setXiaomiKey('');
+      setXiaomiHasSavedKey(true);
+      if (!normalized.length) setXiaomiError('mimo_invalid_response');
+    } catch (error) {
+      if (isXiaomiOperationCurrent(scope, generation)) setXiaomiError(safeXiaomiErrorCode(error));
+    } finally { if (isXiaomiOperationCurrent(scope, generation)) setXiaomiLoading(false); }
+  }
+
+  async function testXiaomi(): Promise<void> {
+    if (xiaomiTesting) return;
+    const scope = xiaomiScopeRef.current;
+    const generation = xiaomiGenerationRef.current;
+    if (!scope || !isXiaomiOperationCurrent(scope, generation)) return;
+    setXiaomiTesting(true);
+    setXiaomiError('');
+    setXiaomiTested(false);
+    try {
+      const ok = await testXiaomiConnection({ apiKey: xiaomiKey, hasSavedKey: xiaomiHasSavedKey === true, baseUrl: xiaomiBaseUrl },
+        request => requestXiaomiWebui(request, generation));
+      if (!isXiaomiOperationCurrent(scope, generation)) return;
+      if (!ok) throw new Error('mimo_invalid_response');
+      setXiaomiTested(true);
+    } catch (error) { if (isXiaomiOperationCurrent(scope, generation)) setXiaomiError(safeXiaomiErrorCode(error)); }
+    finally { if (isXiaomiOperationCurrent(scope, generation)) setXiaomiTesting(false); }
+  }
+
+  async function saveXiaomiSettings(): Promise<void> {
+    if (xiaomiSaving) return;
+    const scope = xiaomiScopeRef.current;
+    const generation = xiaomiGenerationRef.current;
+    if (!scope || !isXiaomiOperationCurrent(scope, generation)) return;
+    const invalid = validateXiaomiBaseUrl(xiaomiKey, xiaomiBaseUrl, xiaomiHasSavedKey === true);
+    if (invalid) { setXiaomiError(invalid); return; }
+    if (xiaomiHasSavedKey !== true && !xiaomiKey.trim()) { setXiaomiError('mimo_api_key_required'); return; }
+    setXiaomiSaving(true);
+    setXiaomiError('');
+    try {
+      const ack = await requestXiaomiWebui({ method: 'POST', path: '/api/providers', body: {
+        provider: 'xiaomi', base_url: xiaomiBaseUrl.trim(),
+        ...(xiaomiKey.trim() ? { api_key: xiaomiKey.trim() } : {})
+      } }, generation);
+      if (!isXiaomiOperationCurrent(scope, generation)) return;
+      if (!isXiaomiProviderSaveAck(ack, xiaomiBaseUrl.trim())) throw new Error('mimo_invalid_response');
+      const status = await readXiaomiProviderStatus(request => requestXiaomiWebui(request, generation));
+      if (!isXiaomiOperationCurrent(scope, generation)) return;
+      setXiaomiHasSavedKey(status?.hasKey ?? null);
+      if (!status?.hasKey || status.baseUrl !== xiaomiBaseUrl.trim()) throw new Error('mimo_invalid_response');
+      if (xiaomiKey.trim()) { setXiaomiKey(''); setXiaomiHasSavedKey(true); }
+      setXiaomiModalOpen(false);
+      await modelsState.refresh();
+      if (!isXiaomiOperationCurrent(scope, generation)) return;
+      showToast(t('settings.panels.providers.connectionSuccess'));
+    } catch (error) { if (isXiaomiOperationCurrent(scope, generation)) setXiaomiError(safeXiaomiErrorCode(error)); }
+    finally { if (isXiaomiOperationCurrent(scope, generation)) setXiaomiSaving(false); }
+  }
+
   async function loadOpenRouterModelCatalog(
     keyToSave = openRouterKey,
     existingKeyAvailable = openRouterHasSavedKey,
     savedSelection?: { ids: string[]; configured: boolean; defaultModel: string },
     providerId: 'openrouter' | 'alibaba' = openRouterConfigProvider,
-    baseUrl = alibabaBaseUrl
+    baseUrl = alibabaBaseUrl,
+    scopeSelection = openRouterScope ?? activeProviderScope
   ): Promise<void> {
     setOpenRouterLoading(true);
     setOpenRouterError('');
     try {
       const nextKey = keyToSave.trim();
+      const requestInScope = (request: ProviderSettingsRequest) => requestProviderSettingsInScope(
+        value => window.lastbrowser.sidekick.requestWebui(value), request, scopeSelection, () => isActiveProviderScope(scopeSelection));
       const catalog = await requestProviderModelCatalog({
         providerId,
         apiKey: nextKey,
         hasSavedKey: existingKeyAvailable,
-        baseUrl
-      }, (request) => window.lastbrowser.sidekick.requestWebui(request));
+        baseUrl,
+        scopeSelection
+      }, requestInScope);
+      if (!isActiveProviderScope(scopeSelection)) return;
       if (nextKey) {
         setOpenRouterKey('');
         setOpenRouterHasSavedKey(true);
@@ -2842,6 +3055,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   }
 
   async function openOpenRouterSettings(providerId: 'openrouter' | 'alibaba' = 'openrouter'): Promise<void> {
+    const scopeSelection = activeProviderScope;
+    setOpenRouterScope(scopeSelection);
     setOpenRouterConfigProvider(providerId);
     setOpenRouterKey('');
     setOpenRouterModels([]);
@@ -2851,7 +3066,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     setOpenRouterDefaultModel(settingsText(modelsState.data?.default_model || settings.default_model, ''));
     setOpenRouterModalOpen(true);
     try {
-      const response = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers' });
+      const response = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection });
+      if (!isActiveProviderScope(scopeSelection)) return;
       const entries = Array.isArray(response.providers) ? response.providers.filter(isRecord) : [];
       const provider = entries.find((entry) => settingsText(entry.id).toLowerCase() === providerId);
       const providerBaseUrl = settingsText(provider?.base_url, '');
@@ -2868,7 +3084,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
           ids: configuredModels,
           configured: hasConfiguredSelection,
           defaultModel: currentDefaultModel
-        }, providerId, providerId === 'alibaba' ? providerBaseUrl : alibabaBaseUrl);
+        }, providerId, providerId === 'alibaba' ? providerBaseUrl : alibabaBaseUrl, scopeSelection);
       }
     } catch (error) {
       setOpenRouterError(error instanceof Error ? error.message : String(error));
@@ -2877,6 +3093,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   async function saveOpenRouterSettings(): Promise<void> {
     if (openRouterSaving) return;
+    const scopeSelection = openRouterScope ?? activeProviderScope;
+    if (!isActiveProviderScope(scopeSelection)) { setOpenRouterError('Provider scope changed. Reopen settings for the selected space.'); return; }
     const selectedModels = [...new Set(openRouterSelectedModels)];
     if (!selectedModels.length) {
       setOpenRouterError(t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaSelectAtLeastOne' : 'settings.panels.providers.openrouterSelectAtLeastOne'));
@@ -2903,7 +3121,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       const body: Record<string, unknown> = { provider: openRouterConfigProvider, models: selectedModels };
       if (openRouterKey.trim()) body.api_key = openRouterKey.trim();
       if (openRouterConfigProvider === 'alibaba') body.base_url = alibabaBaseUrl.trim();
-      await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/providers', body });
+      await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/providers', body, scopeSelection });
+      if (!isActiveProviderScope(scopeSelection)) throw new Error('Provider scope changed. Reopen settings for the selected space.');
       await window.lastbrowser.sidekick.saveSettings({
         settings: {
           ...cleanSettingsPayload(settings),
@@ -4098,6 +4317,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 <Settings size={14} />
                                 <span>{t('settings.panels.providers.configure')}</span>
                               </button>
+                            ) : option.id === 'xiaomi' ? (
+                              <button type="button" className="secondary-action compact" onClick={() => void openXiaomiSettings()} disabled={!ready || saving}>
+                                <Settings size={14} />
+                                <span>{t('settings.panels.providers.configure')}</span>
+                              </button>
                             ) : ['ollama', 'ollama-cloud'].includes(option.id) ? (
                               <button
                                 type="button"
@@ -4108,6 +4332,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                   const configuredProvider = providerConfigs[option.id];
                                   const providerConfig: AnyRecord = isRecord(configuredProvider) ? configuredProvider : {};
                                   const currentProviderSettings = activeProvider === option.id ? settings : providerConfig;
+                                  setOllamaScope(activeProviderScope);
                                   setOllamaModalProviderId(option.id);
                                   setOllamaModalLabel(option.label || option.id);
                                   setOllamaUrl(settingsText(currentProviderSettings.base_url, defaultUrl));
@@ -4248,6 +4473,47 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   </div>
                 )}
 
+                {xiaomiModalOpen && (
+                  <div className="settings-modal-overlay" onClick={closeXiaomiSettings}>
+                    <div className="settings-modal-box" onClick={event => event.stopPropagation()}>
+                      <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Xiaomi MiMo {t('settings.panels.providers.configure')}</h3>
+                      <p className="settings-hint" style={{ margin: '0 0 12px' }}>{t('settings.panels.providers.xiaomiKeyHint')}</p>
+                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.xiaomiBaseUrlLabel')}</label>
+                      <input type="url" value={xiaomiBaseUrl} onChange={event => { setXiaomiBaseUrl(event.target.value); setXiaomiTested(false); }}
+                        placeholder={t('settings.panels.providers.xiaomiBaseUrlPlaceholder')} style={{ width: '100%', marginBottom: 10 }} />
+                      <p className="settings-hint">{t('settings.panels.providers.xiaomiBaseUrlHint')}</p>
+                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.apiKey')}</label>
+                      <input type="password" autoComplete="new-password" value={xiaomiKey} onChange={event => { setXiaomiKey(event.target.value); setXiaomiTested(false); }}
+                          placeholder={xiaomiHasSavedKey === true ? t('settings.panels.providers.openrouterKeyPlaceholder') : t('settings.panels.providers.xiaomiKeyPlaceholder')}
+                        style={{ width: '100%', marginBottom: 10 }} />
+                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginBottom: 12 }}>
+                        <button type="button" className="secondary-action compact" onClick={() => void testXiaomi()} disabled={xiaomiTesting || xiaomiSaving || xiaomiLoading}>
+                          {xiaomiTesting ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}
+                          <span>{t(xiaomiTesting ? 'settings.panels.providers.testing' : 'settings.panels.providers.testConnection')}</span>
+                        </button>
+                        <button type="button" className="secondary-action compact" onClick={() => void loadXiaomiModelCatalog()} disabled={xiaomiLoading || xiaomiSaving || xiaomiTesting}>
+                          {xiaomiLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}
+                          <span>{t('settings.panels.providers.xiaomiLoadModels')}</span>
+                        </button>
+                      </div>
+                      {xiaomiTested && <p role="status" className="settings-hint">{t('settings.panels.providers.xiaomiTestSuccess')}</p>}
+                      {xiaomiLoading && <EmptyState icon={<Loader2 size={15} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
+                      {xiaomiModels.length > 0 && <div aria-label="MiMo models" style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '6px 10px', marginBottom: 12 }}>
+                        {xiaomiModels.map(model => <div key={model.id} style={{ padding: '5px 0', fontSize: 12 }}>{model.label}</div>)}
+                      </div>}
+                      {xiaomiError && <div className="workspace-error" role="alert" style={{ marginBottom: 10 }}>{t(xiaomiErrorTranslationKey(xiaomiError))}</div>}
+                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <button type="button" className="secondary-action compact" onClick={closeXiaomiSettings}>{t('settings.panels.providers.cancel')}</button>
+                        <button type="button" className="primary-action compact" disabled={xiaomiSaving || xiaomiLoading || !(xiaomiHasSavedKey === true || xiaomiKey.trim())}
+                          onClick={() => void saveXiaomiSettings()}>
+                          {xiaomiSaving ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
+                          <span>{t('settings.panels.providers.xiaomiSave')}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Ollama Config Modal */}
                 {ollamaModalProviderId && (
                   <div className="settings-modal-overlay" onClick={() => setOllamaModalProviderId(null)}>
@@ -4282,15 +4548,19 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                             setOllamaTestResult(t('settings.panels.providers.testing'));
                             try {
                               const isCloud = ollamaModalProviderId === 'ollama-cloud';
+                              const scopeSelection = ollamaScope ?? activeProviderScope;
+                              if (!isActiveProviderScope(scopeSelection)) { setOllamaTestResult('Provider scope changed. Reopen settings for the selected space.'); return; }
                               const result = await window.lastbrowser.sidekick.requestWebui({
                                 method: 'POST',
                                 path: '/api/providers/test',
+                                scopeSelection,
                                 body: {
                                   provider: ollamaModalProviderId,
                                   base_url: ollamaUrl.trim(),
                                   api_key: ollamaKey.trim()
                                 }
                               });
+                              if (!isProviderSettingsScopeCurrent(scopeSelection, activeProviderScope, 0, 0)) return;
                               if (result.ok) {
                                 setOllamaTestResult(`✓ ${t('settings.panels.providers.connectionSuccess')} — ${isCloud ? 'Ollama Cloud' : 'Ollama'}`);
                               } else {
@@ -4313,16 +4583,20 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           onClick={async () => {
                             setSaving(true);
                             try {
+                              const scopeSelection = ollamaScope ?? activeProviderScope;
+                              if (!isActiveProviderScope(scopeSelection)) throw new Error('Provider scope changed. Reopen settings for the selected space.');
                               if (ollamaKey.trim()) {
                                 await window.lastbrowser.sidekick.requestWebui({
                                   method: 'POST',
                                   path: '/api/providers',
+                                  scopeSelection,
                                   body: {
                                     provider: ollamaModalProviderId,
                                     api_key: ollamaKey.trim()
                                   }
                                 });
                               }
+                              if (!isProviderSettingsScopeCurrent(scopeSelection, activeProviderScope, 0, 0)) throw new Error('Provider scope changed. Reopen settings for the selected space.');
                               await window.lastbrowser.sidekick.saveSettings({
                                 settings: {
                                   ...cleanSettingsPayload(settings),
@@ -4490,10 +4764,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     </div>
                   )}
                   <div className="settings-system-actions">
-                    <button type="button" className="secondary-action compact" onClick={() => void checkUpdates()} disabled={!ready || updatesState.loading}>
-                      {updatesState.loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
+                    <button type="button" className="secondary-action compact" onClick={() => void checkUpdates()} disabled={!ready || updateStatus?.state === 'checking'}>
+                      {updateStatus?.state === 'checking' ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
                       <span>{t('settings.panels.system.checkUpdates')}</span>
                     </button>
+                    <UpdateNowButton status={updateStatus} pending={updateInstallPending}
+                      label={t('settings.panels.system.updateNow')} onInstall={() => void installUpdateNow()} />
                     <button type="button" className="secondary-action compact" onClick={() => void signOut()} disabled={!ready || !loggedIn}>
                       <Shield size={15} />
                       <span>{t('settings.panels.system.signOut')}</span>
@@ -4507,11 +4783,15 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     <p className="settings-hint">{t('settings.panels.system.authDisableLoginRequired')}</p>
                   )}
                   <div className="settings-system-status">
-                    <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>{t('settings.panels.system.updateState', { state: updateState })}</span>
-                    {updateCurrentVersion && <span className="settings-badge">{t('settings.panels.system.currentVersion', { version: updateCurrentVersion })}</span>}
-                    {updateAvailableVersion && <span className="settings-badge">{t('settings.panels.system.availableVersion', { version: updateAvailableVersion })}</span>}
-                    {updateMessage && <span className="settings-badge">{updateMessage}</span>}
+                    {updateStatus ? <>
+                      <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>{t('settings.panels.system.updateState', { state: updateState })}</span>
+                      {updateCurrentVersion && <span className="settings-badge">{t('settings.panels.system.currentVersion', { version: updateCurrentVersion })}</span>}
+                      {updateAvailableVersion && <span className="settings-badge">{t('settings.panels.system.availableVersion', { version: updateAvailableVersion })}</span>}
+                      {updateMessage && <span className="settings-badge">{updateMessage}</span>}
+                    </> : <span className="settings-badge">{t('settings.panels.system.updateStatusLoading')}</span>}
                   </div>
+                  {updateStatusReadError && <p className="settings-hint" role="alert">{t('settings.panels.system.updateStatusUnavailable')} {updateStatusReadError}</p>}
+                  {updateInstallError && <p className="settings-hint" role="alert">{updateInstallError}</p>}
                 </SettingsCard>
 
                 <SettingsCard

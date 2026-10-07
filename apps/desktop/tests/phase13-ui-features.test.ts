@@ -5,6 +5,7 @@ import { usePanelStore } from '../src/renderer/stores/usePanelStore.js';
 import { AVAILABLE_MODELS } from '../src/renderer/components/CopilotSplitView.js';
 import { brandAssets } from '../src/renderer/brand.js';
 import { normalizeSettingsSectionId, SETTINGS_SECTIONS } from '../src/renderer/panels/SystemPanels.js';
+import { isModelCatalogResponseCurrent } from '../src/renderer/model-picker-options.js';
 
 function readRendererFile(fileName: string): string {
   return readFileSync(path.resolve(process.cwd(), 'src/renderer', fileName), 'utf8');
@@ -177,7 +178,11 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
 
       const source = readRendererFile('components/CopilotSplitView.tsx');
       expect(source).toContain('const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS)');
-      expect(source).toMatch(/if \(alive\)\s*\{\s*setModelList\(AVAILABLE_MODELS\);/);
+      expect(source).toContain('isModelCatalogResponseCurrent(orchestrationScopeKey, orchestrationScopeKeyRef.current)');
+      const selectedScope = 'profile-a::space-a::backend-a';
+      const nextScope = 'profile-b::space-b::backend-b';
+      expect(isModelCatalogResponseCurrent(selectedScope, selectedScope)).toBe(true);
+      expect(isModelCatalogResponseCurrent(selectedScope, nextScope)).toBe(false);
       expect(source).not.toContain('...prev.filter((item) => item.category !== \'gemini\'');
     });
 

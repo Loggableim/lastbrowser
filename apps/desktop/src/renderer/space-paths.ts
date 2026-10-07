@@ -1,4 +1,5 @@
 import type { SpaceSummary } from './shell-state.js';
+import type { ProfileBindingEntry } from './independent-contracts.js';
 
 function normalizePathForComparison(value: string): string {
   return value.trim().replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/+$/, '').toLowerCase();
@@ -19,6 +20,22 @@ export function resolveCanonicalSpacePath(
   const suffix = `/${requested}`;
   const suffixMatches = spaces.filter((space) => normalizePathForComparison(space.path).endsWith(suffix));
   return suffixMatches.length === 1 ? suffixMatches[0].path : null;
+}
+
+/** Reuse a persisted Space binding only when it is unique and matches the requested backend profile. */
+export function resolveExistingSpaceBackendProfile(
+  canonicalPath: string,
+  requestedBackendProfileName: string | undefined,
+  bindings: readonly ProfileBindingEntry[]
+): { ok: true; backendProfileName?: string } | { ok: false; reason: 'ambiguous' | 'profile_mismatch' } {
+  const matches = bindings.filter(binding => binding.workspacePath !== null
+    && resolveCanonicalSpacePath(canonicalPath, [{ path: binding.workspacePath }]) === binding.workspacePath);
+  if (matches.length > 1) return { ok: false, reason: 'ambiguous' };
+  const existing = matches[0];
+  if (existing && requestedBackendProfileName && existing.backendProfileName !== requestedBackendProfileName) {
+    return { ok: false, reason: 'profile_mismatch' };
+  }
+  return { ok: true, ...(existing ? { backendProfileName: existing.backendProfileName } : {}) };
 }
 
 /** Ignore a Space refresh response that started before a local create/rename/delete. */

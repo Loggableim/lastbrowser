@@ -35,7 +35,16 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None) -> Native
     configured, _ = provider_selection(resolved)
     provider = session.model_provider or (configured.provider if configured else None)
     model = session.model or (configured.model if configured else None)
-    if not model or not provider or not native_sdk_supported(provider):
+    antigravity_binding = None
+    if provider == "antigravity":
+        from runtime.antigravity_oauth import resolve_native_account_binding
+        binding = resolve_native_account_binding(resolved.profile_home)
+        if binding is not None:
+            from .native_provider_capture import NativeAntigravityBinding
+            antigravity_binding = NativeAntigravityBinding(account_id=binding["account_id"],
+                project_id=binding["project_id"], digest=binding["digest"])
+    if not model or not provider or (not native_sdk_supported(provider)
+            and not (provider == "antigravity" and antigravity_binding is not None)):
         raise PolicyDenied("native_fixed_sdk_adapter_unavailable")
     catalog = probe_catalog(service.manager, scope, resolved=resolved, include_capabilities=False)
     group, entry = _entry(catalog, model, provider)
@@ -54,6 +63,7 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None) -> Native
         raise PolicyDenied("provider_connection_changed")
     current = service.store.get_permission_state(scope)
     return NativeProviderCapture(scope=scope, session_id=session.session_id, provider=selected,
+        antigravity_binding=antigravity_binding,
         connection_bindings=refs, permission_revision=current["revision"], control_epoch=current["controlEpoch"],
         policy_revision=policy.revision, budget=policy.budget)
 
@@ -122,12 +132,30 @@ class NativeSdkSessionBroker(NativeAutoSessionBroker):
         verify_native_context(self.context)
         if getattr(self.context, "provider_capture", None) != self.capture:
             raise PolicyDenied("native_fixed_capture_changed")
+        if self.capture.provider.provider == "antigravity":
+            from runtime.antigravity_oauth import resolve_native_account_binding
+            binding = self.capture.antigravity_binding
+            current = resolve_native_account_binding(self.context.profile_home,
+                binding.account_id if binding is not None else None)
+            if (binding is None or current is None or current.get("project_id") != binding.project_id
+                    or current.get("digest") != binding.digest):
+                raise PolicyDenied("native_antigravity_binding_changed")
         policy = self.service.get_policy(self.context.scope, self.context.session_id)
         if policy.mode != "fixed" or policy.revision != self.capture.policy_revision or policy.budget != self.capture.budget:
             raise PolicyDenied("native_fixed_policy_changed")
         if self._decision is not None:
             self.service.validate_decision(self._decision)
         return policy
+
+    def validate_selection(self, model, provider, *, api_mode=None):
+        if provider != "antigravity":
+            return super().validate_selection(model, provider, api_mode=api_mode)
+        self._require_private()
+        binding = self.capture.antigravity_binding
+        if (model != self.capture.provider.model or self.capture.provider.provider != provider
+                or binding is None or api_mode not in {None, "chat_completions"}):
+            raise PolicyDenied("native_antigravity_binding_changed")
+        self._validate()
 
     def __call__(self, context, method, payload):
         allowed = {"fixed_validate": "auto_validate", "fixed_claim": "auto_claim",

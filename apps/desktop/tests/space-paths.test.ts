@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import {
   isCurrentSpaceDirectorySnapshot,
   resolveCanonicalSpacePath,
+  resolveExistingSpaceBackendProfile,
   resolveRefreshedActiveSpacePath
 } from '../src/renderer/space-paths.js';
 
@@ -28,6 +29,29 @@ describe('resolveCanonicalSpacePath', () => {
       { path: 'C:/One/spaces/shared' },
       { path: 'C:/Two/spaces/shared' }
     ])).toBeNull();
+  });
+
+  it('reuses the unique existing Space after its first create succeeded but later setup failed', () => {
+    const existing = [{ path: 'C:/Users/user/.sidekick/workspaces/spaces/audit' }];
+    expect(resolveCanonicalSpacePath('spaces/audit', existing)).toBe(existing[0].path);
+    expect(resolveCanonicalSpacePath('spaces/audit', [
+      ...existing,
+      { path: 'D:/Other/spaces/audit' }
+    ])).toBeNull();
+  });
+
+  it('preserves an existing backend profile binding and rejects a conflicting requested profile', () => {
+    const bindings = [{scope:{backendProfileId:'p',spaceId:'s',browserProfileId:'browser-a'},browserProfileId:'browser-a',
+      backendProfileName:'profile-a',workspacePath:'C:/Users/user/.sidekick/workspaces/spaces/audit',spaceName:'Audit',partitionKey:'partition-a',bindingRevision:1}];
+    expect(resolveExistingSpaceBackendProfile('C:/Users/user/.sidekick/workspaces/spaces/audit', undefined, bindings))
+      .toEqual({ok:true,backendProfileName:'profile-a'});
+    expect(resolveExistingSpaceBackendProfile('C:/Users/user/.sidekick/workspaces/spaces/audit', 'profile-a', bindings))
+      .toEqual({ok:true,backendProfileName:'profile-a'});
+    expect(resolveExistingSpaceBackendProfile('C:/Users/user/.sidekick/workspaces/spaces/audit', 'profile-b', bindings))
+      .toEqual({ok:false,reason:'profile_mismatch'});
+    expect(resolveExistingSpaceBackendProfile('C:/Users/user/.sidekick/workspaces/spaces/audit', undefined, [...bindings,
+      {...bindings[0],backendProfileName:'profile-b',scope:{...bindings[0].scope,backendProfileId:'q',spaceId:'t'}}]))
+      .toEqual({ok:false,reason:'ambiguous'});
   });
 
   it('discards a Space list response that started before a directory mutation', () => {
@@ -59,6 +83,9 @@ describe('resolveCanonicalSpacePath', () => {
     const app = readFileSync(resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
     expect(app).toContain('handleSpaceSelect(canonicalPath)');
     expect(app).toContain('saveSpaceModel(createdSpacePath, chosen.value.model');
+    expect(app).toContain('recoverExistingSpace(data.path, data.name');
+    expect(app).toContain("t('spaceSetup.existingSpaceUnmatched')");
+    expect(app).toContain('resolveExistingSpaceBackendProfile(canonicalPath');
     expect(app).toContain('spacePath: createdSpacePath');
     expect(app).toContain('isCurrentSpaceDirectorySnapshot(directoryRevisionAtRequest, spaceDirectoryRevisionRef.current)');
     expect(app).toMatch(/selectionRevisionAtRequest,\s*currentSelectionRevision:\s*activeSpaceSelectionRevisionRef\.current/);

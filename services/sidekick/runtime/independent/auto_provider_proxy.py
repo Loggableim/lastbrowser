@@ -9,6 +9,8 @@ from __future__ import annotations
 import threading
 import os
 from typing import Any
+from pathlib import Path
+from urllib.parse import urlsplit
 
 from .contracts import new_id
 from .policy import PolicyDenied
@@ -35,24 +37,50 @@ def _error_code(error):
     return code if code in {"insufficient_quota", "billing_hard_limit_reached", "enforced_spend_limit_reached"} else None
 
 
+def _ollama_subscription_rejection(error, decision):
+    """Require Ollama Cloud's exact typed 403 before allowing one model retry."""
+    if decision.selected_model.provider != "ollama-cloud" or getattr(error, "status_code", None) != 403:
+        return False
+    body = getattr(error, "body", None)
+    nested = body.get("error", body) if isinstance(body, dict) else None
+    details = nested.get("details") if isinstance(nested, dict) else None
+    code = nested.get("code") if isinstance(nested, dict) else None
+    if code is None and isinstance(details, dict):
+        code = details.get("error_code")
+    if code != "subscription_required":
+        return False
+    try:
+        from .provider_admission import provider_endpoint
+        endpoint = provider_endpoint(Path(decision.context.resolved_profile_home), "ollama-cloud")
+        parsed = urlsplit(endpoint or "")
+        return (parsed.scheme.lower() == "https" and parsed.hostname == "ollama.com"
+            and parsed.port in {None, 443} and parsed.username is None and parsed.password is None
+            and not parsed.query and not parsed.fragment and parsed.path.rstrip("/") in {"", "/v1"})
+    except (TypeError, ValueError, OSError):
+        return False
+
+
 class AutoProviderProxy:
     _RESOURCES = frozenset({"chat", "completions", "responses", "messages", "beta"})
 
     def __init__(self, client, service, decision, *, call_authorizer=None,
                  client_binding_validator=None, compute_acquire=None, compute_release=None,
-                 request_metadata=None, stream_complete=None, path=(), state=None):
+                 request_metadata=None, stream_complete=None, subscription_fallback=None, path=(), state=None):
         self._target, self._service, self._decision = client, service, decision
         self._path, self._authorize = tuple(path), call_authorizer
         self._state = state if state is not None else {"lock": threading.RLock(), "active": {}, "delta": False,
             "client": client, "binding_validator": client_binding_validator,
             "compute_acquire": compute_acquire, "compute_release": compute_release,
-            "request_metadata": request_metadata, "stream_complete": stream_complete}
+            "request_metadata": request_metadata, "stream_complete": stream_complete,
+            "subscription_fallback": subscription_fallback, "fallback_used": False, "decision": decision,
+            "requested_model": decision.selected_model.model}
+        self._state.setdefault("decision", decision)
         if hasattr(client, "max_retries"):
             client.max_retries = 0
 
     def __getattr__(self, name):
         if name in self._RESOURCES:
-            return AutoProviderProxy(getattr(self._target, name), self._service, self._decision,
+            return AutoProviderProxy(getattr(self._target, name), self._service, self._state["decision"],
                 call_authorizer=self._authorize, path=(*self._path, name), state=self._state)
         if name in {"create", "stream"}:
             return lambda *args, **kwargs: self._request(name, args, kwargs)
@@ -63,7 +91,7 @@ class AutoProviderProxy:
                 if args or set(kwargs) - {"max_retries", "timeout"}:
                     raise PolicyDenied("auto_provider_client_change_forbidden")
                 kwargs["max_retries"] = 0
-                return AutoProviderProxy(getattr(self._target, name)(**kwargs), self._service, self._decision,
+                return AutoProviderProxy(getattr(self._target, name)(**kwargs), self._service, self._state["decision"],
                     call_authorizer=self._authorize, path=self._path, state=self._state)
             return copy_client
         return getattr(self._target, name)
@@ -113,9 +141,11 @@ class AutoProviderProxy:
             from .manager import ComputeAdmission
             ComputeAdmission.release("auto-provider:" + claim.claim_id)
 
-    def _request(self, method, args, original):
-        decision = self._decision
-        if args or original.get("model") != decision.selected_model.model:
+    def _request(self, method, args, original, *, fallback_attempted=False):
+        decision = self._state["decision"]
+        requested_model = original.get("model")
+        if args or (requested_model != decision.selected_model.model and not (
+                self._state["fallback_used"] and requested_model == self._state["requested_model"])):
             raise PolicyDenied("auto_actual_model_changed")
         service = self._service
         service.validate_decision(decision)
@@ -124,6 +154,7 @@ class AutoProviderProxy:
             raise PolicyDenied("auto_bound_sdk_client_required")
         policy = service.get_policy(decision.scope, decision.session_id)
         kwargs = dict(original)
+        kwargs["model"] = decision.selected_model.model
         if sum(key in kwargs for key in ("max_tokens", "max_completion_tokens", "max_output_tokens")) > 1:
             raise PolicyDenied("auto_conflicting_output_limits")
         headers = kwargs.get("extra_headers") or {}
@@ -185,7 +216,23 @@ class AutoProviderProxy:
             lifecycle.finish(result)
             return result
         except BaseException as error:
-            lifecycle.fail(error)
+            subscription_rejection = _ollama_subscription_rejection(error, decision)
+            lifecycle.fail(error, error_code="ollama_subscription_required" if subscription_rejection else None)
+            fallback = self._state.get("subscription_fallback")
+            if (subscription_rejection and not fallback_attempted and not self._state["fallback_used"]
+                    and not self._state["delta"] and callable(fallback)):
+                replacement = fallback(decision, claim)
+                if (replacement.selected_model.provider != decision.selected_model.provider
+                        or replacement.turn_id != decision.turn_id or replacement.scope != decision.scope
+                        or replacement.session_id != decision.session_id):
+                    raise PolicyDenied("auto_subscription_fallback_identity_changed") from error
+                with self._state["lock"]:
+                    self._state["decision"] = replacement
+                    self._state["fallback_used"] = True
+                    self._decision = replacement
+                retry = dict(original)
+                retry["model"] = replacement.selected_model.model
+                return self._request(method, args, retry, fallback_attempted=True)
             raise
 
 
@@ -197,7 +244,7 @@ class _RequestLifecycle:
         self.measured = None
 
     def start(self):
-        self.proxy._service.validate_decision(self.proxy._decision)
+        self.proxy._service.validate_decision(self.proxy._state["decision"])
         self.proxy._service.admission.update(self.claim.scope, self.claim.claim_id, state="started")
         self.started = True
 
@@ -243,7 +290,7 @@ class _RequestLifecycle:
             complete()
         self.finish(value)
 
-    def fail(self, error):
+    def fail(self, error, *, error_code=None):
         if self.finished:
             return
         response = getattr(error, "response", None)
@@ -252,7 +299,7 @@ class _RequestLifecycle:
                 self.proxy._service.admission.observe(self.claim.scope, self.claim.claim_id,
                     getattr(response, "headers", {}), status_code=getattr(error, "status_code", None), error_code=_error_code(error))
         finally:
-            self.finish(error_code="provider_stream_interrupted" if self.proxy._state["delta"] else "provider_request_failed")
+            self.finish(error_code=error_code or ("provider_stream_interrupted" if self.proxy._state["delta"] else "provider_request_failed"))
 
     def _release(self):
         self.proxy._release_compute(self.claim)

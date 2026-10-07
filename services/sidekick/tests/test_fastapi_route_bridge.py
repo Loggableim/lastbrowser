@@ -52,6 +52,78 @@ def test_standalone_startup_keeps_legacy_api_bridge_lazy(monkeypatch):
     web_server._prepare_desktop_api_bridge_runtime_on_startup()
 
 
+def test_chat_start_header_timeout_is_before_route_response_and_not_provider_evidence(monkeypatch, caplog):
+    """A blocked local handler reproduces the 504 without invoking chat/provider code."""
+    import logging
+    import threading
+    import time
+
+    from cli import web_server
+    from web.api import fastapi_bridge, routes
+
+    entered = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    caplog.set_level(logging.WARNING)
+    monkeypatch.setattr(fastapi_bridge, "_HEADER_WAIT_SECONDS", 0.05)
+    monkeypatch.setattr(fastapi_bridge, "_CHAT_START_BRIDGE_DIAGNOSTIC_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(fastapi_bridge, "_prepare_webui_runtime", lambda: None)
+    monkeypatch.setattr(routes, "_setup_workspace_from_request", lambda *_: None)
+    monkeypatch.setattr(routes, "_teardown_workspace_context", lambda: None)
+
+    def blocked_start(handler, _parsed):
+        entered.set()
+        try:
+            release.wait(timeout=2)
+            handler.send_response(200)
+            handler.send_header("Content-Type", "application/json")
+            handler.end_headers()
+            return True
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(routes, "handle_post", blocked_start)
+    try:
+        response = TestClient(web_server.app).post(
+            "/api/chat/start", headers=_headers(web_server), json={}
+        )
+        assert response.status_code == 504
+        assert response.json() == {"error": "route handler did not start a response in time"}
+        assert entered.wait(timeout=1), "chat-start route handler did not enter"
+        diagnostics = "\n".join(record.getMessage() for record in caplog.records)
+        assert "Slow chat-start bridge before response headers" in diagnostics
+        assert '"phase": "route_dispatch"' in diagnostics
+        assert '"elapsed_ms":' in diagnostics and '"phase_ms":' in diagnostics
+        assert all(secret_label not in diagnostics for secret_label in ("workspace", "api_key", "prompt", "message"))
+        diagnostic_count = sum("Slow chat-start bridge before response headers" in record.getMessage()
+                               for record in caplog.records)
+        time.sleep(0.04)
+        assert sum("Slow chat-start bridge before response headers" in record.getMessage()
+                   for record in caplog.records) == diagnostic_count
+    finally:
+        release.set()
+    assert finished.wait(timeout=1), "blocked test handler did not clean up"
+
+
+def test_chat_start_bootstrap_exception_returns_error_instead_of_header_timeout(monkeypatch):
+    """An early runtime-bootstrap exception must not strand the bridge until its timeout."""
+    from cli import web_server
+    from web.api import fastapi_bridge
+
+    monkeypatch.setattr(fastapi_bridge, "_HEADER_WAIT_SECONDS", 0.05)
+
+    def fail_bootstrap():
+        raise RuntimeError("synthetic bootstrap failure")
+
+    monkeypatch.setattr(fastapi_bridge, "_prepare_webui_runtime", fail_bootstrap)
+    response = TestClient(web_server.app).post(
+        "/api/chat/start", headers=_headers(web_server), json={}
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {"error": "Internal server error"}
+
+
 def _headers(web_server):
     return {
         web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN,

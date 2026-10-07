@@ -475,6 +475,8 @@ declare global {
         check: () => Promise<LastbrowserUpdateStatus>;
         download: () => Promise<LastbrowserUpdateStatus>;
         install: () => Promise<LastbrowserUpdateStatus>;
+        whatsNewCandidate: () => Promise<{ fromVersion: string | null; toVersion: string } | null>;
+        acknowledgeWhatsNew: (version: string) => Promise<{ acknowledged: boolean }>;
         setAutoCheckEnabled: (enabled: boolean) => Promise<{ enabled: boolean }>;
         onStatus: (callback: (status: LastbrowserUpdateStatus) => void) => () => void;
       };

@@ -1,6 +1,6 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.46",
+  "version": "0.1.47",
   "private": true,
   "type": "module",
   "description": "LastBrowser Electron desktop shell.",
@@ -165,7 +165,10 @@
         ".dll",
         ".pyd",
         ".node"
-      ]
+      ],
+      "signtoolOptions": {
+        "sign": "./scripts/preserve-valid-windows-signatures.cjs"
+      }
     },
     "nsis": {
       "artifactName": "Lastbrowser-${version}-${arch}-setup.${ext}",

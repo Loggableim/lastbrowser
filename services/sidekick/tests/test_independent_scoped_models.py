@@ -31,8 +31,8 @@ class CatalogManager:
         assert payload["mode"] == "model_catalog"
         result = {"providerConfigurationDigest": provider_configuration_digest(context.home), "providers": [], "groups": [
             {"provider_id": "local-a", "provider": "Local A", "configured": True,
-             "models": [{"id": "model-a", "label": "A", "supportsIndependent": True},
-                        {"id": "model-b", "label": "B", "supportsIndependent": True}]},
+             "models": [{"id": "model-a", "label": "A", "supportsIndependent": True, "contextLength": 131072},
+                        {"id": "model-b", "label": "B", "supportsIndependent": True, "contextLength": 131072}]},
             {"provider_id": "disconnected", "configured": False, "models": [{"id": "known-but-disconnected"}]},
             {"provider_id": "", "configured": True, "models": [{"id": "teamwork", "supportsIndependent": False}]},
         ]}
@@ -74,6 +74,12 @@ def test_get_uses_bound_worker_and_redacts_public_catalog(bound, monkeypatch):
     response = get(bound)
     assert response["model"] == "model-a" and response["provider"] == "local-a"
     assert response["revision"] == 1 and response["configured"] and response["supportsIndependent"]
+    availability = response["nativeAvailability"]
+    assert availability == {"schemaVersion": 1, "supported": True, "available": True,
+        "reasonCode": None, "provider": "local-a", "model": "model-a",
+        "scope": response["scope"], "selectionRevision": 1}
+    row_availability = response["groups"][0]["models"][0]["nativeAvailability"]
+    assert row_availability == availability
     assert bound[3].calls[0][0].home == bound[2].resolve(bound[4]).profile_home
     raw = {"groups": [{"provider_id": "test", "provider": "Test", "api_key": "private-only",
                        "models": [{"id": "actual-model", "label": "Actual", "secret": "private-only",
@@ -104,6 +110,7 @@ def test_set_is_atomic_preserves_other_settings_and_retry_survives_reopen(bound)
     old_provider, _ = provider_selection(resolved)
     response = select(bound)
     assert response["revision"] == 2 and response["model"] == "model-b"
+    assert response["nativeAvailability"]["available"] and response["nativeAvailability"]["selectionRevision"] == 2
     assert provider_selection(resolved)[0].model == "model-b" and old_provider.model == "model-a"
     assert resolved.space.load_config()["model"]["other_preference"] == {"keep": True}
     assert select(bound)["revision"] == 2 and len(manager.calls) == 1
@@ -211,10 +218,11 @@ def test_actual_packaged_catalog_workers_keep_two_bound_profiles_and_release_han
         (profile_home / "workspace").mkdir(parents=True)
         endpoint = f"http://127.0.0.1:{server.server_port}/{name}/v1"
         (profile_home / "config.yaml").write_text(yaml.safe_dump({
-            "model": {"default": "actual-model-" + name, "provider": "custom:controlled-" + name,
-                      "base_url": endpoint, "api_key": "synthetic-catalog-" + name},
+                "model": {"default": "actual-model-" + name, "provider": "custom:controlled-" + name,
+                          "base_url": endpoint, "api_key": "synthetic-catalog-" + name, "context_length": 131072},
             "custom_providers": [{"name": "controlled-" + name, "base_url": endpoint, "api_key": "synthetic-catalog-" + name,
-                                  "models": {"actual-model-" + name: {}, "second-model-" + name: {}}}],
+                                      "models": {"actual-model-" + name: {"context_length": 131072},
+                                                 "second-model-" + name: {"context_length": 131072}}}],
         }), "utf-8")
     hub = ProfileHub(home)
     captured = []

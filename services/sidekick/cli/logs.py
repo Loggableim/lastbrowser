@@ -29,6 +29,9 @@ from runtime._compat.shim_constants import get_sidekick_home, display_sidekick_h
 # Known log files (name → filename)
 LOG_FILES = {
     "agent": "agent.log",
+    # The dashboard process uses the shared Sidekick logger; there is no
+    # independent webui.log file. Keep this alias for the native panel.
+    "webui": "agent.log",
     "errors": "errors.log",
     "gateway": "gateway.log",
 }

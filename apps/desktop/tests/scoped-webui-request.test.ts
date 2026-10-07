@@ -65,7 +65,7 @@ describe('Main-owned Teamwork profile binding', () => {
     const { event, options } = fixture();
     for (const bad of [
       { ...selectedRequest, profile: 'beta' }, { ...selectedRequest, backendProfileName: 'beta' },
-      ...['Cookie', 'Authorization', 'X-Sidekick-Profile', 'X-Sidekick-Session-Token'].map(key => ({ ...selectedRequest, headers: { [key]: 'foreign' } })),
+      ...['Cookie', 'Authorization', 'X-Sidekick-Profile', 'X-Sidekick-Session-Token', 'X-LastBrowser-Bridge-Token'].map(key => ({ ...selectedRequest, headers: { [key]: 'foreign' } })),
       { ...selectedRequest, scopeSelection: { ...selection, backendProfileName: '../beta' } },
       { ...selectedRequest, scopeSelection: { ...selection, workspacePath: 5 } },
       { ...selectedRequest, scopeSelection: { ...selection, scope: 'injected' } },
@@ -73,6 +73,23 @@ describe('Main-owned Teamwork profile binding', () => {
       { ...selectedRequest, path: '/api/teamwork/config?profile=beta' },
       { ...selectedRequest, path: '/api/teamwork/status', method: 'POST' }
     ]) await expect(requestScopedWebui(event, bad, options)).rejects.toThrow();
+    expect(options.lookupBinding).not.toHaveBeenCalled();
+    expect(options.request).not.toHaveBeenCalled();
+  });
+
+  it('rejects absolute, authority and backslash paths before binding lookup or request', async () => {
+    const { event, options } = fixture();
+    const paths = [
+      'https://attacker.invalid/api/providers',
+      '//attacker.invalid/api/providers',
+      '///attacker.invalid/api/providers',
+      '\\\\attacker.invalid\\api\\providers',
+      '/api\\providers'
+    ];
+    for (const path of paths) {
+      await expect(requestScopedWebui(event, { path, scopeSelection: selection }, options))
+        .rejects.toThrow(/Invalid WebUI bridge path/);
+    }
     expect(options.lookupBinding).not.toHaveBeenCalled();
     expect(options.request).not.toHaveBeenCalled();
   });
@@ -97,6 +114,71 @@ describe('Main-owned Teamwork profile binding', () => {
     for (const profile of ['alpha', 'beta', 'alpha']) await requestScopedWebui(event,
       { ...selectedRequest, scopeSelection: { ...selection, backendProfileName: profile } }, options);
     expect(options.request.mock.calls.map(([request]) => (request as any).profile)).toEqual([undefined, 'alpha', 'beta', 'alpha']);
+  });
+
+  it('binds provider settings and both live and provider-specific model catalogs to the selected saved Space', async () => {
+    const { event, options } = fixture();
+    const requests = [
+      { method: 'GET', path: '/api/providers' },
+      { method: 'POST', path: '/api/providers', body: { provider: 'xiaomi', api_key: 'synthetic-test-key', base_url: 'https://api.xiaomimimo.com/v1' } },
+      { method: 'POST', path: '/api/providers', body: { provider: 'openrouter', models: ['openai/gpt-4o'] } },
+      { method: 'POST', path: '/api/providers', body: { provider: 'alibaba', models: ['qwen-plus'] } },
+      { method: 'POST', path: '/api/providers/test', body: { provider: 'xiaomi', api_key: 'synthetic-test-key', base_url: 'https://api.xiaomimimo.com/v1' } },
+      { method: 'POST', path: '/api/providers/test', body: { provider: 'ollama-cloud', base_url: 'https://ollama.com/v1' } },
+      { method: 'GET', path: '/api/models/live', query: { provider: 'xiaomi', catalog: 'configuration' } },
+      { method: 'GET', path: '/api/models/live', query: { provider: 'alibaba', catalog: 'configuration' } },
+      { method: 'GET', path: '/api/models' }
+    ];
+    for (const request of requests) {
+      try { await requestScopedWebui(event, { ...request, scopeSelection: selection }, options); }
+      catch (error) { throw new Error(`${JSON.stringify(request)}: ${error instanceof Error ? error.message : String(error)}`); }
+    }
+    expect(options.lookupBinding).toHaveBeenCalledTimes(requests.length);
+    expect(options.request.mock.calls.map(([request]) => (request as any).profile)).toEqual([
+      ...requests.map(() => 'alpha')
+    ]);
+  });
+
+  it('requires exact saved-Space bindings and rejects malformed provider/catalog requests', async () => {
+    const { event, options } = fixture();
+    const requests = [
+      { method: 'GET', path: '/api/providers' },
+      { method: 'POST', path: '/api/providers', body: { provider: '../beta' }, scopeSelection: selection },
+      { method: 'POST', path: '/api/providers', body: { provider: ' OpenRouter ', api_key: 'synthetic-test-key' }, scopeSelection: selection },
+      { method: 'POST', path: '/api/providers', body: { provider: 'arbitrary-provider', api_key: 'synthetic-test-key' }, scopeSelection: selection },
+      { method: 'POST', path: '/api/providers', body: { provider: 'openrouter', api_key: 'synthetic-test-key', extra: true }, scopeSelection: selection },
+      { method: 'POST', path: '/api/providers', body: { provider: 'openrouter', models: [1] }, scopeSelection: selection },
+      { method: 'POST', path: '/api/providers', body: { provider: 'openrouter', models: ['bad model'] }, scopeSelection: selection },
+      { method: 'POST', path: '/api/providers', body: { provider: 'openrouter', models: ['x'.repeat(257)] }, scopeSelection: selection },
+      { method: 'POST', path: '/api/providers', body: { provider: 'xiaomi', base_url: 'https://api.xiaomimimo.com/v1', models: ['mimo'] }, scopeSelection: selection },
+      { method: 'POST', path: '/api/providers', body: '{"provider":"openrouter","provider":"xiaomi","api_key":"synthetic-test-key"}', scopeSelection: selection },
+      { method: 'POST', path: '/api/providers/test', body: { provider: 'openrouter', base_url: 'https://example.invalid' }, scopeSelection: selection },
+      { method: 'POST', path: '/api/providers/test', body: {}, scopeSelection: selection },
+      { method: 'GET', path: '/api/models/live', query: { provider: 'xiaomi', catalog: 'configuration', profile: 'beta' }, scopeSelection: selection },
+      { method: 'GET', path: '/api/models/live?provider=xiaomi&catalog=configuration', query: { provider: 'alibaba', catalog: 'configuration' }, scopeSelection: selection },
+      { method: 'GET', path: '/api/%70roviders', scopeSelection: selection },
+      { method: 'GET', path: '/api/models/live?provider=xiaomi&catalog=configuration&extra=1', scopeSelection: selection },
+      { method: 'GET', path: '/api/models?profile=beta', scopeSelection: selection }
+    ];
+    for (const request of requests) await expect(requestScopedWebui(event, request, options)).rejects.toThrow();
+    expect(options.lookupBinding).not.toHaveBeenCalled();
+    expect(options.request).not.toHaveBeenCalled();
+  });
+
+  it('keeps a started Xiaomi save bound to captured profile even if the UI switches profiles during lookup', async () => {
+    const { event, options } = fixture();
+    let selectedProfile = 'alpha';
+    options.lookupBinding.mockImplementation(async (_browser: string, _workspace: string | null, profile?: string) => {
+      const captured = profile ?? selectedProfile;
+      selectedProfile = 'beta';
+      return { scope: { browserProfileId: 'browser-a' }, backendProfileName: captured };
+    });
+    await requestScopedWebui(event, {
+      method: 'POST', path: '/api/providers', body: { provider: 'xiaomi', base_url: 'https://token-plan-ams.xiaomimimo.com/v1' },
+      scopeSelection: selection
+    }, options);
+    expect(options.request).toHaveBeenCalledWith(expect.objectContaining({ profile: 'alpha' }));
+    expect(selectedProfile).toBe('beta');
   });
 
   it('composes Main-only profile and dashboard authentication cookies on the real fetch bridge', async () => {

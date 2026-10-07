@@ -660,11 +660,11 @@ function registerIpc(): void {
     return quickChatController.start(event, request);
   });
   ipcMain.handle('lastbrowser:quickchat:stop', (event, request) => {
-    if (!quickChatController) throw new Error('Quickchat is unavailable');
+    if (!quickChatController) throw new Error('Quickchat stop failed [quickchat_ipc_unavailable]');
     return quickChatController.stop(event, request);
   });
   ipcMain.handle('lastbrowser:quickchat:cancel', (event, request) => {
-    if (!quickChatController) throw new Error('Quickchat is unavailable');
+    if (!quickChatController) throw new Error('Quickchat cancel failed [quickchat_ipc_unavailable]');
     return quickChatController.cancel(event, request);
   });
   ipcMain.handle('lastbrowser:sidekick:chatMode', async (event, request) => controlChatMode(requireWebuiUrl(), await boundPurposeChatRequest(event, request) as ChatModeRequest));

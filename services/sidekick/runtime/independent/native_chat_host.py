@@ -24,7 +24,7 @@ class NativeChatStartError(WorkerError):
 
 
 _RPC_DIAGNOSTIC_METHODS = frozenset({
-    "auto_validate", "auto_policy", "auto_claim", "auto_observe", "auto_usage",
+    "auto_validate", "auto_policy", "auto_claim", "auto_observe", "auto_usage", "auto_subscription_fallback",
     "fixed_validate", "fixed_claim", "fixed_observe", "fixed_usage",
     "compute_acquire", "compute_release", "teamwork_plan", "teamwork_validate",
     "teamwork_claim", "teamwork_authorize", "teamwork_compute_acquire",

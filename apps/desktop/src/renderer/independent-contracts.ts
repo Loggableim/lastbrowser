@@ -185,7 +185,15 @@ export type DispatchRequest = Readonly<{
   selectedContextRefs: readonly string[]; expectedPermissionRevision: number; definitionId?: string; definitionRevision?: number;
 }>;
 export type ScopeSelectionRequest = Readonly<{ browserProfileId: string; workspacePath: string | null; nativeSpaceId?: string }>;
-export type ScopedModelEntry = Readonly<{ id: string; label: string; supportsIndependent: boolean; reasoning_efforts?: readonly string[] }>;
+export type NativeAvailabilityReason = 'adapter_unsupported' | 'provider_unconfigured' | 'pair_absent' | 'independent_unsupported'
+  | 'context_missing' | 'cloud_denied' | 'binding_mismatch';
+export type NativeModelAvailability = Readonly<{ schemaVersion: 1; supported: boolean; available: boolean;
+  reasonCode: NativeAvailabilityReason | null; provider: string; model: string; scope: IndependentScope; selectionRevision: number }>;
+export type NativeModelResolution = Readonly<{ schemaVersion: 1; scope: IndependentScope; streamId: string;
+  requested: Readonly<{ provider: string; model: string }>; effective: Readonly<{ provider: string; model: string }>;
+  fallbackApplied: boolean; fallbackReasonCode: 'ollama_subscription_required' | null; fallbackAttempts: 0 | 1 }>;
+export type ScopedModelEntry = Readonly<{ id: string; label: string; supportsIndependent: boolean; reasoning_efforts?: readonly string[];
+  nativeAvailability?: NativeModelAvailability }>;
 export type ScopedModelGroup = Readonly<{ provider: string; provider_id: string; configured: boolean; models: readonly ScopedModelEntry[]; extra_models?: readonly ScopedModelEntry[] }>;
 export type ScopedModelProvider = Readonly<{id:string;display_name:string;has_key:boolean;oauth_connected:boolean;auth_state:string;provider_available:boolean;models:readonly string[]}>;
 export type ScopedModelSelection = Readonly<{ schemaVersion: 1; scope: IndependentScope; revision: number; model: string; provider: string; configured: boolean;

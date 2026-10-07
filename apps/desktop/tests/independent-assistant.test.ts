@@ -369,10 +369,12 @@ describe('independent assistant presentation boundaries', () => {
     expect(store.getState().entries[assistantScopeKey(b)]).toBe(originalB); controller.dispose();
   });
   it('decodes scoped literal model IDs, orchestration preferences and committed retry acknowledgements', async () => {
-    const s = scope(); const value = { schemaVersion: 1, scope: s, revision: 2, model: 'smart-track-high', provider: '', configured: true,
+    const s = scope(); const availability = { schemaVersion: 1, supported: true, available: true, reasonCode: null, provider: 'custom:local', model: 'gemma4:31b', scope: s, selectionRevision: 2 };
+    const value = { schemaVersion: 1, scope: s, revision: 2, model: 'smart-track-high', provider: '', configured: true,
       supportsIndependent: false, reasonCode: 'independent_orchestration_not_supported', groups: [
-        { provider: 'Orchestration', provider_id: '', configured: true, models: [{ id: 'smart-track-high', label: 'Smart Track High', supportsIndependent: false }] },
-        { provider: 'Local', provider_id: 'custom:local', configured: true, models: [{ id: 'gemma4:31b', label: 'Local model', supportsIndependent: true, reasoning_efforts: ['low', 'high'] }] }
+        { provider: 'Orchestration', provider_id: '', configured: true, models: [{ id: 'smart-track-high', label: 'Smart Track High', supportsIndependent: false,
+          nativeAvailability: { schemaVersion: 1, supported: false, available: false, reasonCode: 'independent_unsupported', provider: '', model: 'smart-track-high', scope: s, selectionRevision: 2 } }] },
+        { provider: 'Local', provider_id: 'custom:local', configured: true, models: [{ id: 'gemma4:31b', label: 'Local model', supportsIndependent: true, reasoning_efforts: ['low', 'high'], nativeAvailability: availability }] }
       ] };
     const client = new IndependentAssistantClient({ request: async () => ({ ok: true, value }) });
     const result = await client.request({ schemaVersion: 1, operation: 'modelSelection', scope: s, payload: { action: 'get' } });
@@ -385,6 +387,12 @@ describe('independent assistant presentation boundaries', () => {
     } })).ok).toBe(true);
     const wrong = new IndependentAssistantClient({ request: async () => ({ ok: true, value: { ...value, scope: scope() } }) });
     expect((await wrong.request({ schemaVersion: 1, operation: 'modelSelection', scope: s, payload: { action: 'get' } })).ok).toBe(false);
+    const badPair = new IndependentAssistantClient({ request: async () => ({ ok: true, value: { ...value, groups: [value.groups[0], { ...value.groups[1], models: [{ ...value.groups[1].models[0],
+      nativeAvailability: { ...availability, model: 'foreign-model' } }] }] } }) });
+    expect((await badPair.request({ schemaVersion: 1, operation: 'modelSelection', scope: s, payload: { action: 'get' } })).ok).toBe(false);
+    const contradictory = new IndependentAssistantClient({ request: async () => ({ ok: true, value: { ...value, groups: [value.groups[0], { ...value.groups[1], models: [{ ...value.groups[1].models[0],
+      nativeAvailability: { ...availability, supported: false } }] }] } }) });
+    expect((await contradictory.request({ schemaVersion: 1, operation: 'modelSelection', scope: s, payload: { action: 'get' } })).ok).toBe(false);
   });
   it('keeps configured keyless capabilities distinct from credentials, health and execution adapters', async () => {
     const s = scope();

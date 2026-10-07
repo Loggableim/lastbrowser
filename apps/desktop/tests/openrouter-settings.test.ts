@@ -4,6 +4,18 @@ import { describe, expect, it } from 'vitest';
 import { requestProviderModelCatalog } from '../src/renderer/provider-settings.js';
 
 describe('OpenRouter provider settings flow', () => {
+  it('sends provider saves and model catalog reads to the selected Space scope', async () => {
+    const scopeSelection = { browserProfileId: 'profile-b', workspacePath: 'C:/spaces/b', backendProfileName: 'backend-b' };
+    const requests: any[] = [];
+    const models = await requestProviderModelCatalog({ providerId: 'alibaba', apiKey: '', hasSavedKey: true,
+      baseUrl: 'https://workspace.example/v1', scopeSelection }, async request => {
+      requests.push(request);
+      return request.method === 'GET' ? { models: [{ id: 'qwen-plus' }] } : { ok: true };
+    });
+    expect(models).toEqual([{ id: 'qwen-plus' }]);
+    expect(requests).toHaveLength(2);
+    expect(requests.map(request => request.scopeSelection)).toEqual([scopeSelection, scopeSelection]);
+  });
   // Normalize CRLF so line-ending churn in the working tree cannot break
   // multi-line source assertions.
   const source = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/SystemPanels.tsx'), 'utf8').replace(/\r\n/g, '\n');

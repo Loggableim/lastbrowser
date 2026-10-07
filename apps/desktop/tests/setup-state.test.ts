@@ -301,6 +301,61 @@ describe('cloud first-run setup state', () => {
     });
   });
 
+  it('gates release notes on the settled onboarding check and current setup/auth state', async () => {
+    const { canShowWhatsNewModal } = await import('../src/renderer/setup-state.js');
+    const completed = { cloudSetupComplete: true, provider: 'fixture', model: 'fixture-model' };
+    const candidate = { toVersion: '0.1.46', fromVersion: '0.1.45' };
+    let onboardingStatus: { system?: { chat_ready?: boolean } } | null = null;
+    let onboardingStatusChecked = false;
+    let setupDismissed = false;
+    const gate = () => canShowWhatsNewModal({
+      setupLoading: false,
+      setupRequired: isFirstRunRequired(completed, onboardingStatus) && !setupDismissed,
+      onboardingStatusChecked,
+      accessAuthChecked: true,
+      accessAuthRequired: false
+    });
+
+    expect(gate()).toBe(false);
+    const failedInitialRequest = await Promise.resolve(null);
+    onboardingStatus = failedInitialRequest;
+    onboardingStatusChecked = true;
+    expect(gate()).toBe(true);
+    expect(candidate.toVersion).toBe('0.1.46');
+
+    onboardingStatus = { system: { chat_ready: false } };
+    expect(isFirstRunRequired(completed, onboardingStatus)).toBe(true);
+    expect(gate()).toBe(false);
+    expect(candidate.toVersion).toBe('0.1.46');
+
+    setupDismissed = true;
+    expect(gate()).toBe(true);
+    setupDismissed = false;
+    onboardingStatus = { system: { chat_ready: true } };
+    expect(gate()).toBe(true);
+    expect(canShowWhatsNewModal({
+      setupLoading: true,
+      setupRequired: false,
+      onboardingStatusChecked,
+      accessAuthChecked: true,
+      accessAuthRequired: false
+    })).toBe(false);
+    expect(canShowWhatsNewModal({
+      setupLoading: false,
+      setupRequired: false,
+      onboardingStatusChecked,
+      accessAuthChecked: false,
+      accessAuthRequired: false
+    })).toBe(false);
+    expect(canShowWhatsNewModal({
+      setupLoading: false,
+      setupRequired: false,
+      onboardingStatusChecked,
+      accessAuthChecked: true,
+      accessAuthRequired: true
+    })).toBe(false);
+  });
+
   it('keeps setup submission disabled until the WebUI API is reachable', () => {
     expect(canSubmitCloudSetup(firstRunStatus({ sidekick: 'ready', webuiHealth: 'checking' }, null))).toBe(false);
     expect(canSubmitCloudSetup(firstRunStatus({ sidekick: 'ready', webuiHealth: 'ready' }, { system: { chat_ready: false } }))).toBe(true);

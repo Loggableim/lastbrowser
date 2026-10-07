@@ -223,13 +223,23 @@ def _stop_and_wait_for_quickchat_worker(session: Any, stream_id: str, actor: str
     )
 
     context = get_native_stream_context(stream_id)
-    if (context is None or context.session_id != session.session_id
+    if (context is None or context.session_id != session.session_id or getattr(context, "stream_id", None) != stream_id
             or context.profile_name != actor or context.scope != scope):
         raise QuickChatError("Quickchat worker binding could not be verified", 409, "quickchat_worker_binding_missing")
 
     cancelled = False
     if not native_chat_exit_confirmed(context):
-        cancelled = bool(control_native_chat(session.session_id, stream_id, actor=actor, scope=scope, command="cancel"))
+        try:
+            cancelled = bool(control_native_chat(session.session_id, stream_id, actor=actor, scope=scope, command="cancel"))
+        except Exception as exc:
+            # NativeChatHandle deliberately exposes only this fixed stop-gate
+            # token for an unconfirmed parent I/O fence. Translate that one
+            # known token into the public Quickchat error contract; never pass
+            # arbitrary exception text through the API response.
+            if str(exc) == "native_chat_file_exit_not_confirmed":
+                raise QuickChatError("Quickchat could not confirm the native I/O stop", 503,
+                                     "quickchat_file_exit_unconfirmed") from None
+            raise
         if not cancelled and not native_chat_exit_confirmed(context):
             raise QuickChatError("Quickchat worker could not be cancelled safely", 409, "quickchat_worker_cancel_rejected")
 
@@ -239,7 +249,6 @@ def _stop_and_wait_for_quickchat_worker(session: Any, stream_id: str, actor: str
             raise QuickChatError("Quickchat worker has not exited; its private session was kept", 503,
                                  "quickchat_worker_exit_unconfirmed")
         time.sleep(0.025)
-
     # The worker-exit registry settles just before the owning route releases
     # the persisted writer lease. Wait for that release before removing files.
     from runtime.independent.store import IndependentStore
@@ -257,6 +266,31 @@ def _stop_and_wait_for_quickchat_worker(session: Any, stream_id: str, actor: str
         time.sleep(0.025)
 
 
+def _validate_quickchat_binding_without_admission(session: Any, *, raw_scope: Any, actor: str,
+                                                  workspace: str) -> None:
+    """Revalidate saved scope identity without claiming the active writer.
+
+    Stop/reset addresses an already-admitted stream. Its native context proves
+    ownership of the current writer lease; asking start-admission here would
+    reject that very lease and misreport it as a scope denial.
+    """
+    from runtime.independent.contracts import Scope
+    from runtime.independent.scope import same_path
+    from web.api.independent import hub
+
+    scope = _scope_value(raw_scope)
+    saved = getattr(session, "space_scope", None)
+    if saved is None or Scope.model_validate(saved) != scope:
+        raise QuickChatError("Quickchat scope binding did not match", 409, "quickchat_binding_conflict")
+    _, resolver = hub().by_scope(scope, actor)
+    resolved = resolver.resolve(scope, authenticated_profile_name=actor)
+    if (getattr(session, "profile", None) or "default") != actor:
+        raise QuickChatError("Quickchat profile binding did not match", 403, "quickchat_profile_mismatch")
+    permitted = (resolved.binding.workspace_locator, str(resolved.space_root))
+    if not any(path and same_path(path, workspace) for path in permitted):
+        raise QuickChatError("Quickchat workspace binding did not match", 409, "quickchat_binding_conflict")
+
+
 def stop_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     """Stop the exact active response while retaining its private transcript."""
     if not isinstance(body, dict) or set(body) != {"quick_chat_id", "stream_id", "space_scope", "profile", "workspace"}:
@@ -265,7 +299,7 @@ def stop_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     if not isinstance(quick_id, str) or not _QUICK_ID.fullmatch(quick_id) or not isinstance(stream_id, str) or not _QUICK_ID.fullmatch(stream_id):
         raise QuickChatError("Invalid Quickchat stop identity")
     from web.api.profiles import get_active_profile_name
-    from runtime.independent.chat_binding import capture_chat_profile, require_native_scope_header
+    from runtime.independent.chat_binding import require_native_scope_header
     from web.api.models import get_session
     actor = str(get_active_profile_name() or "default")
     scope = _scope_value(body.get("space_scope"))
@@ -282,10 +316,8 @@ def stop_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     workspace = body.get("workspace")
     if workspace is not None and (not isinstance(workspace, str) or Path(workspace).resolve() != Path(session.workspace).resolve()):
         raise QuickChatError("Quickchat workspace binding did not match", 409, "quickchat_binding_conflict")
-    try:
-        capture_chat_profile(session=session, raw_scope=body.get("space_scope"), actor=actor, workspace=session.workspace)
-    except Exception as exc:
-        raise QuickChatError("Quickchat scope could not be confirmed", 409, "quickchat_scope_denied") from exc
+    _validate_quickchat_binding_without_admission(session, raw_scope=body.get("space_scope"),
+                                                  actor=actor, workspace=session.workspace)
     active = str(getattr(session, "active_stream_id", None) or "")
     if active and active != stream_id:
         raise QuickChatError("Quickchat has another active response", 409, "quickchat_stream_mismatch")
@@ -302,7 +334,7 @@ def cancel_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     if not isinstance(quick_id, str) or not _QUICK_ID.fullmatch(quick_id) or not isinstance(stream_id, str) or (stream_id and not _QUICK_ID.fullmatch(stream_id)):
         raise QuickChatError("Invalid Quickchat reset identity")
     from web.api.profiles import get_active_profile_name
-    from runtime.independent.chat_binding import capture_chat_profile, require_native_scope_header
+    from runtime.independent.chat_binding import require_native_scope_header
     from web.api.models import get_session
     actor = str(get_active_profile_name() or "default")
     scope = _scope_value(body.get("space_scope"))
@@ -319,10 +351,8 @@ def cancel_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     workspace = body.get("workspace")
     if workspace is not None and (not isinstance(workspace, str) or Path(workspace).resolve() != Path(session.workspace).resolve()):
         raise QuickChatError("Quickchat workspace binding did not match", 409, "quickchat_binding_conflict")
-    try:
-        capture_chat_profile(session=session, raw_scope=body.get("space_scope"), actor=actor, workspace=session.workspace)
-    except Exception as exc:
-        raise QuickChatError("Quickchat scope could not be confirmed", 409, "quickchat_scope_denied") from exc
+    _validate_quickchat_binding_without_admission(session, raw_scope=body.get("space_scope"),
+                                                  actor=actor, workspace=session.workspace)
     active = str(getattr(session, "active_stream_id", None) or "")
     if active and active != stream_id:
         raise QuickChatError("Quickchat has another active response", 409, "quickchat_stream_mismatch")

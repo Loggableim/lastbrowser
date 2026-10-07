@@ -22,6 +22,15 @@ Der hashgeprüfte Portable-Kandidat startet in einem frischen synthetischen Prof
 | Installations-, Design-, Quickchat-, Teamwork- und weitere UI-Fälle | **NOT_TESTED** | Keine sichtbare Bedienung. Keine Providerturns; Teamwork bleibt gemäß Auftrag read-only vorbereitet. |
 | Quell-/Harness-Tests | **TEILWEISE PASS** | `compileall` PASS; 2 Bundle-Unittests, 39 Space-/Session-Navigationstests und 15 Website-Downloadzähler-Tests PASS. Die vollständigen 202 Desktop-Vitest-Dateien und die Sidekick-Pytest-Suite liefen nicht, da die Abhängigkeiten fehlen und der Auftrag deren Installation untersagt. |
 
+## Ergänzende read-only HTTP-Smokes
+
+In einem weiteren frischen synthetischen Profil antworteten diese lokalen GET-Routen:
+
+- `/health`: HTTP 200, `ok=true`, Sidekick `0.8.84`, 0 aktive Runs und Streams.
+- `/api/config/defaults`: HTTP 200; 58 oberste Felder gezählt, keine Werte protokolliert.
+- `/api/config/schema`: HTTP 200; 287 Schemafelder in 15 Kategorien gezählt, keine Werte protokolliert.
+
+Es wurden keine Modellkatalog-/Providerstatusrouten aufgerufen, keine Konfiguration geändert und keine Providerturns ausgelöst. App-/Sidekick-Testprozesse wurden nach den GET-Aufrufen beendet; der reguläre Quit bleibt unbestätigt.
 ## Laufzeitkorrektur
 
 Ein früherer Direktstart wurde fälschlich als Paketfehler gewertet: Dabei wurde der Portable-Wrapper vor Abschluss seines Entpackvorgangs beendet. Der daraus entstandene unvollständige Temp-Baum fehlte unter anderem `web/api/independent.py`; der anschließende Importfehler gehört zu diesem abgebrochenen Testlauf und ist **kein bestätigter Produktfehler**. Der erste rohe Bundlevergleich verwendete außerdem einen älteren Temp-Baum. Beide Befunde sind durch den danach vollständig gestarteten frischen Lauf ersetzt.

@@ -161,9 +161,10 @@ import {
   canSubmitCloudSetup,
   canShowWhatsNewModal,
   cloudProviderOptions,
+  firstRunAiChoiceForSetup,
   defaultSetupState,
   firstRunStatus,
-  isFirstRunRequired,
+  shouldShowFirstRunSetup,
   modelsForProvider,
   normalizeSetupState
 } from './setup-state.js';
@@ -1013,6 +1014,7 @@ function AppContent(): JSX.Element {
       return false;
     }
   });
+  const [setupReopenRequested, setSetupReopenRequested] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null);
   const [onboardingStatusChecked, setOnboardingStatusChecked] = useState(false);
   const [setupLoading, setSetupLoading] = useState(true);
@@ -1347,7 +1349,10 @@ function AppContent(): JSX.Element {
   const contextSidebarCollapsedRef = useRef(contextSidebarCollapsed);
   const workspacePanelCollapsedRef = useRef(workspacePanelCollapsed);
   const leftSidebarCollapsedRef = useRef(leftSidebarCollapsed);
-  const setupRequired = isFirstRunRequired(setupState, onboardingStatus) && !setupDismissed;
+  const setupRequired = shouldShowFirstRunSetup(setupState, onboardingStatus, {
+    dismissed: setupDismissed,
+    reopenRequested: setupReopenRequested
+  });
   const canPresentWhatsNew = canShowWhatsNewModal({
     setupLoading,
     setupRequired,
@@ -2779,6 +2784,10 @@ function AppContent(): JSX.Element {
 
   async function completeSetup(form: SetupForm): Promise<void> {
     setSetupError('');
+    if (firstRunAiChoiceForSetup(setupState) !== 'enabled') {
+      setSetupError('Choose whether to use AI before configuring a provider.');
+      return;
+    }
     if (!form.provider || !form.model) {
       setSetupError('Choose a provider and model before continuing.');
       return;
@@ -2815,12 +2824,62 @@ function AppContent(): JSX.Element {
         personality: personality
       });
       setSetupState(nextState);
+      setSetupReopenRequested(false);
       setOnboardingStatus((completeStatus || nextStatus) as OnboardingStatus);
       void refreshSessions();
     } catch (error) {
       setSetupError(error instanceof Error ? error.message : String(error));
     } finally {
       setSetupSaving(false);
+    }
+  }
+
+  async function saveFirstRunAiChoice(choice: SetupState['aiChoice']): Promise<boolean> {
+    if (choice !== 'enabled' && choice !== 'disabled') return false;
+    setSetupError('');
+    setSetupSaving(true);
+    try {
+      const nextState = await window.lastbrowser.setup.save({ aiChoice: choice });
+      const normalized = normalizeSetupState(nextState);
+      if (normalized.aiChoice !== choice) throw new Error('The AI preference was not saved.');
+      setSetupState(normalized);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setSetupSaving(false);
+    }
+  }
+
+  async function completeBrowserOnlySetup(): Promise<boolean> {
+    setSetupError('');
+    setSetupSaving(true);
+    try {
+      const nextState = await window.lastbrowser.setup.save({
+        aiChoice: 'disabled',
+        browserSetupComplete: true
+      });
+      const normalized = normalizeSetupState(nextState);
+      if (normalized.aiChoice !== 'disabled' || normalized.browserSetupComplete !== true) {
+        throw new Error('The browser setup was not saved.');
+      }
+      setSetupState(normalized);
+      setSetupReopenRequested(false);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setSetupSaving(false);
+    }
+  }
+
+  function reopenSetupFromSettings(): void {
+    setSetupReopenRequested(true);
+    setSetupDismissed(false);
+    try {
+      window.localStorage.removeItem('lastbrowser.setupDismissed');
+    } catch {
+      // The in-memory request still opens the setup for this session.
     }
   }
 
@@ -5048,14 +5107,7 @@ function AppContent(): JSX.Element {
                   onAddSplitTab={addSplitTab}
                   onRemoveSplitTab={removeSplitTab}
                   onSetSplitLayout={setSplitLayout}
-                  onReopenSetup={() => {
-                    setSetupDismissed(false);
-                    try {
-                      window.localStorage.removeItem('lastbrowser.setupDismissed');
-                    } catch {
-                      // Storage unavailable — the wizard still opens for this session.
-                    }
-                  }}
+                  onReopenSetup={reopenSetupFromSettings}
                   busy={sidekickBusy}
                   chatError={chatError}
                   chatMessages={chatMessages}
@@ -5391,14 +5443,7 @@ function AppContent(): JSX.Element {
               onAddSplitTab={addSplitTab}
               onRemoveSplitTab={removeSplitTab}
               onSetSplitLayout={setSplitLayout}
-              onReopenSetup={() => {
-                setSetupDismissed(false);
-                try {
-                  window.localStorage.removeItem('lastbrowser.setupDismissed');
-                } catch {
-                  // Storage unavailable — the wizard still opens for this session.
-                }
-              }}
+              onReopenSetup={reopenSetupFromSettings}
               busy={sidekickBusy}
               chatError={chatError}
               chatMessages={chatMessages}
@@ -5481,18 +5526,23 @@ function AppContent(): JSX.Element {
           </main>
         </>
       )}
-        {setupRequired && (
+        {!setupLoading && setupRequired && (
           <FirstRunSetupPane
             browserProfileId={activeProfileId}
             workspacePath={activeSpacePath}
+            backendProfileName={activeBackendProfileName || activeSession?.profile || null}
+            aiChoice={firstRunAiChoiceForSetup(setupState)}
             status={status}
             onboardingStatus={onboardingStatus}
             setupLoading={setupLoading}
             error={setupError}
             saving={setupSaving}
             onRefreshOnboarding={refreshOnboardingStatus}
+            onChooseAi={saveFirstRunAiChoice}
+            onCompleteBrowserSetup={completeBrowserOnlySetup}
             onSubmit={completeSetup}
             onDismiss={() => {
+              setSetupReopenRequested(false);
               setSetupDismissed(true);
               try {
                 window.localStorage.setItem('lastbrowser.setupDismissed', '1');

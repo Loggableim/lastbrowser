@@ -257,7 +257,7 @@ describe('browser shell layout', () => {
     expect(source).not.toContain('Native panel shell');
     expect(source).not.toContain('focused placeholder');
     expect(source).not.toContain('is queued for native migration after Chat, Workspace/Spaces, Tasks, Kanban and Todos');
-    expect(source).toContain('{setupRequired && (');
+    expect(source).toContain('{!setupLoading && setupRequired && (');
     expect(source).toContain('<FirstRunSetupPane');
     expect(source).toContain('style={{');
     expect(source).toContain('--context-sidebar-width');

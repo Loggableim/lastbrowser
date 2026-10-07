@@ -178,7 +178,8 @@ import {
   getFallbackModel,
   setFallbackModel
 } from './sidekick-api.js';
-import { registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
+import { installDownloadedUpdateForAppRestart, registerUpdateIpc, startAutoUpdateChecks } from './updates.js';
+import { createCdpRestartHandler } from './cdp-restart-flow.js';
 import { createAdblockController } from './adblock.js';
 import { createSidekickUpdater } from './sidekick-updater.js';
 import { subscribeChatStream } from './chat-stream.js';
@@ -1174,11 +1175,11 @@ function registerIpc(): void {
     const saved = saveCdpPreference(app.getPath('userData'), { enabled: (value as { enabled: boolean }).enabled });
     return { ok: true, enabled: saved.enabled, active: isCdpEnabled(), restartRequired: saved.enabled !== isCdpEnabled() };
   });
-  ipcMain.handle('lastbrowser:cdp:restart', async () => {
-    app.relaunch();
-    app.exit(0);
-    return { ok: true };
-  });
+  ipcMain.handle('lastbrowser:cdp:restart', createCdpRestartHandler({
+    installDownloadedUpdate: installDownloadedUpdateForAppRestart,
+    relaunch: () => app.relaunch(),
+    quit: () => app.quit(),
+  }));
   ipcMain.handle('lastbrowser:cdp:status', async () => {
     if (!isCdpEnabled()) {
       return { available: false, enabled: false, port: null, url: null, wsUrl: null, browser: null };

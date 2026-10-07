@@ -5947,6 +5947,50 @@ html.theme-light .browser-start-search input {
   padding: 24px 32px;
 }
 
+.first-run-ai-choice-screen {
+  min-height: min(560px, calc(100vh - 100px));
+  justify-content: center;
+}
+
+.first-run-ai-choice-card {
+  width: min(100%, 620px);
+  margin: auto;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.first-run-ai-choice-card h1 {
+  margin: 0;
+  color: #f3f8ff;
+  font-size: clamp(24px, 4vw, 34px);
+}
+
+.first-run-ai-choice-card > p {
+  max-width: 480px;
+  margin: 0;
+  color: rgba(232, 242, 255, 0.72);
+  line-height: 1.6;
+}
+
+.first-run-ai-choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.first-run-no-ai-note {
+  margin: 0;
+  color: rgba(232, 242, 255, 0.62);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .first-run-topbar {
   display: flex;
   align-items: center;

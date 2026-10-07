@@ -203,7 +203,7 @@ declare global {
       };
       setup: {
         load: () => Promise<LastbrowserSetupState>;
-        save: (state: LastbrowserSetupState) => Promise<LastbrowserSetupState>;
+        save: (state: Partial<LastbrowserSetupState>) => Promise<LastbrowserSetupState>;
       };
       browser: {
         setSearchEngine: (id: string) => Promise<boolean>;

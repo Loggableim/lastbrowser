@@ -1,0 +1,2 @@
+#include "resource.h"
+IDR_LOGO RCDATA "assets/lastbrowser-logo.png"

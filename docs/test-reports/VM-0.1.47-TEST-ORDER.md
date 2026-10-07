@@ -1,5 +1,16 @@
 # LastBrowser 0.1.47 — Auftrag für die dedizierte Windows-Test-VM
 
+**Aktualisierung 7. Oktober 2026:** Direkter Humanauftrag: laufende VM-Abnahme wieder aufnehmen und neue Tests durchführen. Dieser aktualisierte Repo-Auftrag ersetzt den alten VM-NEXT-Auftrag für 0.1.46. Der unveränderte frühere Release-MD-Download bleibt historisch und enthält diese Ergänzungen nicht. Den aktuellen Repo-Stand benutzen. Kandidatpins unten bleiben unverändert.
+
+## Wiederaufnahme und neue Prioritäten
+
+1. Vor Computer Use tatsächlichen aktiven VM-Testlauf prüfen. Keinen zweiten Installer/Chat/Testprozess parallel starten. Neueste Guestberichte lesen; den letzten fertigen Versuch und verbrauchte Turns im aktuellen 0.1.47-Auftrag übernehmen. Bereits bestandene Fälle desselben Kandidaten nicht erneut ausführen, außer ein neuer konkreter Befund rechtfertigt dies.
+2. Neuester beim CEO-Abgleich sichtbarer GitHub-Bericht: `lastbrowser-9615a8ae-vm-provider-corrections-2026-10-06.md`, Blob `24a2f515e736d7a64e469787fc18e0ec2fb799e5`, Branch `codex/lastbrowser-electron-shell`. Das ist ein anderer 0.1.46-Kandidat, kein 0.1.47-Nachweis. Neuere Berichte am Start prüfen.
+3. Falls noch 0.1.46 läuft: aktuelle synthetische VM-Testdaten erhalten; den gepinnten 0.1.47-Installer verwenden. Ein in-place Upgrade mit dokumentierter alter Baseline ist von einer sauberen Installation zu unterscheiden; keine vorhandene VM zurücksetzen oder Accounts überschreiben. Snapshot nur über bereits verfügbaren sicheren Guest-Testweg, sonst Baselinefall als BLOCKED führen.
+4. Zuerst Settings/Picker/Scope ohne Inferenz prüfen, dann die begrenzten Provider-/Quickchat-Turns. Alte Fehler gezielt nachprüfen: Ollama Cloud saved-Space-Anforderung, widersprüchlicher Active-Provider/Katalog, leere Gemini-Auswahl, Normalchat-Route-Timeout, Quickchat-Verlaufserhaltung und sichere Bereinigung nach A-B-A. Fehler des alten Pakets nicht automatisch als Fehler des neuen übernehmen.
+5. Danach neue Fälle A–E unten. Computer Use in der sichtbaren App ist maßgeblich; bei fehlender nativer Fenstersteuerung konkreten Toolblocker berichten, keine Backendtests als UI-Ersatz. Root/Host startet oder bedient die VM weiterhin nicht. Der Human führt diesen Auftrag dem verbundenen Guest-Codex zu.
+6. Kein laufendes 0.1.47-Paket durch lokalen Sourcebuild reparieren. Nach späteren Sourceänderungen von Multiagent Umsetzung erst ein explizit gepinnter neuer Kandidat; kein Quellbranch als Beleg für installierte Korrekturen.
+
 Ziel: Das genaue signierte Testpaket praktisch prüfen. Kein Stable-/Store-Release, kein Hosttest, keine VM-Reparatur und kein neuer Paketbau. Ausschließlich dedizierte, rücksetzbare Guest-Umgebung und synthetische Spaces verwenden. Hostprofile, Hostkeys und fremde Prozesse bleiben unberührt.
 
 ## Verbindliche Paketpins
@@ -25,6 +36,7 @@ Vor Ausführung Größe, SHA-256 und Authenticode des heruntergeladenen Artefakt
 - Nur bestehende, vom Nutzer im Guest eingerichtete Providerkonten verwenden. Keine Anmeldung, Accountumschaltung, Hostkey-Kopie oder Secrets aus Chats/Repository.
 - GPT, Gemini/Google, Ollama Cloud und MiMo jeweils getrennt scoped prüfen. Nicht eingerichteter Provider: **BLOCKED — Guest-HumanSetup fehlt**.
 - Höchstens **zwei kurze, toolfreie Kontrollturns je bereitgestelltem Provider insgesamt** über alle folgenden Fälle. Quickchat/Folgeanfrage/Normalchat zählen mit; keine zusätzliche Testserie. Eine synthetische Kurzantwort als Positivkontrolle, höchstens ein Streaming-/Stop- oder Folge-Turn. Nicht abgedeckte Fälle **NOT_TESTED — Budget**. Bei Auth-/Quota-/Netzwerkfehler kein Retry, Modellrotation, Kauf oder automatischer kostenpflichtiger Fallback.
+- **Verbindliche Reihenfolge:** erster Turn Positivkontrolle; zweiter Turn entweder Streaming/Stop **oder** Folgeanfrage. Reset darf über seinen ACK ohne weitere Inferenz geprüft werden. Positivkontrolle plus Stop plus Reset-Folgeanfrage wären drei Turns und sind nicht erlaubt. Verbleibenden Fall als NOT_TESTED — Budget ausweisen; das Limit gilt nicht separat je Szenario.
 - Teamwork: Einstellungen nur lesen. Echte Mehrprovider-Turns benötigen ihren separaten Auftrag und zählen hier nicht als abgenommen.
 - Sicherer Reset benötigt bestätigten Cancel-/Reset-ACK. Bei unklarem aktivem Writer, fehlendem ACK oder Cleanupwarnung keine Folgeanfrage/Fehlerinjektion; Bindung und Transcript bewahren.
 
@@ -40,6 +52,20 @@ Vor Ausführung Größe, SHA-256 und Authenticode des heruntergeladenen Artefakt
 8. **Logs und Trust:** Vorhandenen Logalias/Filter auf sichere synthetische Ereignisse prüfen. Keine Keys/Tokens/Cookies/Prompts/Accountkennungen offenlegen. Wirkungsloser Trust-Schalter darf nicht als aktive Sicherheitsfunktion angeboten werden. Bei fehlenden Logs keine Ereignisse erfinden. Bei 504/Timeout keinen parallelen Ersatzturn starten; nur vorhandene redigierte Phase/Zeit/Korrelationsreferenz berichten, Ursache ohne Beleg unbekannt lassen.
 
 ## Ergebnisbericht
+
+## Zusätzliche Fälle für diese Wiederaufnahme
+
+**A. Settings-/Modellbindung ohne kostenpflichtige Turns:** Bestehende eingerichtete Provider und tatsächliche Modelle in Settings, Normalchat und Quickchat lesen. A-B-A und normalen App-Neustart prüfen; Status/Modelle bleiben im richtigen Space. MiMo: nur vorhandenen maskierten Status/gespeicherte URL prüfen; ohne vom Human eingerichteten Guest-Key BLOCKED. Niemals leeren Key über einen unklaren gespeicherten Zustand schreiben. Ollama Local/Cloud getrennt. Bei Timeout sicheren Fehlerzustand und bedienbare UI dokumentieren, keinen parallelen Turn.
+
+**B. Assistant-/Goal-Persistenz:** Mit zwei synthetischen Spaces prüfen, dass Assistant und Normalchat/Quickchat getrennte Verläufe/Status haben. Ziel über tatsächliche UI erstellen, pausieren, nach normalem Beenden/Start wiederfinden und fortsetzen/abbrechen, soweit dies ohne neue Modellaufrufe möglich ist. Wenn Erstellung/Fortsetzung Inferenz startet, zählt sie in das vorhandene Providerbudget; Budget für zentrale Quickchat-Positivkontrolle zuerst reservieren. Keine unbeaufsichtigten Goals laufen lassen. Keine Wiederaufnahme/Revisionserhaltung behaupten, wenn nur ein Dialog sichtbar war. Fehlende/unklare Aktion als konkreten Gap melden.
+
+**C. Local AI / AUTO:** Vorhandene Runtime-/Modell-/Hardwareanzeige und lokale Setupfehler über UI prüfen. Kein großes Modell ungefragt herunterladen/installieren, kein Training, keine Hardware-/Pfadguards umgehen. AUTO: zugelassenes tatsächliches Modell und dessen Spacebindung, fehlende Auswahl und verständlichen Fehler prüfen; kein Qualitätsranking behaupten. Offline-Inferenz nur mit bereits vorhandener lokaler Runtime/Modell und sicher isolierbarem Guest-Testnetz, ohne Remote-Runs oder Login zu unterbrechen. Andernfalls NOT_TESTED mit Voraussetzung. Router-Qualität braucht getrennte Testmatrix, kein Ein-Prompt-PASS.
+
+**D. Update-UX und Änderungs-Popup:** Den Updatezustand im neuen signierten Paket lesen; Installieren/Update-now muss im tatsächlichen Zustand downloaded angeboten werden. Ein nicht heruntergeladenes Update rechtfertigt keinen aktiven Installationsknopf. Manuellen .46→.47-Upgradezustand und What’s New getrennt prüfen: tatsächliche neue Version, einmaliges Popup, späterer normaler Start ohne erneutes Popup, erreichbare Änderungsansicht. Falls Upgrade vor diesem Auftrag schon erfolgt ist, den historischen Popupzustand nicht erraten. Keine Userdaten manipulieren, um ein Popup zu erzwingen. Auto-Update/Update-on-quit bleibt bei fehlender gepinnter Baseline/Testfeed BLOCKED; Stablefeed nicht ändern und keine .45-Downgrades erzwingen.
+
+**E. Teamwork – Abnahmepaket vorbereiten:** Sichtbare Teamwork-Auswahl, Rollen und tatsächlich im aktuellen Space zugelassene Modelle lesen. Kein neuer realer Mehrprovider-Turn ohne konkreten separaten Kosten-/Turnauftrag. Im Bericht minimalen Testplan nennen: vorgesehene Lead/Worker/Reviewer/Synthese-Modelle, maximale Aufrufzahl, vorhandene Nutzungslimits und erwartete Worker-/Stop-Belege. Quelle/Katalogstatus nicht als Ausführung ausgeben. Synthetische Teamwork-Matrix bleibt Hostreview von FIX4, kein Guest-Live-PASS.
+
+Neuer Bericht: `docs/test-reports/lastbrowser-0.1.47-vm-resumption-2026-10-07.md` oder eindeutiger Zeitstempel bei vorhandenem Namen, Evidence in eigenem zugehörigem Unterordner. Tabelle mit Fall-ID, PASS/FAIL/BLOCKED/NOT_TESTED, tatsächlicher Modell-/Turnzahl, sichtbarem Ergebnis, Pin und redigiertem Beleg. Native Abnahme, Source-/Harnesshinweise und fehlende Voraussetzungen getrennt. Nach Abschluss oder echtem Blocker sofort dem Human/CEO über den bestehenden GitHub-Berichtskanal rapportieren; keine automatische Wiederholungsserie.
 
 Je Fall **PASS / FAIL / BLOCKED / NOT_TESTED**, Guest-Zeit, Artefakt-/ASAR-Pin und minimalen redigierten Belegpfad nennen. Screenshots vor Zustellung auf private Daten prüfen. Keine rohen Requests/Responses, Keys, Tokens oder persönlichen Nachrichten. Ein Klick, Katalogstatus oder Sourcecheck ist kein praktischer PASS.
 

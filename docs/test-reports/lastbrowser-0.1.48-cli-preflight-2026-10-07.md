@@ -1,0 +1,35 @@
+# LastBrowser 0.1.48 cec9 – Prüfung ohne Computer Use
+
+**Datum:** 7. Oktober 2026, 12:05 Uhr America/Los_Angeles  
+**Testauftrag:** `VM-0.1.48-TEST-ORDER.md`, gepinnt auf `9079d3be5793a9d2452862fe72ad58e4949a95ac`  
+**Kandidat:** `cec9d2f5ac8a22b8c492c138b7efcbef6d329aba` / `test-v0.1.48-20261007-cec9d2f`  
+**Prüfmodus:** Nutzer bat, keine Computer-Use-Steuerung zu verwenden. Daher keine sichtbare UI-Bedienung und keine Screenshots.
+
+## Ergebnis
+
+Kein vollständiger Funktions-PASS. Der hashgeprüfte Portable-Wrapper entpackte einen `app.asar` mit exakt dem erwarteten cec9-Hash. Ein laufender LastBrowser-Prozess aus diesem entpackten Build oder ein sichtbares Anwendungsfenster wurde jedoch nicht nachgewiesen. Die Guest-UI-Szenarien bleiben deshalb `NOT_TESTED` bzw. `BLOCKED`.
+
+| Teilprüfung | Status | Befund |
+|---|---|---|
+| Portable-Wrapperidentität | **PASS – Paketidentität** | 175,170,969 Bytes; SHA-256 `0C3B0855DFDF2B4C2E5CC37EFA4421A6A94599EBBBEB3479E0FAC0B1AC68B357` |
+| Authenticode | **PASS – erwarteter Paketstatus** | `NotSigned`, wie im Auftrag angegeben |
+| Extrahierter App-Payload | **PASS – Payloadidentität** | `resources/app.asar`: 64,012,655 Bytes; SHA-256 `918330622B3CC5F2D925AE2C31E2B24B1406DBAFCA6230C8CC7C7B038ABB663C` |
+| Isolierter Portable-Appstart | **BLOCKED** | Wrapperprozess blieb ohne Fenster; kein `Lastbrowser.exe` aus dem extrahierten Paket nachgewiesen; frisches synthetisches Profil blieb leer. `CloseMainWindow()` meldete kein schließbares Fenster. Nur der selbst gestartete Wrapperprozess wurde anschließend beendet. |
+| Profil-/Runtimeisolation | **NOT_TESTED** | Ohne bestätigten Appstart keine Aussage über tatsächliche `userData`-/Sidekick-Pfade oder Trennung zur installierten Instanz. |
+| Installations-/Design-/Quickchat-/Teamwork- und übrige UI-Fälle | **NOT_TESTED** | Keine UI-Steuerung und keine Providerturns; Teamwork bleibt gemäß Auftrag read-only vorbereitet. |
+| Quelltests | **BLOCKED** | Auf diesem Arbeitsverzeichnis fehlen `npm`, `node_modules` und eine ausführbare Python-Installation. `python` löst nur den deaktivierten Windows-Store-App-Alias aus; Unit-/Buildtests liefen nicht. |
+
+**Kandidatenbezug:** Die Portable-Datei war bereits zuvor gegen den Auftrag geprüft worden; diese Prüfung wurde erneut bestätigt: SHA-256 `0C3B0855DFDF2B4C2E5CC37EFA4421A6A94599EBBBEB3479E0FAC0B1AC68B357` — vollständiger Wert steht im ursprünglichen Guest-Bericht. Der Setup-Installer wurde in dieser Runde nicht gestartet.
+
+## Ablauf und Grenzen
+
+Der Kandidat wurde einmal mit `--user-data-dir` sowie getrennten, prozesslokalen `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `TEMP`, `TMP` und `LASTBROWSER_DOWNLOADS_DIR` aufgerufen. Alle Pfade zeigten auf ein neu angelegtes Temp-Testverzeichnis. Die extrahierte `app.asar`-Datei stimmte byte- und hashgenau mit dem Auftrag überein. Das ist ein Paket-/Entpacknachweis, kein Beleg, dass die App diese Datei tatsächlich ausgeführt hat.
+
+Die vier vorbestehenden Prozesse der installierten 0.1.46-App (PIDs 7276, 9236, 9248 und 10104) wurden weder geschlossen noch verändert. Es wurde kein Setup gestartet, kein Nutzerprofil geöffnet oder zurückgesetzt und kein Provider-/LLM-Aufruf gesendet.
+
+Es gibt keine Screenshots, weil kein sichtbarer UI-Test stattfand. Der Auftrag verlangt sichtbare Guest-Beobachtung; Prozess- und Hashprüfungen ersetzen diese nicht.
+
+## Erforderlicher nächster Schritt
+
+Für die vollständige Abnahme ist ein sichtbarer Start des gepinnten Portable-Kandidaten in einem frischen synthetischen Profil erforderlich. Der Startpfad muss vor Funktionsprüfungen die tatsächliche cec9-Version, den laufenden/extrahierten ASAR sowie die benutzten Profil- und Runtimepfade bestätigen. Anschließend sind die Szenarien aus dem Masterauftrag einzeln mit UI-Belegen zu prüfen. Bis dahin bleiben Funktionsfälle offen; dieser Bericht gibt keine Produktfreigabe.
+

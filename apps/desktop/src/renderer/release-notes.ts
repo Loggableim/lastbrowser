@@ -8,6 +8,19 @@ export type LocalReleaseNotes = { version: string; changes: readonly string[] };
 // the current UI or from an online changelog at runtime.
 const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, readonly string[]> }> = [
   {
+    version: '0.1.48',
+    changes: {
+      en: ['Complete or cancel persistent goals with confirmed saved state.', 'Teamwork discards late results after Stop and distinguishes timeouts.', 'Accent colors apply to browser controls; page tools are in the action menu.', 'Hardware checks accept stable redirected profile paths.', 'Downloaded updates retain the normal quit path when shutdown times out.'],
+      de: ['Persistente Ziele mit bestätigtem Speicherzustand abschließen oder abbrechen.', 'Teamwork verwirft späte Ergebnisse nach Stop und unterscheidet Zeitüberschreitungen.', 'Akzentfarben gelten für Browser-Bedienelemente; Seitenwerkzeuge liegen im Aktionsmenü.', 'Hardwareprüfungen akzeptieren stabile umgeleitete Profilpfade.', 'Heruntergeladene Updates behalten bei verzögertem Herunterfahren den normalen Beenden-Pfad.'],
+      it: ['Completa o annulla gli obiettivi persistenti con stato salvato confermato.', 'Teamwork scarta risultati tardivi dopo Stop e distingue i timeout.', 'I colori accento si applicano ai controlli; gli strumenti pagina sono nel menu azioni.', 'Il controllo hardware accetta percorsi profilo reindirizzati stabili.', 'Gli aggiornamenti scaricati mantengono la chiusura normale anche se lo spegnimento supera il tempo limite.'],
+      es: ['Completa o cancela objetivos persistentes con estado guardado confirmado.', 'Teamwork descarta resultados tardíos tras Detener y distingue tiempos agotados.', 'Los colores de acento se aplican a los controles; las herramientas están en el menú de acciones.', 'La comprobación de hardware acepta rutas de perfil redirigidas estables.', 'Las actualizaciones descargadas mantienen el cierre normal si se agota el tiempo de apagado.'],
+      fr: ['Terminez ou annulez les objectifs persistants avec un état enregistré confirmé.', 'Teamwork ignore les résultats tardifs après Arrêter et distingue les délais dépassés.', 'Les couleurs d’accent s’appliquent aux commandes ; les outils de page sont dans le menu d’actions.', 'La vérification matérielle accepte les chemins de profil redirigés stables.', 'Les mises à jour téléchargées conservent la fermeture normale si l’arrêt dépasse son délai.'],
+      'pt-BR': ['Conclua ou cancele objetivos persistentes com estado salvo confirmado.', 'Teamwork descarta resultados tardios após Parar e distingue tempos limite.', 'As cores de destaque se aplicam aos controles; ferramentas ficam no menu de ações.', 'A verificação de hardware aceita caminhos de perfil redirecionados estáveis.', 'Atualizações baixadas mantêm o encerramento normal quando o desligamento excede o prazo.'],
+      ru: ['Завершайте или отменяйте постоянные цели с подтверждённым сохранением.', 'Teamwork отбрасывает поздние результаты после остановки и различает тайм-ауты.', 'Акцентные цвета применяются к элементам браузера; инструменты страницы находятся в меню действий.', 'Проверка оборудования принимает стабильные перенаправленные пути профиля.', 'Загруженные обновления сохраняют обычное завершение приложения при превышении срока остановки.'],
+      ja: ['保存状態を確認して永続的な目標を完了またはキャンセルできます。', 'Teamwork は停止後の遅延結果を破棄し、タイムアウトを区別します。', 'アクセント色がブラウザーの操作部に適用され、ページツールはアクションメニューに移動しました。', 'ハードウェア確認は安定したリダイレクト済みプロファイルパスに対応します。', '終了処理がタイムアウトしても、ダウンロード済み更新のための通常の終了経路を維持します。']
+    }
+  },
+  {
     version: '0.1.47',
     changes: {
       en: ['Provider settings and model lists now use the selected Space.', 'Quickchat keeps each Space’s history separate and confirms reset before clearing it.', 'MiMo settings show confirmed saved status and a dedicated key prompt.', 'Chat startup reports early errors promptly and adds bounded diagnostics.'],

@@ -12954,7 +12954,7 @@ def _handle_goal_command(handler, body):
     goal_action = goal_args.strip().lower()
     will_kickoff = bool(
         goal_args.strip()
-        and goal_action not in ("status", "pause", "resume", "clear", "stop", "done")
+        and goal_action not in ("status", "pause", "resume", "clear", "stop", "done", "complete", "cancel")
         and not stream_running
     )
     workspace = model = model_provider = normalized_model = None

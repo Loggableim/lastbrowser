@@ -13,7 +13,7 @@ function text(value: unknown): string | null { return typeof value === 'string' 
 function count(value: unknown): number | null { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null; }
 /** The legacy endpoint interprets these bare words as controls rather than goal text. */
 export function isEditableGoalText(value: string): boolean {
-  return Boolean(value.trim()) && !['status','pause','resume','clear','stop','done'].includes(value.trim().toLowerCase());
+  return Boolean(value.trim()) && !['status','pause','resume','clear','cancel','complete','stop','done'].includes(value.trim().toLowerCase());
 }
 /** Only the owning session's real goal record is rendered. Missing limits stay unknown. */
 export function readPersistentGoalView(session: unknown, context: CommandContext): PersistentGoalView | null {

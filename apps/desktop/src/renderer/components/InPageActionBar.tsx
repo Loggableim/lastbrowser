@@ -33,6 +33,8 @@ export interface InPageActionBarProps {
   onToggleHistory: () => void;
   muted?: boolean;
   onToggleMute: () => void;
+  /** Existing browser tools moved from the page corner into the Sparkles flyout. */
+  overlayTools?: React.ReactNode;
   dockMode?: ActionBarDock;
   onSetDockMode?: (dock: ActionBarDock) => void;
 }
@@ -82,6 +84,7 @@ export function InPageActionBar({
   onToggleHistory,
   muted = false,
   onToggleMute,
+  overlayTools,
   dockMode = 'topbar',
   onSetDockMode
 }: InPageActionBarProps): React.JSX.Element | null {
@@ -118,6 +121,7 @@ export function InPageActionBar({
 
   const dragStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number } | null>(null);
   const pendingCoordsRef = useRef<{ x: number; y: number } | null>(null);
+  const sparklesTriggerRef = useRef<HTMLButtonElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -255,6 +259,16 @@ export function InPageActionBar({
     }, 280);
   }
 
+  function closeFlyoutAndRestoreFocus(): void {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setIsHovered(false);
+    setIsPinned(false);
+    sparklesTriggerRef.current?.focus();
+  }
+
   useEffect(() => {
     return () => {
       if (hoverTimeoutRef.current) {
@@ -270,8 +284,7 @@ export function InPageActionBar({
         if (menuOpen) {
           setMenuOpen(false);
         } else if (isHovered || isPinned) {
-          setIsHovered(false);
-          setIsPinned(false);
+          closeFlyoutAndRestoreFocus();
         }
       }
     }
@@ -295,6 +308,7 @@ export function InPageActionBar({
       >
         <button
           type="button"
+          ref={sparklesTriggerRef}
           className={`titlebar-tool-btn titlebar-research-trigger-btn ${isFlyoutOpen ? 'active' : ''}`}
           onClick={() => setIsPinned((prev) => !prev)}
           title="Nova Research Bar (Mouseover klappt über Adressleiste aus, Klick zum Fixieren)"
@@ -310,6 +324,11 @@ export function InPageActionBar({
             role="toolbar"
             aria-label="Nova In-Page AI Actions"
             onMouseDown={(e) => e.stopPropagation()}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPinned) {
+                setIsHovered(false);
+              }
+            }}
           >
             <div className="flyout-brand">
               <Sparkles size={13} />
@@ -351,6 +370,20 @@ export function InPageActionBar({
               <Globe2 size={13} />
               <span>Research</span>
             </button>
+
+            {overlayTools && (
+              <>
+                <div className="action-strip-divider" />
+                <div
+                  className="action-strip-overlay-tools"
+                  role="group"
+                  aria-label="Browser and site permissions"
+                  onClick={closeFlyoutAndRestoreFocus}
+                >
+                  {overlayTools}
+                </div>
+              </>
+            )}
 
             <div className="action-strip-divider" />
 
@@ -441,10 +474,7 @@ export function InPageActionBar({
               type="button"
               className="flyout-close-btn"
               title="Leiste schließen (Esc)"
-              onClick={() => {
-                setIsHovered(false);
-                setIsPinned(false);
-              }}
+              onClick={closeFlyoutAndRestoreFocus}
             >
               <X size={13} />
             </button>

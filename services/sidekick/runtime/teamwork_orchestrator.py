@@ -81,19 +81,37 @@ class _TeamworkCallBudget:
             }
 
 
+def _teamwork_stop_reason(cancel_event: Optional[threading.Event],
+                          deadline: Optional[float] = None) -> Optional[str]:
+    if cancel_event is not None and cancel_event.is_set():
+        return "cancelled"
+    if deadline is not None and time.monotonic() >= deadline:
+        return "deadline"
+    return None
+
+
+def _raise_teamwork_stop(cancel_event: Optional[threading.Event],
+                         deadline: Optional[float] = None) -> None:
+    reason = _teamwork_stop_reason(cancel_event, deadline)
+    if reason == "cancelled":
+        raise InterruptedError("Cancelled")
+    if reason == "deadline":
+        raise TimeoutError("teamwork_turn_deadline_exceeded")
+
+
 def _call_llm_cancellable(call_llm: Callable[..., Any], *, cancel_event: Optional[threading.Event],
+                          deadline: Optional[float] = None,
                           profile_name: Optional[str] = None, **kwargs: Any) -> Any:
     """Call a sync provider while allowing prompt cancellation."""
-    if cancel_event is None:
+    if cancel_event is None and deadline is None:
         with _teamwork_profile_context(profile_name):
             return call_llm(**kwargs)
 
     while not _CANCELLABLE_CALL_SLOTS.acquire(timeout=0.05):
-        if cancel_event.is_set():
-            raise InterruptedError("Cancelled")
-    if cancel_event.is_set():
+        _raise_teamwork_stop(cancel_event, deadline)
+    if _teamwork_stop_reason(cancel_event, deadline):
         _CANCELLABLE_CALL_SLOTS.release()
-        raise InterruptedError("Cancelled")
+        _raise_teamwork_stop(cancel_event, deadline)
 
     result: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
 
@@ -114,12 +132,15 @@ def _call_llm_cancellable(call_llm: Callable[..., Any], *, cancel_event: Optiona
         raise
 
     while True:
-        if cancel_event.is_set():
-            raise InterruptedError("Cancelled")
+        _raise_teamwork_stop(cancel_event, deadline)
         try:
-            succeeded, value = result.get(timeout=0.05)
+            wait_seconds = 0.05
+            if deadline is not None:
+                wait_seconds = max(0.001, min(wait_seconds, deadline - time.monotonic()))
+            succeeded, value = result.get(timeout=wait_seconds)
         except queue.Empty:
             continue
+        _raise_teamwork_stop(cancel_event, deadline)
         if succeeded:
             return value
         raise value
@@ -855,6 +876,7 @@ def _invoke_worker(
     messages.append({"role": "user", "content": prompt})
 
     while True:
+        _raise_teamwork_stop(cancel_event, deadline)
         attempt_content: List[str] = []
         attempt_reasoning_chars = 0
         try:
@@ -864,6 +886,8 @@ def _invoke_worker(
             with _teamwork_profile_context(profile_name):
                 def emit_worker_delta(text: str) -> None:
                     if not text:
+                        return
+                    if _teamwork_stop_reason(cancel_event, deadline):
                         return
                     attempt_content.append(text)
                     if event_put:
@@ -882,7 +906,8 @@ def _invoke_worker(
                     # Track only whether reasoning arrived. Never retain, log,
                     # or promote private reasoning to a visible worker draft.
                     nonlocal attempt_reasoning_chars
-                    if isinstance(text, str):
+                    if (isinstance(text, str)
+                            and not _teamwork_stop_reason(cancel_event, deadline)):
                         attempt_reasoning_chars += len(text)
 
                 if event_put:
@@ -911,7 +936,12 @@ def _invoke_worker(
                         native_teamwork_visible=True,
                         retry_transient_before_first_token=False,
                     )
-                    content = str(content or "").strip() or "".join(attempt_content).strip()
+                    _raise_teamwork_stop(cancel_event, deadline)
+                    # stream_llm reports visible text through on_content before
+                    # returning it. Only the callback-owned text was actually
+                    # accepted/emitted by this worker; trusting the return value
+                    # could resurrect a delta suppressed after Stop.
+                    content = "".join(attempt_content).strip()
                 else:
                     resp = call_llm(
                         provider=current_worker["provider"],
@@ -921,6 +951,7 @@ def _invoke_worker(
                         max_tokens=TEAMWORK_STAGE_OUTPUT_TOKENS["worker"],
                     )
                     content, response_reasoning_chars = _teamwork_visible_content(resp)
+                    _raise_teamwork_stop(cancel_event, deadline)
                     if not content and response_reasoning_chars:
                         raise RuntimeError("teamwork_worker_reasoning_only")
             if not content:
@@ -959,6 +990,19 @@ def _invoke_worker(
                     "model_id": current_worker.get("call_model", current_worker["model"]),
                     "role": current_worker["role"], "status": "aborted",
                 })
+            if _teamwork_stop_reason(cancel_event, deadline):
+                reason = _teamwork_stop_reason(cancel_event, deadline)
+                return {
+                    "worker_id": worker_id,
+                    "worker_index": current_worker.get("worker_index"),
+                    "model": current_worker["model"], "provider": current_worker["provider"],
+                    "name": current_worker.get("name", current_worker["model"]),
+                    "role": current_worker["role"], "focus": current_worker["focus"],
+                    "content": "", "execution_ms": int((time.time() - start_t) * 1000),
+                    "error": "Teamwork request cancelled" if reason == "cancelled" else "Teamwork deadline exceeded",
+                    "failure_code": "teamwork_cancelled" if reason == "cancelled" else "teamwork_turn_deadline_exceeded",
+                    "swapped": False,
+                }
             raise
         except Exception as e:
             failure_status = _provider_failure_kind(e)
@@ -967,6 +1011,26 @@ def _invoke_worker(
                 failure_code = str(e)
             safe_failure = _safe_worker_failure_message(failure_code, _safe_provider_failure(e))
             logger.warning("Worker %s failed: %s", current_worker["model"], safe_failure)
+            stop_reason = _teamwork_stop_reason(cancel_event, deadline)
+            if stop_reason:
+                if event_put:
+                    event_put("teamwork_worker_end", {
+                        "worker_id": worker_id, "worker_index": current_worker.get("worker_index"),
+                        "attempt": attempt, "provider_id": current_worker["provider"],
+                        "model_id": current_worker.get("call_model", current_worker["model"]),
+                        "role": current_worker["role"], "status": "aborted",
+                    })
+                return {
+                    "worker_id": worker_id,
+                    "worker_index": current_worker.get("worker_index"),
+                    "model": current_worker["model"], "provider": current_worker["provider"],
+                    "name": current_worker.get("name", current_worker["model"]),
+                    "role": current_worker["role"], "focus": current_worker["focus"],
+                    "content": "", "execution_ms": int((time.time() - start_t) * 1000),
+                    "error": "Teamwork request cancelled" if stop_reason == "cancelled" else "Teamwork deadline exceeded",
+                    "failure_code": "teamwork_cancelled" if stop_reason == "cancelled" else "teamwork_turn_deadline_exceeded",
+                    "swapped": False,
+                }
             if event_put:
                 emitted_partial = bool(attempt_content)
                 worker_end = {
@@ -1056,12 +1120,12 @@ def _run_single_provider_reduced(
     put_event: Callable[[str, Any], None],
     *,
     cancel_event: Optional[threading.Event],
+    deadline: Optional[float] = None,
     native_teamwork_bridge: Any = None,
 ) -> Dict[str, Any]:
     """Use one bounded response when only one connected provider is available."""
     start = time.monotonic()
-    if cancel_event and cancel_event.is_set():
-        raise InterruptedError("Cancelled before reduced Teamwork request")
+    _raise_teamwork_stop(cancel_event, deadline)
     budget = _TeamworkCallBudget()
     if not budget.reserve(TEAMWORK_STAGE_OUTPUT_TOKENS["single_provider"]):
         raise RuntimeError("Teamwork request budget is unavailable.")
@@ -1077,6 +1141,8 @@ def _run_single_provider_reduced(
 
     def emit(text: str) -> None:
         if text:
+            if _teamwork_stop_reason(cancel_event, deadline):
+                return
             parts.append(text)
             put_event("delta", {"content": text})
 
@@ -1100,7 +1166,7 @@ def _run_single_provider_reduced(
             messages=messages,
             on_content=emit,
             on_reasoning=lambda _text: None,
-            timeout=65.0,
+            timeout=_stage_timeout(deadline, 65.0) if deadline is not None else 65.0,
             cancel_event=cancel_event,
             max_tokens=TEAMWORK_STAGE_OUTPUT_TOKENS["single_provider"],
             native_teamwork_adapter=(native_teamwork_bridge.for_role(
@@ -1110,8 +1176,13 @@ def _run_single_provider_reduced(
             native_teamwork_visible=True,
             retry_transient_before_first_token=False,
         )
+        _raise_teamwork_stop(cancel_event, deadline)
     except InterruptedError:
         raise
+    except TimeoutError:
+        if _teamwork_stop_reason(cancel_event, deadline) == "deadline":
+            raise
+        raise RuntimeError("Teamwork-Einzelmodus: Der Anbieter hat zu lange gebraucht.") from None
     except Exception as exc:
         raise RuntimeError(f"Teamwork-Einzelmodus: {_safe_provider_failure(exc)}") from None
     final_answer = str(answer or "").strip() or "".join(parts).strip()
@@ -1181,8 +1252,7 @@ def _run_teamwork_turn(
     # Never infer browser context from ambient session/tab state. Only
     # grounding explicitly carried by this accepted turn may be shared.
 
-    if cancel_event and cancel_event.is_set():
-        raise InterruptedError("Cancelled")
+    _raise_teamwork_stop(cancel_event, deadline)
 
     hot_swap_cfg = cfg.get("hot_swap", {})
     if not isinstance(hot_swap_cfg, dict):
@@ -1235,6 +1305,7 @@ def _run_teamwork_turn(
         return _run_single_provider_reduced(
             session, prompt, grounding_text, workers[0], stream_llm, put_event,
             cancel_event=cancel_event,
+            deadline=deadline,
             native_teamwork_bridge=native_teamwork_bridge,
         )
 
@@ -1262,6 +1333,7 @@ def _run_teamwork_turn(
             planner_resp = _call_llm_cancellable(
                 call_llm,
                 cancel_event=cancel_event,
+                deadline=deadline,
                 profile_name=profile_name,
                 provider=planner_model["provider"],
                 model=planner_model.get("call_model", planner_model["id"]),
@@ -1276,6 +1348,7 @@ def _run_teamwork_turn(
                     planner_model.get("call_model", planner_model["id"]), 1,
                 ) if native_teamwork_bridge is not None else None),
             )
+            _raise_teamwork_stop(cancel_event, deadline)
             planner_context, planner_reasoning_chars = _teamwork_visible_content(planner_resp)
             if not planner_context and planner_reasoning_chars:
                 planner_failure = "Das Modell lieferte keinen sichtbaren Arbeitsplan."
@@ -1287,6 +1360,7 @@ def _run_teamwork_turn(
         except InterruptedError:
             raise
         except Exception as e:
+            _raise_teamwork_stop(cancel_event, deadline)
             planner_failure = _safe_provider_failure(e)
             logger.warning("Teamwork planner failed; continuing without plan: %s", planner_failure)
 
@@ -1294,8 +1368,7 @@ def _run_teamwork_turn(
     if planner_context:
         team_context = f"{team_context}\n\n[ARBEITSPLAN DES PLANERS]\n{planner_context}".strip()
 
-    if cancel_event and cancel_event.is_set():
-        raise InterruptedError("Cancelled during teamwork planning")
+    _raise_teamwork_stop(cancel_event, deadline)
 
     put_event("teamwork_stage", {
         "stage": "debate",
@@ -1318,17 +1391,20 @@ def _run_teamwork_turn(
         # cancellation-aware, and submitting one at a time avoids deadlocks
         # between concurrent turns that each need more slots than remain free.
         for worker_index, worker in enumerate(workers):
-            while cancel_event and cancel_event.is_set():
+            reason = _teamwork_stop_reason(cancel_event, deadline)
+            if reason:
                 cancelled = True
-                raise InterruptedError("Cancelled")
+                _raise_teamwork_stop(cancel_event, deadline)
             while not _TEAMWORK_WORKER_SLOTS.acquire(timeout=0.05):
-                if cancel_event and cancel_event.is_set():
+                reason = _teamwork_stop_reason(cancel_event, deadline)
+                if reason:
                     cancelled = True
-                    raise InterruptedError("Cancelled")
-            if cancel_event and cancel_event.is_set():
+                    _raise_teamwork_stop(cancel_event, deadline)
+            reason = _teamwork_stop_reason(cancel_event, deadline)
+            if reason:
                 _TEAMWORK_WORKER_SLOTS.release()
                 cancelled = True
-                raise InterruptedError("Cancelled")
+                _raise_teamwork_stop(cancel_event, deadline)
             try:
                 future = executor.submit(
                     _invoke_worker_with_slot,
@@ -1351,17 +1427,22 @@ def _run_teamwork_turn(
             pending.add(future)
 
         while pending:
-            if cancel_event and cancel_event.is_set():
+            reason = _teamwork_stop_reason(cancel_event, deadline)
+            if reason:
                 cancelled = True
-                raise InterruptedError("Cancelled")
+                _raise_teamwork_stop(cancel_event, deadline)
             completed, pending = wait(
                 pending,
-                timeout=0.05 if cancel_event else None,
+                timeout=0.05 if cancel_event or deadline is not None else None,
                 return_when=FIRST_COMPLETED,
             )
             for future in completed:
                 try:
                     res = future.result()
+                    reason = _teamwork_stop_reason(cancel_event, deadline)
+                    if reason:
+                        cancelled = True
+                        _raise_teamwork_stop(cancel_event, deadline)
                     drafts.append(res)
                     if not res.get("error"):
                         put_event("teamwork_draft", {
@@ -1399,9 +1480,10 @@ def _run_teamwork_turn(
                         put_event("teamwork_draft", draft_event)
                 except Exception as e:
                     logger.error("Worker future raised error: %s", _safe_provider_failure(e))
-        if cancel_event and cancel_event.is_set():
+        reason = _teamwork_stop_reason(cancel_event, deadline)
+        if reason:
             cancelled = True
-            raise InterruptedError("Cancelled")
+            _raise_teamwork_stop(cancel_event, deadline)
     finally:
         # ThreadPoolExecutor.__exit__ always waits for workers, even after a
         # shutdown(wait=False). Avoid that implicit wait when the caller has
@@ -1423,8 +1505,7 @@ def _run_teamwork_turn(
             min_quorum,
         ))
 
-    if cancel_event and cancel_event.is_set():
-        raise InterruptedError("Cancelled")
+    _raise_teamwork_stop(cancel_event, deadline)
 
     # 4. Phase: Critic Evaluation & Cross-Review
     put_event("teamwork_stage", {
@@ -1462,6 +1543,7 @@ def _run_teamwork_turn(
         critic_resp = _call_llm_cancellable(
             call_llm,
             cancel_event=cancel_event,
+            deadline=deadline,
             profile_name=profile_name,
             provider=critic_provider,
             model=critic_entry.get("call_model", critic_model) if critic_entry else critic_model,
@@ -1473,6 +1555,7 @@ def _run_teamwork_turn(
                 critic_entry.get("call_model", critic_model) if critic_entry else critic_model, 1,
             ) if native_teamwork_bridge is not None else None),
         )
+        _raise_teamwork_stop(cancel_event, deadline)
         critic_review, critic_reasoning_chars = _teamwork_visible_content(critic_resp)
         if not critic_review and critic_reasoning_chars:
             critic_review = "Der Critic lieferte keinen sichtbaren Review. Die Synthese stützt sich auf die Entwürfe."
@@ -1481,6 +1564,7 @@ def _run_teamwork_turn(
     except InterruptedError:
         raise
     except Exception as e:
+        _raise_teamwork_stop(cancel_event, deadline)
         safe_failure = _safe_provider_failure(e)
         logger.warning("Critic evaluation failed: %s, continuing with best draft directly", safe_failure)
         critic_review = f"Kritik konnte nicht separat generiert werden ({safe_failure}). Synthese basiert auf den Roh-Entwürfen."
@@ -1494,8 +1578,7 @@ def _run_teamwork_turn(
         "execution_ms": critic_ms,
     })
 
-    if cancel_event and cancel_event.is_set():
-        raise InterruptedError("Cancelled")
+    _raise_teamwork_stop(cancel_event, deadline)
 
     # 5. Phase: Finale Synthese
     put_event("teamwork_stage", {
@@ -1533,11 +1616,15 @@ def _run_teamwork_turn(
     def emit_synthesis_content(text: str) -> None:
         if not text:
             return
+        if _teamwork_stop_reason(cancel_event, deadline):
+            return
         streamed_answer_parts.append(text)
         put_event("delta", {"content": text})
 
     def emit_synthesis_reasoning(text: str) -> None:
         if not text:
+            return
+        if _teamwork_stop_reason(cancel_event, deadline):
             return
         streamed_reasoning_parts.append(text)
         put_event("reasoning", {"text": text})
@@ -1562,6 +1649,7 @@ def _run_teamwork_turn(
             native_teamwork_visible=True,
             retry_transient_before_first_token=False,
         )
+        _raise_teamwork_stop(cancel_event, deadline)
         if not final_answer.strip():
             if streamed_answer_parts or streamed_reasoning_parts:
                 raise RuntimeError(
@@ -1573,6 +1661,7 @@ def _run_teamwork_turn(
     except InterruptedError:
         raise
     except Exception as e:
+        _raise_teamwork_stop(cancel_event, deadline)
         if streamed_answer_parts or streamed_reasoning_parts:
             safe_failure = _safe_provider_failure(e)
             raise RuntimeError(

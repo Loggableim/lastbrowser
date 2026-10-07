@@ -21,6 +21,27 @@ const presets = ['lightweight', 'balanced', 'max_local', 'hybrid', 'custom'];
 const uuid = (value: unknown): value is string => typeof value === 'string' && /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(value);
 const sha256 = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
 const record = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
+async function trustedUserDataDirectory(configuredPath: string): Promise<string> {
+  const absolutePath = path.resolve(configuredPath);
+  const info = await lstat(absolutePath);
+  if (info.isSymbolicLink() || !info.isDirectory())
+    throw new BrowserHostError('local_ai_scan_path_unsafe', 'The trusted application data directory is not a regular directory');
+  // Electron's userData path may pass through a redirected profile parent
+  // (for example, a roaming-profile junction). Compare the target to the
+  // canonical parent plus the unchanged final directory name, rather than to
+  // the original spelling. A link at the trusted data directory itself is
+  // still rejected by lstat above.
+  const [canonicalParent, canonicalTarget] = await Promise.all([
+    realpath(path.dirname(absolutePath)), realpath(absolutePath),
+  ]);
+  const expectedTarget = path.join(canonicalParent, path.basename(absolutePath));
+  if (!samePath(canonicalTarget, expectedTarget))
+    throw new BrowserHostError('local_ai_scan_path_unsafe', 'The trusted application data directory changed during validation');
+  const confirmed = await lstat(absolutePath);
+  if (confirmed.isSymbolicLink() || !confirmed.isDirectory())
+    throw new BrowserHostError('local_ai_scan_path_unsafe', 'The trusted application data directory changed during validation');
+  return canonicalTarget;
+}
 function canonical(value: any): string {
   if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
   if (record(value)) return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}';
@@ -292,16 +313,11 @@ export class LocalAiController {
     const guard = () => { if (expired) throw timeoutError(); recheck(); };
     const operation = (async () => {
       guard();
-      const info = await lstat(this.options.userDataDir); guard();
-      if (info.isSymbolicLink() || !info.isDirectory())
-        throw new BrowserHostError('local_ai_scan_path_unsafe', 'The trusted application data directory is not a regular directory');
-      const trustedDirectory = await realpath(this.options.userDataDir); guard();
-      if (!samePath(trustedDirectory, this.options.userDataDir))
-        throw new BrowserHostError('local_ai_scan_path_unsafe', 'The trusted application data directory changed during validation');
+      const trustedDirectory = await trustedUserDataDirectory(this.options.userDataDir); guard();
       const inventory = await (this.options.inventory ?? scanLocalAiHardwareInventory)(
         { cacheDirectory: trustedDirectory, timeoutMs: 3000 });
       guard();
-      const finalPath = await realpath(this.options.userDataDir); guard();
+      const finalPath = await trustedUserDataDirectory(this.options.userDataDir); guard();
       if (!samePath(trustedDirectory, finalPath))
         throw new BrowserHostError('local_ai_scan_path_unsafe', 'The trusted application data directory changed during the scan');
       if (inventory.schemaVersion !== 1 || !inventory.hardware || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(inventory.hardware.scanId)

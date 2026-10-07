@@ -19,7 +19,7 @@ export function shouldDispatchPersistentGoalControlWhileBusy(input: string, busy
   const command = parsePersistentGoalCommand(input);
   if (!command) return false;
   const action = command.args.toLowerCase();
-  return action === '' || ['status', 'pause', 'clear', 'stop', 'done'].includes(action);
+  return action === '' || ['status', 'pause', 'clear', 'cancel', 'complete', 'stop', 'done'].includes(action);
 }
 
 /** Resume/start cannot be accepted while the current chat writer is active. */
@@ -84,6 +84,19 @@ export async function requestNativePersistentGoalCommand(transport:(request:Nati
     ...(context.clientRequestId?{clientRequestId:context.clientRequestId}:{})});
   if(response.ok!==true)throw new NativeGoalCommandError(typeof response.error==='string'?response.error:'goal_action_unconfirmed');
   if(response.session_id!==undefined&&response.session_id!==context.sessionId)throw new NativeGoalCommandError('goal_response_foreign_session');
+  const action = args.trim().toLowerCase();
+  if (action === 'complete') {
+    const goal = response.goal && typeof response.goal === 'object' && !Array.isArray(response.goal)
+      ? response.goal as Record<string, unknown> : null;
+    if (response.session_id !== context.sessionId || !goal || goal.session_id !== context.sessionId || goal.status !== 'done'
+      || !Number.isSafeInteger(goal.revision) || response.revision !== goal.revision
+      || typeof context.expectedRevision === 'number' && Number(goal.revision) < context.expectedRevision) {
+      throw new NativeGoalCommandError('goal_completion_unconfirmed');
+    }
+  } else if (action === 'cancel' && (response.session_id !== context.sessionId || response.action !== 'clear'
+    || !Number.isSafeInteger(response.revision))) {
+    throw new NativeGoalCommandError('goal_cancel_unconfirmed');
+  }
   return response;
 }
 export function requestNativePersistentGoalControlWhileBusy(transport:Parameters<typeof requestNativePersistentGoalCommand>[0],input:string,busy:boolean,

@@ -8,7 +8,7 @@ import {
   shouldAcceptPersistentGoalCommand,
   shouldDispatchPersistentGoalControlWhileBusy,
 } from '../src/renderer/persistent-goal-command.js';
-import { nativeGoalErrorCopy,NativeGoalCommandError } from '../src/renderer/native-goal-errors.js';
+import { isNativeGoalWriterRunning, nativeGoalErrorCopy, NativeGoalCommandError } from '../src/renderer/native-goal-errors.js';
 
 describe('persistent goal chat command bridge', () => {
   it('requires an actual native success ACK, preserves codeful CAS/owner failures, and rejects a foreign session',async()=>{
@@ -20,6 +20,23 @@ describe('persistent goal chat command bridge', () => {
     for(const locale of ['en','de','it','es','fr','pt-BR','ru','ja'] as const){
       expect(nativeGoalErrorCopy(locale,new NativeGoalCommandError('goal_revision_conflict'))).not.toEqual(nativeGoalErrorCopy(locale,new NativeGoalCommandError('goal_owned_by_run')));
     }
+  });
+  it('accepts completion only with a persisted done snapshot and cancellation only with the clear ACK', async () => {
+    const context={sessionId:'controlled-a',profileId:'actual-browser',browserProfileId:'actual-browser',workspace:'C:/controlled/a',expectedRevision:7,clientRequestId:'complete-request'};
+    const complete = { ok: true, action: 'complete', session_id: context.sessionId, revision: 8,
+      goal: { session_id: context.sessionId, status: 'done', revision: 8 } };
+    await expect(requestNativePersistentGoalCommand(async () => complete, 'complete', context)).resolves.toEqual(complete);
+    await expect(requestNativePersistentGoalCommand(async () => ({ ...complete, goal: { ...complete.goal, status: 'active' } }), 'complete', context))
+      .rejects.toMatchObject({ code: 'goal_completion_unconfirmed' });
+    await expect(requestNativePersistentGoalCommand(async () => ({ ok: true, action: 'clear', session_id: context.sessionId, revision: 8 }), 'cancel', context))
+      .resolves.toMatchObject({ action: 'clear', revision: 8 });
+    await expect(requestNativePersistentGoalCommand(async () => ({ ok: true, action: 'cancel', session_id: context.sessionId, revision: 8 }), 'cancel', context))
+      .rejects.toMatchObject({ code: 'goal_cancel_unconfirmed' });
+  });
+  it('treats agent_running as a definitive non-mutation and tells the user to retry after refresh', () => {
+    const error = new NativeGoalCommandError('agent_running');
+    expect(isNativeGoalWriterRunning(error)).toBe(true);
+    expect(nativeGoalErrorCopy('de', error)).toContain('läuft noch');
   });
   it('recognizes /goal with optional multiline arguments only as a complete command', () => {
     expect(parsePersistentGoalCommand('/goal')).toEqual({ args: '' });
@@ -35,6 +52,8 @@ describe('persistent goal chat command bridge', () => {
     expect(shouldDispatchPersistentGoalControlWhileBusy('/goal', true)).toBe(true);
     expect(shouldDispatchPersistentGoalControlWhileBusy('/goal pause', true)).toBe(true);
     expect(shouldDispatchPersistentGoalControlWhileBusy('/goal clear', true)).toBe(true);
+    expect(shouldDispatchPersistentGoalControlWhileBusy('/goal complete', true)).toBe(true);
+    expect(shouldDispatchPersistentGoalControlWhileBusy('/goal cancel', true)).toBe(true);
     expect(shouldDispatchPersistentGoalControlWhileBusy('/goal resume', true)).toBe(false);
     expect(shouldDispatchPersistentGoalControlWhileBusy('/goal Ship the feature', true)).toBe(false);
     expect(shouldDispatchPersistentGoalControlWhileBusy('/goal pause', false)).toBe(false);
@@ -42,7 +61,7 @@ describe('persistent goal chat command bridge', () => {
   });
 
   it('synchronously accepts safe Goal controls but rejects Resume/start while a writer is busy', () => {
-    for (const command of ['status', 'pause', 'clear', 'stop', 'done'])
+    for (const command of ['status', 'pause', 'clear', 'cancel', 'complete', 'stop', 'done'])
       expect(shouldAcceptPersistentGoalCommand(`/goal ${command}`, true)).toBe(true);
     expect(shouldAcceptPersistentGoalCommand('/goal resume', true)).toBe(false);
     expect(shouldAcceptPersistentGoalCommand('/goal Start research', true)).toBe(false);

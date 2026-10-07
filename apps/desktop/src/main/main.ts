@@ -1569,7 +1569,10 @@ app.on('before-quit', (event) => {
   if (quitCleanupStarted) return;
   quitCleanupStarted = true;
   const watchdog = setTimeout(() => {
-    cleanupServices(); app.exit(0);
+    // Complete a normal quit so electron-updater's quit listener can install
+    // a verified, downloaded update even when agent shutdown times out.
+    quitCleanupComplete = true;
+    cleanupServices(); app.quit();
   }, 15000);
   void independentController.shutdown().catch(error => console.warn('[independent] Quit cleanup:', error)).finally(() => {
     clearTimeout(watchdog); quitCleanupComplete = true; cleanupServices(); app.quit();

@@ -70,7 +70,10 @@ export function GoalControls({ session, context, locale, busy, pending = false, 
           <button type="button" disabled={disabled || busy || migrationRequired} onClick={openEditor}>{copy.edit}</button>
           <button type="button" disabled={!available || pending || !context.sessionId}
             onClick={() => onAction({ kind: 'goal_command', args: 'status', context: captureCommandContext(context), clientRequestId: crypto.randomUUID() })}>{copy.refresh}</button>
-          {goal.status !== 'cleared' && <button type="button" disabled={disabled || migrationRequired} onClick={() => send('clear')}>{copy.clear}</button>}
+          {(goal.status === 'active' || goal.status === 'paused') && <>
+            <button type="button" disabled={disabled || migrationRequired} onClick={() => send('complete')}>{copy.completeAction}</button>
+            <button type="button" disabled={disabled || migrationRequired} onClick={() => send('cancel')}>{copy.cancelAction}</button>
+          </>}
         </div>
         {editing && <form onSubmit={event => { event.preventDefault(); if (isEditableGoalText(draft) && !busy && !migrationRequired) send(draft.trim()); }}>
           <textarea ref={editor} aria-label={copy.goalPlaceholder} placeholder={copy.goalPlaceholder} value={draft} maxLength={8000} onChange={event => setDraft(event.target.value)} />

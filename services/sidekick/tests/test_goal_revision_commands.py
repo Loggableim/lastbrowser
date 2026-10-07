@@ -55,6 +55,66 @@ def test_revisions_survive_clear_and_restart(scoped):
     assert (home / "state.db").exists()
 
 
+def test_complete_is_cas_persisted_terminal_and_invalidates_pending_continuation(scoped):
+    goals, home, call = scoped
+    started = call("Finish the task", 0, "start")
+    manager = goals._ProfileGoalManager("session", profile_home=home)
+    prompt = manager.next_continuation_prompt()
+    assert goals.queue_goal_continuation("session", prompt, profile_home=home)
+
+    stale = call("complete", 0, "stale-complete")
+    assert stale["error"] == "goal_revision_conflict"
+    assert call("status")["goal"]["status"] == "active"
+
+    busy = call("complete", 1, "complete-while-running", stream_running=True)
+    assert busy["error"] == "agent_running"
+    assert call("status")["goal"]["status"] == "active"
+
+    complete = call("complete", 1, "complete")
+    assert complete["ok"] is True
+    assert complete["action"] == "complete"
+    assert complete["goal"]["status"] == "done"
+    assert complete["goal"]["revision"] == 2
+    assert goals.consume_goal_continuation("session", prompt, profile_home=home) == "cancelled"
+    assert goals.evaluate_goal_after_turn("session", "late response", profile_home=home)["verdict"] == "inactive"
+
+    goals._DB_CACHE.clear()
+    status = call("status")
+    assert status["goal"]["status"] == "done"
+    assert status["revision"] == 2
+    assert call("resume", 2, "resume-after-complete")["error"] == "no_goal"
+    assert call("status")["goal"]["status"] == "done"
+    replay = call("complete", 1, "complete")
+    assert replay["ok"] is True and replay["replayed"] is True
+    assert replay["goal"]["status"] == "done"
+    assert "kickoff_prompt" not in replay
+
+
+def test_cancel_is_clear_alias_and_legacy_done_still_clears(scoped):
+    goals, home, call = scoped
+    call("Cancel this", 0, "start")
+    manager = goals._ProfileGoalManager("session", profile_home=home)
+    prompt = manager.next_continuation_prompt()
+    assert goals.queue_goal_continuation("session", prompt, profile_home=home)
+
+    cancelled = call("cancel", 1, "cancel")
+    assert cancelled["ok"] is True and cancelled["action"] == "clear"
+    assert goals.consume_goal_continuation("session", prompt, profile_home=home) == "cancelled"
+    assert call("status")["goal"] is None
+    raw = goals._profile_db(home).get_meta("goal:session")
+    assert '"status": "cleared"' in raw
+    goals._DB_CACHE.clear()
+    assert call("resume", 2, "resume-after-cancel")["error"] == "no_goal"
+    assert '"status": "cleared"' in goals._profile_db(home).get_meta("goal:session")
+
+    next_goal = call("Legacy done", 2, "legacy-start")
+    assert next_goal["ok"] is True
+    legacy_done = call("done", 3, "legacy-done")
+    assert legacy_done["action"] == "clear"
+    assert legacy_done["goal"] is None
+    assert '"status": "cleared"' in goals._profile_db(home).get_meta("goal:session")
+
+
 def test_request_retry_cannot_restart_kickoff(scoped):
     goals, _, call = scoped
     first = call("Verify delivery", 0, "same-request")

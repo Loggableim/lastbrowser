@@ -6,6 +6,11 @@ export class NativeGoalCommandError extends Error {
 export function isNativeGoalMigrationRequired(error:unknown):boolean{
   return error instanceof NativeGoalCommandError?error.code==='native_goal_migration_required':error instanceof Error&&/\bnative_goal_migration_required\b/.test(error.message);
 }
+export function isNativeGoalWriterRunning(error: unknown): boolean {
+  const code = error instanceof NativeGoalCommandError ? error.code : error instanceof Error ? error.message
+    : error && typeof error === 'object' && 'error_code' in error && typeof error.error_code === 'string' ? error.error_code : '';
+  return /\bagent_running\b/.test(code);
+}
 const humanAuthorization:Record<DesktopLocaleId,string>={
  en:'This older goal has no confirmed user instruction. Resume it explicitly to authorize further work.',
  de:'Für dieses ältere Ziel fehlt eine bestätigte Nutzervorgabe. Setze es ausdrücklich fort, um die weitere Arbeit zu erlauben.',
@@ -41,5 +46,5 @@ export function nativeGoalErrorCopy(locale:DesktopLocaleId,error:unknown):string
   if(isNativeGoalMigrationRequired(error))return nativeGoalMigrationCopy(locale).explain;
   const code=error instanceof NativeGoalCommandError?error.code:error instanceof Error?error.message:'';
   return rows[locale][code.includes('goal_revision_conflict')?0:code.includes('goal_owned_by_run')?1:
-    code.includes('command_interrupted')||code.includes('command_in_progress')?2:3];
+    code.includes('command_interrupted')||code.includes('command_in_progress')||code.includes('agent_running')?2:3];
 }

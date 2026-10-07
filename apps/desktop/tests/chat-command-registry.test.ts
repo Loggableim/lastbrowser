@@ -46,6 +46,12 @@ describe('structured composer commands', () => {
     expect(Object.isFrozen(action?.context)).toBe(true);
     expect(createChatCommandAction('/gquota', 'composer', context, capabilities)).toMatchObject({ kind: 'legacy_adapter', adapter: 'gquota' });
   });
+  it('routes explicit goal completion and cancellation while preserving legacy done', () => {
+    for (const [input, args] of [['/goal COMPLETE', 'complete'], ['/goal Cancel', 'cancel'], ['/goal done', 'done']] as const) {
+      expect(createChatCommandAction(input, 'composer', context, capabilities, () => 'goal-request'))
+        .toMatchObject({ kind: 'goal_command', args, clientRequestId: 'goal-request', context });
+    }
+  });
   it('rejects adopting an async response after scope or session changes', async () => {
     const action = createChatCommandAction('/help', 'composer', context, capabilities)!;
     const response = await executeScopedCommand(action, async () => 'done', () => ({ ...context, browserProfileId: 'browser-b' }));
@@ -86,6 +92,8 @@ describe('actual persisted goal projection', () => {
   });
   it('cannot turn a goal edit into a legacy clear/pause action', () => {
     expect(isEditableGoalText('clear')).toBe(false);
+    expect(isEditableGoalText('complete')).toBe(false);
+    expect(isEditableGoalText('cancel')).toBe(false);
     expect(isEditableGoalText('Verify and clear temporary files')).toBe(true);
   });
   it('shows judge wait and actual unlimited counters in the goal card', () => {
@@ -97,6 +105,23 @@ describe('actual persisted goal projection', () => {
     expect(html).toContain('Zielbewertung wartet');
     expect(html).toContain('judge_unavailable');
     expect(html).not.toContain('%');
+  });
+  it('offers explicit complete and cancel controls only for a live persisted goal', () => {
+    const activeSession = { ...session, goal: { ...session.goal, status: 'active', revision: 5 } };
+    const activeHtml = renderToStaticMarkup(React.createElement(GoalControls, {
+      session: activeSession, context, locale: 'de', busy: false, available: true, onAction: () => {}
+    }));
+    expect(activeHtml).toContain('Abschließen');
+    expect(activeHtml).toContain('Abbrechen');
+    expect(activeHtml).not.toContain('>Beenden</button>');
+
+    const doneHtml = renderToStaticMarkup(React.createElement(GoalControls, {
+      session: { ...session, goal: { ...session.goal, status: 'done', revision: 6 } },
+      context, locale: 'de', busy: false, available: true, onAction: () => {}
+    }));
+    expect(doneHtml).toContain('>Erledigt</span>');
+    expect(doneHtml).not.toContain('Abschließen');
+    expect(doneHtml).not.toContain('Abbrechen');
   });
   it('does not offer UI continuation for an independent-run-owned goal', () => {
     const html = renderToStaticMarkup(React.createElement(GoalControls, { session: { ...session, goal: { ...session.goal, continuation_owner: 'independent_run' } }, context, locale: 'de', busy: false, available: true, onAction: () => {} }));

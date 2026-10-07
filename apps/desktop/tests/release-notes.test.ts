@@ -22,12 +22,21 @@ describe('offline versioned release notes', () => {
   it('does not fabricate notes for an unknown or non-upgrade range', () => {
     expect(releaseNotesBetween({ fromVersion: '0.1.46', toVersion: '0.1.45' }, 'en')).toEqual([]);
     expect(releaseNotesBetween({ fromVersion: 'unknown', toVersion: '0.1.46' }, 'en')).toEqual([]);
-    expect(releaseNotesBetween({ fromVersion: '0.1.47', toVersion: '0.1.48' }, 'en')).toEqual([]);
+    expect(releaseNotesBetween({ fromVersion: '0.1.48', toVersion: '0.1.49' }, 'en')).toEqual([]);
   });
 
   it('shows only the new localized notes for a 0.1.46 to 0.1.47 upgrade', () => {
     const notes = releaseNotesBetween({ fromVersion: '0.1.46', toVersion: '0.1.47' }, 'de');
     expect(notes.map(entry => entry.version)).toEqual(['0.1.47']);
     expect(notes[0].changes[0]).toContain('ausgewählten Space');
+  });
+
+  it('includes only 0.1.48 changes for an upgrade from 0.1.47 in every UI language', () => {
+    for (const locale of ['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja'] as const) {
+      const notes = releaseNotesBetween({ fromVersion: '0.1.47', toVersion: '0.1.48' }, locale);
+      expect(notes.map(entry => entry.version)).toEqual(['0.1.48']);
+      expect(notes[0].changes).toHaveLength(5);
+      expect(notes[0].changes.every(change => change.trim().length > 0)).toBe(true);
+    }
   });
 });

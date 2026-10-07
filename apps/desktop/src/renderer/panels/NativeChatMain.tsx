@@ -53,7 +53,7 @@ import { ChatModeControls } from './ChatModeControls.js';
 import { requestChatMode,type ChatModeResponse } from '../chat-mode-client.js';
 import type { IndependentScope } from '../independent-contracts.js';
 import { readNativeGoalStatus,type NativeGoalStatus } from '../native-goal-client.js';
-import { isNativeGoalMigrationRequired,nativeGoalErrorCopy } from '../native-goal-errors.js';
+import { isNativeGoalMigrationRequired, isNativeGoalWriterRunning, nativeGoalErrorCopy } from '../native-goal-errors.js';
 import { shouldAcceptPersistentGoalCommand } from '../persistent-goal-command.js';
 import { NativeGoalMigrationControls } from '../components/NativeGoalMigrationControls.js';
 import { useChildRunHistory } from '../useChildRunHistory.js';
@@ -543,7 +543,7 @@ export function NativeChatMain({
     if(action.kind==='goal_command'){
       if(goalLocks.current.has(modeViewKey)){
         const shortControl=action.args.trim().toLowerCase();
-        if(!['pause','clear','stop','done'].includes(shortControl)||goalControlLocks.current.has(modeViewKey)){
+        if(!['pause','clear','cancel','complete','stop','done'].includes(shortControl)||goalControlLocks.current.has(modeViewKey)){
           setStatusMessage(nativeGoalErrorCopy(locale,new Error('command_in_progress')));
           return false;
         }
@@ -574,7 +574,16 @@ export function NativeChatMain({
       goalLocks.current.add(modeViewKey);setGoalPending(modeViewKey);
       const requestId=goalRetry.current.requestId;
       void Promise.resolve().then(()=>onCommandAction({...action,expectedRevision,clientRequestId:requestId}))
-        .catch(error=>{if(isCommandContextCurrent(action.context,currentCommandContext.current)){if(isNativeGoalMigrationRequired(error))setGoalMigrationRequired(modeViewKey);setStatusMessage(nativeGoalErrorCopy(locale,error));}})
+        .then(()=>{
+          if(['complete','cancel'].includes(action.args.trim().toLowerCase())&&goalRetry.current?.signature===signature)
+            goalRetry.current=null;
+        })
+        .catch(error=>{if(isCommandContextCurrent(action.context,currentCommandContext.current)){
+          if(isNativeGoalMigrationRequired(error))setGoalMigrationRequired(modeViewKey);
+          // agent_running is a definitive no-mutation response, so a retry after the writer stops needs a fresh idempotency key.
+          if(isNativeGoalWriterRunning(error)&&goalRetry.current?.signature===signature)goalRetry.current=null;
+          setStatusMessage(nativeGoalErrorCopy(locale,error));
+        }})
         .finally(()=>{goalLocks.current.delete(modeViewKey);setGoalPending(value=>value===modeViewKey?null:value);
           if(isCommandContextCurrent(action.context,currentCommandContext.current))setModeRefresh(value=>value+1);});return true;
     }

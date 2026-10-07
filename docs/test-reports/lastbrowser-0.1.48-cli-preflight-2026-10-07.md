@@ -44,4 +44,3 @@ Diese 56 Source-/Harness-Tests und der Runtime-Smoke belegen nicht die sichtbare
 Die vier vorbestehenden Prozesse der installierten 0.1.46-App (PIDs 7276, 9236, 9248 und 10104) wurden nicht geschlossen oder verändert. Der 0.1.48-Setup-Installer wurde nicht gestartet; es wurde kein vorhandenes Profil geöffnet oder zurückgesetzt. Die eigenen Prozesse des cec9-Tests wurden nach dem Smoke beendet.
 
 Für die vollständige Abnahme bleiben sichtbare Szenarien aus dem Masterauftrag offen: Settings/Design, Provider-Scope, Quickchat innerhalb des vorhandenen Budgets, read-only Teamwork, First Launch, Sessionisolation, InPage-/Tab-Verhalten und weitere UI-Fälle. Ohne UI-Steuerung kann ich diese nicht als bestanden bewerten. Dieser Bericht gibt keine Produktfreigabe.
-

@@ -12261,7 +12261,7 @@ def _run_agent_streaming_with_native_writer(*args, native_chat_writer=None, nati
                 materialize_pending=kwargs.get("goal_claim_turn") is None and kwargs.get("native_goal_retry") is None,
                 goal_claim_turn=kwargs.get("goal_claim_turn"),
                 goal_claim_space_slug=kwargs.get("goal_claim_space_slug"), error_code=error_code):
-                raise RuntimeError("Native startup termination could not be confirmed")
+                raise RuntimeError("Native startup termination could not be confirmed") from error
             logger.error("Native chat failed before worker launch")
             return 1
         finally:
@@ -12743,7 +12743,6 @@ def _start_native_goal_judge_retry_for_session(s, *, owner, retry):
     from web.api.native_chats import register_native_chat, abandon_unstarted_native_chat
     stream_id = uuid.uuid4().hex
     writer = context = None
-    saved = False
     previous_started = getattr(s, "pending_started_at", None)
     try:
         with _get_session_agent_lock(s.session_id):
@@ -12755,7 +12754,6 @@ def _start_native_goal_judge_retry_for_session(s, *, owner, retry):
             s.active_stream_id = stream_id
             s.pending_started_at = time.time()
             s.save()
-            saved = True
             context = capture_native_chat_context(s, stream_id, writer)
             request = NativeGoalRetryRequest(request_id=uuid.uuid4().hex, scope=context.scope,
                 session_id=context.session_id, stream_id=stream_id, goal_run_id=retry["goalRunId"],

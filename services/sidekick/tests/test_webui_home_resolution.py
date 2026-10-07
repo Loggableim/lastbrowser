@@ -4,10 +4,25 @@ import importlib
 import json
 from pathlib import Path
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def reset_profile_home_context(monkeypatch):
+    """Start each home-resolution test from its default profile context."""
+    from web.api import profiles
+
+    profiles.clear_request_profile()
+    profiles.refresh_profile_base_home_from_env()
+    yield
+    monkeypatch.undo()
+    profiles.clear_request_profile()
+    profiles.refresh_profile_base_home_from_env()
+
 
 def test_webui_home_resolution_uses_sidekick_home(monkeypatch, tmp_path):
     sidekick_home = tmp_path / "sidekick"
-    (sidekick_home / "sidekick-agent").mkdir(parents=True)
+    sidekick_home.mkdir(parents=True)
     (sidekick_home / "state.db").write_text("", encoding="utf-8")
 
     monkeypatch.setenv("SIDEKICK_HOME", str(sidekick_home))
@@ -26,7 +41,7 @@ def test_webui_home_resolution_uses_sidekick_home(monkeypatch, tmp_path):
     assert profiles.get_active_profile_home() == sidekick_home
     assert appstore._ENV_FILE == sidekick_home / ".env"
     assert appstore._CONFIG_FILE == sidekick_home / "config.yaml"
-    assert startup._agent_dir() == sidekick_home / "sidekick-agent"
+    assert startup._agent_dir() == Path(__file__).resolve().parents[1]
     assert rollback._sidekick_home() == sidekick_home
 
     monkeypatch.setattr(

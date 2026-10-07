@@ -1,6 +1,16 @@
 # LastBrowser 0.1.47 – Prüfstatus und offene Freigaben
 
-Stand: 7. Oktober 2026. **Versionstyp:** Testversion. **Gesamtstatus:** finales Source-Delta-Review und frische Full-Pipeline bestanden; Paket, VM-Abnahme und Signierung sind offen.
+Stand: 7. Oktober 2026. **Versionstyp:** Testversion. **Gesamtstatus:** eng begrenzte Releasekorrekturen geprüft; ein vollständiger signierter Kandidat und praktische Abnahme sind noch offen.
+
+## Ergänzungsprüfung und bekannte Testgrenzen
+
+Der exakte Commitexport `74ffe4656ef5424b9e78cf3bd33ae092abe59a40` bestand die vier Pflichtschritte: 1.836 Desktoptests in 195 Dateien, Store-Preflight 39 PASS / 2 WARN / 0 FAIL, Build und Python-Syntax Exit 0. Alle 3.550 archivierten Dateien wurden bytegenau gegen den Paketinput geprüft. Die höhere Zahl des älteren Workingtree-Laufs schließt weitere lokale Änderungen ein und ist kein Beleg für den Commitexport.
+
+Die zusätzliche vollständige Python-Suite unter Host-Python 3.14 endete mit 3.590 PASS, 99 FAIL, 117 SKIP und zwei Setupfehlern. Zahlreiche isolierte Worker scheiterten ausdrücklich an fehlendem `pydantic`. Der gezielte Gegentest mit gebündeltem Python 3.12.10 bestand 52 Tests; der kontrollierte Zwei-Profil-Test scheiterte. Dessen ursprüngliche Barrierursache bleibt **NOT_VERIFIED**.
+
+Nachfolgend wurden eng begrenzte Korrekturen vorgenommen: zwei Ruff-Befunde in `routes.py`, fünf falsche Namespacepfade im Paketprüfer, veraltete Nova-/Legacy-/Standalone-Testfixtures und die gleichzeitige Pipe-Schließung beim Worker-Aufräumen. Ruff und zwei Prüfertests bestanden; die Fixturegruppe bestand 37 Tests, Worker-Regression und bestehende Cancel-/ACK-/Exit-/Lease-Prüfung zwei Tests. Diese getrennten Prüfungen werden nicht zu einer bestandenen Gesamtsuite addiert. Die frische Pflichtpipeline und der genaue neue Commit-/Paketpin werden gesondert protokolliert.
+
+Die bisherigen Signierversuche lieferten keinen vollständigen freigegebenen Installer. Ein Zeitstempelfehler durch die Builder-Offlineoption ist korrigiert und an neuen Payload-Dateien bestätigt. Ein späterer Ressourcen-Kopierfehler erfordert einen neuen Kandidaten mit serieller, bytegeprüfter Kopie; Teilpakete bleiben unverändert und werden nicht veröffentlicht.
 
 ## Frische Pflichtpipeline
 
@@ -26,7 +36,7 @@ Die Zahlen der separaten FIX1-/FIX2-Prüfungen sind isolierte Testläufe und dü
 - **Paketbuild / Nutzlastidentität:** nicht nachgewiesen. Keine Behauptung zu Installer, Portable, ASAR, Nutzlastgleichheit oder In-Guest-Installation für 0.1.47.
 - **VM / Gast:** nicht abgenommen. Der begrenzte VM-Test von 0.1.46 (Kandidat `9615a8ae`) belegte Setup-/ASAR-Identität, Installation und Start, aber keine erfolgreiche Modellantwort, Providerakzeptanz oder Stop-Abnahme. Seine Fehlerbilder sind keine Messung des 0.1.47-Pakets.
 - **Provider / MiMo / Quickchat / Teamwork:** keine erfolgreiche 0.1.47-Inferenz oder sichtbare Laufzeitabnahme belegt. Schlüsselstatus, Katalog oder Source-Tests ersetzen keine Antwort. Teamwork bleibt gesondert autorisierungspflichtig.
-- **Signierung / VMP:** nicht ausgeführt und nicht verifiziert. Vorbereitungsreceipts zu Zertifikat oder Werkzeugverfügbarkeit belegen keine Signatur eines neuen Artefakts.
+- **Signierung / VMP:** Teilversuche wurden ausgeführt, aber ein vollständiger Kandidat einschließlich VMP, Setup und Portable ist noch nicht freigegeben. Einzelne gültige Payload-Signaturen ersetzen diesen Nachweis nicht.
 - **Store:** weder Store-Zertifizierung noch Einreichung oder Storebereitschaft behauptet.
 
 ## Vor einer späteren Kandidatenfreigabe
@@ -35,6 +45,6 @@ Die Zahlen der separaten FIX1-/FIX2-Prüfungen sind isolierte Testläufe und dü
 2. Root führt und dokumentiert die für den eingefrorenen Stand erforderliche vollständige Pipeline. Historische Pipelinezahlen gelten nicht als Ersatz.
 3. Root liefert und prüft eindeutige 0.1.47-Paketpins (Dateiname, Bytegröße, SHA-256, ASAR-/Quellidentität und Download-URL), bevor eine VM-Zustellung geplant wird.
 4. Eine autorisierte Gastprüfung bewertet ausschließlich das exakt gepinnte Paket und trennt Installation/Start von Provider-, Quickchat-, Update-, Portable- und Upgrade-Ergebnissen.
-5. Signierung, VMP, Veröffentlichung und Storefreigabe bleiben separate, noch nicht erteilte Freigaben.
+5. Signierung, GitHub-Testveröffentlichung und Websiteaktualisierung sind ausdrücklich autorisiert. Ihre Ergebnisse bleiben bis zur Prüfung der konkreten finalen Bytes offen. Storeeinreichung und eine Umstellung des stabilen Updatefeeds sind damit nicht freigegeben.
 
 Diese Statusseite ist eine interne Prüfzusammenfassung, keine Freigabe zum Bauen, Signieren, Veröffentlichen oder Einreichen.

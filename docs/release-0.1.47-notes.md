@@ -19,4 +19,6 @@ Für die genannten Änderungen liegen gezielte Source- und Regressionsevidenzen 
 
 Der historische VM-Lauf des unsignierten Kandidaten **0.1.46 / 9615a8ae** belegte nur die Identität von Setup/ASAR sowie Installation und Start. Er erreichte keine erfolgreiche Modellantwort oder Provider-/Quickchat-Abnahme. Seine Befunde sind Ausgangspunkte für gezielte 0.1.47-Prüfungen, keine 0.1.47-Ergebnisse.
 
+Der separate exakte Commitexport von `74ffe46` bestand 1.836 Desktoptests und alle vier Pflichtschritte. Zusätzliche Python-Prüfungen fanden isolierte Host-Abhängigkeitsprobleme und weitere Testbefunde; der gebündelte 3.12-Gegentest bestand 52 Tests, ließ die Zwei-Profil-Barrierursache aber offen. Die folgenden begrenzten Korrekturen betreffen Worker-Pipe-Aufräumen, Testfixtures, Ruff und tatsächliche Local-AI-Modulpfade im Prüfer. Sie ersetzen keine praktische Zwei-Profil-Abnahme. Der genaue nachfolgende Commit und signierte Paketstand werden bei der Veröffentlichung separat gepinnt.
+
 Die dazugehörige Prüf- und Freigabeabgrenzung steht in [release-0.1.47-verification.md](release-0.1.47-verification.md). Diese interne Testversionsnotiz ist keine öffentliche Releaseankündigung, Signierbestätigung, Storezertifizierung oder Einreichungsfreigabe.

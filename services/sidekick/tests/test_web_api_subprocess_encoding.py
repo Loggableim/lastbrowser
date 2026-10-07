@@ -36,6 +36,7 @@ def test_startup_auto_install_agent_deps_uses_utf8_encoding(monkeypatch, tmp_pat
 
     captured = {}
     monkeypatch.setenv("SIDEKICK_WEBUI_AUTO_INSTALL", "1")
+    monkeypatch.setenv("LASTBROWSER_INTEGRATED", "0")
     monkeypatch.setattr(startup, "_agent_dir", lambda: agent_dir)
     monkeypatch.setattr(startup, "_trusted_agent_dir", lambda _path: True)
 

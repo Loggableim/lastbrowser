@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import os
+import sys
 import subprocess
 import queue
 import select
@@ -91,6 +92,24 @@ def drain(handle, timeout=25):
             messages.append(message)
             if message.get("kind") == "eof": return messages
     raise AssertionError("Native engine did not exit before deadline")
+
+
+def test_worker_termination_waits_for_pipe_readers_before_closing_streams():
+    from runtime.independent.worker_host import WorkerHandle
+
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; print('{}', flush=True); time.sleep(30)"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", bufsize=1,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    handle = WorkerHandle(process, SimpleNamespace(run_id="cleanup-test", control_epoch=1))
+    assert handle.read_event(timeout=2) == {}
+
+    assert handle.terminate(grace_seconds=0, hard_seconds=1) is not None
+    assert not handle._reader.is_alive()
+    assert not handle._errors.is_alive()
+    assert process.stdin.closed and process.stdout.closed and process.stderr.closed
 
 
 def test_context_requires_actual_lease_and_exact_turn(tmp_path, monkeypatch):
@@ -311,7 +330,8 @@ def test_two_real_profile_engines_sdk_file_tool_and_parent_drift(tmp_path, monke
             peer = BoundNativePeer(context, store, monkeypatch)
             contexts[index] = peer.context
             handles.append(peer)
-        assert dict(os.environ) == before_env
+        if dict(os.environ) != before_env:
+            pytest.fail("Parent environment changed", pytrace=False)
         try:
             for server in servers: server.arrived.wait(timeout=20)
             assert handles[0].pid != handles[1].pid and all(h.is_alive for h in handles)

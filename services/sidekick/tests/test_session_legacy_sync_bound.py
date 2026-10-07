@@ -35,6 +35,7 @@ def test_legacy_sync_skips_oversized_payload(isolated_session_env, tmp_path):
             # legacy-sync path are needed. `path` is a read-only property
             # resolved from SESSION_DIR, which the fixture isolates.
             self.session_id = "runaway-session"
+            self.space_scope = None
 
         def _legacy_session_path(self):
             return tmp_path / "legacy" / "runaway-session.json"
@@ -54,6 +55,7 @@ def test_legacy_sync_writes_normal_payload(isolated_session_env, tmp_path):
     class _Session(models_mod.Session):
         def __init__(self):
             self.session_id = "normal-session"
+            self.space_scope = None
 
         def _legacy_session_path(self):
             return tmp_path / "legacy" / "normal-session.json"
@@ -74,6 +76,7 @@ def test_legacy_sync_skips_when_paths_match(isolated_session_env, tmp_path):
     class _Session(models_mod.Session):
         def __init__(self):
             self.session_id = "same-path"
+            self.space_scope = None
 
         def _legacy_session_path(self):
             return same

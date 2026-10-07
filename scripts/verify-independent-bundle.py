@@ -28,7 +28,7 @@ MODULE_PATHS = (
     "runtime/independent/native_chat_protocol.py", "runtime/independent/native_chat_host.py", "runtime/independent/native_chat_worker.py", "runtime/independent/native_chat_policy.py", "runtime/independent/native_chat_auto.py", "runtime/independent/native_tool_paths.py", "runtime/independent/model_policy_session.py", "runtime/independent/grill.py",
     "runtime/local_ai/__init__.py", "runtime/local_ai/contracts.py", "runtime/local_ai/registry.py", "runtime/local_ai/setup.py", "runtime/local_ai/installer.py", "runtime/local_ai/runtime_probe.py", "runtime/local_ai/resources.py", "runtime/local_ai/model_manager.py", "runtime/local_ai/role_adapters.py", "runtime/local_ai/benchmark.py", "runtime/local_ai/legacy_runtime.py",
     "web/api/native_chats.py", "web/api/model_policy.py", "web/api/local_ai.py", "web/api/local_ai_setup.py", "web/api/grill.py", "web/api/models.py", "web/api/routes.py", "web/api/streaming.py",
-    "runtime/independent/native_chat_nova.py", "runtime/independent/native_provider_capture.py", "runtime/independent/native_sdk_contracts.py", "runtime/independent/native_sdk_broker.py", "runtime/bootstrap.py", "runtime/model_recovery.py", "runtime/runtime_bundle.py", "runtime/native_stage.py", "runtime/native_dependencies.py", "web/api/local_ai_runtime.py",
+    "runtime/independent/native_chat_nova.py", "runtime/independent/native_provider_capture.py", "runtime/independent/native_sdk_contracts.py", "runtime/independent/native_sdk_broker.py", "runtime/local_ai/bootstrap.py", "runtime/local_ai/model_recovery.py", "runtime/local_ai/runtime_bundle.py", "runtime/local_ai/native_stage.py", "runtime/local_ai/native_dependencies.py", "web/api/local_ai_runtime.py",
 )
 IMPORTS = (
     "runtime.chat_modes",
@@ -37,7 +37,7 @@ IMPORTS = (
     "web.api.chat_modes",
     "web.api.child_streams",
     "runtime.independent.native_chat_protocol", "runtime.independent.native_chat_host", "runtime.independent.native_chat_auto", "runtime.local_ai", "runtime.local_ai.contracts", "runtime.local_ai.registry", "runtime.local_ai.setup", "runtime.local_ai.installer", "web.api.native_chats", "web.api.local_ai", "web.api.local_ai_setup", "web.api.models",
-    "runtime.independent.native_chat_nova", "runtime.independent.native_provider_capture", "runtime.independent.native_sdk_contracts", "runtime.independent.native_sdk_broker", "runtime.bootstrap", "runtime.model_recovery", "runtime.runtime_bundle", "runtime.native_stage", "runtime.native_dependencies", "web.api.local_ai_runtime",
+    "runtime.independent.native_chat_nova", "runtime.independent.native_provider_capture", "runtime.independent.native_sdk_contracts", "runtime.independent.native_sdk_broker", "runtime.local_ai.bootstrap", "runtime.local_ai.model_recovery", "runtime.local_ai.runtime_bundle", "runtime.local_ai.native_stage", "runtime.local_ai.native_dependencies", "web.api.local_ai_runtime",
 )
 
 

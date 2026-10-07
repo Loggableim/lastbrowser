@@ -208,6 +208,10 @@ class WorkerHandle:
         except (OSError, UnicodeError):
             self.transport_error = "worker_transport_closed"
         finally:
+            try:
+                self.process.stdout.close()
+            except OSError:
+                pass
             self._offer({"kind": "eof", "errorCode": self.transport_error})
 
     def _drain_stderr(self):
@@ -227,6 +231,11 @@ class WorkerHandle:
                     self.stderr_missing_module = missing[-1].replace(".", "_")
         except (OSError, UnicodeError):
             pass
+        finally:
+            try:
+                self.process.stderr.close()
+            except OSError:
+                pass
 
     def send(self, message: dict[str, Any]) -> None:
         encoded = canonical_json(message) + "\n"
@@ -292,11 +301,13 @@ class WorkerHandle:
                 self.process.wait(timeout=1)
             except subprocess.TimeoutExpired:
                 pass
-            for stream in (self.process.stdin, self.process.stdout, self.process.stderr):
-                try:
-                    stream.close()
-                except OSError:
-                    pass
+            try:
+                self.process.stdin.close()
+            except OSError:
+                pass
+            # The stdout/stderr reader threads own and close their respective
+            # wrappers after EOF; joining them here avoids a concurrent
+            # TextIOWrapper.close/read race on Windows Python 3.12.
             self._reader.join(timeout=0.25)
             self._errors.join(timeout=0.25)
         return self.returncode

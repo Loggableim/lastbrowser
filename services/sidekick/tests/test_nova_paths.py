@@ -1,11 +1,29 @@
 import importlib
 from pathlib import Path
 
+import pytest
+
 from web.api.nova_paths import (
     get_nova_session_start_path,
     get_nova_space_root,
     get_nova_state_snapshot_path,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolated_default_nova_profile(monkeypatch):
+    """Keep path expectations on each test's HOME, not a prior active profile."""
+    from web.api import profiles
+    from web.api._home import get_webui_home
+
+    profiles.clear_request_profile()
+    profiles.refresh_profile_base_home_from_env()
+    monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
+    monkeypatch.setattr(profiles, "get_active_profile_home", get_webui_home)
+    yield
+    monkeypatch.undo()
+    profiles.clear_request_profile()
+    profiles.refresh_profile_base_home_from_env()
 
 
 def test_nova_paths_prefer_sidekick_home(monkeypatch, tmp_path):

@@ -7,6 +7,22 @@ import pytest
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
 
+@pytest.fixture(autouse=True)
+def isolated_default_nova_profile(monkeypatch):
+    """Keep these SIDEKICK_HOME tests independent of prior profile switches."""
+    from web.api import profiles
+    from web.api._home import get_webui_home
+
+    profiles.clear_request_profile()
+    profiles.refresh_profile_base_home_from_env()
+    monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
+    monkeypatch.setattr(profiles, "get_active_profile_home", get_webui_home)
+    yield
+    monkeypatch.undo()
+    profiles.clear_request_profile()
+    profiles.refresh_profile_base_home_from_env()
+
+
 def _stub_nova_status_dependencies(monkeypatch, lifecycle):
     monkeypatch.setattr(lifecycle, "_game_mode_enabled", lambda: True)
     monkeypatch.setattr(lifecycle, "migration_tick", lambda: {"ok": True})

@@ -96,6 +96,7 @@ describe('browser shell layout', () => {
 
   it('renders visited websites inside a full-height browser webview frame', () => {
     const source = readRendererFile('App.tsx');
+    const lifecycle = readRendererFile('webview-readiness.ts');
 
     expect(source).toContain('className="browser-main browser-page-main"');
     expect(source).toContain('className="browser-webview-frame"');
@@ -103,10 +104,11 @@ describe('browser shell layout', () => {
     expect(source).toContain('className={`browser-tab-pane ${isCurrent ?');
     // Electron webview custom events are attached imperatively because React
     // does not register these non-standard DOM event handler props.
-    expect(source).toContain("el.addEventListener('did-start-loading', handleDidStartLoading)");
-    expect(source).toContain("el.addEventListener('dom-ready', handleDomReady)");
-    expect(source).toContain("el.addEventListener('did-fail-load', handleDidFailLoad)");
-    expect(source).toContain("el.removeEventListener('did-fail-load', handleDidFailLoad)");
+    expect(source).toContain("element.addEventListener('did-start-loading', onDidStartLoading)");
+    expect(source).toContain("element.addEventListener('dom-ready', onDomReady)");
+    expect(source).toContain("element.addEventListener('did-fail-load', onDidFailLoad)");
+    expect(lifecycle).toContain("view.addEventListener('dom-ready', onDomReady)");
+    expect(lifecycle).toContain("view.removeEventListener('dom-ready', onDomReady)");
   });
 
   it('renders native bookmark controls in the browser chrome', () => {
@@ -177,9 +179,9 @@ describe('browser shell layout', () => {
     expect(source).toContain('onWebviewNavigate(activeTab.id, url)');
     expect(source).toContain('onWebviewTitle(activeTab.id, title)');
     expect(source).not.toContain('onDidNavigate={(event) =>');
-    expect(source).toContain('const guestWebview = el as Electron.WebviewTag');
-    expect(source).toContain("el.addEventListener('dom-ready', handleDomReady)");
-    expect(source).toContain('void hideWebviewScrollbars(guestWebview)');
+    expect(source).toContain('const isCurrentElement = () => allWebviewRefs.current[tabId] === element');
+    expect(source).toContain("if (!isCurrentElement() || !isWebviewReady(element)) return");
+    expect(source).toContain('void hideWebviewScrollbars(element)');
     expect(source).not.toContain('annotateWebviewViewport');
   });
 

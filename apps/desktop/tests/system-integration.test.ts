@@ -201,9 +201,9 @@ describe('Split tab detach transfer handshake', () => {
     expect(startup).toBeGreaterThan(-1);
     expect(app.slice(detach, startup)).toContain('if (result?.success) useTabStore.getState().detachTab(tabToDetach.id)');
     expect(app.slice(startup, startup + 1700)).toContain('setPendingDetachedTransfer');
-    expect(app).toContain("el.addEventListener('dom-ready', handleDomReady)");
-    expect(app).toContain("el.addEventListener('did-fail-load', handleDidFailLoad)");
-    expect(app).toContain('onTransferredWebviewReady(tab.id, guestWebview.getWebContentsId())');
+    expect(app).toContain("element.addEventListener('dom-ready', onDomReady)");
+    expect(app).toContain("element.addEventListener('did-fail-load', onDidFailLoad)");
+    expect(app).toContain('webviewEventHandlersRef.current.onTransferredWebviewReady(tabId, element.getWebContentsId())');
     expect(app).toContain('webview.getWebContentsId()');
     expect(app).toContain("webview.addEventListener('dom-ready', confirmAttached)");
     expect(app).toContain("webview.removeEventListener('dom-ready', confirmAttached)");

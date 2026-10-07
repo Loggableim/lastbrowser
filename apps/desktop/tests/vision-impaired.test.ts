@@ -598,9 +598,16 @@ describe('Vision-Impaired 2.0 §9: settings UI wiring (source contracts)', () =>
   });
 
   it('attaches Electron WebView events through addEventListener and reconciles smart invert on dom-ready', () => {
-    expect(appSource).toContain("el.addEventListener('dom-ready', handleDomReady)");
-    expect(appSource).toContain('const guestWebview = el as Electron.WebviewTag');
-    expect(appSource).toContain('refreshSmartInvertForWebview(guestWebview, config.enabled && config.smartInvertWebview)');
+    const readinessSource = readFileSync(resolve(__dirname, '../src/renderer/webview-readiness.ts'), 'utf8');
+    const smartInvertSource = readFileSync(resolve(__dirname, '../src/renderer/utils/smart-invert.ts'), 'utf8');
+
+    expect(appSource).toContain("element.addEventListener('dom-ready', onDomReady)");
+    expect(appSource).toContain('const onDomReady = () => {');
+    expect(appSource).toContain('if (!isCurrentElement() || !isWebviewReady(element)) return');
+    expect(appSource).toContain('refreshSmartInvertForWebview(element, config.enabled && config.smartInvertWebview)');
+    expect(readinessSource).toContain("view.addEventListener('dom-ready', onDomReady)");
+    expect(smartInvertSource).toContain('await removeSmartInvertFromWebview(webview)');
+    expect(smartInvertSource).toContain('if (enabled) await applySmartInvertToWebview(webview)');
     expect(appSource).not.toContain('onDomReady=');
     expect(appSource).not.toContain('onDidFailLoad=');
   });

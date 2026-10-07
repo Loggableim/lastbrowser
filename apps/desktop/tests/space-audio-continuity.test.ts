@@ -85,11 +85,11 @@ describe('audio keepalive across spaces (goal.md Paket 3)', () => {
   });
 
   it('subscribes and cleans up media listeners on every rendered WebView ref', () => {
-    expect(app).toContain('webviewMediaCleanupRefs.current[tab.id] = subscribeToWebviewMediaState(');
-    expect(app).toContain('onWebviewMediaPlayingRef.current?.(tabId, isPlaying)');
+    expect(app).toContain('webviewMediaCleanupRefs.current[tabId] = subscribeToWebviewMediaState(');
+    expect(app).toContain('onWebviewMediaPlayingRef.current?.(id, isPlaying)');
     expect(app).not.toContain("view.addEventListener('media-started-playing', onMediaStarted)");
     expect(app).not.toContain("view.addEventListener('media-paused', onMediaPaused)");
-    expect(app).toContain('webviewMediaCleanupRefs.current[tab.id]?.();');
+    expect(app).toContain('webviewMediaCleanupRefs.current[tabId]?.();');
   });
 });
 

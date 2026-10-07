@@ -58,6 +58,7 @@ import {
 } from 'lucide-react';
 import { hideWebviewScrollbars } from './browser-view.js';
 import { subscribeDevToolsState, toggleWebviewDevTools } from './devtools-state.js';
+import { bindWebviewReadiness, isWebviewReady } from './webview-readiness.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
@@ -1340,7 +1341,9 @@ function AppContent(): JSX.Element {
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const toggleDevTools = useCallback(() => {
-    toggleWebviewDevTools(webviewRef.current, setDevToolsOpen);
+    const view = webviewRef.current;
+    if (!isWebviewReady(view)) return;
+    toggleWebviewDevTools(view, setDevToolsOpen);
   }, []);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const resizeStateRef = useRef<SidebarResizeState | null>(null);
@@ -4776,8 +4779,12 @@ function AppContent(): JSX.Element {
                   muted={false}
                   onToggleMute={() => {
                     const view = webviewRef.current;
-                    if (view && typeof view.isAudioMuted === 'function' && typeof view.setAudioMuted === 'function') {
-                      view.setAudioMuted(!view.isAudioMuted());
+                    if (isWebviewReady(view) && view && typeof view.isAudioMuted === 'function' && typeof view.setAudioMuted === 'function') {
+                      try {
+                        view.setAudioMuted(!view.isAudioMuted());
+                      } catch {
+                        // The guest may begin navigating after the click.
+                      }
                     }
                   }}
                   dockMode={actionBarDock}
@@ -5206,7 +5213,9 @@ function AppContent(): JSX.Element {
                   onSelectPageContext={async kind => {
                     const guest = [...document.querySelectorAll<Electron.WebviewTag>('webview[data-tab-id]')]
                       .find(view => view.getAttribute('data-tab-id') === activeTab.id);
-                    if (!guest) throw new Error('No current page');
+                    if (!guest || webviewRef.current !== guest || !isWebviewReady(guest)) {
+                      throw new Error('The active page is not ready yet.');
+                    }
                     const result = await assistantController.request({ schemaVersion: 1, operation: 'selectedContext', scope: assistantSelection.scope,
                       payload: { guestWebContentsId: guest.getWebContentsId(), includePage: kind === 'page', clientRequestId: newIndependentRequestId() } });
                     if (!result.ok) throw new Error(result.error.code);
@@ -5811,13 +5820,134 @@ function BrowserMain({
   // has been laid out — that second mount is the one that sticks.
   const [webviewReady, setWebviewReady] = useState(false);
   const [webviewMountKey, setWebviewMountKey] = useState(0);
+  const [webviewReadinessRevision, setWebviewReadinessRevision] = useState(0);
   const allWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
   const webviewNavigationCleanupRefs = useRef<Record<string, () => void>>({});
+  const webviewReadinessCleanupRefs = useRef<Record<string, () => void>>({});
+  const webviewRefCallbacks = useRef(new Map<string, React.RefCallback<Electron.WebviewTag>>());
   const smartInvertActive = usePanelStore((s) => s.visionImpaired.enabled && s.visionImpaired.smartInvertWebview);
   const transferredTabBootstrapIds = useRef(new Set<string>());
   const webviewMediaCleanupRefs = useRef<Record<string, () => void>>({});
   const onWebviewMediaPlayingRef = useRef(onWebviewMediaPlaying);
   onWebviewMediaPlayingRef.current = onWebviewMediaPlaying;
+  const webviewEventHandlersRef = useRef({
+    activeTabId: activeTab.id,
+    onClearBrowserError,
+    onTransferredWebviewReady,
+    onSetBrowserError,
+    onNavigate
+  });
+  webviewEventHandlersRef.current = {
+    activeTabId: activeTab.id,
+    onClearBrowserError,
+    onTransferredWebviewReady,
+    onSetBrowserError,
+    onNavigate
+  };
+  const registerWebviewRef = useRef<(tabId: string, element: Electron.WebviewTag | null, previous: Electron.WebviewTag | null) => void>(() => {});
+  registerWebviewRef.current = (tabId, element, previous) => {
+    const existing = allWebviewRefs.current[tabId];
+    if (element) {
+      if (existing === element) return;
+      if (existing) {
+        webviewReadinessCleanupRefs.current[tabId]?.();
+        webviewNavigationCleanupRefs.current[tabId]?.();
+        webviewMediaCleanupRefs.current[tabId]?.();
+      }
+      allWebviewRefs.current[tabId] = element;
+      const isCurrentElement = () => allWebviewRefs.current[tabId] === element;
+      webviewReadinessCleanupRefs.current[tabId] = bindWebviewReadiness(
+        element,
+        isCurrentElement,
+        () => setWebviewReadinessRevision((current) => current + 1)
+      );
+      const onDidStartLoading = () => {
+        if (isCurrentElement() && tabId === webviewEventHandlersRef.current.activeTabId) {
+          webviewEventHandlersRef.current.onClearBrowserError();
+        }
+      };
+      const onDomReady = () => {
+        if (!isCurrentElement() || !isWebviewReady(element)) return;
+        void hideWebviewScrollbars(element);
+        const config = usePanelStore.getState().visionImpaired;
+        void refreshSmartInvertForWebview(element, config.enabled && config.smartInvertWebview);
+        if (tabId === webviewEventHandlersRef.current.activeTabId) {
+          try {
+            webviewEventHandlersRef.current.onTransferredWebviewReady(tabId, element.getWebContentsId());
+          } catch {
+            // Electron can detach a guest while a navigation event is queued.
+          }
+        }
+      };
+      const onDidFailLoad = (rawEvent: Event) => {
+        if (!isCurrentElement()) return;
+        const event = rawEvent as Event & {
+          isMainFrame?: boolean;
+          errorCode?: number;
+          errorDescription?: string;
+        };
+        if (!event.isMainFrame || event.errorCode === -3) return;
+        if (tabId !== webviewEventHandlersRef.current.activeTabId) return;
+        if ((event.errorCode ?? 0) < -100) {
+          webviewEventHandlersRef.current.onSetBrowserError(`Connection failed (${event.errorDescription || 'unknown error'}). Returning to start page.`);
+          setTimeout(() => {
+            if (isCurrentElement() && tabId === webviewEventHandlersRef.current.activeTabId) {
+              webviewEventHandlersRef.current.onNavigate(browserStartUrl);
+            }
+          }, 1500);
+        } else {
+          webviewEventHandlersRef.current.onSetBrowserError(`${event.errorCode}: ${event.errorDescription || 'Navigation failed'}`);
+        }
+      };
+      element.addEventListener('did-start-loading', onDidStartLoading);
+      element.addEventListener('dom-ready', onDomReady);
+      element.addEventListener('did-fail-load', onDidFailLoad);
+      webviewNavigationCleanupRefs.current[tabId] = () => {
+        element.removeEventListener('did-start-loading', onDidStartLoading);
+        element.removeEventListener('dom-ready', onDomReady);
+        element.removeEventListener('did-fail-load', onDidFailLoad);
+      };
+      webviewMediaCleanupRefs.current[tabId]?.();
+      webviewMediaCleanupRefs.current[tabId] = subscribeToWebviewMediaState(
+        element,
+        tabId,
+        (id, isPlaying) => {
+          if (isCurrentElement()) onWebviewMediaPlayingRef.current?.(id, isPlaying);
+        }
+      );
+      if (tabId === webviewEventHandlersRef.current.activeTabId) webviewRef.current = element;
+      return;
+    }
+
+    const removed = previous ?? existing;
+    if (!removed || existing !== removed) return;
+    webviewReadinessCleanupRefs.current[tabId]?.();
+    webviewNavigationCleanupRefs.current[tabId]?.();
+    webviewMediaCleanupRefs.current[tabId]?.();
+    delete webviewReadinessCleanupRefs.current[tabId];
+    delete webviewNavigationCleanupRefs.current[tabId];
+    delete webviewMediaCleanupRefs.current[tabId];
+    delete allWebviewRefs.current[tabId];
+    if (webviewRef.current === removed) webviewRef.current = null;
+  };
+  const getWebviewRefCallback = (tabId: string): React.RefCallback<Electron.WebviewTag> => {
+    let callback = webviewRefCallbacks.current.get(tabId);
+    if (!callback) {
+      let boundElement: Electron.WebviewTag | null = null;
+      callback = (element) => {
+        if (element) {
+          boundElement = element;
+          registerWebviewRef.current(tabId, element, null);
+        } else {
+          const previous = boundElement;
+          boundElement = null;
+          registerWebviewRef.current(tabId, null, previous);
+        }
+      };
+      webviewRefCallbacks.current.set(tabId, callback);
+    }
+    return callback;
+  };
   useEffect(() => {
     Object.values(allWebviewRefs.current).forEach((webview) => {
       if (smartInvertActive) void applySmartInvertToWebview(webview);
@@ -5830,7 +5960,13 @@ function BrowserMain({
   const splitMagnifierActive = usePanelStore((s) => s.visionImpaired.enabled && s.visionImpaired.splitScreenMagnifier);
   useEffect(() => () => {
     Object.values(webviewMediaCleanupRefs.current).forEach((cleanup) => cleanup());
+    Object.values(webviewReadinessCleanupRefs.current).forEach((cleanup) => cleanup());
+    Object.values(webviewNavigationCleanupRefs.current).forEach((cleanup) => cleanup());
     webviewMediaCleanupRefs.current = {};
+    webviewReadinessCleanupRefs.current = {};
+    webviewNavigationCleanupRefs.current = {};
+    webviewRefCallbacks.current.clear();
+    allWebviewRefs.current = {};
   }, []);
   const [snapFlyoutVisible, setSnapFlyoutVisible] = useState(false);
   const [snapDropTarget, setSnapDropTarget] = useState<GhostTarget | null>(null);
@@ -5894,9 +6030,7 @@ function BrowserMain({
   }
   useLayoutEffect(() => {
     const activeEl = allWebviewRefs.current[activeTab.id];
-    if (activeEl) {
-      webviewRef.current = activeEl;
-    }
+    webviewRef.current = activeEl ?? null;
   }, [activeTab.id]);
 
   useEffect(() => {
@@ -5908,14 +6042,14 @@ function BrowserMain({
     let cancelled = false;
     let checking = false;
     const confirmAttached = async () => {
-      if (cancelled || checking) return;
+      if (cancelled || checking || allWebviewRefs.current[tabId] !== webview || !isWebviewReady(webview)) return;
       checking = true;
       try {
-        // dom-ready can be missed while the destination webview is mounting.
-        // A positive guest id confirms Electron has accepted the tab and owns
-        // its navigation, even while the first document is still loading.
+        // Readiness is attached from the element ref before this effect runs,
+        // so an early dom-ready event is retained for this exact guest.
         const guestId = webview.getWebContentsId();
-        if (!cancelled && Number.isInteger(guestId) && guestId > 0) {
+        if (!cancelled && allWebviewRefs.current[tabId] === webview && isWebviewReady(webview)
+          && Number.isInteger(guestId) && guestId > 0) {
           transferredTabBootstrapIds.current.add(tabId);
           onTransferredWebviewReady(tabId, guestId);
         }
@@ -6214,7 +6348,7 @@ function BrowserMain({
 
   const toggleMute = useCallback(() => {
     const view = webviewRef.current;
-    if (!view || typeof view.setAudioMuted !== 'function') return;
+    if (!isWebviewReady(view) || !view || typeof view.setAudioMuted !== 'function') return;
     setMuted((current) => {
       const next = !current;
       try {
@@ -6229,17 +6363,25 @@ function BrowserMain({
   // Re-read both flags when the guest is recreated.
   useEffect(() => {
     const view = webviewRef.current;
-    if (!view) {
+    if (!view || allWebviewRefs.current[activeTab.id] !== view || !isWebviewReady(view)) {
       onDevToolsOpenChange(false);
+      setMuted(Boolean(activeTab.isMuted));
       return;
     }
-    setMuted(typeof view.isAudioMuted === 'function' ? view.isAudioMuted() : false);
+    try {
+      setMuted(typeof view.isAudioMuted === 'function' ? view.isAudioMuted() : false);
+    } catch {
+      // A navigation can revoke guest readiness between the event and this effect.
+      return;
+    }
     return subscribeDevToolsState(
       view,
-      () => webviewRef.current === view,
+      () => webviewRef.current === view
+        && allWebviewRefs.current[activeTab.id] === view
+        && isWebviewReady(view),
       onDevToolsOpenChange
     );
-  }, [webviewMountKey, webviewReady, activeTab.id, onDevToolsOpenChange]);
+  }, [webviewMountKey, webviewReady, webviewReadinessRevision, activeTab.id, activeTab.isMuted, onDevToolsOpenChange]);
 
   // F12 toggles DevTools; Ctrl/Cmd+M mutes the tab.
   useEffect(() => {
@@ -6650,7 +6792,14 @@ function BrowserMain({
             onSetRatio={onSetSnapRatio}
             onActivateTab={onActivateTab}
             onRemoveSplitTab={onRemoveSplitTab}
-            onDetachTab={(tab, screenX, screenY) => onDetachTab?.(tab, screenX, screenY, allWebviewRefs.current[tab.id]?.getWebContentsId())}
+            onDetachTab={(tab, screenX, screenY) => {
+              const view = allWebviewRefs.current[tab.id];
+              let guestId: number | undefined;
+              if (isWebviewReady(view)) {
+                try { guestId = view?.getWebContentsId(); } catch { /* guest may be detaching */ }
+              }
+              onDetachTab?.(tab, screenX, screenY, guestId);
+            }}
             onMaximizeTab={(tabId) => {
               onActivateTab?.(tabId);
               splitTabIds.filter((id) => id !== tabId).forEach((id) => onRemoveSplitTab?.(id));
@@ -6720,61 +6869,7 @@ function BrowserMain({
                       tab.incognito,
                       knownSpacePaths
                     )}:${tab.id}:${webviewMountKey}`}
-                    ref={(el) => {
-                      if (el) {
-                        const guestWebview = el as Electron.WebviewTag;
-                        allWebviewRefs.current[tab.id] = guestWebview;
-                        webviewNavigationCleanupRefs.current[tab.id]?.();
-                        const handleDidStartLoading = () => {
-                          if (tab.id === activeTab.id) onClearBrowserError();
-                        };
-                        const handleDomReady = () => {
-                          void hideWebviewScrollbars(guestWebview);
-                          // Reconcile this document after every navigation and live toggle.
-                          const config = usePanelStore.getState().visionImpaired;
-                          void refreshSmartInvertForWebview(guestWebview, config.enabled && config.smartInvertWebview);
-                          if (tab.id === activeTab.id) onTransferredWebviewReady(tab.id, guestWebview.getWebContentsId());
-                        };
-                        const handleDidFailLoad = (rawEvent: Event) => {
-                          const event = rawEvent as Event & {
-                            isMainFrame?: boolean;
-                            errorCode?: number;
-                            errorDescription?: string;
-                          };
-                          if (!event.isMainFrame || event.errorCode === -3) return;
-                          if (tab.id !== activeTab.id) return;
-                          if ((event.errorCode ?? 0) < -100) {
-                            onSetBrowserError(`Connection failed (${event.errorDescription || 'unknown error'}). Returning to start page.`);
-                            setTimeout(() => onNavigate(browserStartUrl), 1500);
-                          } else {
-                            onSetBrowserError(`${event.errorCode}: ${event.errorDescription || 'Navigation failed'}`);
-                          }
-                        };
-                        el.addEventListener('did-start-loading', handleDidStartLoading);
-                        el.addEventListener('dom-ready', handleDomReady);
-                        el.addEventListener('did-fail-load', handleDidFailLoad);
-                        webviewNavigationCleanupRefs.current[tab.id] = () => {
-                          el.removeEventListener('did-start-loading', handleDidStartLoading);
-                          el.removeEventListener('dom-ready', handleDomReady);
-                          el.removeEventListener('did-fail-load', handleDidFailLoad);
-                        };
-                        webviewMediaCleanupRefs.current[tab.id]?.();
-                        webviewMediaCleanupRefs.current[tab.id] = subscribeToWebviewMediaState(
-                          guestWebview,
-                          tab.id,
-                          (tabId, isPlaying) => onWebviewMediaPlayingRef.current?.(tabId, isPlaying)
-                        );
-                        if (tab.id === activeTab.id) {
-                          webviewRef.current = guestWebview;
-                        }
-                      } else {
-                        webviewNavigationCleanupRefs.current[tab.id]?.();
-                        delete webviewNavigationCleanupRefs.current[tab.id];
-                        webviewMediaCleanupRefs.current[tab.id]?.();
-                        delete webviewMediaCleanupRefs.current[tab.id];
-                        delete allWebviewRefs.current[tab.id];
-                      }
-                    }}
+                    ref={getWebviewRefCallback(tab.id)}
                     src={pendingTransferredTabId === tab.id || transferredTabBootstrapIds.current.has(tab.id) ? 'about:blank' : tab.url}
                     data-tab-id={tab.id}
                     className="browser-view"

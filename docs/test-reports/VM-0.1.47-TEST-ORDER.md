@@ -1,5 +1,7 @@
 # LastBrowser 0.1.47 — Auftrag für die dedizierte Windows-Test-VM
 
+Für die vom Human stündlich eingerichtete Wiederaufnahme gilt zusätzlich [VM-HOURLY-TEST-RUNNER.md](VM-HOURLY-TEST-RUNNER.md): nur neue/geänderte passende Szenarien, keine parallelen Läufe, keine unveränderten Wiederholungen und kein stündlicher Providerbudgetreset.
+
 **Aktualisierung 7. Oktober 2026:** Direkter Humanauftrag: laufende VM-Abnahme wieder aufnehmen und neue Tests durchführen. Dieser aktualisierte Repo-Auftrag ersetzt den alten VM-NEXT-Auftrag für 0.1.46. Der unveränderte frühere Release-MD-Download bleibt historisch und enthält diese Ergänzungen nicht. Den aktuellen Repo-Stand benutzen. Kandidatpins unten bleiben unverändert.
 
 ## Wiederaufnahme und neue Prioritäten
@@ -10,6 +12,16 @@
 4. Zuerst Settings/Picker/Scope ohne Inferenz prüfen, dann die begrenzten Provider-/Quickchat-Turns. Alte Fehler gezielt nachprüfen: Ollama Cloud saved-Space-Anforderung, widersprüchlicher Active-Provider/Katalog, leere Gemini-Auswahl, Normalchat-Route-Timeout, Quickchat-Verlaufserhaltung und sichere Bereinigung nach A-B-A. Fehler des alten Pakets nicht automatisch als Fehler des neuen übernehmen.
 5. Danach neue Fälle A–E unten. Computer Use in der sichtbaren App ist maßgeblich; bei fehlender nativer Fenstersteuerung konkreten Toolblocker berichten, keine Backendtests als UI-Ersatz. Root/Host startet oder bedient die VM weiterhin nicht. Der Human führt diesen Auftrag dem verbundenen Guest-Codex zu.
 6. Kein laufendes 0.1.47-Paket durch lokalen Sourcebuild reparieren. Nach späteren Sourceänderungen von Multiagent Umsetzung erst ein explizit gepinnter neuer Kandidat; kein Quellbranch als Beleg für installierte Korrekturen.
+
+## Stündlicher Lauf für neu hinzugekommene automatisierte Tests
+
+Dieser Abschnitt gilt für den vom Human eingerichteten stündlichen Testagenten. Er ergänzt den manuellen VM-Auftrag; er startet **keine** stündlichen Providerturns oder Installations-/UI-Wiederholungen.
+
+Maßgeblich ist [VM-HOURLY-TEST-RUNNER.md](VM-HOURLY-TEST-RUNNER.md). Der Stundenlauf prüft ausschließlich neu hinzugefügte oder ausdrücklich geänderte VM-UI-Szenarien, die für den unten gepinnten Guest-Kandidaten gelten. Eine Änderung von Unit-/Integrationstests im Quellcode ist kein neues VM-Szenario und autorisiert weder Tests im Guest noch einen Source-Build.
+
+Vor Computer Use müssen der bestätigte Szenarioauftrag samt Revision und der tatsächlich installierte Kandidat (Version, Installer-/ASAR-Hash) eindeutig zusammenpassen. Szenariodokumente werden aus der bestätigten Quelle nur lesend bezogen. Keine Pulls, Merges, Resets, Source-Fixes, Builds oder Testausführungen aus einem dirty/unbestätigten Checkout. Wenn exakter Kandidat, Szenariofreigabe oder erforderliche Voraussetzungen fehlen, den Fall als `NOT_TESTED`/`BLOCKED` protokollieren und nicht ausführen.
+
+Der Agent vergleicht Szenario-ID und -Revision mit seinem VM-lokalen Journal außerhalb des Produktprofils und führt nur neue/geänderte, für genau diesen Kandidaten freigegebene Fälle aus. Unveränderte Szenarien werden nicht wiederholt; Dokuformatierung oder ein neuer Dokument-Commit allein bilden keine neue Revision. Vorhandene Provider-, Berechtigungs-, Zeit- und Budgetgrenzen bleiben bestehen und werden nicht stündlich zurückgesetzt. Ergebnisse und Hashes werden im bestätigten Guest-Berichtskanal festgehalten; Source-/CI-Ergebnisse bleiben davon getrennt und belegen keine Paketabnahme.
 
 Ziel: Das genaue signierte Testpaket praktisch prüfen. Kein Stable-/Store-Release, kein Hosttest, keine VM-Reparatur und kein neuer Paketbau. Ausschließlich dedizierte, rücksetzbare Guest-Umgebung und synthetische Spaces verwenden. Hostprofile, Hostkeys und fremde Prozesse bleiben unberührt.
 

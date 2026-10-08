@@ -5318,6 +5318,9 @@ function AppContent(): JSX.Element {
               never clipped by the sidebar's overflow constraints (goal.md Paket 5). */}
           {dockSettings.position !== 'left' && sidebarMode === 'slim' && (
             <NovaDock
+              draggedTabId={draggedTabId}
+              tabs={tabs}
+              onPinTabAsApp={pinTabAsApp}
               botName={setupState.botName || 'Nova'}
               activePanel={activePanel}
               activeTabUrl={activeTab?.url}

@@ -302,6 +302,9 @@ export function SidekickSidebar({
               }}
               forcedPosition={isFloatingOverlay ? 'left' : undefined}
               spacePath={activeSpacePath}
+              draggedTabId={draggedTabId}
+              tabs={tabs}
+              onPinTabAsApp={onPinTabAsApp}
             />
             {onOpenDownloads && <DownloadDockTrigger anchor="sidebar" open={downloadsOpen} onOpen={onOpenDownloads} className="download-sidebar-slim" />}
           </div>

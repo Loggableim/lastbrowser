@@ -1,0 +1,97 @@
+{
+  "electron": "37.10.3",
+  "chrome": "138.0.7204.251",
+  "log": [
+    {
+      "phase": "profile-add-hit",
+      "covered": true,
+      "at": ""
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".vertical-tab-item .vtab-title",
+      "target": ".pinned-grid-cell",
+      "from": {
+        "x": 99.5,
+        "y": 345,
+        "width": 125,
+        "height": 15
+      },
+      "to": {
+        "x": 36,
+        "y": 259.5,
+        "width": 52,
+        "height": 47
+      },
+      "hit": "<span class=\"pinned-app-letter\" style=\"color: rgb(56, 189, 248);\">E</span>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "root",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "expanded-drag-baseline",
+      "apps": [
+        {
+          "id": "seed",
+          "name": "Existing local app",
+          "url": "https://existing.localhost/",
+          "color": "#38bdf8",
+          "bg": "#183040",
+          "letter": "E",
+          "domain": "existing.localhost"
+        }
+      ],
+      "events": [
+        {
+          "type": "dragstart",
+          "trusted": true,
+          "target": "vertical-tab-item active      ",
+          "types": [],
+          "prevented": false,
+          "allowed": "uninitialized",
+          "effect": "none",
+          "dragged": null
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragend",
+          "trusted": true,
+          "target": "vertical-tab-item active    dragging  ",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1026 @@
+{
+  "electron": "37.10.3",
+  "chrome": "138.0.7204.251",
+  "log": [
+    {
+      "phase": "profile-add-hit",
+      "covered": false,
+      "at": "profile-switcher-action"
+    },
+    {
+      "phase": "profile-interactions",
+      "pointerAdd": true,
+      "keyboardAdd": true,
+      "keyboardSelection": true,
+      "escapeFocus": true,
+      "outsideClick": true,
+      "scrollPosition": true,
+      "resize320": true,
+      "providerCalls": 0
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".vertical-tab-item .vtab-title",
+      "target": ".pinned-grid-cell",
+      "from": {
+        "x": 99.5,
+        "y": 345,
+        "width": 125,
+        "height": 15
+      },
+      "to": {
+        "x": 36,
+        "y": 259.5,
+        "width": 52,
+        "height": 47
+      },
+      "hit": "<span class=\"pinned-app-letter\" style=\"color: rgb(56, 189, 248);\">E</span>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "root",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "expanded-pointer-drag",
+      "events": [
+        {
+          "type": "dragstart",
+          "trusted": true,
+          "target": "vertical-tab-item active      ",
+          "types": [],
+          "prevented": false,
+          "allowed": "uninitialized",
+          "effect": "none",
+          "dragged": null
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "drop",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragend",
+          "trusted": true,
+          "target": "vertical-tab-item active      ",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "move",
+          "dragged": null
+        }
+      ]
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".vertical-tab-item:nth-child(1) .vtab-title",
+      "target": ".pinned-grid-cell",
+      "from": {
+        "x": 99.5,
+        "y": 345,
+        "width": 125,
+        "height": 15
+      },
+      "to": {
+        "x": 36,
+        "y": 259,
+        "width": 52,
+        "height": 47
+      },
+      "hit": "<span class=\"pinned-app-letter\" style=\"color: rgb(56, 189, 248);\">E</span>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "root",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".vertical-tab-item:nth-child(2) .vtab-title",
+      "target": ".pinned-grid-cell.add-cell",
+      "from": {
+        "x": 99.5,
+        "y": 385,
+        "width": 125,
+        "height": 15
+      },
+      "to": {
+        "x": 148,
+        "y": 259.5,
+        "width": 52,
+        "height": 47
+      },
+      "hit": "<div class=\"pinned-grid-icon-box\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-plus\"><path d=\"M5 12h14\"></path><path d=\"M12 5v14\"></path></svg></div>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "docs",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".vertical-tab-item:nth-child(3) .vtab-title",
+      "target": ".pinned-grid-cell",
+      "from": {
+        "x": 99.5,
+        "y": 425,
+        "width": 125,
+        "height": 15
+      },
+      "to": {
+        "x": 36,
+        "y": 259.5,
+        "width": 52,
+        "height": 47
+      },
+      "hit": "<span class=\"pinned-app-letter\" style=\"color: rgb(56, 189, 248);\">E</span>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "www",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "root-subdomain-order",
+      "order": [
+        1,
+        2
+      ],
+      "apps": [
+        {
+          "id": "seed",
+          "name": "Existing local app",
+          "url": "https://existing.localhost/",
+          "color": "#38bdf8",
+          "bg": "#183040",
+          "letter": "E",
+          "domain": "existing.localhost"
+        },
+        {
+          "id": "app-1791477110655-nsypo",
+          "name": "Guest Root - Full Source Title Preserved After Reload",
+          "url": "https://guest.localhost:8877/alpha",
+          "color": "#38bdf8",
+          "bg": "rgba(56, 189, 248, 0.15)",
+          "letter": "G",
+          "iconName": "generic",
+          "faviconUrl": "https://www.google.com/s2/favicons?domain=guest.localhost&sz=64",
+          "domain": "guest.localhost",
+          "spacePath": "fixture-space"
+        },
+        {
+          "id": "app-1791477111602-agb6x",
+          "name": "Guest Docs - Independent Subdomain",
+          "url": "https://docs.guest.localhost:8877/docs",
+          "color": "#38bdf8",
+          "bg": "rgba(56, 189, 248, 0.15)",
+          "letter": "G",
+          "iconName": "generic",
+          "faviconUrl": "https://www.google.com/s2/favicons?domain=docs.guest.localhost&sz=64",
+          "domain": "docs.guest.localhost",
+          "spacePath": "fixture-space"
+        }
+      ]
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".vertical-tab-item:nth-child(2) .vtab-title",
+      "target": ".pinned-grid-cell",
+      "from": {
+        "x": 99.5,
+        "y": 385,
+        "width": 125,
+        "height": 15
+      },
+      "to": {
+        "x": 36,
+        "y": 259,
+        "width": 52,
+        "height": 47
+      },
+      "hit": "<span class=\"pinned-app-letter\" style=\"color: rgb(56, 189, 248);\">E</span>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "docs",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".vertical-tab-item:nth-child(1) .vtab-title",
+      "target": ".pinned-grid-cell.add-cell",
+      "from": {
+        "x": 99.5,
+        "y": 345,
+        "width": 125,
+        "height": 15
+      },
+      "to": {
+        "x": 148,
+        "y": 259.5,
+        "width": 52,
+        "height": 47
+      },
+      "hit": "<div class=\"pinned-grid-icon-box\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-plus\"><path d=\"M5 12h14\"></path><path d=\"M12 5v14\"></path></svg></div>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "root",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".vertical-tab-item:nth-child(3) .vtab-title",
+      "target": ".pinned-grid-cell",
+      "from": {
+        "x": 99.5,
+        "y": 425,
+        "width": 125,
+        "height": 15
+      },
+      "to": {
+        "x": 36,
+        "y": 259.5,
+        "width": 52,
+        "height": 47
+      },
+      "hit": "<span class=\"pinned-app-letter\" style=\"color: rgb(56, 189, 248);\">E</span>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "www",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "root-subdomain-order",
+      "order": [
+        2,
+        1
+      ],
+      "apps": [
+        {
+          "id": "seed",
+          "name": "Existing local app",
+          "url": "https://existing.localhost/",
+          "color": "#38bdf8",
+          "bg": "#183040",
+          "letter": "E",
+          "domain": "existing.localhost"
+        },
+        {
+          "id": "app-1791477113601-gdt32",
+          "name": "Guest Docs - Independent Subdomain",
+          "url": "https://docs.guest.localhost:8877/docs",
+          "color": "#38bdf8",
+          "bg": "rgba(56, 189, 248, 0.15)",
+          "letter": "G",
+          "iconName": "generic",
+          "faviconUrl": "https://www.google.com/s2/favicons?domain=docs.guest.localhost&sz=64",
+          "domain": "docs.guest.localhost",
+          "spacePath": "fixture-space"
+        },
+        {
+          "id": "app-1791477114556-eorj6",
+          "name": "Guest Root - Full Source Title Preserved After Reload",
+          "url": "https://guest.localhost:8877/alpha",
+          "color": "#38bdf8",
+          "bg": "rgba(56, 189, 248, 0.15)",
+          "letter": "G",
+          "iconName": "generic",
+          "faviconUrl": "https://www.google.com/s2/favicons?domain=guest.localhost&sz=64",
+          "domain": "guest.localhost",
+          "spacePath": "fixture-space"
+        }
+      ]
+    },
+    {
+      "phase": "actual-renderer-reload",
+      "pinsPersisted": true,
+      "fullTitle": true
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".vertical-tab-item:nth-child(1) .vtab-title",
+      "target": ".pinned-grid-cell.add-cell",
+      "from": {
+        "x": 99.5,
+        "y": 345,
+        "width": 125,
+        "height": 15
+      },
+      "to": {
+        "x": 92,
+        "y": 259.5,
+        "width": 52,
+        "height": 47
+      },
+      "hit": "<div class=\"pinned-grid-icon-box\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-plus\"><path d=\"M5 12h14\"></path><path d=\"M12 5v14\"></path></svg></div>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "root",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "floating-expanded",
+      "pinned": true
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".tab .tab-title",
+      "target": ".nova-dock-pinned-group .nova-dock-btn",
+      "from": {
+        "x": 282,
+        "y": 28.5,
+        "width": 126,
+        "height": 19
+      },
+      "to": {
+        "x": 27.5,
+        "y": 227,
+        "width": 36,
+        "height": 36
+      },
+      "hit": "<span class=\"pinned-app-letter\" style=\"color: rgb(56, 189, 248);\">E</span>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "root",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "collapsed-dock",
+      "position": "left",
+      "pinned": true
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".tab .tab-title",
+      "target": ".nova-dock-pinned-group .nova-dock-btn",
+      "from": {
+        "x": 282,
+        "y": 28.5,
+        "width": 126,
+        "height": 19
+      },
+      "to": {
+        "x": 1018,
+        "y": 333.5,
+        "width": 36,
+        "height": 36
+      },
+      "hit": "<span class=\"pinned-app-letter\" style=\"color: rgb(56, 189, 248);\">E</span>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "root",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "collapsed-dock",
+      "position": "right",
+      "pinned": true
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".tab .tab-title",
+      "target": ".nova-dock-pinned-group .nova-dock-btn",
+      "from": {
+        "x": 282,
+        "y": 28.5,
+        "width": 126,
+        "height": 19
+      },
+      "to": {
+        "x": 473.5,
+        "y": 78,
+        "width": 36,
+        "height": 36
+      },
+      "hit": "<span class=\"pinned-app-letter\" style=\"color: rgb(56, 189, 248);\">E</span>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "root",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "collapsed-dock",
+      "position": "top",
+      "pinned": true
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".tab .tab-title",
+      "target": ".nova-dock-pinned-group .nova-dock-btn",
+      "from": {
+        "x": 282,
+        "y": 28.5,
+        "width": 126,
+        "height": 19
+      },
+      "to": {
+        "x": 473.5,
+        "y": 720,
+        "width": 36,
+        "height": 36
+      },
+      "hit": "<span class=\"pinned-app-letter\" style=\"color: rgb(56, 189, 248);\">E</span>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "root",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "collapsed-dock",
+      "position": "bottom",
+      "pinned": true
+    },
+    {
+      "phase": "pointer-drag-target",
+      "source": ".tab .tab-title",
+      "target": ".nova-dock-pinned-group .nova-dock-btn",
+      "from": {
+        "x": 282,
+        "y": 28.5,
+        "width": 126,
+        "height": 19
+      },
+      "to": {
+        "x": 76,
+        "y": 256,
+        "width": 36,
+        "height": 36
+      },
+      "hit": "<span class=\"pinned-app-letter\" style=\"color: rgb(56, 189, 248);\">E</span>"
+    },
+    {
+      "phase": "captured-native-drag",
+      "data": {
+        "dragOperationsMask": 16,
+        "items": [
+          {
+            "data": "root",
+            "mimeType": "text/plain"
+          },
+          {
+            "data": "[captured renderer token omitted]",
+            "mimeType": "application/x-lastbrowser-tab"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "collapsed-dock",
+      "position": "floating",
+      "pinned": true
+    },
+    {
+      "phase": "trusted-input",
+      "events": [
+        {
+          "type": "dragstart",
+          "trusted": true,
+          "target": "vertical-tab-item active      ",
+          "types": [],
+          "prevented": false,
+          "allowed": "uninitialized",
+          "effect": "none",
+          "dragged": null
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-grid-icon-box",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-grid-icon-box",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "drop",
+          "trusted": true,
+          "target": "pinned-grid-icon-box",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragend",
+          "trusted": true,
+          "target": "vertical-tab-item active      ",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "move",
+          "dragged": null
+        },
+        {
+          "type": "dragstart",
+          "trusted": true,
+          "target": "tab active    ",
+          "types": [],
+          "prevented": false,
+          "allowed": "uninitialized",
+          "effect": "none",
+          "dragged": null
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "drop",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragend",
+          "trusted": true,
+          "target": "tab active    ",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "move",
+          "dragged": null
+        },
+        {
+          "type": "dragstart",
+          "trusted": true,
+          "target": "tab active    ",
+          "types": [],
+          "prevented": false,
+          "allowed": "uninitialized",
+          "effect": "none",
+          "dragged": null
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "drop",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragend",
+          "trusted": true,
+          "target": "tab active    ",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "move",
+          "dragged": null
+        },
+        {
+          "type": "dragstart",
+          "trusted": true,
+          "target": "tab active    ",
+          "types": [],
+          "prevented": false,
+          "allowed": "uninitialized",
+          "effect": "none",
+          "dragged": null
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "drop",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragend",
+          "trusted": true,
+          "target": "tab active    ",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "move",
+          "dragged": null
+        },
+        {
+          "type": "dragstart",
+          "trusted": true,
+          "target": "tab active    ",
+          "types": [],
+          "prevented": false,
+          "allowed": "uninitialized",
+          "effect": "none",
+          "dragged": null
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "drop",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragend",
+          "trusted": true,
+          "target": "tab active    ",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "move",
+          "dragged": null
+        },
+        {
+          "type": "dragstart",
+          "trusted": true,
+          "target": "tab active    ",
+          "types": [],
+          "prevented": false,
+          "allowed": "uninitialized",
+          "effect": "none",
+          "dragged": null
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragover",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "drop",
+          "trusted": true,
+          "target": "pinned-app-letter",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "none",
+          "dragged": "root"
+        },
+        {
+          "type": "dragend",
+          "trusted": true,
+          "target": "tab active    ",
+          "types": [
+            "text/plain",
+            "application/x-lastbrowser-tab"
+          ],
+          "prevented": false,
+          "allowed": "move",
+          "effect": "move",
+          "dragged": null
+        }
+      ]
+    }
+  ]
+}

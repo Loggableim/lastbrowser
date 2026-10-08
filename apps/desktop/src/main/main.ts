@@ -210,7 +210,7 @@ import { createMainWindowOptions, installBrowserChrome } from './window-chrome.j
 import { registerBrowserContextMenu } from './browser-context-menu.js';
 import { defaultSearchEngineId, searchEngineById } from './browser-search.js';
 import { registerBrowserShortcuts } from './shortcuts.js';
-import { openAuthConnectWindow, cleanOAuthUserAgent, sanitizeSecChUa, isStreamingLoginUrl, openExternalUrl } from './auth-window.js';
+import { openAuthConnectWindow, isStreamingLoginUrl, openExternalUrl } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
 
 process.on('uncaughtException', (err, origin) => {
@@ -1317,10 +1317,6 @@ export const cdpPort = resolveCdpPort();
 if (isCdpEnabled() && !process.argv.some((a) => a.startsWith('--remote-debugging-port'))) {
   app.commandLine.appendSwitch('remote-debugging-port', String(cdpPort));
 }
-// Disable AutomationControlled blink feature to prevent navigator.webdriver = true
-// so Google / Gmail BotGuard does not block sign-in with "Dieser Browser oder diese App ist unter Umständen nicht sicher".
-app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
-
 // Enable Widevine DRM feature flag in Chromium
 app.commandLine.appendSwitch('enable-features', 'WidevineCdm');
 
@@ -1339,12 +1335,6 @@ if (gotSingleInstanceLock && typeof app?.on === 'function') {
 
 // Auto-detect and register system Widevine CDM before app is ready (Ansatz 3)
 configureDrmWidevine(app);
-
-// Strip Electron and Lastbrowser tokens from default User-Agent to avoid Google
-// disallowed_useragent, Disney+ login block, and DRM playback rejections.
-if (app.userAgentFallback) {
-  app.userAgentFallback = cleanOAuthUserAgent(app.userAgentFallback);
-}
 
 // A secondary process must not continue into service/window initialization even
 // if Electron resolves whenReady after the initial quit request.
@@ -1444,28 +1434,6 @@ function attachSessionHandlers(targetSession: Session): void {
     policyController ??= independentController;
     return policyController?.requestPolicy(details, targetSession) ?? { owned: false, allowed: true };
   });
-  const currentUa = targetSession.getUserAgent();
-  if (currentUa) {
-    targetSession.setUserAgent(cleanOAuthUserAgent(currentUa));
-  }
-  // Sanitize outgoing request headers: clean User-Agent and remove Electron tokens from Sec-CH-UA
-  // client hints so Google Accounts / Gmail BotGuard, Disney+, and streaming providers recognize
-  // standard Chrome client hints instead of rejecting embedded webviews.
-  targetSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    const requestHeaders = { ...details.requestHeaders };
-    for (const key of Object.keys(requestHeaders)) {
-      const lower = key.toLowerCase();
-      if (lower === 'user-agent') {
-        requestHeaders[key] = cleanOAuthUserAgent(requestHeaders[key]);
-      } else if (lower === 'sec-ch-ua') {
-        requestHeaders[key] = sanitizeSecChUa(requestHeaders[key]);
-      } else if (lower === 'sec-ch-ua-full-version-list') {
-        requestHeaders[key] = sanitizeSecChUa(requestHeaders[key]);
-      }
-    }
-    callback({ requestHeaders });
-  });
-
   // Strip X-Frame-Options and CSP frame-ancestors from streaming service login pages.
   // Disney+ (sso.id.bamgrid.com), Amazon, HBO/Max and others send these headers to
   // prevent embedding — but Electron interprets them the same way a browser does and
@@ -1520,7 +1488,6 @@ function attachSessionHandlers(targetSession: Session): void {
   });
 }
 
-// Ensure every webContents (including guest webviews) uses clean User-Agent without Electron tokens
 app.on('web-contents-created', (_event, contents) => {
   downloadOrigins.observe(contents);
   // Shell windows are privileged renderers and host remote browser WebViews.
@@ -1538,12 +1505,6 @@ app.on('web-contents-created', (_event, contents) => {
       );
     });
   }
-  try {
-    const ua = contents.getUserAgent?.();
-    if (ua) {
-      contents.setUserAgent(cleanOAuthUserAgent(ua));
-    }
-  } catch {}
 });
 
 // Attach ad blocking, download tracking and permission handling to every

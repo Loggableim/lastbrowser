@@ -47,6 +47,40 @@ export type AdblockOptions = {
 };
 
 const CACHE_FILE = 'adblocker-engine.bin';
+const CACHE_METADATA_FILE = `${CACHE_FILE}.json`;
+export const FILTER_ENGINE_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type FilterEngineCacheOptions<T> = {
+  cached: T | null;
+  cachedAt: number | undefined;
+  now: number;
+  refresh(): Promise<T>;
+  persist(engine: T): Promise<void>;
+};
+
+/** Refresh expired filter data without discarding the last usable offline snapshot. */
+export async function loadFilterEngineCache<T>(options: FilterEngineCacheOptions<T>): Promise<T> {
+  const { cached, cachedAt, now } = options;
+  if (cached !== null
+    && typeof cachedAt === 'number'
+    && Number.isFinite(cachedAt)
+    && cachedAt >= 0
+    && cachedAt <= now
+    && now - cachedAt <= FILTER_ENGINE_CACHE_MAX_AGE_MS) return cached;
+
+  try {
+    const refreshed = await options.refresh();
+    try {
+      await options.persist(refreshed);
+    } catch {
+      // Keep the refreshed engine active; a later startup can retry persistence.
+    }
+    return refreshed;
+  } catch (error) {
+    if (cached !== null) return cached;
+    throw error;
+  }
+}
 
 export const STREAMING_DOMAIN_SUFFIXES = [
   'netflix.com',
@@ -174,27 +208,37 @@ export function createAdblockController(options: AdblockOptions = {}): AdblockCo
 
   async function defaultLoadBlocker(): Promise<ElectronBlocker> {
     const file = cachePath();
-    const caching = file
-      ? {
-          path: file,
-          read: async (p: string) => new Uint8Array(await fs.readFile(p)),
-          write: async (p: string, buffer: Uint8Array) => {
-            await fs.writeFile(p, Buffer.from(buffer));
-          }
-        }
-      : undefined;
-
-    // Prefer the cached engine so startup does not depend on the network.
+    let cached: ElectronBlocker | null = null;
+    let cachedAt: number | undefined;
     if (file && existsSync(file)) {
       try {
         const serialized = new Uint8Array(await fs.readFile(file));
-        return ElectronBlocker.deserialize(serialized);
+        cached = ElectronBlocker.deserialize(serialized);
       } catch {
         // Corrupt cache — fall through to a fresh download.
       }
     }
 
-    return ElectronBlocker.fromPrebuiltAdsAndTracking(fetch, caching);
+    if (file && cached) {
+      try {
+        const metadata = JSON.parse(await fs.readFile(path.join(path.dirname(file), CACHE_METADATA_FILE), 'utf8')) as { updatedAt?: unknown };
+        if (typeof metadata.updatedAt === 'number') cachedAt = metadata.updatedAt;
+      } catch {
+        // Cache files written before metadata was introduced are treated as stale.
+      }
+    }
+
+    return loadFilterEngineCache({
+      cached,
+      cachedAt,
+      now: Date.now(),
+      refresh: () => ElectronBlocker.fromPrebuiltAdsAndTracking(fetch),
+      persist: async (engine) => {
+        if (!file) return;
+        await fs.writeFile(file, Buffer.from(engine.serialize()));
+        await fs.writeFile(path.join(path.dirname(file), CACHE_METADATA_FILE), JSON.stringify({ updatedAt: Date.now() }));
+      }
+    });
   }
 
   async function attach(session: Session): Promise<void> {

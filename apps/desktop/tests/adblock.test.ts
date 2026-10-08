@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createAdblockController,
+  FILTER_ENGINE_CACHE_MAX_AGE_MS,
   isStreamingUrl,
   isStreamingRequest,
-  patchBlockerForStreaming
+  patchBlockerForStreaming,
+  loadFilterEngineCache
 } from '../src/main/adblock.js';
 
 type Listener = (...args: unknown[]) => void;
@@ -33,6 +35,72 @@ function fakeBlocker() {
 const fakeSession = () => ({ id: `session-${Math.random()}` }) as never;
 
 describe('adblock controller', () => {
+  describe('filter engine cache refresh', () => {
+    it('keeps a fresh cache without making a network refresh', async () => {
+      const cached = { version: 'cached' };
+      const refresh = vi.fn(async () => ({ version: 'refreshed' }));
+      const persist = vi.fn(async () => {});
+
+      const loaded = await loadFilterEngineCache({
+        cached,
+        cachedAt: 1_000,
+        now: 1_000 + FILTER_ENGINE_CACHE_MAX_AGE_MS - 1,
+        refresh,
+        persist
+      });
+
+      expect(loaded).toBe(cached);
+      expect(refresh).not.toHaveBeenCalled();
+      expect(persist).not.toHaveBeenCalled();
+    });
+
+    it('refreshes a stale cache and persists the new engine', async () => {
+      const cached = { version: 'stale' };
+      const refreshed = { version: 'current' };
+      const persist = vi.fn(async () => {});
+      const loaded = await loadFilterEngineCache({
+        cached,
+        cachedAt: 1_000,
+        now: 1_000 + FILTER_ENGINE_CACHE_MAX_AGE_MS + 1,
+        refresh: async () => refreshed,
+        persist
+      });
+
+      expect(loaded).toBe(refreshed);
+      expect(persist).toHaveBeenCalledWith(refreshed);
+    });
+
+    it('uses the last valid engine when an expired cache cannot refresh offline', async () => {
+      const cached = { version: 'last-known-good' };
+      await expect(loadFilterEngineCache({
+        cached,
+        cachedAt: 1_000,
+        now: 1_000 + FILTER_ENGINE_CACHE_MAX_AGE_MS + 1,
+        refresh: async () => { throw new Error('offline'); },
+        persist: async () => {}
+      })).resolves.toBe(cached);
+    });
+
+    it('treats a pre-metadata cache as stale and fails only when neither cache nor refresh works', async () => {
+      const refresh = vi.fn(async () => { throw new Error('offline'); });
+      await expect(loadFilterEngineCache({
+        cached: { version: 'legacy' },
+        cachedAt: undefined,
+        now: 10_000,
+        refresh,
+        persist: async () => {}
+      })).resolves.toEqual({ version: 'legacy' });
+      await expect(loadFilterEngineCache({
+        cached: null,
+        cachedAt: undefined,
+        now: 10_000,
+        refresh,
+        persist: async () => {}
+      })).rejects.toThrow('offline');
+      expect(refresh).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('starts in idle state and reports enabled by default', () => {
     const controller = createAdblockController({ loadBlocker: async () => fakeBlocker() as never });
     const status = controller.getStatus();
@@ -222,6 +290,30 @@ describe('adblock controller', () => {
       // 4. Cosmetic filter injection should be skipped for streaming URLs
       mockBlocker.onInjectCosmeticFilters({}, 'https://www.netflix.com/browse');
       expect(mockOrigOnInject).not.toHaveBeenCalled();
+    });
+
+    it('does not bypass YouTube watch, player media or cosmetic-filter requests', async () => {
+      const onBeforeRequest = vi.fn((_details, callback) => callback({ cancel: true }));
+      const onHeadersReceived = vi.fn((_details, callback) => callback({ cancel: true }));
+      const onInjectCosmeticFilters = vi.fn().mockResolvedValue(undefined);
+      const mockBlocker = { onBeforeRequest, onHeadersReceived, onInjectCosmeticFilters };
+      patchBlockerForStreaming(mockBlocker);
+
+      const watchCallback = vi.fn();
+      mockBlocker.onBeforeRequest({ url: 'https://www.youtube.com/watch?v=video' }, watchCallback);
+      expect(onBeforeRequest).toHaveBeenCalledTimes(1);
+      expect(watchCallback).not.toHaveBeenCalledWith({});
+
+      const playerCallback = vi.fn();
+      mockBlocker.onBeforeRequest({
+        url: 'https://rr1---sn.googlevideo.com/videoplayback?video_id=video',
+        initiator: 'https://www.youtube.com'
+      }, playerCallback);
+      expect(onBeforeRequest).toHaveBeenCalledTimes(2);
+      expect(playerCallback).not.toHaveBeenCalledWith({});
+
+      await mockBlocker.onInjectCosmeticFilters({}, 'https://www.youtube.com/watch?v=video');
+      expect(onInjectCosmeticFilters).toHaveBeenCalledTimes(1);
     });
   });
 });

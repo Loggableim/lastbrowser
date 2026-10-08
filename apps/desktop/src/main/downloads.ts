@@ -1,3 +1,4 @@
+import type { DownloadOrigin } from './download-origin.js';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -32,11 +33,13 @@ export type DownloadEntry = {
   savePath: string;
   /** Unix ms when the download started. */
   startedAt: number;
+  origin?: DownloadOrigin;
 };
 
 type DownloadItemLike = {
   getFilename(): string;
   getURL(): string;
+  getURLChain?(): string[];
   getReceivedBytes(): number;
   getTotalBytes(): number;
   getSavePath(): string;
@@ -62,6 +65,7 @@ export type DownloadTracker = {
   /** Remove finished entries. */
   clearFinished(): void;
   /** Subscribe to list changes. Returns an unsubscribe function. */
+  subscribeStarted(listener: (entry: DownloadEntry, contents: unknown) => void): () => void;
   subscribe(listener: (entries: DownloadEntry[]) => void): () => void;
 };
 
@@ -110,7 +114,8 @@ export function broadcastDownloadSnapshot(windows: Iterable<DownloadWindowLike>,
   }
 }
 
-export function createDownloadTracker(options: { denyDownload?: (contents: unknown) => boolean } = {}): DownloadTracker {
+export function createDownloadTracker(options: { denyDownload?: (contents: unknown) => boolean; resolveOrigin?: (contents: unknown, urls: string[]) => Promise<DownloadOrigin | undefined> } = {}): DownloadTracker {
+  const startedListeners = new Set<(entry: DownloadEntry, contents: unknown) => void>();
   const entries = new Map<string, DownloadEntry>();
   const listeners = new Set<(entries: DownloadEntry[]) => void>();
   const attached = new Set<SessionLike>();
@@ -201,6 +206,15 @@ export function createDownloadTracker(options: { denyDownload?: (contents: unkno
           startedAt: Date.now()
         });
         emit();
+        const startedEntry = entries.get(id)!;
+        const publishStarted = (origin?: DownloadOrigin): void => {
+          const entry = { ...startedEntry, ...(origin ? { origin } : {}) };
+          if (origin && entries.has(id)) { entries.set(id, { ...entries.get(id)!, origin }); emit(); }
+          for (const listener of startedListeners) { try { listener(entry, contents); } catch {} }
+        };
+        if (options.resolveOrigin) {
+          Promise.resolve().then(() => options.resolveOrigin!(contents, item.getURLChain?.() ?? [item.getURL()])).then(publishStarted, () => publishStarted());
+        } else publishStarted();
 
         item.on('updated', () => {
           update(id, {
@@ -264,6 +278,11 @@ export function createDownloadTracker(options: { denyDownload?: (contents: unkno
         }
       }
       emit();
+    },
+
+    subscribeStarted(listener) {
+      startedListeners.add(listener);
+      return () => startedListeners.delete(listener);
     },
 
     subscribe(listener: (entries: DownloadEntry[]) => void): () => void {

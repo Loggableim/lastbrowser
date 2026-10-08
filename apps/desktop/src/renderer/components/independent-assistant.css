@@ -1,4 +1,4 @@
-.space-assistant { display:flex; flex-direction:column; width:390px; min-width:280px; max-width:min(480px,90vw); height:100%; min-height:0; box-sizing:border-box; overflow:hidden; color:var(--text); background:var(--bg-secondary,var(--bg)); }
+.space-assistant { --text:var(--lb-text); --text-secondary:var(--lb-muted); --bg:var(--lb-bg); --bg-secondary:var(--lb-surface-panel); --bg-tertiary:var(--lb-surface); --accent:var(--lb-accent); --border:var(--lb-border); display:flex; flex-direction:column; width:390px; min-width:0; max-width:100%; height:100%; min-height:0; box-sizing:border-box; overflow:hidden; color:var(--text); background:var(--bg-secondary,var(--bg)); }
 .space-assistant-header { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--border); }
 .space-assistant-mode-switch { flex:0 0 auto; max-width:82px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.7rem!important; padding:4px 6px!important; }
 .space-assistant-header > button[aria-label="Close"],.space-assistant-header > button[aria-label="Schließen"] { flex:0 0 auto; }
@@ -121,3 +121,37 @@
   .space-assistant-scroll { padding:10px; }
   .space-assistant-composer { gap:6px; padding-inline:10px; }
 }
+
+/* Sidebar hierarchy uses the shell's scoped tokens, including alternate themes. */
+.space-assistant-header { padding:14px 12px; background:var(--lb-surface-strong); }
+.space-assistant-mode-switch { display:flex; align-items:center; gap:5px; max-width:100px; }
+.space-assistant-welcome { display:flex; flex-direction:column; align-items:flex-start; gap:12px; padding:18px; margin-block:16px; border:1px solid var(--border); border-radius:14px; background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 9%,var(--bg)),var(--bg-tertiary)); }
+.space-assistant-welcome p { margin:0; font-size:.9rem; line-height:1.6; color:var(--text-secondary); }
+.space-assistant-welcome-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:13px; color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,transparent); }
+.space-assistant-quick-actions { display:grid; grid-template-columns:1fr 1fr; }
+.space-assistant-quick-actions > button { grid-column:1/-1; }
+.space-assistant-quick-actions .space-assistant-controls { display:contents; }
+.space-assistant-quick-actions button { display:flex; align-items:center; justify-content:flex-start; gap:8px; min-height:42px; text-align:start; line-height:1.4; }
+.space-assistant-quick-actions svg { flex-shrink:0; color:var(--accent); }
+.space-assistant-connections { margin-block:8px; border:1px solid var(--border); border-radius:9px; background:var(--bg-tertiary); }
+.space-assistant-connections > summary { display:flex; align-items:center; gap:8px; padding:11px; cursor:pointer; font-size:.84rem; font-weight:600; }
+.space-assistant-connections > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:8px; }
+.space-assistant-connection-count { margin-inline-start:auto; font-variant-numeric:tabular-nums; color:var(--text-secondary); }
+.space-assistant-connection-warning { padding:2px 6px; border-radius:6px; color:#ffbf69; background:#ffbf691a; }
+.space-assistant-connections-content { padding:0 10px 12px; }
+.space-assistant-connection-summary-heading { flex-wrap:wrap; }
+.space-assistant-connection-summary-heading > span { font-size:.75rem; color:var(--text-secondary); }
+.space-assistant-connections-content select { max-width:100%; }
+.space-assistant-composer { padding:12px; }
+.space-assistant-composer textarea { min-height:76px; border:1px solid var(--border); border-radius:12px; padding:12px; background:var(--bg); color:var(--text); font:inherit; font-size:.85rem; line-height:1.5; }
+.space-assistant-composer button:not(:disabled) { background:var(--accent); color:var(--lb-bg); }
+@media (max-width:340px) { .space-assistant-header { gap:6px; } .space-assistant-mark { flex-basis:28px; width:28px; height:28px; } .space-assistant-quick-actions { grid-template-columns:1fr; } }
+.space-assistant-connection-summary > summary { cursor:pointer; list-style:none; min-height:38px; gap:5px; }
+.space-assistant-connection-summary > summary::-webkit-details-marker { display:none; }
+.space-assistant-connection-summary > summary::before { content:'›'; color:var(--accent); font-size:1.2rem; }
+.space-assistant-connection-summary[open] > summary::before { transform:rotate(90deg); }
+.space-assistant-connection-summary > summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.space-assistant-connections > summary::before { content:'›'; color:var(--text-secondary); }
+.space-assistant-connections[open] > summary::before { transform:rotate(90deg); }
+.space-assistant-status.is-configured .space-assistant-status-dot { background:var(--text-secondary); }
+.space-assistant-connection-summary-heading { justify-content:flex-start; text-align:start; } .space-assistant-connection-summary-heading > strong { flex:1; min-width:0; overflow-wrap:anywhere; }

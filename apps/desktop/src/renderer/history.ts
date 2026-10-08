@@ -3,6 +3,8 @@ export type BrowserVisit = {
   title: string;
   count: number;
   lastVisited: number;
+  /** Profile provenance for new visits; legacy entries remain unbound. */
+  profileId?: string;
 };
 
 export const visitedSitesStorageKey = 'lastbrowser.visitedSites.v1';
@@ -45,15 +47,16 @@ export function recordVisit(
   visits: BrowserVisit[],
   url: string,
   title = '',
-  options: { increment?: boolean } = {}
+  options: { increment?: boolean; profileId?: string } = {}
 ): BrowserVisit[] {
   if (!isTrackableVisitUrl(url)) return visits;
   const normalized = normalizeVisitUrl(url);
   if (!normalized) return visits;
   const nextTitle = readableVisitTitle(title, normalized);
-  const existingIndex = visits.findIndex((entry) => normalizeVisitUrl(entry.url) === normalized);
+  const existingIndex = visits.findIndex((entry) => normalizeVisitUrl(entry.url) === normalized && entry.profileId === options.profileId);
   const nextVisit: BrowserVisit = {
     url: normalized,
+    ...(options.profileId ? { profileId: options.profileId } : {}),
     title: nextTitle,
     count: existingIndex >= 0
       ? (options.increment === false ? visits[existingIndex].count : visits[existingIndex].count + 1)
@@ -141,6 +144,7 @@ function normalizeVisit(entry: unknown): BrowserVisit | null {
   if (typeof candidate.url !== 'string' || !isTrackableVisitUrl(candidate.url)) return null;
   return {
     url: normalizeVisitUrl(candidate.url),
+    ...(typeof candidate.profileId === 'string' && candidate.profileId ? { profileId: candidate.profileId } : {}),
     title: readableVisitTitle(String(candidate.title || ''), candidate.url),
     count: typeof candidate.count === 'number' && Number.isFinite(candidate.count) ? Math.max(1, Math.floor(candidate.count)) : 1,
     lastVisited: typeof candidate.lastVisited === 'number' && Number.isFinite(candidate.lastVisited) ? candidate.lastVisited : Date.now()

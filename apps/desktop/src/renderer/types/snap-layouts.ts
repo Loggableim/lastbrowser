@@ -1,3 +1,5 @@
+import { preparePinnedTabDrag } from '../pinned-tab-drop.js';
+
 export type SnapLayoutType =
   | 'single'
   | 'dual-50-50'
@@ -49,6 +51,7 @@ export interface GhostTarget {
 export function prepareSnapTabDrag(dataTransfer: Pick<DataTransfer, 'effectAllowed' | 'setData'>, tabId: string): void {
   dataTransfer.effectAllowed = 'move';
   dataTransfer.setData('text/plain', tabId);
+  preparePinnedTabDrag(dataTransfer, tabId);
 }
 
 export interface SnapLayoutRatios {

@@ -217,13 +217,13 @@ describe('usePinnedAppStore – pinTabAsApp', () => {
     expect(result.domain).toBe('duplicate-test-xyz.com');
   });
 
-  it('strips trailing title after dash for cleaner names', () => {
+  it('preserves the full source title for CSS-only visual truncation', () => {
     store.getState().pinTabAsApp({
       url: 'https://example-site-test-abc.com',
       title: 'Dashboard - Site'  // Short enough to not get truncated at 20 chars
     });
     const added = store.getState().apps.find(a => a.domain === 'example-site-test-abc.com');
-    expect(added?.name).toBe('Dashboard');
+    expect(added?.name).toBe('Dashboard - Site');
   });
 
   it('keeps Space-scoped apps out of other Spaces and reorders only visible slots', async () => {

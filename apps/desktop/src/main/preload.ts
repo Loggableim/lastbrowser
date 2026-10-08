@@ -280,6 +280,11 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
     setEnabled: (enabled: boolean) => ipcRenderer.invoke('lastbrowser:adblock:setEnabled', enabled)
   },
   downloads: {
+    onStarted: (listener: (entry: unknown) => void) => {
+      const wrapped = (_event: unknown, entry: unknown) => listener(entry);
+      ipcRenderer.on('lastbrowser:downloads:started', wrapped);
+      return () => ipcRenderer.removeListener('lastbrowser:downloads:started', wrapped);
+    },
     list: () => ipcRenderer.invoke('lastbrowser:downloads:list'),
     cancel: (id: string) => ipcRenderer.invoke('lastbrowser:downloads:cancel', id),
     clear: (id?: string) => ipcRenderer.invoke('lastbrowser:downloads:clear', id),

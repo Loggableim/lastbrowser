@@ -173,6 +173,7 @@ type BrowserDownloadEntry = {
   active: boolean;
   savePath: string;
   startedAt: number;
+  origin?: { x: number; y: number; webContentsId: number };
 };
 
 declare global {
@@ -569,6 +570,7 @@ declare global {
         chooseDir: () => Promise<string | null>;
       };
       downloads: {
+        onStarted: (callback: (entry: BrowserDownloadEntry) => void) => () => void;
         list: () => Promise<BrowserDownloadEntry[]>;
         cancel: (id: string) => Promise<boolean>;
         clear: (id?: string) => Promise<BrowserDownloadEntry[]>;

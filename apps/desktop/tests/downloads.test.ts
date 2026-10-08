@@ -105,20 +105,13 @@ describe('download tracker', () => {
     expect(resolveDownloadsDockMode(null)).toBe('dropdown');
   });
 
-  it('exposes stable dock modes and localized labels on downloads controls', () => {
+  it('exposes three anchored placements with localized keyboard controls', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'src/renderer/NativeDownloads.tsx'), 'utf8');
-
-    expect(source).toContain('data-dock-mode={dockMode}');
-    expect(source).toContain('data-download-action="minimize"');
+    expect(source).toContain('data-dock-mode={state.mode}');
     expect(source).toContain('data-download-action="close"');
-    for (const mode of ['dropdown', 'floating', 'dock-tabs', 'dock-topbar-left', 'dock-topbar-right', 'dock-sidekick']) {
-      expect(source).toContain(`data-dock-mode="${mode}"`);
-    }
-    for (const label of ['undock', 'dockTabs', 'dockSidekick', 'dockTopLeft', 'dockTopRight', 'float', 'dockDropdown']) {
-      expect(source).toContain(`aria-label={t('downloads.${label}')}`);
-    }
-    expect(source).toContain('aria-label={t(\'downloads.minimize\')}');
-    expect(source).toContain('aria-label={t(\'downloads.close\')}');
+    for (const mode of ['top', 'sidebar', 'floating']) expect(source).toContain(`data-dock-mode="${mode}"`);
+    for (const label of ['dockSidekick', 'float', 'dockDropdown', 'close']) expect(source).toContain(`aria-label={t('downloads.${label}')}`);
+    expect(source).toContain('data-download-dock-anchor={anchor}');
   });
 
   it('reopens a closed minimized downloads panel in its expanded state', () => {
@@ -131,10 +124,6 @@ describe('download tracker', () => {
     expect(shouldRestoreDownloadsFromPillClick(false)).toBe(true);
     expect(shouldRestoreDownloadsFromPillClick(true)).toBe(false);
 
-    const source = readFileSync(path.resolve(process.cwd(), 'src/renderer/NativeDownloads.tsx'), 'utf8');
-    expect(source).toContain('dragPointerStartRef.current');
-    expect(source).toContain('Math.abs(e.clientX - dragPointerStartRef.current.x) >= 4');
-    expect(source).toContain('shouldRestoreDownloadsFromPillClick(didDragRef.current)');
   });
 
   it('does not begin dragging a floating downloads panel from header controls', () => {

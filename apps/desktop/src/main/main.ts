@@ -6,6 +6,7 @@ import { getChatCompletionNotification, shouldNotifyChatCompletion } from './cha
 import { detachRequestKey, ensureDetachedPageReady, isGuestOwnedByRenderer, normalizeRestoredNavigationHistory, parseDetachTabPayload, PendingTabDetachRegistry, serializeNavigationHistory } from './window-tab-transfer.js';
 import { clearDeletedProfilePartitions } from './profile-partition-cleanup.js';
 import { registerBrowserDataCleanupIpc } from './browser-data-cleanup.js';
+import { createDownloadOriginTracker } from './download-origin.js';
 import { broadcastDownloadSnapshot, createDownloadTracker } from './downloads.js';
 import { ExtensionManager } from './extensions.js';
 import { isCdpEnabled, resolveCdpPort, setPersistedCdpEnabled } from './cdp.js';
@@ -350,7 +351,8 @@ const nativeChatStreams = new NativeChatStreamController({
       nativeBridgeNonce: binding.nativeChat ? services?.getLayout().bridgeToken : undefined })),
   cancelTransport: binding => cancelChatStream(requireWebuiUrl(), binding.streamId, undefined, binding.profile)
 });
-const downloads = createDownloadTracker({ denyDownload: contents => {
+const downloadOrigins = createDownloadOriginTracker();
+const downloads = createDownloadTracker({ resolveOrigin: (contents, urls) => downloadOrigins.resolve(contents, urls), denyDownload: contents => {
   const id = (contents as { id?: number } | null)?.id;
   return typeof id === 'number' && Boolean(independentController?.ownsWebContents(id));
 } });
@@ -1117,6 +1119,11 @@ function registerIpc(): void {
     else downloads.clearFinished();
     return downloads.list();
   });
+    downloads.subscribeStarted((entry, source) => {
+      const contents = source as Electron.WebContents | undefined;
+      const owner = contents?.hostWebContents ?? contents;
+      if (owner && !owner.isDestroyed()) owner.send('lastbrowser:downloads:started', entry);
+    });
     downloads.subscribe((entries) => {
         broadcastDownloadSnapshot(BrowserWindow.getAllWindows(), entries);
     });
@@ -1515,6 +1522,7 @@ function attachSessionHandlers(targetSession: Session): void {
 
 // Ensure every webContents (including guest webviews) uses clean User-Agent without Electron tokens
 app.on('web-contents-created', (_event, contents) => {
+  downloadOrigins.observe(contents);
   // Shell windows are privileged renderers and host remote browser WebViews.
   // Harden guest preferences before any renderer-controlled attachment. This
   // policy intentionally leaves src/partition/plugins alone; the detached-tab

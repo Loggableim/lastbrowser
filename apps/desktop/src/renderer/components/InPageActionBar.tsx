@@ -409,16 +409,6 @@ export function InPageActionBar({
               <Search size={13} />
             </button>
 
-            {/* Downloads */}
-            <button
-              type="button"
-              className={`downloads-trigger ${downloadsOpen ? 'active' : ''}`}
-              title="Downloads (Ctrl+J)"
-              onClick={onToggleDownloads}
-            >
-              <Download size={13} />
-              {hasActiveDownloads && <span className="downloads-active-dot" />}
-            </button>
 
             {/* History */}
             <button
@@ -585,16 +575,6 @@ export function InPageActionBar({
         <Search size={14} />
       </button>
 
-      {/* Downloads */}
-      <button
-        type="button"
-        className={`downloads-trigger ${downloadsOpen ? 'active' : ''}`}
-        title="Downloads (Ctrl+J)"
-        onClick={onToggleDownloads}
-      >
-        <Download size={14} />
-        {hasActiveDownloads && <span className="downloads-active-dot" />}
-      </button>
 
       {/* History */}
       <button

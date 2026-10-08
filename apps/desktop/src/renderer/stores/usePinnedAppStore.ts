@@ -191,11 +191,14 @@ export const DEFAULT_PINNED_APPS: PinnedApp[] = [
 export const PINNED_APPS_STORAGE_KEY_V2 = 'lastbrowser.pinnedApps.v2';
 export const PINNED_APPS_STORAGE_KEY_V1 = 'lastbrowser.pinnedApps.v1';
 
+function canonicalizeAppDomain(domain: string): string {
+  return domain.toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+}
+
 export function extractAppDomain(url?: string): string {
   if (!url) return '';
   try {
-    const parsed = new URL(url);
-    return parsed.hostname.replace(/^www\./, '');
+    return canonicalizeAppDomain(new URL(url).hostname);
   } catch {
     return '';
   }
@@ -351,19 +354,16 @@ export const usePinnedAppStore = create<PinnedAppState>((set, get) => ({
     const domain = extractAppDomain(tab.url);
     const existing = get().apps.find((app) => {
       if (app.spacePath && app.spacePath !== spacePath) return false;
-      const cleanUrl = tab.url.toLowerCase();
-      const appDomain = (app.domain || extractAppDomain(app.url)).toLowerCase();
-      const urlDomain = domain.toLowerCase();
-      return Boolean((app.url && cleanUrl.startsWith(app.url.toLowerCase())) ||
-        (appDomain && urlDomain && (urlDomain === appDomain || urlDomain.endsWith(`.${appDomain}`))));
+      const appDomain = canonicalizeAppDomain(app.domain || extractAppDomain(app.url));
+      return Boolean(appDomain && domain && appDomain === domain);
     });
     if (existing) {
       return existing;
     }
 
-    const title = tab.title.split(/[-|•—]/)[0]?.trim() || domain || 'Web App';
+    const title = tab.title.trim() || domain || 'Web App';
     return get().addApp({
-      name: title.length > 20 ? title.substring(0, 20) : title,
+      name: title,
       url: tab.url,
       color: '#38bdf8',
       bg: 'rgba(56, 189, 248, 0.15)',

@@ -1,0 +1,7 @@
+.omnibox-item.is-selected {
+  box-shadow: inset 3px 0 0 var(--accent, #38bdf8);
+}
+.omnibox-item.is-selected .omnibox-item-arrow {
+  opacity: 1;
+  color: var(--accent, #38bdf8);
+}

@@ -23,6 +23,9 @@ import {
 } from 'lucide-react';
 import type { LastbrowserPanelId } from '../shell-state.js';
 import { useDesktopI18n } from '../i18n.js';
+import type { BrowserTab } from '../tabs.js';
+import { canAcceptPinnedTabDrag, canPinBrowserTab, resolvePinnedTabDrop } from '../pinned-tab-drop.js';
+import './pinned-tab-drop.css';
 import {
   type PinnedApp,
   DEFAULT_PINNED_APPS,
@@ -149,6 +152,9 @@ export interface PinnedAppGridProps {
   onOpenApp: (app: PinnedApp, options?: { newTab?: boolean }) => void;
   onAddApp?: () => void;
   onEditApp?: (app: PinnedApp) => void;
+  draggedTabId?: string | null;
+  tabs?: BrowserTab[];
+  onPinTabAsApp?: (tabId: string) => void;
 }
 
 export function PinnedAppGrid({
@@ -159,7 +165,10 @@ export function PinnedAppGrid({
   openTabUrls = [],
   onOpenApp,
   onAddApp,
-  onEditApp
+  onEditApp,
+  draggedTabId,
+  tabs = [],
+  onPinTabAsApp
 }: PinnedAppGridProps): React.JSX.Element {
   const { t } = useDesktopI18n();
   const store = usePinnedAppStore();
@@ -174,6 +183,8 @@ export function PinnedAppGrid({
   } | null>(null);
 
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null);
+  const [tabDropActive, setTabDropActive] = useState(false);
+  useEffect(() => { if (!draggedTabId) setTabDropActive(false); }, [draggedTabId]);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -215,11 +226,13 @@ export function PinnedAppGrid({
   };
 
   const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
+    if (draggedAppId) e.preventDefault();
   };
 
   const handleDrop = (e: React.DragEvent, targetId: string) => {
+    if (!draggedAppId) return; // Tab drops bubble to the whole pinned area.
     e.preventDefault();
+    e.stopPropagation();
     if (!draggedAppId || draggedAppId === targetId) return;
     const fromIdx = apps.findIndex((a) => a.id === draggedAppId);
     const toIdx = apps.findIndex((a) => a.id === targetId);
@@ -253,6 +266,7 @@ export function PinnedAppGrid({
               onClick={(e) => onOpenApp(app, { newTab: e.ctrlKey || e.metaKey })}
               onContextMenu={(e) => handleContextMenu(e, app)}
               onDragStart={(e) => handleDragStart(e, app.id)}
+              onDragEnd={() => setDraggedAppId(null)}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, app.id)}
             >
@@ -301,7 +315,27 @@ export function PinnedAppGrid({
 
   // Grid layout (Zen compact raster)
   return (
-    <div className="pinned-zen-grid" role="region" aria-label="Favorite Apps Grid">
+    <div className={`pinned-zen-grid ${tabDropActive ? 'is-tab-drop-target' : ''}`} role="region" aria-label="Favorite Apps Grid"
+      onDragOver={event => {
+        const tab = tabs.find(item => item.id === draggedTabId);
+        if (!onPinTabAsApp || !tab || !canPinBrowserTab(tab) || !canAcceptPinnedTabDrag(event.dataTransfer, draggedTabId)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = 'move';
+        setTabDropActive(true);
+      }}
+      onDragLeave={event => {
+        if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setTabDropActive(false);
+      }}
+      onDrop={event => {
+        setTabDropActive(false);
+        const tab = resolvePinnedTabDrop(event.dataTransfer, draggedTabId, tabs);
+        if (!tab || !onPinTabAsApp) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onPinTabAsApp(tab.id);
+      }}>
+      {tabDropActive && <div className="pinned-tab-drop-hint" role="status"><Plus size={12} />{t('sidebar.pinnedApps.add')}</div>}
       <div className="pinned-grid-header">
         <span className="pinned-grid-title">PINNED APPS</span>
         {onAddApp && (
@@ -338,6 +372,7 @@ export function PinnedAppGrid({
               onClick={(e) => onOpenApp(app, { newTab: e.ctrlKey || e.metaKey })}
               onContextMenu={(e) => handleContextMenu(e, app)}
               onDragStart={(e) => handleDragStart(e, app.id)}
+              onDragEnd={() => setDraggedAppId(null)}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, app.id)}
             >

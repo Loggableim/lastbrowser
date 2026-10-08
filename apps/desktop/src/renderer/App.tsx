@@ -93,7 +93,6 @@ import {
   createInitialTab,
   isAiBrowserHomeUrl,
   loadSearchEngineId,
-  rememberClosedTab,
   reorderTabs,
   saveSearchEngineId,
   searchEngines,
@@ -220,6 +219,7 @@ import { NativeTerminalMain } from './panels/NativeTerminalMain.js';
 import { ControlCenter } from './NativeControlCenter.js';
 import { ApprovalPollManager, ApprovalCard } from './NativeApproval.js';
 import { DownloadsPanel } from './NativeDownloads.js';
+import { DownloadStartAnimation } from './DownloadStartAnimation.js';
 import { HistoryPanel } from './NativeHistory.js';
 import { PermissionsPanel, SitePermissionButton } from './NativePermissions.js';
 import { ContextUsageIndicator } from './NativeContextUsage.js';
@@ -255,6 +255,7 @@ import { CVD_FILTER_MATRIXES } from './utils/cvd-filters.js';
 import { playCopilotSuccessChime } from './utils/audio-chimes.js';
 import { toggleVisionImpairedFeature } from './stores/a11y-config.js';
 
+import { canPinBrowserTab } from './pinned-tab-drop.js';
 import { usePinnedAppStore } from './stores/usePinnedAppStore.js';
 import type { PinnedApp } from './components/PinnedAppGrid.js';
 
@@ -2695,20 +2696,10 @@ function AppContent(): JSX.Element {
   }
 
   function closeTab(tabId: string): void {
-    if (tabs.length === 1) return;
-    const index = tabs.findIndex((tab) => tab.id === tabId);
-    const closing = tabs[index];
-    if (closing && !closing.incognito) {
-      // Remember it so Ctrl+Shift+T can bring it back.
-      setClosedTabs((current) => rememberClosedTab(current, closing));
-    }
-    const nextTabs = tabs.filter((tab) => tab.id !== tabId);
-    setTabs(nextTabs);
-    if (activeTabId === tabId) {
-      const nextActiveId = nextTabs[Math.max(0, index - 1)].id;
-      activeTabIdRef.current = nextActiveId;
-      setActiveTabId(nextActiveId);
-    }
+    const store = useTabStore.getState();
+    if (!store.tabs.some(tab => tab.id === tabId)) return;
+    store.closeTab(tabId);
+    activeTabIdRef.current = useTabStore.getState().activeTabId;
   }
 
   /** Wake a sleeping (discarded) tab so it will be reloaded when focused. */
@@ -2748,7 +2739,7 @@ function AppContent(): JSX.Element {
     setTabs((current) => updateTabTitle(current, tabId, title));
     const tab = tabs.find((item) => item.id === tabId);
     if (tab && !tab.incognito) {
-      setVisitedSites((current) => recordVisit(current, tab.url, title, { increment: false }));
+      setVisitedSites((current) => recordVisit(current, tab.url, title, { increment: false, profileId: activeProfileId }));
     }
   }
 
@@ -2763,7 +2754,7 @@ function AppContent(): JSX.Element {
     }
     const tab = tabs.find((item) => item.id === tabId);
     if (tab && !tab.incognito) {
-      setVisitedSites((current) => recordVisit(current, url, tab?.title || ''));
+      setVisitedSites((current) => recordVisit(current, url, tab?.title || '', { profileId: activeProfileId }));
     }
   }
 
@@ -2794,6 +2785,13 @@ function AppContent(): JSX.Element {
 
   function moveTab(tabId: string, targetTabId: string): void {
     setTabs((current) => reorderTabs(current, tabId, targetTabId));
+  }
+
+  function pinTabAsApp(tabId: string): void {
+    const tab = useTabStore.getState().tabs.find(item => item.id === tabId);
+    if (!tab || !canPinBrowserTab(tab)) return;
+    usePinnedAppStore.getState().pinTabAsApp({ ...tab, url: tab.discardedUrl || tab.url }, activeSpacePath || undefined);
+    setDraggedTabId(null);
   }
 
   function toggleTabPinned(tabId: string): void {
@@ -4885,6 +4883,8 @@ function AppContent(): JSX.Element {
           >
             {activePanel === 'browser' ? (
               <AddressBar
+                key={`${activeProfileId}:${activeTab.id}`}
+                privacyContext={{ profileId: activeProfileId, allowLegacyHistory: profiles.length === 1, incognito: Boolean(activeTab.incognito) }}
                 value={addressValue}
                 onChange={setAddressValue}
                 onSubmit={navigate}
@@ -4952,6 +4952,7 @@ function AppContent(): JSX.Element {
                     setZenSidebarRevealed(false);
                   }}
                   onPinTab={toggleTabPinned}
+                  onPinTabAsApp={pinTabAsApp}
                   onToggleTabMute={toggleTabMute}
                   onDragStartTab={setDraggedTabId}
                   onDragEndTab={() => setDraggedTabId(null)}
@@ -5070,6 +5071,7 @@ function AppContent(): JSX.Element {
               onCloseTab={closeTab}
               onNewTab={(url, opts) => addTabAndFocusStartSearch(url, opts)}
               onPinTab={toggleTabPinned}
+                  onPinTabAsApp={pinTabAsApp}
               onToggleTabMute={toggleTabMute}
               onDragStartTab={setDraggedTabId}
               onDragEndTab={() => setDraggedTabId(null)}
@@ -5408,6 +5410,8 @@ function AppContent(): JSX.Element {
                 </button>
               </div>
               <AddressBar
+                key={`${activeProfileId}:${activeTab.id}`}
+                privacyContext={{ profileId: activeProfileId, allowLegacyHistory: profiles.length === 1, incognito: Boolean(activeTab.incognito) }}
                 value={addressValue}
                 onChange={setAddressValue}
                 onSubmit={navigate}
@@ -5695,6 +5699,7 @@ function AppContent(): JSX.Element {
           />
         )}
         <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />
+        <DownloadStartAnimation onOpen={() => setDownloadsOpen(true)} />
         <CommandPalette onToggleTabPinned={toggleTabPinned} onToggleTabMute={toggleTabMute} />
 
     </div>

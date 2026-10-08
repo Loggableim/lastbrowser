@@ -13,18 +13,13 @@ import type { BrowserBookmark } from '../bookmarks.js';
 import type { BrowserVisit } from '../history.js';
 import {
   normalizeNavigationInput,
-  searchEngineById,
-  searchUrlFor
+  searchEngineById
 } from '../tabs.js';
 import { useDesktopI18n } from '../i18n.js';
 
-export type OmniboxSuggestion = {
-  id: string;
-  type: 'search' | 'url' | 'bookmark' | 'history';
-  title: string;
-  url: string;
-  badge: string;
-};
+export type { OmniboxSuggestion } from '../omnibox-suggestions.js';
+import { buildOmniboxSuggestions, type OmniboxPrivacyContext } from '../omnibox-suggestions.js';
+import './address-autocomplete.css';
 
 export interface AddressBarProps {
   value: string;
@@ -37,6 +32,7 @@ export interface AddressBarProps {
   activeBookmarked: boolean;
   onToggleBookmark: () => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
+  privacyContext?: OmniboxPrivacyContext;
 }
 
 export function AddressBar({
@@ -49,107 +45,25 @@ export function AddressBar({
   activeBookmarkable,
   activeBookmarked,
   onToggleBookmark,
-  inputRef
+  inputRef,
+  privacyContext = {}
 }: AddressBarProps): JSX.Element {
   const { t } = useDesktopI18n();
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [selection, setSelection] = useState<{ query: string; id: string | null } | null>(null);
+  const listboxId = React.useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const fallbackRef = useRef<HTMLInputElement>(null);
   const effectiveInputRef = inputRef ?? fallbackRef;
 
   const rawQuery = value.trim();
 
-  // Compute live autocomplete suggestions based on query
-  const suggestions = useMemo<OmniboxSuggestion[]>(() => {
-    if (!rawQuery || rawQuery.startsWith('lastbrowser://')) {
-      return [];
-    }
-
-    const items: OmniboxSuggestion[] = [];
-    const engine = searchEngineById(searchEngineId);
-    const searchUrl = searchUrlFor(rawQuery, searchEngineId);
-
-    // 1. Search engine action
-    items.push({
-      id: `search-${rawQuery}`,
-      type: 'search',
-      title: t('browser.omnibox.searchSuggestion', { engine: engine.label, query: rawQuery }),
-      url: searchUrl,
-      badge: engine.label
-    });
-
-    // 2. Direct URL navigation if input looks like a host/path
-    const isDomainLike =
-      !rawQuery.includes(' ') &&
-      (/^[\w.-]+\.[a-z]{2,}/i.test(rawQuery) ||
-        rawQuery.startsWith('http://') ||
-        rawQuery.startsWith('https://') ||
-        rawQuery.startsWith('localhost'));
-
-    if (isDomainLike) {
-      const directUrl = normalizeNavigationInput(rawQuery, searchEngineId);
-      if (directUrl !== searchUrl) {
-        items.push({
-          id: `url-${rawQuery}`,
-          type: 'url',
-          title: directUrl,
-          url: directUrl,
-          badge: t('browser.omnibox.openUrl')
-        });
-      }
-    }
-
-    // 3. Matching bookmarks
-    const qLower = rawQuery.toLowerCase();
-    const matchedBookmarks = bookmarks
-      .filter(
-        (b) =>
-          b.title.toLowerCase().includes(qLower) ||
-          b.url.toLowerCase().includes(qLower)
-      )
-      .slice(0, 4);
-
-    for (const bm of matchedBookmarks) {
-      if (!items.some((item) => item.url === bm.url)) {
-        items.push({
-          id: `bm-${bm.id}`,
-          type: 'bookmark',
-          title: bm.title,
-          url: bm.url,
-          badge: t('browser.omnibox.bookmarkBadge')
-        });
-      }
-    }
-
-    // 4. Matching visited sites / history
-    const matchedVisits = visits
-      .filter(
-        (v) =>
-          v.title.toLowerCase().includes(qLower) ||
-          v.url.toLowerCase().includes(qLower)
-      )
-      .slice(0, 4);
-
-    for (const v of matchedVisits) {
-      if (!items.some((item) => item.url === v.url)) {
-        items.push({
-          id: `hist-${v.url}`,
-          type: 'history',
-          title: v.title,
-          url: v.url,
-          badge: t('browser.omnibox.historyBadge')
-        });
-      }
-    }
-
-    return items.slice(0, 7);
-  }, [rawQuery, searchEngineId, bookmarks, visits, t]);
-
-  // Reset selectedIndex whenever query changes
-  useEffect(() => {
-    setSelectedIndex(-1);
-  }, [rawQuery]);
+  const suggestions = useMemo(() => buildOmniboxSuggestions(rawQuery, bookmarks, visits, searchEngineId, privacyContext), [rawQuery, bookmarks, visits, searchEngineId, privacyContext.profileId, privacyContext.incognito, privacyContext.allowLegacyHistory]);
+  const selectedIndex = selection?.query === rawQuery
+    ? suggestions.findIndex(item => item.id === selection.id)
+    : suggestions[0]?.autoSelect ? 0 : -1;
+  const setSelectedIndex = (index: number): void => setSelection({ query: rawQuery, id: suggestions[index]?.id ?? null });
+  const selectedSuggestion = isOpen && selectedIndex >= 0 ? suggestions[selectedIndex] : undefined;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -171,7 +85,7 @@ export function AddressBar({
       setSelectedIndex(-1);
       onSubmit(targetUrl);
     },
-    [onSubmit]
+    [onSubmit, rawQuery, suggestions]
   );
 
   const handleSubmit = useCallback(
@@ -188,13 +102,17 @@ export function AddressBar({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'ArrowDown') {
+      if (e.nativeEvent.isComposing) return;
+      if (e.key === 'Tab' && isOpen && suggestions.length > 0) {
+        e.preventDefault();
+        setSelectedIndex(selectedIndex < 0 ? (e.shiftKey ? suggestions.length - 1 : 0) : (selectedIndex + (e.shiftKey ? -1 : 1) + suggestions.length) % suggestions.length);
+      } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         if (!isOpen && suggestions.length > 0) {
           setIsOpen(true);
           setSelectedIndex(0);
         } else if (suggestions.length > 0) {
-          setSelectedIndex((prev) => (prev + 1) % suggestions.length);
+          setSelectedIndex((selectedIndex + 1) % suggestions.length);
         }
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
@@ -202,9 +120,7 @@ export function AddressBar({
           setIsOpen(true);
           setSelectedIndex(suggestions.length - 1);
         } else if (suggestions.length > 0) {
-          setSelectedIndex(
-            (prev) => (prev - 1 + suggestions.length) % suggestions.length
-          );
+          setSelectedIndex(selectedIndex < 0 ? suggestions.length - 1 : (selectedIndex - 1 + suggestions.length) % suggestions.length);
         }
       } else if (e.key === 'Escape') {
         if (isOpen) {
@@ -214,7 +130,7 @@ export function AddressBar({
         }
       }
     },
-    [isOpen, suggestions]
+    [isOpen, suggestions, selectedIndex, rawQuery]
   );
 
   const handleFocus = useCallback(() => {
@@ -232,10 +148,16 @@ export function AddressBar({
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
+            setSelection(null);
             setIsOpen(true);
           }}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={isOpen && suggestions.length > 0}
+          aria-controls={isOpen ? listboxId : undefined}
+          aria-activedescendant={selectedSuggestion ? `${listboxId}-${selectedIndex}` : undefined}
           aria-label={t('browser.omnibox.addressLabel')}
           placeholder={t('browser.chrome.searchPlaceholder')}
           autoComplete="off"
@@ -258,13 +180,14 @@ export function AddressBar({
       </form>
 
       {isOpen && suggestions.length > 0 && (
-        <div className="omnibox-dropdown" role="listbox">
+        <div className="omnibox-dropdown" role="listbox" id={listboxId}>
           {suggestions.map((suggestion, index) => {
             const isSelected = index === selectedIndex;
             return (
               <div
                 key={suggestion.id}
                 role="option"
+                id={`${listboxId}-${index}`}
                 aria-selected={isSelected}
                 className={`omnibox-item ${isSelected ? 'is-selected' : ''}`}
                 onMouseDown={(e) => {
@@ -274,19 +197,19 @@ export function AddressBar({
                 onMouseEnter={() => setSelectedIndex(index)}
               >
                 <div className="omnibox-item-icon">
-                  {suggestion.type === 'search' && <Search size={14} />}
+                  {(suggestion.type === 'search' || suggestion.type === 'query') && <Search size={14} />}
                   {suggestion.type === 'url' && <Globe2 size={14} />}
                   {suggestion.type === 'bookmark' && <Star size={14} />}
                   {suggestion.type === 'history' && <Clock size={14} />}
                 </div>
                 <div className="omnibox-item-content">
-                  <span className="omnibox-item-title">{suggestion.title}</span>
-                  {suggestion.type !== 'search' && (
+                  <span className="omnibox-item-title">{suggestion.query ? t('browser.omnibox.searchSuggestion', { engine: searchEngineById(searchEngineId).label, query: suggestion.query }) : suggestion.title}</span>
+                  {!suggestion.query && (
                     <span className="omnibox-item-url">{suggestion.url}</span>
                   )}
                 </div>
                 <span className={`omnibox-badge ${suggestion.type}`}>
-                  {suggestion.badge}
+                  {suggestion.type === 'search' ? searchEngineById(searchEngineId).label : suggestion.type === 'url' ? t('browser.omnibox.openUrl') : suggestion.type === 'bookmark' ? t('browser.omnibox.bookmarkBadge') : t('browser.omnibox.historyBadge')}
                 </span>
                 <ArrowRight size={13} className="omnibox-item-arrow" />
               </div>

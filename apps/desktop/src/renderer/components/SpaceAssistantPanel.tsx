@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Send, Bot, RefreshCw, ChevronRight } from 'lucide-react';
+import { X, Send, Bot, RefreshCw, ChevronRight, Activity, MousePointer2, FileText, MessageCircle } from 'lucide-react';
 import { useDesktopI18n } from '../i18n.js';
 import { RichTextRenderer } from '../NativeRichText.js';
 import { SpaceInterview } from './SpaceInterview.js';
@@ -125,19 +125,21 @@ export function SpaceAssistantPanel({ selection, controller, onClose, onOpenWork
   const messages = snapshot?.messages ?? [];
   const providerFailure = (code: string | null | undefined) => code === 'context_metadata_required' || code === 'provider_requires_broker_adapter' || code === 'main_model_context_unsupported';
   const errorCode = entry?.error?.code;
-  const openConnections = () => { setSetupExpanded(true); setSetupVisitedScope(scopeKey); };
+  const [connectionsExpanded, setConnectionsExpanded] = useState(false);
+  useEffect(() => { setConnectionsExpanded(false); }, [scopeKey]);
+  const openConnections = () => setConnectionsExpanded(true);
   const activityState = activity?.sourceState === 'live' ? t('spaceAssistant.live')
     : activity ? t('spaceAssistant.stale') : entry?.busy ? t('spaceAssistant.connecting') : t('spaceAssistant.activityUnavailable');
   return <aside className="copilot-split-view space-assistant" aria-label={`${t('spaceAssistant.title')}: ${selection.spaceName}`} data-testid="space-assistant-panel">
     <header className="space-assistant-header"><span className="space-assistant-mark"><Bot size={18} aria-hidden="true" /></span><div className="space-assistant-heading"><strong>{t('spaceAssistant.title')}</strong><span className="space-assistant-space-name" dir="auto">{selection.spaceName}</span>
       </div>
-      {onSwitchToQuickChat && <button className="space-assistant-mode-switch" type="button" aria-label={t('spaceAssistant.switchToQuickChat')} title={t('spaceAssistant.switchToQuickChat')} onClick={onSwitchToQuickChat}>{t('spaceAssistant.switchToQuickChat')}</button>}
+      {onSwitchToQuickChat && <button className="space-assistant-mode-switch" type="button" aria-label={t('spaceAssistant.switchToQuickChat')} title={t('spaceAssistant.switchToQuickChat')} onClick={onSwitchToQuickChat}><MessageCircle size={14} aria-hidden="true" />{t('spaceAssistant.switchToQuickChat')}</button>}
       <button type="button" aria-label={t('common.close')} onClick={onClose}><X size={18} /></button>
     </header>
     <div className="space-assistant-scroll">
-      <div className={`space-assistant-status ${activity?.sourceState === 'live' ? 'is-live' : activity ? 'is-stale' : ''}`} role="status" data-testid="space-assistant-compact-activity">
+      <div className={`space-assistant-status ${snapshot?.providerReady ? 'is-configured' : activity ? 'is-stale' : ''}`} role="status" data-testid="space-assistant-compact-activity">
         <span className="space-assistant-status-dot" aria-hidden="true" />
-        <span>{snapshot ? (snapshot.providerReady ? t('spaceAssistant.ready') : t('spaceAssistant.notReady'))
+        <span>{snapshot ? (snapshot.providerReady ? t('spaceAssistant.connection.configured') : t('spaceAssistant.notReady'))
           : entry?.error ? t('spaceAssistant.activityUnavailable') : t('spaceAssistant.connecting')}</span>
         <span className="space-assistant-status-separator" aria-hidden="true">·</span>
         <span className="space-assistant-status-activity">{activityState}</span>
@@ -149,7 +151,7 @@ export function SpaceAssistantPanel({ selection, controller, onClose, onOpenWork
       {(entry?.error || localError) && <div role="alert" className="space-assistant-error"><p>{localError || (providerFailure(errorCode) ? t(`spaceAssistant.${errorCode}`) : entry?.error?.message)}</p>
         {providerFailure(errorCode) && snapshot?.providerReady !== false && <button type="button" onClick={onOpenProviderSettings}>{t('spaceAssistant.setupConnection')}</button>}
         <button type="button" onClick={() => void controller.load(scope)}><RefreshCw size={12} /> {t('common.retry')}</button></div>}
-        {!messages.length && <p>{t('spaceAssistant.intro')}</p>}
+        {!messages.length && <div className="space-assistant-welcome"><span className="space-assistant-welcome-icon"><Bot size={24} aria-hidden="true" /></span><p>{t('spaceAssistant.intro')}</p></div>}
         {messages.map(message => <article key={message.id} className={`space-assistant-message ${message.role}`}>
           {message.controlResolution && message.controlResolution.kind !== 'conversation' && snapshot
             ? <IndependentMessageControl key={`${scopeKey}:${message.id}`} message={message} snapshot={snapshot} activity={activity} controller={controller} busy={busy}/>
@@ -158,10 +160,10 @@ export function SpaceAssistantPanel({ selection, controller, onClose, onOpenWork
           {message.targetSessionId && <button type="button" onClick={() => onOpenWorkChat(message.targetSessionId!, scope)}>{t('spaceAssistant.openChat')}</button>}
         </article>)}
         <div className="space-assistant-quick-actions" aria-label={t('spaceAssistant.quickActions')}>
-          <button type="button" disabled={busy || !snapshot} onClick={() => void controller.send(scope, t('spaceAssistant.statusQuestion'))}>{t('spaceAssistant.statusQuestion')}</button>
+          <button type="button" disabled={busy || !snapshot} onClick={() => void controller.send(scope, t('spaceAssistant.statusQuestion'))}><Activity size={16} aria-hidden="true" />{t('spaceAssistant.statusQuestion')}</button>
         {onSelectPageContext && <div className="space-assistant-controls">
-          <button type="button" disabled={busy} onClick={() => void page('selection')}>{t('spaceAssistant.askSelection')}</button>
-          <button type="button" disabled={busy} onClick={() => void page('page')}>{t('browser.actions.summarize')}</button>
+          <button type="button" disabled={busy} onClick={() => void page('selection')}><MousePointer2 size={16} aria-hidden="true" />{t('spaceAssistant.askSelection')}</button>
+          <button type="button" disabled={busy} onClick={() => void page('page')}><FileText size={16} aria-hidden="true" />{t('browser.actions.summarize')}</button>
         </div>}
         </div>
       <details className="space-assistant-setup" data-testid="space-assistant-setup" open={setupExpanded} onToggle={event => {
@@ -180,7 +182,6 @@ export function SpaceAssistantPanel({ selection, controller, onClose, onOpenWork
               <dt>{t('spaceAssistant.background')}</dt><dd dir="auto">{snapshot.confirmedProfile.values.backgroundPreferences??'—'}</dd>
             </dl></section>}
             {!snapshot?.confirmedProfile && <div className="space-assistant-setup-actions"><p>{t('spaceAssistant.setupHint')}</p><button data-testid="space-assistant-start-interview" type="button" disabled={busy || !snapshot} onClick={() => void controller.startInterview(scope, locale, setupSeed)}>{t('spaceAssistant.setup')}</button></div>}</>}
-        <IndependentConnections key={scopeKey} scope={scope} controller={controller} onOpenPluginBrowser={onOpenPluginBrowser} onOpenProviderSettings={onOpenProviderSettings} />
         <details className="space-assistant-advanced" data-testid="space-assistant-advanced">
           <summary><ChevronRight size={14} aria-hidden="true" />{t('spaceAssistant.advanced')}</summary>
         {permissions && <form data-testid="independent-browser-permissions" onSubmit={event => { event.preventDefault(); void changePermissions('grant'); }}><fieldset disabled={permissionBusy}>
@@ -196,6 +197,7 @@ export function SpaceAssistantPanel({ selection, controller, onClose, onOpenWork
         </details>
         </>}
       </details>
+      <IndependentConnections key={scopeKey} scope={scope} controller={controller} expanded={connectionsExpanded} onExpandedChange={setConnectionsExpanded} onOpenPluginBrowser={onOpenPluginBrowser} onOpenProviderSettings={onOpenProviderSettings} />
       <details className="space-assistant-activity" data-testid="space-assistant-activity" aria-label={`${t('spaceAssistant.activity')}: ${attentionCount}`} open={activityExpanded}
         onToggle={event => setActivityExpanded(event.currentTarget.open)}>
         <summary><ChevronRight size={15} className="space-assistant-disclosure-icon" aria-hidden="true" /><span>{t('spaceAssistant.activity')}</span>

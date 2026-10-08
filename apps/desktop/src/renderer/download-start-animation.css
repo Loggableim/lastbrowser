@@ -1,0 +1,2 @@
+.download-start-token { position: fixed; left: 0; top: 0; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px; color: var(--accent, #00cbe8); background: var(--panel-bg, #132936); border: 1px solid currentColor; box-shadow: 0 3px 14px #0005; font-size: 22px; pointer-events: none; z-index: 11000; }
+.download-sidebar-slim { margin-top: auto; align-self: center; }

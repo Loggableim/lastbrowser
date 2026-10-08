@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DownloadDockTrigger } from '../NativeDownloads.js';
 import {
   Bell,
   Check,
@@ -57,6 +58,7 @@ export interface SidekickSidebarProps {
   onCloseTab: (tabId: string) => void;
   onNewTab: (url?: string, options?: { incognito?: boolean }) => void;
   onPinTab?: (tabId: string) => void;
+  onPinTabAsApp?: (tabId: string) => void;
   onToggleTabMute?: (tabId: string) => void;
   onDragStartTab?: (tabId: string | null) => void;
   onDragEndTab?: () => void;
@@ -123,6 +125,7 @@ export function SidekickSidebar({
   onCloseTab,
   onNewTab,
   onPinTab,
+  onPinTabAsApp,
   onToggleTabMute,
   onDragStartTab,
   onDragEndTab,
@@ -163,6 +166,7 @@ export function SidekickSidebar({
   onDock
 }: SidekickSidebarProps): React.JSX.Element {
   const { t } = useDesktopI18n();
+  const downloadsOpen = usePanelStore((state) => state.downloadsOpen);
   const [dragOverInfo, setDragOverInfo] = useState<{ id: string; mode: 'before' | 'after' | 'split' } | null>(null);
   const [internalDrawerTab, setInternalDrawerTab] = useState<SidebarDrawerTab>(drawerTab);
   const currentDrawerTab = onSelectDrawerTab ? drawerTab : internalDrawerTab;
@@ -299,6 +303,7 @@ export function SidekickSidebar({
               forcedPosition={isFloatingOverlay ? 'left' : undefined}
               spacePath={activeSpacePath}
             />
+            {onOpenDownloads && <DownloadDockTrigger anchor="sidebar" open={downloadsOpen} onOpen={onOpenDownloads} className="download-sidebar-slim" />}
           </div>
         ) : null
       ) : (
@@ -475,6 +480,9 @@ export function SidekickSidebar({
                   onOpenApp={onOpenApp}
                   onAddApp={onAddPinnedApp}
                   onEditApp={onEditPinnedApp}
+                  draggedTabId={draggedTabId}
+                  tabs={tabs}
+                  onPinTabAsApp={onPinTabAsApp}
                 />
               </div>
 
@@ -483,17 +491,6 @@ export function SidekickSidebar({
                 <div className="expanded-section-header">
                   <span className="section-title">{t('sidebar.tabs.header')}</span>
                   <div className="expanded-section-actions">
-                    {onOpenDownloads && (
-                      <button
-                        type="button"
-                        className="sidebar-header-icon-btn"
-                        onClick={onOpenDownloads}
-                        title={`${t('sidebar.downloads')} (Ctrl+J)`}
-                        aria-label={t('sidebar.downloads')}
-                      >
-                        <Download size={12} />
-                      </button>
-                    )}
                     <span className="tab-count-badge">{tabs.length}</span>
                   </div>
                 </div>
@@ -670,17 +667,6 @@ export function SidekickSidebar({
 
                 {/* Tabs Action Buttons */}
                 <div className="tabs-tier-actions-row">
-                  {onOpenDownloads && (
-                    <button
-                      type="button"
-                      className="vertical-downloads-btn"
-                      onClick={onOpenDownloads}
-                      title={`${t('sidebar.downloads')} (Ctrl+J)`}
-                    >
-                      <Download size={13} />
-                      <span>{t('sidebar.downloads')}</span>
-                    </button>
-                  )}
                 </div>
               </div>
             </>
@@ -883,6 +869,7 @@ export function SidekickSidebar({
 
           {/* Bottom Footer in Expanded mode */}
           <div className="expanded-bottom-footer">
+            {onOpenDownloads && <DownloadDockTrigger anchor="sidebar" open={downloadsOpen} onOpen={onOpenDownloads} className="footer-link-btn"><span>{t('sidebar.downloads')}</span></DownloadDockTrigger>}
             <button
               type="button"
               className="footer-link-btn"

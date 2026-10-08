@@ -7,6 +7,7 @@ import { browserAccountCopy,browserAccountUseCopy } from '../i18n/browser-accoun
 import { assistantScopeKey,newIndependentRequestId, type CapabilityCatalog, type CapabilityCatalogEntry,
   type CapabilityConnection, type ConnectionSetupFlow, type IndependentScope, type SpaceBindingsView } from '../independent-contracts.js';
 import { isSafePluginStartUrl } from '../plugin-browser-navigation.js';
+import { connectionPresentation } from './connection-presentation.js';
 
 export function UrlOnlyPluginBrowserAccess({ capability, scope, onOpen, onUnavailable }: {
   capability: CapabilityCatalogEntry; scope: IndependentScope;
@@ -29,7 +30,8 @@ export function UrlOnlyPluginBrowserAccess({ capability, scope, onOpen, onUnavai
   </div>;
 }
 
-export function IndependentConnections({ scope, controller, onOpenPluginBrowser, onOpenProviderSettings }: { scope: IndependentScope; controller: IndependentAssistantController;
+export function IndependentConnections({ scope, controller, onOpenPluginBrowser, onOpenProviderSettings, expanded, onExpandedChange }: { scope: IndependentScope; controller: IndependentAssistantController;
+  expanded?: boolean; onExpandedChange?: (expanded: boolean) => void;
   onOpenPluginBrowser?: (capabilityId: string, startUrl: string, scope: IndependentScope) => Promise<boolean>;
   onOpenProviderSettings?: () => void }): React.JSX.Element {
   const { t, locale } = useDesktopI18n();
@@ -41,6 +43,10 @@ export function IndependentConnections({ scope, controller, onOpenPluginBrowser,
   const lock = useRef(false), current = useRef(true);
   const setupCard = useRef<HTMLElement>(null);
   const [retry, setRetry] = useState(0);
+  const [localExpanded, setLocalExpanded] = useState(false);
+  const disclosureExpanded = expanded ?? localExpanded;
+  const [visited, setVisited] = useState(Boolean(expanded));
+  useEffect(() => { if (expanded) setVisited(true); }, [expanded]);
   async function refresh() {
     const [capabilities, binding] = await Promise.all([
       controller.request({ schemaVersion: 1, operation: 'capabilities', scope, payload: { refresh: true } }),
@@ -56,9 +62,9 @@ export function IndependentConnections({ scope, controller, onOpenPluginBrowser,
     setupCard.current?.querySelector<HTMLElement>('input,button')?.focus();
   }, [flow?.flowId]);
   useEffect(() => {
-    current.current = true; void refresh();
+    current.current = true; if (visited) void refresh();
     return () => { current.current = false; };
-  }, [controller, retry]);
+  }, [controller, retry, visited]);
   useEffect(() => {
     if (!flow || !['starting', 'awaiting_user'].includes(flow.setupStatus)) return;
     const flowId = flow.flowId;
@@ -121,10 +127,8 @@ export function IndependentConnections({ scope, controller, onOpenPluginBrowser,
   function taskLabel(task: string) { return task==='browser.account.use'?browserAccountUseCopy[locale]:task === 'conversation' || task === 'adaptive_interview' || task === 'agent_reasoning' ? t(knownTask[task]) : task; }
   const isBound = (capability: CapabilityCatalogEntry, connection: CapabilityConnection) => Boolean(bindings?.connectionBindings?.some(row =>
     row.capabilityId === capability.capabilityId && row.connectionId === connection.connectionId && row.status !== 'revoked'));
-  const configuredEntries = catalog?.entries.filter(capability => capability.connectionKind === 'browser_account'
-    || ['configured', 'connected', 'reauth_required'].includes(capability.status)
-    || capability.connections?.some(connection => ['configured', 'connected', 'reauth_required'].includes(connection.status)
-      || connection.configurationStatus === 'configured' || isBound(capability, connection))) ?? [];
+  const presentation = connectionPresentation(catalog?.entries ?? [], bindings);
+  const configuredEntries = presentation.entries;
   const pluginEntries = catalog?.entries.filter(capability => capability.capabilityId.startsWith('plugin:')
     && capability.connectionKind === 'connector' && capability.status === 'restricted' && capability.supportedTasks.length === 0
     && isSafePluginStartUrl(capability.startUrl)) ?? [];
@@ -134,8 +138,8 @@ export function IndependentConnections({ scope, controller, onOpenPluginBrowser,
   function compactCapability(capability: CapabilityCatalogEntry) {
     const title = capability.capabilityId === 'browser.account' ? browserAccountCopy(locale).title
       : capability.capabilityId === 'assistant.conversation' ? t('spaceAssistant.title') : capability.title || capability.capabilityId;
-    return <article className="space-assistant-connection-summary" key={capability.capabilityId}>
-      <div className="space-assistant-connection-summary-heading"><strong>{title}</strong><span>{t(`spaceAssistant.connection.${capability.status}`)}</span></div>
+    return <details className="space-assistant-connection-summary" key={capability.capabilityId}>
+      <summary className="space-assistant-connection-summary-heading"><strong>{title}</strong><span>{t(`spaceAssistant.connection.${capability.status}`)}</span></summary>
       {capability.connections?.map(connection => {
         const binding = bindings?.connectionBindings?.find(row => row.capabilityId === capability.capabilityId && row.connectionId === connection.connectionId && row.status !== 'revoked');
         return <div className="space-assistant-connection-summary-row" key={connection.connectionId}>
@@ -145,10 +149,16 @@ export function IndependentConnections({ scope, controller, onOpenPluginBrowser,
           {binding && <button type="button" disabled={busy || binding.status === 'revoking'} onClick={() => void bind(capability, connection, true)}>{t('spaceAssistant.revoke')}</button>}
         </div>;
       })}
-    </article>;
+    </details>;
   }
-  return <section aria-label={t('spaceAssistant.connections')} data-testid="space-assistant-connections">
-    <h3>{t('spaceAssistant.connections')}</h3>
+  const problemCount = presentation.problemCount;
+  const countLabel = `${t('spaceAssistant.connections')}: ${configuredEntries.length + pluginEntries.length}; ${t('spaceAssistant.connection.connected')}: ${presentation.connectedCount}`;
+  const problemLabel = `${t('spaceAssistant.connection.reauth_required')} / ${t('spaceAssistant.connection.unavailable')}: ${problemCount}`;
+  return <details className="space-assistant-connections" aria-label={t('spaceAssistant.connections')} data-testid="space-assistant-connections" open={disclosureExpanded}
+    onToggle={event => { const open = event.currentTarget.open; if (open) setVisited(true); setLocalExpanded(open); onExpandedChange?.(open); }}>
+    <summary><span>{t('spaceAssistant.connections')}</span>{catalog && <span className="space-assistant-connection-count" aria-label={countLabel} title={countLabel}>{configuredEntries.length + pluginEntries.length}</span>}
+      {(problemCount > 0 || error) && <span className="space-assistant-connection-warning" role="status" aria-label={error || problemLabel} title={error || problemLabel}>{problemCount || '!'}</span>}</summary>
+    <div className="space-assistant-connections-content">
     {error && <p role="alert">{error}</p>}
     {!catalog && <p role="status">{t(error ? 'spaceAssistant.stale' : 'spaceAssistant.connecting')}</p>}
     {catalog && error && <p role="status">{t('spaceAssistant.stale')}</p>}
@@ -225,5 +235,6 @@ export function IndependentConnections({ scope, controller, onOpenPluginBrowser,
       {ongoing && <button type="button" onClick={() => { void controller.request({ schemaVersion: 1, operation: 'connectionSetup', scope, payload: { action: 'cancel', flowId: flow.flowId } })
         .then(result => { if (!current.current) return; if (result.ok) setFlow(result.value); else setError(result.error.message); }); }}>{t('spaceAssistant.cancelSetup')}</button>}
     </section>}
-  </section>;
+    </div>
+  </details>;
 }

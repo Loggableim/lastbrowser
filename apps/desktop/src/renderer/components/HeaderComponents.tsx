@@ -11,6 +11,8 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import { DownloadDockTrigger } from '../NativeDownloads.js';
+import { usePanelStore } from '../stores/usePanelStore.js';
 import { AdblockShield } from './AdblockShield.js';
 import {
   Bug,
@@ -840,6 +842,7 @@ export function ModernTitlebar({
   onToggleLoupe
 }: ModernTitlebarProps): React.JSX.Element {
   const { t } = useDesktopI18n();
+  const downloadsOpen = usePanelStore((state) => state.downloadsOpen);
   const { isMaximized, handleDoubleClick, handleMouseDown } = useWindowDrag();
   const isZen = zenMode ?? sidebarMode === 'hidden';
   const [internalZenHover, setInternalZenHover] = useState(false);
@@ -1013,16 +1016,7 @@ export function ModernTitlebar({
           </button>
         )}
 
-        <button
-          type="button"
-          className={`titlebar-tool-btn downloads-trigger ${hasActiveDownloads ? 'has-active' : ''}`}
-          title={`${t('browser.chrome.downloads')} (Ctrl+J)`}
-          aria-label={t('browser.chrome.downloads')}
-          onClick={onToggleDownloads}
-        >
-          <Download size={15} />
-          {hasActiveDownloads && <span className="downloads-active-dot" />}
-        </button>
+        <DownloadDockTrigger anchor="top" open={downloadsOpen} onOpen={onToggleDownloads} label={t('browser.chrome.downloads')} className="titlebar-tool-btn downloads-trigger" />
 
         <button
           type="button"

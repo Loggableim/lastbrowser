@@ -35,7 +35,9 @@ import {
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
 import { saveSpaceModel } from '../space-models.js';
-import { resolveLiteralCatalogModelSelection, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
+import { isMultiAgentModelSelection, resolveLiteralCatalogModelSelection, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
+import { getQualifiedProviderModels, isProviderModelQualified } from '../provider-chat-evidence.js';
+import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { IndependentAssistantClient } from '../independent-assistant-client.js';
 import { assistantScopeKey, sameAssistantScope, newIndependentRequestId, type ScopedModelSelection, type NativeModelAvailability } from '../independent-contracts.js';
 import { useSpaceAssistantStore } from '../stores/useSpaceAssistantStore.js';
@@ -132,6 +134,7 @@ export function NativeChatMain({
   onStop
 }: NativeChatMainProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
+  const showUntestedBetas = useShowUntestedProviderBetas();
   const independentRun = isIndependentOwnedSession(activeSession) ? readIndependentSessionRun(activeSession) : null;
   const independentRunState = useSpaceAssistantStore(state => {
     if (!independentRun) return undefined;
@@ -196,12 +199,29 @@ export function NativeChatMain({
         const result = await modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: { action: 'get' } });
         if (!result.ok) throw new Error(result.error.message);
         if (!alive) return;
-        const data = result.value;
+        let data = result.value;
         if (!data.groups) throw new Error('Model catalog is missing.');
         const rawParsed = mapScopedModelPickerOptions(data).map(group=>({...group,models:group.models.map(entry=>({...entry,reasoningEfforts:normalizeReasoningEfforts(entry.reasoningEfforts)}))}));
+        if (!showUntestedBetas && isMultiAgentModelSelection({ model: data.model, provider: data.provider })) {
+          const fallback = rawParsed.flatMap(group => group.providerId ? group.models
+            .filter(entry => group.configured && entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)
+              && isProviderModelQualified(group.providerId, entry.id, activeBrowserProfileId,
+                activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage))
+            .map(entry => ({ provider: group.providerId!, model: entry.id })) : [])[0];
+          if (fallback) {
+            const migrated = await modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: {
+              action: 'set', model: fallback.model, provider: fallback.provider, expectedRevision: data.revision, clientRequestId: newIndependentRequestId()
+            } });
+            if (!migrated.ok) throw new Error(migrated.error.message);
+            data = migrated.value;
+            setStatusMessage(t('settings.panels.providers.singleModelMigration'));
+          }
+        }
         setScopedModel({ viewKey: modelViewKey, selection: data });
-        setCatalogDefaultModel(data.model);
-        if (data.model && activeSpacePath) saveSpaceModel(activeSpacePath, data.model, window.localStorage, data.provider);
+        const defaultModelQualified = Boolean(data.provider && data.model
+          && isProviderModelQualified(data.provider, data.model, activeBrowserProfileId, activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage));
+        setCatalogDefaultModel(defaultModelQualified ? data.model : '');
+        if (defaultModelQualified && data.model && activeSpacePath) saveSpaceModel(activeSpacePath, data.model, window.localStorage, data.provider);
         setModelCatalog(rawParsed);
         setModelCatalogLoaded(true);
       } catch {
@@ -215,7 +235,7 @@ export function NativeChatMain({
     };
     void load();
     return () => { alive = false; };
-  }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry]);
+  }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry, showUntestedBetas, activeBackendProfileName, activeSession?.profile, t]);
 
   /** Change only this bound Space preference; executing runs keep their captured model. */
   const commitComposerModelChoice = useCallback((selection: string) => {
@@ -248,6 +268,14 @@ export function NativeChatMain({
 
   const reasoningModel = resolveReasoningModel(model, modelProvider, modelCatalog);
   const modelReasoningEfforts = reasoningModel?.reasoningEfforts || [];
+  const visibleModelCatalog = useMemo(() => modelCatalog.flatMap(group => {
+    const qualified = getQualifiedProviderModels(group.providerId, activeBrowserProfileId, activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage);
+    const models = showUntestedBetas ? group.models.map(entry => qualified.has(entry.id)
+      ? entry : { ...entry, label: `${entry.label} · ${t('settings.panels.providers.betaUntested')}` })
+      : group.models.filter(entry => qualified.has(entry.id));
+    return models.length ? [{ ...group, models }] : [];
+  }), [modelCatalog, activeBrowserProfileId, showUntestedBetas, t]);
+  const modelQualified = Boolean(modelProvider && model && isProviderModelQualified(modelProvider, model, activeBrowserProfileId, activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage));
   const sessionReasoningEffort = resolveSessionReasoningEffort(activeSession?.reasoning_selection, model, modelProvider);
   useEffect(() => {
     if (!activeSessionId || activeSession?.session_id !== activeSessionId || sessionReasoningEffort === null
@@ -290,6 +318,14 @@ export function NativeChatMain({
   const policyLocks=useRef(new Set<string>()),policyRetry=useRef<{signature:string;requestId:string}|null>(null);
   const currentPolicy=policyGate?.viewKey===policyOperationKey?policyGate:null;
   const automaticSelected=Boolean(currentPolicy?.response.policy.mode==='auto');
+  const unqualifiedAutoModels = !currentPolicy?.response.policy.allowedModels.length
+    || (!showUntestedBetas && currentPolicy.response.policy.allowedModels.some(pair =>
+      !isProviderModelQualified(pair.provider, pair.model, activeBrowserProfileId, activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)));
+  const multiAgentSelection = isMultiAgentModelSelection({ model, provider: modelProvider });
+  const multiAgentBetaBlocked = !showUntestedBetas && (multiAgentSelection || Boolean(automaticSelected && currentPolicy?.response.policy.orchestrator));
+  const betaSelectionBlocked = automaticSelected
+    ? unqualifiedAutoModels || Boolean(currentPolicy?.response.policy.orchestrator && !showUntestedBetas)
+    : multiAgentSelection ? !showUntestedBetas : !modelQualified && !showUntestedBetas;
   const automaticAvailable=currentPolicy?canExecuteAutomaticPolicy(currentPolicy.response):false;
   const automaticBlocked=Boolean(automaticSelected&&!automaticAvailable);
   const availableCommands=writerProtected?noCommandCapabilities:currentModeGate?.response.capabilities??commandCapabilities;
@@ -407,11 +443,18 @@ export function NativeChatMain({
       if(!automaticAvailable){setStatusMessage(modelPolicyReason(locale,currentPolicy.response.executionAvailability.reasonCode));return;}
       const policy=currentPolicy.response.policy;
       if(!policy.allowedModels.length){setStatusMessage(modelPolicyCopy(locale).choose);return;}
+      if(policy.allowedModels.some(pair=>!isProviderModelQualified(pair.provider,pair.model,activeBrowserProfileId,activeBackendProfileName || (activeSession as any)?.profile || 'default',window.localStorage))){
+        setStatusMessage(t('settings.panels.providers.betaCatalogEmpty'));return;
+      }
       void saveModelPolicy({mode:'auto',allowedModels:policy.allowedModels,orchestrator:policy.orchestrator,cloudPolicy:policy.cloudPolicy,
         allowedCloudDataClasses:policy.allowedCloudDataClasses,budget:policy.budget});
       return;
     }
-    if(!resolveLiteralCatalogModelSelection(selection,modelCatalog))return;
+    const candidate=resolveLiteralCatalogModelSelection(selection,modelCatalog);
+    if(!candidate)return;
+    if(candidate?.provider&&!isProviderModelQualified(candidate.provider,candidate.model,activeBrowserProfileId,activeBackendProfileName || (activeSession as any)?.profile || 'default',window.localStorage)&&!showUntestedBetas){
+      setStatusMessage(t('settings.panels.providers.betaCatalogEmpty'));return;
+    }
     if(automaticSelected&&currentPolicy){const policy=currentPolicy.response.policy;
       void saveModelPolicy({mode:'fixed',allowedModels:policy.allowedModels,orchestrator:policy.orchestrator,cloudPolicy:policy.cloudPolicy,
         allowedCloudDataClasses:policy.allowedCloudDataClasses,budget:policy.budget}).then(saved=>{if(saved)commitComposerModelChoice(selection);});return;}
@@ -708,9 +751,11 @@ export function NativeChatMain({
               pending={sessionLoading||modePending===modeViewKey||goalPending===modeViewKey} available={ready&&availableCommands.goal}
               migrationRequired={goalMigrationRequired===modeViewKey} editorOpenToken={goalEditorViewKey===modeViewKey?goalEditorToken:0}
               onDismissEmpty={()=>setGoalEditorViewKey(current=>current===modeViewKey?null:current)} onAction={handleCommandAction}/>}
-            <ChatComposer
+      <ChatComposer
         automaticPolicy={{active:automaticSelected,available:automaticAvailable}}
-        sendBlocked={automaticBlocked||policyPending===policyOperationKey}
+        sendBlocked={automaticBlocked||policyPending===policyOperationKey||betaSelectionBlocked}
+        betaSelectionBlocked={betaSelectionBlocked}
+        multiAgentBetaBlocked={multiAgentBetaBlocked}
         commandContext={commandContext}
         commandCapabilities={availableCommands}
         onCommandAction={handleCommandAction}
@@ -718,7 +763,7 @@ export function NativeChatMain({
         mode={currentModeGate?currentModeGate.response.mode.mode==='plan'?'plan':'action':composerMode}
         model={model}
         modelProvider={modelProvider}
-        modelOptions={modelCatalog}
+        modelOptions={visibleModelCatalog}
         modelCatalogError={modelCatalogError}
         onRetryModelCatalog={()=>setModelCatalogRetry(value=>value+1)}
         reasoningEffort={effectiveReasoningEffort}

@@ -66,7 +66,9 @@ def _run(tmp_path, monkeypatch, *, outcome="success", cleanup_fails=False):
 def test_native_local_short_chat_persists_authoritative_evidence_and_turn_identity(tmp_path, monkeypatch):
     context, events, persisted = _run(tmp_path, monkeypatch)
     assistant = next(message for message in persisted["messages"] if message["role"] == "assistant")
-    evidence = {"provider_id": "local-ai", "model_id": "model-350m", "successful_chat": True}
+    from web.api.runtime_identity import RUNTIME_GENERATION, provider_config_generation
+    evidence = {"provider_id": "local-ai", "model_id": "model-350m", "successful_chat": True,
+        "runtime_generation": RUNTIME_GENERATION, "provider_config_generation": provider_config_generation("local-ai")}
     done = next(data for event, data in events if event == "done")
     assert done["provider_evidence"] == evidence
     assert done["stream_id"] == done["turn_id"] == context.stream_id

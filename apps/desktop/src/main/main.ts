@@ -577,7 +577,10 @@ function registerIpc(): void {
     const spacePaths = (request.spacePaths as unknown[]).filter((value): value is string => typeof value === 'string' && value.length <= 2048);
     return clearDeletedProfilePartitions(request.profileId, spacePaths, (partition) => session.fromPartition(partition));
   });
-  ipcMain.handle('lastbrowser:services:status', () => services?.getStatus());
+  ipcMain.handle('lastbrowser:services:status', () => {
+    const status = services?.getStatus();
+    return status ? { ...status, desktopVersion: app.getVersion() } : status;
+  });
     ipcMain.handle('lastbrowser:services:start', async () => {
       try {
         await services?.start();

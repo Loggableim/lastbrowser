@@ -1,5 +1,9 @@
 export {};
 
+declare global {
+  const __LASTBROWSER_BUILD_ID__: string;
+}
+
 import type {
   DesktopChatMessage as ShellDesktopChatMessage,
   DesktopSessionDetail as ShellDesktopSessionDetail,
@@ -197,6 +201,8 @@ declare global {
           port: number | null;
           runtimeDir: string;
           lastError: string | null;
+          runtimeGeneration: string | null;
+          desktopVersion: string;
         }>;
         start: () => Promise<unknown>;
         stop: () => Promise<unknown>;

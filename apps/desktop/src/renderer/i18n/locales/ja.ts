@@ -203,4 +203,10 @@ export const desktopJaOverrides = {
   'spaceSetup.existingSpaceProfileMismatch': 'このスペースはすでに別のバックエンドプロファイルに紐付いています。そのプロファイルを選ぶか、別のスペースを選択してください。',
   'spaceSetup.existingSpaceBindingAmbiguous': 'このスペースには複数のバックエンド紐付けがあるため、安全に再利用できません。スペース一覧から選び、プロファイル設定を確認してください。',
   ...group('workspaces', { activeSpace: '現在のスペース', breadcrumb: 'パンくずリスト', createFile: 'ファイルを作成', createFolder: 'フォルダーを作成', delete: '削除', detail: 'ワークスペースのツリー、ファイルのプレビュー、ファイル操作。', editing: '編集中', empty: 'ワークスペースの内容がありません。', hideHidden: '隠しファイルを非表示', kicker: 'スペース', newChat: '新しいチャット', noFile: 'ファイルが選択されていません。', noSession: 'セッションなし', parent: '親フォルダー', preview: 'プレビュー', refresh: '更新', rename: '名前を変更', save: '保存', showHidden: '隠しファイルを表示', title: 'スペース', upload: 'アップロード' }),
+  'settings.panels.providers.betaCatalogToggle': '未検証のベータ版プロバイダーとモデルをこのセッションで表示して有効にする',
+  'settings.panels.providers.betaCatalogDescription': 'このセッションのみ有効です。未検証のプロバイダー／モデルとマルチエージェントの選択肢を表示します。プロフィール、アカウント、ランタイム、ハードウェア、ライセンス、スコープ、停止の各制御は引き続き適用されます。',
+  'settings.panels.providers.betaCatalogEmpty': 'このプロフィールで最近の成功したチャットにより確認されたプロバイダーとモデルの組み合わせはありません。カタログから選ぶには未検証のベータ版を有効にしてください。',
+  'settings.panels.providers.betaSavedChoice': '保存済みの選択・ベータ未検証',
+  'settings.panels.providers.multiAgentBetaRequired': '保存された選択はマルチエージェントモードを実行します。このセッションでベータ版を有効にしてモードを明示的に選ぶか、確認済みの単一モデルを選んでください。',
+  'settings.panels.providers.singleModelMigration': '保存されたマルチエージェントの既定値を、最近確認された単一モデルに置き換えました。ベータ版を有効にして選択しない限り、再実行されません。'
 } satisfies Record<DesktopTranslationKey, string>;

@@ -268,6 +268,8 @@ def test_provider_evidence_uses_actual_fallback_provider_and_requires_success():
         "provider_id": "fallback-provider",
         "model_id": "fallback-model",
         "successful_chat": True,
+        "runtime_generation": __import__("web.api.runtime_identity", fromlist=["RUNTIME_GENERATION"]).RUNTIME_GENERATION,
+        "provider_config_generation": __import__("web.api.runtime_identity", fromlist=["provider_config_generation"]).provider_config_generation("fallback-provider"),
     }
     assert _provider_evidence_from_result({**result, "error": "upstream error"})["successful_chat"] is False
     assert _provider_evidence_from_result({**result, "interrupted": True})["successful_chat"] is False

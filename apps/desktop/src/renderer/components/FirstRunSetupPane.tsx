@@ -51,6 +51,9 @@ import { useDesktopI18n } from '../i18n.js';
 import { localizedProviderRecommendation } from '../i18n/provider-recommendations.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
+import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQualified } from '../provider-chat-evidence.js';
+import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
+import { ProviderBetaCatalogToggle } from './ProviderBetaCatalogToggle.js';
 import { LocalAiSetupPane } from './LocalAiSetupPane.js';
 import {
   OnboardingStatus,
@@ -130,20 +133,27 @@ export function FirstRunSetupPane({
   onDismiss
 }: FirstRunSetupPaneProps): React.JSX.Element {
   const { locale, t } = useDesktopI18n();
+  const showUntestedBetas = useShowUntestedProviderBetas();
   const [flowError, setFlowError] = useState('');
   const providers = cloudProviderOptions(onboardingStatus);
   const [liveProviderModels, setLiveProviderModels] = useState<Record<string, Array<{ id: string; label: string }>>>({});
   const [modelProbeLoading, setModelProbeLoading] = useState(false);
   const [modelProbeError, setModelProbeError] = useState('');
-  // Default to a provider whose setup flow is supported in Lastbrowser.
-  const defaultProviderId = providers.some((p) => p.id === 'openai-codex')
+  // A provider is a default only after an exact successful chat in this profile
+  // and the current app session. Otherwise the empty choice is intentional.
+  const evidenceStorage = typeof window === 'undefined' ? undefined : window.localStorage;
+  const qualifiedProviders = providers.filter(item => Boolean(browserProfileId && evidenceStorage
+    && getProviderChatEvidence(item.id, browserProfileId, backendProfileName || 'default', evidenceStorage)));
+  const defaultProviderId = qualifiedProviders.some((p) => p.id === 'openai-codex')
     ? 'openai-codex'
-    : (providers[0]?.id || 'openrouter');
+    : (qualifiedProviders[0]?.id || '');
 
   const [provider, setProvider] = useState<string>(defaultProviderId);
   const providerModelOptions = useMemo(() => {
-    return liveProviderModels[provider] ?? [];
-  }, [liveProviderModels, provider]);
+    const catalog = liveProviderModels[provider] ?? [];
+    return showUntestedBetas || !browserProfileId ? catalog
+      : catalog.filter(item => isProviderModelQualified(provider, item.id, browserProfileId, backendProfileName || 'default', window.localStorage));
+  }, [liveProviderModels, provider, showUntestedBetas, browserProfileId]);
   const models = providerModelOptions;
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -170,6 +180,7 @@ export function FirstRunSetupPane({
   const readiness = firstRunStatus(status, onboardingStatus);
   const canSubmit = canSubmitCloudSetup(readiness);
   const activeProviderOption = providers.find((item) => item.id === provider);
+  const visibleProviders = showUntestedBetas ? providers : qualifiedProviders;
 
   const oauthProviderId = activeProviderOption?.oauthProvider || '';
   const oauthAlreadyReady = Boolean(oauthProviderId)
@@ -352,6 +363,7 @@ export function FirstRunSetupPane({
       });
       return;
     }
+    clearProviderChatEvidence(provider, window.localStorage);
     const providerLabel = activeProviderOption?.label || 'Provider';
     setOAuthState({ status: 'starting', message: t('firstRun.startingLogin', { provider: providerLabel }) });
     try {
@@ -833,15 +845,19 @@ export function FirstRunSetupPane({
                 <span>{t('firstRun.tabCustomKey')}</span>
               </button>
             </div>
+            <ProviderBetaCatalogToggle />
           </div>
           {activeTab === 'featured' ? (
             /* ── FEATURED RECOMMENDATIONS (3 big rich cards) ── */
             <div className="featured-cards-grid">
-              {featuredIds.map((featuredId) => {
+              {!visibleProviders.some(item => featuredIds.includes(item.id as typeof featuredIds[number]))
+                && !showUntestedBetas && <p role="status">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
+              {featuredIds.filter(id => visibleProviders.some(item => item.id === id)).map((featuredId) => {
                 const rec = PROVIDER_RECOMMENDATIONS[featuredId];
                 if (!rec) return null;
                 const copy = localizedProviderRecommendation(featuredId, locale);
-                const verification = providerVerification(featuredId);
+                const chatEvidence = browserProfileId ? getProviderChatEvidence(featuredId, browserProfileId, backendProfileName || 'default', window.localStorage) : undefined;
+                const verification = providerVerification(featuredId, { successfulChat: Boolean(chatEvidence), modelId: chatEvidence?.modelId });
                 const isSelected = provider === featuredId;
                 const opt = providers.find((p) => p.id === featuredId);
 
@@ -900,7 +916,9 @@ export function FirstRunSetupPane({
               </div>
 
               <div className="provider-chips-grid">
-                {providers
+              {!visibleProviders.some(p => p.id !== 'google-gemini-cli' && p.id !== 'openai-codex') && !showUntestedBetas
+                && <p role="status">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
+              {visibleProviders
                   .filter((p) => p.id !== 'google-gemini-cli' && p.id !== 'openai-codex')
                   .map((p) => {
                     const meta = providerPresentation(p.id);
@@ -925,7 +943,8 @@ export function FirstRunSetupPane({
           )}
 
           {/* ── INTERACTION & CONFIGURATION BOX FOR SELECTED ENGINE ── */}
-          <div className="active-engine-box">
+          {!provider && <p role="status">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
+          {provider && <div className="active-engine-box">
             <div className="engine-box-header">
               <div className="engine-box-title">
                 <span className="engine-icon" style={{ background: providerPresentation(provider).color }}>
@@ -1142,6 +1161,7 @@ export function FirstRunSetupPane({
                 {models.map((m) => {
                   const note = modelNote(m.id);
                   const isModelActive = m.id === model;
+                  const isQualified = Boolean(browserProfileId && isProviderModelQualified(provider, m.id, browserProfileId, backendProfileName || 'default', window.localStorage));
                   return (
                     <button
                       key={m.id}
@@ -1149,14 +1169,14 @@ export function FirstRunSetupPane({
                       className={`model-pill ${isModelActive ? 'active' : ''}`}
                       onClick={() => setModel(m.id)}
                     >
-                      <strong>{m.label}</strong>
+                      <strong>{m.label}{isQualified ? '' : ` · ${t('settings.panels.providers.betaUntested')}`}</strong>
                       {note && <span className={`pill-tier ${note.tier}`}>{tierLabels[note.tier]}</span>}
                     </button>
                   );
                 })}
               </div>}
             </div>
-          </div>
+          </div>}
 
           </>}
 

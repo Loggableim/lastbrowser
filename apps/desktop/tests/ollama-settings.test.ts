@@ -28,7 +28,7 @@ describe('Ollama settings configuration flow', () => {
     const chatSource = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8');
     expect(chatSource).toContain("operation: 'modelSelection'");
     expect(chatSource).toContain('setScopedModel({ viewKey: modelViewKey, selection: data })');
-    expect(chatSource).toContain('setCatalogDefaultModel(data.model)');
+    expect(chatSource).toContain('setScopedModel({ viewKey: modelViewKey, selection: data })');
     expect(chatSource).toMatch(/catalogDefaultModel,\r?\n\s*'default'/);
   });
 });

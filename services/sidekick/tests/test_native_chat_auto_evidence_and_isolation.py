@@ -31,10 +31,17 @@ from web.api.config import (
     set_session_dir,
 )
 from web.api.models import Session
+from web.api.runtime_identity import RUNTIME_GENERATION, provider_config_generation
 from web.api.streaming import (
     _provider_evidence_from_result,
     cancel_stream,
 )
+
+
+def _expected_provider_evidence(provider: str, model: str) -> dict:
+    return {"provider_id": provider, "model_id": model, "successful_chat": True,
+        "runtime_generation": RUNTIME_GENERATION,
+        "provider_config_generation": provider_config_generation(provider)}
 
 
 def simulate_read_observed_decision_from_session(session_dict: dict, expected_session_id: str):
@@ -106,6 +113,8 @@ def test_provider_evidence_calculation_and_gateway_routing():
         "provider_id": "openai",
         "model_id": "gpt-4o",
         "successful_chat": True,
+        "runtime_generation": __import__("web.api.runtime_identity", fromlist=["RUNTIME_GENERATION"]).RUNTIME_GENERATION,
+        "provider_config_generation": __import__("web.api.runtime_identity", fromlist=["provider_config_generation"]).provider_config_generation("openai"),
     }
 
     # Gateway routing fallback when model is 'auto'
@@ -121,6 +130,8 @@ def test_provider_evidence_calculation_and_gateway_routing():
         "provider_id": "anthropic",
         "model_id": "claude-3-5-sonnet",
         "successful_chat": True,
+        "runtime_generation": __import__("web.api.runtime_identity", fromlist=["RUNTIME_GENERATION"]).RUNTIME_GENERATION,
+        "provider_config_generation": __import__("web.api.runtime_identity", fromlist=["provider_config_generation"]).provider_config_generation("anthropic"),
     }
 
     # Unsuccessful chats do not get marked successful
@@ -230,11 +241,7 @@ def test_successful_turn_persists_evidence_and_rehydrates_consistently(tmp_path,
         done_payload = done_events[0]
         assert "provider_evidence" in done_payload
         sse_evidence = done_payload["provider_evidence"]
-        assert sse_evidence == {
-            "provider_id": "openai",
-            "model_id": "gpt-4o",
-            "successful_chat": True,
-        }
+        assert sse_evidence == _expected_provider_evidence("openai", "gpt-4o")
 
         # 2. Verify Session persisted on disk
         raw_disk = json.loads(session_file.read_text(encoding="utf-8"))
@@ -378,19 +385,11 @@ def test_two_different_models_in_successive_turns(tmp_path, monkeypatch):
 
     # First assistant message retains Turn 1 evidence completely untouched:
     assert assistants[0]["turn_id"] == stream_1
-    assert assistants[0]["provider_evidence"] == {
-        "provider_id": "openai",
-        "model_id": "gpt-4o",
-        "successful_chat": True,
-    }
+    assert assistants[0]["provider_evidence"] == _expected_provider_evidence("openai", "gpt-4o")
 
     # Second assistant message has Turn 2 evidence:
     assert assistants[1]["turn_id"] == stream_2
-    assert assistants[1]["provider_evidence"] == {
-        "provider_id": "anthropic",
-        "model_id": "claude-3-5-sonnet",
-        "successful_chat": True,
-    }
+    assert assistants[1]["provider_evidence"] == _expected_provider_evidence("anthropic", "claude-3-5-sonnet")
 
 
 def test_aborted_or_failed_turn_does_not_persist_false_success_evidence(tmp_path, monkeypatch):

@@ -405,6 +405,8 @@ export function BionicText({ text, enabled = true, as = 'p' }: { text: string; e
 export type ChatComposerProps = {
   automaticPolicy?:Readonly<{active:boolean;available:boolean}>;
   sendBlocked?:boolean;
+  betaSelectionBlocked?:boolean;
+  multiAgentBetaBlocked?:boolean;
   commandContext?: CommandContext;
   commandCapabilities?: CommandCapabilities;
   onCommandAction?: (action:CommandAction)=>boolean|void;
@@ -444,7 +446,7 @@ function workspaceLabel(path?: string | null): string {
 }
 
 export function ChatComposer({
-  automaticPolicy,sendBlocked=false,
+  automaticPolicy,sendBlocked=false,betaSelectionBlocked=false,multiAgentBetaBlocked=false,
   commandContext,
   commandCapabilities=unavailableCommands,
   onCommandAction,
@@ -582,7 +584,9 @@ export function ChatComposer({
               >
                 {automaticPolicy&&<option value="__lastbrowser_auto_policy__">AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
                 {!automaticPolicy?.active&&!modelOptions.some(group=>!group.providerId&&group.models.some(entry=>entry.id===model))&&
-                  <option value={qualifyModelForProvider(model, modelProvider)}>{model || 'default'} · {modelProvider || 'current'}</option>}
+                  <option value={qualifyModelForProvider(model, modelProvider)} disabled={betaSelectionBlocked}>
+                    {model || 'default'} · {modelProvider || 'current'}{betaSelectionBlocked ? ` · ${t('settings.panels.providers.betaSavedChoice')}` : ''}
+                  </option>}
                 {modelOptions.filter(group=>!group.providerId).map((group) => (
                   <optgroup key={group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
                     {group.models.map((m) => (
@@ -618,6 +622,8 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
+      {betaSelectionBlocked&&<div className="composer-model-notice" role="status">{multiAgentBetaBlocked
+        ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</div>}
       {showManualModels&&<section id="composer-manual-models" className="composer-manual-models" role="region" aria-label={t('chat.chooseModelManually')}
         onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}}>
         <label>{t('chat.modelSearch')}<input ref={manualModelSearchInput} type="search" value={manualModelSearch} onChange={event=>setManualModelSearch(event.target.value)}/></label>

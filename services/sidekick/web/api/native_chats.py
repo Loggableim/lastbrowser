@@ -256,6 +256,7 @@ def run_native_local_short_chat(context,args,kwargs,*,host,decision):
         with _lock:
             if entry.cancelled.is_set():raise RuntimeError("local_short_chat_cancelled")
             entry.completion_committed=True
+        from web.api.runtime_identity import RUNTIME_GENERATION, provider_config_generation
         metadata={"mode":"auto","route":"local_chat","taskClass":"simple",
             "reasonCode":"auto_simple_task_local_capability_verified",
             "decisionId":decision["decisionId"],"profileRevision":result["profileRevision"],
@@ -263,7 +264,8 @@ def run_native_local_short_chat(context,args,kwargs,*,host,decision):
             "adapterRef":result["adapterRef"],"qualityEvidenceRef":result["qualityEvidenceRef"],
             "memoryEvidenceRef":result["memoryEvidenceRef"],"limits":result["limits"],
             "provider_evidence":{"provider_id":"local-ai","model_id":result["artifactId"],
-                "successful_chat":True}}
+                "successful_chat":True,"runtime_generation":RUNTIME_GENERATION,
+                "provider_config_generation":provider_config_generation("local-ai")}}
         _cleanup_saved_pending(context,completed_text=result["text"],completed_metadata=metadata)
         put("token",{"text":result["text"]})
         put("metering",{"provider":"local-ai","model":result["artifactId"],

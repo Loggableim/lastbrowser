@@ -226,7 +226,9 @@ def test_real_350m_product_host_native_auto_stream(monkeypatch, tmp_path):
         assert len(server.requests) == 0, "local simple AUTO turn unexpectedly reached remote provider"
         token = next(data for event, data in recorded if event == "token")
         done = next(data for event, data in recorded if event == "done")
-        expected_evidence = {"provider_id": "local-ai", "model_id": artifact.artifact_id, "successful_chat": True}
+        from web.api.runtime_identity import RUNTIME_GENERATION, provider_config_generation
+        expected_evidence = {"provider_id": "local-ai", "model_id": artifact.artifact_id, "successful_chat": True,
+            "runtime_generation": RUNTIME_GENERATION, "provider_config_generation": provider_config_generation("local-ai")}
         assert "4" in token["text"], token
         assert done["provider_evidence"] == expected_evidence
         assert done["stream_id"] == done["turn_id"] == stream_id

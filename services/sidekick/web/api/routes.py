@@ -7386,6 +7386,8 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
                 return bad(handler, "Failed to save provider model selection.", 500)
         from runtime.smart_track_orchestrator import schedule_model_wall_scan
         schedule_model_wall_scan()
+        from web.api.runtime_identity import rotate_provider_config_generation
+        rotate_provider_config_generation(provider_id)
         return j(handler, result)
 
     if parsed.path == "/api/providers/delete":
@@ -7395,6 +7397,8 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
         result = remove_provider_key(provider_id)
         if not result.get("ok"):
             return bad(handler, result.get("error", "Unknown error"))
+        from web.api.runtime_identity import rotate_provider_config_generation
+        rotate_provider_config_generation(provider_id)
         from runtime.smart_track_orchestrator import schedule_model_wall_scan
         schedule_model_wall_scan()
         return j(handler, result)

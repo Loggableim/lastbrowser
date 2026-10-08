@@ -17,28 +17,26 @@ const ONBOARDING_PROVIDER_IDS = [
 
 describe('provider verification claims', () => {
   it('does not infer live verification from provider identity alone', () => {
-    for (const providerId of ONBOARDING_PROVIDER_IDS.filter((id) => !['ollama-cloud', 'openai-codex'].includes(id))) {
+    for (const providerId of ONBOARDING_PROVIDER_IDS) {
       const result = providerVerification(providerId);
       expect(result.verified, providerId).toBe(false);
       expect(result.statusKey, providerId).toBe('settings.panels.providers.betaUntested');
     }
   });
 
-  it('keeps dated Ollama adapter proof separate from current-account chat verification', () => {
+  it('does not treat dated adapter proof or a catalog result as current qualification', () => {
     const catalogOnly = providerVerification('ollama-cloud', { catalogVerified: true });
-    expect(catalogOnly.verified).toBe(true);
-    expect(catalogOnly.statusKey).toBe('settings.panels.providers.ollamaCloudSourceTested');
-    expect(catalogOnly.evidenceKey).toBe('settings.panels.providers.ollamaCloudSourceEvidence');
+    expect(catalogOnly.verified).toBe(false);
+    expect(catalogOnly.statusKey).toBe('settings.panels.providers.betaUntested');
 
     const noEvidence = providerVerification('ollama-cloud');
-    expect(noEvidence.verified).toBe(true);
-    expect(noEvidence.statusKey).toBe('settings.panels.providers.ollamaCloudSourceTested');
-    expect(noEvidence.evidenceKey).toBe('settings.panels.providers.ollamaCloudSourceEvidence');
+    expect(noEvidence.verified).toBe(false);
+    expect(noEvidence.statusKey).toBe('settings.panels.providers.betaUntested');
   });
 
   it('accepts successful Lastbrowser chat evidence, including direct Ollama', () => {
     for (const providerId of ['ollama', 'ollama-cloud', 'openrouter']) {
-      const result = providerVerification(providerId, { successfulChat: true });
+      const result = providerVerification(providerId, { successfulChat: true, modelId: 'tested-model' });
       expect(result.verified, providerId).toBe(true);
       expect(result.statusKey, providerId).toBe('settings.panels.providers.lastSuccessfulChat');
     }
@@ -52,12 +50,12 @@ describe('provider verification claims', () => {
     }
   });
 
-  it('labels the real Codex backend probe separately from in-app chat evidence', () => {
+  it('does not treat a historical Codex backend probe as current in-app chat evidence', () => {
     const backend = providerVerification('openai-codex');
-    expect(backend.statusKey).toBe('settings.panels.providers.codexSourceTested');
-    expect(backend.evidenceKey).toBe('settings.panels.providers.codexSourceEvidence');
-    expect(backend.verified).toBe(true);
-    expect(providerVerification('openai-codex', { successfulChat: true }).statusKey)
+    expect(backend.statusKey).toBe('settings.panels.providers.betaUntested');
+    expect(backend.verified).toBe(false);
+    expect(providerVerification('openai-codex', { successfulChat: true }).verified).toBe(false);
+    expect(providerVerification('openai-codex', { successfulChat: true, modelId: 'gpt-6-luna' }).statusKey)
       .toBe('settings.panels.providers.lastSuccessfulChat');
   });
 
@@ -82,8 +80,8 @@ describe('provider verification claims', () => {
   });
 
   it('normalizes provider ID casing and keeps unknown providers untested', () => {
-    expect(providerVerification(' OLLAMA-CLOUD ').statusKey).toBe('settings.panels.providers.ollamaCloudSourceTested');
-    expect(providerVerification(' OLLAMA ', { successfulChat: true }).verified).toBe(true);
+    expect(providerVerification(' OLLAMA-CLOUD ').statusKey).toBe('settings.panels.providers.betaUntested');
+    expect(providerVerification(' OLLAMA ', { successfulChat: true, modelId: 'tested-model' }).verified).toBe(true);
     expect(providerVerification('new-provider').verified).toBe(false);
     expect(providerVerification('new-provider').statusKey).toBe('settings.panels.providers.betaUntested');
   });

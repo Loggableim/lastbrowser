@@ -40,6 +40,7 @@ from web.api.metering import meter
 from web.api.nova_paths import get_nova_session_start_path
 from web.api.turn_journal import append_turn_journal_event_for_stream
 from shared.sessions import is_default_session_title
+from web.api.runtime_identity import RUNTIME_GENERATION, provider_config_generation
 
 # Global lock for os.environ writes. Per-session locks (_agent_lock) prevent
 # concurrent runs of the SAME session, but two DIFFERENT sessions can still
@@ -99,6 +100,8 @@ def _provider_evidence_from_result(result, gateway_routing=None):
         "provider_id": provider_id,
         "model_id": model_id,
         "successful_chat": successful,
+        "runtime_generation": RUNTIME_GENERATION,
+        "provider_config_generation": provider_config_generation(provider_id),
     }
 
 

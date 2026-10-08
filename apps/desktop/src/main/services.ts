@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
@@ -29,6 +29,7 @@ export type ServiceStatus = {
   /** Where the running Sidekick code came from. */
   source: 'bundled' | 'runtime';
   version: string | null;
+  runtimeGeneration: string | null;
 };
 
 export type PortResolver = (preferredPort: number) => Promise<number>;
@@ -403,7 +404,8 @@ export class SidecarServices {
       lastError: null,
       runtimeDir: this.layout.runtimeDir,
       source: this.layout.sidekickDir.includes(`${path.sep}runtime${path.sep}`) ? 'runtime' : 'bundled',
-      version: readSidekickVersion(this.layout.sidekickDir)
+      version: readSidekickVersion(this.layout.sidekickDir),
+      runtimeGeneration: null
     };
   }
 
@@ -618,6 +620,7 @@ export class SidecarServices {
         ...this.status,
         sidekick: 'error',
         webuiHealth: 'unreachable',
+        runtimeGeneration: null,
         lastError: error instanceof Error ? error.message : String(error)
       };
       return this.getStatus();
@@ -625,7 +628,8 @@ export class SidecarServices {
 
     const webuiUrl = `http://127.0.0.1:${webuiPort}`;
     const env = buildSidecarEnvironment(this.layout, webuiPort);
-    this.status = { ...this.status, webuiUrl, port: webuiPort, webuiHealth: 'checking', lastError: null };
+    this.status = { ...this.status, webuiUrl, port: webuiPort, webuiHealth: 'checking', lastError: null, runtimeGeneration: randomUUID() };
+    env.LASTBROWSER_RUNTIME_GENERATION = this.status.runtimeGeneration || '';
 
     try {
       const launch = buildSidecarLaunch(this.layout, webuiPort);
@@ -669,6 +673,7 @@ export class SidecarServices {
         ...this.status,
         sidekick: 'error',
         webuiHealth: 'unreachable',
+        runtimeGeneration: null,
         lastError: error.message
       };
       this.webuiProcess = null;
@@ -681,6 +686,7 @@ export class SidecarServices {
         ...this.status,
         sidekick: 'stopped',
         webuiHealth: 'unreachable',
+        runtimeGeneration: null,
         lastError: `Sidekick service stopped (code=${code}, signal=${signal}).`
       };
       // Auto-restart if the process crashed (not a clean stop)
@@ -745,14 +751,14 @@ export class SidecarServices {
       };
     }
     if (!this.webuiProcess) {
-      this.status = { ...this.status, sidekick: 'stopped' };
+      this.status = { ...this.status, sidekick: 'stopped', runtimeGeneration: null };
       return;
     }
     try {
       this.webuiProcess.kill();
     } catch {}
     this.webuiProcess = null;
-    this.status = { ...this.status, sidekick: 'stopped' };
+    this.status = { ...this.status, sidekick: 'stopped', runtimeGeneration: null };
   }
 }
 

@@ -5,6 +5,7 @@ import { canSelectNativeModel, isModelCatalogResponseCurrent, manualModelPickerO
 import { quickChatModelGateReason } from '../src/renderer/quick-chat-model-gate.js';
 import {
   isProviderModelSelected,
+  isMultiAgentModelSelection,
   parseProviderModelId,
   qualifyModelForProvider,
   resolveCatalogModelSelection,
@@ -14,6 +15,12 @@ import {
 } from '../src/renderer/provider-model-selection.js';
 
 describe('provider-aware model selection', () => {
+  it('classifies saved Teamwork and orchestration defaults for the Beta gate', () => {
+    expect(isMultiAgentModelSelection({ model: 'teamwork', provider: 'orchestrator' })).toBe(true);
+    expect(isMultiAgentModelSelection({ model: 'smart-track-medium', provider: 'orchestrator' })).toBe(true);
+    expect(isMultiAgentModelSelection({ model: 'comode', provider: 'orchestrator' })).toBe(true);
+    expect(isMultiAgentModelSelection({ model: 'gpt-6-luna', provider: 'openai-codex' })).toBe(false);
+  });
   it('keeps the real Gemini provider group visible in both available and unavailable scopes and drops stale A results in B', () => {
     const catalogFor = (scope: string, available: boolean) => ({
       schemaVersion: 1 as const,
@@ -363,7 +370,7 @@ describe('provider-aware model selection', () => {
     expect(chat).toContain("operation: 'modelSelection'");
     expect(chat).not.toContain('sidekick.setDefaultModel');
     expect(chat).toContain('modelProvider={modelProvider}');
-    expect(app).toContain('const chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
+    expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
     expect(app).toContain("includeCatalog: false");
     expect(app).toContain('const copilotModelSelection = resolvePreferredChatModelSelection({');
     expect(copilot).toContain('const activeModelId = modelName || selectedModel;');

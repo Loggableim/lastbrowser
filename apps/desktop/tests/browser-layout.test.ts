@@ -23,7 +23,7 @@ describe('browser shell layout', () => {
     expect(composer).toContain('onChange={(event) => onModelChange(event.target.value)}');
     expect(chatMain).toContain('saveSpaceModel(activeSpacePath, nextModel, window.localStorage, provider)');
     expect(chatMain).toContain('setSelectedModelProvider(provider)');
-    expect(app).toContain('const chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
+    expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
     expect(chatMain).toContain("operation: 'modelSelection'");
     expect(app).toContain('model: configuredChatModel');
     expect(app).toContain('modelProvider: chatModelProvider');

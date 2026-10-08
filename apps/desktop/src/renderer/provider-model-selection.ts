@@ -1,6 +1,14 @@
 export interface ProviderModelSelection {
   model: string;
   provider?: string;
+  migratedFromMultiAgent?: boolean;
+}
+
+export function isMultiAgentModelSelection(selection: ProviderModelSelection | null | undefined): boolean {
+  const model = typeof selection?.model === 'string' ? selection.model.trim().toLowerCase() : '';
+  const provider = typeof selection?.provider === 'string' ? selection.provider.trim().toLowerCase() : '';
+  return provider === 'orchestrator' || model === 'teamwork' || model.startsWith('smart-track-')
+    || model === 'comode' || model.startsWith('co-mode-');
 }
 
 export interface PreferredChatModelSelectionInput {
@@ -10,10 +18,12 @@ export interface PreferredChatModelSelectionInput {
   setupModel?: unknown;
   setupProvider?: unknown;
   configuredSelection?: ProviderModelSelection | null;
+  allowMultiAgent?: boolean;
 }
 
 /** Resolve one model/provider pair for every chat surface and its backend request. */
 export function resolvePreferredChatModelSelection(input: PreferredChatModelSelectionInput): ProviderModelSelection {
+  let skippedMultiAgent = false;
   const candidates = [
     input.spaceSelection,
     { model: input.selectedModel, provider: input.selectedModelProvider },
@@ -24,9 +34,14 @@ export function resolvePreferredChatModelSelection(input: PreferredChatModelSele
     const rawModel = typeof candidate?.model === 'string' ? candidate.model.trim() : '';
     if (!rawModel) continue;
     const rawProvider = typeof candidate?.provider === 'string' ? candidate.provider.trim() : '';
-    return parseProviderModelId(rawModel, rawProvider);
+    const parsed = parseProviderModelId(rawModel, rawProvider);
+    if (isMultiAgentModelSelection(parsed) && input.allowMultiAgent !== true) {
+      skippedMultiAgent = true;
+      continue;
+    }
+    return { ...parsed, ...(skippedMultiAgent ? { migratedFromMultiAgent: true } : {}) };
   }
-  return { model: '' };
+  return { model: '', ...(skippedMultiAgent ? { migratedFromMultiAgent: true } : {}) };
 }
 
 /** Resolve an API default to the raw id used by the chat model picker. */

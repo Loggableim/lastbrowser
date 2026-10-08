@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Globe2,
   Search,
@@ -115,6 +115,8 @@ export interface NativeBrowserStartPageProps {
   activeSpaceTabs?: BrowserTab[];
   onSelectSpace?: (spacePath: string) => void;
   onAddSpace?: (path: string, name: string) => void;
+  focusSearchOnMount?: boolean;
+  onSearchFocusConsumed?: () => void;
 }
 
 export function getStartPageSpaceTabCount(
@@ -147,7 +149,9 @@ export function NativeBrowserStartPage({
   activeProfileId = 'default',
   activeSpaceTabs = [],
   onSelectSpace,
-  onAddSpace
+  onAddSpace,
+  focusSearchOnMount = false,
+  onSearchFocusConsumed
 }: NativeBrowserStartPageProps): JSX.Element {
   const { locale, t } = useDesktopI18n();
   const spaceCopy = browserStartSpaceCopy[locale];
@@ -156,6 +160,7 @@ export function NativeBrowserStartPage({
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const displayedSpaces = useMemo(() => {
     if (spaces && spaces.length > 0) {
@@ -190,6 +195,15 @@ export function NativeBrowserStartPage({
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!focusSearchOnMount) return;
+    const frame = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      onSearchFocusConsumed?.();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusSearchOnMount, onSearchFocusConsumed]);
 
   const effectiveBotName = botName.trim() || 'Nova';
   const greeting = useMemo(() => getDashboardGreeting(currentTime), [currentTime]);
@@ -275,6 +289,7 @@ export function NativeBrowserStartPage({
       <form className="browser-start-search startpage-search-bar" onSubmit={submit}>
         <Search size={18} />
         <input
+          ref={searchInputRef}
           value={query}
           placeholder={t('browser.startPage.searchPlaceholder', { botName: effectiveBotName })}
           onChange={(event) => setQuery(event.target.value)}

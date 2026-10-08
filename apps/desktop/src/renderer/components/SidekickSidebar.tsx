@@ -454,6 +454,17 @@ export function SidekickSidebar({
           {/* Drawer Body depending on active drawer tab */}
           {currentDrawerTab === 'tabs' && (
             <>
+              <button
+                type="button"
+                className="vertical-new-tab-btn vertical-new-tab-btn-prominent"
+                onClick={() => onNewTab()}
+                title={`${t('sidebar.tabs.new')} (Ctrl+T)`}
+                aria-label={`${t('sidebar.tabs.new')} (Ctrl+T)`}
+              >
+                <Plus size={15} />
+                <span>{t('sidebar.tabs.new')}</span>
+                <kbd className="shortcut-hint">Ctrl+T</kbd>
+              </button>
               {/* Zen Pinned Apps Raster */}
               <div className="expanded-pinned-raster">
                 <PinnedAppGrid
@@ -659,16 +670,6 @@ export function SidekickSidebar({
 
                 {/* Tabs Action Buttons */}
                 <div className="tabs-tier-actions-row">
-                  <button
-                    type="button"
-                    className="vertical-new-tab-btn"
-                    onClick={() => onNewTab()}
-                    title={`${t('sidebar.tabs.new')} (Ctrl+T)`}
-                  >
-                    <Plus size={14} />
-                    <span>{t('sidebar.tabs.new')}</span>
-                    <kbd className="shortcut-hint">Ctrl+T</kbd>
-                  </button>
                   {onOpenDownloads && (
                     <button
                       type="button"

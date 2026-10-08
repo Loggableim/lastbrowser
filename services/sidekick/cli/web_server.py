@@ -4535,6 +4535,8 @@ async def disconnect_oauth_provider(provider_id: str, request: Request):
     try:
         from cli.auth import clear_provider_auth
         cleared = clear_provider_auth(provider_id)
+        from web.api.runtime_identity import rotate_provider_config_generation
+        rotate_provider_config_generation(provider_id)
         _log.info("oauth/disconnect: %s (cleared=%s)", provider_id, cleared)
         return {"ok": bool(cleared), "provider": provider_id}
     except Exception as e:
@@ -5161,10 +5163,16 @@ async def poll_oauth_session(provider_id: str, session_id: str):
     """Poll a device-code session's status (no auth Ã¢â‚¬â€ read-only state)."""
     with _oauth_sessions_lock:
         sess = _oauth_sessions.get(session_id)
+        rotate_config = bool(sess and sess.get("status") == "approved" and not sess.get("config_generation_rotated"))
+        if rotate_config:
+            sess["config_generation_rotated"] = True
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found or expired")
     if sess["provider"] != provider_id:
         raise HTTPException(status_code=400, detail="Provider mismatch for session")
+    if rotate_config:
+        from web.api.runtime_identity import rotate_provider_config_generation
+        rotate_provider_config_generation(provider_id)
     return {
         "session_id": session_id,
         "status": sess["status"],

@@ -44,7 +44,9 @@ import { providerPresentation } from '../provider-presentation.js';
 import { isProviderSettingsScopeCurrent, isXiaomiProviderSaveAck, readXiaomiProviderStatus, requestProviderModelCatalog, requestProviderSettingsInScope, safeXiaomiErrorCode, saveAndLoadXiaomiModels, testXiaomiConnection, validateXiaomiBaseUrl, type ProviderSettingsRequest } from '../provider-settings.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
-import { getProviderChatEvidence } from '../provider-chat-evidence.js';
+import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQualified } from '../provider-chat-evidence.js';
+import { ProviderBetaCatalogToggle } from '../components/ProviderBetaCatalogToggle.js';
+import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { clearBrowserDataWithFeedback } from '../utils/clear-browser-data.js';
 import { copyDoctorOutput, runDoctorExclusively } from '../utils/doctor-dashboard.js';
 import { searchEngines } from '../tabs.js';
@@ -2220,6 +2222,8 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
   sessionId: string | null; workspacePath: string; browserProfileId: string; backendProfileName: string | null;
   ready: boolean; locale: import('../i18n/keys.js').DesktopLocaleId;
 }): JSX.Element {
+  const { t } = useDesktopI18n();
+  const showUntestedBetas = useShowUntestedProviderBetas();
   const client = useMemo(() => new IndependentAssistantClient(window.lastbrowser.independent), []);
   const identity = JSON.stringify([sessionId, workspacePath, browserProfileId, backendProfileName]);
   const identityRef = useRef(identity); identityRef.current = identity;
@@ -2229,6 +2233,7 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
   const [refresh, setRefresh] = useState(0), [loadingKey, setLoadingKey] = useState<string | null>(null), [pendingKey, setPendingKey] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<{ identity: string; policy: ModelPolicyResponse; candidates: ModelPolicyCandidate[]; observedDecision: ReturnType<typeof readObservedDecisionFromSession> } | null>(null);
   const [errorState, setErrorState] = useState<{ identity: string; message: string } | null>(null);
+  const [autoQualificationError, setAutoQualificationError] = useState(false);
   const current = loaded?.identity === identity ? loaded : null;
   const policy = current?.policy ?? null, candidates = current?.candidates ?? [], observedDecision = current?.observedDecision ?? null;
   const error = errorState?.identity === identity ? errorState.message : '';
@@ -2263,8 +2268,10 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
         const session = sessionResult.session;
         if (!session || session.session_id !== sessionId || session.profile && session.profile !== backendProfileName) throw Error('model_policy_scope_unavailable');
         const nextCandidates = mapScopedModelPickerOptions(selectionResponse.value).flatMap(group => group.providerId
-          ? group.models.map(entry => ({ pair: { provider: group.providerId, model: entry.id }, label: entry.label, providerLabel: group.provider,
-              available: group.configured && entry.supportsIndependent })) : []);
+          ? group.models.filter(entry => showUntestedBetas || isProviderModelQualified(group.providerId, entry.id, browserProfileId, backendProfileName, window.localStorage))
+            .map(entry => ({ pair: { provider: group.providerId, model: entry.id },
+              label: `${entry.label}${isProviderModelQualified(group.providerId, entry.id, browserProfileId, backendProfileName, window.localStorage) ? '' : ` · ${t('settings.panels.providers.betaUntested')}`}`,
+              providerLabel: group.provider, available: group.configured && entry.supportsIndependent })) : []);
         if (!active || requestEpochRef.current !== requestEpoch || scopeEpochRef.current.epoch !== scopeEpoch || identityRef.current !== identity) return;
         setLoaded({ identity, policy: policyResponse, candidates: nextCandidates, observedDecision: readObservedDecisionFromSession(session, sessionId) }); setErrorState(null);
       } catch (cause) {
@@ -2276,11 +2283,17 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
       }
     })();
     return () => { active = false; };
-  }, [identity, ready, refresh, client, sessionId, workspacePath, browserProfileId, backendProfileName]);
+  }, [identity, ready, refresh, client, sessionId, workspacePath, browserProfileId, backendProfileName, showUntestedBetas, t]);
 
   async function save(draft: ModelPolicyDraft): Promise<void> {
     const epoch = scopeEpochRef.current.epoch, capturedIdentity = identityRef.current, capturedPolicy = policy, lockKey = `${epoch}:${capturedIdentity}`;
     if (identityRef.current !== identity || scopeEpochRef.current.epoch !== epoch || !capturedPolicy || !sessionId || !backendProfileName || !ready || saveLocks.current.has(lockKey)) return;
+    if (draft.mode === 'auto' && !showUntestedBetas
+      && draft.allowedModels.some(pair => !isProviderModelQualified(pair.provider, pair.model, browserProfileId, backendProfileName, window.localStorage))) {
+      setAutoQualificationError(true);
+      return;
+    }
+    setAutoQualificationError(false);
     saveLocks.current.add(lockKey); setPendingKey(lockKey); setErrorState(null);
     try {
       const response = await requestModelPolicy(request => window.lastbrowser.sidekick.modelPolicy(request), {
@@ -2301,6 +2314,7 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
     {!sessionId && <p role="status">{statusCopy.sessionRequired}</p>}
     {sessionId && loading && <p role="status">{statusCopy.loading}</p>}
     {sessionId && error && <p role="alert">{modelPolicyReason(locale, error)}</p>}
+    {autoQualificationError && <p role="alert">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
     {sessionId && policy && <ModelPolicyControls value={policy} candidates={candidates} pending={pending || loading}
       error={error} open onOpen={() => {}} locale={locale} onSave={draft => { void save(draft); }} onRefresh={() => setRefresh(value => value + 1)}
       observedDecision={observedDecision} />}
@@ -2309,6 +2323,7 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
 
 export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
+  const showUntestedBetas = useShowUntestedProviderBetas();
   const ready = isReady(serviceStatus);
   const activeProviderScope = { browserProfileId: activeProfileId, workspacePath: activeSpacePath || null,
     ...(activeBackendProfileName ? { backendProfileName: activeBackendProfileName } : {}) };
@@ -2517,9 +2532,21 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const authEnabled = settingsBoolean(authState.data?.auth_enabled, false);
   const loggedIn = settingsBoolean(authState.data?.logged_in, false);
   const passwordEnvLocked = settingsBoolean(settings.password_env_var, false);
-  const modelGroups = arrayFrom(modelsState.data, ['groups']);
+  const allModelGroups: AnyRecord[] = arrayFrom(modelsState.data, ['groups']) as AnyRecord[];
+  const modelGroups: AnyRecord[] = (showUntestedBetas ? allModelGroups : allModelGroups.flatMap((group) => {
+    const providerId = settingsText(group.provider_id || group.provider_id_canonical, '');
+    const models = Array.isArray(group.models) ? group.models.filter(isRecord).filter(model =>
+      isProviderModelQualified(providerId, settingsText(model.id || model.name || model.label, ''), activeProfileId, activeBackendProfileName || 'default', window.localStorage)) : [];
+    return models.length ? [{ ...group, models } as AnyRecord] : [];
+  })).map(group => ({ ...group, models: (Array.isArray(group.models) ? group.models.filter(isRecord) : []).map(model => {
+    const providerId = settingsText(group.provider_id || group.provider_id_canonical, '');
+    const modelId = settingsText(model.id || model.name || model.label, '');
+    const qualified = isProviderModelQualified(providerId, modelId, activeProfileId, activeBackendProfileName || 'default', window.localStorage);
+    return showUntestedBetas && !qualified ? { ...model, label: `${settingsText(model.label || model.name || model.id)} · ${t('settings.panels.providers.betaUntested')}` } : model;
+  }) }));
   const activeProvider = settingsText(modelsState.data?.active_provider, settingsText(settings.provider || settings.model_provider));
   const defaultModel = settingsText(draft.default_model ?? settings.default_model ?? modelsState.data?.default_model, '');
+  const defaultModelQualified = Boolean(defaultModel && activeProvider && isProviderModelQualified(activeProvider, defaultModel, activeProfileId, activeBackendProfileName || 'default', window.localStorage));
   const webuiVersion = settingsText(settings.webui_version, 'not detected');
   const agentVersion = settingsText(settings.agent_version, 'not detected');
   const updateState = settingsText(updateStatus?.state, '');
@@ -2529,9 +2556,16 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const pluginList = arrayFrom(pluginsState.data, ['plugins', 'items']);
   const providerOptions = useMemo(() => {
     const options = cloudProviderOptions(onboardingStatus);
-    return options.some(option => option.id === 'xiaomi') ? options : [...options,
+    const expanded = options.some(option => option.id === 'xiaomi') ? options : [...options,
       { id: 'xiaomi', label: 'Xiaomi MiMo', keyOptional: false, requiresBaseUrl: true }];
-  }, [onboardingStatus]);
+    if (showUntestedBetas) return expanded;
+    return expanded.filter(option => allModelGroups.some(group => {
+      const providerId = settingsText(group.provider_id || group.provider_id_canonical, '');
+      if (providerId.trim().toLowerCase() !== option.id.trim().toLowerCase()) return false;
+      return (Array.isArray(group.models) ? group.models.filter(isRecord) : []).some(model =>
+        isProviderModelQualified(providerId, settingsText(model.id || model.name || model.label, ''), activeProfileId, activeBackendProfileName || 'default', window.localStorage));
+    }));
+  }, [onboardingStatus, showUntestedBetas, allModelGroups, activeProfileId]);
   const fallbackState = useApiState(() => window.lastbrowser.sidekick.getFallbackModel(), [ready], ready);
   const fallbackModelConfig = isRecord(fallbackState.data?.fallback_model) ? fallbackState.data.fallback_model : {};
   const fallbackModel = settingsText(fallbackModelConfig.model, '');
@@ -2814,6 +2848,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       return;
     }
     if (!option.oauthProvider) return;
+    clearProviderChatEvidence(option.id, window.localStorage);
     const isCodex = option.oauthProvider === 'openai-codex';
     let startedFlowId = '';
     if (isCodex) setCodexConnect({ status: 'starting', message: t('firstRun.startingLogin', { provider: 'ChatGPT Codex' }) });
@@ -2987,6 +3022,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       if (!isXiaomiOperationCurrent(scope, generation)) return;
       setXiaomiHasSavedKey(status?.hasKey ?? null);
       if (!status?.hasKey || status.baseUrl !== xiaomiBaseUrl.trim()) throw new Error('mimo_invalid_response');
+      clearProviderChatEvidence('xiaomi', window.localStorage);
       if (xiaomiKey.trim()) { setXiaomiKey(''); setXiaomiHasSavedKey(true); }
       setXiaomiModalOpen(false);
       await modelsState.refresh();
@@ -3134,6 +3170,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         }
       });
       await window.lastbrowser.sidekick.setDefaultModel({ model: selectedDefault });
+      clearProviderChatEvidence(openRouterConfigProvider, window.localStorage);
       await settingsState.refresh();
       await modelsState.refresh();
       setOpenRouterModalOpen(false);
@@ -3176,7 +3213,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   function renderModelOptions(): JSX.Element {
     if (!modelGroups.length) {
-      return <input value={defaultModel} onChange={(event) => updateDraftField('default_model', event.target.value)} placeholder="model-id" />;
+      return <input value={defaultModel} readOnly={!showUntestedBetas} onChange={(event) => updateDraftField('default_model', event.target.value)} placeholder="model-id" aria-label={showUntestedBetas ? t('settings.panels.providers.betaCatalogToggle') : t('settings.panels.providers.betaSavedChoice')} />;
     }
     const hasCurrentModel = modelGroups.some((group) => {
       const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
@@ -3185,7 +3222,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     return (
       <select value={defaultModel} onChange={(event) => updateDraftField('default_model', event.target.value)}>
         {!defaultModel && <option value="">Server default</option>}
-        {defaultModel && !hasCurrentModel && <option value={defaultModel}>{defaultModel}</option>}
+        {defaultModel && !hasCurrentModel && <option value={defaultModel} disabled={!showUntestedBetas}>{defaultModel}{!showUntestedBetas ? ` · ${t('settings.panels.providers.betaSavedChoice')}` : ''}</option>}
         {modelGroups.map((group) => {
           const providerLabel = settingsText(group.provider || group.provider_id || 'Provider');
           const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
@@ -4242,6 +4279,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
               backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible/>}
             {section === 'providers' && (
               <>
+                <ProviderBetaCatalogToggle />
                 <SettingsCard
                   title={t('settings.panels.providers.title')}
                   description={t('settings.panels.providers.description')}
@@ -4251,9 +4289,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
                   {!modelsState.loading && (
                     <div className="provider-status-list">
+                      {!providerOptions.length && <p role="status">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
                       {providerOptions.map((option) => {
                         const meta = providerPresentation(option.id);
-                        const chatEvidence = getProviderChatEvidence(option.id, window.localStorage);
+                        const chatEvidence = getProviderChatEvidence(option.id, activeProfileId, activeBackendProfileName || 'default', window.localStorage);
                         // Catalog groups can contain static/offline fallback
                         // models. Their presence is not a successful provider probe.
                         const verification = providerVerification(option.id, {
@@ -4606,6 +4645,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                   base_url: ollamaUrl.trim()
                                 }
                               });
+                              clearProviderChatEvidence(ollamaModalProviderId, window.localStorage);
                               await settingsState.refresh();
                               await modelsState.refresh();
                               showToast(`${ollamaModalLabel} configured. URL: ${ollamaUrl.trim()}`);
@@ -4625,12 +4665,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 )}
 
                 <SettingsCard title={t('settings.panels.providers.modelCatalog')} description={t('settings.panels.providers.modelCatalogDescription')}>
+                  {!modelGroups.length && !modelsState.loading && !modelsState.error && <p role="status">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
 
                   {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
                   {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
                   {!modelsState.loading && !modelsState.error && (
                     <div className="settings-model-summary">
-                      <span className="settings-badge">{t('settings.panels.providers.default')}: {settingsText(modelsState.data?.default_model, '—')}</span>
+                      <span className="settings-badge">{t('settings.panels.providers.default')}: {settingsText(modelsState.data?.default_model, '—')}{settingsText(modelsState.data?.default_model) && !defaultModelQualified ? ` · ${t('settings.panels.providers.betaSavedChoice')}` : ''}</span>
                       <span className="settings-badge">{t('settings.panels.providers.activeProvider')}: {activeProvider || '—'}</span>
                       <span className="settings-badge">{t('settings.panels.providers.groups')}: {modelGroups.length}</span>
                     </div>
@@ -4640,16 +4681,16 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 <SettingsCard title={t('settings.panels.providers.advancedRouting')} description={t('settings.panels.providers.advancedRoutingDescription')}>
                   <div className="settings-field-grid">
                     <SettingsField label={t('settings.panels.providers.provider')} description={t('settings.panels.providers.providerDescription')}>
-                      <input value={settingsText(draft.provider ?? settings.provider, '')} onChange={(event) => updateDraftField('provider', event.target.value)} placeholder="openai-codex" />
+                      <input value={settingsText(draft.provider ?? settings.provider, '')} disabled={!showUntestedBetas} onChange={(event) => updateDraftField('provider', event.target.value)} placeholder="openai-codex" />
                     </SettingsField>
                     <SettingsField label={t('settings.panels.providers.modelProvider')} description={t('settings.panels.providers.modelProviderDescription')}>
-                      <input value={settingsText(draft.model_provider ?? settings.model_provider, '')} onChange={(event) => updateDraftField('model_provider', event.target.value)} placeholder="openai-codex" />
+                      <input value={settingsText(draft.model_provider ?? settings.model_provider, '')} disabled={!showUntestedBetas} onChange={(event) => updateDraftField('model_provider', event.target.value)} placeholder="openai-codex" />
                     </SettingsField>
                     <SettingsField label={t('settings.panels.providers.gateway')} description={t('settings.panels.providers.gatewayDescription')}>
                       <input value={settingsText(draft.gateway ?? settings.gateway, '')} onChange={(event) => updateDraftField('gateway', event.target.value)} placeholder="default" />
                     </SettingsField>
                     <SettingsField label={t('settings.panels.providers.openaiCodex')} description={t('settings.panels.providers.openaiCodexDescription')}>
-                      <select value={settingsBoolean(draft.openai_codex_enabled ?? settings.openai_codex_enabled, false) ? 'true' : 'false'} onChange={(event) => updateDraftField('openai_codex_enabled', event.target.value === 'true')}>
+                      <select value={settingsBoolean(draft.openai_codex_enabled ?? settings.openai_codex_enabled, false) ? 'true' : 'false'} disabled={!showUntestedBetas} onChange={(event) => updateDraftField('openai_codex_enabled', event.target.value === 'true')}>
                         <option value="false">{t('settings.panels.providers.disabled')}</option>
                         <option value="true">{t('settings.panels.providers.enabled')}</option>
                       </select>

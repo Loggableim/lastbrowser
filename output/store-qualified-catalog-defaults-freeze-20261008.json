@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "lease_ids": [
+    "STORE_QUALIFIED_CATALOG_DEFAULTS_20261008",
+    "STORE_NEW_TAB_FOCUS_UX_20261008",
+    "STORE_SINGLE_MODEL_DEFAULT_20261008"
+  ],
+  "recorded_at": "2026-10-08T10:55:00+02:00",
+  "source_branch": "codex/qualified-catalog-defaults",
+  "base_commit": "fa1ee5f2effee5341e8e3122b00ddda8bed81a5e",
+  "source_tree_without_receipt": "2313a3866c3ab950826043b6d1e9455504d4ab32",
+  "scope": [
+    "Recent exact provider/model chat evidence controls default visibility and activation; untested provider and model catalog entries are available only through a session-only Beta switch.",
+    "Normal chat, Quickchat, and Space Assistant use a single model selection; saved multi-agent defaults are migrated to a qualified single model with a hint when available, otherwise blocked with an explanation until deliberate Beta selection.",
+    "New Tab is prominent above pinned apps; creating a tab activates its start page and focuses search, while switching to an existing tab does not auto-focus it."
+  ],
+  "evidence_identity_and_limits": {
+    "qualified_pair_key": [
+      "provider_id",
+      "model_id",
+      "browser_profile_id",
+      "backend_profile_name"
+    ],
+    "freshness_hours": 24,
+    "required_evidence_identity": [
+      "runtime_generation",
+      "renderer_build_id",
+      "local_provider_config_generation",
+      "backend_provider_config_generation"
+    ],
+    "credential_edits_clear_provider_evidence": true,
+    "supported_provider_save_delete_and_oauth_changes_rotate_backend_generation": true,
+    "ordinary_restart_preserves_fresh_evidence": false,
+    "runtime_binding": "Electron assigns a fresh opaque UUID before each Sidekick process launch and passes it through LASTBROWSER_RUNTIME_GENERATION; backend evidence carries that generation. A stopped or replaced runtime cannot reuse prior evidence.",
+    "build_binding": "Renderer evidence includes a deterministic SHA-256 build identity derived from tracked and untracked renderer source, brand assets, desktop package metadata, and Vite configuration.",
+    "account_config_binding": "Provider-specific account IDs are not exposed. Supported provider configuration and OAuth change flows rotate opaque per-provider generations in renderer and backend; generation mismatch or missing identity fails closed. This is change invalidation through supported flows, not verification of a provider account identity.",
+    "secret_handling": "No raw credentials or hashes of credentials are stored in renderer evidence.",
+    "stale_evidence_tests": [
+      "provider config generation mismatch",
+      "backend runtime restart generation mismatch",
+      "renderer build identity mismatch"
+    ]
+  },
+  "verification": {
+    "focused_renderer_tests": {
+      "status": "PASS",
+      "test_files": 4,
+      "tests": 48
+    },
+    "focused_python_tests": {
+      "status": "PASS_WITH_SKIP",
+      "passed": 26,
+      "skipped": 1
+    },
+    "new_tab_electron_dom_flow": {
+      "status": "PASS",
+      "result": "new-tab-start-focus-smoke:passed",
+      "scope": "Source UI DOM harness using installed Windows Electron; expanded and slim sidebar, native Ctrl+T route, start page focus, typing and submit, and existing-tab no-autofocus. Not packaged guest evidence."
+    },
+    "npm_test": {
+      "status": "PASS",
+      "test_files": 204,
+      "tests": 1884
+    },
+    "npm_run_verify_store": {
+      "status": "PASS_WITH_WARNINGS",
+      "passed": 39,
+      "warnings": 2,
+      "failures": 0,
+      "warnings_detail": [
+        "Store screenshot content remains provisional pending completed release review.",
+        "No package was supplied for final binary signature checking."
+      ]
+    },
+    "desktop_build": {
+      "status": "PASS",
+      "command": "npm --workspace apps/desktop run build",
+      "notes": [
+        "TypeScript and Vite build passed.",
+        "Vite reported the existing large-chunk advisory (>500 kB)."
+      ]
+    },
+    "python_compileall": {
+      "status": "PASS",
+      "command": "python -m compileall -q services/sidekick"
+    },
+    "git_diff_check": "PASS"
+  },
+  "not_tested": [
+    "Real provider requests, charges, provider-account identity verification, runtime acceptance, package or installer build, signing, guest VM, Store portal, upload, or submission.",
+    "Packaged guest focus acceptance; source smoke is not package or guest evidence."
+  ],
+  "dashboard_status": {
+    "teamwork": "BETA / OPEN; no runtime PASS claimed.",
+    "store3_review": "Historical fa1ee5f2 review remains partial; full payload scan is not verified. Corrected source freeze requires its own new candidate and full review.",
+    "store_readiness": "Not Store-ready; this is a source freeze receipt only."
+  }
+}

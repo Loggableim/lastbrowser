@@ -278,11 +278,13 @@ import { mergeSessionListSnapshot, resolveSessionBackendProfile, resolveSessionL
 import { createAndLoadScopedSession } from './scoped-session-creation.js';
 import { usePanelStore, type SidebarMode } from './stores/usePanelStore.js';
 import { useChatStore } from './stores/useChatStore.js';
-import { recordCompletedChatEvidence } from './provider-chat-evidence.js';
+import { recordCompletedChatEvidence, setProviderChatEvidenceRuntime } from './provider-chat-evidence.js';
 import { saveChatReasoningEffort } from './chat-reasoning-effort.js';
 import { isQuickChatAction, type QuickActionChip } from './quick-actions.js';
 import { loadSpaceModelSelection, removeSpaceModel, saveSpaceModel } from './space-models.js';
-import { resolvePreferredChatModel, resolvePreferredChatModelSelection } from './provider-model-selection.js';
+import { isMultiAgentModelSelection, resolvePreferredChatModel, resolvePreferredChatModelSelection } from './provider-model-selection.js';
+import { readShowUntestedProviderBetas } from './provider-beta-preferences.js';
+import { isProviderModelQualified } from './provider-chat-evidence.js';
 import { isQuickChatScopeVisible, updateScopedQuickChatState } from './quick-chat-view-state.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { LiveAutomationBanner } from './components/LiveAutomationBanner.js';
@@ -827,6 +829,7 @@ export function App(): JSX.Element {
 
 function AppContent(): JSX.Element {
   const { t,locale } = useDesktopI18n();
+  const [pendingStartSearchFocus, setPendingStartSearchFocus] = useState<{ tabId: string; expiresAt: number } | null>(null);
   const selectedChatModel = useChatStore((state) => state.selectedModel);
   const selectedChatModelProvider = useChatStore((state) => state.selectedModelProvider);
   const {
@@ -1000,6 +1003,7 @@ function AppContent(): JSX.Element {
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const { isMaximized: windowMaximized, handleDoubleClick: handleTopbarDoubleClick, handleMouseDown: handleTopbarMouseDown } = useWindowDrag();
   const [status, setStatus] = useState<ServiceStatus | null>(null);
+  setProviderChatEvidenceRuntime(status?.runtimeGeneration, __LASTBROWSER_BUILD_ID__);
   const [accessAuthChecked, setAccessAuthChecked] = useState(false);
   const [accessAuthRequired, setAccessAuthRequired] = useState(false);
   const [accessPassword, setAccessPassword] = useState('');
@@ -1272,6 +1276,11 @@ function AppContent(): JSX.Element {
     quickChatErrorsByScopeRef.current.set(scopeKey, message);
     quickChatErrorScopeKeyRef.current = scopeKey;
     if (currentQuickChatScopeKey() === scopeKey) setQuickChatError(message);
+  };
+  const setQuickChatStatusForScope = (scopeKey: string, message: string): void => {
+    quickChatStatusesByScopeRef.current.set(scopeKey, message);
+    quickChatStatusScopeKeyRef.current = scopeKey;
+    if (currentQuickChatScopeKey() === scopeKey) setQuickChatStatus(message);
   };
   const processQuickChatEvent = useCallback((event: import('../main/quick-chat-controller.js').QuickChatStreamEvent, generation: number): void => {
     if (!isCurrentQuickChatGeneration(quickChatGenerationRef.current, generation)) return;
@@ -1628,7 +1637,7 @@ function AppContent(): JSX.Element {
     return window.lastbrowser.browser.onShortcut((event: { action: string; payload?: { index?: number } }) => {
       switch (event.action) {
         case 'new-tab':
-          addTab();
+          addTabAndFocusStartSearch();
           setActivePanel('browser');
           break;
         case 'new-incognito-tab':
@@ -2332,12 +2341,18 @@ function AppContent(): JSX.Element {
 
   function addTab(url = browserStartUrl, options?: { incognito?: boolean; pinned?: boolean }): void {
     const next = createInitialTab(url, options);
+    setPendingStartSearchFocus(null);
     setTabs((current) => [...current, next]);
     setBrowserMode(isAiBrowserHomeUrl(url) ? 'home' : 'web');
     setBrowserLoadError('');
     activeTabIdRef.current = next.id;
     setActiveTabId(next.id);
     setActivePanel('browser');
+  }
+
+  function addTabAndFocusStartSearch(url = browserStartUrl, options?: { incognito?: boolean; pinned?: boolean }): void {
+    addTab(url, options);
+    if (isAiBrowserHomeUrl(url)) setPendingStartSearchFocus({ tabId: activeTabIdRef.current, expiresAt: Date.now() + 5000 });
   }
 
   async function openPluginBrowserUrl(capabilityId: string, startUrl: string, scope: IndependentScope): Promise<boolean> {
@@ -3051,7 +3066,7 @@ function AppContent(): JSX.Element {
     streamError: string | null;
     completed: boolean;
     cancelled: boolean;
-    providerEvidence: { provider_id?: string; model_id?: string; successful_chat?: boolean } | null;
+    providerEvidence: { provider_id?: string; model_id?: string; successful_chat?: boolean; runtime_generation?: string; provider_config_generation?: string } | null;
   }> {
     const streamStartedAt = Date.now();
     let lastProgressAt = streamStartedAt;
@@ -3059,7 +3074,7 @@ function AppContent(): JSX.Element {
     let streamFailed = false;
     let streamError: string | null = null;
     let cancelled = false;
-    let providerEvidence: { provider_id?: string; model_id?: string; successful_chat?: boolean } | null = null;
+    let providerEvidence: { provider_id?: string; model_id?: string; successful_chat?: boolean; runtime_generation?: string; provider_config_generation?: string } | null = null;
     let teamworkCompleteReceived = false;
     let hasLiveOutput = false;
     let modelResolutionReceived = false;
@@ -3384,7 +3399,7 @@ function AppContent(): JSX.Element {
         streamError: string | null;
         completed: boolean;
         cancelled: boolean;
-        providerEvidence: { provider_id?: string; model_id?: string; successful_chat?: boolean } | null;
+        providerEvidence: { provider_id?: string; model_id?: string; successful_chat?: boolean; runtime_generation?: string; provider_config_generation?: string } | null;
       } | null = null;
 
       if (streamId) {
@@ -3593,6 +3608,25 @@ function AppContent(): JSX.Element {
       return true;
     }
 
+    let chatModelSelection: Awaited<ReturnType<typeof readCapturedSpaceModelSelection>>;
+    try {
+      chatModelSelection = await readCapturedSpaceModelSelection(turnContext);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+    if (isMultiAgentModelSelection(chatModelSelection) && !readShowUntestedProviderBetas()) {
+      setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
+      return false;
+    }
+    if (!isMultiAgentModelSelection(chatModelSelection) && !readShowUntestedProviderBetas()
+      && (!chatModelSelection.provider || !chatModelSelection.model
+        || !isProviderModelQualified(chatModelSelection.provider, chatModelSelection.model, turnContext.profileId,
+          turnBackendProfileName || activeSession?.profile || 'default', window.localStorage))) {
+      setChatError(t('settings.panels.providers.betaCatalogEmpty'));
+      return false;
+    }
+
     const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
     setLastChatTurnUsage(null);
     setChatMessages((current) => [
@@ -3632,7 +3666,6 @@ function AppContent(): JSX.Element {
       if (earlyStreamEvents.length > 1000) earlyStreamEvents.shift();
     });
     try {
-      const chatModelSelection = await readCapturedSpaceModelSelection(turnContext);
       const chatModelProvider = chatModelSelection.provider || undefined;
       const configuredChatModel = chatModelSelection.model || undefined;
       let teamworkGroundingContext;
@@ -3744,6 +3777,10 @@ function AppContent(): JSX.Element {
         completed: streamResult.completed,
         cancelled: streamResult.cancelled,
         streamError: streamResult.streamError,
+        browserProfileId: turnContext.profileId,
+        backendProfileName: turnBackendProfileName || activeSession?.profile || 'default',
+        runtimeGeneration: status?.runtimeGeneration,
+        appBuildId: __LASTBROWSER_BUILD_ID__,
         providerEvidence: streamResult.providerEvidence,
       }, window.localStorage);
       if (turnContextStillCurrent) {
@@ -4105,13 +4142,40 @@ function AppContent(): JSX.Element {
     const workspacePath = activeSpacePathRef.current || null;
     const backendProfileName = activeBackendProfileNameRef.current || undefined;
     const capturedScopeKey = `${browserProfileId}::${workspacePath || ''}::${backendProfileName || ''}`;
+    let scopedSelection: Awaited<ReturnType<typeof readCapturedSpaceModelSelection>>;
+    try {
+      scopedSelection = await readCapturedSpaceModelSelection({ profileId: browserProfileId, spacePath: workspacePath || '' });
+    } catch (error) {
+      quickChatStopPendingRef.current = false;
+      setQuickChatErrorForScope(capturedScopeKey, error instanceof Error ? error.message : String(error));
+      return;
+    }
+    if (capturedScopeKey !== `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`) {
+      quickChatStopPendingRef.current = false;
+      return;
+    }
     const selection = resolvePreferredChatModelSelection({
-      spaceSelection: loadSpaceModelSelection(workspacePath || '', window.localStorage),
+      spaceSelection: scopedSelection,
       selectedModel: selectedChatModel,
       selectedModelProvider: selectedChatModelProvider,
       setupModel: setupState.model,
-      setupProvider: setupState.provider
+      setupProvider: setupState.provider,
+      allowMultiAgent: readShowUntestedProviderBetas()
     });
+    if (selection.migratedFromMultiAgent) setQuickChatStatusForScope(capturedScopeKey,
+      selection.model ? t('settings.panels.providers.singleModelMigration') : t('settings.panels.providers.multiAgentBetaRequired'));
+    if (isMultiAgentModelSelection(selection) && !readShowUntestedProviderBetas()) {
+      quickChatStopPendingRef.current = false;
+      setQuickChatErrorForScope(capturedScopeKey, t('settings.panels.providers.multiAgentBetaRequired'));
+      return;
+    }
+    if (!readShowUntestedProviderBetas() && (!selection.provider || !selection.model
+      || !isProviderModelQualified(selection.provider, selection.model, browserProfileId,
+        backendProfileName || 'default', window.localStorage))) {
+      quickChatStopPendingRef.current = false;
+      setQuickChatErrorForScope(capturedScopeKey, t('settings.panels.providers.betaCatalogEmpty'));
+      return;
+    }
     quickChatBusyRef.current = true;
     quickChatTranscriptScopeKeyRef.current = capturedScopeKey;
     quickChatErrorScopeKeyRef.current = capturedScopeKey;
@@ -4663,6 +4727,7 @@ function AppContent(): JSX.Element {
     selectedModelProvider: selectedChatModelProvider,
     setupModel: setupState.model,
     setupProvider: setupState.provider,
+    allowMultiAgent: readShowUntestedProviderBetas(),
   });
 
   if (!canRenderBrowserForAccessAuth(accessAuthChecked, {
@@ -4883,7 +4948,7 @@ function AppContent(): JSX.Element {
                   }}
                   onCloseTab={closeTab}
                   onNewTab={(url, opts) => {
-                    addTab(url, opts);
+                    addTabAndFocusStartSearch(url, opts);
                     setZenSidebarRevealed(false);
                   }}
                   onPinTab={toggleTabPinned}
@@ -5003,7 +5068,7 @@ function AppContent(): JSX.Element {
                 setActivePanel('browser');
               }}
               onCloseTab={closeTab}
-              onNewTab={(url, opts) => addTab(url, opts)}
+              onNewTab={(url, opts) => addTabAndFocusStartSearch(url, opts)}
               onPinTab={toggleTabPinned}
               onToggleTabMute={toggleTabMute}
               onDragStartTab={setDraggedTabId}
@@ -5081,6 +5146,8 @@ function AppContent(): JSX.Element {
                   activeSession={activeSession}
                   activeSessionId={activeSessionId}
                   activeTab={activeTab}
+                  pendingStartSearchFocus={pendingStartSearchFocus}
+                  onStartSearchFocusConsumed={() => setPendingStartSearchFocus(current => current?.tabId === activeTab.id ? null : current)}
                   onToggleDevTools={toggleDevTools}
                   onDevToolsOpenChange={setDevToolsOpen}
                   activeProfile={activeProfile}
@@ -5188,6 +5255,19 @@ function AppContent(): JSX.Element {
                 onSelectModel={(model, provider) => {
                   useChatStore.getState().setSelectedModel(model);
                   useChatStore.getState().setSelectedModelProvider(provider || '');
+                  void (async () => {
+                    const resolved = await assistantController.resolveScope(
+                      { browserProfileId: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current || null },
+                      activeBackendProfileNameRef.current || undefined
+                    );
+                    if (!resolved.ok) return;
+                    const current = await assistantController.request({ schemaVersion: 1, operation: 'modelSelection',
+                      scope: resolved.value.scope, payload: { action: 'get' } });
+                    if (!current.ok) return;
+                    await assistantController.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope,
+                      payload: { action: 'set', model, provider: provider || '', expectedRevision: current.value.revision,
+                        clientRequestId: newIndependentRequestId() } });
+                  })();
                 }}
                 onNewChat={() => resetQuickChat(true)}
                 sessions={[]}
@@ -5273,7 +5353,7 @@ function AppContent(): JSX.Element {
               onEditPinnedApp={(app) => { setPinnedEditApp(app); setPinnedModalOpen(true); }}
               onOpenHistory={() => usePanelStore.getState().setHistoryOpen(!usePanelStore.getState().historyOpen)}
               onOpenSettings={() => setActivePanel('settings')}
-              onNewTab={(url) => addTab(url)}
+              onNewTab={(url) => addTabAndFocusStartSearch(url)}
               onExpandSidebar={() => setSidebarMode('expanded')}
               spacePath={activeSpacePath}
             />
@@ -5292,7 +5372,7 @@ function AppContent(): JSX.Element {
             }}
             onCloseTab={closeTab}
             onMoveTab={moveTab}
-            onNewTab={() => addTab()}
+            onNewTab={() => addTabAndFocusStartSearch()}
             onPinTab={toggleTabPinned}
             onToggleTabMute={toggleTabMute}
             onDragStartTab={setDraggedTabId}
@@ -5422,6 +5502,8 @@ function AppContent(): JSX.Element {
               activeSession={activeSession}
               activeSessionId={activeSessionId}
               activeTab={activeTab}
+              pendingStartSearchFocus={pendingStartSearchFocus}
+              onStartSearchFocusConsumed={() => setPendingStartSearchFocus(current => current?.tabId === activeTab.id ? null : current)}
               onToggleDevTools={toggleDevTools}
               onDevToolsOpenChange={setDevToolsOpen}
               activeProfile={activeProfile}
@@ -5624,6 +5706,8 @@ function BrowserMain({
   activeSession,
   activeSessionId,
   activeTab,
+  pendingStartSearchFocus,
+  onStartSearchFocusConsumed,
   onToggleDevTools,
   onDevToolsOpenChange,
   activeProfile,
@@ -5708,6 +5792,8 @@ function BrowserMain({
   activeSession: DesktopSessionDetail | null;
   activeSessionId: string | null;
   activeTab: BrowserTab;
+  pendingStartSearchFocus: { tabId: string; expiresAt: number } | null;
+  onStartSearchFocusConsumed: () => void;
   onToggleDevTools: () => void;
   onDevToolsOpenChange: (isOpen: boolean) => void;
   activeProfile: BrowserProfile;
@@ -6522,12 +6608,14 @@ function BrowserMain({
     };
   }, [webviewMountKey, webviewReady]);
 
-  function renderBrowserStartPage(tabId?: string): React.ReactNode {
+  function renderBrowserStartPage(tabId?: string, focusSearchOnMount = false, onSearchFocusConsumed?: () => void): React.ReactNode {
+    const pageTabId = tabId || activeTab.id;
     const activatePane = () => {
       if (tabId && tabId !== activeTab.id) onActivateTab?.(tabId);
     };
     return (
       <NativeBrowserStartPage
+        key={pageTabId}
         bookmarks={bookmarks}
         visits={visitedSites}
         onNavigate={(url) => { activatePane(); onNavigate(url); }}
@@ -6536,6 +6624,8 @@ function BrowserMain({
         activeSpacePath={activeSpacePath}
         activeProfileId={activeProfile.id}
         activeSpaceTabs={tabs}
+        focusSearchOnMount={activeTab.id === pageTabId && focusSearchOnMount}
+        onSearchFocusConsumed={onSearchFocusConsumed}
         onSelectSpace={(path) => { activatePane(); onSelectSpace(path); }}
         onAddSpace={(path, name) => { activatePane(); onAddSpace(path, name); }}
         onAskAi={(prompt) => {
@@ -6749,7 +6839,9 @@ function BrowserMain({
           </div>
         ) : !splitGroupActive && (browserMode === 'home' || isAiBrowserHomeUrl(activeTab.url)) ? (
           <div className="browser-mode-overlay" style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'var(--bg-main, #12141a)', overflowY: 'auto' }}>
-            {renderBrowserStartPage()}
+            {renderBrowserStartPage(activeTab.id,
+              pendingStartSearchFocus?.tabId === activeTab.id && pendingStartSearchFocus.expiresAt >= Date.now(),
+              onStartSearchFocusConsumed)}
           </div>
         ) : null}
         {draggedTabId && (

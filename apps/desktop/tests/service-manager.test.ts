@@ -126,13 +126,16 @@ describe('sidecar service layout', () => {
     );
 
     try {
-      await service.start();
+      const started = await service.start();
 
       expect(service.getStatus().webuiUrl).toBe('http://127.0.0.1:8788');
+      expect(started.runtimeGeneration).toBeTruthy();
+      expect(spawned[0].env?.LASTBROWSER_RUNTIME_GENERATION).toBe(started.runtimeGeneration);
       expect(spawned[0].env?.LASTBROWSER_WEBUI_PORT).toBe('8788');
       expect(spawned[0].env?.HERMES_WEBUI_PORT).toBe('8788');
     } finally {
       service.stop();
+      expect(service.getStatus().runtimeGeneration).toBeNull();
       rmSync(resourcesRoot, { recursive: true, force: true });
     }
   });

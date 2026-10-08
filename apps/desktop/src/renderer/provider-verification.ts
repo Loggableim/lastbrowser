@@ -28,35 +28,21 @@ export function providerVerification(
   providerId: string,
   evidence: ProviderRuntimeEvidence = {}
 ): ProviderVerification {
-  if (evidence.successfulChat === true) {
+  if (evidence.successfulChat === true && evidence.modelId?.trim()) {
     return {
       statusKey: 'settings.panels.providers.lastSuccessfulChat',
       verified: true,
-      ...(evidence.modelId?.trim() ? { modelId: evidence.modelId.trim() } : {}),
+      modelId: evidence.modelId.trim(),
     };
   }
 
   switch (providerId.trim().toLowerCase()) {
-    case 'openai-codex':
-      return {
-        statusKey: 'settings.panels.providers.codexSourceTested',
-        evidenceKey: 'settings.panels.providers.codexSourceEvidence',
-        verified: true,
-      };
     case 'antigravity':
       // OAuth and onboarding reached the provider, but inference returned a
       // quota response. No successful Lastbrowser chat has been verified.
       return {
         ...BETA_UNTESTED,
         evidenceKey: 'settings.panels.providers.antigravityQuotaOnly',
-      };
-    case 'ollama-cloud':
-      // Dated source/package chat runs verify this adapter, not the current
-      // account or every model. A new catalog probe does not erase that proof.
-      return {
-        statusKey: 'settings.panels.providers.ollamaCloudSourceTested',
-        evidenceKey: 'settings.panels.providers.ollamaCloudSourceEvidence',
-        verified: true,
       };
     case 'openrouter':
       return evidence.catalogVerified === true

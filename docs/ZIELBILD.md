@@ -27,7 +27,7 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 - [x] **Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur) (v0.1.31)** (Konsolidierung von Chrome MV3 WebExtensions und nativen Nova MCP-Skills, Ablösung des alten „App Store“-Begriffs, Workspace-Scoping, Berechtigungs-Sandboxing)
 - [!] **Store-Release Readiness: Microsoft Partner Center (Win32 / NSIS) — OPEN** (Die früheren 27/27-, WACK-/Silent-Install- und Listing-Angaben sind historische Meilensteine, keine aktuelle Abnahme. Für 0.1.49 belegt ist der Source-Preflight 39 PASS / 2 WARN / 0 FAIL und die unsignierte TEST-Zustellung; aktueller WACK-, Installations-, Signierungs- oder Store-Abnahmenachweis fehlt.)
 
-### Aktuelle Abnahmeampel — 0.1.49 (Stand 8. Oktober 2026)
+### Aktuelle Abnahmeampel — veröffentlichter TEST 0.1.49 und spätere Sourceintegration (Stand 9. Oktober 2026)
 
 Die abgehakten Phasen oben sind historische Funktionsmeilensteine. Sie sind keine Paket-, VM- oder Veröffentlichungsfreigabe.
 
@@ -40,6 +40,18 @@ Die abgehakten Phasen oben sind historische Funktionsmeilensteine. Sie sind kein
 | Offene Ursachen | **OPEN** | Profilreferenz und Modellkatalog/-ursache bleiben offen; eingebettetes Google-Verhalten ist `NOT_GUARANTEED`. |
 | Test-Publish / Upload | **TEST-Release zugestellt; begrenzter Guest-Retest ausgeführt** | Fünf Remote-Dateien vollständig rückgelesen und anhand des Remote-Readback-Receipts gegen Bytes und SHA-256 geprüft. Gepinnter Setup-Update-/Versionsreadback im bestehenden Guest **PASS**; Verhalten 3 **FAIL**, 14 **BLOCKED**, 0 benannte **PASS**; Provider 0/10 Turns. Keine vollständige Runtime-/Guest-Abnahme.
 | Signierung / Stable / Store | **OPEN — nicht durchgeführt** | Signierung und Store-Einreichung nicht durchgeführt; strenge BoringSSL-Store-Provenienz und CleanWindows bleiben offen. Stable bleibt `v0.1.45`; TEST-Release ist keine Stable-Promotion. |
+
+### Spätere Sourceintegration — noch kein neuer Paketkandidat
+
+Aktueller integrierter Quellstand: `ba28440c6161e7e3fdc15367046a873f6663a345`, Tree `430973b417137da1d762736478b50f5d8e66fbf9`. Der veröffentlichte TEST 0.1.49 bleibt auf `5f90bb56`; B7 ist ausschließlich historisch.
+
+| Bereich | Status | Beleg und Grenze |
+|---|---|---|
+| Appearance bei schmalem Fenster | **MERGED SOURCE / React-Probe PASS; Paket und Guest OPEN** | PR #26, Merge `23a658c9ec285cc55a0e320603f7e564c5e254a0`: unabhängiger echter React-Retest 1920×1032 und 1100×920, Themes, Schriftgrößen, Zoom-Reset und Tastatur bestanden. Kein neuer installierter Paketnachweis. |
+| Profildiagnose | **MERGED SOURCE; Guest-Ursache OPEN** | PR #25, Merge `d543d1ab1bc60e8052a2e84b58ff0db9ad2827f6`: redigierte Snapshotdiagnose, Handleidentität vor Lesen und ungültige Sidecars abgesichert. Tatsächliches Guest-Backend-Home einschließlich `SIDEKICK_BASE_HOME` muss vor Ausführung bestätigt werden. Kein Profilreparatur- oder Runtimefreigabebeleg. |
+| Begrenzte DRM-Startbereitschaft | **MERGED SOURCE; Guest-Schwarzbild OPEN** | PR #27, Merge `ba28440c6161e7e3fdc15367046a873f6663a345`: maximal drei Sekunden Initialwartezeit, ehrlicher pending/unavailable/ready-Zustand. Historischer echter Source-Erststart und Settings-Neustart bestanden; die Ursache des installierten Guest-Schwarzbilds ist nicht bewiesen. |
+| Vorläufiger GPT-6-Luna-Chatstandard | **VORGABE; Umsetzung und Pair-Qualifikation OPEN** | CEO/CTO verantworten die gewünschte vorläufige Produktzuordnung. Kein ungeprüftes Provider-/Modellpaar als qualified freischalten; Beta-, Profil- und Runtime-Gates bleiben bestehen. |
+| Gemeinsame Releaseprüfung | **OPEN — nach Freeze** | Gemäß neuer Humanvorgabe Regressionen und Pflichtchecks einmal gesammelt vor dem neuen Release. Vorherige Entwicklungstests gelten nur für ihre jeweiligen Sourcepins, nicht als Abschlussfreigabe dieses gemeinsamen Standes. Achtsprachiger Quellreview ist benannt bestanden; sichtbar gerenderte Achtsprachenabnahme bleibt offen. |
 
 ### Historische B7-Guest-Ampel — v0.1.48, nicht auf 0.1.49 übertragen
 

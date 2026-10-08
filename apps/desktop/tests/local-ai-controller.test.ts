@@ -210,6 +210,35 @@ describe('hardware inventory trusted user-data path', () => {
     expect(observed).toEqual([expectedCanonical]);
   });
 
+  it('scans short and long profile roots without requiring the future model download path to fit MAX_PATH', async () => {
+    const shortRoot = directory;
+    const longRoot = path.join(directory, `profile-${'a'.repeat(48)}`, `user-${'b'.repeat(48)}`);
+    await mkdir(longRoot, { recursive: true });
+    expect(longRoot.length).toBeLessThan(260);
+    expect(localAiCachePathIsLegacySafe(path.join(longRoot, 'local-ai', 'cache'), 'win32')).toBe(false);
+
+    const observed: string[] = [];
+    const scan = vi.fn(async ({ cacheDirectory, scope: actualScope }: any) => {
+      observed.push(cacheDirectory);
+      return { schemaVersion: 1, scope: actualScope,
+        hardware: { scanId: `scan-${observed.length}`, observedAt: new Date().toISOString() },
+        gpuFeatureStatus: {}, probeIssues: [] };
+    });
+    api.mockImplementation(async (_operation, selected) => ({ schemaVersion: 1, scope: selected,
+      scan: { scope: selected, hardware: { scanId: `scan-${observed.length}`, observedAt: new Date().toISOString() } } }));
+
+    for (const userDataDir of [shortRoot, longRoot]) {
+      controller = new LocalAiController({ userDataDir, apiRequest: api, scan: scan as any });
+      await expect(controller.request(binding, { action: 'scan' }, () => owner)).resolves.toMatchObject({
+        schemaVersion: 1, scope, scan: { hardware: { scanId: expect.any(String) } }
+      });
+    }
+    expect(observed).toEqual([await realpath(shortRoot), await realpath(longRoot)]);
+    await expect(readdir(path.join(longRoot, 'local-ai'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(api).toHaveBeenCalledWith('localAi.hardwareBind', scope, expect.any(Object), 'frozen-profile');
+    expect(api).toHaveBeenCalledWith('localAi.hardwareRead', scope, expect.any(Object), 'frozen-profile');
+  });
+
   it('still rejects a user-data directory whose final path component is a junction', async () => {
     const realUserData = path.join(directory, 'outside-user-data');
     const linkedUserData = path.join(directory, 'linked-user-data');

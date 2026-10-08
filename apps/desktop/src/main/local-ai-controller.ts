@@ -411,15 +411,18 @@ export class LocalAiController {
     const guard = () => { if (expired) throw timeoutError(); recheck(); };
     const operation = (async () => {
       guard();
-      const cache = await this.cacheDirectory(guard); guard();
+      // Hardware inspection needs an existing trusted path for disk free-space
+      // measurement, not a prospective model-file path. Keep the stricter
+      // nested-cache/MAX_PATH guard for installation and runtime operations.
+      const probeDirectory = await trustedUserDataDirectory(this.options.userDataDir); guard();
       const scan: BoundHardwareScan = await (this.options.scan ?? scanLocalAiHardware)(
-        { scope: { ...binding.scope }, cacheDirectory: cache, timeoutMs: 3000 });
+        { scope: { ...binding.scope }, cacheDirectory: probeDirectory, timeoutMs: 3000 });
       guard();
-      const checkedCache = await this.cacheDirectory(guard); guard();
-      if (!samePath(cache, checkedCache) || scan.schemaVersion !== 1 || !sameBrowserScope(scan.scope, binding.scope)
+      const checkedProbeDirectory = await trustedUserDataDirectory(this.options.userDataDir); guard();
+      if (!samePath(probeDirectory, checkedProbeDirectory) || scan.schemaVersion !== 1 || !sameBrowserScope(scan.scope, binding.scope)
         || !scan.hardware || typeof scan.hardware.scanId !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(scan.hardware.scanId)
         || !Number.isFinite(Date.parse(scan.hardware.observedAt)))
-        throw new BrowserHostError('local_ai_scan_changed', 'Actual Local AI scan scope or cache changed');
+        throw new BrowserHostError('local_ai_scan_changed', 'Actual Local AI scan scope or probe directory changed');
       const bindingResponse = await this.options.apiRequest('localAi.hardwareBind', binding.scope,
         scan as unknown as Record<string, unknown>, binding.backendProfileName);
       guard();

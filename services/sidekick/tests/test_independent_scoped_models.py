@@ -127,6 +127,21 @@ def test_set_is_atomic_preserves_other_settings_and_retry_survives_reopen(bound)
         reopened.close()
 
 
+def test_default_smart_track_space_mode_is_persistable_but_not_an_independent_provider(bound):
+    _, store, resolver, manager, scope = bound
+    request = {"action": "set", "model": "smart-track", "provider": "", "expectedRevision": 1,
+               "clientRequestId": "space-create-smart-track"}
+
+    response = handle_model_selection(store, resolver, manager, scope, request)
+
+    assert response["model"] == "smart-track" and response["provider"] == ""
+    assert response["reasonCode"] == "independent_orchestration_not_supported"
+    assert response["nativeAvailability"]["reasonCode"] == "independent_unsupported"
+    assert not response["nativeAvailability"]["available"]
+    config = resolver.resolve(scope).space.load_config()
+    assert config["model"]["model"] == "smart-track" and config["model"]["provider"] == ""
+
+
 @pytest.mark.parametrize("change,code", [({"model": "fabricated"}, "model_not_in_bound_catalog"),
     ({"provider": "foreign"}, "model_not_in_bound_catalog"),
     ({"model": "known-but-disconnected", "provider": "disconnected"}, "provider_not_configured"),

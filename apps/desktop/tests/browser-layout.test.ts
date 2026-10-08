@@ -19,14 +19,17 @@ describe('browser shell layout', () => {
     const app = readRendererFile('App.tsx');
     const chatMain = readRendererFile('panels/NativeChatMain.tsx');
     const composer = readRendererFile('panels/ChatComponents.tsx');
+    const guardedStart = readRendererFile('guarded-native-chat-start.ts');
 
     expect(composer).toContain('onChange={(event) => onModelChange(event.target.value)}');
     expect(chatMain).toContain('saveSpaceModel(activeSpacePath, nextModel, window.localStorage, provider)');
     expect(chatMain).toContain('setSelectedModelProvider(provider)');
     expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
     expect(chatMain).toContain("operation: 'modelSelection'");
-    expect(app).toContain('model: configuredChatModel');
-    expect(app).toContain('modelProvider: chatModelProvider');
+    expect(app).toContain('prepareGuardedNativeChatStart(createGuardedStartInput())');
+    expect(app).toContain('(payload) => window.lastbrowser.sidekick.startChat(payload)');
+    expect(guardedStart).toContain('model: input.selection.model || undefined');
+    expect(guardedStart).toContain('modelProvider: input.selection.provider || undefined');
   });
 
   it('uses the WebUI-style shell grid with expanded CD navigation', () => {

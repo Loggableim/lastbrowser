@@ -22,7 +22,8 @@ import { IndependentAssistantController } from './src/renderer/independent-assis
 import { useSpaceAssistantStore } from './src/renderer/stores/useSpaceAssistantStore';
 import { assistantScopeKey } from './src/renderer/independent-contracts';
 import { DesktopI18nProvider, useDesktopI18n } from './src/renderer/i18n';
-import { setShowUntestedProviderBetas } from './src/renderer/provider-beta-preferences';
+import { readShowUntestedProviderBetas, setShowUntestedProviderBetas } from './src/renderer/provider-beta-preferences';
+import { startGuardedNativeChat } from './src/renderer/guarded-native-chat-start';
 localStorage.setItem('lastbrowser.locale', 'en');
 const id = () => crypto.randomUUID(), at = () => new Date().toISOString();
 const backend = id();
@@ -257,6 +258,7 @@ window.lastbrowser={independent:transport,system:{openExternal:async()=>{navigat
    return{ok:true,action:request.args==='status'?'status':'set',revision:nativeGoalRevisions[name],goal:copy(session.goal)};}
 }};
 const navigation={entered:0,workChats:0,spaceLinks:0,closed:0,overviewClosed:0,signIn:0,createdSessions:0,browserLogins:0,sent:[]};
+const guardedChatStarts=[];
 let choose,showNative,showStart,showLocal,showAssistant,closeAssistant,chooseLocale,activateNative,refreshNative,remountNative,remountAssistant;
 function NativeChatMain(props){const [mount,setMount]=useState(0);remountNative=()=>setMount(value=>value+1);return <NativeChatMainComponent key={mount} {...props}/>;}
 function LocaleBinding(){const{setLocale}=useDesktopI18n();chooseLocale=setLocale;return null;}
@@ -266,12 +268,12 @@ function Fixture(){
  return <DesktopI18nProvider><LocaleBinding/><main><h1>Controlled Lastbrowser renderer probe</h1><p>Real mounted components; deterministic backend responses.</p>
   {open&&<SpaceAssistantPanel key={assistantEpoch} selection={selection} controller={controller} beginSetup={name==='A'} onClose={()=>{navigation.closed++;setOpen(false)}} onOpenWorkChat={()=>navigation.workChats++} onOpenGlobalOverview={()=>setOverview(true)} onEnterSpace={()=>{navigation.entered++}} onOpenProviderSettings={()=>{}} />}
  {overview&&<IndependentActivityOverview scope={scopes[name]} controller={controller} onClose={()=>{navigation.overviewClosed++;setOverview(false)}} onOpenSpace={async()=>{navigation.spaceLinks++}}/>}
- {native&&<NativeChatMain activeSession={nativeActive?copy(nativeSessions[name]):null} activeSessionId={nativeActive?nativeSessions[name].session_id:null} busy={false} chatError="" messages={nativeActive?nativeSessions[name].messages:[]} runState="idle" composerMode="action" composerText={nativeText} serviceStatus={{sidekick:'ready',webuiHealth:'ready',webuiUrl:'http://controlled.invalid'}} sessionLoading={false} setupModel="" activeSpacePath={selection.workspacePath} activeBrowserProfileId="controlled" showTokenUsage={false} showTps={false} showThinking={false} simplifiedToolCalling={true} latestTurnUsage={null} onComposerMode={()=>{}} onComposerText={setNativeText} onCreateSession={()=>navigation.createdSessions++} onSend={message=>{navigation.sent.push({scope:name,message});setNativeText('')}} onStop={()=>{}} onCommandAction={async action=>{if(action.kind==='goal_command'){await requestNativePersistentGoalCommand(request=>window.lastbrowser.sidekick.goalCommand(request),action.args,{sessionId:action.context.sessionId,profileId:action.context.profileId,browserProfileId:action.context.browserProfileId,workspace:action.context.spacePath,expectedRevision:action.expectedRevision,clientRequestId:action.clientRequestId});refreshNative();}}}/>}
+ {native&&<NativeChatMain activeSession={nativeActive?copy(nativeSessions[name]):null} activeSessionId={nativeActive?nativeSessions[name].session_id:null} busy={false} chatError="" messages={nativeActive?nativeSessions[name].messages:[]} runState="idle" composerMode="action" composerText={nativeText} serviceStatus={{sidekick:'ready',webuiHealth:'ready',webuiUrl:'http://controlled.invalid'}} sessionLoading={false} setupModel="" activeSpacePath={selection.workspacePath} activeBrowserProfileId="controlled" showTokenUsage={false} showTps={false} showThinking={false} simplifiedToolCalling={true} latestTurnUsage={null} onComposerMode={()=>{}} onComposerText={setNativeText} onCreateSession={()=>navigation.createdSessions++} onSend={(message,effort)=>{void startGuardedNativeChat({message,captured:{sessionId:nativeActive?nativeSessions[name].session_id:'',profileId:'controlled',spacePath:selection.workspacePath,backendProfileName:'controlled-backend'},current:{sessionId:nativeActive?nativeSessions[name].session_id:null,profileId:'controlled',spacePath:selection.workspacePath,backendProfileName:'controlled-backend'},selection:{scope:scopes[name],model:models[name].model,provider:models[name].provider},allowUntestedBetas:readShowUntestedProviderBetas(),qualificationBackendProfileName:'controlled-backend',storage:localStorage,...(effort?{reasoningEffort:effort}:{})},payload=>{guardedChatStarts.push(copy(payload));return Promise.resolve({sessionId:payload.sessionId||'synthetic-session',streamId:'synthetic-chat-stream'});}).then(result=>{if(result.ok)navigation.sent.push({scope:name,message,payload:copy(result.payload)});setNativeText('');});}} onStop={()=>{}} onCommandAction={async action=>{if(action.kind==='goal_command'){await requestNativePersistentGoalCommand(request=>window.lastbrowser.sidekick.goalCommand(request),action.args,{sessionId:action.context.sessionId,profileId:action.context.profileId,browserProfileId:action.context.browserProfileId,workspace:action.context.spacePath,expectedRevision:action.expectedRevision,clientRequestId:action.clientRequestId});refreshNative();}}}/>}
  {start&&<NativeBrowserStartPage bookmarks={[]} visits={[]} spaces={[{path:selection.workspacePath,name:'Space '+name,emoji:'🧪'}]} activeSpacePath={selection.workspacePath} activeProfileId="controlled" onNavigate={()=>{}} onSelectSpace={()=>navigation.spaceLinks++} onAddSpace={(path,name)=>{navigation.createdSpace={path,name}}}/>}
  {local&&<LocalAiSetupPane key={name} browserProfileId="controlled" workspacePath={selection.workspacePath} ready={true}/>}
  </main></DesktopI18nProvider>;
 }
-window.__independentSmoke={scopes,snapshots,models,connections,bindings,definitions,permissionStates,delays,calls,navigation,nativeCalls,nativeModes,nativeSessions,nativeChildren,activateNative:()=>activateNative(),resetBeta:()=>setShowUntestedProviderBetas(false),closeAssistant:()=>closeAssistant(),childDelta:(name,index,delta,foreign=false)=>{const child=nativeChildren[name][index];const event={...copy(child),kind:'answer_delta',sequence:child.watermark+1,payload:{delta},at:at()};delete event.messages;if(foreign)event.scope=scopes[name==='A'?'B':'A'];else{child.messages[0].content+=delta;child.watermark++;child.revision++;}for(const listener of nativeListeners)listener({streamId:child.parentTurnId,event:'subagent_event',data:{childEvent:event}});},locale:value=>chooseLocale(value),showNative:()=>showNative(),showStart:()=>showStart(),select:name=>choose(name),entry:name=>copy(useSpaceAssistantStore.getState().entries[assistantScopeKey(scopes[name])]),poll:name=>controller.poll(scopes[name]),load:name=>controller.load(scopes[name]),dispose:()=>controller.dispose(),foreign:()=>{foreign=true},delta:(name,delta,stale=false)=>{
+window.__independentSmoke={scopes,snapshots,models,connections,bindings,definitions,permissionStates,delays,calls,navigation,nativeCalls,guardedChatStarts,nativeModes,nativeSessions,nativeChildren,activateNative:()=>activateNative(),resetBeta:()=>setShowUntestedProviderBetas(false),closeAssistant:()=>closeAssistant(),childDelta:(name,index,delta,foreign=false)=>{const child=nativeChildren[name][index];const event={...copy(child),kind:'answer_delta',sequence:child.watermark+1,payload:{delta},at:at()};delete event.messages;if(foreign)event.scope=scopes[name==='A'?'B':'A'];else{child.messages[0].content+=delta;child.watermark++;child.revision++;}for(const listener of nativeListeners)listener({streamId:child.parentTurnId,event:'subagent_event',data:{childEvent:event}});},locale:value=>chooseLocale(value),showNative:()=>showNative(),showStart:()=>showStart(),select:name=>choose(name),entry:name=>copy(useSpaceAssistantStore.getState().entries[assistantScopeKey(scopes[name])]),poll:name=>controller.poll(scopes[name]),load:name=>controller.load(scopes[name]),dispose:()=>controller.dispose(),foreign:()=>{foreign=true},delta:(name,delta,stale=false)=>{
  const state=snapshots[name],assistant=state.messages.findLast(m=>m.role==='assistant'),user=state.messages.find(m=>m.role==='user'&&m.turnId===assistant?.turnId);
  if(!stale&&assistant?.pending)assistant.content+=delta;
  queues[name].push({schemaVersion:1,eventId:id(),scope:scopes[name],seq:++sequences[name],at:at(),kind:'assistant',payload:{conversationId:state.conversationId,turnId:assistant.turnId,requestId:user.clientRequestId,delta,revision:stale?state.revision-1:state.revision}});
@@ -411,6 +413,8 @@ async function electronChild(temp, mode='') {
         assert.equal(await run(`document.querySelector('.composer-beta-catalog-opt-in input').checked`),false,'Untested catalog stays opt-in');
         assert(await run(`document.querySelector('.composer-beta-catalog-opt-in').textContent.includes('No provider and model pair has a current successful chat qualification')`),'Fresh profile explains why the qualified list is empty');
         assert.equal(await run(`document.querySelector('.chat-composer button[type=submit]').disabled`),true,'Unqualified model cannot be sent before opt-in');
+        await run(`document.querySelector('.chat-composer button[type=submit]').click()`);
+        assert.equal(await run(`window.__independentSmoke.guardedChatStarts.length`),0,'The actual guarded start transport is untouched before opt-in');
         assert.equal(await run(`document.querySelectorAll('.chat-composer .composer-model-notice').length`),1,'The actionable empty-catalog notice replaces the duplicate blocked-model notice');
         assert.equal(await run(`localStorage.getItem('lastbrowser.providerChatEvidence.v3')`),null,'The controlled fresh profile contains no fabricated chat qualification');
         await run(`window.__independentSmoke.closeAssistant()`);
@@ -420,7 +424,7 @@ async function electronChild(temp, mode='') {
         await until(`!!document.querySelector('#composer-manual-models')`, 'Manual model catalog did not open');
         assert.equal(await run(`document.querySelectorAll('#composer-manual-models fieldset button').length`),0,'Unqualified models stay out of the list before opt-in');
         await run(`document.querySelector('.composer-beta-catalog-opt-in input').focus()`);await key('Space');
-        await until(`!document.querySelector('.composer-beta-catalog-opt-in')&&document.querySelectorAll('#composer-manual-models fieldset button').length>=4`, 'Explicit opt-in did not reveal the untested catalog');
+        await until(`document.querySelector('.composer-beta-catalog-opt-in input')?.checked&&document.querySelectorAll('#composer-manual-models fieldset button').length>=4`, 'Explicit opt-in did not reveal the untested catalog');
         assert(await run(`document.querySelector('#composer-manual-models').textContent.includes('Beta · untested')`),'Unqualified entries remain explicitly labeled as untested');
         assert.equal(await run(`document.querySelector('.chat-composer button[type=submit]').disabled`),true,'Opt-in alone does not enable sending an empty message');
         assert(await run(`document.querySelector('#composer-manual-models').textContent.includes('Extra local model')`));
@@ -432,16 +436,20 @@ async function electronChild(temp, mode='') {
         await run(`(()=>[...document.querySelectorAll('#composer-manual-models button')].find(button=>button.textContent.includes('Literal local model')).click())()`);
         await until(`window.__independentSmoke.models.A.model==='gemma4:31b'&&document.querySelector('.composer-model select')?.value==='@custom:local:gemma4:31b'`, 'Manual literal model selection did not commit to its provider');
         assert(await run(`document.activeElement===document.querySelector('.composer-toolbar button[aria-controls="composer-manual-models"]')`));
-        await input('.chat-composer textarea','Controlled fresh-profile test message');
-        await until(`!document.querySelector('.chat-composer button[type=submit]').disabled`, 'Explicitly opted-in Beta model remains blocked after valid message input');
-        await run(`document.querySelector('.chat-composer button[type=submit]').click()`);
-        await until(`window.__independentSmoke.navigation.sent.length===1`, 'Controlled renderer did not dispatch the selected model chat');
-        assert.equal(await run(`window.__independentSmoke.models.A.model`),'gemma4:31b');
-        assert.equal(await run(`window.__independentSmoke.models.A.provider`),'custom:local');
-        assert.equal(await run(`window.__independentSmoke.navigation.sent[0].message`),'Controlled fresh-profile test message');
         assert.deepEqual(await run(`[...document.querySelector('.composer-reasoning-effort select').options].map(option=>option.value)`),['','low','high']);
         await run(`(()=>{const select=document.querySelector('.composer-reasoning-effort select');select.value='high';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);
         assert.equal(await run(`document.querySelector('.composer-reasoning-effort select').value`),'high');
+        await input('.chat-composer textarea','Controlled fresh-profile test message');
+        await until(`!document.querySelector('.chat-composer button[type=submit]').disabled`, 'Explicitly opted-in Beta model remains blocked after valid message input');
+        await run(`document.querySelector('.chat-composer button[type=submit]').click()`);
+        await until(`window.__independentSmoke.navigation.sent.length===1&&window.__independentSmoke.guardedChatStarts.length===1`, 'Controlled renderer did not dispatch the selected model chat');
+        assert.equal(await run(`window.__independentSmoke.models.A.model`),'gemma4:31b');
+        assert.equal(await run(`window.__independentSmoke.models.A.provider`),'custom:local');
+        assert.equal(await run(`window.__independentSmoke.navigation.sent[0].message`),'Controlled fresh-profile test message');
+        assert.deepEqual(await run(`window.__independentSmoke.guardedChatStarts[0]`),{
+          sessionId:'native-a',message:'Controlled fresh-profile test message',model:'gemma4:31b',modelProvider:'custom:local',
+          profile:'controlled',workspace:'C:\\controlled\\a',backendProfileName:'controlled-backend',reasoningEffort:'high'
+        },'The mounted composer reaches the shared real guard and constructs the exact controlled transport payload');
         await run(`document.querySelector('[aria-controls="composer-manual-models"]').click()`);await key('Escape');
         assert.equal(await run(`document.querySelector('#composer-manual-models')`),null);
         assert(await run(`document.activeElement===document.querySelector('.composer-toolbar button[aria-controls="composer-manual-models"]')`));
@@ -449,7 +457,13 @@ async function electronChild(temp, mode='') {
         await until(`document.querySelector('.composer-model select')?.value==='teamwork'`, 'Orchestration model selection failed');
         const mutations=await run(`window.__independentSmoke.calls.filter(c=>c.operation==='modelSelection'&&c.payload.action==='set')`);
         assert.equal(mutations.length,2);assert(mutations.every(c=>c.scope.spaceId===mutations[0].scope.spaceId));
-        log('native-model-picker-interaction:passed',{literalIds:true,capturedScope:true,qualifiedModelsFilteredByDefault:true,explicitBetaOptIn:true,untestedLabelsRetained:true,selectedSpaceModelPersistedBeforeControlledSend:true,orchestrationPreserved:true,reasoningSelection:true,focusRestoration:true,escapeDismissal:true,freshProfileScreenshot:freshScreenshot,providerChatEvidenceAbsent:true,controlledTransportOnly:true});
+        await run(`document.querySelector('.composer-beta-catalog-opt-in input').focus()`);await key('Space');
+        await until(`document.querySelector('.composer-beta-catalog-opt-in input')?.checked===false`, 'Beta opt-out control did not revoke the session preference');
+        await input('.chat-composer textarea','Blocked after beta opt-out');
+        assert.equal(await run(`document.querySelector('.chat-composer button[type=submit]').disabled`),true,'Opt-out closes sending for the unqualified orchestration model');
+        await run(`document.querySelector('.chat-composer button[type=submit]').click()`);
+        assert.equal(await run(`window.__independentSmoke.guardedChatStarts.length`),1,'Opt-out never reaches the controlled transport');
+        log('native-model-picker-interaction:passed',{literalIds:true,capturedScope:true,qualifiedModelsFilteredByDefault:true,explicitBetaOptIn:true,untestedLabelsRetained:true,selectedSpaceModelPersistedBeforeControlledSend:true,actualGuardedStartTransport:true,exactPayload:true,noTransportBeforeOptIn:true,noTransportAfterOptOut:true,orchestrationPreserved:true,reasoningSelection:true,focusRestoration:true,escapeDismissal:true,freshProfileScreenshot:freshScreenshot,providerChatEvidenceAbsent:true,controlledTransportOnly:true});
         await run(`window.__independentSmoke.dispose()`);clearTimeout(timeout);window.destroy();app.quit();return;
       }
       if(mode==='--child-only'){

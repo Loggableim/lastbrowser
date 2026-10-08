@@ -380,19 +380,20 @@ describe('provider-aware model selection', () => {
 
   it('sends the active scoped model selection as an explicit chat model/provider pair', () => {
     const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
+    const startContract = readFileSync(path.resolve(process.cwd(), 'src/renderer/guarded-native-chat-start.ts'), 'utf8');
     const selectionRead = app.indexOf('chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
-    const startChat = app.indexOf('window.lastbrowser.sidekick.startChat({', selectionRead);
-    const requestEnd = app.indexOf('\n      });', startChat);
-    const requestBody = app.slice(startChat, requestEnd);
+    const guard = app.indexOf('prepareGuardedNativeChatStart(createGuardedStartInput())', selectionRead);
+    const transport = app.indexOf('(payload) => window.lastbrowser.sidekick.startChat(payload)', guard);
 
     expect(selectionRead).toBeGreaterThanOrEqual(0);
-    expect(startChat).toBeGreaterThan(selectionRead);
-    expect(app).toContain('const chatModelProvider = chatModelSelection.provider || undefined;');
+    expect(guard).toBeGreaterThan(selectionRead);
+    expect(transport).toBeGreaterThan(guard);
     expect(app).toContain('const configuredChatModel = chatModelSelection.model || undefined;');
-    expect(requestBody).toContain('model: configuredChatModel');
-    expect(requestBody).toContain('modelProvider: chatModelProvider');
-    expect(requestBody).toContain('profile: turnContext.profileId');
-    expect(requestBody).toContain('workspace: turnContext.spacePath');
+    expect(startContract).toContain('model: input.selection.model || undefined');
+    expect(startContract).toContain('modelProvider: input.selection.provider || undefined');
+    expect(startContract).toContain('profile: input.captured.profileId');
+    expect(startContract).toContain('workspace: input.captured.spacePath');
+    expect(startContract).toContain('backendProfileName: input.captured.backendProfileName');
   });
 
   it('maps a provider-qualified configured default to the bare picker ID', () => {

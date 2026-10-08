@@ -627,7 +627,7 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
-      {emptyQualifiedCatalog&&<div className="composer-model-notice composer-beta-catalog-opt-in" role="status">
+      {(emptyQualifiedCatalog||showUntestedBetas)&&<div className="composer-model-notice composer-beta-catalog-opt-in" role="status">
         <span>{t('settings.panels.providers.betaCatalogEmpty')}</span>
         <label>
           <input type="checkbox" checked={showUntestedBetas} onChange={event=>setShowUntestedProviderBetas(event.currentTarget.checked)} />

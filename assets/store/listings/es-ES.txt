@@ -1,27 +1,27 @@
-Lastbrowser — es-ES
+LastBrowser — es-ES
 
 DESCRIPTION
-Lastbrowser combina un navegador Chromium para Windows con el asistente de IA integrado Nova. Organiza las páginas web en pestañas verticales y espacios de trabajo y utiliza el asistente junto a las páginas abiertas.
+LastBrowser combina un navegador Chromium para Windows con el asistente de IA integrado Nova. Organiza las páginas web en pestañas verticales y espacios de trabajo y utiliza el asistente junto a las páginas abiertas.
 
 Funciones:
 • Pestañas verticales y espacios de trabajo para tus proyectos web.
 • Asistente de IA Nova para preguntas, resúmenes y tareas con el contexto de las páginas web que proporcionas.
-• Conexión con proveedores de IA compatibles mediante tus propias credenciales y compatibilidad con modelos locales a través de Ollama.
+• Conéctate con tus propias credenciales a combinaciones de proveedor y modelo de IA probadas y cualificadas; puede haber modelos locales de Ollama. Las combinaciones beta no probadas están ocultas de forma predeterminada y, si se ofrecen, requieren activarlas expresamente en Configuración.
 • Terminal integrado y compatibilidad con extensiones del navegador.
 • Perfiles del navegador almacenados localmente y herramientas para borrar los datos de navegación.
+• Los chats usan un único modelo de forma predeterminada. La orquestación Teamwork es una versión beta opcional.
 
-El uso personal es gratuito. El uso comercial requiere una licencia comercial independiente. Los servicios externos de IA pueden requerir una cuenta propia y servicios de pago. Los modelos locales de IA necesitan una instalación local adecuada. Al utilizar proveedores externos de IA, tus solicitudes y el contexto proporcionado para la tarea se envían al proveedor seleccionado. Los perfiles del navegador se guardan localmente en tu PC.
-
+LastBrowser es gratuito para uso personal y comercial. Los servicios externos de IA pueden requerir una cuenta y servicios de pago. Cuando utilizas un proveedor externo de IA, tu solicitud y el contexto que proporcionas para la tarea se envían a dicho proveedor. Los perfiles del navegador se guardan localmente en tu PC. Siguen aplicándose las licencias y condiciones de los componentes de terceros, modelos y servicios externos.
 SHORT DESCRIPTION
 Navegador Chromium para Windows con pestañas verticales, espacios de trabajo y asistente de IA Nova. Los perfiles permanecen locales; los servicios externos de IA reciben las solicitudes y el contenido que proporcionas.
 
 PRODUCT FEATURES
 • Pestañas verticales y espacios de trabajo
 • Asistente de IA Nova integrado
-• Proveedores externos de IA compatibles y modelos locales de Ollama
+• Combinaciones de proveedor y modelo de IA probadas y cualificadas; modelos de Ollama si están disponibles
 • Terminal integrado y extensiones del navegador
 • Perfiles del navegador almacenados localmente
-
+• Un modelo por chat de forma predeterminada; orquestación Teamwork en beta opcional
 SEARCH TERMS
 navegador
 navegador web
@@ -29,16 +29,10 @@ navegador ia
 pestañas verticales
 asistente ia
 espacios de trabajo
-local-first
-
 WHAT'S NEW
-Primera versión de Lastbrowser en Microsoft Store.
-
+Mejoras de estabilidad y correcciones.
 APPLICABLE LICENSE TERMS
-Lastbrowser puede utilizarse gratuitamente para fines personales y no comerciales. El uso comercial requiere una licencia comercial independiente. Consultas sobre licencias comerciales: rainer@dominik.in.
-
-Las licencias de los componentes de terceros incluidos siguen siendo aplicables de forma independiente y conceden los derechos descritos para cada componente. El acceso y el uso de servicios externos de IA también están sujetos a las condiciones de su proveedor.
-
+LastBrowser es gratuito para uso personal y comercial. Los servicios externos de IA pueden requerir una cuenta y servicios de pago. Cuando utilizas un proveedor externo de IA, tu solicitud y el contexto que proporcionas para la tarea se envían a dicho proveedor. Los perfiles del navegador se guardan localmente en tu PC. Siguen aplicándose las licencias y condiciones de los componentes de terceros, modelos y servicios externos.
 COPYRIGHT
 © 2026 Dominik Rainer / Lastbrowser.com
 

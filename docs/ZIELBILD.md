@@ -13,7 +13,7 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 
 - [x] **Phase 1: Stabilitätsfundament** (Zustand Stores, App.tsx Modularisierung, 6 Locales i18n, node-pty Terminal, auto-generierter 418-Endpunkte-API-Katalog, Multi-Monitor Window Dragging)
 - [x] **Phase 2: Modularisierung & Kernfeatures (v0.1.26)** (Sub-Panels ausgelagert, Netscape/JSON Lesezeichen-Import/Export, Session-Snapshots, Visual Adblock Shield)
-- [x] **Phase 3: Auth, Modellkatalog & Setup Assistant** (In-App OAuth Connect Window, Google AI Studio API-Key-Modellzugriff, Fullscreen First-Run Wizard, 5 Persönlichkeitsprofile)
+- [x] **Phase 3: Auth, Modellkatalog & Setup Assistant** (Provider-Authentifizierung gemäß jeweiligem Provider-Flow, Fullscreen First-Run Wizard, 5 Persönlichkeitsprofile; Gemini-CLI-Subscription-OAuth nicht verfügbar)
 - [x] **Phase 4: Shortcuts, Omnibox & Speed Dial (v0.1.27)** (Globaler IPC-Shortcut-Dispatcher, Omnibox-Autocomplete mit Live-Suggestions, Startseiten Speed-Dial)
 - [x] **Phase 5: Browser Polish & UX (v0.1.28)** (Tab-Favicons, Lade-Spinner, dynamischer Stop/Reload-Button, Webview Crash-Recovery, F11 Vollbild, Download-Aktivitätsindikator, 306 Unit-Tests grün)
 - [x] **Phase 6: Browser Power-Features (v0.1.29)** (Rechtsklick „Element untersuchen“ / DevTools Inspect mit Auto-Open, Rechtsklick „Deep Research mit [Assistenten-Name]“, Tab Audio-Indikator & Per-Tab Mute, Privater / Inkognito-Modus mit in-memory-incognito Partition & Ctrl+Shift+N, 309 Unit-Tests grün)
@@ -22,10 +22,79 @@ Das Zielbild ist die **vollständige, native Parität** und eine **moderne, aufg
 - [x] **Phase 9: Modernes UI-Redesign (Sidekick + Zen Synthese mit einklappbarer Sidebar)** (Einklappbare vertikale Tabs, Wegfall horizontaler Tabs, 48px Slim-Dock, Pinned-Grid, Sidekick-Startseiten-Dashboard, 70/30 Copilot Split-View)
 - [x] **Phase 10: Agentic Browsing & Deep Tab Intelligence (Comet-Parität)** (10.1 Cross-Tab Context Synthesis `@tabs`, 10.6 CometJacking & Prompt-Injection Guardrails, Clickable Citation Badges)
 - [x] **Phase 11: Agentic Workflow Templates & Quick Action Hub** (Kuratierte 1-Klick Recherche- & Analyse-Workflows, Empty-State Quick-Launcher, Command Palette Integration)
-- [!] **Phase 12: Gemini CLI Subscription-OAuth & Round-Robin – nicht verfügbar** (Google beendete den Consumer-Code-Assist-Zugriff am 18.06.2026; Lastbrowser blockiert diesen Provider. Gespeicherte Alt-Credentials sind keine nutzbaren Zugangsdaten.)
-- [x] **Phase 13: UI-Synthese, Nova AI Branding & Power-Tools Integration (v0.1.31)** (Re-Branding zu Nova AI, Menü-Synthese der 17+ Power-Panels, Top-64 Pinned-Apps-Katalog, Draggable AI-Action-Bar, dynamische Provider-Modellauswahl, 48 Spezial-Skills, Phasing-out des Classic Layouts)
+- [!] **Phase 12: Gemini CLI Subscription-OAuth & Round-Robin – nicht verfügbar** (Google stellte den Consumer-Code-Assist-Zugriff am 18.06.2026 ein; Lastbrowser blockiert diesen Provider. Gespeicherte Alt-Credentials sind keine nutzbaren Zugangsdaten.)
+- [x] **Phase 13: UI-Synthese, Nova AI Branding & Power-Tools Integration (v0.1.31)** (Re-Branding zu Nova AI, Menü-Synthese der 17+ Power-Panels, Top-64 Pinned-Apps-Katalog, Draggable AI-Action-Bar, dynamische Live-Modellauswahl via Google CLI Quota-Discovery, 48 Spezial-Skills, Phasing-out des Classic Layouts)
 - [x] **Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur) (v0.1.31)** (Konsolidierung von Chrome MV3 WebExtensions und nativen Nova MCP-Skills, Ablösung des alten „App Store“-Begriffs, Workspace-Scoping, Berechtigungs-Sandboxing)
 - [x] **Store-Release Readiness: Microsoft Partner Center (Win32 / NSIS)** (27/27 Preflight Checks, WACK / Silent-Install `/S` Compliance, Store-Listing DE/EN, IARC-Guide, Local-First Privacy Policy)
+
+### Aktuelle Abnahmeampel — 0.1.49 (Stand 8. Oktober 2026)
+
+Die abgehakten Phasen oben sind historische Funktionsmeilensteine. Sie sind keine Paket-, VM- oder Veröffentlichungsfreigabe.
+
+| Bereich | Status | Beleg und Grenze |
+|---|---|---|
+| 0.1.49 Source-Freeze | **PASS — Source** | Commit `5f90bb5628f91f2ec8d245b608d7e5ce60afaafe`, Tree `f0750ea77da2036b45202272a4e795ff85c4e3ae`. All-4-Receipt `E:\lastbrowser-ui-integration-20261008\output\release-fix-integration-0.1.49\final-all4-receipt.json`, SHA-256 `c267e3d922376dc4127d88b7c6c19de3e531f7f357a8a9cb538be1e56f515b2e`: 214 Testdateien / 1.953 Tests PASS, Build Exit 0 (bestehender Chunk >500 kB Hinweis), Store 39 PASS / 2 WARN / 0 FAIL (Screenshots vorläufig; beim Preflight noch kein Paket zur Signaturprüfung beigelegt), Python-Syntax Exit 0. Das belegt Source-Gates, keine Runtime-Abnahme. |
+| 0.1.49 Testpakete / TEST-Release | **ZUSTELLUNG PASS — unsigniert** | Öffentlicher [TEST-Release](https://github.com/Loggableim/lastbrowser/releases/tag/test-v0.1.49-5f90bb56-20261008), keine Stable-Promotion. Vollständiger Remote-Readback aller fünf Assets: `E:\lastbrowser-package-candidate-5f90bb56-20261008\release\remote-readback-receipt.json`, SHA-256 `60fbbbe54683069d02ad4601b0c5a88ec2b1f5078dbcbe6c63d329df524c8d4e`, 2.619 Bytes; Receipt meldet Byte-Readback und Hashvergleich **PASS** für alle fünf Dateien. Setup/Portable bleiben `NotSigned`; Stable latest bleibt `v0.1.45`. |
+| 0.1.49 Paketreview / Guest | **REVIEW COMPLETE — bounded PASS / Guest NOT_RUN** | Unabhängiger Review `E:\lastbrowser-package-candidate-5f90bb56-20261008\output\independent-package-review-2026-10-08.json` (13.424 Bytes, SHA-256 `f523173c9ceca77607285577712d532efd3ff536ddfa2b8b1c31dffbd34870f6`) meldet Local-Payload- und Guest-Bundle-Integrität **PASS**. Separater Unpacked-Preview-Erststart zeigt aktuellen KI-Wahldialog, gebündeltes Backend bereit und normalen Browser-Schluss mit Exit 0 (**PASS**). Die unveränderten Raw-Direct-EXE- und Portable-Probes bleiben **FAIL** an der Assertion zum alten Setup-Selector; nicht gelöscht oder als PASS umetikettiert. Guest Acceptance **NOT_RUN**; kein Host-VM-Lauf. Der bestätigte Guest-Order-Readback (remote Commit `95fbcbc3b8b6a505ee3ecb24bcbf24a98f43a992`, Blob `7ff1a7a4a678abd59c531f543ef444ce67c204cf`, SHA-256 `f3f51a9942626eb70da52efbc0ddc94ad09641d0927677bbe6d6db9b79bd92d0`) bestätigt URL, Bytes und SHA aller fünf Dateien unabhängig **PASS**; `GuestACK` **NOT_OBSERVED**, Tests **NOT_RUN**. Strenge BoringSSL-Store-Provenienz und CleanWindows weiterhin **OPEN**. TEST-Zustellung PASS; finale Store-/Stable-Distributionsabnahme OPEN. Signierung und Store-Einreichung nicht durchgeführt. Das ist kein Gesamtprodukt-PASS. |
+| Copy-/Lokalisierungslücken | **OPEN — source findings** | Drei bestehende sichtbare Befundgruppen aus `docs/store-screenshot-capture.md` bleiben konkret: (1) deutsche Space-Karten; (2) englische Favoriten-/Verlaufstexte auf der Startseite; (3) englische bzw. gemischte Beschriftungen „Zurück zum Web“, „Deaktiviert“ und native Panel-/Hub-Titel. Betroffene Quellbereiche: `apps/desktop/src/renderer/components/SpaceSelector.tsx` (Space-Karten), `apps/desktop/src/renderer/components/StartPage.tsx` plus `apps/desktop/src/renderer/i18n/browser-chrome-translations.ts` (Startseite), `apps/desktop/src/renderer/components/Sidebar.tsx`, `apps/desktop/src/renderer/panels/SystemPanels.tsx` und `apps/desktop/src/renderer/i18n/keys.ts`/Locale-Kataloge (Dock und native Panels). Vorhandene Doku nennt die sichtbaren Strings, aber keinen belastbaren vollständigen achtsprachigen Screenshot-Abgleich je Fundstelle; daher keine Locale-Vollständigkeit behauptet. Source-Freeze bleibt unverändert, Paket-/Store-Darstellung **OPEN**. |
+| Offene Ursachen | **OPEN** | Profilreferenz und Modellkatalog/-ursache bleiben offen; eingebettetes Google-Verhalten ist `NOT_GUARANTEED`. |
+| Test-Publish / Upload | **PASS — TEST-Release zugestellt** | Fünf Remote-Dateien vollständig rückgelesen und anhand des Remote-Readback-Receipts gegen Bytes und SHA-256 geprüft. Guest-Testlauf **NOT_RUN**; diese Zustellung ist keine Runtime- oder Guest-Abnahme. |
+| Signierung / Stable / Store | **OPEN — nicht durchgeführt** | Signierung und Store-Einreichung nicht durchgeführt; strenge BoringSSL-Store-Provenienz und CleanWindows bleiben offen. Stable bleibt `v0.1.45`; TEST-Release ist keine Stable-Promotion. |
+
+### Historische B7-Guest-Ampel — v0.1.48, nicht auf 0.1.49 übertragen
+
+Der reale VM-Lauf prüfte Source `b7ca38bd6db7b8a6e5fd814bd322b4916f561e73`, Tree `30f2deb9301b12cf8908e6acd633893b64caa00d`, portable Kandidat `test-v0.1.48-b7ca38bd-20261008`. Der Bericht liegt im Report-Commit `b39ae4281d2f77e9714f7b91b4c4888348259e65`, Pfad `docs/test-reports/2026-10-08-b7ca38bd-runtime-test-report.md`. Seine historischen Paketintegritätspins bleiben erhalten:
+
+| B7-Artefakt | SHA-256 | Ergebnis / Umfang |
+|---|---|---|
+| Guest-ZIP | `a083d83bd1d94130ab68da8850882c3a833b7513d9c8008049b01d316c3aa95f` | **PASS** — gehashtes Testinput |
+| Standalone-Manifest | `33000f3447e5bb2f2718b30336d3abfcbe83f18fe5987bfe4218ae9ee2488101` | **PASS** — gehashtes Manifest |
+| Setup-Wrapper (nicht ausgeführt) | `c84618cd6da1f10010f445d443d39eb604c4dd489b41376a1c55928edad97c95` | **PASS** — Datei gepinnt; nicht als Setup-Lauf werten |
+| Ausgeführter Portable-Wrapper | `560b367378fef4b60599dbbf82c6f7e23660e6b3d74f9ec42fbee5a1e4d28683` | **PASS** — im isolierten synthetischen Profil gestartet |
+| ASAR aus dem Portable-Extraktionsbaum | `a196a883890cd33a68b0b02fdfb8f2cc8bf608e94fbf96b16e57578cb69b408b` | **PASS** — mit gestartetem Portable verknüpft |
+
+Beide Wrapper waren `NotSigned`. Providerturns, Inferenz, Modellinstallationen und Kosten waren **0**. Die getrennten UI-Ergebnisse des B7-Berichts lauten:
+
+| Beobachteter B7-Fall | Status | Präzisierung |
+|---|---|---|
+| Erststart „Ohne KI“ und Reload ohne erneute Auswahl | **PASS** | Kontrolliertes frisches Profil; keine Inferenz. |
+| Browserprofil A→B→A und History-Isolation | **PASS** | B zeigte keine A-History; A-History kam nach Rückwechsel wieder. |
+| History-Vorschläge, Up/Down-Auswahl, Enter und explizite Suchoption | **PASS** | Lokale History-/Search-UI; keine externe Suche abgeschickt. |
+| Privater Tab / History und Schließen des letzten sichtbaren Tabs | **PASS — begrenzt** | Privater Tab im selben Fenster; Fenster blieb auf Startansicht offen. Separates privates Fenster bzw. Tabmodell mit null Tabs nicht geprüft. |
+| Loopback-Download, Indikatoren, Floating-/Resize-/Dock-Aktionen | **PASS — begrenzt** | Synthetischer lokaler Download; Animationsursprung, Zwischen-Dockziele und Prozessneustartpersistenz nicht geprüft. |
+| Modellstore zeigt CPU/RAM/GPU/Disk ehrlich als „Unbekannt“ | **PASS — begrenzt** | Keine erfundenen Messwerte; Advanced-Details nicht ausgeklappt. |
+| Assistant-Übersicht und Connections-Disclosure | **PASS — begrenzt** | Composer/Connections sichtbar; 0 verbundene Verbindungen, Setup nötig. Keine Live-Verbindung konfiguriert. |
+| `AI_NEW_CHAT_20261008`: Neuer Chat aktiviert Arbeitschat nicht | **FAIL** | Beide Klicks erzeugten Recent-Einträge, ließen aber die Startseite bzw. den vorherigen Arbeitschat sichtbar. |
+| Neuer Chat / Sessionwechsel trennt ungesendeten Composer-Entwurf nicht | **FAIL** | `Guest focus check` blieb nach neuer Session und Wechsel zwischen zwei Sessions stehen. Innerer Composer-Fokus war **NOT_TESTED**. |
+| Profilmenü überlagert; Add per Pointer scheitert | **FAIL** | Add/Profilwechsel funktionierten per Tastatur; das Menü lag über der Settings-Karte. |
+| Tab-Drag zu Pinned Apps erzeugt keinen Pin | **FAIL** | Originaltab blieb erhalten; vorgeschriebene Root/Subdomain-Deduplizierung daher **BLOCKED**. |
+| Hardware-Scan unter langem Temp-Pfad | **FAIL — beobachtet** | UI meldete `local_ai_path_too_long`; kurzer Pfad wurde nicht gegengeprüft, Ursache bleibt offen. |
+| Space-Erstellung meldet `adapter_unsupported`, obwohl der Space entsteht | **FAIL — widersprüchliche UI-Antwort** | Der Space erschien und war auswählbar; Ursache nicht festgelegt. |
+| Zweiter Erststart / kurzer Profilpfad und echte IME | **BLOCKED** | Zweiter isolierter Start durch Freigabeprüfung abgelehnt und nicht ausgeführt; VM hatte keine IME-Kandidatenauswahl. |
+| Goals, Scheduler, Rechteentzug, Reset und Quickchat-Ausführungsfälle | **BLOCKED** | Keine ausdrücklich kontrollierte lokale Fixture identifiziert; keine Provider-/autonomen Läufe. |
+| Goal-Zustandsansicht nach Reload und Summarize-Routing | **NOT_TESTED** | Keine gezielte Ansicht und kein Summary-Aufruf. |
+| Schmaler Viewport und vollständige Tastaturbedienung | **NOT_TESTED** | In diesem Guest-Lauf nicht ausgeführt. |
+| Vollständiges Beenden des Portable-Prozesses | **NOT_VERIFIED** | Nach Fenster-X blieben Wrapper/Hauptprozess/Backend bestehen. |
+| Setup, Update, Deinstallation und Clean-Windows-CRT | **BLOCKED / NOT_VERIFIED** | Kompatible Baseline bzw. sauberer Snapshot fehlte; Setup wurde nicht ausgeführt. |
+
+Der vollständige B7-Bericht bewahrt die Zeitstempel, Screenshots, Prozess-/Artefaktidentitäten und Teilfallgrenzen. Diese B7-PASS-/FAIL-/BLOCKED-Ergebnisse beschreiben ausschließlich v0.1.48 auf dem genannten VM-Kandidaten und sind weder v0.1.49-Runtimebeleg noch pauschale Aussage „Runtime nicht getestet“.
+
+### Späterer B7-Provider-Retest — eigener historischer Lauf
+
+Separater Report-Pin: Commit `15fabd8fa7776db2da29e58303ff47cc61397402`, Datei `docs/test-reports/2026-10-08-b7ca38bd-user-provider-retest.md`, GitHub-Blob `452d5188e80312e9e07f70f60a63518f07801473` (7.274 Bytes, SHA-256 `b51005cf06757e0e093e128a8ac6e54c987875c3af6ffec0fea7e3a041030af2`). Root hat den Blob live verifiziert. Der Inhalt bezieht sich auf v0.1.48 und enthält den konkreten Profilreferenzfehler; er ist kein 0.1.49-Beleg.
+
+| Retest-Fall | Status | Präzisierung |
+|---|---|---|
+| 0.1.48 Setup-/ASAR-Identität | **IDENTIFIZIERT** | Der Retest pinnt Setup `0.1.48` und ASAR; dies ist Paketidentität, keine 0.1.49-Paketabnahme. |
+| Upgrade 0.1.46 → 0.1.48 | **PASS — begrenzt** | Nur begrenzter Upgradebeleg für diesen Versionspfad; keine allgemeine Setup-/Updatefreigabe. |
+| New Chat | **FAIL** | Fehler blieb im späteren Retest bestehen. |
+| Modellkatalog | **FAIL** | Katalogpfad blieb fehlerhaft. |
+| Quickchat nach Reload | **FAIL** | `Profile reference is ambiguous or has moved`. |
+| Providerturns | **0** | Keine Providerturns ausgeführt. |
+| Tatsächliche Inferenz | **BLOCKED** | Keine Inferenz durchgeführt. |
+| Teamwork | **NOT_TESTED** | Keine Teamwork-Abnahme in diesem Retest. |
+
+Dieser spätere Lauf ist vom vorigen B7-Guest-Bericht getrennt: dessen Aussage „Setup nicht ausgeführt“ beschreibt nur den ersten Lauf; der spätere Report pinnt eine 0.1.48-Identität und einen begrenzten 0.1.46→0.1.48 Upgradebeleg. Keiner der beiden B7-Läufe ist Runtime- oder Guest-Abnahme für 0.1.49.
 
 ---
 
@@ -264,9 +333,7 @@ Aus der Architektur des Perplexity Comet Browsers werden gezielt jene Kernfeatur
 
 ## 8. Phase 12: Gemini CLI Subscription-OAuth & Round-Robin – nicht verfügbar
 
-Der frühere `google-gemini-cli`-Provider ist in Lastbrowser absichtlich deaktiviert. Google stellte den Consumer-Code-Assist-Zugriff am 18.06.2026 ein; gespeicherte OAuth-Tokens und Account-Metadaten ermöglichen deshalb keine Inferenz. Lastbrowser bietet für diesen Provider weder Login noch Modellkatalog, Account-Rotation oder Quota-Failover an. Eine lokale Round-Robin-Metadatenfunktion ist kein Nachweis für ausführbare Anfragen.
-
-Google AI Studio bleibt ein separater Provider: `gemini` verwendet einen vom Nutzer konfigurierten `GOOGLE_API_KEY` oder `GEMINI_API_KEY` und den nativen Gemini-API-Adapter. Diese API-Key-Anbindung ist unabhängig von Gemini-CLI-Subscription-OAuth und dessen Kontingenten. In der aktuellen Provider-Registry ist kein Vertex-AI-Provider implementiert.
+Der frühere `google-gemini-cli`-Provider ist in Lastbrowser absichtlich deaktiviert. Google stellte den Consumer-Code-Assist-Zugriff am 18.06.2026 ein; gespeicherte OAuth-Tokens und Account-Metadaten ermöglichen deshalb keine Inferenz. Lastbrowser bietet für diesen Provider weder Login noch Modellkatalog, Account-Rotation oder Quota-Failover an. Eine lokale Round-Robin-Metadatenfunktion ist kein Nachweis für ausführbare Anfragen. Gemini API und Vertex AI sind separate, eigenständig zu konfigurierende Provider und kein Ersatz für Subscription-OAuth.
 
 ---
 
@@ -319,23 +386,24 @@ Google AI Studio bleibt ein separater Provider: `gemini` verwendet einen vom Nut
      - Standardzustand A: **Kompakter Mini-Mode / Slim Dock (48px)**.
      - Standardzustand B: **Vollständig Ausgeklappt (~240px)**.
 
-### 13.6 Universelle Modellauswahl & Provider-Discovery [x]
+### 13.6 Universelle Modellauswahl & Provider-Sync [x]
 1. **Ablösung des statischen Hardcodings:**
    - Die bisherigen, statisch im Frontend hinterlegten Mock-Arrays (`AVAILABLE_MODELS` in `CopilotSplitView.tsx`, `setup-state.ts`, etc.) werden vollständig durch eine dynamische Anbindung an die Backend-API (`/api/models` / `/api/models/live`) ersetzt.
    - Veraltete oder nicht mehr im Code-Assist-Endpoint existierende Modell-IDs (wie `gemini-1.5-*`) werden aus allen Katalogen entfernt.
-2. **Google-Provider klar getrennt:**
-   - **Google AI Studio (`gemini`):** API-Key-basierter Zugriff über die Gemini API und den nativen Gemini-Adapter. Er verwendet weder Gemini-CLI-Subscription-OAuth noch dessen alte Code Assist Quota-Discovery.
-   - **Gemini CLI (`google-gemini-cli`):** Nicht verfügbar; alte OAuth-Tokens, Quota-Abfragen und statische Legacy-Modelllisten dürfen keine auswählbaren Modelle oder Inferenz erzeugen.
-3. **Provider-abhängiger Modellkatalog:**
-   - Modellkataloge können aus Provider-APIs geladen und, sofern unterstützt, durch einen gekennzeichneten Offline-Fallback ergänzt werden.
-   - Google AI Studio ist ein API-Key-Provider; seine Katalog- und Verbindungsanzeige ist unabhängig von Google-Konto-OAuth. Der deaktivierte Gemini-CLI-Provider erhält keine Pre-Login-Modellliste.
+2. **Provider-spezifische Modellerkennung:**
+   - Der deaktivierte Provider `google-gemini-cli` liefert weder Authentifizierung noch Modelle oder Quota-Daten. Gemini API und Vertex AI müssen über ihre eigenen Provider-Zugangsdaten und unterstützten Modellkataloge laufen.
+3. **Pre-Login & Offline-Fallback:**
+   - Vor dem Login (`GOOGLE CLI CONNECT`) oder bei Netzwerkunterbrechung zeigt der Picker eine verifizierte Standardauswahl der stabilen Produktionsmodelle:
+     - `gemini-2.5-flash` (Standard • Schnell & Kosteneffizient)
+     - `gemini-2.5-pro` (Tiefes Reasoning & Komplexe Analyse)
+   - Sobald das Konto verbunden ist (`GOOGLE CLI READY`), aktualisiert sich das Dropdown in Echtzeit mit den real verfügbaren Modellen des Accounts.
 4. **UI-Darstellung & Quota-Badges:**
    - Dynamischer Dropdown-Picker im Chat- und Copilot-SplitView:
-     - **Google AI Studio:** Darstellung als separater API-Key-Provider; Modellverfügbarkeit richtet sich nach der Gemini-API-Anbindung. Es werden keine Gemini-CLI-Account- oder Subscription-Quota-Badges angezeigt.
+     - **Google Gemini CLI (`google-gemini-cli`):** nicht verfügbar; alte OAuth-Tokens, Quota-Abfragen und statische Legacy-Modelllisten dürfen keine auswählbaren Modelle oder Inferenz erzeugen.
      - **Anthropic:** `claude-3-5-sonnet`, `claude-3-opus`, `claude-3-5-haiku`.
      - **OpenAI:** `gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini`.
      - **Lokale Modelle:** Erkannte Ollama- / LocalAI-Instanzen.
-   - Auto-Failover: Provider-Fehler können über die jeweils konfigurierte Provider-Fallback-Logik behandelt werden. Es gibt keine Rotation oder Quota-Failover zwischen Consumer-Google-Accounts.
+   - Auto-Failover darf nur auf tatsächlich verfügbare und konfigurierte Provider bzw. Accounts routen. Lokale Alt-Account-Metadaten umgehen keine Anbieterlimits.
 
 ### 13.7 Agentic Workflows: Kategorisiertes Dropout-Menü mit 12+ Skills pro Kategorie [x]
 1. **Erweitertes Dropout-Menü:**

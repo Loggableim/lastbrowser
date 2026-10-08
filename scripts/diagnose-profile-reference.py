@@ -11,12 +11,13 @@ the output is not a continuing live-state or execution-authorization claim.
 """
 from __future__ import annotations
 
-from contextlib import closing
+from contextlib import closing, contextmanager
 import hashlib
 import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 import sys
 import tempfile
 
@@ -36,10 +37,41 @@ def _result(reason, *, schema=None, count=None, matches=None):
             "homeMatches": matches, "reason": reason}
 
 
-def _hash_file(path, limit):
-    digest, size = hashlib.sha256(), 0
+def _identity(metadata):
+    return (metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns)
+
+
+def _plain_source(path):
+    metadata = path.lstat()
+    reparse = getattr(metadata, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    if not stat.S_ISREG(metadata.st_mode) or reparse:
+        raise Unavailable("snapshot_source_unavailable")
+    return metadata
+
+
+@contextmanager
+def _verified_source(path, expected):
+    # Path checks alone cannot bind the subsequently opened Windows handle.
+    # Check both the path and actual descriptor before *any* content read.
+    if _identity(_plain_source(path)) != expected:
+        raise Unavailable("snapshot_changed")
     with path.open("rb") as source:
-        while block := source.read(CHUNK_BYTES):
+        def verify():
+            if (_identity(os.fstat(source.fileno())) != expected
+                or _identity(_plain_source(path)) != expected):
+                raise Unavailable("snapshot_changed")
+        verify()
+        yield source, verify
+
+
+def _hash_file(path, limit, expected):
+    digest, size = hashlib.sha256(), 0
+    with _verified_source(path, expected) as (source, verify):
+        while True:
+            verify()
+            block = source.read(CHUNK_BYTES)
+            if not block:
+                break
             size += len(block)
             if size > limit:
                 raise Unavailable("snapshot_too_large")
@@ -56,18 +88,18 @@ def _manifest(home):
     result = {}
     for name, limit in LIMITS.items():
         path = home / name
-        if not path.exists():
+        try:
+            before = _plain_source(path)
+        except FileNotFoundError:
             result[name] = None
             continue
-        if path.is_symlink() or not path.is_file() or path.resolve(strict=True).parent != home:
+        if path.resolve(strict=True).parent != home:
             raise Unavailable("snapshot_source_unavailable")
-        before = path.stat()
-        size, digest = _hash_file(path, limit)
-        after = path.stat()
-        identity = lambda stat: (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
-        if identity(before) != identity(after) or size != after.st_size:
+        size, digest = _hash_file(path, limit, _identity(before))
+        after = _plain_source(path)
+        if _identity(before) != _identity(after) or size != after.st_size:
             raise Unavailable("snapshot_changed")
-        result[name] = (identity(after), digest)
+        result[name] = (_identity(after), digest)
     if result["state.db"] is None:
         raise Unavailable("database_missing")
     return result
@@ -79,8 +111,12 @@ def _copy_snapshot(home, destination, before):
         if expected is None:
             continue
         digest, size = hashlib.sha256(), 0
-        with (home / name).open("rb") as source, (destination / name).open("xb") as target:
-            while block := source.read(CHUNK_BYTES):
+        with _verified_source(home / name, expected[0]) as (source, verify), (destination / name).open("xb") as target:
+            while True:
+                verify()
+                block = source.read(CHUNK_BYTES)
+                if not block:
+                    break
                 size += len(block)
                 if size > limit:
                     raise Unavailable("snapshot_too_large")

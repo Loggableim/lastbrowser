@@ -100,6 +100,55 @@ def test_concurrent_source_change_is_reported_unavailable_not_a_false_identity(t
         "refCount": None, "homeMatches": None, "reason": "snapshot_changed"}
 
 
+@pytest.mark.parametrize("phase", ["manifest_hash", "snapshot_copy"])
+def test_swapped_open_handle_is_rejected_before_reading_any_foreign_bytes(tmp_path, monkeypatch, phase):
+    home, outside = tmp_path / "profile", tmp_path / "outside"
+    connection = seed(home)
+    connection.close()
+    outside.mkdir()
+    foreign = outside / "foreign-database"
+    foreign.write_bytes(b"external-private-bytes-must-never-be-read")
+    before = contents(home)
+    opened, reads = [], []
+    path_open = Path.open
+
+    class ForeignHandle:
+        def __init__(self):
+            self.handle = path_open(foreign, "rb")
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            self.handle.close()
+        def fileno(self):
+            return self.handle.fileno()
+        def read(self, *args):
+            reads.append(True)
+            return self.handle.read(*args)
+
+    def swapped(path, *args, **kwargs):
+        if path == home / "state.db" and args and args[0] == "rb":
+            opened.append(True)
+            return ForeignHandle()
+        return path_open(path, *args, **kwargs)
+
+    if phase == "manifest_hash":
+        monkeypatch.setattr(Path, "open", swapped)
+    else:
+        copy = diagnostic._copy_snapshot
+        def changed(source, destination, manifest):
+            with monkeypatch.context() as patch:
+                patch.setattr(Path, "open", swapped)
+                return copy(source, destination, manifest)
+        monkeypatch.setattr(diagnostic, "_copy_snapshot", changed)
+    result = diagnostic.diagnose(home)
+    assert result["reason"] == "snapshot_changed"
+    assert result["refCount"] is None and result["homeMatches"] is None
+    assert opened and reads == []
+    # Read this comparison with the normal Path API, outside the injection.
+    monkeypatch.setattr(Path, "open", path_open)
+    assert contents(home) == before
+
+
 def test_missing_database_and_missing_captured_home_do_not_create_or_echo_paths(tmp_path):
     home = tmp_path / "profile"
     home.mkdir()
@@ -112,6 +161,26 @@ def test_missing_database_and_missing_captured_home_do_not_create_or_echo_paths(
     result = diagnostic.diagnose(home)
     assert result["reason"] == "home_unavailable" and result["homeMatches"] is None
     assert "private" not in json.dumps(result) and contents(home) == before
+
+
+@pytest.mark.parametrize("sidecar", ["state.db-wal", "state.db-shm"])
+def test_dangling_sidecar_symlink_is_unavailable_instead_of_absent(tmp_path, sidecar):
+    home = tmp_path / "profile"
+    connection = seed(home)
+    connection.close()
+    database_before = (home / "state.db").read_bytes()
+    dangling = home / sidecar
+    absent_target = tmp_path / "absent-private-sidecar"
+    # Actual filesystem symlink, including Windows. Lack of permission fails
+    # this proof rather than silently treating an unexecuted case as passed.
+    dangling.symlink_to(absent_target)
+    assert dangling.is_symlink() and not dangling.exists()
+    result = diagnostic.diagnose(home)
+    assert result == {"diagnosticVersion": 1, "schemaVersion": None,
+        "refCount": None, "homeMatches": None, "reason": "snapshot_source_unavailable"}
+    assert (home / "state.db").read_bytes() == database_before
+    assert dangling.is_symlink() and not absent_target.exists()
+    assert "private" not in json.dumps(result)
 
 
 def test_invalid_cli_arguments_and_unreadable_sqlite_are_redacted(tmp_path, capsys):

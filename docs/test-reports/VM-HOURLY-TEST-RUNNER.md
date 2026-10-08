@@ -1,5 +1,9 @@
 # VM-Testagent: stündlich neue LastBrowser-Szenarien prüfen
 
+## Priorisierter Zusatzauftrag: AI → Neuer Chat
+
+Führe zusätzlich [VM-AI-NEW-CHAT-20261008.md](VM-AI-NEW-CHAT-20261008.md), Test-ID `AI_NEW_CHAT_20261008` Revision 1, am tatsächlich hashbestätigten 9A943-Guest-Kandidaten aus. Der direkte Humanauftrag verlangt Layout-, Fokus- und Fehleranalyse nach Klick auf den AI-Reiter und Neuer Chat, ohne Senden oder Providerturns (Kosten 0). Die vorhandene 9A943-Matrix und Ergebnishistorie bleiben erhalten; neue ungepackte UI-Fixes nicht als enthalten behaupten. Bericht auf `codex/lastbrowser-electron-shell` unter `docs/test-reports/` zustellen.
+
 
 ## Aktueller Testkandidat 9A943 — 0.1.48
 

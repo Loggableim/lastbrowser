@@ -1,15 +1,17 @@
 import type { DesktopCatalog, LegacyDesktopLocaleId as DesktopLocaleId, DesktopTranslationKey } from './keys.js';
 
 // Desktop Settings copy that is unique to SystemPanels. Each row is English,
-// Brazilian Portuguese, then Russian; de/es/fr/it live in system-panels-roman.ts.
+// Brazilian Portuguese, then Russian; de/es/fr/it are added below as partial catalogs.
 const rows: Partial<Record<DesktopTranslationKey, readonly [string, string, string]>> = {
   'settings.sections.teamwork': ['AI orchestration', 'Orquestração de IA', 'Оркестрация ИИ'],
   'settings.sections.googleAccounts': ['Google accounts', 'Contas do Google', 'Аккаунты Google'],
   'settings.sections.extensions': ['Extensions', 'Extensões', 'Расширения'],
+  'settings.sections.localAi': ['Local AI', 'IA local', 'Локальный ИИ'],
   'settings.sectionDescriptions.conversation': ['Default model, send key and assistant identity.', 'Modelo padrão, tecla de envio e identidade do assistente.', 'Модель по умолчанию, клавиша отправки и имя помощника.'],
   'settings.sectionDescriptions.appearance': ['Theme, skin, font sizing and message layout.', 'Tema, aparência, tamanho da fonte e layout das mensagens.', 'Тема, оформление, размер шрифта и расположение сообщений.'],
   'settings.sectionDescriptions.preferences': ['Language, notifications and chat behavior.', 'Idioma, notificações e comportamento do chat.', 'Язык, уведомления и поведение чата.'],
   'settings.sectionDescriptions.providers': ['AI providers, per-Space local models and model routing settings.', 'Provedores de IA, modelos locais por Espaço e configurações de roteamento.', 'Провайдеры ИИ, локальные модели для каждого пространства и маршрутизация моделей.'],
+  'settings.sectionDescriptions.localAi': ['Model store, hardware, installation and benchmarks.', 'Catálogo de modelos, hardware, instalação e benchmarks.', 'Каталог моделей, оборудование, установка и тесты производительности.'],
   'settings.sectionDescriptions.teamwork': ['Multi-agent Teamwork, Smart Track and model availability.', 'Teamwork multiagente, Smart Track e disponibilidade de modelos.', 'Мультиагентный Teamwork, Smart Track и доступность моделей.'],
   'settings.sectionDescriptions.googleAccounts': ['Google CLI / Antigravity OAuth accounts and token rotation.', 'Contas OAuth do Google CLI / Antigravity e rotação de tokens.', 'Аккаунты OAuth Google CLI / Antigravity и ротация токенов.'],
   'settings.sectionDescriptions.extensions': ['Chrome extensions, Manifest V3 add-ons and content scripts.', 'Extensões do Chrome, complementos Manifest V3 e scripts de conteúdo.', 'Расширения Chrome, дополнения Manifest V3 и скрипты содержимого.'],
@@ -129,6 +131,9 @@ const rows: Partial<Record<DesktopTranslationKey, readonly [string, string, stri
   'settings.panels.providers.apiRedaction': ['API redaction', 'Ocultação de dados da API', 'Скрытие данных API'],
   'settings.panels.providers.apiRedactionDescription': ['Hide sensitive data in API responses.', 'Ocultar dados confidenciais nas respostas da API.', 'Скрывать конфиденциальные данные в ответах API.'],
   'settings.panels.providers.enabled': ['Enabled', 'Ativado', 'Включено'],
+  'settings.panels.providers.unnamedPlugin': ['Unnamed plugin', 'Plugin sem nome', 'Плагин без названия'],
+  'settings.panels.providers.noDescription': ['No description provided.', 'Nenhuma descrição fornecida.', 'Описание не указано.'],
+  'settings.panels.providers.noLifecycleHooks': ['No registered lifecycle hooks', 'Nenhum gancho de ciclo de vida registrado', 'Нет зарегистрированных хуков жизненного цикла'],
   'settings.panels.providers.disabled': ['Disabled', 'Desativado', 'Отключено'],
   'settings.panels.providers.googleAccounts': ['Google accounts and round-robin', 'Contas Google e rotação round-robin', 'Аккаунты Google и циклическое распределение'],
   'settings.panels.providers.googleAccountsDescription': ['Multiple Google Gemini CLI / Antigravity OAuth accounts with balanced token use.', 'Várias contas OAuth do Google Gemini CLI / Antigravity para distribuir o uso de tokens.', 'Несколько аккаунтов OAuth Google Gemini CLI / Antigravity для равномерного использования токенов.'],
@@ -185,4 +190,57 @@ export const desktopSystemPanelCoreOverrides: Partial<Record<DesktopLocaleId, De
   ru: column(2)
 };
 
+for (const locale of ['de', 'es', 'fr', 'it'] as const) {
+  desktopSystemPanelCoreOverrides[locale] ??= {} as DesktopCatalog;
+}
+Object.assign(desktopSystemPanelCoreOverrides.de!, {
+  'settings.sections.localAi': 'Lokale KI',
+  'settings.sectionDescriptions.localAi': 'Modell-Store, Hardware, Installation und Benchmarks.',
+  'settings.panels.providers.unnamedPlugin': 'Unbenanntes Plugin',
+  'settings.panels.providers.noDescription': 'Keine Beschreibung vorhanden.',
+  'settings.panels.providers.noLifecycleHooks': 'Keine registrierten Lifecycle-Hooks'
+});
+Object.assign(desktopSystemPanelCoreOverrides.es!, {
+  'settings.sections.localAi': 'IA local',
+  'settings.sectionDescriptions.localAi': 'Catálogo de modelos, hardware, instalación y pruebas de rendimiento.',
+  'settings.panels.providers.unnamedPlugin': 'Complemento sin nombre',
+  'settings.panels.providers.noDescription': 'No se proporcionó ninguna descripción.',
+  'settings.panels.providers.noLifecycleHooks': 'No hay ganchos de ciclo de vida registrados'
+});
+Object.assign(desktopSystemPanelCoreOverrides.fr!, {
+  'settings.sections.localAi': 'IA locale',
+  'settings.sectionDescriptions.localAi': 'Catalogue de modèles, matériel, installation et benchmarks.',
+  'settings.panels.providers.unnamedPlugin': 'Extension sans nom',
+  'settings.panels.providers.noDescription': 'Aucune description fournie.',
+  'settings.panels.providers.noLifecycleHooks': 'Aucun hook de cycle de vie enregistré'
+});
+Object.assign(desktopSystemPanelCoreOverrides.it!, {
+  'settings.sections.localAi': 'IA locale',
+  'settings.sectionDescriptions.localAi': 'Catalogo dei modelli, hardware, installazione e benchmark.',
+  'settings.panels.providers.unnamedPlugin': 'Plugin senza nome',
+  'settings.panels.providers.noDescription': 'Nessuna descrizione fornita.',
+  'settings.panels.providers.noLifecycleHooks': 'Nessun hook del ciclo di vita registrato'
+});
+for (const [locale, unnamedPlugin, noDescription, noLifecycleHooks] of [
+  ['en', 'Unnamed plugin', 'No description provided.', 'No registered lifecycle hooks'],
+  ['pt-BR', 'Plugin sem nome', 'Nenhuma descrição fornecida.', 'Nenhum gancho de ciclo de vida registrado'],
+  ['ru', 'Плагин без названия', 'Описание не указано.', 'Нет зарегистрированных хуков жизненного цикла']
+] as const) {
+  Object.assign(desktopSystemPanelCoreOverrides[locale]!, {
+    'settings.panels.providers.unnamedPlugin': unnamedPlugin,
+    'settings.panels.providers.noDescription': noDescription,
+    'settings.panels.providers.noLifecycleHooks': noLifecycleHooks
+  });
+}
+
 export const desktopSystemPanelCoreKeys = Object.keys(rows) as DesktopTranslationKey[];
+
+export const desktopSystemPanelLocaleAdditions: Partial<Record<DesktopLocaleId, DesktopCatalog>> = {
+  en: desktopSystemPanelCoreOverrides.en,
+  de: desktopSystemPanelCoreOverrides.de,
+  es: desktopSystemPanelCoreOverrides.es,
+  fr: desktopSystemPanelCoreOverrides.fr,
+  it: desktopSystemPanelCoreOverrides.it,
+  'pt-BR': desktopSystemPanelCoreOverrides['pt-BR'],
+  ru: desktopSystemPanelCoreOverrides.ru
+};

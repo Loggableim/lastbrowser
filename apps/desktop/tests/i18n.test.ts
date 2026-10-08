@@ -64,6 +64,25 @@ describe('desktop i18n', () => {
     }
   });
 
+  it('provides Local AI labels and plugin fallbacks in all eight resolved locales', () => {
+    const keys = [
+      'settings.sections.localAi',
+      'settings.sectionDescriptions.localAi',
+      'settings.panels.providers.unnamedPlugin',
+      'settings.panels.providers.noDescription',
+      'settings.panels.providers.noLifecycleHooks'
+    ] as const;
+    for (const locale of desktopLocaleIds) {
+      const catalog = desktopLocaleCatalogs[locale];
+      const raw = desktopLocaleOverrides[locale];
+      for (const key of keys) {
+        expect(raw[key], `${locale}.${key} must have a locale-specific override`).toBeTruthy();
+        expect(catalog[key], `${locale}.${key} must resolve to visible copy`).toBeTruthy();
+        if (locale !== 'en') expect(catalog[key], `${locale}.${key} must not fall back to English`).not.toBe(desktopLocaleOverrides.en[key]);
+      }
+    }
+  });
+
   it('requires every raw locale resource to cover every key before English fallback', () => {
     const expected = new Set<string>(desktopTranslationKeys);
 

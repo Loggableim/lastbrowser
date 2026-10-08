@@ -27,6 +27,15 @@ describe('settings appearance and Nova Dock usability regressions', () => {
     expect(css).toMatch(/@container settings-layout \(max-width:\s*760px\)\s*\{[^]*?\.settings-editor\s*\{[^}]*width:\s*100%;[^}]*min-width:\s*0;/s);
   });
 
+  it('keeps Appearance cards and controls within a narrow settings editor', () => {
+    const narrowSettings = css.match(/@container settings-layout \(max-width:\s*520px\)\s*\{([^]*?)\n\}/)?.[1] ?? '';
+    expect(narrowSettings).toMatch(/\.settings-editor \.settings-panel-stack[\s\S]*?\.settings-editor \.settings-card-body\s*>\s*\*\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*100%;/);
+    expect(narrowSettings).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));');
+    expect(narrowSettings).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 96px), 1fr));');
+    expect(narrowSettings).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 112px), 1fr));');
+    expect(narrowSettings).toMatch(/\.settings-card:has\(\.settings-size-grid\)[^}]*\{[^}]*flex-wrap:\s*wrap;/s);
+  });
+
   it('starts and resynchronizes auto-hide, and restores the dock when disabled', () => {
     vi.useFakeTimers();
     const visibility: boolean[] = [];

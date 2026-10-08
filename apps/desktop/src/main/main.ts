@@ -189,7 +189,7 @@ import { NativeChatStreamController } from './native-chat-stream-controller.js';
 import { QuickChatController } from './quick-chat-controller.js';
 import type { BrowserScope } from './independent-browser-host.js';
 import { createPermissionController, loadTrustedOrigins, resolvePermissionRequest, saveTrustedOrigins, trustedNotificationOriginsFileName, trustedOriginsFileName } from './permissions.js';
-import { configureDrmWidevine, initializeCastlabsWidevine } from './drm.js';
+import { configureDrmWidevine, initializeCastlabsWidevine, type WidevineReadiness } from './drm.js';
 import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startPrimaryInstanceStartup } from './app-startup.js';
@@ -298,6 +298,7 @@ async function restoreDetachedNavigationHistory(
 let services: SidecarServices | null = null;
 let appTray: TrayController | null = null;
 let isQuitting = false;
+let widevineReadiness: WidevineReadiness = { status: 'pending', reason: 'initializing' };
 let quitCleanupComplete = false;
 let quitCleanupStarted = false;
 let independentController: IndependentController | null = null;
@@ -581,7 +582,7 @@ function registerIpc(): void {
   });
   ipcMain.handle('lastbrowser:services:status', () => {
     const status = services?.getStatus();
-    return status ? { ...status, desktopVersion: app.getVersion() } : status;
+    return status ? { ...status, desktopVersion: app.getVersion(), drm: widevineReadiness } : status;
   });
     ipcMain.handle('lastbrowser:services:start', async () => {
       try {
@@ -1339,8 +1340,12 @@ configureDrmWidevine(app);
 // A secondary process must not continue into service/window initialization even
 // if Electron resolves whenReady after the initial quit request.
 startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.whenReady(), async () => {
-  // Initialize native Widevine CDM if running under Castlabs Electron
-  await initializeCastlabsWidevine();
+  // Missing/offline CDM installation must not indefinitely block the shell.
+  // Late component completion changes DRM status only while Main is alive.
+  await initializeCastlabsWidevine(undefined, {
+    isActive: () => !isQuitting,
+    onStatus: (status) => { widevineReadiness = status; }
+  });
 
   // Register HTTP/HTTPS only through the user's explicit Settings action.
   // Starting the browser (including portable previews) must not change OS defaults.

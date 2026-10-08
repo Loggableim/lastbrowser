@@ -21,6 +21,20 @@ export interface AppLike {
   commandLine: CommandLineLike;
 }
 
+export const widevineStartupDeadlineMs = 3_000;
+
+export type WidevineReadiness = Readonly<{
+  status: 'pending' | 'ready' | 'unavailable';
+  reason: 'initializing' | 'deadline_exceeded' | 'components_ready' | 'component_error' | 'unsupported';
+}>;
+
+export type WidevineInitializationOptions = {
+  timeoutMs?: number;
+  /** Late component completion must not update a shell that is quitting. */
+  isActive?: () => boolean;
+  onStatus?: (status: WidevineReadiness) => void;
+};
+
 /**
  * Compare version strings numerically in descending order (highest version first).
  * e.g. "153.0.4234.48" > "120.0.0.0" > "90.0.0.0"
@@ -213,18 +227,55 @@ export function isCastlabsElectron(electronModule?: unknown): boolean {
  * Initialize Widevine CDM via Castlabs Electron components API.
  * Must be called in or after app.whenReady().
  */
-export async function initializeCastlabsWidevine(electronModule?: unknown): Promise<boolean> {
+export async function initializeCastlabsWidevine(
+  electronModule?: unknown,
+  options: WidevineInitializationOptions = {}
+): Promise<boolean> {
+  const timeoutMs = options.timeoutMs ?? widevineStartupDeadlineMs;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 60_000) {
+    throw new Error('Invalid Widevine startup deadline');
+  }
+  const notify = (status: WidevineReadiness): void => {
+    if (!options.isActive || options.isActive()) options.onStatus?.(Object.freeze(status));
+  };
+  let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
     const mod = electronModule || (await import('electron'));
     const components = (mod as unknown as { components?: { whenReady?: () => Promise<void>; status?: () => unknown } }).components;
     if (components && typeof components.whenReady === 'function') {
-      await components.whenReady();
-      const status = typeof components.status === 'function' ? components.status() : 'ready';
-      console.log('[DRM/Widevine] Castlabs Widevine CDM components ready:', status);
-      return true;
+      notify({ status: 'pending', reason: 'initializing' });
+      // The native updater may still complete after the shell's bounded wait.
+      // Keep its promise handled and report ready only on actual fulfillment.
+      const completion = Promise.resolve().then(() => components.whenReady!()).then(() => {
+        notify({ status: 'ready', reason: 'components_ready' });
+        if (!options.isActive || options.isActive()) {
+          const status = typeof components.status === 'function' ? components.status() : 'ready';
+          console.log('[DRM/Widevine] Castlabs Widevine CDM components ready:', status);
+        }
+        return true;
+      }, (err: unknown) => {
+        notify({ status: 'unavailable', reason: 'component_error' });
+        if (!options.isActive || options.isActive()) {
+          console.warn('[DRM/Widevine] Failed to initialize Castlabs Widevine components:', err);
+        }
+        return false;
+      });
+      return await Promise.race([completion, new Promise<boolean>((resolve) => {
+        deadline = setTimeout(() => {
+          notify({ status: 'pending', reason: 'deadline_exceeded' });
+          if (!options.isActive || options.isActive()) {
+            console.warn('[DRM/Widevine] Component readiness exceeded the shell startup deadline; DRM remains pending.');
+          }
+          resolve(false);
+        }, timeoutMs);
+      })]);
     }
+    notify({ status: 'unavailable', reason: 'unsupported' });
   } catch (err) {
+    notify({ status: 'unavailable', reason: 'component_error' });
     console.warn('[DRM/Widevine] Failed to initialize Castlabs Widevine components:', err);
+  } finally {
+    if (deadline !== undefined) clearTimeout(deadline);
   }
   return false;
 }

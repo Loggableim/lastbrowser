@@ -378,6 +378,23 @@ describe('provider-aware model selection', () => {
     expect(chat).toContain("t('chat.retryModels')");
   });
 
+  it('sends the active scoped model selection as an explicit chat model/provider pair', () => {
+    const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
+    const selectionRead = app.indexOf('chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
+    const startChat = app.indexOf('window.lastbrowser.sidekick.startChat({', selectionRead);
+    const requestEnd = app.indexOf('\n      });', startChat);
+    const requestBody = app.slice(startChat, requestEnd);
+
+    expect(selectionRead).toBeGreaterThanOrEqual(0);
+    expect(startChat).toBeGreaterThan(selectionRead);
+    expect(app).toContain('const chatModelProvider = chatModelSelection.provider || undefined;');
+    expect(app).toContain('const configuredChatModel = chatModelSelection.model || undefined;');
+    expect(requestBody).toContain('model: configuredChatModel');
+    expect(requestBody).toContain('modelProvider: chatModelProvider');
+    expect(requestBody).toContain('profile: turnContext.profileId');
+    expect(requestBody).toContain('workspace: turnContext.spacePath');
+  });
+
   it('maps a provider-qualified configured default to the bare picker ID', () => {
     const groups = [{ providerId: 'ollama-cloud', models: [{ id: 'deepseek-v4.1-flash' }] }];
     expect(resolveCatalogModelSelection('@ollama-cloud:deepseek-v4.1-flash', groups)).toEqual({

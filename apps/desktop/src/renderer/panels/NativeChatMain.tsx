@@ -764,6 +764,7 @@ export function NativeChatMain({
         model={model}
         modelProvider={modelProvider}
         modelOptions={visibleModelCatalog}
+        emptyQualifiedCatalog={modelCatalogLoaded && modelCatalog.length > 0 && visibleModelCatalog.length === 0}
         modelCatalogError={modelCatalogError}
         onRetryModelCatalog={()=>setModelCatalogRetry(value=>value+1)}
         reasoningEffort={effectiveReasoningEffort}

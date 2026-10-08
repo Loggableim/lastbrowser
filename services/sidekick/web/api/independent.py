@@ -533,6 +533,41 @@ def dispatch_operation(operation: str, request: OperationRequest, actor: str):
                     and digest==payload['confirmationDigest']).model_dump(mode='json',by_alias=True)
         else:raise ValueError('Invalid Local AI role profile operation')
         return {'schemaVersion':1,'scope':scope.model_dump(mode='json',by_alias=True),'kind':'role_profile','operation':kind,'profile':result}
+    if operation == "localAi.store":
+        from runtime.local_ai.model_store import get_store
+        from web.api.local_ai import LocalAiBroker
+        if set(payload)-{'request','cacheRoot','scanId'} or not isinstance(payload.get('request'),dict):
+            raise ValueError('model_store_envelope_invalid')
+        cache_root=_bind_main_local_ai_cache(payload.get('cacheRoot'))
+        resolver.resolve(scope,authenticated_profile_name=actor)
+        with _LOCK:
+            if _local_ai_broker is None:_local_ai_broker=LocalAiBroker(Path(__file__).resolve().parents[4])
+            broker=_local_ai_broker
+        model_store=get_store(cache_root,scope,broker.repository_root)
+        if payload.get('scanId'):
+            model_store.bind_hardware(broker.scans.read(scope,payload['scanId']).hardware)
+        data=payload['request'];kind=data.get('operation')
+        allowed={'view':{'operation'},'scan':{'operation'},'install':{'operation','modelId','requestId','licenseDigest'},
+            'importModel':{'operation','modelId','requestId','licenseDigest','sourcePath'},
+            'benchmark':{'operation','modelId','requestId','mode'},'cancel':{'operation','jobId'},
+            'activate':{'operation','modelId'},'remove':{'operation','modelId'},
+            'export':{'operation','receiptId'},'import':{'operation','receipt'},
+            'deleteHistory':{'operation','receiptId'},'chat':{'operation','text'},'stopChat':{'operation'}}
+        if kind not in allowed or set(data)!=allowed[kind]:raise ValueError('model_store_request_invalid')
+        result=None
+        if kind in ('install','importModel','benchmark'):
+            if not isinstance(data['requestId'],str) or len(data['requestId'])>64:raise ValueError('request_identity_invalid')
+            result=model_store.start(data)
+        elif kind=='cancel':result=model_store.cancel(data['jobId'])
+        elif kind=='activate':model_store.activate(data['modelId'])
+        elif kind=='remove':model_store.remove(data['modelId'])
+        elif kind=='export':result=model_store.export(data['receiptId'])
+        elif kind=='import':result=model_store.import_receipt(data['receipt'])
+        elif kind=='deleteHistory':model_store.delete_receipt(data['receiptId'])
+        elif kind=='chat':result=model_store.chat(data['text'])
+        elif kind=='stopChat':model_store.stop_chat()
+        return {'schemaVersion':1,'scope':scope.model_dump(mode='json',by_alias=True),'kind':'model_store',
+            'operation':kind,'store':model_store.view(),'storeResult':result}
     if operation == "localAi.setup":
         from web.api.local_ai_setup import handle_local_ai_setup
         if set(payload) - {"request", "cacheRoot"} or not isinstance(payload.get("request"), dict):
@@ -748,6 +783,8 @@ async def independent_operation(operation: str, raw: Request):
 
 
 def shutdown():
+    from runtime.local_ai.model_store import shutdown_stores
+    shutdown_stores()
     global _gateway, _last_heartbeat, _hub, _main_generation, _schedule_adapter, _local_ai_bootstrap_manager
     _watchdog_stop.set()
     from runtime.cron.scheduler import register_independent_enqueue_hook

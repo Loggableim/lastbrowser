@@ -12187,6 +12187,12 @@ def _run_agent_streaming_with_native_writer(*args, native_chat_writer=None, nati
                                 native_chat_context.profile_name,broker.service.manager)
                             capability=host.short_chat_capability(native_chat_context.scope,
                                 native_chat_context.profile_name)
+                            if capability.get('state')!='ready':
+                                from runtime.local_ai.store_native_chat import native_store_host
+                                store_host=native_store_host(native_chat_context.scope,native_chat_context.profile_name)
+                                if store_host is not None:
+                                    store_capability=store_host.short_chat_capability(native_chat_context.scope,native_chat_context.profile_name)
+                                    if store_capability.get('state')=='ready':host,capability=store_host,store_capability
                             decision=decide_auto_route(AutoRouteRequest(text=str(local_args[1] or "")),
                                 AutoRouteCapabilities(local_chat_ready=capability.get("state")=="ready"))
                         except Exception:

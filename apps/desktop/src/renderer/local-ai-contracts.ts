@@ -1,4 +1,5 @@
 import { sameAssistantScope,type IndependentScope } from './independent-contracts.js';
+import { isModelStoreResponse,type ModelStoreResponse,type ModelStoreRequest } from './model-store-contracts.js';
 import { isLocalAiRuntimeResponse,type LocalAiRuntimeResponse,type LocalAiRuntimeRequest } from './local-ai-runtime-contracts.js';
 import { isLocalRoleResponse,type LocalRoleRequest,type LocalRoleResponse } from '../main/local-ai-role-profile.js';
 export type LocalAiPreset='lightweight'|'balanced'|'max_local'|'hybrid'|'custom';
@@ -47,13 +48,13 @@ export type LocalAiSetupRequest=Readonly<{operation:'get'}>|Readonly<{operation:
   |Readonly<{operation:'status';jobId?:string|null}>;
 export type LocalAiPayload=Readonly<{action:'catalog'|'scan'}>|Readonly<{action:'recommend';scanId:string;preset:LocalAiPreset;contextTokens:number;
   parallelRequests?:number;maxParallelModels?:number;optInRoles?:readonly LocalAiRole[];roleBudgets?:readonly Readonly<{role:LocalAiRole;contextTokens:number;parallelRequests:number}>[];
-  customArtifactIds?:readonly string[];maxRamBytes?:number|null;maxGpuBytes?:number|null}>|Readonly<{action:'setup';request:LocalAiSetupRequest}>|Readonly<{action:'runtime';request:LocalAiRuntimeRequest}>|Readonly<{action:'roleProfile';request:LocalRoleRequest}>;
+  customArtifactIds?:readonly string[];maxRamBytes?:number|null;maxGpuBytes?:number|null}>|Readonly<{action:'setup';request:LocalAiSetupRequest}>|Readonly<{action:'runtime';request:LocalAiRuntimeRequest}>|Readonly<{action:'roleProfile';request:LocalRoleRequest}>|Readonly<{action:'store';request:ModelStoreRequest}>;
 type Envelope=Readonly<{schemaVersion:1;scope:IndependentScope}>;
 export type LocalAiResponse=Envelope&(Readonly<{catalog:LocalAiCatalog}>|Readonly<{scan:Readonly<{schemaVersion:1;scope:IndependentScope;hardware:LocalAiHardware;gpuFeatureStatus:Readonly<Record<string,string>>;probeIssues:readonly string[]}>;
   runtimes:readonly Readonly<{buildRef:string;state:'verified'|'detected'|'unavailable'|'unknown';managed:'in_tree'|'external';os:string;arch:string}>[];availableComputeSlots:number;skipAvailable:true;existingProviderAvailable:true}>
   |Readonly<{result:LocalAiRecommendationResult;skipAvailable:true;existingProviderAvailable:true}>
   |Readonly<{operation:LocalAiSetupRequest['operation'];skipAvailable:true;existingProviderAvailable:true;preferences?:LocalAiPreferences;plan?:LocalAiPlan;consent?:LocalAiConsent;job?:LocalAiJob;jobs?:readonly LocalAiJob[]}>
-  |LocalAiRuntimeResponse|LocalRoleResponse);
+  |LocalAiRuntimeResponse|LocalRoleResponse|ModelStoreResponse);
 const ref=(value:unknown):value is string=>typeof value==='string'&&value.length>0&&value.length<=4096;
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^(?:[a-f\d]{32}|[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12})$/i.test(value);
 const boolean=(value:unknown):value is boolean=>typeof value==='boolean';
@@ -106,6 +107,7 @@ function job(v:unknown,scope:IndependentScope):v is LocalAiJob{return isIndepend
 export function isLocalAiResponse(v:unknown):v is LocalAiResponse{
   if(isIndependentRecord(v)&&v.kind==='role_profile')return isLocalRoleResponse(v);
   if(!isIndependentRecord(v)||v.schemaVersion!==1||!isIndependentScope(v.scope))return false;const scope=v.scope;
+  if(v.kind==='model_store')return isModelStoreResponse(v);
   if(['inspect','capability','review','bootstrap','receipt','unload'].includes(String(v.operation)))return isLocalAiRuntimeResponse(v);
   if('catalog'in v)return isIndependentRecord(v.catalog)&&ref(v.catalog.revision)&&at(v.catalog.observedAt)&&Array.isArray(v.catalog.artifacts)&&v.catalog.artifacts.every(artifact)
     &&unique(v.catalog.artifacts.map(item=>item.artifactId));

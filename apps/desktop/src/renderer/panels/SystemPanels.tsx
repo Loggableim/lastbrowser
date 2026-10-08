@@ -195,7 +195,7 @@ export function normalizeAppstoreRecord(app: AnyRecord): NormalizedAppstoreRecor
   };
 }
 
-export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'advanced' | 'teamwork' | 'plugins' | 'system';
+export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'local-ai' | 'advanced' | 'teamwork' | 'plugins' | 'system';
 
 export type SettingsSectionMeta ={
   title: string;
@@ -228,6 +228,7 @@ export const SETTINGS_LANGUAGES = [
 ] as const;
 
 export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> ={
+  'local-ai': {title:'Lokale KI',description:'Modell-Store, Hardware, Installation und Benchmarks.',icon:<Gauge size={16}/>},
   conversation: {
     title: 'Conversation',
     description: 'Default model, send key and assistant identity.',
@@ -271,6 +272,7 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
 };
 
 const SETTINGS_SECTION_COPY: Record<SettingsSectionId, { title: DesktopTranslationKey; description: DesktopTranslationKey }> ={
+  'local-ai': {title:'settings.sections.providers',description:'settings.sectionDescriptions.providers'},
   conversation: { title: 'settings.sections.conversation', description: 'settings.sectionDescriptions.conversation' },
   appearance: { title: 'settings.sections.appearance', description: 'settings.sectionDescriptions.appearance' },
   preferences: { title: 'settings.sections.preferences', description: 'settings.sectionDescriptions.preferences' },
@@ -3255,8 +3257,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             <button key={key} type="button" className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}>
               <span className="settings-section-button-icon">{meta.icon}</span>
               <span className="settings-section-button-text">
-                  <strong>{t(SETTINGS_SECTION_COPY[key].title)}</strong>
-                  <small>{t(SETTINGS_SECTION_COPY[key].description)}</small>
+                  <strong>{key==='local-ai'?meta.title:t(SETTINGS_SECTION_COPY[key].title)}</strong>
+                  <small>{key==='local-ai'?meta.description:t(SETTINGS_SECTION_COPY[key].description)}</small>
               </span>
             </button>
           ))}
@@ -3265,8 +3267,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         <main className="native-work-card settings-editor settings-panel-scroll">
           <header className="settings-editor-head">
             <div>
-              <strong>{t(SETTINGS_SECTION_COPY[section].title)}</strong>
-              <span>{t(SETTINGS_SECTION_COPY[section].description)}</span>
+              <strong>{section==='local-ai'?SETTINGS_SECTIONS[section].title:t(SETTINGS_SECTION_COPY[section].title)}</strong>
+              <span>{section==='local-ai'?SETTINGS_SECTIONS[section].description:t(SETTINGS_SECTION_COPY[section].description)}</span>
             </div>
             <div className="settings-editor-actions">
               <span className={`native-rest-pill ${dirty ? '' : 'ready'}`}>
@@ -4236,10 +4238,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             )}
 
 
+            {section === 'local-ai' && <LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||''])} browserProfileId={activeProfileId} workspacePath={activeSpacePath}
+              backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible/>}
             {section === 'providers' && (
               <>
-                <LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||''])} browserProfileId={activeProfileId} workspacePath={activeSpacePath}
-                  backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible/>
                 <SettingsCard
                   title={t('settings.panels.providers.title')}
                   description={t('settings.panels.providers.description')}

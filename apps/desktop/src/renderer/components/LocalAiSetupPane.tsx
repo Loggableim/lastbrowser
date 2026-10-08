@@ -12,6 +12,7 @@ import { LocalAiRuntimeControls } from './LocalAiRuntimeControls.js';
 import { LocalAiRoleBindings } from './LocalAiRoleBindings.js';
 import { LocalAiBootstrapPane } from './LocalAiBootstrapPane.js';
 import { LocalAiChatQualification } from './LocalAiChatQualification.js';
+import { LocalModelStore } from './LocalModelStore.js';
 import { retryRetryableOnce } from './local-ai-bootstrap-state.js';
 type Scan=Extract<LocalAiResponse,{scan:unknown}>;
 type Props=Readonly<{workspacePath:string;browserProfileId:string;backendProfileName?:string|null;ready:boolean;onSkipped?:()=>void;keepGlobalRouterStatusVisible?:boolean}>;
@@ -211,10 +212,11 @@ export function LocalAiSetupPane({workspacePath,browserProfileId,backendProfileN
     return Boolean(artifact?.manifestComplete&&(chat?chatCandidate?.state==='ready_to_download':candidate&&candidate.selectable&&candidate.support==='supported'&&candidate.allocationReady&&candidate.downloadReady));})
     &&(fileMode||result?.requestedPreset===preset));
   const inventoryMeasurement=(value:LocalAiHardwareInventory['hardware']['ramAvailableBytes'])=>`${bytes(value.value)} · ${copy[value.status==='unknown'?'unknown':value.status]}`;
-  if(skipped)return <section className="local-ai-setup" aria-label={copy.title}><h2>{copy.title}</h2><p>{copy.skip}</p>{detailMode==='advanced'&&<LocalAiBootstrapPane compact keepVisible={keepGlobalRouterStatusVisible}/>}
+  if(skipped)return <section className="local-ai-setup" aria-label={copy.title}><h2>{copy.title}</h2><p>{copy.skip}</p>{scope&&<LocalModelStore key={assistantScopeKey(scope)} scope={scope} client={client} ready={ready}/>}{detailMode==='advanced'&&<LocalAiBootstrapPane compact keepVisible={keepGlobalRouterStatusVisible}/>}
     <button type="button" disabled={busy} onClick={()=>{skipRequested.current=false;setSkipped(false);void load();}}>{modeCopy.scanRetry}</button></section>;
   const visiblePresets:readonly LocalAiPreset[]=detailMode==='simple'?['lightweight','balanced','hybrid']:localAiPresets;
   return <section className="local-ai-setup" aria-label={copy.title}><h2>{copy.title}</h2><p>{copy.noAuto}</p>
+    {scope&&<LocalModelStore key={assistantScopeKey(scope)} scope={scope} client={client} ready={ready}/>}
     <div className="local-ai-mode" role="group" aria-label={copy.title}>
       <button type="button" aria-pressed={detailMode==='simple'} onClick={()=>changeMode('simple')}>{modeCopy.simple}</button>
       <button type="button" aria-pressed={detailMode==='advanced'} onClick={()=>changeMode('advanced')}>{modeCopy.advanced}</button>

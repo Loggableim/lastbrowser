@@ -18,7 +18,7 @@ export const INDEPENDENT_OPERATIONS = new Set([
   'browser.connectionStart', 'browser.connectionOpened', 'browser.connectionPoll', 'browser.connectionConfirm',
   'browser.connectionCancel', 'browser.connectionBeginLogout', 'browser.connectionCompleteLogout',
   'browser.connectionAuthorize', 'browser.connectionInvalidate',
-  'localAi.catalog', 'localAi.hardwareBind', 'localAi.hardwareRead', 'localAi.recommend', 'localAi.setup', 'localAi.runtime', 'localAi.roleProfile', 'localAi.bootstrap'
+  'localAi.catalog', 'localAi.hardwareBind', 'localAi.hardwareRead', 'localAi.recommend', 'localAi.setup', 'localAi.runtime', 'localAi.roleProfile', 'localAi.bootstrap', 'localAi.store'
 ]);
 
 export async function independentApiRequest(

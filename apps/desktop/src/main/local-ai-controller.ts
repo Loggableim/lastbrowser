@@ -4,6 +4,7 @@ import { isLocalRoleChoice, isLocalRoleResponse, roleDigest, type LocalRoleDraft
 import { createHash, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type { WebContents } from 'electron';
+import {dialog} from 'electron';
 import { BrowserHostError, sameBrowserScope, type BrowserScope } from './independent-browser-host.js';
 import { scanLocalAiHardware, scanLocalAiHardwareInventory, type BoundHardwareScan, type LocalAiHardwareInventory } from './local-ai-hardware.js';
 
@@ -740,6 +741,39 @@ export class LocalAiController {
       available: false, ...runtimeBenchmark(result, receipt?.review) };
   }
   async request(binding: Binding, payload: Record<string, any>, recheck: () => unknown): Promise<any> {
+    if(payload.action==='store') {
+      keys(payload,['action','request']);
+      if(!record(payload.request))throw new BrowserHostError('invalid_request','Invalid model store request');
+      const request=payload.request, operation=request.operation;
+      const fields:Record<string,string[]>={view:['operation'],scan:['operation'],install:['operation','modelId','requestId','licenseDigest'],importModel:['operation','modelId','requestId','licenseDigest'],
+        benchmark:['operation','modelId','requestId','mode'],cancel:['operation','jobId'],activate:['operation','modelId'],
+        remove:['operation','modelId'],export:['operation','receiptId'],import:['operation','receipt'],
+        deleteHistory:['operation','receiptId'],chat:['operation','text'],stopChat:['operation']};
+      if(typeof operation!=='string'||!fields[operation])throw new BrowserHostError('operation_denied','Unsupported model store operation');
+      keys(request,fields[operation]);
+      if(JSON.stringify(request).length>4*1024*1024)throw new BrowserHostError('invalid_request','Model store import exceeds size limit');
+      for(const name of ['modelId','jobId','receiptId','requestId'])if(name in request&&(typeof request[name]!=='string'||!request[name]||request[name].length>256))
+        throw new BrowserHostError('invalid_request','Invalid model store identity');
+      if(['install','importModel'].includes(operation)&&!sha256(request.licenseDigest))throw new BrowserHostError('invalid_request','Publisher license consent is required');
+      if(operation==='benchmark'&&!['quick','standard'].includes(request.mode))throw new BrowserHostError('invalid_request','Invalid benchmark mode');
+      if(operation==='chat'&&(typeof request.text!=='string'||request.text.length<1||request.text.length>8192))throw new BrowserHostError('invalid_request','Invalid local chat input');
+      recheck();
+      let scanId:string|undefined;
+      if(['install','importModel','benchmark','activate','chat','scan'].includes(operation)){
+        const scanned=await this.hardwareScan(binding,recheck);scanId=scanned.scan.hardware.scanId;
+      }
+      const cacheRoot=await this.cacheDirectory(recheck);recheck();
+      let privateRequest={...request};
+      if(operation==='importModel'){
+        const selected=await dialog.showOpenDialog({title:'Kuratierte GGUF-Datei importieren',properties:['openFile'],filters:[{name:'GGUF',extensions:['gguf']}]});recheck();
+        if(selected.canceled||selected.filePaths.length!==1)throw new BrowserHostError('operation_cancelled','Model import cancelled');
+        privateRequest={...request,sourcePath:selected.filePaths[0]};
+      }
+      const value=await this.options.apiRequest('localAi.store',binding.scope,{request:privateRequest,cacheRoot,...(scanId?{scanId}:{})},binding.backendProfileName);
+      recheck();const response=this.response(value,binding);
+      if(response.kind!=='model_store'||response.operation!==operation||!record(response.store))throw new BrowserHostError('invalid_response','Invalid model store response');
+      return response;
+    }
     if(payload.action==='roleProfile')return this.roleProfile(binding,payload,recheck);
     recheck();
     if (payload.action === 'setup') return this.setup(binding, payload, recheck);

@@ -24,6 +24,8 @@ import {
 import { renderAppIcon } from './PinnedAppGrid.js';
 import { useDesktopI18n } from '../i18n.js';
 import { canDragFloatingDock, createDockAutoHideController, resolveDockOrientationForPanel } from '../dock-auto-hide.js';
+import type { BrowserTab } from '../tabs.js';
+import { canAcceptPinnedTabDrag, canPinBrowserTab, resolvePinnedTabDrop } from '../pinned-tab-drop.js';
 
 export interface NovaDockProps {
   botName?: string;
@@ -41,6 +43,9 @@ export interface NovaDockProps {
   onEnterZenMode?: () => void;
   forcedPosition?: NovaDockPosition;
   spacePath?: string;
+  draggedTabId?: string | null;
+  tabs?: BrowserTab[];
+  onPinTabAsApp?: (tabId: string) => void;
 }
 
 export function NovaDock({
@@ -58,7 +63,10 @@ export function NovaDock({
   onExpandSidebar,
   onEnterZenMode,
   forcedPosition,
-  spacePath = ''
+  spacePath = '',
+  draggedTabId,
+  tabs = [],
+  onPinTabAsApp
 }: NovaDockProps): React.JSX.Element {
   const { t } = useDesktopI18n();
   const dockSettings = usePanelStore((s) => s.dockSettings);
@@ -69,6 +77,8 @@ export function NovaDock({
   const enterZenMode = onEnterZenMode ?? (() => setSidebarMode('hidden'));
 
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [tabDropActive, setTabDropActive] = useState(false);
+  useEffect(() => { if (!draggedTabId) setTabDropActive(false); }, [draggedTabId]);
   const [isRevealed, setIsRevealed] = useState<boolean>(true);
   const autoHideControllerRef = useRef<ReturnType<typeof createDockAutoHideController> | null>(null);
   if (!autoHideControllerRef.current) {
@@ -437,7 +447,23 @@ export function NovaDock({
         <div className="nova-dock-separator" />
 
         {/* 3. Pinned Web Apps & Bookmarks */}
-        <div className="nova-dock-pinned-group">
+        <div className="nova-dock-pinned-group" role="region" aria-label={t('sidebar.pinnedApps.add')}
+          style={tabDropActive ? { outline: '2px solid var(--accent, #38bdf8)', outlineOffset: 3, borderRadius: 8 } : undefined}
+          onDragOver={(event) => {
+            const tab = tabs.find(item => item.id === draggedTabId);
+            if (!onPinTabAsApp || !tab || !canPinBrowserTab(tab) || !canAcceptPinnedTabDrag(event.dataTransfer, draggedTabId)) return;
+            event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move';
+            autoHideController.pointerEnter(); setTabDropActive(true);
+          }}
+          onDragLeave={(event) => {
+            if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setTabDropActive(false);
+          }}
+          onDrop={(event) => {
+            setTabDropActive(false);
+            const tab = resolvePinnedTabDrop(event.dataTransfer, draggedTabId, tabs);
+            if (!tab || !onPinTabAsApp) return;
+            event.preventDefault(); event.stopPropagation(); onPinTabAsApp(tab.id);
+          }}>
           {apps.map((app, i) => {
             const index = pinnedIndexes[i];
             const isRunning = pinnedStore.isAppRunning(app, openTabUrls);

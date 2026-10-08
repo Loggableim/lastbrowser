@@ -73,7 +73,7 @@ def test_definition_pins_confirmed_profile_before_later_assistant_change(tmp_pat
         store.close()
 
 
-@pytest.mark.parametrize("model", ["teamwork", "smart-track-low", "smart-track-medium", "smart-track-high"])
+@pytest.mark.parametrize("model", ["teamwork", "smart-track", "smart-track-low", "smart-track-medium", "smart-track-high"])
 def test_virtual_orchestration_fails_closed_but_catalog_context_is_readable(tmp_path, model):
     _, _, scope, store, manager, request = manager_fixture(tmp_path)
     provider = ProviderSelection(provider_config_ref="controlled", provider=model, model=model)

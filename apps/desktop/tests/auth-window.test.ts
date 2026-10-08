@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
-  cleanOAuthUserAgent,
-  sanitizeSecChUa,
   isLocalhostCallback,
   isOAuthUrl,
   isStreamingLoginUrl,
@@ -12,6 +11,17 @@ import {
 } from '../src/main/auth-window.js';
 
 describe('auth-window logic', () => {
+  it('preserves Chromium automation and identity signals while retaining response security policy', () => {
+    const mainSource = readFileSync(new URL('../src/main/main.ts', import.meta.url), 'utf8');
+    const authSource = readFileSync(new URL('../src/main/auth-window.ts', import.meta.url), 'utf8');
+
+    expect(mainSource).not.toMatch(/disable-blink-features.{0,100}AutomationControlled/s);
+    expect(mainSource).not.toMatch(/cleanOAuthUserAgent|sanitizeSecChUa|setUserAgent\s*\(|userAgentFallback\s*=/);
+    expect(authSource).not.toMatch(/cleanOAuthUserAgent|sanitizeSecChUa|"Google Chrome"/);
+    expect(mainSource).toContain('targetSession.webRequest.onHeadersReceived');
+    expect(mainSource).toContain('isStreamingLoginUrl(details.url)');
+  });
+
   it('correctly identifies OAuth and identity provider URLs', () => {
     expect(isOAuthUrl('https://accounts.google.com/o/oauth2/v2/auth?client_id=123')).toBe(true);
     expect(isOAuthUrl('https://auth.openai.com/authorize?client_id=xyz')).toBe(true);

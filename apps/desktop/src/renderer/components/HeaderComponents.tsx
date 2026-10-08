@@ -10,7 +10,8 @@
  *   • WindowControls   - Minimize / Maximize / Close window action buttons
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DownloadDockTrigger } from '../NativeDownloads.js';
 import { usePanelStore } from '../stores/usePanelStore.js';
 import { AdblockShield } from './AdblockShield.js';
@@ -268,15 +269,44 @@ export function ProfileSwitcher({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuId = useId();
+  const [menuPosition, setMenuPosition] = useState<React.CSSProperties>({ visibility: 'hidden' });
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId) || profiles[0];
+
+  function closeMenu(): void { setOpen(false); triggerRef.current?.focus(); }
+  useLayoutEffect(() => {
+    if (!open) return;
+    function positionMenu(): void {
+      const trigger = triggerRef.current, menu = menuRef.current;
+      if (!trigger || !menu) return;
+      const rect = trigger.getBoundingClientRect();
+      const margin = 8, width = Math.min(320, Math.max(0, window.innerWidth - margin * 2));
+      const height = Math.min(menu.scrollHeight, Math.max(0, window.innerHeight - margin * 2));
+      const below = window.innerHeight - rect.bottom - margin - 6;
+      const above = rect.top - margin - 6;
+      const placeBelow = below >= Math.min(height, 220) || below >= above;
+      const maxHeight = Math.max(0, placeBelow ? below : above);
+      setMenuPosition({ visibility: 'visible', width, minWidth: 0, maxHeight,
+        left: Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin)),
+        top: placeBelow ? rect.bottom + 6 : Math.max(margin, rect.top - Math.min(height, maxHeight) - 6) });
+    }
+    positionMenu();
+    // The portal keeps focus inside the real menu rather than in later cards.
+    menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    window.addEventListener('resize', positionMenu);
+    document.addEventListener('scroll', positionMenu, true);
+    return () => { window.removeEventListener('resize', positionMenu); document.removeEventListener('scroll', positionMenu, true); };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
     const handleClick = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node) && !menuRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') { event.preventDefault(); closeMenu(); }
     };
     document.addEventListener('mousedown', handleClick);
     document.addEventListener('keydown', handleKey);
@@ -292,7 +322,7 @@ export function ProfileSwitcher({
     if (!name) return;
     onCreate(name);
     setDraftName('');
-    setOpen(false);
+    closeMenu();
   }
 
   function submitRename(event: React.FormEvent, profileId: string): void {
@@ -307,18 +337,31 @@ export function ProfileSwitcher({
     <div className="profile-switcher" ref={rootRef}>
       <button
         type="button"
+        ref={triggerRef}
         className="profile-switcher-trigger"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
         title={t('browser.chrome.profileTitle', { name: activeProfile?.name || t('browser.chrome.defaultProfile') })}
         onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setOpen(true); }
+        }}
       >
         <span className="profile-dot" style={{ background: activeProfile?.color || '#2563FF' }} />
         <span>{activeProfile?.icon || '🌐'} {activeProfile?.name || t('browser.chrome.defaultProfile')}</span>
         <ChevronDown size={14} />
       </button>
-      {open && (
-        <div className="profile-switcher-menu" role="menu">
+      {open && createPortal(
+        <div className="profile-switcher-menu" role="menu" id={menuId} ref={menuRef} style={menuPosition}
+          onKeyDown={(event) => {
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) || (event.target as HTMLElement).closest('input')) return;
+            const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+            const index = items.indexOf(document.activeElement as HTMLElement);
+            if (!items.length) return;
+            event.preventDefault();
+            items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length]?.focus();
+          }}>
           {profiles.map((profile) => (
             <div
               key={profile.id}
@@ -327,19 +370,19 @@ export function ProfileSwitcher({
               tabIndex={0}
               onClick={() => {
                 onSelect(profile.id);
-                setOpen(false);
+                closeMenu();
               }}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
+                if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
                   event.preventDefault();
                   onSelect(profile.id);
-                  setOpen(false);
+                  closeMenu();
                 }
               }}
             >
               <span className="profile-dot" style={{ background: profile.color }} />
               {renamingId === profile.id ? (
-                <form className="profile-switcher-form" onSubmit={(event) => submitRename(event, profile.id)}>
+                <form className="profile-switcher-form" onClick={(event) => event.stopPropagation()} onSubmit={(event) => submitRename(event, profile.id)}>
                   <input
                     className="profile-switcher-input"
                     value={renameDraft}
@@ -389,6 +432,7 @@ export function ProfileSwitcher({
             <input
               className="profile-switcher-input"
               placeholder={t('browser.chrome.newProfileName')}
+              aria-label={t('browser.chrome.newProfileName')}
               value={draftName}
               onChange={(event) => setDraftName(event.target.value)}
             />
@@ -399,7 +443,7 @@ export function ProfileSwitcher({
           <div className="profile-switcher-empty">
             {t('browser.chrome.profileStorageHint')}
           </div>
-        </div>
+        </div>, document.body
       )}
     </div>
   );

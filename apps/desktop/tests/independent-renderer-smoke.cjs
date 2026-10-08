@@ -22,6 +22,8 @@ import { IndependentAssistantController } from './src/renderer/independent-assis
 import { useSpaceAssistantStore } from './src/renderer/stores/useSpaceAssistantStore';
 import { assistantScopeKey } from './src/renderer/independent-contracts';
 import { DesktopI18nProvider, useDesktopI18n } from './src/renderer/i18n';
+import { readShowUntestedProviderBetas, setShowUntestedProviderBetas } from './src/renderer/provider-beta-preferences';
+import { startGuardedNativeChat } from './src/renderer/guarded-native-chat-start';
 localStorage.setItem('lastbrowser.locale', 'en');
 const id = () => crypto.randomUUID(), at = () => new Date().toISOString();
 const backend = id();
@@ -31,6 +33,7 @@ const initial = scope => ({schemaVersion:1,scope,conversationId:id(),revision:1,
 const snapshots = { A:initial(scopes.A), B:initial(scopes.B) };
 const models = {A:{model:'model-a',provider:'controlled-provider',revision:1},B:{model:'model-b',provider:'controlled-provider',revision:1}};
 const modelGroups=[{provider:'Controlled provider',provider_id:'controlled-provider',configured:true,models:['model-a','model-b'].map(id=>({id,label:id,supportsIndependent:true}))},{provider:'Local',provider_id:'custom:local',configured:true,models:[{id:'gemma4:31b',label:'Literal local model',supportsIndependent:true,reasoning_efforts:['low','high']}],extra_models:[{id:'extra-local-model',label:'Extra local model',supportsIndependent:true,reasoning_efforts:['medium']}]},{provider:'Offline provider',provider_id:'offline-provider',configured:false,models:[{id:'offline-model',label:'Unavailable model',supportsIndependent:true}]},{provider:'Orchestration',provider_id:'',configured:true,models:[{id:'teamwork',label:'Teamwork',supportsIndependent:false}]}];
+const scopedModelGroups=name=>modelGroups.map(group=>({...group,models:group.models.map(entry=>({...entry,...(group.provider_id?{nativeAvailability:{schemaVersion:1,supported:true,available:true,reasonCode:null,provider:group.provider_id,model:entry.id,scope:scopes[name],selectionRevision:models[name].revision}}:{})})),...(group.extra_models?{extra_models:group.extra_models.map(entry=>({...entry,nativeAvailability:{schemaVersion:1,supported:true,available:true,reasonCode:null,provider:group.provider_id,model:entry.id,scope:scopes[name],selectionRevision:models[name].revision}}))}:{})}));
 const queues = { A:[], B:[] }, sequences={A:0,B:0}, calls=[];
 const question = revision => ({schemaVersion:1,kind:'question',basedOnRevision:revision,topic:'purpose',prompt:'What should this Space help with?',options:[{id:'research',label:'Research'},{id:'work',label:'Work'},{id:'personal',label:'Personal'}],allowFreeText:true,selection:'single',understood:[],profilePatch:{}});
 const permissions = {revision:1,browserOrigins:[],networkOrigins:[],connectorBindings:[],allowedWorkspaceRoots:[],allowedEffects:[],rawCdp:false,terminal:false,desktop:false};
@@ -62,7 +65,7 @@ const transport={request:async request=>{
     case 'resolveScope': {const label=request.payload.workspacePath.endsWith('a')?'A':'B';return {ok:true,value:{schemaVersion:1,scope:scopes[label],spaceName:'Space '+label,workspacePath:request.payload.workspacePath,bindingRevision:1,setupStatus:'confirmed'}};}
     case 'modelSelection': {
       const model=models[name];if(payload.action==='set'){assertRevision(payload,model.revision);traceOrder.push('space-model:'+payload.model);model.model=payload.model;model.provider=payload.provider;model.revision++;}
-      return {ok:true,value:{schemaVersion:1,scope:state.scope,...copy(model),configured:true,supportsIndependent:model.model!=='teamwork',...(model.model==='teamwork'?{reasonCode:'independent_orchestration_not_supported'}:{}),groups:copy(modelGroups),providers:[{id:'offline-provider',display_name:'Offline provider',has_key:false,oauth_connected:false,auth_state:'not_configured',provider_available:false,models:[]}]}};
+      return {ok:true,value:{schemaVersion:1,scope:state.scope,...copy(model),configured:true,supportsIndependent:model.model!=='teamwork',...(model.model==='teamwork'?{reasonCode:'independent_orchestration_not_supported'}:{}),groups:copy(scopedModelGroups(name)),providers:[{id:'offline-provider',display_name:'Offline provider',has_key:false,oauth_connected:false,auth_state:'not_configured',provider_available:false,models:[]}]}};
     }
     case 'assistantSnapshot': await new Promise(r=>setTimeout(r,65)); return {ok:true,value:copy(state)};
     case 'assistantReset': {
@@ -255,21 +258,22 @@ window.lastbrowser={independent:transport,system:{openExternal:async()=>{navigat
    return{ok:true,action:request.args==='status'?'status':'set',revision:nativeGoalRevisions[name],goal:copy(session.goal)};}
 }};
 const navigation={entered:0,workChats:0,spaceLinks:0,closed:0,overviewClosed:0,signIn:0,createdSessions:0,browserLogins:0,sent:[]};
-let choose,showNative,showStart,showLocal,showAssistant,chooseLocale,activateNative,refreshNative,remountNative,remountAssistant;
+const guardedChatStarts=[];
+let choose,showNative,showStart,showLocal,showAssistant,closeAssistant,chooseLocale,activateNative,refreshNative,remountNative,remountAssistant;
 function NativeChatMain(props){const [mount,setMount]=useState(0);remountNative=()=>setMount(value=>value+1);return <NativeChatMainComponent key={mount} {...props}/>;}
 function LocaleBinding(){const{setLocale}=useDesktopI18n();chooseLocale=setLocale;return null;}
 function Fixture(){
- const [name,setName]=useState('A'),[open,setOpen]=useState(true),[assistantEpoch,setAssistantEpoch]=useState(0),[overview,setOverview]=useState(false),[native,setNative]=useState(false),[start,setStart]=useState(false),[local,setLocal]=useState(false),[nativeActive,setNativeActive]=useState(false),[nativeText,setNativeText]=useState(''),[,setNativeEpoch]=useState(0);choose=setName;showNative=()=>{setNative(true);setLocal(false)};showStart=()=>{setNative(false);setLocal(false);setStart(true)};showLocal=()=>{setNative(false);setStart(false);setLocal(true)};showAssistant=()=>{setNative(false);setStart(false);setLocal(false);setOpen(true)};activateNative=()=>setNativeActive(true);refreshNative=()=>setNativeEpoch(value=>value+1);remountAssistant=()=>setAssistantEpoch(value=>value+1);
+ const [name,setName]=useState('A'),[open,setOpen]=useState(true),[assistantEpoch,setAssistantEpoch]=useState(0),[overview,setOverview]=useState(false),[native,setNative]=useState(false),[start,setStart]=useState(false),[local,setLocal]=useState(false),[nativeActive,setNativeActive]=useState(false),[nativeText,setNativeText]=useState(''),[,setNativeEpoch]=useState(0);choose=setName;closeAssistant=()=>setOpen(false);showNative=()=>{setNative(true);setLocal(false)};showStart=()=>{setNative(false);setLocal(false);setStart(true)};showLocal=()=>{setNative(false);setStart(false);setLocal(true)};showAssistant=()=>{setNative(false);setStart(false);setLocal(false);setOpen(true)};activateNative=()=>setNativeActive(true);refreshNative=()=>setNativeEpoch(value=>value+1);remountAssistant=()=>setAssistantEpoch(value=>value+1);
  const selection={schemaVersion:1,scope:scopes[name],spaceName:'Space '+name,workspacePath:'C:\\controlled\\'+name.toLowerCase(),bindingRevision:1,setupStatus:'legacy'};
  return <DesktopI18nProvider><LocaleBinding/><main><h1>Controlled Lastbrowser renderer probe</h1><p>Real mounted components; deterministic backend responses.</p>
   {open&&<SpaceAssistantPanel key={assistantEpoch} selection={selection} controller={controller} beginSetup={name==='A'} onClose={()=>{navigation.closed++;setOpen(false)}} onOpenWorkChat={()=>navigation.workChats++} onOpenGlobalOverview={()=>setOverview(true)} onEnterSpace={()=>{navigation.entered++}} onOpenProviderSettings={()=>{}} />}
  {overview&&<IndependentActivityOverview scope={scopes[name]} controller={controller} onClose={()=>{navigation.overviewClosed++;setOverview(false)}} onOpenSpace={async()=>{navigation.spaceLinks++}}/>}
- {native&&<NativeChatMain activeSession={nativeActive?copy(nativeSessions[name]):null} activeSessionId={nativeActive?nativeSessions[name].session_id:null} busy={false} chatError="" messages={nativeActive?nativeSessions[name].messages:[]} runState="idle" composerMode="action" composerText={nativeText} serviceStatus={{sidekick:'ready',webuiHealth:'ready',webuiUrl:'http://controlled.invalid'}} sessionLoading={false} setupModel="" activeSpacePath={selection.workspacePath} activeBrowserProfileId="controlled" showTokenUsage={false} showTps={false} showThinking={false} simplifiedToolCalling={true} latestTurnUsage={null} onComposerMode={()=>{}} onComposerText={setNativeText} onCreateSession={()=>navigation.createdSessions++} onSend={message=>{navigation.sent.push({scope:name,message});setNativeText('')}} onStop={()=>{}} onCommandAction={async action=>{if(action.kind==='goal_command'){await requestNativePersistentGoalCommand(request=>window.lastbrowser.sidekick.goalCommand(request),action.args,{sessionId:action.context.sessionId,profileId:action.context.profileId,browserProfileId:action.context.browserProfileId,workspace:action.context.spacePath,expectedRevision:action.expectedRevision,clientRequestId:action.clientRequestId});refreshNative();}}}/>}
+ {native&&<NativeChatMain activeSession={nativeActive?copy(nativeSessions[name]):null} activeSessionId={nativeActive?nativeSessions[name].session_id:null} busy={false} chatError="" messages={nativeActive?nativeSessions[name].messages:[]} runState="idle" composerMode="action" composerText={nativeText} serviceStatus={{sidekick:'ready',webuiHealth:'ready',webuiUrl:'http://controlled.invalid'}} sessionLoading={false} setupModel="" activeSpacePath={selection.workspacePath} activeBrowserProfileId="controlled" showTokenUsage={false} showTps={false} showThinking={false} simplifiedToolCalling={true} latestTurnUsage={null} onComposerMode={()=>{}} onComposerText={setNativeText} onCreateSession={()=>navigation.createdSessions++} onSend={(message,effort)=>{void startGuardedNativeChat({message,captured:{sessionId:nativeActive?nativeSessions[name].session_id:'',profileId:'controlled',spacePath:selection.workspacePath,backendProfileName:'controlled-backend'},current:{sessionId:nativeActive?nativeSessions[name].session_id:null,profileId:'controlled',spacePath:selection.workspacePath,backendProfileName:'controlled-backend'},selection:{scope:scopes[name],model:models[name].model,provider:models[name].provider},allowUntestedBetas:readShowUntestedProviderBetas(),qualificationBackendProfileName:'controlled-backend',storage:localStorage,...(effort?{reasoningEffort:effort}:{})},payload=>{guardedChatStarts.push(copy(payload));return Promise.resolve({sessionId:payload.sessionId||'synthetic-session',streamId:'synthetic-chat-stream'});}).then(result=>{if(result.ok)navigation.sent.push({scope:name,message,payload:copy(result.payload)});setNativeText('');});}} onStop={()=>{}} onCommandAction={async action=>{if(action.kind==='goal_command'){await requestNativePersistentGoalCommand(request=>window.lastbrowser.sidekick.goalCommand(request),action.args,{sessionId:action.context.sessionId,profileId:action.context.profileId,browserProfileId:action.context.browserProfileId,workspace:action.context.spacePath,expectedRevision:action.expectedRevision,clientRequestId:action.clientRequestId});refreshNative();}}}/>}
  {start&&<NativeBrowserStartPage bookmarks={[]} visits={[]} spaces={[{path:selection.workspacePath,name:'Space '+name,emoji:'🧪'}]} activeSpacePath={selection.workspacePath} activeProfileId="controlled" onNavigate={()=>{}} onSelectSpace={()=>navigation.spaceLinks++} onAddSpace={(path,name)=>{navigation.createdSpace={path,name}}}/>}
  {local&&<LocalAiSetupPane key={name} browserProfileId="controlled" workspacePath={selection.workspacePath} ready={true}/>}
  </main></DesktopI18nProvider>;
 }
-window.__independentSmoke={scopes,snapshots,models,connections,bindings,definitions,permissionStates,delays,calls,navigation,nativeCalls,nativeModes,nativeSessions,nativeChildren,activateNative:()=>activateNative(),childDelta:(name,index,delta,foreign=false)=>{const child=nativeChildren[name][index];const event={...copy(child),kind:'answer_delta',sequence:child.watermark+1,payload:{delta},at:at()};delete event.messages;if(foreign)event.scope=scopes[name==='A'?'B':'A'];else{child.messages[0].content+=delta;child.watermark++;child.revision++;}for(const listener of nativeListeners)listener({streamId:child.parentTurnId,event:'subagent_event',data:{childEvent:event}});},locale:value=>chooseLocale(value),showNative:()=>showNative(),showStart:()=>showStart(),select:name=>choose(name),entry:name=>copy(useSpaceAssistantStore.getState().entries[assistantScopeKey(scopes[name])]),poll:name=>controller.poll(scopes[name]),load:name=>controller.load(scopes[name]),dispose:()=>controller.dispose(),foreign:()=>{foreign=true},delta:(name,delta,stale=false)=>{
+window.__independentSmoke={scopes,snapshots,models,connections,bindings,definitions,permissionStates,delays,calls,navigation,nativeCalls,guardedChatStarts,nativeModes,nativeSessions,nativeChildren,activateNative:()=>activateNative(),resetBeta:()=>setShowUntestedProviderBetas(false),closeAssistant:()=>closeAssistant(),childDelta:(name,index,delta,foreign=false)=>{const child=nativeChildren[name][index];const event={...copy(child),kind:'answer_delta',sequence:child.watermark+1,payload:{delta},at:at()};delete event.messages;if(foreign)event.scope=scopes[name==='A'?'B':'A'];else{child.messages[0].content+=delta;child.watermark++;child.revision++;}for(const listener of nativeListeners)listener({streamId:child.parentTurnId,event:'subagent_event',data:{childEvent:event}});},locale:value=>chooseLocale(value),showNative:()=>showNative(),showStart:()=>showStart(),select:name=>choose(name),entry:name=>copy(useSpaceAssistantStore.getState().entries[assistantScopeKey(scopes[name])]),poll:name=>controller.poll(scopes[name]),load:name=>controller.load(scopes[name]),dispose:()=>controller.dispose(),foreign:()=>{foreign=true},delta:(name,delta,stale=false)=>{
  const state=snapshots[name],assistant=state.messages.findLast(m=>m.role==='assistant'),user=state.messages.find(m=>m.role==='user'&&m.turnId===assistant?.turnId);
  if(!stale&&assistant?.pending)assistant.content+=delta;
  queues[name].push({schemaVersion:1,eventId:id(),scope:scopes[name],seq:++sequences[name],at:at(),kind:'assistant',payload:{conversationId:state.conversationId,turnId:assistant.turnId,requestId:user.clientRequestId,delta,revision:stale?state.revision-1:state.revision}});
@@ -338,6 +342,7 @@ async function electronChild(temp, mode='') {
     const input = (selector, value) => run(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing input');Object.getOwnPropertyDescriptor(e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}))})()`);
     const openSetupSection = index => run(`(()=>{const panel=document.querySelector('.space-assistant-setup');if(!panel)throw Error('Setup disclosure missing');if(!panel.open)panel.querySelector(':scope > summary').click();const section=panel.querySelectorAll('.space-assistant-subdisclosure')[${index}];if(!section)throw Error('Setup section missing: '+${index});if(!section.open)section.querySelector('summary').click()})()`);
     const capture = async name => {await new Promise(resolve=>setTimeout(resolve,200));const destination=path.join(root,'apps/desktop/dist',name);fs.mkdirSync(path.dirname(destination),{recursive:true});fs.writeFileSync(destination,(await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());return destination;};
+    const captureOutput = async name => {await new Promise(resolve=>setTimeout(resolve,200));const destination=path.join(root,'output',name);fs.mkdirSync(path.dirname(destination),{recursive:true});fs.writeFileSync(destination,(await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());return destination;};
     const key=async(keyCode,modifiers=[])=>{window.show();window.focus();window.webContents.focus();window.webContents.sendInputEvent({type:'keyDown',keyCode,modifiers});if(keyCode==='Enter')window.webContents.sendInputEvent({type:'char',keyCode:'\r',modifiers});window.webContents.sendInputEvent({type:'keyUp',keyCode,modifiers});await new Promise(resolve=>setTimeout(resolve,40));window.hide();};
     if(mode){
       await until(`typeof window.__independentSmoke?.select==='function'`, 'Controlled fixture did not initialize');
@@ -399,12 +404,29 @@ async function electronChild(temp, mode='') {
         await run(`window.__independentSmoke.dispose()`);clearTimeout(timeout);window.destroy();app.quit();return;
       }
       if(mode==='--model-picker-only'){
+        await run(`window.__independentSmoke.resetBeta()`);
         window.setContentSize(1440,1040);await run(`window.__independentSmoke.select('A');window.__independentSmoke.showNative()`);
         await until(`document.querySelector('.composer-model select')?.value==='@controlled-provider:model-a'`, 'Native chat did not mount for model picker UI');
         await run(`window.__independentSmoke.activateNative()`);
-        await until(`!!document.querySelector('#composer-manual-models')===false&&!!document.querySelector('[aria-label="Reasoning depth"]')`, 'Native model controls did not load');
-        await button('Choose model manually','.composer-command-button');
+        await until(`!!document.querySelector('#composer-manual-models')===false&&!!document.querySelector('.composer-reasoning-effort select')`, 'Native model controls did not load');
+        await until(`!!document.querySelector('.composer-beta-catalog-opt-in input[type=checkbox]')`, 'Fresh profile did not show a next step for the empty qualified catalog');
+        assert.equal(await run(`document.querySelector('.composer-beta-catalog-opt-in input').checked`),false,'Untested catalog stays opt-in');
+        assert(await run(`document.querySelector('.composer-beta-catalog-opt-in').textContent.includes('No provider and model pair has a current successful chat qualification')`),'Fresh profile explains why the qualified list is empty');
+        assert.equal(await run(`document.querySelector('.chat-composer button[type=submit]').disabled`),true,'Unqualified model cannot be sent before opt-in');
+        await run(`document.querySelector('.chat-composer button[type=submit]').click()`);
+        assert.equal(await run(`window.__independentSmoke.guardedChatStarts.length`),0,'The actual guarded start transport is untouched before opt-in');
+        assert.equal(await run(`document.querySelectorAll('.chat-composer .composer-model-notice').length`),1,'The actionable empty-catalog notice replaces the duplicate blocked-model notice');
+        assert.equal(await run(`localStorage.getItem('lastbrowser.providerChatEvidence.v3')`),null,'The controlled fresh profile contains no fabricated chat qualification');
+        await run(`window.__independentSmoke.closeAssistant()`);
+        await until(`!document.querySelector('[data-testid="space-assistant-panel"]')`, 'Renderer fixture did not isolate the Native chat screenshot');
+        const freshScreenshot=await captureOutput(`chat-model-picker-empty-qualified-${Date.now()}.png`);
+        await run(`document.querySelector('[aria-controls="composer-manual-models"]').click()`);
         await until(`!!document.querySelector('#composer-manual-models')`, 'Manual model catalog did not open');
+        assert.equal(await run(`document.querySelectorAll('#composer-manual-models fieldset button').length`),0,'Unqualified models stay out of the list before opt-in');
+        await run(`document.querySelector('.composer-beta-catalog-opt-in input').focus()`);await key('Space');
+        await until(`document.querySelector('.composer-beta-catalog-opt-in input')?.checked&&document.querySelectorAll('#composer-manual-models fieldset button').length>=4`, 'Explicit opt-in did not reveal the untested catalog');
+        assert(await run(`document.querySelector('#composer-manual-models').textContent.includes('Beta · untested')`),'Unqualified entries remain explicitly labeled as untested');
+        assert.equal(await run(`document.querySelector('.chat-composer button[type=submit]').disabled`),true,'Opt-in alone does not enable sending an empty message');
         assert(await run(`document.querySelector('#composer-manual-models').textContent.includes('Extra local model')`));
         assert(await run(`document.querySelector('#composer-manual-models').textContent.includes('Unavailable in this build')`));
         assert.equal(await run(`[...document.querySelectorAll('#composer-manual-models button')].find(button=>button.textContent.includes('Unavailable model')).disabled`),true);
@@ -414,17 +436,34 @@ async function electronChild(temp, mode='') {
         await run(`(()=>[...document.querySelectorAll('#composer-manual-models button')].find(button=>button.textContent.includes('Literal local model')).click())()`);
         await until(`window.__independentSmoke.models.A.model==='gemma4:31b'&&document.querySelector('.composer-model select')?.value==='@custom:local:gemma4:31b'`, 'Manual literal model selection did not commit to its provider');
         assert(await run(`document.activeElement===document.querySelector('.composer-toolbar button[aria-controls="composer-manual-models"]')`));
-        assert.deepEqual(await run(`[...document.querySelector('[aria-label="Reasoning depth"]').options].map(option=>option.value)`),['','low','high']);
-        await run(`(()=>{const select=document.querySelector('[aria-label="Reasoning depth"]');select.value='high';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);
-        assert.equal(await run(`document.querySelector('[aria-label="Reasoning depth"]').value`),'high');
-        await button('Choose model manually','.composer-command-button');await key('Escape');
+        assert.deepEqual(await run(`[...document.querySelector('.composer-reasoning-effort select').options].map(option=>option.value)`),['','low','high']);
+        await run(`(()=>{const select=document.querySelector('.composer-reasoning-effort select');select.value='high';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+        assert.equal(await run(`document.querySelector('.composer-reasoning-effort select').value`),'high');
+        await input('.chat-composer textarea','Controlled fresh-profile test message');
+        await until(`!document.querySelector('.chat-composer button[type=submit]').disabled`, 'Explicitly opted-in Beta model remains blocked after valid message input');
+        await run(`document.querySelector('.chat-composer button[type=submit]').click()`);
+        await until(`window.__independentSmoke.navigation.sent.length===1&&window.__independentSmoke.guardedChatStarts.length===1`, 'Controlled renderer did not dispatch the selected model chat');
+        assert.equal(await run(`window.__independentSmoke.models.A.model`),'gemma4:31b');
+        assert.equal(await run(`window.__independentSmoke.models.A.provider`),'custom:local');
+        assert.equal(await run(`window.__independentSmoke.navigation.sent[0].message`),'Controlled fresh-profile test message');
+        assert.deepEqual(await run(`window.__independentSmoke.guardedChatStarts[0]`),{
+          sessionId:'native-a',message:'Controlled fresh-profile test message',model:'gemma4:31b',modelProvider:'custom:local',
+          profile:'controlled',workspace:'C:\\controlled\\a',backendProfileName:'controlled-backend',reasoningEffort:'high'
+        },'The mounted composer reaches the shared real guard and constructs the exact controlled transport payload');
+        await run(`document.querySelector('[aria-controls="composer-manual-models"]').click()`);await key('Escape');
         assert.equal(await run(`document.querySelector('#composer-manual-models')`),null);
         assert(await run(`document.activeElement===document.querySelector('.composer-toolbar button[aria-controls="composer-manual-models"]')`));
         await run(`(()=>{const picker=document.querySelector('.composer-model select');picker.value='teamwork';picker.dispatchEvent(new Event('change',{bubbles:true}))})()`);
         await until(`document.querySelector('.composer-model select')?.value==='teamwork'`, 'Orchestration model selection failed');
         const mutations=await run(`window.__independentSmoke.calls.filter(c=>c.operation==='modelSelection'&&c.payload.action==='set')`);
         assert.equal(mutations.length,2);assert(mutations.every(c=>c.scope.spaceId===mutations[0].scope.spaceId));
-        log('native-model-picker-interaction:passed',{literalIds:true,capturedScope:true,providerQualified:true,orchestrationPreserved:true,reasoningSelection:true,focusRestoration:true,escapeDismissal:true});
+        await run(`document.querySelector('.composer-beta-catalog-opt-in input').focus()`);await key('Space');
+        await until(`document.querySelector('.composer-beta-catalog-opt-in input')?.checked===false`, 'Beta opt-out control did not revoke the session preference');
+        await input('.chat-composer textarea','Blocked after beta opt-out');
+        assert.equal(await run(`document.querySelector('.chat-composer button[type=submit]').disabled`),true,'Opt-out closes sending for the unqualified orchestration model');
+        await run(`document.querySelector('.chat-composer button[type=submit]').click()`);
+        assert.equal(await run(`window.__independentSmoke.guardedChatStarts.length`),1,'Opt-out never reaches the controlled transport');
+        log('native-model-picker-interaction:passed',{literalIds:true,capturedScope:true,qualifiedModelsFilteredByDefault:true,explicitBetaOptIn:true,untestedLabelsRetained:true,selectedSpaceModelPersistedBeforeControlledSend:true,actualGuardedStartTransport:true,exactPayload:true,noTransportBeforeOptIn:true,noTransportAfterOptOut:true,orchestrationPreserved:true,reasoningSelection:true,focusRestoration:true,escapeDismissal:true,freshProfileScreenshot:freshScreenshot,providerChatEvidenceAbsent:true,controlledTransportOnly:true});
         await run(`window.__independentSmoke.dispose()`);clearTimeout(timeout);window.destroy();app.quit();return;
       }
       if(mode==='--child-only'){

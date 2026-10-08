@@ -378,6 +378,24 @@ describe('provider-aware model selection', () => {
     expect(chat).toContain("t('chat.retryModels')");
   });
 
+  it('sends the active scoped model selection as an explicit chat model/provider pair', () => {
+    const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
+    const startContract = readFileSync(path.resolve(process.cwd(), 'src/renderer/guarded-native-chat-start.ts'), 'utf8');
+    const selectionRead = app.indexOf('chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
+    const guard = app.indexOf('prepareGuardedNativeChatStart(createGuardedStartInput())', selectionRead);
+    const transport = app.indexOf('(payload) => window.lastbrowser.sidekick.startChat(payload)', guard);
+
+    expect(selectionRead).toBeGreaterThanOrEqual(0);
+    expect(guard).toBeGreaterThan(selectionRead);
+    expect(transport).toBeGreaterThan(guard);
+    expect(app).toContain('const configuredChatModel = chatModelSelection.model || undefined;');
+    expect(startContract).toContain('model: input.selection.model || undefined');
+    expect(startContract).toContain('modelProvider: input.selection.provider || undefined');
+    expect(startContract).toContain('profile: input.captured.profileId');
+    expect(startContract).toContain('workspace: input.captured.spacePath');
+    expect(startContract).toContain('backendProfileName: input.captured.backendProfileName');
+  });
+
   it('maps a provider-qualified configured default to the bare picker ID', () => {
     const groups = [{ providerId: 'ollama-cloud', models: [{ id: 'deepseek-v4.1-flash' }] }];
     expect(resolveCatalogModelSelection('@ollama-cloud:deepseek-v4.1-flash', groups)).toEqual({

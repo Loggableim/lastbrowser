@@ -65,23 +65,6 @@ export function isLocalhostCallback(url: string): boolean {
   }
 }
 
-// Retained for the existing main-process session policy. The generic auth window
-// deliberately does not call these helpers; Google OAuth uses the system browser.
-export function cleanOAuthUserAgent(rawUserAgent: string): string {
-  if (!rawUserAgent) return '';
-  return rawUserAgent.replace(/Electron\/[^\s]+/gi, '').replace(/Lastbrowser\/[^\s]+/gi, '').replace(/\s{2,}/g, ' ').trim();
-}
-
-export function sanitizeSecChUa(headerValue: string): string {
-  if (!headerValue) return headerValue;
-  const filtered = headerValue.split(',').map((part) => part.trim()).filter((part) => !/electron|lastbrowser/i.test(part));
-  if (filtered.some((part) => /"Chromium"/i.test(part)) && !filtered.some((part) => /"Google Chrome"/i.test(part))) {
-    const version = /"Chromium";v="([^\"]+)"/i.exec(headerValue)?.[1] ?? '134';
-    filtered.push(`"Google Chrome";v="${version}"`);
-  }
-  return filtered.join(', ');
-}
-
 /**
  * Open a dedicated, sandboxed Lastbrowser Connect window for generic website sign-ins.
  * Gemini CLI OAuth is started from its account panel in the OS browser.
@@ -135,7 +118,7 @@ export function openAuthConnectWindow(options: AuthWindowOptions): BrowserWindow
 
 /**
  * Return candidate paths to pre-installed native OS browsers on Windows
- * (Edge, Chrome, Firefox, Brave) where Google BotGuard never flags embedded webviews.
+ * (Edge, Chrome, Firefox, Brave), outside the embedded application WebView.
  */
 export function getKnownWindowsBrowserPaths(): string[] {
   const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';

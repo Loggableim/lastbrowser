@@ -30,11 +30,12 @@ const tab = (id: string, url = 'https://example.com'): BrowserTab => ({
 describe('Space Session & Partition Isolation', () => {
   it('starts chat requests in the active profile and Space scope', () => {
     const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
-    const startChatRequest = appTsx.slice(appTsx.indexOf('window.lastbrowser.sidekick.startChat({'));
-    const requestBody = startChatRequest.slice(0, startChatRequest.indexOf('\n      });'));
+    const startContract = fs.readFileSync(path.resolve(__dirname, '../src/renderer/guarded-native-chat-start.ts'), 'utf8');
 
-    expect(requestBody).toContain('profile: turnContext.profileId');
-    expect(requestBody).toContain('workspace: turnContext.spacePath');
+    expect(appTsx).toContain('(payload) => window.lastbrowser.sidekick.startChat(payload)');
+    expect(startContract).toContain('profile: input.captured.profileId');
+    expect(startContract).toContain('workspace: input.captured.spacePath');
+    expect(startContract).toContain('backendProfileName: input.captured.backendProfileName');
   });
 
   it('refreshes the session list in the active profile and Space scope', () => {

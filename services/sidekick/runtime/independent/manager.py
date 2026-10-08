@@ -394,7 +394,7 @@ class RunManager:
 
     @staticmethod
     def _require_independent_model(provider: ProviderSelection):
-        if provider.model == "teamwork" or provider.model.startswith("smart-track-") or provider.provider == "teamwork":
+        if provider.model in {"teamwork", "smart-track"} or provider.model.startswith("smart-track-") or provider.provider == "teamwork":
             raise PolicyDenied("independent_orchestration_not_supported")
 
     def make_context(self, scope: Scope, provider: ProviderSelection, *, dispatch_id: str | None = None, run_id: str | None = None, definition: AgentDefinition | None = None, permissions: PermissionScope | None = None, connection_bindings=(), allow_virtual_for_catalog: bool = False, interactive: bool = False) -> RunContext:

@@ -1,3 +1,6 @@
+.pinned-zen-grid {
+  position: relative;
+}
 .pinned-zen-grid.is-tab-drop-target {
   outline: 2px solid var(--accent, #38bdf8);
   outline-offset: 3px;
@@ -5,10 +8,19 @@
   background: rgba(56, 189, 248, 0.08);
 }
 .pinned-tab-drop-hint {
+  /* Keep the existing native drag target under the pointer. An in-flow hint
+     moves the hovered cell before Chromium can deliver its drop event. */
+  position: absolute;
+  inset-inline: 8px;
+  top: 8px;
+  pointer-events: none;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 7px 9px;
   color: var(--text-primary, #f8fafc);
   font-size: 12px;
+  border-radius: 6px;
+  background: var(--panel, #172033);
 }

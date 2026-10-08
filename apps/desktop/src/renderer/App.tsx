@@ -153,7 +153,8 @@ import {
   dispatchSidekickAction,
   lastAssistantText,
   resolveConfiguredModel,
-  resolveConfiguredModelSelection
+  resolveConfiguredModelSelection,
+  type TeamworkGroundingContext
 } from './bridge.js';
 import {
   OnboardingStatus,
@@ -286,6 +287,8 @@ import { loadSpaceModelSelection, removeSpaceModel, saveSpaceModel } from './spa
 import { isMultiAgentModelSelection, resolvePreferredChatModel, resolvePreferredChatModelSelection } from './provider-model-selection.js';
 import { readShowUntestedProviderBetas } from './provider-beta-preferences.js';
 import { isProviderModelQualified } from './provider-chat-evidence.js';
+import { prepareGuardedNativeChatStart, startGuardedNativeChat } from './guarded-native-chat-start.js';
+import { selectNativeSession as selectNativeChatSession } from './native-session-selection.js';
 import { isQuickChatScopeVisible, updateScopedQuickChatState } from './quick-chat-view-state.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { LiveAutomationBanner } from './components/LiveAutomationBanner.js';
@@ -2911,6 +2914,16 @@ function AppContent(): JSX.Element {
   async function createNativeSession(): Promise<void> {
     setQuickChatMode(false);
     const requestId = ++createSessionRequestRef.current;
+    // A new session starts with a clean, unbound composer. Do not leave a
+    // previous session's draft visible while the scoped create/load is pending.
+    activeSessionIdRef.current = null;
+    setActiveSessionId(null);
+    setActiveSession(null);
+    setChatMessages([]);
+    setMessages([]);
+    setComposerText('');
+    setChatError('');
+    setActivePanel('chat');
     const requestedScope: SessionListScope = { profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current, backendProfileName: activeBackendProfileNameRef.current };
     const selectionRevision = activeSpaceSelectionRevisionRef.current;
     let boundScope: SessionListScope | null = null;
@@ -2982,14 +2995,27 @@ function AppContent(): JSX.Element {
   }
 
   function handleNewChat(): void {
-    isCreatingSessionRef.current = true;
-    setChatMessages([]);
-    setMessages([]);
-    setActiveSessionId(null);
-    activeSessionIdRef.current = null;
-    setComposerText('');
-    setChatError('');
     void createNativeSession();
+  }
+
+  function selectNativeSession(sessionId: string): void {
+    selectNativeChatSession(sessionId, activeSessionIdRef.current, {
+      // A pending New Chat must not steal focus after a recent session pick.
+      invalidatePendingCreation: () => {
+        createSessionRequestRef.current += 1;
+        isCreatingSessionRef.current = false;
+      },
+      bindSessionRef: (nextSessionId) => { activeSessionIdRef.current = nextSessionId; },
+      clearPreviousSessionView: () => {
+        setActiveSession(null);
+        setChatMessages([]);
+        setMessages([]);
+        setComposerText('');
+        setChatError('');
+      },
+      selectSession: setActiveSessionId,
+      openChatPanel: () => setActivePanel('chat')
+    });
   }
 
   function pinNativeSession(session: DesktopSessionSummary): void {
@@ -3613,15 +3639,33 @@ function AppContent(): JSX.Element {
       setChatError(error instanceof Error ? error.message : String(error));
       return false;
     }
-    if (isMultiAgentModelSelection(chatModelSelection) && !readShowUntestedProviderBetas()) {
-      setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
-      return false;
-    }
-    if (!isMultiAgentModelSelection(chatModelSelection) && !readShowUntestedProviderBetas()
-      && (!chatModelSelection.provider || !chatModelSelection.model
-        || !isProviderModelQualified(chatModelSelection.provider, chatModelSelection.model, turnContext.profileId,
-          turnBackendProfileName || activeSession?.profile || 'default', window.localStorage))) {
-      setChatError(t('settings.panels.providers.betaCatalogEmpty'));
+    const createGuardedStartInput = (groundingContext?: TeamworkGroundingContext) => ({
+      message: trimmed,
+      captured: {
+        sessionId: turnContext.sessionId,
+        profileId: turnContext.profileId,
+        spacePath: turnContext.spacePath,
+        backendProfileName: turnBackendProfileName || ''
+      },
+      current: {
+        sessionId: activeSessionIdRef.current,
+        profileId: activeProfileIdRef.current,
+        spacePath: activeSpacePathRef.current,
+        backendProfileName: activeBackendProfileNameRef.current || ''
+      },
+      selection: chatModelSelection,
+      allowUntestedBetas: readShowUntestedProviderBetas(),
+      qualificationBackendProfileName: turnBackendProfileName
+        || (activeSession?.session_id === turnContext.sessionId ? activeSession.profile : '')
+        || 'default',
+      storage: window.localStorage,
+      ...(reasoningEffort ? { reasoningEffort } : {}),
+      ...(groundingContext ? { groundingContext } : {})
+    });
+    const initialStart = prepareGuardedNativeChatStart(createGuardedStartInput());
+    if (!initialStart.ok) {
+      if (initialStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
+      else if (initialStart.reason === 'model_unqualified') setChatError(t('settings.panels.providers.betaCatalogEmpty'));
       return false;
     }
 
@@ -3691,21 +3735,23 @@ function AppContent(): JSX.Element {
       }
 
       setNativeModelResolutionNotice(null);
-      const response = await window.lastbrowser.sidekick.startChat({
-        sessionId: turnContext.sessionId || null,
-        message: trimmed,
-        // Resolve the model explicitly. The setup state is often empty (the
-        // wizard may have been skipped), and sending nothing made the backend
-        // pick a stale catalog entry — observed as
-        // "Ring-2.6-1T is no longer available as a free model".
-        model: configuredChatModel,
-        modelProvider: chatModelProvider,
-        groundingContext: teamworkGroundingContext,
-        profile: turnContext.profileId,
-        workspace: turnContext.spacePath,
-        backendProfileName: activeBackendProfileName,
-        ...(reasoningEffort ? { reasoningEffort } : {})
-      });
+      // Resolve the model explicitly. The setup state is often empty (the
+      // wizard may have been skipped), and sending nothing made the backend
+      // pick a stale catalog entry. The shared operation rechecks beta
+      // qualification and captured scope immediately before the IPC boundary.
+      const guardedStart = await startGuardedNativeChat(
+        createGuardedStartInput(teamworkGroundingContext),
+        (payload) => window.lastbrowser.sidekick.startChat(payload)
+      );
+      if (!guardedStart.ok) {
+        if (guardedStart.reason === 'transport_error') throw guardedStart.error;
+        captureEarlyEvents = false;
+        unsubscribeEarly();
+        if (guardedStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
+        else if (guardedStart.reason === 'model_unqualified') setChatError(t('settings.panels.providers.betaCatalogEmpty'));
+        return false;
+      }
+      const response = guardedStart.response;
       if (!response?.streamId) throw new Error('Sidekick did not return a chat stream ID.');
       chatStartAccepted = true;
       if (reasoningEffort) saveChatReasoningEffort(response.sessionId, reasoningEffort, window.localStorage);
@@ -5043,8 +5089,7 @@ function AppContent(): JSX.Element {
                   sessions={sessions}
                   activeSessionId={activeSessionId}
                   onSelectSession={(sessionId) => {
-                    setActiveSessionId(sessionId);
-                    setActivePanel('chat');
+                    selectNativeSession(sessionId);
                     setZenSidebarRevealed(false);
                   }}
                   onCreateSession={() => void createNativeSession()}
@@ -5132,8 +5177,7 @@ function AppContent(): JSX.Element {
               sessions={sessions}
               activeSessionId={activeSessionId}
               onSelectSession={(sessionId) => {
-                setActiveSessionId(sessionId);
-                setActivePanel('chat');
+                selectNativeSession(sessionId);
               }}
               onCreateSession={() => void createNativeSession()}
               splitTabIds={splitTabIds}
@@ -5318,6 +5362,9 @@ function AppContent(): JSX.Element {
               never clipped by the sidebar's overflow constraints (goal.md Paket 5). */}
           {dockSettings.position !== 'left' && sidebarMode === 'slim' && (
             <NovaDock
+              draggedTabId={draggedTabId}
+              tabs={tabs}
+              onPinTabAsApp={pinTabAsApp}
               botName={setupState.botName || 'Nova'}
               activePanel={activePanel}
               activeTabUrl={activeTab?.url}
@@ -5491,8 +5538,7 @@ function AppContent(): JSX.Element {
               onArchiveSession={(session) => archiveNativeSession(session)}
               onSearch={setSessionSearch}
               onSelectSession={(sessionId) => {
-                setActiveSessionId(sessionId);
-                setActivePanel('chat');
+                selectNativeSession(sessionId);
               }}
               onContextItemChange={setActiveContextItem}
               onBrowserModeChange={setBrowserMode}

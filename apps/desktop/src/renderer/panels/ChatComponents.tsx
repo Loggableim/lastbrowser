@@ -48,6 +48,7 @@ import type { CommandAction, CommandCapabilities, CommandContext } from '../Comm
 import { createChatCommandAction, parseChatCommand } from '../chat-command-registry.js';
 import { chatCommandCopy } from '../chat-command-copy.js';
 import { canSelectNativeModel, manualModelPickerOptions } from '../model-picker-options.js';
+import { setShowUntestedProviderBetas, useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import type { NativeModelAvailability } from '../independent-contracts.js';
 import { SlashCommandMenu } from './SlashCommandMenu.js';
 import { ChildRunBubbles,childRunLabels } from '../components/ChildRunBubbles.js';
@@ -415,6 +416,8 @@ export type ChatComposerProps = {
   model: string;
   /** Selectable models, grouped by provider. The current model remains visible when empty. */
   modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability }> }>;
+  /** True when a loaded catalog exists but every provider/model pair is still unqualified. */
+  emptyQualifiedCatalog?: boolean;
   modelCatalogError?: boolean;
   onRetryModelCatalog?: () => void;
   modelProvider?: string;
@@ -458,6 +461,7 @@ export function ChatComposer({
   reasoningEfforts,
   reasoningCapabilityState,
   modelOptions,
+  emptyQualifiedCatalog = false,
   modelCatalogError=false,
   onRetryModelCatalog,
   profile,
@@ -473,6 +477,7 @@ export function ChatComposer({
   onText
 }: ChatComposerProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
+  const showUntestedBetas = useShowUntestedProviderBetas();
   const commandCopy=chatCommandCopy(locale);
   const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
@@ -622,7 +627,14 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
-      {betaSelectionBlocked&&<div className="composer-model-notice" role="status">{multiAgentBetaBlocked
+      {(emptyQualifiedCatalog||showUntestedBetas)&&<div className="composer-model-notice composer-beta-catalog-opt-in" role="status">
+        <span>{t('settings.panels.providers.betaCatalogEmpty')}</span>
+        <label>
+          <input type="checkbox" checked={showUntestedBetas} onChange={event=>setShowUntestedProviderBetas(event.currentTarget.checked)} />
+          {t('settings.panels.providers.betaCatalogToggle')}
+        </label>
+      </div>}
+      {betaSelectionBlocked&&!emptyQualifiedCatalog&&<div className="composer-model-notice" role="status">{multiAgentBetaBlocked
         ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</div>}
       {showManualModels&&<section id="composer-manual-models" className="composer-manual-models" role="region" aria-label={t('chat.chooseModelManually')}
         onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}}>

@@ -9028,16 +9028,17 @@ html.theme-light .browser-start-search input {
 }
 
 .profile-switcher-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  position: fixed;
   min-width: 240px;
   padding: 8px 0;
-  background: var(--panel);
+  background: var(--panel, var(--lb-surface-strong, #0a1020));
   border: 1px solid var(--lb-border);
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0,0,0,.2);
   z-index: 1001;
+  overflow-y: auto;
+  box-sizing: border-box;
+  -webkit-app-region: no-drag;
 }
 
 .profile-switcher-item {
@@ -9121,6 +9122,11 @@ html.theme-light .browser-start-search input {
   transition: opacity .15s;
   color: var(--muted);
   cursor: pointer;
+}
+
+.profile-switcher-item:focus-visible .profile-switcher-delete,
+.profile-switcher-item:focus-within .profile-switcher-delete {
+  opacity: 1;
 }
 
 .profile-switcher-item:hover .profile-switcher-delete {

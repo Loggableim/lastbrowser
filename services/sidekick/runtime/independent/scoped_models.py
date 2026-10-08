@@ -17,7 +17,8 @@ from .runner import provider_configuration_digest
 from .store import RevisionConflict
 
 _META = "lastbrowser_independent_selection"
-_VIRTUAL = {"teamwork": "Teamwork", "smart-track-low": "Smart Track Low",
+_VIRTUAL = {"teamwork": "Teamwork", "smart-track": "Smart Track",
+            "smart-track-low": "Smart Track Low",
             "smart-track-medium": "Smart Track Medium", "smart-track-high": "Smart Track High"}
 NATIVE_AVAILABILITY_REASONS = frozenset({
     "adapter_unsupported", "provider_unconfigured", "pair_absent",

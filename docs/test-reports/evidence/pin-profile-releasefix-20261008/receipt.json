@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-08",
+  "baseCommit": "b7ca38bd6db7b8a6e5fd814bd322b4916f561e73",
+  "baseTree": "30f2deb9301b12cf8908e6acd633893b64caa00d",
+  "reportCommit": "b39ae4281d2f77e9714f7b91b4c4888348259e65",
+  "branch": "codex/pin-profile-b7-20261008",
+  "targetBranch": "codex/ui-integration-20261008",
+  "productFiles": [
+    {
+      "sha256": "91f28eb4dd7b22a43b90efc4d52ba8ed9aee9050466dab54f4481cbc20c41682",
+      "path": "apps/desktop/src/renderer/App.tsx"
+    },
+    {
+      "sha256": "75fa5c507f03faac6e3e71fd5e0a41e9a2d7d89c9f645423198685a8b62e0c96",
+      "path": "apps/desktop/src/renderer/components/HeaderComponents.tsx"
+    },
+    {
+      "sha256": "58b4ecf8f676cf85a46e378d0dd65eefef1d39c78e96ec9baf21d446c109dd3d",
+      "path": "apps/desktop/src/renderer/components/NovaDock.tsx"
+    },
+    {
+      "sha256": "a05f0ac794667a99b303178989ad5b37256d1b87575c74d036a19a05761405f0",
+      "path": "apps/desktop/src/renderer/components/SidekickSidebar.tsx"
+    },
+    {
+      "sha256": "5ac0fea11b879a9db7ec42306e03afdc45cb0ea8dedd34c9de5e5584ab2f0f88",
+      "path": "apps/desktop/src/renderer/components/pinned-tab-drop.css"
+    },
+    {
+      "sha256": "d82a34968c510e968dcb93cc7a42fb6b7094aa6564e6d85c320cfdf3b6799f3a",
+      "path": "apps/desktop/src/renderer/styles.css"
+    }
+  ],
+  "checks": [
+    {
+      "name": "npm-test.log",
+      "command": "npm test -- --run",
+      "suites": 212,
+      "exitCode": 0,
+      "sha256": "73cba27c6e320046d42b4c3af23af84cccf5db24db9f6a3ce0fca6b0b0fc88cd",
+      "tests": 1942
+    },
+    {
+      "name": "store-preflight.log",
+      "exitCode": 0,
+      "command": "npm run verify:store",
+      "warnings": 2,
+      "sha256": "a8f2a6c493fcfbd1b9af6dbe1bfacd9706e11cec81242fd3581ab3350f4b9821",
+      "failed": 0,
+      "passed": 39
+    },
+    {
+      "exitCode": 0,
+      "command": "npm --workspace apps/desktop run build",
+      "sha256": "5f6a7d92867f89780676d30390abb8a6cfeead4bfeb35802b8fd2e0377babde8",
+      "name": "build.log"
+    },
+    {
+      "exitCode": 0,
+      "command": "python -m compileall -q services/sidekick",
+      "runtime": "existing bundled Python",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "name": "compileall.log"
+    }
+  ],
+  "runtime": {
+    "electron": "37.10.3",
+    "chrome": "138.0.7204.251"
+  },
+  "uiProbe": {
+    "externalProviderCalls": 0,
+    "fullAppVerified": false,
+    "trustedNativeDrag": true,
+    "actualRendererReload": true,
+    "baselineExitCode": 0,
+    "actualPinnedStore": true,
+    "currentExitCode": 0,
+    "fixtureProfileCallbacks": true,
+    "packagedVmVerified": false
+  },
+  "evidenceFiles": [
+    {
+      "sha256": "db5d6262e773dd3b3c8ae99377996e30126134743e197ee50f2d092b1a896c6d",
+      "path": "baseline-profile-overlay.png"
+    },
+    {
+      "sha256": "ecf198d93fdfc973903ee7ac8c77d934a657cf88b15bc61cd42b306d559a8eba",
+      "path": "baseline.json"
+    },
+    {
+      "sha256": "eebee0f1f052a8b0f1ea988fd1d4587233b43a616a9d8e9822faee2005ed691c",
+      "path": "collapsed-pin-fixed.png"
+    },
+    {
+      "sha256": "36c72d283e51d3d491f2dacc196e2e3ebd1a49dffb8fd137b3cca3fb15f43df6",
+      "path": "expanded-pin-fixed.png"
+    },
+    {
+      "sha256": "0d56e610208aec3ef9a58afb6ff8c057b8a51e35fdb01aa51b70d109cafa42ab",
+      "path": "profile-menu-320.png"
+    },
+    {
+      "sha256": "d78a383228652facdd044da62e426a57bff5d109334f4ff5cb1f64c72a650273",
+      "path": "profile-menu-fixed.png"
+    },
+    {
+      "sha256": "9160669c494e323cfb4c10a392d15d6c523d8f74a29197a29feef364dca8b5e2",
+      "path": "result.json"
+    }
+  ]
+}

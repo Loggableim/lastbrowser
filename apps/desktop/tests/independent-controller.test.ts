@@ -185,9 +185,9 @@ describe('Local AI Main purpose boundary', () => {
     await expect(access(path.join(directory, 'local-ai'))).rejects.toThrow();
     expect(api).toHaveBeenCalledWith('localAi.catalog', scope, {}, 'default');
   });
-  it('binds only an actual Main scan to the saved profile and uses the actual cache volume', async () => {
+  it('binds only an actual Main scan to the saved profile and measures its trusted user-data volume', async () => {
     const { scan, probe } = await localAiFixture(); const result: any = await localAi({ action: 'scan' });
-    expect(result.scan).toEqual(scan); expect(probe).toHaveBeenCalledWith({ scope, cacheDirectory: path.join(directory, 'local-ai', 'cache'), timeoutMs: 3000 });
+    expect(result.scan).toEqual(scan); expect(probe).toHaveBeenCalledWith({ scope, cacheDirectory: directory, timeoutMs: 3000 });
     expect(api).toHaveBeenCalledWith('localAi.hardwareBind', scope, scan, 'default');
     expect(api).toHaveBeenCalledWith('localAi.hardwareRead', scope, { scanId: scan.hardware.scanId }, 'default');
     expect((controller as any).host).toBeUndefined();
@@ -220,11 +220,13 @@ describe('Local AI Main purpose boundary', () => {
     await expect(localAi({ action: 'recommend', scanId: 'forged', preset: 'balanced', contextTokens: 1024 })).rejects.toThrow(/fresh hardware scan/);
     expect(probe).not.toHaveBeenCalled(); expect(api).not.toHaveBeenCalled();
   });
-  it('refuses a preexisting cache junction before any scan or write to the target', async () => {
+  it('scans the trusted profile without traversing a preexisting model-cache junction', async () => {
     const { probe } = await localAiFixture(); const target = path.join(directory, 'external-target'); await mkdir(target);
     await symlink(target, path.join(directory, 'local-ai'), 'junction');
-    await expect(localAi({ action: 'scan' })).rejects.toThrow(/own directory/);
-    expect(await readdir(target)).toEqual([]); expect(probe).not.toHaveBeenCalled(); expect(api).not.toHaveBeenCalled();
+    await expect(localAi({ action: 'scan' })).resolves.toMatchObject({ scan: { hardware: { scanId: 'actual-main-scan' } } });
+    expect(probe).toHaveBeenCalledWith({ scope, cacheDirectory: directory, timeoutMs: 3000 });
+    expect(await readdir(target)).toEqual([]);
+    // Install/runtime cache-junction rejection remains covered by the Main controller tests.
   });
   it('rechecks the trusted frame after the real scan and never binds proof from a reloaded sender', async () => {
     await localAiFixture(async () => { event.senderFrame.url = 'https://untrusted.invalid'; });

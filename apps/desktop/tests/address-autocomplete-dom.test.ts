@@ -13,8 +13,28 @@ let results: Record<string, { submitted: string; selected: string; value: string
 describe.skipIf(process.platform === 'linux' && !process.env.DISPLAY)('actual React omnibox keyboard DOM behavior', () => {
   beforeAll(async () => {
     const directory = mkdtempSync(path.join(tmpdir(), 'lastbrowser-omnibox-'));
-    server = await createServer({ configFile: false, root: process.cwd(), cacheDir: path.join(directory, 'vite-cache'), server: { host: '127.0.0.1', port: 0, watch: null } });
+    server = await createServer({
+      configFile: false, root: process.cwd(), cacheDir: path.join(directory, 'vite-cache'),
+      optimizeDeps: { entries: ['tests/fixtures/omnibox-keyboard.html'] },
+      server: { host: '127.0.0.1', port: 0, watch: null }
+    });
     await server.listen();
+    // Prepare the fixture's actual import graph before the native keyboard clock.
+    // Scanning every HTML entry also prepares the unrelated production App.
+    let preparationTimeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => {
+          await server.warmupRequest('/tests/fixtures/omnibox-keyboard.tsx');
+          await server.waitForRequestsIdle();
+        })(),
+        new Promise<never>((_resolve, reject) => {
+          preparationTimeout = setTimeout(() => reject(new Error(`Omnibox fixture preparation exceeded its 10-second deadline; proof: ${directory}`)), 10000);
+        })
+      ]);
+    } finally {
+      if (preparationTimeout) clearTimeout(preparationTimeout);
+    }
     const address = server.httpServer!.address() as { port: number };
     const env = { ...process.env, LASTBROWSER_OMNIBOX_PROOF_DIR: directory, LASTBROWSER_OMNIBOX_PROOF_URL: `http://127.0.0.1:${address.port}/tests/fixtures/omnibox-keyboard.html` };
     delete env.ELECTRON_RUN_AS_NODE;
@@ -22,14 +42,15 @@ describe.skipIf(process.platform === 'linux' && !process.env.DISPLAY)('actual Re
       const require = createRequire(import.meta.url);
       const executable = process.platform === 'win32' ? path.join(path.dirname(require.resolve('electron/package.json')), 'dist', 'electron.exe') : String(electronPath);
       const child = spawn(executable, [path.resolve('tests/fixtures/omnibox-keyboard-probe.cjs')], { env, windowsHide: true, stdio: 'pipe' });
-      const timeout = setTimeout(() => { child.kill(); reject(new Error('Electron DOM probe exceeded its 45-second deadline')); }, 45000);
       let output = '';
+      const errorFile = path.join(directory, 'error.txt');
+      const diagnostics = () => `${output}\n${existsSync(errorFile) ? readFileSync(errorFile, 'utf8') : 'No probe error was written'}\nProof: ${directory}`;
+      const timeout = setTimeout(() => { child.kill(); reject(new Error(`Electron DOM probe exceeded its 45-second deadline: ${diagnostics()}`)); }, 45000);
       child.stderr.on('data', chunk => { output += chunk; });
       child.on('error', error => { clearTimeout(timeout); reject(error); });
       child.on('exit', code => {
         clearTimeout(timeout);
-        const errorFile = path.join(directory, 'error.txt');
-        code === 0 ? resolve() : reject(new Error(`Electron DOM probe failed (${code}): ${output}\n${existsSync(errorFile) ? readFileSync(errorFile, 'utf8') : 'No probe result was written'}`));
+        code === 0 ? resolve() : reject(new Error(`Electron DOM probe failed (${code}): ${diagnostics()}`));
       });
     });
     results = JSON.parse(readFileSync(path.join(directory, 'result.json'), 'utf8'));

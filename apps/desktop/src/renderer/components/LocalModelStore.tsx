@@ -10,7 +10,7 @@ const reasons:Record<string,string>={hardware_scan_required:'Hardware-Scan erfor
   runtime_compatibility_unknown:'Gebündelte Runtime noch nicht qualifiziert',artifact_qualification_incomplete:'Downloadartefakt noch nicht vollständig qualifiziert',
   cpu_features_unknown:'CPU-Instruktionen noch nicht bestätigt',hardware_measurement_unknown:'Speicherwerte fehlen',
   insufficient_available_ram:'Zu wenig freier RAM einschließlich Systemreserve',insufficient_disk_staging:'Zu wenig freier Speicher für Download und Prüfung',
-  commercial_lastbrowser_license_required:'Kommerzielle LastBrowser-Lizenz erforderlich',model_parameter_count_unknown:'Gesamtparameterzahl noch ungeklärt'};
+  model_parameter_count_unknown:'Gesamtparameterzahl noch ungeklärt',model_parameter_count_invalid:'Ungültige Parameterangabe'};
 export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;client:IndependentAssistantClient;ready:boolean}):React.JSX.Element{
   const [view,setView]=useState<StoreView|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const [showLarge,setShowLarge]=useState(false),[showUnknown,setShowUnknown]=useState(false),[query,setQuery]=useState(''),[publisher,setPublisher]=useState('');
@@ -57,7 +57,6 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
     <dl><dt>Gesamtparameter</dt><dd>{model.totalParameters===null?'Unbekannt':`${(model.totalParameters/1e9).toFixed(2)} B`}</dd>
       <dt>Download</dt><dd>{bytes(model.downloadBytes)}</dd><dt>RAM empfohlen (Schätzung)</dt><dd>{bytes(model.recommendedRamBytes)}</dd>
       <dt>VRAM empfohlen</dt><dd>{bytes(model.recommendedVramBytes)}</dd><dt>Kontext maximal</dt><dd>{model.contextLimit?.toLocaleString()??'Unbekannt'} Tokens</dd></dl>
-    {model.commercialRequired&&<p className="local-model-license">Kommerzielle LastBrowser-Lizenz erforderlich</p>}
     <p>{model.eligibility.state==='likely_suitable'?'Voraussichtlich geeignet':model.eligibility.state==='too_large'?'Zu groß':'Kompatibilität ungeklärt'}</p>
     <button type="button" onClick={()=>{setDetail(model.id);setConsent('');}}>Details / Aktionen</button>
   </article>;}
@@ -106,6 +105,6 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
       <textarea maxLength={8192} value={chatText} onChange={e=>setChatText(e.target.value)} aria-label="Lokale Nachricht"/>
       <button type="button" disabled={chatBusy||!chatText.trim()} onClick={()=>{setChatBusy(true);void request({operation:'chat',text:chatText}).then(result=>{if(mounted.current&&result&&typeof result==='object'&&'text'in result)setChatResult(String(result.text));}).finally(()=>{if(mounted.current)setChatBusy(false);});}}>Senden</button>
       {chatBusy&&<button type="button" onClick={()=>void request({operation:'stopChat'})}>Stoppen</button>}<pre>{chatResult}</pre></section>}
-    <p>Über 100B Gesamtparameter: kommerzielle LastBrowser-Lizenz erforderlich, auch MoE. Genau 100B ausgenommen. Aktuell ist kein kommerzieller Lizenzverifier angebunden; Freischaltung bleibt gesperrt.</p>
+    <p>LastBrowser erhebt keine Lizenzgebühr nach Modellgröße. Installation und Ausführung hängen weiterhin von Herausgeberlizenz, Hardwareeignung und qualifizierter Runtime ab.</p>
   </section>;
 }

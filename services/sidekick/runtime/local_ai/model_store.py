@@ -22,7 +22,6 @@ from .runtime_probe import hash_contained_file
 from .store_benchmark import CASES, SUITE_VERSION, SUITE_HASH, VALIDATOR_VERSION, evaluate
 from .store_inference import stream_answer, MemorySampler
 
-LIMIT = 100_000_000_000
 GIB = 1024 ** 3
 CATALOG = json.loads((Path(__file__).parent/'store_catalog.json').read_text(encoding='utf-8'))
 _LOCK = threading.RLock()
@@ -31,9 +30,9 @@ _EXECUTION = threading.Lock()
 _RUNNING = {'pending','running','downloading','verifying','stopping'}
 
 class Entitlements:
-    """Trusted host integration point. Default denies; JSON/UI flags never grant."""
+    """Compatibility shim: LastBrowser has no model-size entitlement gate."""
     def permits_large_local_models(self, scope):
-        return False
+        return True
 
 def _digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode()).hexdigest()
@@ -108,7 +107,7 @@ def catalog_entries():
             'licenseText':model.get('license_text'),'licenseDigest':model.get('license_sha256'),
             'gated':bool(model.get('gated')),'artifact':chosen,
             'installQualified':bool(supported and parameters and model.get('license_sha256') and chosen.get('sha256')),
-            'commercialRequired':parameters>LIMIT if parameters is not None else None,
+            'commercialRequired':False,
             'tasks':['chat','summary'] if supported else ['research']})
     return entries
 
@@ -134,10 +133,9 @@ class ModelStore:
         return self.entries[identity]
 
     def _license(self, entry):
-        total=entry['totalParameters']
-        if type(total) is not int or total<=0: raise ValueError('model_parameter_count_unknown')
-        if total>LIMIT and not self.entitlements.permits_large_local_models(self.scope):
-            raise ValueError('commercial_lastbrowser_license_required')
+        total=entry.get('totalParameters')
+        if total is not None and (type(total) is not int or total<=0):
+            raise ValueError('model_parameter_count_invalid')
 
     def bind_hardware(self, hardware):
         # Authenticated Main supplied scan bound by existing scan broker.
@@ -186,7 +184,7 @@ class ModelStore:
                 'jobs':[self._job_view(j) for j in self.jobs.values()],
                 'history':[self._summary(r) for r in self.history],
                 'entitlement':{'largeModelsAllowed':self.entitlements.permits_large_local_models(self.scope),
-                    'status':'commercial_verifier_not_configured','threshold':LIMIT},
+                    'status':'open_source_no_size_restriction','threshold':None},
                 'suite':{'version':SUITE_VERSION,'sha256':SUITE_HASH,'cases':16,'quickCases':6,'standardRepeats':3}}
 
     @staticmethod

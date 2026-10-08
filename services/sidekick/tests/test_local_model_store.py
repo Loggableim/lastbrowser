@@ -1,8 +1,10 @@
 """Synthetic safety contracts. No downloads, sessions, hardware or provider calls."""
 import json
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
-from runtime.local_ai.model_store import ModelStore, Entitlements, LIMIT, _device_identity, _digest
+from unittest.mock import patch
+from runtime.local_ai.model_store import ModelStore, Entitlements, _device_identity, _digest
 from runtime.local_ai.store_benchmark import CASES, evaluate
 
 class ModelStoreContracts(unittest.TestCase):
@@ -12,22 +14,39 @@ class ModelStoreContracts(unittest.TestCase):
         result.entitlements=Entitlements()
         return result
 
-    def test_exact_100b_exempt(self):
-        self.store()._license({'totalParameters':LIMIT})
+    def test_large_models_have_no_lastbrowser_license_gate(self):
+        store=self.store()
+        store._license({'totalParameters':100_000_000_000})
+        store._license({'totalParameters':100_000_000_001,'activeParameters':1})
+        store._license({'totalParameters':1_000_000_000_000})
 
-    def test_more_than_100b_denied(self):
-        with self.assertRaisesRegex(ValueError,'commercial_lastbrowser_license_required'):
-            self.store()._license({'totalParameters':LIMIT+1,'activeParameters':1})
+    def test_unknown_parameter_count_is_not_a_license_gate(self):
+        self.store()._license({'totalParameters':None})
 
-    def test_unknown_parameters_denied(self):
-        for value in (None,True,0,-1,100.0):
-            with self.assertRaisesRegex(ValueError,'model_parameter_count_unknown'):
+    def test_unknown_parameter_count_does_not_hide_hardware_or_runtime_gaps(self):
+        store=self.store()
+        store.repository=Path('.')
+        store.device=None
+        entry={'totalParameters':None,'runtimeStatus':'unknown','installQualified':True,
+            'recommendedRamBytes':None,'downloadBytes':1024}
+        with patch('runtime.local_ai.model_store.private_cpu_manifest',
+                   return_value=SimpleNamespace(files=[],package_relative_dir='')):
+            result=store.eligibility(entry)
+        self.assertEqual(result['state'],'unknown')
+        self.assertFalse(result['allowed'])
+        self.assertIn('hardware_scan_required',result['reasons'])
+        self.assertIn('runtime_compatibility_unknown',result['reasons'])
+        self.assertNotIn('model_parameter_count_unknown',result['reasons'])
+
+    def test_invalid_parameter_metadata_is_rejected(self):
+        for value in (True,0,-1,100.0):
+            with self.assertRaisesRegex(ValueError,'model_parameter_count_invalid'):
                 self.store()._license({'totalParameters':value})
 
-    def test_trusted_entitlement_does_not_depend_on_renderer_flag(self):
+    def test_renderer_flags_do_not_change_open_license_gate(self):
         store=self.store()
-        store._license({'totalParameters':LIMIT,'rendererLicense':True})
-        with self.assertRaises(ValueError):store._license({'totalParameters':LIMIT+1,'rendererLicense':True})
+        store._license({'totalParameters':100_000_000_001,'rendererLicense':False})
+        store._license({'totalParameters':100_000_000_001,'rendererLicense':True})
 
     def test_fence_content_pass_format_fail(self):
         result=evaluate(CASES[1],'```json\n'+json.dumps(CASES[1]['expected'])+'\n```')

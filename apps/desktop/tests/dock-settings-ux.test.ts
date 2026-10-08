@@ -17,6 +17,14 @@ describe('settings appearance and Nova Dock usability regressions', () => {
   it('lets translated font-size labels wrap without clipping', () => {
     expect(css).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));');
     expect(css).toMatch(/\.settings-size-btn strong\s*\{[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/s);
+    expect(css).toMatch(/\.settings-editor\s+\.settings-size-btn\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
+  });
+
+  it('reflows settings from the available pane width when the Copilot split is open', () => {
+    expect(css).toMatch(/\.settings-main\s*\{[^}]*container-name:\s*settings-layout;[^}]*container-type:\s*inline-size;/s);
+    expect(css).toMatch(/@container settings-layout \(max-width:\s*760px\)\s*\{[^}]*\.settings-native-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
+    expect(css).toMatch(/\.settings-native-grid\s*>\s*\.settings-section-nav\s*\{[^}]*overflow-x:\s*auto;[^}]*scroll-padding-inline-end:\s*min\(220px,\s*76vw\);/s);
+    expect(css).toMatch(/@container settings-layout \(max-width:\s*760px\)\s*\{[^]*?\.settings-editor\s*\{[^}]*width:\s*100%;[^}]*min-width:\s*0;/s);
   });
 
   it('starts and resynchronizes auto-hide, and restores the dock when disabled', () => {

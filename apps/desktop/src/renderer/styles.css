@@ -3444,6 +3444,11 @@ html.theme-light select optgroup {
     #080d19;
 }
 
+.settings-main {
+  container-name: settings-layout;
+  container-type: inline-size;
+}
+
 .native-rest-header {
   display: flex;
   align-items: flex-start;
@@ -3774,7 +3779,7 @@ html.theme-light select optgroup {
   min-width: 0;
 }
 
-@media (max-width: 760px) {
+@container settings-layout (max-width: 760px) {
   .settings-native-grid {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
@@ -3787,6 +3792,7 @@ html.theme-light select optgroup {
     overflow-y: hidden;
     max-width: 100%;
     padding: 8px;
+    scroll-padding-inline-end: min(220px, 76vw);
     overscroll-behavior-inline: contain;
     scroll-snap-type: x proximity;
     touch-action: pan-x;
@@ -4155,6 +4161,11 @@ body:has(.nova-dock.pos-floating.settings-safe-position) .settings-main {
   color: rgba(232, 242, 255, .76);
   background: rgba(255, 255, 255, .045);
   cursor: pointer;
+}
+
+.settings-editor .settings-size-btn {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .settings-size-btn.active span {

@@ -1,11 +1,15 @@
 # VM-Testagent: stündlich neue LastBrowser-Szenarien prüfen
 
+## Aktueller UI-Testkandidat B7CA38BD — 0.1.48
+
+Für neue gemeinsame UI-Prüfungen gilt [VM-B7CA38BD-TEST-ORDER-20261008.md](VM-B7CA38BD-TEST-ORDER-20261008.md), Source `b7ca38bd6db7b8a6e5fd814bd322b4916f561e73`, Tree `30f2deb9301b12cf8908e6acd633893b64caa00d`. Erst die dortigen tatsächlichen Remote-Dateien und Wrapper-/ASAR-Hashes bestätigen. Der Auftrag enthält den neuen AI→Neuer-Chat-Fall Revision 2, IME/Profilwechsel, Download/Pin, Modellstore/Assistant und ausschließlich kostenfreie kontrollierte Ziel-/Scheduler-/Rechte-/Quickchat-Szenarien. Guest- und Funktionsabnahme bleiben offen. 9A943-Aufträge und AI_NEW_CHAT Revision 1 bleiben als Historie erhalten; ihre Ergebnisse nicht als b7-Evidenz übernehmen. Providerbudget 0, keine Modell-Downloads oder realen Providerturns.
+
 ## Priorisierter Zusatzauftrag: AI → Neuer Chat
 
 Führe zusätzlich [VM-AI-NEW-CHAT-20261008.md](VM-AI-NEW-CHAT-20261008.md), Test-ID `AI_NEW_CHAT_20261008` Revision 1, am tatsächlich hashbestätigten 9A943-Guest-Kandidaten aus. Der direkte Humanauftrag verlangt Layout-, Fokus- und Fehleranalyse nach Klick auf den AI-Reiter und Neuer Chat, ohne Senden oder Providerturns (Kosten 0). Die vorhandene 9A943-Matrix und Ergebnishistorie bleiben erhalten; neue ungepackte UI-Fixes nicht als enthalten behaupten. Bericht auf `codex/lastbrowser-electron-shell` unter `docs/test-reports/` zustellen.
 
 
-## Aktueller Testkandidat 9A943 — 0.1.48
+## Historischer Testkandidat 9A943 — 0.1.48
 
 Der aktuelle Auftrag für neue kandidatengebundene Guest-Prüfungen ist [VM-9A943-TEST-ORDER-20261008.md](VM-9A943-TEST-ORDER-20261008.md). Er bindet Sourcecommit `9a94340853c90dd9f19393e83ae5c09fa1a430b1`, Source-tree `7e5f3e931e1487754d4b68c7cce5efa59cddbb8a`, ZIP-SHA-256 `8df8036f72d7be22cbfe0c5095ef6825235118a109fb31375a17e9160ce0f813`, Manifest-SHA-256 `33785913589f2ef9d1a9b092366775afed424fe70d0b2c82cff6bcd4f5a12bb6` und installierten ASAR-SHA-256 `69732f7115157fc5405db63d2dbfad5e24fff87f1f91aa14eb67db9079511adc`. Das Test-Prerelease ist bereits veröffentlicht; kein Upload oder Releaseedit. Veröffentlichungsreceipt `output/store-guest-delivery-9a943-20261008/publication-receipt.json`, SHA-256 `ac6aba3ff87b66ad634389d43ec1daa4a1298c80a5215fdc11d35ad9205a2b65`. Guest-Runtime, Installation und Abnahme bleiben `NOT_TESTED`; YouTube-Adblock `NOT_OBSERVED`, Native Runtime Rights `OPEN`. Nur der verlinkte Auftrag ist die neue 9A943-Matrix. Er bewahrt den priorisierten Expanded-New-Tab-Button, enthält danach Slim/Ctrl+T/Tabwechsel, Offline-Backendbeleg, Setup-Uninstall als letzten Fall und die weiteren dort begrenzten Checks. Die historische `BASELINE-UI-20261008` sowie ältere Kandidatenberichte bleiben bestehen und werden weder überschrieben noch als 9A943-Ergebnis wiederholt.
 

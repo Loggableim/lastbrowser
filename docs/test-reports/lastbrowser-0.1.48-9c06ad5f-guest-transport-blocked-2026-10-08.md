@@ -26,3 +26,7 @@ Keine App gestartet oder installiert. Keine UI-Szenarien, First-Launch-, Design-
 ## Erforderlicher nächster Schritt
 
 Den exakten 9c06ad5f-Setup- und/oder Portable-Kandidaten über einen autorisierten Weg in den Guest übertragen. Danach im Guest Dateigröße und SHA-256 gegen den Auftrag prüfen. Erst bei Übereinstimmung den freigegebenen, isolierten Guest-Test fortsetzen und anschließend den tatsächlich extrahierten/installierten ASAR prüfen. Bis dahin keine cec9- oder ältere Installationsdatei als Ersatz verwenden.
+
+## Nachprüfung des Transfers
+
+Am 2026-10-08 wurde der neue Dokumentationsbranch erneut geprüft: weiterhin Commit `51185642567eb7873462d3e3e42d9a5b380bfd7c`, ohne Kandidatenbinary; sein einziges ZIP ist das 32617-Byte-Auftragsbundle. Der Guest-Downloadordner enthält weiterhin nur das cec9-Portable und das 0.1.45-Setup. Die öffentliche [GitHub-Releaseliste](https://github.com/Loggableim/lastbrowser/releases) führt die frühere unsignierte 0.1.48-Testvorabversion und ältere Releases; ein Release mit Kennung `9c06ad5f` ist dort nicht gelistet. Die 9c06-Paketübertragung bleibt daher **BLOCKED / PENDING**. Keine Datei heruntergeladen oder gestartet.

@@ -48,8 +48,8 @@ describe('startpage atmospheric dashboard helpers', () => {
   it('has real translated Space and history states in every website language',()=>{
     for(const locale of desktopLocaleIds){
       const space=browserStartSpaceCopy[locale],history=browserStartHistoryCopy[locale];
-      expect(space.noTabs.trim()).toBeTruthy();expect(space.session.trim()).toBeTruthy();expect(space.tabCount(2)).toContain('2');
-      expect(history.empty.trim()).toBeTruthy();expect(history.visits(2)).toContain('2');
+      expect(space.home.trim()).toBeTruthy();expect(space.noTabs.trim()).toBeTruthy();expect(space.session.trim()).toBeTruthy();expect(space.tabCount(2)).toContain('2');
+      expect(history.favorites.trim()).toBeTruthy();expect(history.mostVisited.trim()).toBeTruthy();expect(history.recentSites.trim()).toBeTruthy();expect(history.empty.trim()).toBeTruthy();expect(history.visits(2)).toContain('2');
     }
     expect(browserStartSpaceCopy.en.noTabs).toBe('No tabs');expect(browserStartSpaceCopy.ja.session).toBe('個別のセッション');
     const source=fs.readFileSync(path.resolve(__dirname,'../src/renderer/panels/NativeBrowserStartPage.tsx'),'utf8');

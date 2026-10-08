@@ -274,7 +274,7 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
 };
 
 const SETTINGS_SECTION_COPY: Record<SettingsSectionId, { title: DesktopTranslationKey; description: DesktopTranslationKey }> ={
-  'local-ai': {title:'settings.sections.providers',description:'settings.sectionDescriptions.providers'},
+  'local-ai': {title:'settings.sections.localAi',description:'settings.sectionDescriptions.localAi'},
   conversation: { title: 'settings.sections.conversation', description: 'settings.sectionDescriptions.conversation' },
   appearance: { title: 'settings.sections.appearance', description: 'settings.sectionDescriptions.appearance' },
   preferences: { title: 'settings.sections.preferences', description: 'settings.sectionDescriptions.preferences' },
@@ -3258,13 +3258,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
           const hooks = Array.isArray(plugin?.hooks) ? plugin.hooks : [];
           return (
             <article key={idOf(plugin)}>
-              <strong>{titleOf(plugin, 'Unnamed plugin')}</strong>
+              <strong>{titleOf(plugin, t('settings.panels.providers.unnamedPlugin'))}</strong>
               <span>{settingsText(plugin.key || plugin.id || 'plugin')}{plugin.version ? ` · v${settingsText(plugin.version)}` : ''}</span>
-              <span>{settingsText(plugin.description, 'No description provided.')}</span>
+              <span>{settingsText(plugin.description, t('settings.panels.providers.noDescription'))}</span>
               <div className="plugin-hook-list">
-                {hooks.length ? hooks.map((hook) => <span key={`${idOf(plugin)}-${settingsText(hook)}`} className="plugin-hook-badge">{settingsText(hook)}</span>) : <span className="plugin-hook-empty">No registered lifecycle hooks</span>}
+                {hooks.length ? hooks.map((hook) => <span key={`${idOf(plugin)}-${settingsText(hook)}`} className="plugin-hook-badge">{settingsText(hook)}</span>) : <span className="plugin-hook-empty">{t('settings.panels.providers.noLifecycleHooks')}</span>}
               </div>
-              <span className={`provider-card-badge ${enabled ? '' : 'plugin-card-badge-disabled'}`}>{enabled ? 'Enabled' : 'Disabled'}</span>
+              <span className={`provider-card-badge ${enabled ? '' : 'plugin-card-badge-disabled'}`}>{t(enabled ? 'settings.panels.providers.enabled' : 'settings.panels.providers.disabled')}</span>
             </article>
           );
         })}
@@ -3294,8 +3294,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             <button key={key} type="button" className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}>
               <span className="settings-section-button-icon">{meta.icon}</span>
               <span className="settings-section-button-text">
-                  <strong>{key==='local-ai'?meta.title:t(SETTINGS_SECTION_COPY[key].title)}</strong>
-                  <small>{key==='local-ai'?meta.description:t(SETTINGS_SECTION_COPY[key].description)}</small>
+                  <strong>{t(SETTINGS_SECTION_COPY[key].title)}</strong>
+                  <small>{t(SETTINGS_SECTION_COPY[key].description)}</small>
               </span>
             </button>
           ))}
@@ -3304,8 +3304,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         <main className="native-work-card settings-editor settings-panel-scroll">
           <header className="settings-editor-head">
             <div>
-              <strong>{section==='local-ai'?SETTINGS_SECTIONS[section].title:t(SETTINGS_SECTION_COPY[section].title)}</strong>
-              <span>{section==='local-ai'?SETTINGS_SECTIONS[section].description:t(SETTINGS_SECTION_COPY[section].description)}</span>
+              <strong>{t(SETTINGS_SECTION_COPY[section].title)}</strong>
+              <span>{t(SETTINGS_SECTION_COPY[section].description)}</span>
             </div>
             <div className="settings-editor-actions">
               <span className={`native-rest-pill ${dirty ? '' : 'ready'}`}>
@@ -3584,7 +3584,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           className={!dockSettings.autoHide ? 'settings-seg-btn active' : 'settings-seg-btn'}
                           onClick={() => setDockSettings({ autoHide: false })}
                         >
-                          Deaktiviert
+                          {t('settings.panels.appearance.disabled')}
                         </button>
                       </div>
                     </div>

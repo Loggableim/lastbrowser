@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "store-package-9c06ad5f-20261008",
+  "version": "0.1.48",
+  "sourceCommit": "9c06ad5f20102e45deb6312b2e4f91d6b4c7255a",
+  "status": "UNSIGNED_OFFLINE_TEST_CANDIDATE_GUEST_TRANSPORT_PENDING",
+  "guestBundle": {
+    "filename": "LastBrowser-0.1.48-9c06ad5f-Guest-Test-Bundle.zip",
+    "bytes": 32617,
+    "sha256": "0ab5225b4c2355b43c27518fc97465b1aa55061da4c931db1a5fcbea1545e0b2",
+    "contents": [
+      {
+        "filename": "README-GUEST-FIRST.md",
+        "bytes": 672,
+        "sha256": "9224cca130b70d60a60ef75a617865f2e7b5eb37cacb3454f249e3dbf6641705"
+      },
+      {
+        "filename": "VM-STORE-9C06-TEST-ORDER-20261008.md",
+        "bytes": 83339,
+        "sha256": "b204a22b9827b93d6011957606246fe40249951658af83be5ccd87180757e74a"
+      },
+      {
+        "filename": "bundle-content-manifest.json",
+        "bytes": 3008,
+        "sha256": "3862630ec1cb3331ee15bedf592f4f657bb6acbf7f36d8051bc804dd1ddc3060"
+      }
+    ]
+  },
+  "releaseAssets": {
+    "setup": {
+      "filename": "Lastbrowser-0.1.48-x64-setup.exe",
+      "bytes": 174209985,
+      "sha256": "c94e2784d52b380f55da589b2c792cc41a26b7cdf6ef2df0c7e4a9ce60881548",
+      "signature": "NotSigned"
+    },
+    "portable": {
+      "filename": "Lastbrowser-0.1.48-x64-portable.exe",
+      "bytes": 173855852,
+      "sha256": "e800c9f496452881ac8c8d50d59971849c7d34da58ca3b0c3edadd510f6d1481",
+      "signature": "NotSigned"
+    },
+    "installedAsar": {
+      "filename": "resources/app.asar",
+      "bytes": 64027770,
+      "sha256": "34bea0db2ed0e854bc7d4dc1eab4222004f791eedd3067d189741a40bb57bbfe"
+    },
+    "offlineMarker": {
+      "variant": "offline-test",
+      "sha256": "82e28a93604caf12fef3b32d3c89d5ad3a11ad335b9e84b595ee2864022cdcd0"
+    }
+  }
+}

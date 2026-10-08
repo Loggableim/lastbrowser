@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "store-package-9c06ad5f-20261008",
+  "version": "0.1.48",
+  "sourceCommit": "9c06ad5f20102e45deb6312b2e4f91d6b4c7255a",
+  "sourceTree": "9df419b6aa90687cce544e170f8319f5c8b8f4d2",
+  "status": "PREPARED_NOT_EXECUTED",
+  "guestTransport": "PENDING",
+  "assets": {
+    "setup": {
+      "filename": "Lastbrowser-0.1.48-x64-setup.exe",
+      "bytes": 174209985,
+      "sha256": "c94e2784d52b380f55da589b2c792cc41a26b7cdf6ef2df0c7e4a9ce60881548",
+      "authenticode": "NotSigned"
+    },
+    "portable": {
+      "filename": "Lastbrowser-0.1.48-x64-portable.exe",
+      "bytes": 173855852,
+      "sha256": "e800c9f496452881ac8c8d50d59971849c7d34da58ca3b0c3edadd510f6d1481",
+      "authenticode": "NotSigned"
+    },
+    "asar": {
+      "filename": "resources/app.asar",
+      "bytes": 64027770,
+      "sha256": "34bea0db2ed0e854bc7d4dc1eab4222004f791eedd3067d189741a40bb57bbfe"
+    },
+    "offlineMarker": {
+      "variant": "offline-test",
+      "sha256": "82e28a93604caf12fef3b32d3c89d5ad3a11ad335b9e84b595ee2864022cdcd0"
+    }
+  },
+  "bundleFiles": [
+    {
+      "file": "README-GUEST-FIRST.md",
+      "sha256": "9224cca130b70d60a60ef75a617865f2e7b5eb37cacb3454f249e3dbf6641705",
+      "bytes": 672
+    },
+    {
+      "file": "VM-STORE-9C06-TEST-ORDER-20261008.md",
+      "sha256": "b204a22b9827b93d6011957606246fe40249951658af83be5ccd87180757e74a",
+      "bytes": 83339
+    }
+  ],
+  "sourceInventory": [
+    {
+      "sourceLabel": "master-order",
+      "sha256": "337286728622223541447e7da60101625554a6ba01172eac0f9b2399b31457e7",
+      "bytes": 54884
+    },
+    {
+      "sourceLabel": "design-scenarios",
+      "sha256": "4cfcd4ab60b65826bbf17e60e04e7ea24406b9a9a6333c5e8c5bba099eacfea2",
+      "bytes": 6835
+    },
+    {
+      "sourceLabel": "first-run-scenarios",
+      "sha256": "f8e90ee07667ed2cbccb13c4ae04190a43d1b929e08560fa92105a37637048c1",
+      "bytes": 14802
+    },
+    {
+      "sourceLabel": "fix2-settings-plan",
+      "sha256": "2adbe79b236e5980452447f93a6599501b501ccdc94142342052239b44918c93",
+      "bytes": 23525
+    },
+    {
+      "sourceLabel": "delta-matrix",
+      "sha256": "d7f8db6f62addb4932544ca4b8f34dcf1560fffaff385158892ee1237d5d425f",
+      "bytes": 9385
+    }
+  ],
+  "scenarioCoverage": {
+    "masterUmbrellaGroups": 22,
+    "masterAIds": "A01-A53 including A21a and A21b",
+    "fix2Cases": 16,
+    "webviewDelta": "WV-D1..WV-D5",
+    "localModelStoreDelta": "LMS-D1..LMS-D6",
+    "firstRunIds": [
+      "FL-AI-CLEAN-YES",
+      "FL-AI-CLEAN-NO",
+      "FL-AI-NO-RESTART-PRE",
+      "FL-AI-NO-RESTART-POST",
+      "FL-AI-NO-BROWSER-OPTIONAL",
+      "FL-AI-LEGACY-CREDENTIALS",
+      "FL-AI-SAVE-FAILURE",
+      "FL-AI-NO-SETTINGS-LATER"
+    ],
+    "designIds": [
+      "DESIGN-LIGHT-ACCENT-READABILITY",
+      "DESIGN-SETTINGS-FONT-NARROW",
+      "DESIGN-FLOATING-SETTINGS-ORIENTATION",
+      "DESIGN-DOCK-AUTOHIDE-LIFECYCLE-FOCUS"
+    ]
+  }
+}

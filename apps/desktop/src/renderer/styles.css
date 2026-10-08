@@ -4223,6 +4223,34 @@ body:has(.nova-dock.pos-floating.settings-safe-position) .settings-main {
   line-height: 1.3;
 }
 
+@container settings-layout (max-width: 520px) {
+  .settings-editor .settings-panel-stack,
+  .settings-editor .settings-panel-stack > *,
+  .settings-editor .settings-card,
+  .settings-editor .settings-card-header,
+  .settings-editor .settings-card-body,
+  .settings-editor .settings-card-body > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .settings-editor .settings-theme-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  }
+
+  .settings-editor .settings-size-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 96px), 1fr));
+  }
+
+  .settings-editor .settings-skin-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 112px), 1fr));
+  }
+
+  .settings-editor .settings-card:has(.settings-size-grid) > .settings-card-body > div:last-child > div:first-child {
+    flex-wrap: wrap;
+  }
+}
+
 .settings-badge {
   display: inline-flex;
   align-items: center;

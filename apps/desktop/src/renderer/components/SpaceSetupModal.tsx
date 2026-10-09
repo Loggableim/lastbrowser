@@ -492,7 +492,7 @@ export function SpaceSetupModal({
                     const nameKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrack' : mode.id === 'teamwork' ? 'teamwork' : 'ollama'}` as DesktopTranslationKey;
                     const descKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'smartTrackDescription' : mode.id === 'teamwork' ? 'teamworkDescription' : 'ollamaDescription'}` as DesktopTranslationKey;
                     const badgeKey = `spaceSetup.model.${mode.id === 'smart-track' ? 'adaptive' : mode.id === 'teamwork' ? 'multiAgent' : 'local'}` as DesktopTranslationKey;
-                    return { id: mode.id, provider: '', name: t(nameKey), desc: t(descKey), badge: t(badgeKey) };
+                    return { id: mode.id, provider: mode.id === 'ollama-cloud' ? 'ollama-cloud' : '', name: t(nameKey), desc: t(descKey), badge: t(badgeKey) };
                   }).map((m) => (
                   <div
                     key={m.id}

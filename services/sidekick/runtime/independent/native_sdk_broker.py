@@ -15,7 +15,78 @@ from .runner import provider_configuration_digest
 from .scope import same_path
 
 
-def capture_fixed_provider(session, *, profile_hub=None, service=None) -> NativeProviderCapture:
+def _resolve_authoritative_account_id(session, resolved, explicit_account_id: str | None = None) -> str | None:
+    """Return only a caller-supplied account ID with trusted selection provenance.
+
+    Current chat sessions and Space snapshots do not carry an account selection;
+    generic session/config aliases are preferences or stale data, not authority.
+    """
+    del session, resolved
+    if explicit_account_id is None:
+        return None
+    value = str(explicit_account_id).strip()
+    return value or None
+
+
+def resolve_explicit_account_id(profile_home, *, account_id: str | None = None,
+                                account_email: str | None = None) -> str | None:
+    """Map an explicitly pinned account selection to its pool account ID.
+
+    Fail-closed handoff helper for upstream call sites (chat-start API) that
+    received a user-pinned account but not its pool ID: the pin is matched
+    exactly once against the profile-local ``auth.json`` only — never the
+    global pool — and anything missing, ambiguous, duplicated or empty returns
+    ``None``. Callers must only pass a pin that came from an explicit user
+    selection, never a rotated or default account. Full usable-entry
+    validation (refresh grant, saved project, invalid_grant/exhausted) stays
+    with ``resolve_native_account_binding`` at capture time, so a value
+    resolved here can still fail closed there.
+    """
+    import json
+    from runtime.antigravity_oauth import POOL_PROVIDER_ID
+
+    pinned_id = str(account_id or "").strip()
+    pinned_email = str(account_email or "").strip().casefold()
+    if not pinned_id and not pinned_email:
+        return None
+    if profile_home is None or not str(profile_home).strip():
+        return None
+    auth_path = Path(profile_home).expanduser().resolve(strict=False) / "auth.json"
+    try:
+        if auth_path.is_symlink() or not auth_path.is_file():
+            return None
+        payload = json.loads(auth_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        return None
+    pool = payload.get("credential_pool") if isinstance(payload, dict) else None
+    entries = pool.get(POOL_PROVIDER_ID) if isinstance(pool, dict) else None
+    if not isinstance(entries, list):
+        return None
+
+    def _email_of(entry):
+        email = entry.get("email")
+        if not email and isinstance(entry.get("extra"), dict):
+            email = entry["extra"].get("email")
+        return str(email or "").strip().casefold()
+
+    matches = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        entry_id = str(entry.get("id") or "").strip()
+        if not entry_id:
+            continue
+        if pinned_id and entry_id != pinned_id:
+            continue
+        if pinned_email and _email_of(entry) != pinned_email:
+            continue
+        matches.append(entry_id)
+    if len(matches) != 1:
+        return None
+    return matches[0]
+
+
+def capture_fixed_provider(session, *, profile_hub=None, service=None, account_id: str | None = None) -> NativeProviderCapture:
     """Private Parent capture only, from the saved own chat and scoped catalog."""
     from web.api.model_policy import service_for_native_chat
     from .scoped_models import probe_catalog, _entry
@@ -38,7 +109,10 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None) -> Native
     antigravity_binding = None
     if provider == "antigravity":
         from runtime.antigravity_oauth import resolve_native_account_binding
-        binding = resolve_native_account_binding(resolved.profile_home)
+        authoritative_account = _resolve_authoritative_account_id(
+            session, resolved, explicit_account_id=account_id
+        )
+        binding = resolve_native_account_binding(resolved.profile_home, account_id=authoritative_account)
         if binding is not None:
             from .native_provider_capture import NativeAntigravityBinding
             antigravity_binding = NativeAntigravityBinding(account_id=binding["account_id"],

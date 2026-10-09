@@ -48,8 +48,9 @@ import type { CommandAction, CommandCapabilities, CommandContext } from '../Comm
 import { createChatCommandAction, parseChatCommand } from '../chat-command-registry.js';
 import { chatCommandCopy } from '../chat-command-copy.js';
 import { canSelectNativeModel, manualModelPickerOptions } from '../model-picker-options.js';
-import { setShowUntestedProviderBetas, useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
+import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import type { NativeModelAvailability } from '../independent-contracts.js';
+import type { ProviderChatEvidence } from '../provider-chat-evidence.js';
 import { SlashCommandMenu } from './SlashCommandMenu.js';
 import { ChildRunBubbles,childRunLabels } from '../components/ChildRunBubbles.js';
 import type { ChildRunState } from '../child-run-controller.js';
@@ -404,10 +405,19 @@ export function BionicText({ text, enabled = true, as = 'p' }: { text: string; e
 // ─── ChatComposer ─────────────────────────────────────────────────────────────
 
 export type ChatComposerProps = {
-  automaticPolicy?:Readonly<{active:boolean;available:boolean}>;
+  automaticPolicy?:Readonly<{active:boolean;available:boolean;qualified?:boolean;allowedModels?:readonly {provider:string;model:string}[]}>;
   sendBlocked?:boolean;
   betaSelectionBlocked?:boolean;
   multiAgentBetaBlocked?:boolean;
+  modelQualified?:boolean;
+  requestedDefaultModel?:string;
+  requestedDefaultProviderLabel?:string;
+  requestedDefaultQualified?:boolean;
+  requestedDefaultAvailable?:boolean;
+  requestedDefaultUnavailableReason?:string;
+  requestedLunaInCatalog?:boolean;
+  browserProfileId?:string;
+  backendProfileName?:string;
   commandContext?: CommandContext;
   commandCapabilities?: CommandCapabilities;
   onCommandAction?: (action:CommandAction)=>boolean|void;
@@ -415,12 +425,15 @@ export type ChatComposerProps = {
   mode: ComposerMode;
   model: string;
   /** Selectable models, grouped by provider. The current model remains visible when empty. */
-  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability }> }>;
+  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; qualification?:ProviderChatEvidence }> }>;
   /** True when a loaded catalog exists but every provider/model pair is still unqualified. */
   emptyQualifiedCatalog?: boolean;
   modelCatalogError?: boolean;
+  antigravityCatalogUnavailable?: boolean;
+  antigravityCatalogUnknown?: boolean;
   onRetryModelCatalog?: () => void;
   modelProvider?: string;
+  modelProviderLabel?: string;
   reasoningEffort: string;
   reasoningEfforts: string[];
   reasoningCapabilityState?: 'loading' | 'unknown' | 'ready';
@@ -449,7 +462,9 @@ function workspaceLabel(path?: string | null): string {
 }
 
 export function ChatComposer({
-  automaticPolicy,sendBlocked=false,betaSelectionBlocked=false,multiAgentBetaBlocked=false,
+  automaticPolicy,sendBlocked=false,betaSelectionBlocked=false,multiAgentBetaBlocked=false,modelQualified=false,requestedLunaInCatalog,
+  requestedDefaultModel='',requestedDefaultProviderLabel='',requestedDefaultQualified=false,requestedDefaultAvailable=false,requestedDefaultUnavailableReason='',
+  browserProfileId='',backendProfileName='default',
   commandContext,
   commandCapabilities=unavailableCommands,
   onCommandAction,
@@ -457,12 +472,15 @@ export function ChatComposer({
   mode,
   model,
   modelProvider,
+  modelProviderLabel,
   reasoningEffort,
   reasoningEfforts,
   reasoningCapabilityState,
   modelOptions,
   emptyQualifiedCatalog = false,
   modelCatalogError=false,
+  antigravityCatalogUnavailable=false,
+  antigravityCatalogUnknown=false,
   onRetryModelCatalog,
   profile,
   ready,
@@ -481,6 +499,10 @@ export function ChatComposer({
   const commandCopy=chatCommandCopy(locale);
   const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
+  const displayedModelQualified=automaticPolicy?.active?Boolean(automaticPolicy.qualified):modelQualified;
+  const qualificationScope=automaticPolicy?.active
+    ? `AUTO · ${(automaticPolicy.allowedModels||[]).map(pair=>`${modelOptions.find(group=>group.providerId===pair.provider)?.provider||pair.provider} · ${pair.model}`).join(', ')||t('settings.panels.providers.betaUntested')}`
+    : `${modelProviderLabel || modelProvider || 'AUTO'} · ${model || 'default'} · ${browserProfileId || profile} / ${backendProfileName}`;
 
   const [showSlashDropdown, setShowSlashDropdown] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
@@ -525,8 +547,10 @@ export function ChatComposer({
     : reasoningCapabilityState !== 'ready' || reasoningEfforts.length === 0
       ? t('chat.reasoningEffortUnavailable')
       : t('chat.reasoningEffort');
-  const manualModelGroups=manualModelPickerOptions(modelOptions).map(group=>({...group,models:group.models.filter(entry=>
-    `${group.provider} ${entry.label} ${entry.id}`.toLocaleLowerCase().includes(manualModelSearch.trim().toLocaleLowerCase()))}));
+  const manualModelGroups=manualModelPickerOptions(modelOptions)
+    .filter(group => !(antigravityCatalogUnavailable && (group.providerId === 'antigravity' || group.provider.toLowerCase().includes('antigravity'))))
+    .map(group=>({...group,models:group.models.filter(entry=>
+      `${group.provider} ${entry.label} ${entry.id}`.toLocaleLowerCase().includes(manualModelSearch.trim().toLocaleLowerCase()))}));
 
   return (
     <form className="chat-composer" onSubmit={submit}>
@@ -587,15 +611,22 @@ export function ChatComposer({
                 onChange={(event) => onModelChange(event.target.value)}
                 style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}
               >
-                {automaticPolicy&&<option value="__lastbrowser_auto_policy__">AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
-                {!automaticPolicy?.active&&!modelOptions.some(group=>!group.providerId&&group.models.some(entry=>entry.id===model))&&
-                  <option value={qualifyModelForProvider(model, modelProvider)} disabled={betaSelectionBlocked}>
-                    {model || 'default'} · {modelProvider || 'current'}{betaSelectionBlocked ? ` · ${t('settings.panels.providers.betaSavedChoice')}` : ''}
-                  </option>}
+                {automaticPolicy&&<option value="__lastbrowser_auto_policy__" disabled={!automaticPolicy.available || !ready || running}>AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
+                {!automaticPolicy?.active&&!modelOptions.some(group=>!group.providerId&&group.models.some(entry=>entry.id===model))&& (
+                  antigravityCatalogUnavailable && (modelProvider === 'antigravity' || modelProvider?.includes('antigravity')) ? (
+                    <option value="" disabled style={{ backgroundColor: '#0b1325', color: 'rgba(232, 242, 255, 0.45)' }}>
+                      {t('settings.panels.providers.antigravityCatalogUnavailable')}
+                    </option>
+                  ) : (
+                    <option value={qualifyModelForProvider(model, modelProvider)} disabled={betaSelectionBlocked}>
+                      {model || 'default'} · {modelProviderLabel || modelProvider || 'current'}{betaSelectionBlocked ? ` · ${t('settings.panels.providers.betaUntested')}` : ''}
+                    </option>
+                  )
+                )}
                 {modelOptions.filter(group=>!group.providerId).map((group) => (
                   <optgroup key={group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
                     {group.models.map((m) => (
-                      <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={!canSelectNativeModel(group.providerId,m.nativeAvailability)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                      <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={!canSelectNativeModel(group.providerId,m.nativeAvailability)||(!m.qualified&&!showUntestedBetas)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
                         {m.label}
                       </option>
                     ))}
@@ -603,6 +634,21 @@ export function ChatComposer({
                 ))}
               </select>
           </label>
+          <span className={`composer-model-qualification ${displayedModelQualified?'qualified':'untested'}`} role="status"
+            title={`${displayedModelQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')} · ${qualificationScope}`}>
+            {displayedModelQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
+          </span>
+          {antigravityCatalogUnavailable && <span className="composer-model-notice" role="status">
+            {t('settings.panels.providers.antigravityCatalogUnavailable')}
+          </span>}
+          {antigravityCatalogUnknown && <span className="composer-model-notice" role="status">
+            {t('settings.panels.providers.antigravityCatalogUnknown')}
+          </span>}
+          <span className={`composer-desired-default-status ${requestedDefaultQualified&&requestedDefaultAvailable?'qualified':'untested'}`} role="status"
+            title={`${t('settings.panels.providers.requestedChatDefault')}: ${requestedDefaultProviderLabel} · ${requestedDefaultModel==='gpt-6-luna'?'GPT-6 Luna':requestedDefaultModel} · ${requestedDefaultQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}${requestedDefaultUnavailableReason?` · ${requestedDefaultUnavailableReason}`:''}`}>
+            {t('settings.panels.providers.requestedChatDefault')}: {requestedDefaultModel==='gpt-6-luna'?'GPT-6 Luna':requestedDefaultModel} · {requestedDefaultProviderLabel} · {requestedDefaultQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
+            {requestedDefaultUnavailableReason?` · ${requestedDefaultUnavailableReason}`:''}
+          </span>
           <button ref={manualModelTrigger} type="button" className="composer-command-button composer-model-trigger" aria-expanded={showManualModels}
             aria-label={t('chat.chooseModelManually')} title={t('chat.chooseModelManually')}
             aria-controls="composer-manual-models" onClick={()=>setShowManualModels(open=>!open)}>
@@ -627,24 +673,32 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
-      {(emptyQualifiedCatalog||showUntestedBetas)&&<div className="composer-model-notice composer-beta-catalog-opt-in" role="status">
-        <span>{t('settings.panels.providers.betaCatalogEmpty')}</span>
-        <label>
-          <input type="checkbox" checked={showUntestedBetas} onChange={event=>setShowUntestedProviderBetas(event.currentTarget.checked)} />
-          {t('settings.panels.providers.betaCatalogToggle')}
-        </label>
+      {antigravityCatalogUnavailable&&(modelProvider==='antigravity'||modelProvider?.includes('antigravity'))&&<div className="composer-model-notice" role="alert">
+        <span>{t('settings.panels.providers.antigravityCatalogUnavailable')}</span>
+      </div>}
+      {modelOptions.length>0&&emptyQualifiedCatalog&&!showUntestedBetas&&<div className="composer-model-notice" role="status">
+        {t('settings.panels.providers.betaCatalogEmpty')}
       </div>}
       {betaSelectionBlocked&&!emptyQualifiedCatalog&&<div className="composer-model-notice" role="status">{multiAgentBetaBlocked
         ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</div>}
       {showManualModels&&<section id="composer-manual-models" className="composer-manual-models" role="region" aria-label={t('chat.chooseModelManually')}
         onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}}>
         <label>{t('chat.modelSearch')}<input ref={manualModelSearchInput} type="search" value={manualModelSearch} onChange={event=>setManualModelSearch(event.target.value)}/></label>
+        {requestedLunaInCatalog===false&&<p className="composer-requested-model-status" role="status">{requestedDefaultModel==='gpt-6-luna'?'GPT-6 Luna':requestedDefaultModel} · {requestedDefaultProviderLabel} · {t('settings.panels.providers.requestedChatDefault')} · {t('settings.panels.providers.betaUntested')} · {requestedDefaultUnavailableReason}</p>}
         {manualModelGroups.map(group=><fieldset key={group.providerId||group.provider} disabled={group.configured===false}>
           <legend>{group.provider}{group.configured===false&&` · ${t(group.disabledReason==='unavailable'?'chat.modelProviderUnavailable':'chat.modelProviderNotConfigured')}`}</legend>
-          {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);return <button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||entry.supportsIndependent===false||unavailable||!ready||running}
-            title={`${entry.label} · ${entry.id}`}
+          {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);const betaBlocked=!entry.qualified&&!showUntestedBetas;
+            const desiredDefault=group.providerId==='openai-codex'&&entry.id==='gpt-6-luna';
+            const expiry=entry.qualification?new Date(entry.qualification.recordedAt+24*60*60*1000).toLocaleString(locale):'';
+            const evidenceDetails=entry.qualification
+              ? `${t('settings.panels.providers.qualificationUntil')}: ${expiry}; ${t('settings.panels.providers.browserProfileLabel')}: ${entry.qualification.browserProfileId}; ${t('settings.panels.providers.backendProfileLabel')}: ${entry.qualification.backendProfileName}; ${t('settings.panels.providers.runtimeLabel')}: ${entry.qualification.runtimeGeneration}; ${t('settings.panels.providers.buildLabel')}: ${entry.qualification.appBuildId}; ${t('settings.panels.providers.providerConfigLabel')}: ${entry.qualification.providerConfigGeneration}; ${t('settings.panels.providers.backendConfigLabel')}: ${entry.qualification.backendConfigGeneration}`
+              : `${t('settings.panels.providers.betaUntested')}; ${t('settings.panels.providers.browserProfileLabel')}: ${browserProfileId||profile}; ${t('settings.panels.providers.backendProfileLabel')}: ${backendProfileName}`;
+            return <button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||entry.supportsIndependent===false||unavailable||betaBlocked||!ready||running}
+            title={`${group.provider} · ${entry.id} · ${evidenceDetails}`}
             aria-pressed={model===entry.id&&modelProvider===group.providerId} onClick={()=>{onModelChange(qualifyModelForProvider(entry.id,group.providerId));setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}>
-            <span className="composer-manual-model-name">{entry.label}</span><small>{entry.id}{unavailable?` · ${t('chat.modelUnavailableInSpace')}`:entry.supportsIndependent===false?` · ${t('chat.modelIndependentUnsupported')}`:''}</small>
+            <span className="composer-manual-model-name">{desiredDefault?'GPT-6 Luna':entry.label}{desiredDefault?` · ${t('settings.panels.providers.requestedChatDefault')}`:''}</span>
+            <small>{group.provider} · {entry.id} · {entry.qualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
+              {entry.qualified?` · ${expiry}`:''}{unavailable?` · ${t('chat.modelUnavailableInSpace')}`:entry.supportsIndependent===false?` · ${t('chat.modelIndependentUnsupported')}`:''}</small>
           </button>;})}
         </fieldset>)}
         {!manualModelGroups.some(group=>group.models.length>0)&&<p role="status">{t('chat.noManualModels')}</p>}

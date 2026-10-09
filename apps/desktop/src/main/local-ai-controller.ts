@@ -332,11 +332,11 @@ export class LocalAiController {
     try { return await Promise.race([operation, deadline]); }
     finally { if (timer) clearTimeout(timer); }
   }
-  private async cacheDirectory(recheck: () => unknown): Promise<string> {
+  private async cacheDirectory(recheck: () => unknown, requireLegacySafeModelPath = true): Promise<string> {
     recheck();
     const root = await realpath(this.options.userDataDir); recheck();
     const prospectiveCache = path.join(root, 'local-ai', 'cache');
-    if (!localAiCachePathIsLegacySafe(prospectiveCache))
+    if (requireLegacySafeModelPath && !localAiCachePathIsLegacySafe(prospectiveCache))
       throw new BrowserHostError('local_ai_path_too_long', 'The Local AI cache path is too long for Windows. Change the Windows user-data location before downloading or starting a model; existing files have been left untouched.');
     let parent = root;
     for (const component of ['local-ai', 'cache']) {
@@ -765,7 +765,11 @@ export class LocalAiController {
       if(['install','importModel','benchmark','activate','chat','scan'].includes(operation)){
         const scanned=await this.hardwareScan(binding,recheck);scanId=scanned.scan.hardware.scanId;
       }
-      const cacheRoot=await this.cacheDirectory(recheck);recheck();
+      // Only operations that access a concrete model file need the conservative
+      // legacy path reservation. Store views, scans and receipt operations stay
+      // usable under long Windows profile paths.
+      const needsModelPath = ['install','importModel','benchmark','activate','chat'].includes(operation);
+      const cacheRoot=await this.cacheDirectory(recheck,needsModelPath);recheck();
       let privateRequest={...request};
       if(operation==='importModel'){
         const selected=await dialog.showOpenDialog({title:'Kuratierte GGUF-Datei importieren',properties:['openFile'],filters:[{name:'GGUF',extensions:['gguf']}]});recheck();

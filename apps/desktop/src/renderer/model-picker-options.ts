@@ -12,22 +12,36 @@ export function isModelCatalogResponseCurrent(capturedScopeKey: string, activeSc
   return capturedScopeKey === activeScopeKey;
 }
 
-export function mapScopedModelPickerOptions(selection: ScopedModelSelection): ModelPickerOptionGroup[] {
+export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { catalog_status?: Record<string, string> }): ModelPickerOptionGroup[] {
+  const catalogStatus = (selection as { catalog_status?: Record<string, string> }).catalog_status;
   const providers = new Map((selection.providers ?? []).map(provider => [provider.id, provider]));
-  return (selection.groups ?? []).map(group => {
-    const provider = providers.get(group.provider_id);
-    const models = [...new Map([...group.models, ...(group.extra_models ?? [])].map(entry => [entry.id, entry])).values()]
-      .map(entry => {
-        const availability = entry.nativeAvailability;
-        const identityMatches = !availability || nativeModelAvailabilityMatchesIdentity(availability, {
-          provider: group.provider_id, model: entry.id, scope: selection.scope, selectionRevision: selection.revision
+  return (selection.groups ?? [])
+    .filter(group => {
+      const pid = String(group.provider_id || '').toLowerCase();
+      if (catalogStatus) {
+        if (pid === 'antigravity' && String(catalogStatus.antigravity || '').toLowerCase() !== 'ready') {
+          return false;
+        }
+        if (catalogStatus[group.provider_id] && String(catalogStatus[group.provider_id]).toLowerCase() === 'unavailable') {
+          return false;
+        }
+      }
+      return true;
+    })
+    .map(group => {
+      const provider = providers.get(group.provider_id);
+      const models = [...new Map([...group.models, ...(group.extra_models ?? [])].map(entry => [entry.id, entry])).values()]
+        .map(entry => {
+          const availability = entry.nativeAvailability;
+          const identityMatches = !availability || nativeModelAvailabilityMatchesIdentity(availability, {
+            provider: group.provider_id, model: entry.id, scope: selection.scope, selectionRevision: selection.revision
+          });
+          return { id: entry.id, label: entry.label, reasoningEfforts: [...(entry.reasoning_efforts ?? [])], supportsIndependent: entry.supportsIndependent,
+            ...(availability ? { nativeAvailability: identityMatches ? availability : { ...availability, supported: false, available: false, reasonCode: 'binding_mismatch' as const } } : {}) };
         });
-        return { id: entry.id, label: entry.label, reasoningEfforts: [...(entry.reasoning_efforts ?? [])], supportsIndependent: entry.supportsIndependent,
-          ...(availability ? { nativeAvailability: identityMatches ? availability : { ...availability, supported: false, available: false, reasonCode: 'binding_mismatch' as const } } : {}) };
-      });
-    return { provider: group.provider, providerId: group.provider_id, configured: group.configured,
-      ...(!group.configured ? { disabledReason: provider?.provider_available === false ? 'unavailable' as const : 'notConfigured' as const } : {}), models };
-  }).filter(group => group.models.length > 0);
+      return { provider: group.provider, providerId: group.provider_id, configured: group.configured,
+        ...(!group.configured ? { disabledReason: provider?.provider_available === false ? 'unavailable' as const : 'notConfigured' as const } : {}), models };
+    }).filter(group => group.models.length > 0);
 }
 
 export function nativeModelAvailabilityMatchesIdentity(

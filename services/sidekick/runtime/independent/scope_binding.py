@@ -145,26 +145,40 @@ class ProfileHub:
                 if not same_path(existing.profile_home, home):
                     raise ScopeError("Profile Home changed")
                 return existing
-            profile_id = None
-            db = home / "state.db"
-            if db.is_file():
-                # sqlite3's transaction context does not close the connection on Windows.
-                with closing(sqlite3.connect(db.as_uri() + "?mode=ro", uri=True)) as connection:
-                    if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ia_profile_refs'").fetchone():
-                        rows = connection.execute("SELECT backend_profile_id,canonical_home FROM ia_profile_refs").fetchall()
-                        if len(rows) > 1 or rows and not same_path(rows[0][1], home):
-                            raise ScopeError("Profile reference is ambiguous or has moved")
-                        if rows:
-                            profile_id = rows[0][0]
-            store = IndependentStore(home, profile_id or new_id())
-            ref = store.get_profile_ref()
-            if ref is None:
-                store.register_profile(BackendProfileRef(backend_profile_id=store.backend_profile_id, name=name, canonical_home=str(home)))
-            elif ref.name != name or ref.status != "active":
-                store.close()
-                raise ScopeError("Profile name or status changed; explicit migration required")
-            self._stores[name] = store
-            return store
+            # First registration races other processes (self._lock is only a
+            # thread lock): both sides can read an empty ia_profile_refs, pick
+            # different fresh ids, and the loser hits the UNIQUE(canonical_home)
+            # conflict inside register_profile. Re-read under the exact same
+            # fail-closed checks instead of leaking the raw SQLite error; only
+            # a single matching row is ever adopted, ambiguity still raises.
+            last_conflict: sqlite3.IntegrityError | None = None
+            for _attempt in range(3):
+                profile_id = None
+                db = home / "state.db"
+                if db.is_file():
+                    # sqlite3's transaction context does not close the connection on Windows.
+                    with closing(sqlite3.connect(db.as_uri() + "?mode=ro", uri=True)) as connection:
+                        if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ia_profile_refs'").fetchone():
+                            rows = connection.execute("SELECT backend_profile_id,canonical_home FROM ia_profile_refs").fetchall()
+                            if len(rows) > 1 or rows and not same_path(rows[0][1], home):
+                                raise ScopeError("Profile reference is ambiguous or has moved")
+                            if rows:
+                                profile_id = rows[0][0]
+                store = IndependentStore(home, profile_id or new_id())
+                ref = store.get_profile_ref()
+                if ref is None:
+                    try:
+                        store.register_profile(BackendProfileRef(backend_profile_id=store.backend_profile_id, name=name, canonical_home=str(home)))
+                    except sqlite3.IntegrityError as exc:
+                        store.close()
+                        last_conflict = exc
+                        continue
+                elif ref.name != name or ref.status != "active":
+                    store.close()
+                    raise ScopeError("Profile name or status changed; explicit migration required")
+                self._stores[name] = store
+                return store
+            raise ScopeError("Profile reference registration is contended; retry the request") from last_conflict
 
     def by_scope(self, scope: Scope, authenticated_name: str) -> tuple[IndependentStore, ScopeResolver]:
         store = self.get(authenticated_name)

@@ -11153,6 +11153,18 @@ def _handle_live_models(handler, parsed):
         from web.api.config import _resolve_provider_alias
         provider = _resolve_provider_alias(provider)
 
+        # There is no supported LastBrowser-profile/account-bound Antigravity
+        # catalog discovery. Never serve static IDs or a pre-fix process cache.
+        if provider == "antigravity":
+            payload = {
+                "provider": provider,
+                "models": [],
+                "count": 0,
+                "catalog_status": "unavailable",
+            }
+            _set_cached_live_models(_live_models_cache_key(provider), payload)
+            return j(handler, payload)
+
         configuration_catalog = provider == "openrouter" and qs.get("catalog", [""])[0] == "configuration"
         cache_key = _live_models_cache_key(f"{provider}:configuration" if configuration_catalog else provider)
         cached = _get_cached_live_models(cache_key)

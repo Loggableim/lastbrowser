@@ -168,7 +168,7 @@ def _entry(catalog, model, provider):
     return None, None
 
 
-def _native_availability(scope, revision, catalog, provider, model, *, profile_home=None):
+def _native_availability(scope, revision, catalog, provider, model, *, profile_home=None, account_id=None):
     """Compute a model-row capability from this exact bound Space catalog."""
     from .native_chat_auto import native_sdk_supported
     from runtime.model_metadata import MINIMUM_CONTEXT_LENGTH
@@ -177,7 +177,7 @@ def _native_availability(scope, revision, catalog, provider, model, *, profile_h
     if provider == "antigravity" and profile_home is not None:
         try:
             from runtime.antigravity_oauth import resolve_native_account_binding
-            antigravity_binding_available = bool(resolve_native_account_binding(profile_home))
+            antigravity_binding_available = bool(resolve_native_account_binding(profile_home, account_id=account_id))
         except Exception:
             antigravity_binding_available = False
 
@@ -218,7 +218,7 @@ def _native_availability(scope, revision, catalog, provider, model, *, profile_h
     }
 
 
-def _catalog_with_native_availability(scope, revision, catalog, *, profile_home=None):
+def _catalog_with_native_availability(scope, revision, catalog, *, profile_home=None, account_id=None):
     groups = copy.deepcopy(catalog.get("groups") or [])
     for group in groups:
         if not isinstance(group, dict):
@@ -228,11 +228,11 @@ def _catalog_with_native_availability(scope, revision, catalog, *, profile_home=
             for row in group.get(bucket, []) if isinstance(group.get(bucket), list) else []:
                 if isinstance(row, dict) and isinstance(row.get("id"), str):
                     row["nativeAvailability"] = _native_availability(
-                        scope, revision, catalog, provider, row["id"], profile_home=profile_home)
+                        scope, revision, catalog, provider, row["id"], profile_home=profile_home, account_id=account_id)
     return groups
 
 
-def _response(scope, revision, model, provider, catalog, *, profile_home=None):
+def _response(scope, revision, model, provider, catalog, *, profile_home=None, account_id=None):
     group, entry = _entry(catalog, model, provider)
     configured = bool(model and group and group.get("configured"))
     supported = configured and bool(entry and entry.get("supportsIndependent", True))
@@ -242,10 +242,10 @@ def _response(scope, revision, model, provider, catalog, *, profile_home=None):
     return {"schemaVersion": 1, "scope": scope.model_dump(mode="json", by_alias=True), "revision": revision,
             "model": model, "provider": provider, "configured": configured, "supportsIndependent": supported,
             "nativeAvailability": _native_availability(scope, revision, catalog, provider, model,
-                profile_home=profile_home),
+                profile_home=profile_home, account_id=account_id),
             **({"reasonCode": reason} if reason else {}),
             "groups": _catalog_with_native_availability(scope, revision, catalog,
-                profile_home=profile_home),
+                profile_home=profile_home, account_id=account_id),
             "providers": catalog.get("providers", [])}
 
 
@@ -289,9 +289,12 @@ def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict
             raise ScopeError("Space configuration is malformed")
         current_model, current_provider = _choice(resolved, config)
         revision = _revision(config, current_model, current_provider)
+        # No canonical Space account-selection field is currently produced by
+        # the UI/session lifecycle. Saved generic IDs are not selection proof.
+        target_account = None
         if action == "get":
             return _response(scope, revision, current_model, current_provider, catalog,
-                profile_home=resolved.profile_home)
+                profile_home=resolved.profile_home, account_id=target_account)
         metadata = (config.get("model") or {}).get(_META) or {}
         cached = metadata.get("requests", {}).get(request_id)
         if cached:
@@ -303,7 +306,7 @@ def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict
         if provider_configuration_digest(resolved.profile_home) != catalog["providerConfigurationDigest"]:
             raise PolicyDenied("provider_connection_changed")
         availability = _native_availability(scope, revision + 1, catalog, provider, model,
-            profile_home=resolved.profile_home)
+            profile_home=resolved.profile_home, account_id=target_account)
         if not availability["available"] and model not in _VIRTUAL:
             # Keep the established model-selection mutation error stable for
             # API callers. The more granular nativeAvailability reason is a
@@ -317,7 +320,7 @@ def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict
         original_config = copy.deepcopy(config)
         next_revision = revision + 1
         response = _response(scope, next_revision, model, provider, catalog,
-            profile_home=resolved.profile_home)
+            profile_home=resolved.profile_home, account_id=target_account)
         requests = dict(metadata.get("requests") or {})
         # Keep the idempotency record in the same atomic config write as choice.
         # Catalogs can be large; retain only the small acknowledgement per key.

@@ -83,7 +83,8 @@ describe('provider-aware model selection', () => {
       expect(canSelectNativeModel('antigravity', mappedAvailability)).toBe(false);
     }
     const nativeChat = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8').replace(/\r\n/g, '\n');
-    expect(nativeChat).toContain('mapScopedModelPickerOptions(data)');
+    expect(nativeChat).toContain('const cataloguedData = { ...data, catalog_status: statusMap }');
+    expect(nativeChat).toContain('mapScopedModelPickerOptions(cataloguedData)');
     expect(nativeChat).toContain('canSelectNativeModel(candidate.provider, selectedEntry?.nativeAvailability)');
   });
   it('keeps extra models and unavailable providers visible without making them selectable, while binding real manual IDs', () => {

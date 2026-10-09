@@ -266,12 +266,15 @@ export function CopilotSplitView({
         // Gemini IDs are account/tier specific and must not use stale entries.
 
         const dynamicModels: AvailableModelItem[] = [];
+        const catalogStatus = (res as { catalog_status?: Record<string, string> })?.catalog_status || {};
+        const isAntigravityUnavailable = String(catalogStatus.antigravity || '').toLowerCase() === 'unavailable';
 
         for (const g of res.groups) {
           const pid = String(g.provider_id || g.provider || '').toLowerCase();
           // The retired Gemini CLI / Code Assist provider stays in backend
           // migration data, but must never appear as a selectable model source.
           if (['google-gemini-cli', 'gemini-cli', 'gemini-oauth'].includes(pid)) continue;
+          if (isAntigravityUnavailable && pid.includes('antigravity')) continue;
           const gAccount = g.account;
 
           let category: 'gemini' | 'claude' | 'openai' | 'local' | 'other' = 'other';
@@ -500,6 +503,7 @@ export function CopilotSplitView({
 
   function handleSelectWorkflow(template: AgenticWorkflowTemplate) {
     setWorkflowsMenuOpen(false);
+    if (busy || modelGateReason !== null) return;
     const prompt = formatWorkflowPrompt(template, activeUrl, activeTitle);
     onSendMessage(prompt);
   }

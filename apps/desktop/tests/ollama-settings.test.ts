@@ -24,11 +24,16 @@ describe('Ollama settings configuration flow', () => {
     expect(source).not.toContain('api_key: ollamaKey.trim(),\n                                  ...cleanSettingsPayload');
   });
 
-  it('uses the bound Space server model in the chat picker', () => {
+  it('saves chat picker choices through the bound Space scope and applies them only to the captured view', () => {
     const chatSource = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8');
     expect(chatSource).toContain("operation: 'modelSelection'");
-    expect(chatSource).toContain('setScopedModel({ viewKey: modelViewKey, selection: data })');
-    expect(chatSource).toContain('setScopedModel({ viewKey: modelViewKey, selection: data })');
+    expect(chatSource).toContain('const capturedKey = modelViewKey;');
+    expect(chatSource).toContain('modelClient.request({ schemaVersion: 1, operation: \'modelSelection\', scope: spaceModelSelection.scope, payload: {');
+    expect(chatSource).toContain('action: \'set\', model: nextModel, provider, expectedRevision: spaceModelSelection.revision');
+    expect(chatSource).toContain('if (modelViewKeyRef.current !== capturedKey) return;');
+    expect(chatSource).toContain('setScopedModel({ viewKey: capturedKey, selection: result.value });');
+    expect(chatSource).toContain('setSelectedModel(nextModel);');
+    expect(chatSource).toContain('setSelectedModelProvider(provider);');
     expect(chatSource).toMatch(/catalogDefaultModel,\r?\n\s*'default'/);
   });
 });

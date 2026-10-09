@@ -13,6 +13,9 @@ const reasons:Record<string,string>={hardware_scan_required:'Hardware-Scan erfor
   cpu_features_unknown:'CPU-Instruktionen noch nicht bestätigt',hardware_measurement_unknown:'Speicherwerte fehlen',
   insufficient_available_ram:'Zu wenig freier RAM einschließlich Systemreserve',insufficient_disk_staging:'Zu wenig freier Speicher für Download und Prüfung',
   model_parameter_count_unknown:'Gesamtparameterzahl noch ungeklärt',model_parameter_count_invalid:'Ungültige Parameterangabe'};
+const operationErrors:Record<string,string>={
+  local_ai_path_too_long:'Der Windows-Profilpfad ist für den Modellpfad zu lang. Verschiebe den Windows-Benutzerordner oder ändere den App-Datenspeicherort, bevor du ein Modell installierst oder startest. Die lokale Modellansicht bleibt verfügbar.',
+};
 export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;client:IndependentAssistantClient;ready:boolean}):React.JSX.Element{
   const titleId = useId(), searchId = useId(), detailTitleId = useId();
   const detailRef = useRef<HTMLElement>(null), openerRef = useRef<HTMLButtonElement|null>(null);
@@ -30,7 +33,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
     try{
       const response=await client.request({schemaVersion:1,operation:'localAi',scope,payload:{action:'store',request:data}});
       if(!mounted.current||requestGeneration!==generation.current)return;
-      if(!response.ok){if(!quiet)setError(`Lokale KI: ${response.error.code}`);return;}
+      if(!response.ok){if(!quiet)setError(operationErrors[response.error.code]??`Lokale KI: ${response.error.code}`);return;}
       if(!('kind'in response.value)||response.value.kind!=='model_store'){if(!quiet)setError('Ungültige Store-Antwort');return;}
       setView(response.value.store);return response.value.storeResult;
     }catch{if(mounted.current&&requestGeneration===generation.current&&!quiet)setError('Lokale KI nicht erreichbar. Es wurde kein Cloud-Ersatz verwendet.');}

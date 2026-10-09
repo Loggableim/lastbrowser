@@ -657,6 +657,36 @@ def clear_credentials() -> None:
 # HTTP helpers
 # =============================================================================
 
+def _mask_email(email: str) -> str:
+    raw = str(email or "").strip()
+    if "@" not in raw:
+        return "[redacted]" if raw else "unknown"
+    user, domain = raw.split("@", 1)
+    if len(user) <= 2:
+        masked_user = user[:1] + "*"
+    else:
+        masked_user = user[:2] + "***" + user[-1:]
+    return f"{masked_user}@{domain}"
+
+
+def _sanitize_error_message(text: str) -> str:
+    """Redact any accidental email or token patterns from error strings."""
+    if not text:
+        return ""
+    import re
+    sanitized = re.sub(
+        r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+        lambda m: _mask_email(m.group(0)),
+        text,
+    )
+    sanitized = re.sub(
+        r"\b(?:ya29\.[A-Za-z0-9_-]+|1//[A-Za-z0-9_-]+|AIza[A-Za-z0-9_-]+)\b",
+        "[token-redacted]",
+        sanitized,
+    )
+    return sanitized
+
+
 def _post_form(url: str, data: Dict[str, str], timeout: float) -> Dict[str, Any]:
     """POST x-www-form-urlencoded and return parsed JSON response."""
     body = urllib.parse.urlencode(data).encode("ascii")
@@ -674,22 +704,40 @@ def _post_form(url: str, data: Dict[str, str], timeout: float) -> Dict[str, Any]
             raw = response.read().decode("utf-8", errors="replace")
             return json.loads(raw)
     except urllib.error.HTTPError as exc:
-        detail = ""
+        raw_detail = ""
         try:
-            detail = exc.read().decode("utf-8", errors="replace")
+            raw_detail = exc.read().decode("utf-8", errors="replace")
         except Exception:
             pass
-        # Detect invalid_grant to signal credential revocation
         code = "google_oauth_token_http_error"
-        if "invalid_grant" in detail.lower():
-            code = "google_oauth_invalid_grant"
+        error_msg = f"HTTP {exc.code}"
+        if raw_detail:
+            try:
+                err_data = json.loads(raw_detail)
+                err_code = str(err_data.get("error", "")).strip().lower()
+                err_desc = str(err_data.get("error_description", "")).strip()
+                if err_code == "invalid_grant" or "invalid_grant" in raw_detail.lower():
+                    code = "google_oauth_invalid_grant"
+                if err_desc:
+                    error_msg = f"HTTP {exc.code}: {_sanitize_error_message(err_desc)}"
+                elif err_code:
+                    error_msg = f"HTTP {exc.code}: {_sanitize_error_message(err_code)}"
+                else:
+                    error_msg = f"HTTP {exc.code}: {exc.reason}"
+            except Exception:
+                if "invalid_grant" in raw_detail.lower():
+                    code = "google_oauth_invalid_grant"
+                error_msg = f"HTTP {exc.code}: {exc.reason}"
+        else:
+            error_msg = f"HTTP {exc.code}: {exc.reason}"
         raise GoogleOAuthError(
-            f"Google OAuth token endpoint returned HTTP {exc.code}: {detail or exc.reason}",
+            f"Google OAuth token endpoint returned {error_msg}",
             code=code,
         ) from exc
     except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", None) or "connection failed"
         raise GoogleOAuthError(
-            f"Google OAuth token request failed: {exc}",
+            f"Google OAuth token request failed: {reason}",
             code="google_oauth_token_network_error",
         ) from exc
 
@@ -788,10 +836,31 @@ def _get_valid_account_access_token(email: str, *, force_refresh: bool = False) 
         else:
             owner = False
     if not owner:
-        event.wait(timeout=LOCK_TIMEOUT_SECONDS)
+        completed = event.wait(timeout=LOCK_TIMEOUT_SECONDS)
         fresh = load_account_credentials(email)
         if fresh is not None and not fresh.access_token_expired():
             return fresh.access_token
+        if not completed:
+            raise GoogleOAuthError(
+                "Another Google OAuth token refresh is still in progress. Retry the request.",
+                code="google_oauth_refresh_in_progress",
+            )
+        from runtime.credential_pool import read_credential_pool
+        for entry in read_credential_pool("google-gemini-cli"):
+            if _pool_entry_email(entry) == _normalized_account_email(email):
+                if (
+                    str(entry.get("last_status") or "").casefold() == "exhausted"
+                    and str(entry.get("last_error_reason") or "").casefold() == "invalid_grant"
+                ):
+                    raise GoogleOAuthError(
+                        "Google rejected the refresh token (revoked or expired). Reconnect the account.",
+                        code="google_oauth_invalid_grant",
+                    )
+                break
+        raise GoogleOAuthError(
+            "The concurrent Google OAuth token refresh did not produce a usable access token. Retry the request.",
+            code="google_oauth_refresh_failed",
+        )
     try:
         response = refresh_access_token(rt)
         access = str(response.get("access_token", "") or "").strip()
@@ -857,11 +926,19 @@ def get_valid_access_token(*, force_refresh: bool = False, account_email: Option
 
     if not owner:
         # Another thread is refreshing — wait, then re-read from disk.
-        event.wait(timeout=LOCK_TIMEOUT_SECONDS)
+        completed = event.wait(timeout=LOCK_TIMEOUT_SECONDS)
         fresh = load_credentials()
         if fresh is not None and not fresh.access_token_expired():
             return fresh.access_token
-        # Fall through to do our own refresh if the other attempt failed
+        if not completed:
+            raise GoogleOAuthError(
+                "Another Google OAuth token refresh is still in progress. Retry the request.",
+                code="google_oauth_refresh_in_progress",
+            )
+        raise GoogleOAuthError(
+            "The concurrent Google OAuth token refresh did not produce a usable access token. Retry the request.",
+            code="google_oauth_refresh_failed",
+        )
 
     try:
         try:
@@ -1236,11 +1313,17 @@ def _persist_token_response(
             "Google token response missing access_token or refresh_token.",
             code="google_oauth_incomplete_token_response",
         )
+    email = _fetch_user_email(access_token)
+    if not email:
+        raise GoogleOAuthError(
+            "Google did not return an account email; credentials cannot be added to the multi-account pool.",
+            code="google_oauth_account_missing",
+        )
     creds = GoogleCredentials(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_ms=int((time.time() + max(60, expires_in)) * 1000),
-        email=_fetch_user_email(access_token),
+        email=email,
         project_id=project_id,
         managed_project_id="",
     )

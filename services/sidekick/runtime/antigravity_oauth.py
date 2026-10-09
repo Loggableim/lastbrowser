@@ -56,12 +56,15 @@ __all__ = [
     "select_next_account_email",
     "load_account_credentials",
     "get_valid_access_token",
+    "get_valid_access_token_with_account",
+    "get_last_selected_account_email",
     "save_account_credentials_to_pool",
     "list_connected_accounts",
     "remove_account",
     "get_antigravity_auth_status",
     "onboard_account",
     "resolve_project_id",
+    "resolve_native_account_binding",
 ]
 
 # =============================================================================
@@ -211,6 +214,36 @@ def _normalized_account_email(email: str) -> str:
     return str(email or "").strip().casefold()
 
 
+def _mask_email(email: str) -> str:
+    raw = str(email or "").strip()
+    if "@" not in raw:
+        return "[redacted]" if raw else "unknown"
+    user, domain = raw.split("@", 1)
+    if len(user) <= 2:
+        masked_user = user[:1] + "*"
+    else:
+        masked_user = user[:2] + "***" + user[-1:]
+    return f"{masked_user}@{domain}"
+
+
+def _sanitize_error_message(text: str) -> str:
+    """Redact any accidental email or token patterns from error strings."""
+    if not text:
+        return ""
+    import re
+    sanitized = re.sub(
+        r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+        lambda m: _mask_email(m.group(0)),
+        text,
+    )
+    sanitized = re.sub(
+        r"\b(?:ya29\.[A-Za-z0-9_-]+|1//[A-Za-z0-9_-]+|AIza[A-Za-z0-9_-]+)\b",
+        "[token-redacted]",
+        sanitized,
+    )
+    return sanitized
+
+
 def _pool_entry_email(entry: Dict[str, Any]) -> str:
     email = entry.get("email")
     if not email and isinstance(entry.get("extra"), dict):
@@ -233,6 +266,8 @@ def resolve_native_account_binding(profile_home: str | Path, account_id: str | N
     closed. The returned email is private worker input; callers must only put
     account_id/project_id/digest into captured context or receipts.
     """
+    if profile_home is None or not str(profile_home).strip():
+        return None
     home = Path(profile_home).expanduser().resolve(strict=False)
     auth_path = home / "auth.json"
     try:
@@ -254,7 +289,8 @@ def resolve_native_account_binding(profile_home: str | Path, account_id: str | N
         refresh = str(entry.get("refresh_token") or "").strip()
         project = str(entry.get("project_id") or "").strip()
         if (account and email and refresh and project
-                and str(entry.get("last_error_reason") or "").casefold() != "invalid_grant"):
+                and str(entry.get("last_error_reason") or "").casefold() != "invalid_grant"
+                and str(entry.get("last_status") or "").casefold() != "exhausted"):
             usable.append((account, email, project))
     if account_id is None:
         if len(usable) != 1:
@@ -298,6 +334,7 @@ def list_connected_accounts() -> List[Dict[str, Any]]:
         if not email:
             continue
         accounts.append({
+            "id": str(entry.get("id") or "").strip(),
             "email": email,
             "label": str(entry.get("label") or email),
             "project_id": str(entry.get("project_id") or ""),
@@ -310,13 +347,17 @@ def list_connected_accounts() -> List[Dict[str, Any]]:
 
 
 def remove_account(email: str) -> bool:
-    """Remove one account from the pool. Returns True when an entry was removed."""
+    """Remove one account from the pool by email or account id. Returns True when removed."""
     normalized = _normalized_account_email(email)
-    if not normalized:
+    raw_ident = str(email or "").strip()
+    if not normalized and not raw_ident:
         return False
     with _pool_update_lock():
         entries = _read_pool_entries()
-        remaining = [e for e in entries if _pool_entry_email(e) != normalized]
+        remaining = [
+            e for e in entries
+            if _pool_entry_email(e) != normalized and str(e.get("id") or "").strip() != raw_ident
+        ]
         removed = len(remaining) < len(entries)
         if removed:
             _write_pool_entries(remaining)
@@ -426,6 +467,8 @@ def save_account_credentials_to_pool(creds: AntigravityCredentials) -> None:
         if matching is None:
             entries.append({"id": secrets.token_hex(8), **fields})
         else:
+            if not str(matching.get("id") or "").strip():
+                matching["id"] = secrets.token_hex(8)
             matching.update(fields)
             matching.pop("extra", None)
         _write_pool_entries(entries)
@@ -448,18 +491,26 @@ def _post_form(url: str, data: Dict[str, str], timeout: float) -> Dict[str, Any]
             body = exc.read().decode("utf-8", errors="replace")
         except Exception:
             pass
-        if "invalid_grant" in body:
+        if "invalid_grant" in body.lower():
             raise AntigravityOAuthError(
                 "Google rejected the refresh token (revoked or expired). Reconnect the account.",
                 code="google_oauth_invalid_grant",
             ) from exc
+        parsed_err = ""
+        try:
+            parsed = json.loads(body)
+            if isinstance(parsed, dict):
+                parsed_err = str(parsed.get("error_description") or parsed.get("error") or "")
+        except Exception:
+            pass
+        safe_reason = _sanitize_error_message(parsed_err) or f"HTTP {exc.code}"
         raise AntigravityOAuthError(
-            f"Token endpoint HTTP {exc.code}: {body[:200] or exc.reason}",
+            f"Token endpoint HTTP {exc.code}: {safe_reason}",
             code="antigravity_token_http_error",
         ) from exc
     except urllib.error.URLError as exc:
         raise AntigravityOAuthError(
-            f"Token request failed: {exc}",
+            "Token request failed: network connection error",
             code="antigravity_token_network_error",
         ) from exc
 
@@ -569,6 +620,17 @@ def _get_valid_account_access_token(email: str, *, force_refresh: bool = False) 
                 "Another Antigravity token refresh is still in progress. Retry the request.",
                 code="antigravity_refresh_in_progress",
             )
+        for entry in _read_pool_entries():
+            if _pool_entry_email(entry) == _normalized_account_email(email):
+                if (
+                    str(entry.get("last_status") or "").casefold() == "exhausted"
+                    and str(entry.get("last_error_reason") or "").casefold() == "invalid_grant"
+                ):
+                    raise AntigravityOAuthError(
+                        "Google rejected the refresh token (revoked or expired). Reconnect the account.",
+                        code="google_oauth_invalid_grant",
+                    )
+                break
         raise AntigravityOAuthError(
             "The concurrent Antigravity token refresh did not produce a usable access token. Retry the request.",
             code="antigravity_refresh_failed",
@@ -608,12 +670,18 @@ def _get_valid_account_access_token(email: str, *, force_refresh: bool = False) 
             event.set()
 
 
-def get_valid_access_token(*, force_refresh: bool = False, account_email: Optional[str] = None) -> str:
-    """Return a valid bearer token, refreshing when near expiry.
+_local = threading.local()
 
-    With ``account_email`` the matching pool entry is used; without it the
-    round-robin selector picks the next account.
-    """
+
+def get_last_selected_account_email() -> Optional[str]:
+    """Return the account email used during the most recent token resolution in the current thread."""
+    return getattr(_local, "last_selected_account_email", None)
+
+
+def get_valid_access_token_with_account(
+    *, force_refresh: bool = False, account_email: Optional[str] = None
+) -> Tuple[str, str]:
+    """Return (access_token, effective_account_email), refreshing when near expiry."""
     email = _normalized_account_email(account_email or "")
     if not email:
         email = select_next_account_email() or ""
@@ -622,7 +690,19 @@ def get_valid_access_token(*, force_refresh: bool = False, account_email: Option
                 "No Antigravity account is connected. Add one in Settings → Providers.",
                 code="antigravity_not_logged_in",
             )
-    return _get_valid_account_access_token(email, force_refresh=force_refresh)
+    token = _get_valid_account_access_token(email, force_refresh=force_refresh)
+    _local.last_selected_account_email = email
+    return token, email
+
+
+def get_valid_access_token(*, force_refresh: bool = False, account_email: Optional[str] = None) -> str:
+    """Return a valid bearer token, refreshing when near expiry.
+
+    With ``account_email`` the matching pool entry is used; without it the
+    round-robin selector picks the next account.
+    """
+    token, _ = get_valid_access_token_with_account(force_refresh=force_refresh, account_email=account_email)
+    return token
 
 
 # =============================================================================
@@ -659,13 +739,21 @@ def _post_code_assist(path: str, body: Dict[str, Any], access_token: str, timeou
                 "Google requires account verification before Antigravity can be used.",
                 code="antigravity_validation_required",
             ) from exc
+        parsed_message = ""
+        try:
+            parsed_json = json.loads(detail)
+            if isinstance(parsed_json, dict) and isinstance(parsed_json.get("error"), dict):
+                parsed_message = str(parsed_json["error"].get("message") or parsed_json["error"].get("status") or "")
+        except Exception:
+            pass
+        safe_detail = _sanitize_error_message(parsed_message) or f"HTTP {exc.code}"
         raise AntigravityOAuthError(
-            f"Code Assist HTTP {exc.code}: {detail[:300] or exc.reason}",
+            f"Code Assist HTTP {exc.code}: {safe_detail}",
             code=f"code_assist_http_{exc.code}",
         ) from exc
     except urllib.error.URLError as exc:
         raise AntigravityOAuthError(
-            f"Code Assist request failed: {exc}",
+            "Code Assist request failed: network connection error",
             code="code_assist_network_error",
         ) from exc
 
@@ -711,7 +799,14 @@ def resolve_project_id(access_token: str) -> str:
         },
         access_token,
     )
-    project = str(resp.get("cloudaicompanionProject") or "")
+    inner = resp.get("response", resp) if isinstance(resp, dict) else {}
+    companion = inner.get("cloudaicompanionProject") if isinstance(inner, dict) else None
+    if isinstance(companion, dict):
+        project = str(companion.get("id") or "").strip()
+    elif isinstance(companion, str):
+        project = companion.strip()
+    else:
+        project = ""
     return project or DEFAULT_ANTIGRAVITY_PROJECT
 
 
@@ -964,6 +1059,11 @@ def start_antigravity_oauth_flow(
         raise AntigravityOAuthError("Antigravity OAuth cancelled.", code="antigravity_oauth_cancelled")
 
     email = _fetch_user_email(access_token)
+    if not email:
+        raise AntigravityOAuthError(
+            "Google did not return an account email; credentials cannot be added.",
+            code="antigravity_account_missing",
+        )
     creds = AntigravityCredentials(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -983,7 +1083,7 @@ def start_antigravity_oauth_flow(
         # Every other error aborts login so we never report a false connection.
         if exc.code != "antigravity_validation_required":
             raise
-        logger.warning("Antigravity onboarding requires account verification for %s", email or "unknown")
+        logger.warning("Antigravity onboarding requires account verification for %s", _mask_email(email) if email else "unknown")
         creds.project_id = DEFAULT_ANTIGRAVITY_PROJECT
 
     if cancel_event is not None and cancel_event.is_set():
@@ -996,7 +1096,7 @@ def start_antigravity_oauth_flow(
         on_credentials(creds)
     else:
         save_account_credentials_to_pool(creds)
-    logger.info("Antigravity account %s connected (project=%s)", creds.email, creds.project_id)
+    logger.info("Antigravity account %s connected (project=%s)", _mask_email(creds.email), creds.project_id)
     return creds
 
 

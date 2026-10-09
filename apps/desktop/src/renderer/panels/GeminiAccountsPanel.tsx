@@ -6,6 +6,9 @@ import { createAntigravityAuthUrlOpener } from './antigravity-auth-flow.js';
 export type GeminiAccountsPanelProps = {
   /** Retained for compatibility with the settings panel; this notice is offline-safe. */
   sidekickReady?: boolean;
+  onAccountsChanged?: () => void;
+  catalogStatus?: string | null;
+  providerId?: string;
 };
 
 type AntigravityAccount = {
@@ -24,29 +27,81 @@ type AntigravityStatus = {
   round_robin?: boolean;
 };
 
+type LiveModelsResponse = {
+  provider?: string;
+  models?: Array<{ id?: string; label?: string; name?: string } | string>;
+  count?: number;
+  catalog_status?: 'ready' | 'unavailable' | string;
+};
+
 const ANTIGRAVITY_MIGRATION_URL = 'https://antigravity.google/docs/';
 
-export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Element {
+export function GeminiAccountsPanel({
+  sidekickReady: _sidekickReady,
+  onAccountsChanged,
+  catalogStatus: propCatalogStatus,
+  providerId = 'antigravity',
+}: GeminiAccountsPanelProps): JSX.Element {
   const { t } = useDesktopI18n();
   const [status, setStatus] = useState<AntigravityStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogStatus, setCatalogStatus] = useState<string | null>(propCatalogStatus ?? null);
+  const [catalogModels, setCatalogModels] = useState<Array<{ id: string; label: string }>>([]);
   const [flowBusy, setFlowBusy] = useState(false);
   const [flowMessage, setFlowMessage] = useState('');
   const pollTimerRef = useRef<number | null>(null);
 
+  const isAntigravity = providerId.trim().toLowerCase() === 'antigravity';
+  const effectiveCatalogStatus = catalogStatus ?? (propCatalogStatus ? String(propCatalogStatus).toLowerCase() : null);
+  const _isCatalogReady = effectiveCatalogStatus === 'ready';
+
   const refresh = useCallback(async () => {
     setLoading(true);
+    setCatalogLoading(true);
     try {
       const data = await window.lastbrowser.sidekick.requestWebui({
         method: 'GET',
         path: '/api/antigravity/accounts'
       });
-      setStatus(data as AntigravityStatus);
+      const parsedStatus = data as AntigravityStatus;
+      setStatus(parsedStatus);
       setFlowMessage('');
+
+      const accountsCount = parsedStatus?.accounts?.length || 0;
+      if (accountsCount > 0) {
+        try {
+          const liveData = (await window.lastbrowser.sidekick.requestWebui({
+            method: 'GET',
+            path: '/api/models/live?provider=antigravity'
+          })) as LiveModelsResponse;
+          const statusStr = liveData?.catalog_status === 'ready' ? 'ready'
+            : liveData?.catalog_status === 'unavailable' ? 'unavailable' : 'unknown';
+          setCatalogStatus(statusStr);
+          const rawModels = statusStr === 'ready' && Array.isArray(liveData?.models) ? liveData.models : [];
+          const normalized = rawModels
+            .map((m) => {
+              if (typeof m === 'string') return { id: m, label: m };
+              const id = String(m?.id || m?.name || '').trim();
+              return id ? { id, label: String(m?.label || id).trim() } : null;
+            })
+            .filter((m): m is { id: string; label: string } => Boolean(m));
+          setCatalogModels(normalized);
+        } catch {
+          setCatalogStatus('unknown');
+          setCatalogModels([]);
+        }
+      } else {
+        setCatalogStatus(null);
+        setCatalogModels([]);
+      }
     } catch {
       setStatus(null);
+      setCatalogStatus(null);
+      setCatalogModels([]);
     } finally {
       setLoading(false);
+      setCatalogLoading(false);
     }
   }, []);
 
@@ -99,6 +154,7 @@ export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Eleme
             const email = String((poll as { email?: string }).email || '');
             setFlowMessage(email ? `✓ ${email}` : '✓');
             void refresh();
+            onAccountsChanged?.();
           } else if (pollStatus === 'error' || pollStatus === 'cancelled' || pollStatus === 'expired') {
             flowFinished = true;
             if (timer !== null) window.clearInterval(timer);
@@ -125,7 +181,7 @@ export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Eleme
       setFlowBusy(false);
       setFlowMessage(`✗ ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [refresh, t]);
+  }, [onAccountsChanged, refresh, t]);
 
   const removeAccount = useCallback(async (email: string) => {
     try {
@@ -135,10 +191,11 @@ export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Eleme
         body: { action: 'remove', email }
       });
       void refresh();
+      onAccountsChanged?.();
     } catch (error) {
       setFlowMessage(`✗ ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [refresh]);
+  }, [onAccountsChanged, refresh]);
 
   const accounts = status?.accounts || [];
 
@@ -147,7 +204,7 @@ export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Eleme
       <div className="gemini-accounts-header">
         <div className="gemini-accounts-title-row">
           <span className="gemini-accounts-icon">✦</span>
-          <div><h3 className="gemini-accounts-title">{t('settings.panels.providers.googleAccounts')}</h3></div>
+          <div><h3 className="gemini-accounts-title">{t('settings.sections.googleAccounts')}</h3></div>
         </div>
         <button
           type="button"
@@ -160,7 +217,11 @@ export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Eleme
         </button>
       </div>
       <div className="gemini-rr-controls" role="note">
-        <p>{t('settings.panels.providers.antigravityRoundRobinHint')}</p>
+        <p>
+          {!isAntigravity && status?.round_robin
+            ? t('settings.panels.providers.googleAccountsRoundRobinDescription')
+            : t('settings.panels.providers.antigravityRoundRobinHint')}
+        </p>
       </div>
 
       {accounts.length > 0 && (
@@ -171,7 +232,7 @@ export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Eleme
                 <strong>{account.label || account.email}</strong>
                 <span className="antigravity-account-meta">
                   {account.email}
-                  {account.last_error_reason === 'invalid_grant' ? ' · reconnect required' : ''}
+                  {account.last_error_reason === 'invalid_grant' ? ` · ${t('settings.panels.providers.antigravityReconnectRequired')}` : ''}
                 </span>
               </div>
               <button
@@ -186,6 +247,47 @@ export function GeminiAccountsPanel(_props: GeminiAccountsPanelProps): JSX.Eleme
           ))}
         </ul>
       )}
+
+      {accounts.length > 0 && (
+        <div className="antigravity-catalog-status" role="status" style={{ marginTop: 8 }}>
+          {catalogLoading && (
+            <div className="antigravity-catalog-loading" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary, #9ab)' }}>
+              <Loader2 size={13} className="spin" />
+              <span>{t('settings.panels.providers.loadingModels')}</span>
+            </div>
+          )}
+          {!catalogLoading && catalogStatus === 'unavailable' && (
+            <p className="antigravity-catalog-notice" style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary, #9ab)' }}>
+              {t('settings.panels.providers.antigravityCatalogUnavailable')}
+            </p>
+          )}
+          {!catalogLoading && catalogStatus !== 'ready' && catalogStatus !== 'unavailable' && (
+            <p className="antigravity-catalog-notice" style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary, #9ab)' }}>
+              {t('settings.panels.providers.antigravityCatalogUnknown')}
+            </p>
+          )}
+          {!catalogLoading && catalogStatus === 'ready' && catalogModels.length === 0 && (
+            <p className="antigravity-catalog-notice" style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary, #9ab)' }}>
+              {t('settings.panels.providers.antigravityCatalogUnavailable')}
+            </p>
+          )}
+          {!catalogLoading && catalogStatus === 'ready' && catalogModels.length > 0 && (
+            <div className="antigravity-catalog-models" style={{ marginTop: 6, fontSize: 12 }}>
+              <div style={{ marginBottom: 4, color: 'var(--text-secondary, #9ab)' }}>
+                {t('settings.panels.providers.antigravityCatalogReady')}:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {catalogModels.map((m) => (
+                  <span key={m.id} className="settings-badge" title={m.id}>
+                    {m.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {accounts.length === 0 && !loading && (
         <p className="antigravity-empty-hint">{t('settings.panels.providers.antigravityEmptyHint')}</p>
       )}

@@ -100,7 +100,7 @@ async function main() {
     await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, { once: true }); socket.addEventListener('error', reject, { once: true }); });
     let ready = false; const healthDeadline = Date.now() + 80000;
     while (Date.now() < healthDeadline && !ready) {
-      const state = await evaluate("(async()=>({shell:!!document.querySelector('.app-shell'),setup:!!document.querySelector('.local-ai-setup'),status:window.lastbrowser?await window.lastbrowser.services.status():null}))()");
+      const state = await evaluate("(async()=>{const setup=document.querySelector('.first-run-fullscreen-wrap,.first-run-ai-choice-screen');return {shell:!!document.querySelector('.app-shell'),setup:!!setup&&!!(setup.offsetWidth||setup.offsetHeight||setup.getClientRects().length),status:window.lastbrowser?await window.lastbrowser.services.status():null}})()");
       report.appState = state; ready = state.shell && state.setup && state.status?.sidekick === 'ready' && state.status?.webuiHealth === 'ready';
       if (!ready) await sleep(300);
     }

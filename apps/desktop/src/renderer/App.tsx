@@ -4545,18 +4545,25 @@ function AppContent(): JSX.Element {
       if (!recovered.ok) return created.ok ? recovered.error : `${created.error} ${recovered.error}`;
       const createdSpacePath = recovered.path;
       if (data.model) {
-        const resolved = await assistantController.resolveScope({ browserProfileId: creationProfileId, workspacePath: createdSpacePath }, data.backendProfileName ?? recovered.backendProfileName);
-        if (!resolved.ok) throw new Error(resolved.error.message);
-        const current = await assistantController.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: { action: 'get' } });
-        if (!current.ok) throw new Error(current.error.message);
-        const chosen = await assistantController.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: {
-          action: 'set', model: data.model, provider: data.modelProvider ?? '', expectedRevision: current.value.revision, clientRequestId: newIndependentRequestId()
-        } });
-        if (!chosen.ok) throw new Error(chosen.error.message);
-        saveSpaceModel(createdSpacePath, chosen.value.model, window.localStorage, chosen.value.provider);
-        if (activeProfileIdRef.current === creationProfileId && activeSpacePathRef.current === createdSpacePath) {
-          useChatStore.getState().setSelectedModel(chosen.value.model);
-          useChatStore.getState().setSelectedModelProvider(chosen.value.provider);
+        try {
+          const resolved = await assistantController.resolveScope({ browserProfileId: creationProfileId, workspacePath: createdSpacePath }, data.backendProfileName ?? recovered.backendProfileName);
+          if (resolved.ok) {
+            const current = await assistantController.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: { action: 'get' } });
+            if (current.ok) {
+              const chosen = await assistantController.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: {
+                action: 'set', model: data.model, provider: data.modelProvider ?? '', expectedRevision: current.value.revision, clientRequestId: newIndependentRequestId()
+              } });
+              if (chosen.ok) {
+                saveSpaceModel(createdSpacePath, chosen.value.model, window.localStorage, chosen.value.provider);
+                if (activeProfileIdRef.current === creationProfileId && activeSpacePathRef.current === createdSpacePath) {
+                  useChatStore.getState().setSelectedModel(chosen.value.model);
+                  useChatStore.getState().setSelectedModelProvider(chosen.value.provider);
+                }
+              }
+            }
+          }
+        } catch {
+          // Initial model preference error must not fail already created Space
         }
       }
       if (activeProfileIdRef.current === creationProfileId && activeSpacePathRef.current === createdSpacePath) {

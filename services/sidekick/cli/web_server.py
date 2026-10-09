@@ -3793,6 +3793,13 @@ def get_live_models(provider: str = ""):
 
         catalog = get_available_models()
         provider_id = (provider or catalog.get("active_provider") or "").strip()
+        if provider_id.casefold() == "antigravity":
+            return {
+                "provider": provider_id,
+                "models": [],
+                "count": 0,
+                "catalog_status": "unavailable",
+            }
         models: list[dict] = []
         for group in catalog.get("groups", []) or []:
             group_provider = str(group.get("provider_id") or group.get("provider") or "").strip()

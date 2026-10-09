@@ -2532,7 +2532,16 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const authEnabled = settingsBoolean(authState.data?.auth_enabled, false);
   const loggedIn = settingsBoolean(authState.data?.logged_in, false);
   const passwordEnvLocked = settingsBoolean(settings.password_env_var, false);
-  const allModelGroups: AnyRecord[] = arrayFrom(modelsState.data, ['groups']) as AnyRecord[];
+  const catalogStatusMap = isRecord(modelsState.data?.catalog_status) ? (modelsState.data.catalog_status as Record<string, unknown>) : {};
+  const antigravityStatus = String(catalogStatusMap.antigravity || '').toLowerCase();
+  const isAntigravityReady = antigravityStatus === 'ready';
+  const isAntigravityUnavailable = antigravityStatus === 'unavailable';
+  const isAntigravityUnknown = !isAntigravityReady && !isAntigravityUnavailable;
+  const isAntigravityUnverified = !isAntigravityReady;
+  const rawModelGroups: AnyRecord[] = arrayFrom(modelsState.data, ['groups']) as AnyRecord[];
+  const allModelGroups: AnyRecord[] = isAntigravityUnverified
+    ? rawModelGroups.filter((group) => settingsText(group.provider_id || group.provider_id_canonical, '').trim().toLowerCase() !== 'antigravity')
+    : rawModelGroups;
   const modelGroups: AnyRecord[] = (showUntestedBetas ? allModelGroups : allModelGroups.flatMap((group) => {
     const providerId = settingsText(group.provider_id || group.provider_id_canonical, '');
     const models = Array.isArray(group.models) ? group.models.filter(isRecord).filter(model =>
@@ -3212,17 +3221,38 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   }
 
   function renderModelOptions(): JSX.Element {
+    const isAntigravityDefault = activeProvider === 'antigravity' && isAntigravityUnverified;
+    const antigravityNoticeText = isAntigravityUnavailable
+      ? t('settings.panels.providers.antigravityCatalogUnavailable')
+      : t('settings.panels.providers.antigravityCatalogUnknown');
     if (!modelGroups.length) {
-      return <input value={defaultModel} readOnly={!showUntestedBetas} onChange={(event) => updateDraftField('default_model', event.target.value)} placeholder="model-id" aria-label={showUntestedBetas ? t('settings.panels.providers.betaCatalogToggle') : t('settings.panels.providers.betaSavedChoice')} />;
+      return (
+        <input
+          value={isAntigravityDefault ? '' : defaultModel}
+          readOnly={isAntigravityDefault || !showUntestedBetas}
+          onChange={(event) => updateDraftField('default_model', event.target.value)}
+          placeholder={isAntigravityDefault ? antigravityNoticeText : 'model-id'}
+          aria-label={showUntestedBetas ? t('settings.panels.providers.betaCatalogToggle') : t('settings.panels.providers.betaSavedChoice')}
+        />
+      );
     }
     const hasCurrentModel = modelGroups.some((group) => {
       const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
       return models.some((model) => settingsText(model.id || model.name || model.label) === defaultModel);
     });
     return (
-      <select value={defaultModel} onChange={(event) => updateDraftField('default_model', event.target.value)}>
-        {!defaultModel && <option value="">Server default</option>}
-        {defaultModel && !hasCurrentModel && <option value={defaultModel} disabled={!showUntestedBetas}>{defaultModel}{!showUntestedBetas ? ` · ${t('settings.panels.providers.betaSavedChoice')}` : ''}</option>}
+      <select value={isAntigravityDefault ? '' : defaultModel} onChange={(event) => updateDraftField('default_model', event.target.value)}>
+        {(!defaultModel || isAntigravityDefault) && <option value="">Server default</option>}
+        {isAntigravityDefault && (
+          <option value="" disabled>
+            {antigravityNoticeText}
+          </option>
+        )}
+        {defaultModel && !hasCurrentModel && !isAntigravityDefault && (
+          <option value={defaultModel} disabled={!showUntestedBetas}>
+            {defaultModel}{!showUntestedBetas ? ` · ${t('settings.panels.providers.betaSavedChoice')}` : ''}
+          </option>
+        )}
         {modelGroups.map((group) => {
           const providerLabel = settingsText(group.provider || group.provider_id || 'Provider');
           const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
@@ -4330,7 +4360,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                             )}
                             {option.id === 'antigravity' && (
                               <div className="provider-antigravity-accounts">
-                                <GeminiAccountsPanel sidekickReady={ready} />
+                                <GeminiAccountsPanel
+                                  sidekickReady={ready}
+                                  onAccountsChanged={() => void modelsState.refresh()}
+                                  catalogStatus={antigravityStatus || undefined}
+                                  providerId={option.id}
+                                />
                               </div>
                             )}
                             {option.id === 'openai-codex' && codexConnect && (

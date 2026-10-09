@@ -84,7 +84,7 @@ _SUPPORTED_PROVIDER_SETUPS = {
         # (multi-account round-robin). No API key; the provider must be written
         # into config.yaml after login so the runtime selects it.
         "env_var": "SIDEKICK_ANTIGRAVITY_UNUSED",
-        "default_model": "gemini-2.5-flash",
+        "default_model": "",
         "requires_base_url": False,
         "key_optional": True,
         "models": list(_PROVIDER_MODELS.get("antigravity", [])),

@@ -141,11 +141,17 @@ export function getProviderChatEvidence(providerId: string, browserProfileId: st
     .sort((a, b) => b.recordedAt - a.recordedAt)[0];
 }
 
-export function isProviderModelQualified(providerId: string, modelId: string, browserProfileId: string,
-  backendProfileName: string, storage: Pick<Storage, 'getItem' | 'setItem'>, now = Date.now()): boolean {
+/** Return the current, identity-bound evidence for one exact provider/model pair. */
+export function getProviderModelEvidence(providerId: string, modelId: string, browserProfileId: string,
+  backendProfileName: string, storage: Pick<Storage, 'getItem' | 'setItem'>, now = Date.now()): ProviderChatEvidence | undefined {
   const provider = normalizeProviderId(providerId);
   const evidence = readAll(storage)[evidenceKey(provider, modelId, browserProfileId, backendProfileName)];
-  return Boolean(evidence && matchesActiveIdentity(evidence, storage) && isFresh(evidence, now));
+  return evidence && matchesActiveIdentity(evidence, storage) && isFresh(evidence, now) ? evidence : undefined;
+}
+
+export function isProviderModelQualified(providerId: string, modelId: string, browserProfileId: string,
+  backendProfileName: string, storage: Pick<Storage, 'getItem' | 'setItem'>, now = Date.now()): boolean {
+  return Boolean(getProviderModelEvidence(providerId, modelId, browserProfileId, backendProfileName, storage, now));
 }
 
 export function getQualifiedProviderModels(providerId: string, browserProfileId: string, backendProfileName: string,

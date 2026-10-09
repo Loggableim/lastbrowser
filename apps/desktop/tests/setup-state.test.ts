@@ -226,10 +226,7 @@ describe('cloud first-run setup state', () => {
       { id: 'ollama-cloud', label: 'Ollama Cloud' }
     ] } });
     expect(options.map((option) => option.id)).toEqual(['openai-codex', 'antigravity', 'alibaba', 'openrouter', 'ollama-cloud']);
-    expect(modelsForProvider(null, 'antigravity').map((model) => model.id)).toEqual([
-      'gemini-3.1-pro-preview',
-      'gemini-3-flash-preview'
-    ]);
+    expect(modelsForProvider(null, 'antigravity')).toEqual([]);
   });
 
   it('keeps OpenAI Codex available even when the WebUI catalog omits it', () => {

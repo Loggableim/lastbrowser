@@ -162,14 +162,8 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
         "gemini-3.1-pro-preview",
         "gemini-3-flash-preview",
     ],
-    "antigravity": [
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-        "gemini-2.5-flash-lite",
-        "gemini-3-flash-preview",
-        "gemini-3-pro-preview",
-        "gemini-3.1-pro-preview",
-    ],
+    # No supported profile/account-bound catalog discovery is available.
+    "antigravity": [],
     "ollama-cloud": [
         "deepseek-v4.1-flash",
         "deepseek-v4-pro",
@@ -1424,6 +1418,9 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
     on the platform appear in ``/model`` without a Sidekick release.
     """
     normalized = normalize_provider(provider)
+    if normalized == "antigravity":
+        # Do not advertise a static or CLI-global catalog as account-bound.
+        return []
     if normalized == "google-gemini-cli":
         # Legacy account tokens no longer enable consumer subscription
         # inference, so do not advertise stale Google Code Assist models.

@@ -1080,14 +1080,7 @@ _PROVIDER_MODELS = {
         {"id": "gpt-5.3-codex-spark", "label": "GPT-5.3 Codex Spark"},
     ],
     "google-gemini-cli": [],
-    "antigravity": [
-        {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
-        {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
-        {"id": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash Lite"},
-        {"id": "gemini-3-flash-preview", "label": "Gemini 3 Flash Preview"},
-        {"id": "gemini-3-pro-preview", "label": "Gemini 3 Pro Preview"},
-        {"id": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro Preview"},
-    ],
+    "antigravity": [],
     "google": [],
     "gemini-router": [
         {"id": "gemini-router", "label": "Gemini Router (Free Tier)"},
@@ -2839,6 +2832,31 @@ def _load_models_cache_from_disk() -> dict | None:
         return None
 
 
+def _remove_unavailable_antigravity_catalog(payload: dict) -> None:
+    """Keep persisted pre-fix Antigravity IDs out of current picker results."""
+    groups = payload.get("groups")
+    if isinstance(groups, list):
+        payload["groups"] = [
+            group for group in groups
+            if not isinstance(group, dict)
+            or _canonicalise_provider_id(group.get("provider_id") or group.get("provider")) != "antigravity"
+        ]
+    # The renderer may append configured badge keys as model rows even when
+    # no provider group exists. Keep saved configuration in its own fields,
+    # but never publish Antigravity badge candidates as available options.
+    badges = payload.get("configured_model_badges")
+    if isinstance(badges, dict):
+        payload["configured_model_badges"] = {
+            model_id: badge
+            for model_id, badge in badges.items()
+            if not isinstance(badge, dict)
+            or _canonicalise_provider_id(badge.get("provider")) != "antigravity"
+        }
+    status = payload.setdefault("catalog_status", {})
+    if isinstance(status, dict):
+        status["antigravity"] = "unavailable"
+
+
 def _save_models_cache_to_disk(cache: dict) -> None:
     """Save cache to disk so it survives server restarts.
 
@@ -2901,7 +2919,9 @@ def _get_fresh_memory_models_cache(now: float) -> dict | None:
         _available_models_cache_source_fingerprint = None
         return None
     if _is_valid_models_cache(_available_models_cache):
-        return copy.deepcopy(_available_models_cache)
+        result = copy.deepcopy(_available_models_cache)
+        _remove_unavailable_antigravity_catalog(result)
+        return result
     _available_models_cache = None
     _available_models_cache_ts = 0.0
     _available_models_cache_source_fingerprint = None
@@ -3369,6 +3389,10 @@ def get_available_models() -> dict:
             badges: dict[str, dict[str, str]] = {}
             for entry in configured_entries:
                 provider = entry["provider"]
+                if _canonicalise_provider_id(provider) == "antigravity":
+                    # The saved value remains in config/default_model, but a
+                    # badge key can become a picker row without a catalog group.
+                    continue
                 model = entry["model"]
                 raw_candidates = []
                 for candidate in (
@@ -3921,6 +3945,10 @@ def get_available_models() -> dict:
         # replacement path. Do not keep exposing selectable models (or probe
         # those credentials for quota) merely because an old token remains.
         detected_providers.discard("google-gemini-cli")
+        # No supported Antigravity catalog discovery is bound to the selected
+        # LastBrowser account/profile/space. Configured allowlists and stale
+        # credential detection must not expose selectable model IDs.
+        detected_providers.discard("antigravity")
 
         # Gemini → gemini-router: Der Free Tier Router ersetzt den built-in Gemini Provider
         if "gemini" in detected_providers and "gemini-router" not in detected_providers:
@@ -4550,8 +4578,13 @@ def get_available_models() -> dict:
         return {
             "active_provider": active_provider,
             "default_model": default_model,
+            "groups": [
+                group for group in groups
+                if not isinstance(group, dict)
+                or _canonicalise_provider_id(group.get("provider_id") or group.get("provider")) != "antigravity"
+            ],
             "configured_model_badges": _build_configured_model_badges(),
-            "groups": groups,
+            "catalog_status": {"antigravity": "unavailable"},
             "thinking_models": thinking_models,
         }
 
@@ -4586,6 +4619,7 @@ def get_available_models() -> dict:
             _wait_for_models_cache_build()
             cached = _get_fresh_memory_models_cache(time.monotonic())
             if cached is not None:
+                _remove_unavailable_antigravity_catalog(cached)
                 _annotate_model_reasoning_efforts(cached.get("groups"))
                 return cached
 
@@ -4601,11 +4635,13 @@ def get_available_models() -> dict:
         now = time.monotonic()
         cached = _get_fresh_memory_models_cache(now)
         if cached is not None:
+            _remove_unavailable_antigravity_catalog(cached)
             _annotate_model_reasoning_efforts(cached.get("groups"))
             return cached
 
         # Cold path: disk cache hit — use it (fast, no lock contention)
         if disk_groups is not None:
+            _remove_unavailable_antigravity_catalog(disk_groups)
             _annotate_model_reasoning_efforts(disk_groups.get("groups"))
             _available_models_cache = disk_groups
             _available_models_cache_ts = now

@@ -123,10 +123,7 @@ const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string
     { id: 'glm-5.3', label: 'GLM 5.3' },
     { id: 'nemotron-3-nano:30b', label: 'Nemotron 3 Nano (30B)' }
   ],
-  antigravity: [
-    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
-    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
-  ],
+  antigravity: [],
   deepseek: [
     { id: 'deepseek-chat', label: 'DeepSeek V3 (Chat)' },
     { id: 'deepseek-reasoner', label: 'DeepSeek R1 (Reasoner)' }

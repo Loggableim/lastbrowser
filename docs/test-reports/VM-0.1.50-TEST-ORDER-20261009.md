@@ -7,7 +7,7 @@ Status: **TEST-Prerelease verfügbar; Guest-Prüfung ausstehend.** Dies ist ein 
 - Source-Commit: `2eeb314cdf233af7bd4aa4c28b70cc3be89c53b8`
 - Versionspin: `output/release-0.1.50-20261009/source-freeze-pin-v8.json`, SHA-256 `829879daf98963811b0180b85b2a862e866e01ff4fc8eb070114654e75272d2b`
 - Pflichtpipeline: `pipeline-receipt-v7.json`, SHA-256 `54aa0f9fb5bc085d0160c53270cc48ca13a2e4019a4cca550197619026ea75f1`; 215 Testdateien / 1.962 Tests PASS, Store 39 PASS / 2 WARN / 0 FAIL, Desktopbuild PASS, Pythonsyntax PASS. Die v8-Prüfung bestätigt, dass alle 38 gepinnten Produkt-/Testdateien den getesteten Inputs entsprechen; nur synchronisierte Zielbilddateien wurden danach aktualisiert.
-- Paketreceipt: `unsigned-package-build-receipt-v1.json`, SHA-256 `b02dc97022c70fbda26de6cc010efd175d9ecde2fd4f3c6129e44a32991e5b6e`
+- Paketreceipt und vollständige Quellen-/Buildprovenienz sind im lokalen Release-Ledger des Koordinators hinterlegt; für den Guest-Start gelten die oben vollständig aufgeführten Artefakt-Hashes.
 - Paketreview: statische Integrität PASS; **kein** Runtime-, Installations-, Guest- oder Store-PASS.
 - GitHub-Testrelease: [LastBrowser 0.1.50 TEST](https://github.com/Loggableim/lastbrowser/releases/tag/test-v0.1.50-20261009-2eeb314) — `prerelease=true`, `latest=false`.
 

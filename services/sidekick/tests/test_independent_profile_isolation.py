@@ -1,9 +1,10 @@
 """Two real worker processes, actual imported globals and parent profile drift."""
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
 import sys
-import json
 import threading
 from pathlib import Path
 
@@ -33,6 +34,20 @@ def wait_for(handle, kind, timeout=20):
         if event and event.get("kind") in {"eof", "error"}:
             pytest.fail(f"Controlled worker ended before {kind}: {event.get('errorCode') or event.get('code')}; stderr bytes={handle.stderr_bytes}")
     pytest.fail("Controlled worker did not produce the expected event before deadline")
+
+
+def _load_canonical_run_agent():
+    """Load the in-tree class without relying on the mutable compatibility alias."""
+    sidekick_root = Path(__file__).resolve().parents[1]
+    module_name = "_lastbrowser_independent_profile_isolation_run_agent"
+    module = sys.modules.get(module_name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(module_name, sidekick_root / "run_agent.py")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    return module
 
 
 def isolated_python():
@@ -177,7 +192,7 @@ def test_runtime_plan_does_not_guess_context_or_activate_auxiliary_models(tmp_pa
 
 
 def test_existing_hook_helpers_preserve_normal_calls_and_deny_independent_calls(monkeypatch):
-    from run_agent import AIAgent
+    AIAgent = _load_canonical_run_agent().AIAgent
     from cli import plugins
     calls = []
     monkeypatch.setattr(plugins, "invoke_hook", lambda *a, **kw: calls.append((a, kw)) or ["normal"])
@@ -195,7 +210,7 @@ def test_existing_hook_helpers_preserve_normal_calls_and_deny_independent_calls(
 def test_actual_constructor_uses_owned_config_without_changing_normal_config(tmp_path, monkeypatch):
     import copy
     from unittest.mock import MagicMock
-    import run_agent
+    run_agent = _load_canonical_run_agent()
     from cli import config
     home = tmp_path / "constructor-home"
     home.mkdir()

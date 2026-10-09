@@ -274,6 +274,9 @@ class BoundNativePeer:
         self.context, session, service, _ = captured_fixed(context, store, monkeypatch)
         self.broker = NativeSdkSessionBroker(self.context, session, service=service,
             execution_policy=ChatExecutionPolicy(mode, 1))
+        # The nested -I file executor must use the same offline interpreter
+        # as the native worker, not the host pytest process's system Python.
+        self.broker.file_fence.python_executable = str(isolated_python())
         self.events, self.started = queue.Queue(), threading.Event()
         self.handle = None
         self.error = None

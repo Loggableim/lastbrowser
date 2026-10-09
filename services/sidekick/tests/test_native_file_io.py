@@ -11,6 +11,7 @@ from runtime.independent.contracts import new_id
 from runtime.independent.native_file_io import recover_native_file_leases
 from runtime.independent.policy import PolicyDenied
 from test_native_auto_auxiliary import AuxiliaryServer
+from test_independent_profile_isolation import isolated_python
 from test_native_sdk_broker import setup_fixed
 
 
@@ -25,6 +26,10 @@ def test_actual_parent_file_write_read_replace_is_durable_and_deduplicated(tmp_p
     store = manager = broker = None
     try:
         context, store, manager, broker = setup_fixed(tmp_path, server)
+        # The current pytest process may use user-site packages, which the
+        # executor intentionally cannot inherit under Python's -I isolation.
+        # Exercise the exact offline interpreter shipped with the desktop.
+        broker.file_fence.python_executable = str(isolated_python())
         payload = command()
         result = broker(context, "file_execute", payload)
         assert result["acknowledged"] and result["processExited"]
@@ -108,6 +113,7 @@ def test_actual_stop_waits_for_executor_exit_and_keeps_unknown_receipt(tmp_path)
     thread = None
     try:
         context, store, manager, broker = setup_fixed(tmp_path, server)
+        broker.file_fence.python_executable = str(isolated_python())
         directory = Path(context.workspace) / "project"
         directory.mkdir()
         (directory / "search.txt").write_text("a" * 20000 + "!", "utf-8")

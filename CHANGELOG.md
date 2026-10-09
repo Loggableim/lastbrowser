@@ -5,6 +5,17 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.52] - 2026-10-09
+
+### Fixes
+- Make GPT-6 Luna with its OpenAI Codex provider the requested chat default, while showing provider-qualified model choices and keeping unqualified catalog entries behind the explicit Beta opt-in.
+- Keep unavailable Antigravity catalogs fail-closed and make reduced Local-AI operations validate profile/Space scope before returning the unavailable response.
+- Prevent judge-only goal retries from emitting regular chat-routing events that the restricted worker host rejects.
+- Clarify the four-worker Teamwork execution cap while preserving the full manually selected model pool as eligible choices.
+
+### Verification
+- Release verification is pending for the final frozen source candidate.
+
 ## [0.1.43] - 2026-10-01
 
 ### Fixes

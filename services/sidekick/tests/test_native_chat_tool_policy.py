@@ -27,10 +27,12 @@ def bound_file(tmp_path, monkeypatch):
     from runtime.independent import native_file_io
     from test_native_sdk_broker import setup_fixed
     from test_native_auto_auxiliary import AuxiliaryServer
+    from test_independent_profile_isolation import isolated_python
     server = AuxiliaryServer()
     context = store = manager = broker = None
     try:
         context, store, manager, broker = setup_fixed(tmp_path, server)
+        broker.file_fence.python_executable = str(isolated_python())
         for key, value in build_native_environment(context).items(): monkeypatch.setenv(key, value)
         monkeypatch.setattr(policy, "_context", None)
         policy.bind_native_policy(context)

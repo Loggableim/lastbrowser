@@ -23,7 +23,11 @@ from runtime.chat_modes import ChatExecutionPolicy
 
 def bound_parent(context, store, monkeypatch):
     context, session, service, _ = captured_fixed(context, store, monkeypatch)
-    return context, NativeSdkSessionBroker(context, session, service=service, execution_policy=ChatExecutionPolicy('action', 1))
+    broker = NativeSdkSessionBroker(context, session, service=service, execution_policy=ChatExecutionPolicy('action', 1))
+    # File tools execute under Python -I and cannot see the current pytest
+    # process's user-site dependencies. Use the same bundled offline runtime.
+    broker.file_fence.python_executable = str(isolated_python())
+    return context, broker
 
 
 def test_parent_detach_does_not_cancel_worker_and_replays_actual_completion(tmp_path, monkeypatch):

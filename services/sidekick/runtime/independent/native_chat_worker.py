@@ -345,18 +345,19 @@ def main():
                     auto_bridge = get_bound_native_auto_bridge()
                     if auto_bridge is None or auto_bridge.decision is None:
                         raise WorkerError("native_auto_decision_missing")
-                    from .native_model_resolution import publish_native_model_resolution
-                    from .model_selection import ModelPair
-                    selected = auto_bridge.decision.selected_model
-                    publish_native_model_resolution(context, selected, selected)
-                    # Safe user-visible routing receipt: public_view deliberately
-                    # excludes the captured RunContext and any prompt/provider secrets.
-                    channel.put_nowait(("auto_route", auto_bridge.decision.public_view()))
+                    if not judge_retry:
+                        from .native_model_resolution import publish_native_model_resolution
+                        selected = auto_bridge.decision.selected_model
+                        publish_native_model_resolution(context, selected, selected)
+                    if not judge_retry:
+                        # Safe user-visible routing receipt: public_view deliberately
+                        # excludes the captured RunContext and any prompt/provider secrets.
+                        channel.put_nowait(("auto_route", auto_bridge.decision.public_view()))
                 else:
                     from .native_sdk_broker import prepare_native_fixed_turn
                     _stage = "fixed_prepare"
                     actual_args, actual_kwargs = prepare_native_fixed_turn(args, kwargs)
-                    if context.provider_capture is not None:
+                    if context.provider_capture is not None and not judge_retry:
                         from .native_model_resolution import publish_native_model_resolution
                         from .model_selection import ModelPair
                         selected = ModelPair(provider=context.provider_capture.provider.provider,

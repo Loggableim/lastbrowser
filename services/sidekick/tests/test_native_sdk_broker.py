@@ -36,8 +36,10 @@ def setup_fixed(tmp_path, server, *, name="a", children=False):
     capture = capture_fixed_provider(session, service=service)
     context = context.model_copy(update={"selection_mode": "fixed", "selection_policy_revision": policy.revision,
         "provider_capture": capture})
-    return context, store, manager, NativeSdkSessionBroker(context, session, service=service,
+    broker = NativeSdkSessionBroker(context, session, service=service,
         execution_policy=ChatExecutionPolicy("boost" if children else "action", 1))
+    broker.file_fence.python_executable = str(isolated_python())
+    return context, store, manager, broker
 
 
 def fixed_turn(context, *, mode="action"):

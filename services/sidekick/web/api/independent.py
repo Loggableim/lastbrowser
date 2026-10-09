@@ -464,6 +464,17 @@ def dispatch_operation(operation: str, request: OperationRequest, actor: str):
         'localAi.bootstrap', 'localAi.roleProfile', 'localAi.store',
         'localAi.setup', 'localAi.runtime', 'localAi.catalog', 'localAi.recommend',
     }:
+        # Preserve the normal authorization boundary before refusing the
+        # unavailable feature. In particular, a foreign profile must still
+        # receive ScopeError rather than being treated as a local request.
+        if operation == 'localAi.bootstrap':
+            if request.scope is not None or actor != 'default':
+                raise ScopeError('First-run model bootstrap is installation-wide and uses only the default local Sidekick profile')
+        elif request.scope is not None:
+            # Resolve an explicitly supplied scope before denying the feature,
+            # preserving the profile/Space authorization boundary without
+            # starting the normal worker manager or any Local-AI service.
+            hub().by_scope(request.scope, actor)
         raise ValueError('local_ai_unavailable_in_test_build')
     if operation == 'localAi.bootstrap':
         if request.scope is not None or actor != 'default':

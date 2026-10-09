@@ -78,8 +78,10 @@ def test_native_antigravity_completion_uses_captured_account_and_project(monkeyp
     monkeypatch.setenv("SIDEKICK_HOME", str(profile))
     binding = antigravity_oauth.resolve_native_account_binding(profile)
     tokens = []
-    monkeypatch.setattr(antigravity_oauth, "get_valid_access_token",
-        lambda *, account_email=None: tokens.append(account_email) or "synthetic-access")
+    def get_access_token(*, account_email=None, force_refresh=False):
+        tokens.append(account_email)
+        return "synthetic-access", account_email
+    monkeypatch.setattr(antigravity_oauth, "get_valid_access_token_with_account", get_access_token)
     monkeypatch.setattr(adapter, "_translate_gemini_response", lambda _response, *, model: {"model": model})
 
     class Response:

@@ -26,6 +26,7 @@ def test_models_cache_fingerprint_ignores_unrelated_settings_edits(monkeypatch, 
         "default_model": "",
         "configured_model_badges": {},
         "groups": [],
+        "catalog_status": {"antigravity": "unavailable"},
     }
     monkeypatch.setattr(config, "_available_models_cache", catalog)
     monkeypatch.setattr(config, "_available_models_cache_ts", time.monotonic())

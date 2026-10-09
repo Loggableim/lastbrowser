@@ -14,8 +14,8 @@ def test_root_local_ai_get_is_scoped_and_unknown_envelope_is_rejected(broker):
     from runtime.independent.contracts import new_id
     before = store._one("SELECT COUNT(*) FROM ia_request_results")[0]
     result = post("localAi.setup", payload={"request": {"operation": "get"}})
-    assert result.status_code == 200
-    assert result.json()["scope"] == scopes[0].model_dump(by_alias=True)
+    assert result.status_code == 400
+    assert result.json()["error"]["code"] == "invalid_request"
     assert store._one("SELECT COUNT(*) FROM ia_request_results")[0] == before
     assert post("localAi.setup", payload={"request": {"operation": "get"}, "cacheRoot": "C:/forbidden"}).status_code == 400
     foreign = scopes[0].model_copy(update={"backend_profile_id": new_id()})

@@ -1,0 +1,12 @@
+{
+  "orderCommit": "0fad425c1bf9c9e064e4813cc9dfc088043f29d6",
+  "report": "docs/test-reports/lastbrowser-0.1.50-vm-test-2026-10-09.md",
+  "reportBlob": "6d77664d32f18de94c7470ab26b759699fa21112",
+  "reportSha256": "4462ab1778f16574058502690b0710d343ebbc5e71ecf5bd2afffddba6c94433",
+  "functionalCases": {
+    "FAIL": 0,
+    "BLOCKED": 7,
+    "PASS": 0
+  },
+  "providerTurns": 0
+}

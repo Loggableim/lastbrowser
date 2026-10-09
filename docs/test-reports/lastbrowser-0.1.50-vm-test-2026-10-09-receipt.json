@@ -1,12 +1,75 @@
 {
-  "orderCommit": "0fad425c1bf9c9e064e4813cc9dfc088043f29d6",
+  "revision": 2,
+  "orderCommit": "c60e5f058dbd7a39e03d7859d9bd8a4bdcee022f",
   "report": "docs/test-reports/lastbrowser-0.1.50-vm-test-2026-10-09.md",
-  "reportBlob": "6d77664d32f18de94c7470ab26b759699fa21112",
-  "reportSha256": "4462ab1778f16574058502690b0710d343ebbc5e71ecf5bd2afffddba6c94433",
+  "reportBlob": "1562ed8aeac841791a4b165f03f582aa7cf3fc2c",
+  "reportSha256": "399359cd82f75dfbf65ad0df23b6260fcd7ffb59851037bf242bf8a8642330bd",
   "functionalCases": {
-    "FAIL": 0,
-    "BLOCKED": 7,
-    "PASS": 0
+    "PASS": 0,
+    "FAIL": 2,
+    "BLOCKED": 5
   },
-  "providerTurns": 0
+  "providerTurns": 0,
+  "evidence": [
+    {
+      "file": "01-before-update-conversation.jpg",
+      "bytes": 157798,
+      "sha256": "a965da34e1e16facada8ba7f890ed595f2e2c2a73042d299356c304b37d5611c"
+    },
+    {
+      "file": "02-before-update-provider-gate.jpg",
+      "bytes": 171785,
+      "sha256": "f01fa51ddcb323d48ca18d8b939eac1766d6fbcd6616a6efce660809cb6245b8"
+    },
+    {
+      "file": "03-after-update-conversation.jpg",
+      "bytes": 147399,
+      "sha256": "7c3e93b849af56504d36815fab2e417d6cd4faa378ee409e0bc9b2973f807603"
+    },
+    {
+      "file": "04-after-update-provider-gate.jpg",
+      "bytes": 163205,
+      "sha256": "0fffdf6ddf59f99c5c3e1267199283f7507673d1f99dd8785c2279d6f6f6341d"
+    },
+    {
+      "file": "05-conversation-model-no-picker.jpg",
+      "bytes": 147652,
+      "sha256": "1f66a3fd0fe0056825f2332099389c6fcb3459a3129a5cae37afbea67a22cc18"
+    },
+    {
+      "file": "06-beta-provider-list.jpg",
+      "bytes": 158971,
+      "sha256": "208155c049c5b58cfdf930bcd7af75835cf6cd9389b336fc90a721a815aaf0a5"
+    },
+    {
+      "file": "07-ollama-local-form.jpg",
+      "bytes": 59522,
+      "sha256": "1453024277d8484cf93a209b0d36c4855e669e5d59d6d5260f51a0b164f0e657"
+    },
+    {
+      "file": "08-openrouter-existing-model-list.jpg",
+      "bytes": 75749,
+      "sha256": "5d7e9ec4b22b3827f320209f229f1bd2b7d54eca9c7732e12bec056a3c8d4032"
+    },
+    {
+      "file": "09-chat-beta-status-and-catalog-error.jpg",
+      "bytes": 103311,
+      "sha256": "8fc4c11dac355123d41cd3413241357ab8d155c6f3a0d3bc8408b59d85c81253"
+    },
+    {
+      "file": "10-chat-picker-unavailable.jpg",
+      "bytes": 102755,
+      "sha256": "0e1a3933c6f6bb265357cd024a89965124431fa5dff13e3941edbe192c0c3142"
+    },
+    {
+      "file": "11-conversation-beta-model-menu.jpg",
+      "bytes": 163125,
+      "sha256": "06d76bdd2dd8afb08ed893d01ec382593e41eb9b0b52388aabeb71c8ee4fc01b"
+    },
+    {
+      "file": "12-beta-opt-in-restored-off.jpg",
+      "bytes": 163531,
+      "sha256": "e6fe06d688ba0da5e287f007ad25949daca7c4adf27ccbdc73845f2f8317c5cd"
+    }
+  ]
 }

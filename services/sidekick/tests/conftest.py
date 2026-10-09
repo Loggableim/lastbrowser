@@ -83,3 +83,18 @@ def _clear_launcher_env_overrides(monkeypatch):
     for name in _LAUNCHER_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
 
+
+@pytest.fixture(autouse=True)
+def _isolate_test_session_dir():
+    """Ensure thread-local session directory overrides do not leak between tests."""
+    try:
+        from web.api.config import clear_session_dir
+        clear_session_dir()
+    except Exception:
+        pass
+    yield
+    try:
+        from web.api.config import clear_session_dir
+        clear_session_dir()
+    except Exception:
+        pass

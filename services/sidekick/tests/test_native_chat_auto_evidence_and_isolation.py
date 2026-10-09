@@ -29,6 +29,7 @@ from web.api.config import (
     STREAM_PARTIAL_TEXT,
     StreamChannel,
     set_session_dir,
+    clear_session_dir,
 )
 from web.api.models import Session
 from web.api.runtime_identity import RUNTIME_GENERATION, provider_config_generation
@@ -516,6 +517,7 @@ def test_two_backend_profiles_full_isolation_without_cross_contamination(tmp_pat
     # Alpha session cannot be loaded from Beta dir
     loaded_cross_reverse = Session.load("alpha_sess")
     assert loaded_cross_reverse is None
+    clear_session_dir()
 
 
 def test_cancel_stream_after_profile_switch_targets_only_original_stream():

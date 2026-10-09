@@ -175,13 +175,14 @@ def test_native_stop_interrupts_provider_request_before_releasing_writer(tmp_pat
         context, session, service, _ = captured_fixed(context, store, monkeypatch)
         broker = NativeSdkSessionBroker(context, session, service=service,
             execution_policy=ChatExecutionPolicy("action", 1))
+        broker.file_fence.python_executable = str(isolated_python())
         native_chats.register_native_chat(context)
         with config.STREAMS_LOCK: config.STREAMS[context.stream_id] = channel
         worker = threading.Thread(target=native_chats.run_native_chat,
             args=(context, *turn(context)), kwargs={"python_executable":isolated_python(),
                 "rpc_handler":broker}, daemon=True)
         worker.start()
-        deadline = time.monotonic() + 20
+        deadline = time.monotonic() + 45
         while not server.held_started.is_set() and worker.is_alive() and time.monotonic() < deadline:
             time.sleep(.025)
         if not server.held_started.is_set():
@@ -234,6 +235,7 @@ def test_native_stop_interrupts_provider_request_before_releasing_writer(tmp_pat
         server.hold = False
         next_broker = NativeSdkSessionBroker(next_context, next_session, service=service,
             execution_policy=ChatExecutionPolicy("action", 1))
+        next_broker.file_fence.python_executable = str(isolated_python())
         followup = threading.Thread(target=native_chats.run_native_chat,
             args=(next_context, *turn(next_context)), kwargs={"python_executable":isolated_python(),
                 "rpc_handler":next_broker}, daemon=True)

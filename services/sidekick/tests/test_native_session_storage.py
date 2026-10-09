@@ -8,10 +8,12 @@ def test_http_session_new_legacy_storage_survives_reload_without_ambient_mirror(
     """The ordinary HTTP endpoint keeps legacy sessions in the selected Space store."""
     monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "home"))
     from cli import web_server
-    from web.api import profiles, space_engine
+    from web.api import config, profiles, space_engine
     from web.api.models import get_session
     from runtime._compat.shim_state import SessionDB
 
+    config.clear_session_dir()
+    config.refresh_runtime_paths_from_env()
     profiles.refresh_profile_base_home_from_env()
     space_engine._invalidate_space_cache()
     state_db_path = tmp_path / "home" / "state.db"

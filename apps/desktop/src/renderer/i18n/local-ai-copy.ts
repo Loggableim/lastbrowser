@@ -17,7 +17,30 @@ const modelDownloadPolicy:Record<DesktopLocaleId,string>={
   'pt-BR':'Modelos adicionais só são baixados depois que você os escolhe.',
   ru:'Дополнительные модели загружаются только после вашего выбора.',ja:'追加モデルは選択した後にのみダウンロードされます。'
 };
-export function localAiCopy(locale:DesktopLocaleId):Copy{return {...Object.fromEntries(keys.map((key,index)=>[key,rows[locale][index]])),noAuto:modelDownloadPolicy[locale]} as Copy;}
+const testBuildUnavailable:Record<DesktopLocaleId,string>={
+  en:'The Local Model Store and bundled CPU inference are unavailable in this test build.',
+  de:'Der lokale Modell-Store und die gebündelte CPU-Inferenz sind in dieser Testversion nicht verfügbar.',
+  it:'Il catalogo di modelli locali e l’inferenza CPU inclusa non sono disponibili in questa versione di test.',
+  es:'La tienda de modelos locales y la inferencia de CPU incluida no están disponibles en esta versión de prueba.',
+  fr:'La boutique de modèles locaux et l’inférence CPU intégrée ne sont pas disponibles dans cette version de test.',
+  'pt-BR':'A loja de modelos locais e a inferência de CPU incluída não estão disponíveis nesta versão de teste.',
+  ru:'Магазин локальных моделей и встроенный инференс на CPU недоступны в этой тестовой версии.',
+  ja:'このテスト版では、ローカルモデルストアと同梱CPU推論は利用できません。'
+};
+const externalProvidersUnaffected:Record<DesktopLocaleId,string>={
+  en:'External AI providers are unaffected. Configure them under AI & local models.',
+  de:'Externe KI-Anbieter sind davon nicht betroffen. Richte sie unter „KI & lokale Modelle“ ein.',
+  it:'I provider AI esterni non sono interessati. Configurali in “IA e modelli locali”.',
+  es:'Los proveedores de IA externos no se ven afectados. Configúralos en «IA y modelos locales».',
+  fr:'Les fournisseurs d’IA externes ne sont pas concernés. Configurez-les dans « IA et modèles locaux ».',
+  'pt-BR':'Os provedores externos de IA não são afetados. Configure-os em “IA e modelos locais”.',
+  ru:'Внешние ИИ-провайдеры не затронуты. Настройте их в разделе «ИИ и локальные модели».',
+  ja:'外部AIプロバイダーには影響しません。「AIとローカルモデル」で設定できます。'
+};
+export function localAiCopy(locale:DesktopLocaleId):Copy&Readonly<{testBuildUnavailable:string;externalProvidersUnaffected:string}>{return {
+  ...Object.fromEntries(keys.map((key,index)=>[key,rows[locale][index]])),noAuto:modelDownloadPolicy[locale],
+  testBuildUnavailable:testBuildUnavailable[locale],externalProvidersUnaffected:externalProvidersUnaffected[locale]
+} as Copy&Readonly<{testBuildUnavailable:string;externalProvidersUnaffected:string}>;}
 export type LocalAiSetupCopy=Readonly<{simple:string;advanced:string;simpleHelp:string;advancedHelp:string;checking:string;scanTimeout:string;scanFailed:string;scanReady:string;
   lightweightHelp:string;balancedHelp:string;hybridHelp:string;noLocalAi:string;scanRetry:string;recommendedForDevice?:string;noSupportedRecommendation?:string}>;
 const setupRows:Record<DesktopLocaleId,LocalAiSetupCopy>={

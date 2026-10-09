@@ -11,7 +11,7 @@ const rows: Partial<Record<DesktopTranslationKey, readonly [string, string, stri
   'settings.sectionDescriptions.appearance': ['Theme, skin, font sizing and message layout.', 'Tema, aparência, tamanho da fonte e layout das mensagens.', 'Тема, оформление, размер шрифта и расположение сообщений.'],
   'settings.sectionDescriptions.preferences': ['Language, notifications and chat behavior.', 'Idioma, notificações e comportamento do chat.', 'Язык, уведомления и поведение чата.'],
   'settings.sectionDescriptions.providers': ['AI providers, per-Space local models and model routing settings.', 'Provedores de IA, modelos locais por Espaço e configurações de roteamento.', 'Провайдеры ИИ, локальные модели для каждого пространства и маршрутизация моделей.'],
-  'settings.sectionDescriptions.localAi': ['Model store, hardware, installation and benchmarks.', 'Catálogo de modelos, hardware, instalação e benchmarks.', 'Каталог моделей, оборудование, установка и тесты производительности.'],
+  'settings.sectionDescriptions.localAi': ['Bundled local inference is unavailable in this test build. External providers remain available in AI & local models.', 'A inferência local incluída não está disponível nesta versão de teste. Os provedores externos continuam disponíveis em IA e modelos locais.', 'Встроенный локальный инференс недоступен в этой тестовой версии. Внешние провайдеры доступны в разделе «ИИ и локальные модели».'],
   'settings.sectionDescriptions.teamwork': ['Multi-agent Teamwork, Smart Track and model availability.', 'Teamwork multiagente, Smart Track e disponibilidade de modelos.', 'Мультиагентный Teamwork, Smart Track и доступность моделей.'],
   'settings.sectionDescriptions.googleAccounts': ['Google CLI / Antigravity OAuth accounts and token rotation.', 'Contas OAuth do Google CLI / Antigravity e rotação de tokens.', 'Аккаунты OAuth Google CLI / Antigravity и ротация токенов.'],
   'settings.sectionDescriptions.extensions': ['Chrome extensions, Manifest V3 add-ons and content scripts.', 'Extensões do Chrome, complementos Manifest V3 e scripts de conteúdo.', 'Расширения Chrome, дополнения Manifest V3 и скрипты содержимого.'],
@@ -195,28 +195,28 @@ for (const locale of ['de', 'es', 'fr', 'it'] as const) {
 }
 Object.assign(desktopSystemPanelCoreOverrides.de!, {
   'settings.sections.localAi': 'Lokale KI',
-  'settings.sectionDescriptions.localAi': 'Modell-Store, Hardware, Installation und Benchmarks.',
+  'settings.sectionDescriptions.localAi': 'Die gebündelte lokale Inferenz ist in dieser Testversion nicht verfügbar. Externe Anbieter findest du unter „KI & lokale Modelle“.',
   'settings.panels.providers.unnamedPlugin': 'Unbenanntes Plugin',
   'settings.panels.providers.noDescription': 'Keine Beschreibung vorhanden.',
   'settings.panels.providers.noLifecycleHooks': 'Keine registrierten Lifecycle-Hooks'
 });
 Object.assign(desktopSystemPanelCoreOverrides.es!, {
   'settings.sections.localAi': 'IA local',
-  'settings.sectionDescriptions.localAi': 'Catálogo de modelos, hardware, instalación y pruebas de rendimiento.',
+  'settings.sectionDescriptions.localAi': 'La inferencia local incluida no está disponible en esta versión de prueba. Los proveedores externos están en «IA y modelos locales».',
   'settings.panels.providers.unnamedPlugin': 'Complemento sin nombre',
   'settings.panels.providers.noDescription': 'No se proporcionó ninguna descripción.',
   'settings.panels.providers.noLifecycleHooks': 'No hay ganchos de ciclo de vida registrados'
 });
 Object.assign(desktopSystemPanelCoreOverrides.fr!, {
   'settings.sections.localAi': 'IA locale',
-  'settings.sectionDescriptions.localAi': 'Catalogue de modèles, matériel, installation et benchmarks.',
+  'settings.sectionDescriptions.localAi': 'L’inférence locale intégrée est indisponible dans cette version de test. Les fournisseurs externes restent accessibles dans « IA et modèles locaux ».',
   'settings.panels.providers.unnamedPlugin': 'Extension sans nom',
   'settings.panels.providers.noDescription': 'Aucune description fournie.',
   'settings.panels.providers.noLifecycleHooks': 'Aucun hook de cycle de vie enregistré'
 });
 Object.assign(desktopSystemPanelCoreOverrides.it!, {
   'settings.sections.localAi': 'IA locale',
-  'settings.sectionDescriptions.localAi': 'Catalogo dei modelli, hardware, installazione e benchmark.',
+  'settings.sectionDescriptions.localAi': 'L’inferenza locale inclusa non è disponibile in questa versione di test. I provider esterni sono in “IA e modelli locali”.',
   'settings.panels.providers.unnamedPlugin': 'Plugin senza nome',
   'settings.panels.providers.noDescription': 'Nessuna descrizione fornita.',
   'settings.panels.providers.noLifecycleHooks': 'Nessun hook del ciclo di vita registrato'

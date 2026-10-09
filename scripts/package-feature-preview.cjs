@@ -79,6 +79,11 @@ async function copyResources() {
 build({ projectDir: desktop, targets: Platform.WINDOWS.createTarget(['dir'], Arch.x64), config, publish: 'never' })
   .then(async artifacts => {
     const resourceFiles = await copyResources();
+    // Preview packages intentionally omit electron-builder's app-update.yml.
+    // Bind that offline behavior to this exact app version so the updater is
+    // disabled instead of reporting a missing production update manifest.
+    const variantMarker = { schemaVersion: 1, variant: 'offline-test', appVersion: manifest.version };
+    fs.writeFileSync(path.join(output, 'win-unpacked', 'resources', 'lastbrowser-build-variant.json'), `${JSON.stringify(variantMarker)}\n`);
     fs.writeFileSync(path.join(output, 'preview-result.json'), JSON.stringify({ createdAt: new Date().toISOString(), artifacts, resourceFiles, blocked, unsigned: true, published: false, fullAcceptanceVerified: false }, null, 2));
     console.log(`Start: ${path.join(output, 'win-unpacked', 'Lastbrowser.exe')}`);
   })

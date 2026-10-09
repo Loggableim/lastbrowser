@@ -230,7 +230,7 @@ export const SETTINGS_LANGUAGES = [
 ] as const;
 
 export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> ={
-  'local-ai': {title:'Lokale KI',description:'Modell-Store, Hardware, Installation und Benchmarks.',icon:<Gauge size={16}/>},
+  'local-ai': {title:'Lokale KI',description:'Die gebündelte lokale Inferenz ist in dieser Testversion nicht verfügbar.',icon:<Gauge size={16}/>},
   conversation: {
     title: 'Conversation',
     description: 'Default model, send key and assistant identity.',

@@ -178,21 +178,21 @@ describe('Local AI Main purpose boundary', () => {
     } finally { release(); vi.useRealTimers(); }
   });
 
-  it('reads catalog without creating cache or starting browser/runtime processes', async () => {
+  it('fails closed for bundled local model features before API, disk, or runtime access', async () => {
     const { probe } = await localAiFixture();
-    await expect(localAi({ action: 'catalog' })).resolves.toMatchObject({ schemaVersion: 1, scope, catalog: { artifacts: [] } });
-    expect(probe).not.toHaveBeenCalled(); expect((controller as any).host).toBeUndefined();
+    for (const action of ['store', 'setup', 'runtime', 'roleProfile', 'catalog', 'recommend'])
+      await expect(localAi({ action })).rejects.toMatchObject({ code: 'local_ai_unavailable_in_test_build' });
+    await expect(controller.request(event, { schemaVersion: 1, operation: 'localAiBootstrap', payload: { action: 'start' } }))
+      .rejects.toMatchObject({ code: 'local_ai_unavailable_in_test_build' });
+    expect(probe).not.toHaveBeenCalled(); expect(api).not.toHaveBeenCalled(); expect((controller as any).host).toBeUndefined();
     await expect(access(path.join(directory, 'local-ai'))).rejects.toThrow();
-    expect(api).toHaveBeenCalledWith('localAi.catalog', scope, {}, 'default');
   });
-  it('binds only an actual Main scan to the saved profile and measures its trusted user-data volume', async () => {
+  it('keeps hardware inventory available without enabling local model recommendations', async () => {
     const { scan, probe } = await localAiFixture(); const result: any = await localAi({ action: 'scan' });
     expect(result.scan).toEqual(scan); expect(probe).toHaveBeenCalledWith({ scope, cacheDirectory: directory, timeoutMs: 3000 });
     expect(api).toHaveBeenCalledWith('localAi.hardwareBind', scope, scan, 'default');
     expect(api).toHaveBeenCalledWith('localAi.hardwareRead', scope, { scanId: scan.hardware.scanId }, 'default');
     expect((controller as any).host).toBeUndefined();
-    await localAi({ action: 'recommend', scanId: scan.hardware.scanId, preset: 'balanced', contextTokens: 2048 });
-    expect(api).toHaveBeenCalledWith('localAi.recommend', scope, { scanId: scan.hardware.scanId, preset: 'balanced', contextTokens: 2048 }, 'default');
   });
   it('bounds a held Main hardware probe, clears its deadline and never binds a late result', async () => {
     let entered!: () => void, release!: () => void;
@@ -217,7 +217,8 @@ describe('Local AI Main purpose boundary', () => {
     const { probe } = await localAiFixture();
     for (const extra of [{ hardware: {} }, { exePath: 'external.exe' }, { availableComputeSlots: 2 }, { cacheDirectory: directory }, { runtime: {} }, { scanId: 'forged' }])
       await expect(localAi({ action: 'scan', ...extra })).rejects.toThrow(/authority/);
-    await expect(localAi({ action: 'recommend', scanId: 'forged', preset: 'balanced', contextTokens: 1024 })).rejects.toThrow(/fresh hardware scan/);
+    await expect(localAi({ action: 'recommend', scanId: 'forged', preset: 'balanced', contextTokens: 1024 }))
+      .rejects.toMatchObject({ code: 'local_ai_unavailable_in_test_build' });
     expect(probe).not.toHaveBeenCalled(); expect(api).not.toHaveBeenCalled();
   });
   it('scans the trusted profile without traversing a preexisting model-cache junction', async () => {

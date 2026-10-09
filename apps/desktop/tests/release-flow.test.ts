@@ -7,6 +7,8 @@ const desktopPackagePath = path.join(repoRoot, 'apps', 'desktop', 'package.json'
 const rootPackagePath = path.join(repoRoot, 'package.json');
 const releaseWorkflowPath = path.join(repoRoot, '.github', 'workflows', 'release.yml');
 const releaseDocPath = path.join(repoRoot, 'docs', 'release.md');
+const previewPackageScriptPath = path.join(repoRoot, 'scripts', 'package-feature-preview.cjs');
+const distPreviewScriptPath = path.join(repoRoot, 'scripts', 'package-dist-preview.cjs');
 
 function readJson(file: string): Record<string, any> {
   return JSON.parse(readFileSync(file, 'utf8'));
@@ -29,6 +31,31 @@ describe('GitHub release auto-update flow', () => {
         releaseType: 'release'
       }
     ]);
+  });
+
+  it('marks offline feature previews with the exact app version and rejects unmarked dist wrapping', () => {
+    const previewScript = readFileSync(previewPackageScriptPath, 'utf8');
+    const distScript = readFileSync(distPreviewScriptPath, 'utf8');
+
+    expect(previewScript).toContain("variant: 'offline-test', appVersion: manifest.version");
+    expect(previewScript).toContain("'lastbrowser-build-variant.json'");
+    expect(distScript).toContain("'lastbrowser-build-variant.json'");
+    expect(distScript).toContain('variantMarker.appVersion !== manifest.version');
+    expect(distScript).toContain("publish: null");
+  });
+
+  it('uses the reduced 0.1.52 candidate version and excludes the unqualified b11377 runtime', () => {
+    const root = readJson(rootPackagePath);
+    const desktop = readJson(desktopPackagePath);
+    const lock = readJson(path.join(repoRoot, 'package-lock.json'));
+    expect(root.version).toBe('0.1.52');
+    expect(desktop.version).toBe('0.1.52');
+    expect(lock.version).toBe('0.1.52');
+    expect(lock.packages[''].version).toBe('0.1.52');
+    expect(lock.packages['apps/desktop'].version).toBe('0.1.52');
+    expect(desktop.build.extraResources).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: 'runtime/local-ai/b11377-cpu', to: 'apps/desktop/runtime/local-ai/b11377-cpu' })
+    ]));
   });
 
   it('exposes a root release command for the Windows GitHub release build', () => {

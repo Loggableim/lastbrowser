@@ -882,10 +882,11 @@ export function NativeChatMain({
         requestedLunaInCatalog={modelCatalogLoaded ? requestedLunaInCatalog : undefined}
         emptyQualifiedCatalog={modelCatalogLoaded && modelCatalog.length > 0 && !hasQualifiedCatalogModel && !showUntestedBetas}
         modelCatalogError={modelCatalogError}
-        antigravityCatalogUnavailable={modelCatalogLoaded && isAntigravityCatalogUnavailable
-          && (modelProvider === 'antigravity' || currentModelPair.provider === 'antigravity' || requestedChatDefault.provider === 'antigravity')}
-        antigravityCatalogUnknown={(modelCatalogLoaded || modelCatalogError) && isAntigravityCatalogUnknown
-          && (modelProvider === 'antigravity' || currentModelPair.provider === 'antigravity' || requestedChatDefault.provider === 'antigravity')}
+        antigravityCatalogUnavailable={modelCatalogLoaded && isAntigravityCatalogUnavailable}
+        antigravityCatalogUnknown={(modelCatalogLoaded || modelCatalogError) && isAntigravityCatalogUnknown}
+        antigravityCatalogReady={modelCatalogLoaded && String(catalogStatus.antigravity || '').toLowerCase() === 'ready'}
+        antigravityCatalogRelevant={modelProvider === 'antigravity' || currentModelPair.provider === 'antigravity'
+          || requestedChatDefault.provider === 'antigravity'}
         onRetryModelCatalog={()=>setModelCatalogRetry(value=>value+1)}
         reasoningEffort={effectiveReasoningEffort}
         reasoningEfforts={modelReasoningEfforts}

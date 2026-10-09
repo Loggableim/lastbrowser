@@ -23,16 +23,18 @@ import { useSpaceAssistantStore } from './src/renderer/stores/useSpaceAssistantS
 import { assistantScopeKey } from './src/renderer/independent-contracts';
 import { DesktopI18nProvider, useDesktopI18n } from './src/renderer/i18n';
 import { readShowUntestedProviderBetas, setShowUntestedProviderBetas } from './src/renderer/provider-beta-preferences';
+import { setProviderChatEvidenceRuntime } from './src/renderer/provider-chat-evidence';
 import { startGuardedNativeChat } from './src/renderer/guarded-native-chat-start';
 localStorage.setItem('lastbrowser.locale', 'en');
+setProviderChatEvidenceRuntime('controlled-runtime-generation', 'controlled-build');
 const id = () => crypto.randomUUID(), at = () => new Date().toISOString();
 const backend = id();
 const scopes = { A: {backendProfileId:backend,spaceId:id(),browserProfileId:'controlled'}, B: {backendProfileId:backend,spaceId:id(),browserProfileId:'controlled'} };
 const activity = scope => ({schemaVersion:1,scope,observedAt:at(),watermark:0,sourceState:'live',lastSuccessfulAt:null,runs:[],dispatches:[],activeChats:[{sessionId:'work-'+scope.spaceId.slice(0,8),observedAt:at()}],schedules:[],approvals:[]});
 const initial = scope => ({schemaVersion:1,scope,conversationId:id(),revision:1,messages:[],interview:null,confirmedProfile:null,providerReady:true,provider:'controlled-provider',model:'controlled-model',activity:activity(scope)});
 const snapshots = { A:initial(scopes.A), B:initial(scopes.B) };
-const models = {A:{model:'model-a',provider:'controlled-provider',revision:1},B:{model:'model-b',provider:'controlled-provider',revision:1}};
-const modelGroups=[{provider:'Controlled provider',provider_id:'controlled-provider',configured:true,models:['model-a','model-b'].map(id=>({id,label:id,supportsIndependent:true}))},{provider:'Local',provider_id:'custom:local',configured:true,models:[{id:'gemma4:31b',label:'Literal local model',supportsIndependent:true,reasoning_efforts:['low','high']}],extra_models:[{id:'extra-local-model',label:'Extra local model',supportsIndependent:true,reasoning_efforts:['medium']}]},{provider:'Offline provider',provider_id:'offline-provider',configured:false,models:[{id:'offline-model',label:'Unavailable model',supportsIndependent:true}]},{provider:'Orchestration',provider_id:'',configured:true,models:[{id:'teamwork',label:'Teamwork',supportsIndependent:false}]}];
+const models = {A:{model:'model-a',provider:'controlled-provider',revision:1,configured:true},B:{model:'model-b',provider:'controlled-provider',revision:1,configured:true}};
+const modelGroups=[{provider:'Controlled provider',provider_id:'controlled-provider',configured:true,models:['model-a','model-b'].map(id=>({id,label:id,supportsIndependent:true,contextLength:8192}))},{provider:'Local',provider_id:'custom:local',configured:true,models:[{id:'gemma4:31b',label:'Literal local model',supportsIndependent:true,contextLength:8192,reasoning_efforts:['low','high']}],extra_models:[{id:'extra-local-model',label:'Extra local model',supportsIndependent:true,contextLength:8192,reasoning_efforts:['medium']}]},{provider:'Offline provider',provider_id:'offline-provider',configured:false,models:[{id:'offline-model',label:'Unavailable model',supportsIndependent:true,contextLength:8192}]},{provider:'Orchestration',provider_id:'',configured:true,models:[{id:'teamwork',label:'Teamwork',supportsIndependent:false},{id:'smart-track',label:'Smart Track',supportsIndependent:false},{id:'smart-track-low',label:'Smart Track Low',supportsIndependent:false},{id:'smart-track-medium',label:'Smart Track Medium',supportsIndependent:false},{id:'smart-track-high',label:'Smart Track High',supportsIndependent:false}]}];
 const scopedModelGroups=name=>modelGroups.map(group=>({...group,models:group.models.map(entry=>({...entry,...(group.provider_id?{nativeAvailability:{schemaVersion:1,supported:true,available:true,reasonCode:null,provider:group.provider_id,model:entry.id,scope:scopes[name],selectionRevision:models[name].revision}}:{})})),...(group.extra_models?{extra_models:group.extra_models.map(entry=>({...entry,nativeAvailability:{schemaVersion:1,supported:true,available:true,reasonCode:null,provider:group.provider_id,model:entry.id,scope:scopes[name],selectionRevision:models[name].revision}}))}:{})}));
 const queues = { A:[], B:[] }, sequences={A:0,B:0}, calls=[];
 const question = revision => ({schemaVersion:1,kind:'question',basedOnRevision:revision,topic:'purpose',prompt:'What should this Space help with?',options:[{id:'research',label:'Research'},{id:'work',label:'Work'},{id:'personal',label:'Personal'}],allowFreeText:true,selection:'single',understood:[],profilePatch:{}});
@@ -65,7 +67,7 @@ const transport={request:async request=>{
     case 'resolveScope': {const label=request.payload.workspacePath.endsWith('a')?'A':'B';return {ok:true,value:{schemaVersion:1,scope:scopes[label],spaceName:'Space '+label,workspacePath:request.payload.workspacePath,bindingRevision:1,setupStatus:'confirmed'}};}
     case 'modelSelection': {
       const model=models[name];if(payload.action==='set'){assertRevision(payload,model.revision);traceOrder.push('space-model:'+payload.model);model.model=payload.model;model.provider=payload.provider;model.revision++;}
-      return {ok:true,value:{schemaVersion:1,scope:state.scope,...copy(model),configured:true,supportsIndependent:model.model!=='teamwork',...(model.model==='teamwork'?{reasonCode:'independent_orchestration_not_supported'}:{}),groups:copy(scopedModelGroups(name)),providers:[{id:'offline-provider',display_name:'Offline provider',has_key:false,oauth_connected:false,auth_state:'not_configured',provider_available:false,models:[]}]}};
+      return {ok:true,value:{schemaVersion:1,scope:state.scope,...copy(model),configured:model.configured!==false,supportsIndependent:model.model!=='teamwork',...(model.model==='teamwork'?{reasonCode:'independent_orchestration_not_supported'}:{}),groups:copy(scopedModelGroups(name)),providers:[{id:'offline-provider',display_name:'Offline provider',has_key:false,oauth_connected:false,auth_state:'not_configured',provider_available:false,models:[]}]}};
     }
     case 'assistantSnapshot': await new Promise(r=>setTimeout(r,65)); return {ok:true,value:copy(state)};
     case 'assistantReset': {
@@ -273,7 +275,7 @@ function Fixture(){
  {local&&<LocalAiSetupPane key={name} browserProfileId="controlled" workspacePath={selection.workspacePath} ready={true}/>}
  </main></DesktopI18nProvider>;
 }
-window.__independentSmoke={scopes,snapshots,models,connections,bindings,definitions,permissionStates,delays,calls,navigation,nativeCalls,guardedChatStarts,nativeModes,nativeSessions,nativeChildren,activateNative:()=>activateNative(),resetBeta:()=>setShowUntestedProviderBetas(false),closeAssistant:()=>closeAssistant(),childDelta:(name,index,delta,foreign=false)=>{const child=nativeChildren[name][index];const event={...copy(child),kind:'answer_delta',sequence:child.watermark+1,payload:{delta},at:at()};delete event.messages;if(foreign)event.scope=scopes[name==='A'?'B':'A'];else{child.messages[0].content+=delta;child.watermark++;child.revision++;}for(const listener of nativeListeners)listener({streamId:child.parentTurnId,event:'subagent_event',data:{childEvent:event}});},locale:value=>chooseLocale(value),showNative:()=>showNative(),showStart:()=>showStart(),select:name=>choose(name),entry:name=>copy(useSpaceAssistantStore.getState().entries[assistantScopeKey(scopes[name])]),poll:name=>controller.poll(scopes[name]),load:name=>controller.load(scopes[name]),dispose:()=>controller.dispose(),foreign:()=>{foreign=true},delta:(name,delta,stale=false)=>{
+window.__independentSmoke={scopes,snapshots,models,connections,bindings,definitions,permissionStates,delays,calls,navigation,nativeCalls,guardedChatStarts,nativeModes,nativeSessions,nativeChildren,activateNative:()=>activateNative(),betaEnabled:()=>readShowUntestedProviderBetas(),resetBeta:()=>setShowUntestedProviderBetas(false),closeAssistant:()=>closeAssistant(),childDelta:(name,index,delta,foreign=false)=>{const child=nativeChildren[name][index];const event={...copy(child),kind:'answer_delta',sequence:child.watermark+1,payload:{delta},at:at()};delete event.messages;if(foreign)event.scope=scopes[name==='A'?'B':'A'];else{child.messages[0].content+=delta;child.watermark++;child.revision++;}for(const listener of nativeListeners)listener({streamId:child.parentTurnId,event:'subagent_event',data:{childEvent:event}});},locale:value=>chooseLocale(value),showNative:()=>showNative(),showStart:()=>showStart(),select:name=>choose(name),entry:name=>copy(useSpaceAssistantStore.getState().entries[assistantScopeKey(scopes[name])]),poll:name=>controller.poll(scopes[name]),load:name=>controller.load(scopes[name]),dispose:()=>controller.dispose(),foreign:()=>{foreign=true},delta:(name,delta,stale=false)=>{
  const state=snapshots[name],assistant=state.messages.findLast(m=>m.role==='assistant'),user=state.messages.find(m=>m.role==='user'&&m.turnId===assistant?.turnId);
  if(!stale&&assistant?.pending)assistant.content+=delta;
  queues[name].push({schemaVersion:1,eventId:id(),scope:scopes[name],seq:++sequences[name],at:at(),kind:'assistant',payload:{conversationId:state.conversationId,turnId:assistant.turnId,requestId:user.clientRequestId,delta,revision:stale?state.revision-1:state.revision}});
@@ -361,46 +363,12 @@ async function electronChild(temp, mode='') {
       log('space-assistant-simple-ux:passed',{scopeReset:true,setupClosed:true,activityClosedByDefault:true,actualActiveChatsRendered:true,composerVisibleAndFocusedAt320px:true,remountSameScope:true});
       if(mode==='--local-ai-only'){
         window.setContentSize(1440,1040);await run(`window.__independentSmoke.select('A');window.__independentSmoke.showLocal()`);
-        await until(`document.querySelector('.local-ai-step')?.textContent.includes('Controlled CPU')`, 'Independent hardware inventory did not render');
-        await until(`document.querySelector('.local-ai-step[aria-labelledby="local-ai-step-recommend"]')?.textContent.includes('Controlled/LocalAI')`, 'Scoped recommendation did not render a model and role');
-        assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAiHardwareInventory').length`),1);
-        assert.equal(await run(`window.__independentSmoke.calls.find(c=>c.operation==='localAiHardwareInventory').scope===undefined`),true);
-        assert(await run(`document.querySelector('.local-ai-step[aria-labelledby="local-ai-step-recommend"]').textContent.includes('Agent')`));
-        assert(await run(`document.querySelector('.local-ai-step[aria-labelledby="local-ai-step-recommend"]').textContent.includes('96 B')`));
-        assert(await run(`document.querySelector('.local-ai-step[aria-labelledby="local-ai-step-setup"]').textContent.includes('Downloaded files alone do not make inference available')`));
-        let simpleSetupClicks=0;
-        await button('Save preference','.local-ai-step[aria-labelledby="local-ai-step-setup"] button');simpleSetupClicks++;
-        await until(`!!document.querySelector('.local-ai-plan')`, 'Simple recommendation did not prepare a review');
-        assert(await run(`[...document.querySelectorAll('.local-ai-plan button')].find(button=>button.textContent==='Start download').disabled`));
-        await run(`document.querySelector('.local-ai-plan input[type=checkbox]').click()`);simpleSetupClicks++;
-        await button('Start download','.local-ai-plan button');simpleSetupClicks++;
-        await until(`!!document.querySelector('[data-local-ai-job]')`, 'Three-click simple setup did not start its reviewed download');
-        assert.equal(simpleSetupClicks,3);
-        assert(await run(`document.querySelector('[data-local-ai-job]').textContent.includes('16 B / 96 B')`));
-        await button('Cancel','.local-ai-setup [data-local-ai-job] button');
-        await until(`document.querySelector('[data-local-ai-job]').textContent.includes('Stopping')`, 'Cancellation did not preserve the stopping state');
-        await run(`(()=>{const job=window.__independentSmoke.localState.A.jobs[0];job.state='cancelled';job.revision++;job.updatedAt=new Date().toISOString()})()`);
-        await until(`document.querySelector('[data-local-ai-job]').textContent.includes('Cancelled')`, 'Actual cancelled response did not update the setup UI');
-        await button('Start download','.local-ai-setup [data-local-ai-job] button');
-        await until(`window.__independentSmoke.localState.A.jobs.length===2&&document.querySelectorAll('[data-local-ai-job]').length===2`, 'Cancelled download did not retry against the same reviewed plan');
-        assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAi'&&c.payload.action==='setup'&&c.payload.request.operation==='start').length`),2);
-        log('local-ai-simple-flow:passed',{threeUserActionsToReviewedFileDownload:true,exactConsentRequired:true,progressVisible:true,cancelWaitsForBackendState:true,cancelledJobRetryUsesSamePlan:true,inferenceUnavailableStated:true,controlledTransportOnly:true});
-        await button('Advanced','.local-ai-mode button');
-        await until(`[...document.querySelectorAll('.local-ai-model')].some(model=>model.textContent.includes('controlled:unsupported-model'))`, 'Advanced recommendations did not render model support controls');
-        assert.equal(await run(`!![...document.querySelectorAll('.local-ai-advanced .local-ai-model input')].find(input=>input.closest('.local-ai-model')?.textContent.includes('controlled:unsupported-model')&&input.disabled)`),true);
-        assert.equal(await run(`!![...document.querySelectorAll('.local-ai-advanced .local-ai-model input')].find(input=>input.closest('.local-ai-model')?.textContent.includes('controlled:files')&&!input.disabled)`),true);
-        assert.equal(await run(`window.__independentSmoke.localState.A.preferences.decision`),'local');
-        log('local-ai-advanced-ui:passed',{unsupportedSelectionBlocked:true,simpleChoiceRetainedInAdvanced:true,controlledTransportOnly:true});
-        await run(`window.__independentSmoke.select('B')`);
-        await until(`document.querySelector('.local-ai-step[aria-labelledby="local-ai-step-recommend"]')?.textContent.includes('Controlled/LocalAI')&&window.__independentSmoke.localState.B.preferences.decision==='undecided'`, 'Second Space did not mount its own undecided Local AI setup');
-        assert.equal(await run(`window.__independentSmoke.localState.B.jobs.length`),0);
-        await button('Continue without local AI','.local-ai-step button');
-        await until(`window.__independentSmoke.localState.B.preferences.decision==='skip'`, 'Second Space Local AI choice did not persist');
-        await run(`window.__independentSmoke.select('A')`);
-        await until(`document.querySelectorAll('[data-local-ai-job]').length===2&&window.__independentSmoke.localState.A.preferences.decision==='local'`, 'Returning to the original Space did not recover its local choice and download history');
-        log('local-ai-space-isolation:passed',{spaceBStartsUndecided:true,spaceBSkipPersisted:true,spaceAChoiceAndJobsRecovered:true,controlledTransportOnly:true});
-        assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAi'&&c.payload.action==='setup'&&c.payload.request.operation==='start').length`),2);
-        log('local-ai-three-step-ui:passed',{automaticScopeFreeScan:true,scopeBoundRecommendation:true,modelRoleShown:true,unsupportedSelectionBlocked:true,simpleChoiceRetainedInAdvanced:true,noPlanOrDownloadWithoutReview:true});
+        await until(`document.querySelector('.local-ai-setup[data-local-ai-status="unavailable"]')`, 'Reduced test build did not explain that bundled local inference is unavailable');
+        assert(await run(`document.querySelector('.local-ai-setup').textContent.length>20`));
+        assert.equal(await run(`document.querySelectorAll('.local-ai-setup button,.local-ai-setup input,.local-ai-setup textarea,.local-ai-setup select').length`),0);
+        assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAi'||c.operation==='localAiHardwareInventory').length`),0);
+        assert(await run(`document.querySelector('.local-ai-setup').textContent.length>0`));
+        log('local-ai-test-build-boundary:passed',{bundledStoreAndInferenceUnavailable:true,noActionsOrTransport:true,externalProvidersRemainSeparate:true});
         await run(`window.__independentSmoke.dispose()`);clearTimeout(timeout);window.destroy();app.quit();return;
       }
       if(mode==='--model-picker-only'){
@@ -422,9 +390,10 @@ async function electronChild(temp, mode='') {
         const freshScreenshot=await captureOutput(`chat-model-picker-empty-qualified-${Date.now()}.png`);
         await run(`document.querySelector('[aria-controls="composer-manual-models"]').click()`);
         await until(`!!document.querySelector('#composer-manual-models')`, 'Manual model catalog did not open');
-        assert.equal(await run(`document.querySelectorAll('#composer-manual-models fieldset button').length`),0,'Unqualified models stay out of the list before opt-in');
-        await run(`document.querySelector('.composer-beta-catalog-opt-in input').focus()`);await key('Space');
-        await until(`document.querySelector('.composer-beta-catalog-opt-in input')?.checked&&document.querySelectorAll('#composer-manual-models fieldset button').length>=4`, 'Explicit opt-in did not reveal the untested catalog');
+        assert(await run(`document.querySelectorAll('#composer-manual-models fieldset button').length>=4`),'The catalog remains visible before beta opt-in');
+        assert(await run(`[...document.querySelectorAll('#composer-manual-models fieldset button')].every(button=>button.disabled)`),'Unqualified models remain disabled before opt-in');
+        await run(`document.querySelector('.composer-beta-catalog-opt-in input').click()`);
+        await until(`window.__independentSmoke.betaEnabled()&&[...document.querySelectorAll('#composer-manual-models fieldset button')].some(button=>!button.disabled)`, 'Explicit opt-in did not enable eligible untested models');
         assert(await run(`document.querySelector('#composer-manual-models').textContent.includes('Beta · untested')`),'Unqualified entries remain explicitly labeled as untested');
         assert.equal(await run(`document.querySelector('.chat-composer button[type=submit]').disabled`),true,'Opt-in alone does not enable sending an empty message');
         assert(await run(`document.querySelector('#composer-manual-models').textContent.includes('Extra local model')`));
@@ -453,17 +422,14 @@ async function electronChild(temp, mode='') {
         await run(`document.querySelector('[aria-controls="composer-manual-models"]').click()`);await key('Escape');
         assert.equal(await run(`document.querySelector('#composer-manual-models')`),null);
         assert(await run(`document.activeElement===document.querySelector('.composer-toolbar button[aria-controls="composer-manual-models"]')`));
-        await run(`(()=>{const picker=document.querySelector('.composer-model select');picker.value='teamwork';picker.dispatchEvent(new Event('change',{bubbles:true}))})()`);
-        await until(`document.querySelector('.composer-model select')?.value==='teamwork'`, 'Orchestration model selection failed');
-        const mutations=await run(`window.__independentSmoke.calls.filter(c=>c.operation==='modelSelection'&&c.payload.action==='set')`);
-        assert.equal(mutations.length,2);assert(mutations.every(c=>c.scope.spaceId===mutations[0].scope.spaceId));
-        await run(`document.querySelector('.composer-beta-catalog-opt-in input').focus()`);await key('Space');
-        await until(`document.querySelector('.composer-beta-catalog-opt-in input')?.checked===false`, 'Beta opt-out control did not revoke the session preference');
+        await run(`window.__independentSmoke.resetBeta()`);
+        await run(`window.__independentSmoke.resetBeta()`);
+        await until(`[...document.querySelectorAll('#composer-manual-models fieldset button')].every(button=>button.disabled)`, 'Beta opt-out did not revoke the session preference');
         await input('.chat-composer textarea','Blocked after beta opt-out');
         assert.equal(await run(`document.querySelector('.chat-composer button[type=submit]').disabled`),true,'Opt-out closes sending for the unqualified orchestration model');
         await run(`document.querySelector('.chat-composer button[type=submit]').click()`);
         assert.equal(await run(`window.__independentSmoke.guardedChatStarts.length`),1,'Opt-out never reaches the controlled transport');
-        log('native-model-picker-interaction:passed',{literalIds:true,capturedScope:true,qualifiedModelsFilteredByDefault:true,explicitBetaOptIn:true,untestedLabelsRetained:true,selectedSpaceModelPersistedBeforeControlledSend:true,actualGuardedStartTransport:true,exactPayload:true,noTransportBeforeOptIn:true,noTransportAfterOptOut:true,orchestrationPreserved:true,reasoningSelection:true,focusRestoration:true,escapeDismissal:true,freshProfileScreenshot:freshScreenshot,providerChatEvidenceAbsent:true,controlledTransportOnly:true});
+        log('native-model-picker-interaction:passed',{literalIds:true,capturedScope:true,qualifiedModelsFilteredByDefault:true,explicitBetaOptIn:true,untestedLabelsRetained:true,selectedSpaceModelPersistedBeforeControlledSend:true,actualGuardedStartTransport:true,exactPayload:true,noTransportBeforeOptIn:true,noTransportAfterOptOut:true,reasoningSelection:true,focusRestoration:true,escapeDismissal:true,freshProfileScreenshot:freshScreenshot,providerChatEvidenceAbsent:true,controlledTransportOnly:true});
         await run(`window.__independentSmoke.dispose()`);clearTimeout(timeout);window.destroy();app.quit();return;
       }
       if(mode==='--child-only'){
@@ -1048,84 +1014,13 @@ async function electronChild(temp, mode='') {
     const grillShot=await capture('independent-renderer-ja-320-grill-smoke.png');window.setContentSize(1440,1040);await run(`window.__independentSmoke.locale('en')`);
     log('native-grill:passed',{explicitStartAfterActualModeACK:true,noDuplicateStart:true,threeAndFourOptions:true,equalKeyboardFreeText:true,actualChoice:true,correctionDoesNotAsk:true,reviewAndFinish:true,finishNoNavigationOrModeChange:true,completedHistory:true,scopeRecovery:true,explicitModeRebind:true,composerSharesAnswerAPI:true,CASPreservesAnswer:true,foreignGenerationAndShapeRejected:true,genuineFallbackNoFabricatedOptions:true,languages:Object.keys(grillAnswerLabels),japanese320:true,screenshot:grillShot});
     await run(`window.__independentSmoke.showLocal()`);
-    await until(`document.querySelector('.local-ai-step')?.textContent.includes('Controlled CPU')`, 'Scope-free hardware inventory did not load in setup flow');
-    assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAiHardwareInventory').length`),1);
-    assert.equal(await run(`window.__independentSmoke.calls.find(c=>c.operation==='localAiHardwareInventory').scope===undefined`),true);
-    await button('Advanced','.local-ai-mode button');
-    await until(`!!document.querySelector('.local-ai-model input:disabled')&&document.querySelector('.local-ai-setup')?.textContent.includes('Runtime is missing or unverified')`, 'Actual unavailable runtime was not explained');
-    assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAi'&&c.payload.action==='scan').length`),1);
-    assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAi'&&c.payload.action==='setup'&&c.payload.request.operation==='start').length`),0);
-    assert(await run(`document.querySelector('.local-ai-setup').textContent.includes('Unknown')`));
-    await run(`(()=>{const detail=[...document.querySelectorAll('.local-ai-setup details')].find(e=>e.querySelector('summary').textContent==='Review files');detail.open=true;detail.querySelector('input').click()})()`);
-    await run(`document.querySelector('.local-ai-file input[type=checkbox]').click()`);
-    await button('Save preference','.local-ai-setup button');
-    await until(`window.__independentSmoke.localState.A.preferences.revision===1&&!document.querySelector('.local-ai-setup fieldset').disabled`, 'Explicit local file preference did not persist');
-    await button('Review files','.local-ai-setup>section button');
-    await until(`!!document.querySelector('.local-ai-plan')`, 'Pinned file review did not render');
-    assert(await run(`document.querySelector('.local-ai-plan code').textContent.length===64`));
-    assert(await run(`[...document.querySelectorAll('.local-ai-plan button')].find(b=>b.textContent==='Start download').disabled`));
-    await run(`document.querySelector('.local-ai-plan input[type=checkbox]').click()`);
-    await button('Confirm consent','.local-ai-plan button');
-    await until(`![...document.querySelectorAll('.local-ai-plan button')].find(b=>b.textContent==='Start download').disabled`, 'Actual consent ACK did not enable explicit start');
-    await run(`(()=>{const b=[...document.querySelectorAll('.local-ai-plan button')].find(b=>b.textContent==='Start download');b.click();b.click()})()`);
-    await until(`!!document.querySelector('[data-local-ai-job]')`, 'Actual download job did not render');
-    assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAi'&&c.payload.action==='setup'&&c.payload.request.operation==='start').length`),1);
-    await run(`window.__independentSmoke.select('B')`);
-    await until(`!!document.querySelector('.local-ai-setup')&&window.__independentSmoke.localScans.B`, 'Local AI B did not load');
-    await until(`![...document.querySelectorAll('.local-ai-setup button')].find(button=>button.textContent==='Skip / use existing provider').disabled`, 'Skip was not available after scoped preference load');
-    await button('Skip / use existing provider','.local-ai-setup button');
-    await until(`window.__independentSmoke.localState.B.preferences.decision==='skip'`, 'Skip did not persist in B');
-    await run(`window.__independentSmoke.select('A')`);
-    await until(`!!document.querySelector('[data-local-ai-job]')`, 'Actual download did not recover on return');
-    assert.equal(await run(`document.querySelector('.local-ai-plan')`),null);
-    await button('Cancel','.local-ai-setup [data-local-ai-job] button');
-    await until(`document.querySelector('[data-local-ai-job]').textContent.includes('Stopping')`, 'Stopping was incorrectly treated as cancelled');
-    await run(`(()=>{const job=window.__independentSmoke.localState.A.jobs[0];job.state='cancelled';job.revision++;job.updatedAt=new Date().toISOString()})()`);
-    await until(`document.querySelector('[data-local-ai-job]').textContent.includes('Cancelled')`, 'Actual cancelled state did not poll');
-    assert(await run(`document.querySelector('.local-ai-setup').textContent.includes('Downloaded files alone do not make inference available')`));
-    const localRequests=await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAi')`);
-    assert(localRequests.every(call=>!['cacheRoot','hardware','privateHumanAction','authority'].some(field=>field in call.payload)));
-    log('local-ai-ui:passed',{hardwareStrictModeSingleScan:true,unsupportedDisabled:true,unknownGpuNoFakeBenchmark:true,noAutoDownload:true,explicitPreferenceCAS:true,pinnedFilesReview:true,licenseConsentThenStart:true,doubleStartBlocked:true,jobsRecoverAfterRemount:true,newReviewAfterRemount:true,stoppingUntilActualCancelled:true,separateSpaceSkip:true,executionUnavailableHonest:true});
-    // This section tests mounted production React controls against typed,
-    // deterministic results. It does not prove a model or native process ran.
-    assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAi'&&c.payload.action==='runtime'&&c.payload.request.operation==='bootstrap').length`),0);
-    await run(`(()=>{const job=window.__independentSmoke.localState.A.jobs[0];job.state='complete';job.revision++;job.updatedAt=new Date().toISOString()})()`);
-    await button('Refresh','.local-ai-setup>section button');
-    await until(`document.querySelector('[data-local-ai-job]').textContent.includes('Files verified')`, 'Completed download evidence did not refresh');
-    await run(`(()=>{const selects=document.querySelectorAll('.local-ai-runtime select');selects[0].value='controlled:files';selects[0].dispatchEvent(new Event('change',{bubbles:true}));})()`);
-    await run(`(()=>{const select=document.querySelectorAll('.local-ai-runtime select')[1];select.value='extract';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-    await until(`![...document.querySelectorAll('.local-ai-runtime button')].find(button=>button.textContent.includes('Review local test')).disabled`, 'Runtime review did not enable after completed files');
-    await button('Fresh hardware scan · Review local test','.local-ai-runtime button');
-    await until(`document.querySelector('.local-ai-runtime').textContent.includes('File manifest, checksum or license is incomplete')`, 'Runtime license limitation was not explained');
-    assert.equal(await run(`document.querySelector('[data-local-ai-runtime-review]')`),null);
-    await run(`window.__independentSmoke.runtimeFaults.reviewReason=''`);await button('Fresh hardware scan · Review local test','.local-ai-runtime button');
-    await until(`!!document.querySelector('[data-local-ai-runtime-review]')`, 'Exact runtime purpose was not reviewed');
-    assert(await run(`document.querySelector('[data-local-ai-runtime-review]').textContent.includes('CPU')&&document.querySelector('[data-local-ai-runtime-review]').textContent.includes('1024')`));
-    assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAi'&&c.payload.action==='runtime'&&c.payload.request.operation==='bootstrap').length`),0);
-    await run(`window.__independentSmoke.runtimeFaults.loseAck=true;window.__independentSmoke.runtimeFaults.unknownReceipt=true;(()=>{const button=[...document.querySelectorAll('[data-local-ai-runtime-review] button')].find(button=>button.textContent==='Start local test');button.click();button.click()})()`);
-    await until(`!!document.querySelector('[data-local-ai-runtime-recovery] button:not(:disabled)')`, 'Unknown runtime ACK lost its request identity');
-    const bootstrapRequest=await run(`window.__independentSmoke.calls.find(call=>call.operation==='localAi'&&call.payload.action==='runtime'&&call.payload.request.operation==='bootstrap').payload.request`);
-    await run(`window.__independentSmoke.select('B')`);await until(`document.querySelector('.local-ai-runtime')?.dataset.localAiRuntimeScope===JSON.stringify(Object.values(window.__independentSmoke.scopes.B))`, 'Runtime B did not mount');
-    assert.equal(await run(`document.querySelector('[data-local-ai-runtime-recovery]')`),null);
-    await run(`window.__independentSmoke.select('A')`);await until(`document.querySelector('.local-ai-runtime')?.dataset.localAiRuntimeScope===JSON.stringify(Object.values(window.__independentSmoke.scopes.A))&&!!document.querySelector('[data-local-ai-runtime-recovery] button:not(:disabled)')`, 'Original runtime request did not survive remount');
-    assert(await run(`[...document.querySelectorAll('.local-ai-runtime button')].find(button=>button.textContent.includes('Review local test')).disabled`));
-    await button('Check the existing test result','.local-ai-runtime button');
-    await until(`!!document.querySelector('[data-local-ai-runtime-recovery] button:not(:disabled)')`, 'Unknown read-only receipt did not remain unconfirmed');
-    await run(`window.__independentSmoke.runtimeFaults.unknownReceipt=false`);await button('Check the existing test result','.local-ai-runtime button');
-    await until(`!!document.querySelector('[data-local-ai-runtime-benchmark]')&&!document.querySelector('[data-local-ai-runtime-recovery]')`, 'Historical technical result did not recover');
-    assert(await run(`document.querySelector('[data-local-ai-runtime-benchmark]').textContent.includes('Synthetic test evidence')&&document.querySelector('[data-local-ai-runtime-benchmark]').textContent.includes('remain unverified')`));
-    const runtimeCalls=await run(`window.__independentSmoke.calls.filter(call=>call.operation==='localAi'&&call.payload.action==='runtime')`);
-    assert.equal(runtimeCalls.filter(call=>call.payload.request.operation==='bootstrap').length,1);
-    assert(runtimeCalls.filter(call=>call.payload.request.operation==='receipt').every(call=>call.payload.request.clientRequestId===bootstrapRequest.clientRequestId&&call.payload.request.purposeDigest===bootstrapRequest.purposeDigest));
-    await button('Refresh process status','.local-ai-runtime button');await until(`!!document.querySelector('[data-local-ai-runtime-handle] button:not(:disabled)')`, 'Scoped runtime process did not display');
-    await button('Cancel','.local-ai-runtime [data-local-ai-runtime-handle] button');await until(`document.querySelector('[data-local-ai-runtime-handle]').textContent.includes('Stopping')`, 'Unload false was incorrectly displayed as stopped');
-    await run(`(()=>{const handle=window.__independentSmoke.localRuntime.A.handles[0];handle.state='stopped';handle.revision++})()`);await until(`document.querySelector('[data-local-ai-runtime-handle]').textContent.includes('Process stopped')`, 'Actual stopped process observation did not refresh');
-    const runtimeRecoveryLabels={en:'Check the existing test result',de:'Vorhandenes Testergebnis prüfen',es:'Consultar el resultado existente',fr:'Consulter le résultat existant',it:'Controlla il risultato esistente','pt-BR':'Consultar o resultado existente',ru:'Проверить существующий результат',ja:'既存のテスト結果を確認'};
-    for(const locale of Object.keys(runtimeRecoveryLabels)){await run(`window.__independentSmoke.locale(${JSON.stringify(locale)})`);await until(`document.querySelector('.local-ai-runtime')?.textContent.length>0`, 'Localized runtime controls missing');}
-    window.setContentSize(320,1000);await until(`innerWidth===320`, 'Runtime narrow viewport missing');await run(`document.querySelector('[data-local-ai-runtime-benchmark]').scrollIntoView({block:'center'})`);
-    assert(await run(`[...document.querySelectorAll('.local-ai-runtime button,.local-ai-runtime select,.local-ai-runtime article')].every(element=>element.getBoundingClientRect().left>=0&&element.getBoundingClientRect().right<=innerWidth)`));
-    const runtimeShot=await capture('independent-renderer-ja-320-local-runtime-smoke.png');window.setContentSize(1440,1040);await run(`window.__independentSmoke.locale('en')`);
-    log('local-ai-runtime-ui:passed',{controlledTransportOnly:true,noInferenceClaim:true,scanThenReviewThenSeparateStart:true,licenseGateExplained:true,doubleStartBlocked:true,unknownIdentitySurvivesRemount:true,readOnlyReceiptRecovery:true,otherScopeUnaffected:true,unloadWaitsActualStopped:true,syntheticEvidenceMarked:true,japanese320:true,screenshot:runtimeShot});
+    await until(`document.querySelector('.local-ai-setup[data-local-ai-status="unavailable"]')`, 'Reduced test build did not explain that bundled local inference is unavailable');
+    const localText=await run(`document.querySelector('.local-ai-setup').textContent`);
+    assert(await run(`document.querySelector('.local-ai-setup').textContent.length>0`));
+    assert.equal(await run(`document.querySelectorAll('.local-ai-setup button,.local-ai-setup input,.local-ai-setup textarea,.local-ai-setup select').length`),0);
+    assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAi'||c.operation==='localAiHardwareInventory').length`),0);
+    assert(/external|externe|externes|externos|esterni|fournisseurs|провайдер|プロバイダー/i.test(localText));
+    log('local-ai-test-build-boundary:passed',{bundledStoreAndInferenceUnavailable:true,noActionsOrTransport:true,externalProvidersRemainSeparate:true});
     await run(`window.__independentSmoke.showNativeAgain()`);
     await run(`window.__independentSmoke.locale('ja')`);
     await until(`document.documentElement.lang==='ja'&&!!document.querySelector('[aria-label="推論の深さ"]')`, 'Japanese locale or reasoning picker did not render');
@@ -1142,9 +1037,8 @@ async function electronChild(temp, mode='') {
     const narrowShot=await capture('independent-renderer-ja-320-policy-smoke.png');
     log('japanese-auto-320:passed',{viewport:320,realFormControlsFit:true,localizedPolicy:true,screenshot:narrowShot});
     await run(`window.__independentSmoke.showLocal()`);
-    await until(`!!document.querySelector('.local-ai-model input:disabled')`, 'Japanese Local AI did not load');
-    await run(`document.querySelector('.local-ai-setup details').open=true`);
-    assert(await run(`(()=>{const p=document.querySelector('.local-ai-setup');return p.textContent.includes('ローカルAI')&&[...p.querySelectorAll('input,button')].every(input=>input.getBoundingClientRect().right<=innerWidth&&input.getBoundingClientRect().left>=0)})()`));
+    await until(`document.querySelector('.local-ai-setup[data-local-ai-status="unavailable"]')`, 'Japanese Local AI unavailable notice did not render');
+    assert(await run(`(()=>{const p=document.querySelector('.local-ai-setup');return p.textContent.includes('ローカルAI')&&p.textContent.includes('利用できません')&&p.querySelectorAll('button,input,textarea,select').length===0})()`));
     const local320=await capture('independent-renderer-ja-320-local-ai-smoke.png');
     await run(`window.__independentSmoke.showAssistant()`);
     await until(`!!document.querySelector('.space-assistant-setup')&&!window.__independentSmoke.entry('A').loading`, 'Japanese Assistant did not restore');

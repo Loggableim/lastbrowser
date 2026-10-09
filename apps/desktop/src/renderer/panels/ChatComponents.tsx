@@ -49,6 +49,7 @@ import { createChatCommandAction, parseChatCommand } from '../chat-command-regis
 import { chatCommandCopy } from '../chat-command-copy.js';
 import { canSelectNativeModel, manualModelPickerOptions } from '../model-picker-options.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
+import { ProviderBetaCatalogToggle } from '../components/ProviderBetaCatalogToggle.js';
 import type { NativeModelAvailability } from '../independent-contracts.js';
 import type { ProviderChatEvidence } from '../provider-chat-evidence.js';
 import { SlashCommandMenu } from './SlashCommandMenu.js';
@@ -431,6 +432,8 @@ export type ChatComposerProps = {
   modelCatalogError?: boolean;
   antigravityCatalogUnavailable?: boolean;
   antigravityCatalogUnknown?: boolean;
+  antigravityCatalogReady?: boolean;
+  antigravityCatalogRelevant?: boolean;
   onRetryModelCatalog?: () => void;
   modelProvider?: string;
   modelProviderLabel?: string;
@@ -481,6 +484,8 @@ export function ChatComposer({
   modelCatalogError=false,
   antigravityCatalogUnavailable=false,
   antigravityCatalogUnknown=false,
+  antigravityCatalogReady=false,
+  antigravityCatalogRelevant=false,
   onRetryModelCatalog,
   profile,
   ready,
@@ -615,7 +620,7 @@ export function ChatComposer({
                 {!automaticPolicy?.active&&!modelOptions.some(group=>!group.providerId&&group.models.some(entry=>entry.id===model))&& (
                   antigravityCatalogUnavailable && (modelProvider === 'antigravity' || modelProvider?.includes('antigravity')) ? (
                     <option value="" disabled style={{ backgroundColor: '#0b1325', color: 'rgba(232, 242, 255, 0.45)' }}>
-                      {t('settings.panels.providers.antigravityCatalogUnavailable')}
+                      {t('settings.panels.providers.antigravityCatalogUnavailableShort')}
                     </option>
                   ) : (
                     <option value={qualifyModelForProvider(model, modelProvider)} disabled={betaSelectionBlocked}>
@@ -627,7 +632,7 @@ export function ChatComposer({
                   <optgroup key={group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
                     {group.models.map((m) => (
                       <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={!canSelectNativeModel(group.providerId,m.nativeAvailability)||(!m.qualified&&!showUntestedBetas)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
-                        {m.label}
+                        {m.label} · {group.provider}
                       </option>
                     ))}
                   </optgroup>
@@ -638,17 +643,11 @@ export function ChatComposer({
             title={`${displayedModelQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')} · ${qualificationScope}`}>
             {displayedModelQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
           </span>
-          {antigravityCatalogUnavailable && <span className="composer-model-notice" role="status">
-            {t('settings.panels.providers.antigravityCatalogUnavailable')}
+          {antigravityCatalogRelevant&&(antigravityCatalogUnavailable||antigravityCatalogUnknown||antigravityCatalogReady)&&<span className={`composer-model-qualification ${antigravityCatalogReady?'qualified':'untested'}`} role="status">
+            {t(antigravityCatalogUnavailable?'settings.panels.providers.antigravityCatalogUnavailableShort'
+              :antigravityCatalogUnknown?'settings.panels.providers.antigravityCatalogUnknownShort'
+                :'settings.panels.providers.antigravityCatalogReadyShort')}
           </span>}
-          {antigravityCatalogUnknown && <span className="composer-model-notice" role="status">
-            {t('settings.panels.providers.antigravityCatalogUnknown')}
-          </span>}
-          <span className={`composer-desired-default-status ${requestedDefaultQualified&&requestedDefaultAvailable?'qualified':'untested'}`} role="status"
-            title={`${t('settings.panels.providers.requestedChatDefault')}: ${requestedDefaultProviderLabel} · ${requestedDefaultModel==='gpt-6-luna'?'GPT-6 Luna':requestedDefaultModel} · ${requestedDefaultQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}${requestedDefaultUnavailableReason?` · ${requestedDefaultUnavailableReason}`:''}`}>
-            {t('settings.panels.providers.requestedChatDefault')}: {requestedDefaultModel==='gpt-6-luna'?'GPT-6 Luna':requestedDefaultModel} · {requestedDefaultProviderLabel} · {requestedDefaultQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
-            {requestedDefaultUnavailableReason?` · ${requestedDefaultUnavailableReason}`:''}
-          </span>
           <button ref={manualModelTrigger} type="button" className="composer-command-button composer-model-trigger" aria-expanded={showManualModels}
             aria-label={t('chat.chooseModelManually')} title={t('chat.chooseModelManually')}
             aria-controls="composer-manual-models" onClick={()=>setShowManualModels(open=>!open)}>
@@ -673,18 +672,28 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
-      {antigravityCatalogUnavailable&&(modelProvider==='antigravity'||modelProvider?.includes('antigravity'))&&<div className="composer-model-notice" role="alert">
-        <span>{t('settings.panels.providers.antigravityCatalogUnavailable')}</span>
-      </div>}
-      {modelOptions.length>0&&emptyQualifiedCatalog&&!showUntestedBetas&&<div className="composer-model-notice" role="status">
-        {t('settings.panels.providers.betaCatalogEmpty')}
+      {modelOptions.length>0&&emptyQualifiedCatalog&&!showUntestedBetas&&<div className="composer-model-notice composer-beta-catalog-opt-in">
+        <span role="status">{t('settings.panels.providers.betaCatalogEmpty')}</span>
+        <ProviderBetaCatalogToggle />
       </div>}
       {betaSelectionBlocked&&!emptyQualifiedCatalog&&<div className="composer-model-notice" role="status">{multiAgentBetaBlocked
         ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</div>}
       {showManualModels&&<section id="composer-manual-models" className="composer-manual-models" role="region" aria-label={t('chat.chooseModelManually')}
         onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}}>
         <label>{t('chat.modelSearch')}<input ref={manualModelSearchInput} type="search" value={manualModelSearch} onChange={event=>setManualModelSearch(event.target.value)}/></label>
-        {requestedLunaInCatalog===false&&<p className="composer-requested-model-status" role="status">{requestedDefaultModel==='gpt-6-luna'?'GPT-6 Luna':requestedDefaultModel} · {requestedDefaultProviderLabel} · {t('settings.panels.providers.requestedChatDefault')} · {t('settings.panels.providers.betaUntested')} · {requestedDefaultUnavailableReason}</p>}
+        <p className="composer-requested-model-status" role="status">
+          {requestedDefaultModel==='gpt-6-luna'?'GPT-6 Luna':requestedDefaultModel} · {requestedDefaultProviderLabel} · {t('settings.panels.providers.requestedChatDefault')} · {requestedDefaultQualified&&requestedDefaultAvailable?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
+          {requestedDefaultUnavailableReason?` · ${requestedDefaultUnavailableReason}`:''}
+        </p>
+        {(antigravityCatalogUnavailable||antigravityCatalogUnknown||antigravityCatalogReady)&&<p className="composer-model-notice" role="status">
+          {t(antigravityCatalogUnavailable?'settings.panels.providers.antigravityCatalogUnavailable'
+            :antigravityCatalogUnknown?'settings.panels.providers.antigravityCatalogUnknown'
+              :'settings.panels.providers.antigravityCatalogReady')}
+        </p>}
+        {emptyQualifiedCatalog&&!showUntestedBetas&&<div className="composer-model-notice composer-beta-catalog-opt-in">
+          <span role="status">{t('settings.panels.providers.betaCatalogEmpty')}</span>
+          <ProviderBetaCatalogToggle />
+        </div>}
         {manualModelGroups.map(group=><fieldset key={group.providerId||group.provider} disabled={group.configured===false}>
           <legend>{group.provider}{group.configured===false&&` · ${t(group.disabledReason==='unavailable'?'chat.modelProviderUnavailable':'chat.modelProviderNotConfigured')}`}</legend>
           {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);const betaBlocked=!entry.qualified&&!showUntestedBetas;

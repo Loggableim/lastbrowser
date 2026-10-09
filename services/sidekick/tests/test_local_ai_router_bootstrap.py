@@ -84,21 +84,12 @@ def test_offline_retries_are_bounded_and_request_replay_is_idempotent(tmp_path):
     assert len(calls) == 3
 
 
-def test_private_operation_is_installation_wide_and_rejects_space_or_policy_input(tmp_path, monkeypatch):
+@pytest.mark.parametrize('operation', [
+    'localAi.bootstrap', 'localAi.roleProfile', 'localAi.store', 'localAi.setup',
+    'localAi.runtime', 'localAi.catalog', 'localAi.recommend',
+])
+def test_reduced_test_build_fails_closed_for_bundled_local_ai_operations(operation):
     from web.api import independent
-    from runtime.independent.contracts import Scope
-    from runtime.independent.scope import ScopeError
-    state = tmp_path / 'state'; cache = tmp_path / 'cache'; cache.mkdir()
-    monkeypatch.setattr(independent, '_DEFAULT_STATE', state)
-    monkeypatch.setattr(independent, '_local_ai_bootstrap_manager', None)
-    monkeypatch.setattr(independent, '_bind_main_local_ai_cache', lambda value: cache if value == str(cache) else (_ for _ in ()).throw(ValueError('cache rejected')))
-    request = independent.OperationRequest(scope=None, payload={'action':'status','cacheRoot':str(cache)})
-    result = independent.dispatch_operation('localAi.bootstrap',request,'default')
-    assert result['state'] == 'idle' and result['executionUnavailable'] is True
-    with pytest.raises(ScopeError):
-        independent.dispatch_operation('localAi.bootstrap',request.model_copy(update={'scope':Scope(
-            backend_profile_id='a'*32,space_id='b'*32,browser_profile_id='default')}),'default')
-    with pytest.raises(ScopeError):
-        independent.dispatch_operation('localAi.bootstrap',request,'another-profile')
-    forged = independent.OperationRequest(scope=None,payload={'action':'status','cacheRoot':str(cache),'policyId':'anything'})
-    with pytest.raises(ValueError): independent.dispatch_operation('localAi.bootstrap',forged,'default')
+    request = independent.OperationRequest(scope=None, payload={})
+    with pytest.raises(ValueError, match='local_ai_unavailable_in_test_build'):
+        independent.dispatch_operation(operation, request, 'default')

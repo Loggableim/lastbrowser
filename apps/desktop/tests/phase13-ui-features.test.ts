@@ -18,18 +18,21 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
     expect(normalizeSettingsSectionId('extensions')).toBe('plugins');
   });
 
-  it('makes local AI discoverable in Settings and keeps setup Space-scoped', () => {
+  it('keeps external provider settings discoverable and disables bundled local inference in the test candidate', () => {
     expect(SETTINGS_SECTIONS.providers.title).toBe('AI & local models');
     expect(readRendererFile('i18n/locales/de.ts')).toContain("'settings.sections.providers': 'KI & lokale Modelle'");
     const settings = readRendererFile('panels/SystemPanels.tsx');
     expect(settings).toContain("{section === 'providers' && (");
-    expect(settings).toContain('<LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||\'\'])}');
-    expect(settings).toContain('keepGlobalRouterStatusVisible');
-    expect(settings).toContain('browserProfileId={activeProfileId} workspacePath={activeSpacePath}');
-    expect(settings).toContain('backendProfileName={activeBackendProfileName} ready={ready}');
+    expect(settings).toContain("{section === 'local-ai' && <LocalAiSetupPane");
     const setup = readRendererFile('components/LocalAiSetupPane.tsx');
-    expect(setup).toContain("import { LocalAiBootstrapPane } from './LocalAiBootstrapPane.js'");
-    expect(setup).toContain('<LocalAiBootstrapPane compact keepVisible={keepGlobalRouterStatusVisible}/>');
+    expect(setup).toContain('data-local-ai-status="unavailable"');
+    expect(setup).toContain('copy.testBuildUnavailable');
+    expect(setup).toContain('copy.externalProvidersUnaffected');
+    expect(setup).not.toContain('LocalModelStore');
+    expect(setup).not.toContain('LocalAiBootstrapPane');
+    expect(setup).not.toContain('LocalAiRuntimeControls');
+    expect(setup).not.toContain('client.request');
+    expect(readRendererFile('components/FirstRunSetupPane.tsx')).toContain('<LocalAiSetupPane');
   });
 
   describe('Panel Store & Zen Exit Default Mode', () => {

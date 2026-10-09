@@ -21,9 +21,18 @@ if (!fs.existsSync(path.join(prepackaged, 'Lastbrowser.exe'))) {
 
 const previewName = path.basename(previewDir).replace(/^feature-preview-/, 'dist-preview-');
 const output = path.join(root, 'output', previewName);
-fs.mkdirSync(output, { recursive: true });
-
 const manifest = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8'));
+const variantMarkerPath = path.join(prepackaged, 'resources', 'lastbrowser-build-variant.json');
+let variantMarker;
+try {
+  variantMarker = JSON.parse(fs.readFileSync(variantMarkerPath, 'utf8'));
+} catch {
+  throw new Error('Refusing to package an offline preview without its version-bound updater-disable marker. Rebuild the preview from the current package-feature-preview script.');
+}
+if (!variantMarker || variantMarker.schemaVersion !== 1 || variantMarker.variant !== 'offline-test' || variantMarker.appVersion !== manifest.version) {
+  throw new Error(`Refusing to package an offline preview with a missing or mismatched updater-disable marker for version ${manifest.version}.`);
+}
+fs.mkdirSync(output, { recursive: true });
 
 const config = {
   ...manifest.build,

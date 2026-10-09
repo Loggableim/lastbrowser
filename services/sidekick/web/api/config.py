@@ -2833,7 +2833,14 @@ def _load_models_cache_from_disk() -> dict | None:
 
 
 def _remove_unavailable_antigravity_catalog(payload: dict) -> None:
-    """Keep persisted pre-fix Antigravity IDs out of current picker results."""
+    """Enforce the Antigravity model-catalog API contract on cached payloads.
+
+    Until a supported profile/account-bound discovery source is available,
+    picker payloads contain no Antigravity model rows or configured badges and
+    report ``catalog_status.antigravity == "unavailable"``. A saved default
+    or a provider-global/CLI account is not evidence that a model belongs to
+    the active profile's catalog.
+    """
     groups = payload.get("groups")
     if isinstance(groups, list):
         payload["groups"] = [
@@ -4584,6 +4591,8 @@ def get_available_models() -> dict:
                 or _canonicalise_provider_id(group.get("provider_id") or group.get("provider")) != "antigravity"
             ],
             "configured_model_badges": _build_configured_model_badges(),
+            # Keep the same explicit unavailable state as the live endpoint.
+            # Account presence alone cannot qualify model IDs for this profile.
             "catalog_status": {"antigravity": "unavailable"},
             "thinking_models": thinking_models,
         }

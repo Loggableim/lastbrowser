@@ -1416,6 +1416,13 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
     (opencode-go/zen, xiaomi, deepseek, smaller inference providers, etc.),
     models.dev entries are merged on top of curated so new models released
     on the platform appear in ``/model`` without a Sidekick release.
+
+    Antigravity is deliberately excluded from this generic resolver. Its
+    account pool is profile-scoped, while this function has no profile/account
+    binding and must not substitute static IDs, a CLI-global account, or a
+    round-robin account. Until a supported account-bound catalog source exists,
+    callers receive an empty list and must report the provider catalog as
+    unavailable.
     """
     normalized = normalize_provider(provider)
     if normalized == "antigravity":

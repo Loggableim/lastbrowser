@@ -456,6 +456,15 @@ def local_ai_core_release_ready(manager,run_id):
 def dispatch_operation(operation: str, request: OperationRequest, actor: str):
     global _local_ai_broker, _local_ai_bootstrap_manager
     payload = request.payload
+    # This release candidate deliberately excludes the bundled local model
+    # store and llama.cpp runtime until redistribution and package evidence are
+    # closed. Reject every feature operation before constructing managers,
+    # binding caches, reading runtime receipts, or reaching provider routes.
+    if operation in {
+        'localAi.bootstrap', 'localAi.roleProfile', 'localAi.store',
+        'localAi.setup', 'localAi.runtime', 'localAi.catalog', 'localAi.recommend',
+    }:
+        raise ValueError('local_ai_unavailable_in_test_build')
     if operation == 'localAi.bootstrap':
         if request.scope is not None or actor != 'default':
             raise ScopeError('First-run model bootstrap is installation-wide and uses only the default local Sidekick profile')

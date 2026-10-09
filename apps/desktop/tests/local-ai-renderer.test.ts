@@ -1,5 +1,8 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe,expect,it } from 'vitest';
-import { desktopLocaleCatalogs } from '../src/renderer/i18n.js';
+import { desktopLocaleCatalogs,DesktopI18nProvider } from '../src/renderer/i18n.js';
+import { LocalAiSetupPane } from '../src/renderer/components/LocalAiSetupPane.js';
 import { isChatQualificationCandidate,isLocalAiHardwareInventory,isLocalAiResponse,localAiScanFresh,type LocalAiHardware } from '../src/renderer/local-ai-contracts.js';
 import { isLocalAiRuntimeResponse,runtimeResponseMatches } from '../src/renderer/local-ai-runtime-contracts.js';
 import { IndependentAssistantClient } from '../src/renderer/independent-assistant-client.js';
@@ -14,11 +17,32 @@ const hardware={schemaVersion:1,scanId:'scan-a',observedAt:time,os:'win32',arch:
 const scan={schemaVersion:1,scope,scan:{schemaVersion:1,scope,hardware,gpuFeatureStatus:{cuda:'unknown'},probeIssues:[]},runtimes:[{buildRef:'in-tree:inference-unavailable',state:'unavailable',managed:'in_tree',os:'win32',arch:'x64'}],availableComputeSlots:0,skipAvailable:true,existingProviderAvailable:true};
 const preferences={schemaVersion:1,scope,revision:0,decision:'undecided',preset:null,artifactIds:[],updatedAt:null};
 describe('Local AI purpose UI contract',()=>{
+  it('renders only a localized unavailable notice with no bundled-store or inference controls',()=>{
+    const markup=renderToStaticMarkup(React.createElement(DesktopI18nProvider,null,
+      React.createElement(LocalAiSetupPane,{workspacePath:'C:/test',browserProfileId:'test',ready:true})));
+    const text=markup.replaceAll('&amp;','&').replaceAll('&quot;','"').replaceAll('&#x27;',"'");
+    const locales=['en','de','it','es','fr','pt-BR','ru','ja'] as const;
+    const notices=locales.map(locale=>localAiCopy(locale));
+    expect(markup).toContain('data-local-ai-status="unavailable"');
+    expect(notices.some(copy=>text.includes(copy.testBuildUnavailable))).toBe(true);
+    expect(notices.some(copy=>text.includes(copy.externalProvidersUnaffected))).toBe(true);
+    expect(markup).not.toMatch(/<(?:button|input|textarea|select)\b/i);
+    expect(markup).not.toContain('local-model-store');
+    expect(markup).not.toContain('LocalAiRuntimeControls');
+  });
+  it('provides both unavailable and external-provider guidance in all eight locales',()=>{
+    for(const locale of ['en','de','it','es','fr','pt-BR','ru','ja'] as const){
+      const copy=localAiCopy(locale);
+      expect(copy.testBuildUnavailable.trim().length).toBeGreaterThan(20);
+      expect(copy.externalProvidersUnaffected.trim().length).toBeGreaterThan(20);
+    }
+  });
   it('keeps the Local AI entry discoverable in Settings in every supported language',()=>{
     const titles={en:'AI & Local Models',de:'KI & lokale Modelle',it:'IA e modelli locali',es:'IA y modelos locales',fr:'IA et modèles locaux','pt-BR':'IA e modelos locais',ru:'ИИ и локальные модели',ja:'AI・ローカルモデル'} as const;
     for(const[locale,title]of Object.entries(titles)){
       expect(desktopLocaleCatalogs[locale as keyof typeof desktopLocaleCatalogs]['settings.sections.providers']).toBe(title);
       expect(desktopLocaleCatalogs[locale as keyof typeof desktopLocaleCatalogs]['settings.sectionDescriptions.providers']).toBeTruthy();
+      expect(desktopLocaleCatalogs[locale as keyof typeof desktopLocaleCatalogs]['settings.sectionDescriptions.localAi']).toMatch(/unavailable|not available|nicht verfügbar|indisponible|non è disponibile|no está disponible|não está disponível|недоступен|利用できません/i);
     }
   });
   it('accepts a scope-free read-only inventory with unknown budgets but rejects extra authority fields',()=>{

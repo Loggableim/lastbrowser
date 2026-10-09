@@ -11153,8 +11153,10 @@ def _handle_live_models(handler, parsed):
         from web.api.config import _resolve_provider_alias
         provider = _resolve_provider_alias(provider)
 
-        # There is no supported LastBrowser-profile/account-bound Antigravity
-        # catalog discovery. Never serve static IDs or a pre-fix process cache.
+        # Antigravity's model-catalog contract is fail-closed: no supported
+        # LastBrowser-profile/account-bound discovery source exists, so return
+        # an empty list and catalog_status="unavailable". Do not substitute
+        # static IDs, saved defaults, a CLI-global account, or stale cache.
         if provider == "antigravity":
             payload = {
                 "provider": provider,

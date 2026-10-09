@@ -3,7 +3,7 @@ import path from 'node:path';
 import { minimatch } from 'minimatch';
 import { expect, it } from 'vitest';
 
-it('retains in-tree service sources while excluding private profile data and downloaded weights', () => {
+it('retains in-tree service sources, excludes private data, and omits the unqualified local runtime', () => {
   const manifest = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
   const resource = manifest.build.extraResources.find((entry: { to: string }) => entry.to === 'services');
   const included = (file: string) => resource.filter.some((pattern: string) =>
@@ -21,13 +21,6 @@ it('retains in-tree service sources while excluding private profile data and dow
   ]) {
     expect(included(file), file).toBe(false);
   }
-  const native = manifest.build.extraResources.find((entry: { to: string }) =>
-    entry.to === 'apps/desktop/runtime/local-ai/b11377-cpu');
-  const nativeIncluded = (file: string) => native.filter.some((pattern: string) =>
-    !pattern.startsWith('!') && minimatch(file, pattern, { dot: true })) &&
-    !native.filter.some((pattern: string) =>
-      pattern.startsWith('!') && minimatch(file, pattern.slice(1), { dot: true }));
-  expect(nativeIncluded('llama-server.exe')).toBe(true);
-  expect(nativeIncluded('msvcp140.dll')).toBe(true);
-  expect(nativeIncluded('models/router.gguf')).toBe(false);
+  expect(manifest.build.extraResources.some((entry: { from: string; to: string }) =>
+    entry.from === 'runtime/local-ai/b11377-cpu' || entry.to === 'apps/desktop/runtime/local-ai/b11377-cpu')).toBe(false);
 });

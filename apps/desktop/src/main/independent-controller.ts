@@ -20,6 +20,7 @@ const publicOperations = new Set(['assistantSnapshot', 'assistantTurn', 'cancelA
   'permissions', 'approve', 'capabilities', 'bindings', 'events', 'globalActivity', 'modelSelection',
   'definitions', 'connectionSetup', 'connectionConfigure']);
 const startupHandshakeRetryDelaysMs = [250, 500, 1000, 2000, 4000] as const;
+const bundledLocalAiUnavailableActions = new Set(['store', 'setup', 'runtime', 'roleProfile', 'catalog', 'recommend']);
 function isRetryableSidekickStartup(error: unknown): boolean {
   return Boolean(error && typeof error === 'object'
     && (error as { code?: unknown }).code === 'sidekick_not_ready'
@@ -488,9 +489,7 @@ export class IndependentController {
       return { schemaVersion: 1, bindings };
     }
     if (request.operation === 'localAiBootstrap') {
-      if (request.scope !== undefined || request.backendProfileName !== undefined)
-        throw new BrowserHostError('invalid_request', 'The installation-wide bootstrap cannot be bound to a Space or profile');
-      return this.localAi.bootstrap(payload, recheck);
+      throw new BrowserHostError('local_ai_unavailable_in_test_build', 'Bundled local model setup and inference are unavailable in this test build');
     }
     if (request.operation === 'resolveScope' || request.operation === 'scope.open') {
       const sourceBinding = request.scope === undefined ? undefined : this.binding(request.scope);
@@ -552,7 +551,11 @@ export class IndependentController {
     }
     const binding = this.binding(request.scope);
     if (request.backendProfileName && request.backendProfileName !== binding.backendProfileName) throw new Error('Profile differs from the saved Space binding');
-    if (request.operation === 'localAi') return this.localAi.request(binding, payload, recheck);
+    if (request.operation === 'localAi') {
+      if (bundledLocalAiUnavailableActions.has(String(payload.action)))
+        throw new BrowserHostError('local_ai_unavailable_in_test_build', 'Bundled local model setup and inference are unavailable in this test build');
+      return this.localAi.request(binding, payload, recheck);
+    }
     if (['openNativeBrowser', 'takeoverNativeBrowser'].includes(request.operation)) {
       const takeover = request.operation === 'takeoverNativeBrowser';
       const allowed = ['sessionId', 'streamId', 'clientRequestId', ...(takeover ? ['writerGeneration', 'writerLeaseId',

@@ -356,7 +356,7 @@ class WindowsEngine:
         except Exception as e:
             return False, f"Failed to initialize Per-Monitor-V2 DPI: {e}"
 
-        # 2. Attach thread to Input Desktop
+        # 2. Attach thread to Input Desktop if not already on an isolated/dedicated desktop
         try:
             user32.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
             user32.OpenInputDesktop.restype = wintypes.HANDLE
@@ -364,14 +364,30 @@ class WindowsEngine:
             user32.SetThreadDesktop.restype = wintypes.BOOL
             user32.CloseDesktop.argtypes = [wintypes.HANDLE]
             user32.CloseDesktop.restype = wintypes.BOOL
+            user32.GetThreadDesktop.argtypes = [wintypes.DWORD]
+            user32.GetThreadDesktop.restype = wintypes.HANDLE
+            user32.GetUserObjectInformationW.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+            user32.GetUserObjectInformationW.restype = wintypes.BOOL
 
-            hdesk = user32.OpenInputDesktop(0, False, 0x01FF)
-            if hdesk:
-                if user32.SetThreadDesktop(hdesk):
-                    self._input_desktop_handle = hdesk
-                else:
-                    user32.CloseDesktop(hdesk)
-                    logger.debug("SetThreadDesktop failed; continuing on current desktop")
+            curr_desk = user32.GetThreadDesktop(kernel32.GetCurrentThreadId())
+            curr_name = ""
+            if curr_desk:
+                buf = ctypes.create_unicode_buffer(256)
+                needed = wintypes.DWORD()
+                if user32.GetUserObjectInformationW(curr_desk, 2, buf, 512, ctypes.byref(needed)):
+                    curr_name = buf.value.lower()
+
+            # Preserve current thread desktop when running on a dedicated or sandbox desktop (e.g. exebox-*)
+            if not curr_name or curr_name == "default":
+                hdesk = user32.OpenInputDesktop(0, False, 0x01FF)
+                if hdesk:
+                    if user32.SetThreadDesktop(hdesk):
+                        self._input_desktop_handle = hdesk
+                    else:
+                        user32.CloseDesktop(hdesk)
+                        logger.debug("SetThreadDesktop failed; continuing on current desktop")
+            else:
+                logger.debug("Running on dedicated desktop %r; preserving thread desktop", curr_name)
         except Exception as e:
             logger.debug("OpenInputDesktop error (non-fatal): %s", e)
 
@@ -596,8 +612,12 @@ class WindowsEngine:
     def list_windows(self) -> List[Dict[str, Any]]:
         """List running top-level windows with title, class, HWND, PID, and process creation time."""
         windows = []
+        seen_hwnds: Set[int] = set()
 
         def enum_proc(hwnd, lparam):
+            if hwnd in seen_hwnds:
+                return 1
+            seen_hwnds.add(hwnd)
             if not user32.IsWindowVisible(hwnd) or user32.IsIconic(hwnd):
                 return 1
             length = user32.GetWindowTextLengthW(hwnd)
@@ -632,14 +652,14 @@ class WindowsEngine:
             return 1
 
         enum_proc_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        cb = enum_proc_type(enum_proc)
+        user32.EnumWindows(cb, 0)
         hdesk = user32.OpenInputDesktop(0, False, 0x01FF)
         if hdesk:
             try:
-                user32.EnumDesktopWindows(hdesk, enum_proc_type(enum_proc), 0)
+                user32.EnumDesktopWindows(hdesk, cb, 0)
             finally:
                 user32.CloseDesktop(hdesk)
-        else:
-            user32.EnumWindows(enum_proc_type(enum_proc), 0)
         return windows
 
     def is_element_occluded_conservative(self, bounds: Tuple[int, int, int, int], target_hwnd: int) -> bool:

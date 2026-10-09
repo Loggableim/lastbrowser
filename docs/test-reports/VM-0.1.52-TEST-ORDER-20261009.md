@@ -1,5 +1,7 @@
 # LastBrowser 0.1.52 — Guest-VM-Testauftrag (unsignierter Kandidat)
 
+**EXECUTION HOLD:** Do not start or consume this VM order until the Human has reported the local 0.1.52 host smoke-test result in the CEO chat. The release assets are published, but Guest execution remains on hold pending that local report.
+
 **Status:** Für den genehmigten Guest-VM-Test zugestellt. Dies ist ausschließlich ein Testkandidat; keine Aussage über Produktions-, Stable- oder Store-Reife.
 
 ## Kandidat und Remote-Artefakte

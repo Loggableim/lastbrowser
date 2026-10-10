@@ -153,6 +153,7 @@
         ".node"
       ],
       "signtoolOptions": {
+        "certificateSha1": "1AD3C19A7338BBC3FFE4D62853411AD73E139857",
         "sign": "./scripts/preserve-valid-windows-signatures.cjs"
       }
     },

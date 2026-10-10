@@ -5980,9 +5980,12 @@ html.theme-light .browser-start-search input {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 24px 20px;
+  /* The dimmed backdrop must not eat clicks on the sidebar or top navigation. */
+  pointer-events: none;
 }
 
 .first-run-fullscreen {
+  pointer-events: auto;
   width: 100%;
   max-width: 1080px;
   margin: 0 auto;

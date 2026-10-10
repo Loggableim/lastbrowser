@@ -1,4 +1,4 @@
-﻿"""CEO blocker summary remains bounded, redacted, and Space-isolated."""
+"""CEO blocker summary remains bounded, redacted, and Space-isolated."""
 
 from web.api.nova_presence import _blockers_for
 

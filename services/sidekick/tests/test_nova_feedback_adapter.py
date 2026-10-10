@@ -1,4 +1,4 @@
-﻿import time
+import time
 from nova.feedback_adapter import LocalNovaFeedbackAdapter
 
 

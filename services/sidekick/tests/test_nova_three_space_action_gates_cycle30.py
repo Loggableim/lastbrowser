@@ -1,4 +1,4 @@
-﻿"""Three-Space action-gate regressions without workers, credentials, or providers."""
+"""Three-Space action-gate regressions without workers, credentials, or providers."""
 
 from __future__ import annotations
 

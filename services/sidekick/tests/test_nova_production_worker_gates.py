@@ -1,4 +1,4 @@
-﻿from nova import production_workers as workers
+from nova import production_workers as workers
 
 
 def test_github_worker_rechecks_typed_requests_before_subprocess(monkeypatch, tmp_path):

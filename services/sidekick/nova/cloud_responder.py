@@ -1,4 +1,4 @@
-﻿"""Explicitly enabled Nova feedback responder over the Ollama Cloud transport."""
+"""Explicitly enabled Nova feedback responder over the Ollama Cloud transport."""
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import hashlib

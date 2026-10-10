@@ -1,4 +1,4 @@
-﻿"""External/irreversible action boundaries across all Nova-managed Spaces."""
+"""External/irreversible action boundaries across all Nova-managed Spaces."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-﻿"""Private Telegram notification isolation and at-most-once regression."""
+"""Private Telegram notification isolation and at-most-once regression."""
 
 from pathlib import Path
 from uuid import uuid4

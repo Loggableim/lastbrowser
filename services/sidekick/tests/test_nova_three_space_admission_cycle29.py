@@ -1,4 +1,4 @@
-﻿"""Production-shaped three-Space capability admission regressions."""
+"""Production-shaped three-Space capability admission regressions."""
 
 from __future__ import annotations
 

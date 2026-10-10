@@ -1,4 +1,4 @@
-﻿"""Trusted-root and registry-generation fail-closed checks for three Spaces."""
+"""Trusted-root and registry-generation fail-closed checks for three Spaces."""
 
 from __future__ import annotations
 

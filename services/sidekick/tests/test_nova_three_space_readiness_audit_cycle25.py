@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 from nova.live_test_gate import audit_three_space_readiness
 

@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from web.api.subagent_history import list_history, record
 
 def test_session_scoped_redacted_history(tmp_path: Path):

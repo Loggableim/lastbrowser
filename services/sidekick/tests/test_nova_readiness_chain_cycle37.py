@@ -1,4 +1,4 @@
-﻿"""Full three-Space readiness-chain audit remains red/fail-closed."""
+"""Full three-Space readiness-chain audit remains red/fail-closed."""
 
 from __future__ import annotations
 

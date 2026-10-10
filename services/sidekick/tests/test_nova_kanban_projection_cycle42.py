@@ -1,4 +1,4 @@
-﻿"""Kanban remains an optional projection, never a Presence truth source."""
+"""Kanban remains an optional projection, never a Presence truth source."""
 
 from pathlib import Path
 

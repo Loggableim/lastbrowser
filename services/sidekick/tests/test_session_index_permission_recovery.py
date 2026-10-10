@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 def test_locked_session_index_fails_safe_without_overwriting(monkeypatch, tmp_path: Path):
     from web.api import models

@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 
 def test_browser_qa_stale_card_gates_fix_and_repro_actions():

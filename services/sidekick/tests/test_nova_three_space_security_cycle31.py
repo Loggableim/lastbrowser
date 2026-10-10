@@ -1,4 +1,4 @@
-﻿"""Security boundary regression for production-shaped three-Space actions."""
+"""Security boundary regression for production-shaped three-Space actions."""
 
 from __future__ import annotations
 

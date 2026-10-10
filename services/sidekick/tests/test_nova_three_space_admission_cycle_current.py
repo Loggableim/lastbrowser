@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from uuid import uuid4
 from nova.space_supervision_runtime import NovaSpaceSupervisionRuntime
 from nova.space_supervisor import ManagedSpaceGovernance, ManagedSpaceSupervisor

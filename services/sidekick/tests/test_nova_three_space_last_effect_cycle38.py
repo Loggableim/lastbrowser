@@ -1,4 +1,4 @@
-﻿"""Final production worker effect-path audit for all fixed Spaces."""
+"""Final production worker effect-path audit for all fixed Spaces."""
 
 from __future__ import annotations
 

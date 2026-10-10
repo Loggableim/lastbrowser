@@ -1,4 +1,4 @@
-﻿"""Integration contract for the three fixed Nova Spaces.
+"""Integration contract for the three fixed Nova Spaces.
 
 The regression combines the read-only WebUI management/presence surface with
 live-test readiness diagnostics.  It deliberately supplies no readiness

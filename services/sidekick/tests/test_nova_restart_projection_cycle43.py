@@ -1,4 +1,4 @@
-﻿"""Restart/terminal-state projections preserve the one global slot."""
+"""Restart/terminal-state projections preserve the one global slot."""
 
 from pathlib import Path
 from uuid import uuid4

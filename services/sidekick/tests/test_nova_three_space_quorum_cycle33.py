@@ -1,4 +1,4 @@
-﻿"""Admission-to-policy quorum integration for the fixed Spaces."""
+"""Admission-to-policy quorum integration for the fixed Spaces."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-﻿import time
+import time
 import pytest
 from nova.cloud_responder import NovaCloudResponder
 from swarm_core.models import ModelResponse

@@ -1,4 +1,4 @@
-﻿"""Git/Kanban/CI trigger projection regressions for fixed Spaces."""
+"""Git/Kanban/CI trigger projection regressions for fixed Spaces."""
 
 from __future__ import annotations
 

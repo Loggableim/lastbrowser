@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from web.api.subagent_history import list_history, record, reconcile_stale
 
 def test_restart_reconciles_stale_running_rows(tmp_path: Path):

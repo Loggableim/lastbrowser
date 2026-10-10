@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 
 from swarm_core.router import ModelRouter, NoEligibleModel
 from swarm_core.models import ModelRegistry

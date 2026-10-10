@@ -1,4 +1,4 @@
-﻿"""Pack integrity and role/model routing safety for fixed Spaces."""
+"""Pack integrity and role/model routing safety for fixed Spaces."""
 
 from pathlib import Path
 

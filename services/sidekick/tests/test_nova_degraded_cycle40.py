@@ -1,4 +1,4 @@
-﻿"""Offline/degraded readiness projections stay bounded and redacted."""
+"""Offline/degraded readiness projections stay bounded and redacted."""
 
 from pathlib import Path
 

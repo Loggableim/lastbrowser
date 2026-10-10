@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 
 def test_browser_permission_required_payload_reports_exact_steps():

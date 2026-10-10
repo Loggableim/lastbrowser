@@ -1,4 +1,4 @@
-﻿"""Local Nova feedback bridge with bounded ack/timeout and offline mode."""
+"""Local Nova feedback bridge with bounded ack/timeout and offline mode."""
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass
 import math

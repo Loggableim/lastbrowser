@@ -1,4 +1,4 @@
-﻿"""Presence payload shape and managed-Space isolation regressions."""
+"""Presence payload shape and managed-Space isolation regressions."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-﻿"""Three-Space E2E governance regressions without live/provider activation."""
+"""Three-Space E2E governance regressions without live/provider activation."""
 
 from __future__ import annotations
 

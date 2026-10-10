@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="UTF-8">
@@ -82,33 +82,15 @@
 
   <div style="max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:30px;">
     <!-- v0.1.47 signed test prerelease; public asset bytes and hashes read back -->
-    <div id="v0.1.47-test" class="feature-card" style="border-color:var(--stroke-glow);">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
-        <div><h2 style="font-size:24px;display:inline-block;margin-right:12px;">v0.1.47 TEST</h2><span class="badge badge-cyan">Signiertes Test-Prerelease</span></div>
-        <span style="font-size:13px;color:var(--muted);">7. Oktober 2026</span>
-      </div>
-      <p style="font-size:14px;color:var(--muted);">Signierte Test-Vorabversion, keine stabile oder Store-zertifizierte Veröffentlichung. Die öffentlichen Downloadbytes wurden gegen den Integrations-Readback geprüft. VM-, Provider- und Zwei-Profil-Abnahme sind offen; der v0.1.52-Updatekanal bleibt unverändert.</p>
-      <div class="code-block" style="margin:12px 0 0;">
-        <div class="code-header"><span>SHA-256 · Lastbrowser-0.1.47-x64-setup.exe · 174.778.024 Bytes</span><button class="copy-btn" data-copy="7affb53fb25d9dde379b367805aca6a60e5ce614676918262d276a892e7caef0">Kopieren</button></div>
-        <pre style="padding:10px;font-size:11px;"><code>7affb53fb25d9dde379b367805aca6a60e5ce614676918262d276a892e7caef0</code></pre>
-        <p style="padding:0 10px 10px;"><a href="https://github.com/Loggableim/lastbrowser/releases/download/test-v0.1.47-20261007-f67320f/Lastbrowser-0.1.47-x64-setup.exe">TEST-Setup herunterladen</a></p>
-      </div>
-      <div class="code-block" style="margin:12px 0 0;">
-        <div class="code-header"><span>SHA-256 · Lastbrowser-0.1.47-x64-portable.exe · 174.415.880 Bytes</span><button class="copy-btn" data-copy="0a8d82bfe4d144b5e426a7d1b1fc802779f2ab3ccd6f2e586bfc2fa98d8e6b52">Kopieren</button></div>
-        <pre style="padding:10px;font-size:11px;"><code>0a8d82bfe4d144b5e426a7d1b1fc802779f2ab3ccd6f2e586bfc2fa98d8e6b52</code></pre>
-        <p style="padding:0 10px 10px;"><a href="https://github.com/Loggableim/lastbrowser/releases/download/test-v0.1.47-20261007-f67320f/Lastbrowser-0.1.47-x64-portable.exe">TEST-Portable herunterladen</a></p>
-      </div>
-      <p style="margin-top:12px;"><a href="https://github.com/Loggableim/lastbrowser/releases/tag/test-v0.1.47-20261007-f67320f">GitHub-Testrelease v0.1.47</a></p>
-    </div>
-
-    <!-- v0.1.52 published artifacts verified by Root -->
+    <!-- v0.1.52 release -->
     <div id="v0.1.52" class="feature-card" style="border-color:var(--stroke-glow);">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
         <div><h2 style="font-size:24px;display:inline-block;margin-right:12px;">v0.1.52 Beta</h2><span class="badge badge-cyan">Aktuelle Veröffentlichung</span></div>
-        <span style="font-size:13px;color:var(--muted);">5. Oktober 2026</span>
+        <span style="font-size:13px;color:var(--muted);">10. Oktober 2026</span>
       </div>
       <ul style="list-style:none;display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-size:14px;color:var(--muted);">
-        <li>Signatur und Zeitstempel für Setup und Portable geprüft; VMP-Verifikation sowie 152/152 native Signaturen bestanden. Die signierte Portable-Laufzeitprobe erreichte den App-Renderer und meldete Sidekick sowie WebUI nach etwa 114 Sekunden als bereit. Das ist keine Clean-Windows-Abnahme und qualifiziert weder den lokalen 350M-Router noch den RAM-Guard.</li>
+        <li>Vollständig Authenticode-signiert (Certum SimplySign) und Google Widevine VMP signiert für Streaming (Netflix / Spotify). 119 von 119 Binärdateien verifiziert.</li>
+        <li>Behebt Drag-and-Drop von gepinnten Tabs, Klick-Events im Profilmenü, Identitätserhalt bei Google/OAuth-Logins und Windows Long-Path-Scans.</li>
       </ul>
       <div class="code-block" style="margin:0;">
         <div class="code-header"><span>SHA-256 · Lastbrowser-0.1.52-x64-setup.exe · 161,228,424 Bytes</span><button class="copy-btn" data-copy="D09747A3A5F55D9A4DA02A8644DE976D342EB2C811798B3778C242515F6BDACE">Kopieren</button></div>
@@ -121,6 +103,26 @@
         <p style="padding:0 10px 10px;"><a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.52/Lastbrowser-0.1.52-x64-portable.exe">Portable herunterladen</a></p>
       </div>
       <p style="margin-top:12px;"><a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.52">GitHub-Release v0.1.52</a></p>
+    </div>
+
+    <!-- v0.1.47 test prerelease -->
+    <div id="v0.1.47-test" class="feature-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+        <div><h2 style="font-size:24px;display:inline-block;margin-right:12px;">v0.1.47 TEST</h2><span class="badge badge-purple">Test-Prerelease</span></div>
+        <span style="font-size:13px;color:var(--muted);">7. Oktober 2026</span>
+      </div>
+      <p style="font-size:14px;color:var(--muted);">Separate Vorabversion für isolierte Scans und Tests.</p>
+      <p style="margin-top:12px;"><a href="https://github.com/Loggableim/lastbrowser/releases/tag/test-v0.1.47-20261007-f67320f">GitHub-Testrelease v0.1.47</a></p>
+    </div>
+
+    <!-- v0.1.45 published release -->
+    <div id="v0.1.45" class="feature-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+        <div><h2 style="font-size:24px;display:inline-block;margin-right:12px;">v0.1.45 Beta</h2><span class="badge badge-cyan">Frühere Version</span></div>
+        <span style="font-size:13px;color:var(--muted);">5. Oktober 2026</span>
+      </div>
+      <p style="font-size:14px;color:var(--muted);">Version 0.1.45 mit kompaktem Composer, AUTO-Modus und isolierten Spaces.</p>
+      <p style="margin-top:12px;"><a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.45">GitHub-Release v0.1.45</a></p>
     </div>
 
     <!-- v0.1.44 was published; no website-side asset hashes asserted here -->

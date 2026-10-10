@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -155,6 +155,27 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
 
   <div class="timeline">
 
+    <!-- v0.1.52 release -->
+    <div class="release-entry">
+      <div class="release-bullet highlight"></div>
+      <article class="release-card current">
+        <div class="release-header">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="release-tag">v0.1.52 · Latest Release</span>
+            <span class="badge-now">Current</span>
+          </div>
+          <span class="release-date">October 10, 2026</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;font-weight:600">Release 0.1.52 consolidates hotfixes for tab pinning, profile menu interactions, Chromium session identity preservation during OAuth, and Windows long-path hardware scans.</p>
+        <ul class="release-list">
+          <li><strong>Tab Pinning &amp; Profile Menu:</strong> Reliable drag-and-drop for pinned tabs and responsive pointer interaction across compact and split viewports.</li>
+          <li><strong>Chromium Identity &amp; OAuth:</strong> Full preservation of Chromium user identity during Google and third-party OAuth flows without session resets.</li>
+          <li><strong>Smart Track Spaces:</strong> Resilient Space setup and error-free hardware scanning across deep Windows directory trees and long paths.</li>
+          <li><strong>Model Resolution &amp; Stability:</strong> Guaranteed safe default model resolution for new profiles, hardened worker lifecycle, and Authenticode + Widevine VMP signing.</li>
+        </ul>
+      </article>
+    </div>
+
     <!-- v0.1.47 signed test prerelease -->
     <div class="release-entry">
       <div class="release-bullet"></div>
@@ -171,11 +192,11 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
       </article>
     </div>
 
-    <!-- v0.1.52 published release -->
+    <!-- v0.1.45 published release -->
     <div class="release-entry">
       <div class="release-bullet"></div>
       <article class="release-card">
-        <div class="release-header"><span class="release-tag">v0.1.52 · published</span><span class="release-date">October 5, 2026</span></div>
+        <div class="release-header"><span class="release-tag">v0.1.45 · published</span><span class="release-date">October 5, 2026</span></div>
         <p style="color:var(--text);font-size:14px;font-weight:600">Version 0.1.45 was released on October 5, 2026. It brings the compact composer with AUTO and “More”, compact goal controls, a closer link between Space Assistant and Quick Chat, and a simpler local setup flow.</p>
         <ul class="release-list">
           <li><strong>AUTO:</strong> An eligible configured orchestrator is preferred. Otherwise, AUTO uses fresh observed limit headroom only when known for every candidate, then compares active/recent local requests and uses configured order to break ties. It does not optimize semantic quality or cost. The 350M router failed its independent quality holdout; Teamwork remains a separate explicit choice.</li>

@@ -205,6 +205,18 @@ export function FirstRunSetupPane({
   };
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || saving) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (aiChoice === 'disabled') void completeBrowserSetup();
+      else void chooseAi('disabled');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [aiChoice, saving]);
+
+  useEffect(() => {
     if (!providers.some((item) => item.id === provider) && providers[0]) {
       setProvider(providers[0].id);
     }

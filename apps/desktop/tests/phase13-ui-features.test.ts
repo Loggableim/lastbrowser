@@ -35,6 +35,18 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
     expect(readRendererFile('components/FirstRunSetupPane.tsx')).toContain('<LocalAiSetupPane');
   });
 
+  it('keeps the first-run overlay from swallowing sidebar and top-navigation clicks', () => {
+    const css = readRendererFile('styles.css');
+    const wrap = css.slice(css.indexOf('.first-run-fullscreen-wrap {'), css.indexOf('.first-run-fullscreen {'));
+    const panel = css.slice(css.indexOf('.first-run-fullscreen {'), css.indexOf('.first-run-ai-choice-screen {'));
+    expect(wrap).toContain('pointer-events: none;');
+    expect(panel).toContain('pointer-events: auto;');
+    const pane = readRendererFile('components/FirstRunSetupPane.tsx');
+    expect(pane).toContain("if (event.key !== 'Escape' || saving) return;");
+    expect(pane).toContain("if (aiChoice === 'disabled') void completeBrowserSetup();");
+    expect(pane).toContain("else void chooseAi('disabled');");
+  });
+
   describe('Panel Store & Zen Exit Default Mode', () => {
     it('manages zenExitDefaultMode, sidebarDrawerTab, and actionBarDock in usePanelStore', () => {
       const store = usePanelStore.getState();

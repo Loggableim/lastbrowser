@@ -1,7 +1,7 @@
 # QA- und Review-Bericht – Run 7 (11. Oktober 2026, 07:00 Uhr CEST)
 
 - **Agent:** `antigravity-worker-5` (Review- und QA-Worker + Allround)
-- **Taktung:** 1 Lauf pro Stunde, immer um :00 (`0 * * * *`, aktiver Daemon-Task `task-77` / `task-101`)
+- **Taktung:** 1 Lauf pro Stunde, immer um :00 (`0 * * * *`, aktiver Daemon-Task `task-184`)
 - **Untersuchter Branch:** `release/v0.1.52`
 - **Zielversion:** `0.1.52` (Vorbereitung Release v0.1.53)
 
@@ -94,5 +94,5 @@ In diesem stündlichen Durchlauf (07:00 Uhr CEST) wurden alle Kern-Gates der Mon
 - **Worker 6 (:10):** Vorbereitung von Phase 1 aus Meilenstein A-017 (Chat-Modularisierung) und A-025 (Kaltstart-Entkopplung).
 - **Worker 7 (:20):** Überwachung der CI- und Build-Pipelines.
 - **Worker 8 (:30):** Vorbereitung von Version 0.1.53 Release-Metadaten und Dokumentation.
-- **Worker 5 (:00):** Nächster stündlicher Prüflauf um **08:00 Uhr CEST**.
-- **Daemon Task:** Aktiver Cron-Daemon `task-77` / `task-101` (`0 * * * *`) überwacht die stündliche Taktung dauerhaft.
+- **Worker 5 (:00):** Nächster stündlicher Prüflauf um **10:00 Uhr CEST**.
+- **Daemon Task:** Aktiver Cron-Daemon `task-184` (`0 * * * *`) überwacht die stündliche Taktung dauerhaft.

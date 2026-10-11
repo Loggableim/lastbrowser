@@ -90,34 +90,34 @@
 
 ---
 
-## 3. Matrix der aktuellen Qualitäts- und Release-Gates (Run 6)
+## 3. Matrix der aktuellen Qualitäts- und Release-Gates (Run 7)
 
 | Gate / Prüfung | Vorgeschriebenes Kriterium | Aktueller Status | Details / Befund |
 | :--- | :--- | :---: | :--- |
-| **Python Syntax Check** | Exit Code 0, 0 Warnings | **PASS** | `services/sidekick` vollständig fehlerfrei kompiliert (Exit Code 0) |
-| **Secret-Fixtures Guard** | Keine Secrets in git-getrackten Dateien | **PASS** | `tests/secret-fixtures.test.ts` (1/1 bestanden in 16,11s; 0 Leaks) |
+| **Python Syntax Check** | Exit Code 0, 0 Warnings | **PASS** | `services/sidekick` Module fehlerfrei kompiliert (Exit Code 0) |
+| **Secret-Fixtures Guard** | Keine Secrets in git-getrackten Dateien | **PASS** | `tests/secret-fixtures.test.ts` (1/1 bestanden in 2,06s; 0 Leaks) |
 | **Store Release Preflight** | 27+ automatische Checks pass, 0 Fail | **PASS** | **39 PASS, 2 WARN, 0 FAIL** (100% Win32 Store Konformität) |
-| **Desktop Shell Build** | 0 TS-Fehler, 0 Vite-Fehler | **PASS** | Main, Preload & Renderer ohne Fehler gebündelt (1834 Module in 9,82s) |
-| **Public Downloads Test** | 5/5 Tests grün auf v0.1.52 | **PASS** | `tests/public-downloads.test.ts` (5/5 PASS in 63ms) |
-| **Update IPC Contract** | Fehler bleiben als `error` sichtbar | **PASS** | `tests/updates-ipc.test.ts` (8/8 PASS in 15ms) |
-| **i18n Key Parity** | 8 Sprachen ohne Lücken | **PASS** | `tests/i18n.test.ts` (14/14 PASS in 444ms) |
-| **Independent Controller** | Work Admission & Recovery | **PASS** | `tests/independent-controller.test.ts` (63/63 PASS in 2,52s) |
-| **Windows Package Signatures** | Signatur-Prüfungen fehlerfrei | **PASS** | `tests/windows-package-signatures.test.ts` (7/7 PASS in 4,44s) |
-| **Website Download Counter** | 15 Node Tests bestanden | **PASS** | `download-counter.test.mjs` (15/15 PASS in 237ms) |
-| **Python Worker Tests** | Kanban & Nova Worker Verträge | **PASS** | 18/18 Pytest-Fälle bestanden in 4,15s |
+| **Desktop Shell Build** | 0 TS-Fehler, 0 Vite-Fehler | **PASS** | Main, Preload & Renderer ohne Fehler gebündelt (1834 Module in 5,62s) |
+| **Public Downloads Test** | 5/5 Tests grün auf v0.1.52 | **PASS** | `tests/public-downloads.test.ts` (5/5 PASS in 29ms) |
+| **Update IPC Contract** | Fehler bleiben als `error` sichtbar | **PASS** | `tests/updates-ipc.test.ts` (8/8 PASS in 12ms) |
+| **i18n Key Parity** | 8 Sprachen ohne Lücken | **PASS** | `tests/i18n.test.ts` (14/14 PASS in 373ms) |
+| **Independent Controller** | Work Admission & Recovery | **PASS** | `tests/independent-controller.test.ts` (63/63 PASS in 2,37s) |
+| **Windows Package Signatures** | Signatur-Prüfungen fehlerfrei | **PASS** | `tests/windows-package-signatures.test.ts` (7/7 PASS in 3,19s) |
+| **Website Download Counter** | 15 Node Tests bestanden | **PASS** | `download-counter.test.mjs` (15/15 PASS in 60ms) |
+| **Python Worker Tests** | Kanban & Nova Worker Verträge | **PASS** | 18/18 Pytest-Fälle bestanden in 1,01s |
 | **Monorepo In-Tree Engine** | `services/sidekick` als Source of Truth | **PASS** | Kein externes Klonen, keine Monkey-Patches, kein `services/webui` |
 
 ---
 
 ## 4. Detaillierte Review-Befunde & Empfehlungen
 
-### 4.1 Befund: Externe Chat-Best-Practices A-016 (Worker 6)
-- **Status:** **ABGENOMMEN FÜR UMSETZUNG IN 0.1.53**.
-- **Bewertung:** Die vorgeschlagenen Architekturmuster (insbesondere RAF-Throttling für Streaming-Token, Entkopplung von Markdown-Rendering und Token-Empfang sowie Fail-Open bei Katalog-Verbindungsabbrüchen) adressieren die in A-015 identifizierten Latenzprobleme direkt und schützen vor UI-Blockaden.
+### 4.1 Befund: Abschluss Meilenstein A-017 (Chat-Portierungsplan, Worker 6)
+- **Status:** **VOLLSTÄNDIG ABGENOMMEN FÜR UMSETZUNG IN 0.1.53**.
+- **Bewertung:** Der modulare Portierungsplan in [`docs/analysis/A-017-chat-portierungsplan.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-017-chat-portierungsplan.md) und [`A-017-modularer-chat-portierungsplan.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-017-modularer-chat-portierungsplan.md) entflechtet `NativeChatMain.tsx` in 4 fokussierte Module (`ChatStreamController`, `ChatSessionHeader`, `ChatTranscriptView`, `ChatComposerView`) und integriert Thinking-Cards, RAF-Throttling sowie Live-Steering ohne Vertragsbrüche.
 
-### 4.2 Befund: Windows Build-Härtung
+### 4.2 Befund: Windows Build- & Test-Resilienz (Worker 7)
 - **Status:** **DOKUMENTIERT & GEHÄRTET**.
-- **Bewertung:** Unter Windows kann der Vite `emptyOutDir`-Schritt temporär an blockierten Datei-Handles scheitern. Ein Pre-Clean (`Remove-Item apps/desktop/dist/renderer`) und `NODE_OPTIONS="--max-old-space-size=4096"` verhindern Build-Abbrüche verlässlich.
+- **Bewertung:** Gehärtete Timeouts (Vitest 25s, Package-Signatures 30s) und atomare Probe-Schreibvorgänge sichern alle 215 Testsuiten zuverlässig gegen Windows I/O-Latenzen ab.
 
 ---
 
@@ -126,7 +126,7 @@
 | Minute | Worker | Rolle | Fokus |
 | :---: | :--- | :--- | :--- |
 | **:00** | **antigravity-worker-5** | **Review- und QA-Worker (+ Allround)** | **Code-Review, QA-Audit, Regressionsprüfung, Gate-Abnahme** |
-| **:10** | **antigravity-worker-6** | Bug-Kurator und Bugsucher (+ Allround) | Fehlerkuration, Problem-Isolierung (A-016, A-025, LB-001 bis LB-010) |
+| **:10** | **antigravity-worker-6** | Bug-Kurator und Bugsucher (+ Allround) | Fehlerkuration, Problem-Isolierung (A-017, A-025, LB-001 bis LB-010) |
 | **:20** | **antigravity-worker-7** | Test-, CI- und Build-Worker (+ Allround) | Vitest-Suite, CI-Pipelines, Build-Automatisierung |
 | **:30** | **antigravity-worker-8** | Release-, Doku-, Website- und i18n-Worker (+ Allround) | Release-Artefakte, Dokumentation, lastbrowser.com, i18n |
 
@@ -141,11 +141,11 @@
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Freigegeben (`run_lock_since`: `null`)
 - **Nächster geplanter Lauf:** 11. Oktober 2026, **10:00 Uhr CEST**
-- **Aktiver Daemon-Task:** `task-144` (`Cron: 0 * * * *`, Dauerläufer)
+- **Aktiver Daemon-Task:** `task-184` (`Cron: 0 * * * *`, Dauerläufer)
 
 ---
 
-## 7. Geplante Aktionen für den nächsten stündlichen Lauf (:00 um 08:00 Uhr)
+## 7. Geplante Aktionen für den nächsten stündlichen Lauf (:00 um 10:00 Uhr)
 
 1. Stündliche Neuvalidierung aller Kern-Gates (`verify:store`, `build`, `compileall`, `secret-fixtures`, `test:run`, `pytest`).
 2. Überprüfung aller eingehenden Commits aus dem Worker-Kollektiv (:10 Worker 6, :20 Worker 7, :30 Worker 8).

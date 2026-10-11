@@ -25,3 +25,11 @@ The regression uses the P003 catalog pairs `ollama-cloud/deepseek-v4.1-flash`, `
 ## Scope
 
 Renderer and regression tests only. No version, release metadata, backend, credentials, signing, publication, installation, or user data changed.
+
+## Gate follow-up (2026-10-11)
+
+- The missing Electron runtime was recovered from the local v0.1.54 integration worktree. Its package metadata is `37.10.3+wvcus`, and `electron.exe` SHA-256 matches the requested `096FEEBB1D27894727B1D07A66B87312CA84613BE1A321D7A26BB59318671EC1`. The full 76-file `node_modules/electron/dist` tree was copied into ignored dependencies and hash-compared to the donor. No package manifest, lockfile, or tracked dependency was changed.
+- After restoration, both previously blocked UI suites passed: 23/23 tests.
+- Full `npm test` then passed: 220 suites, 1,995 tests passed, 0 skipped.
+- Red-before was run in a separate detached worktree at the exact base SHA, with only the new `a027-model-selection.test.ts` patch and a junction to the PR worktree's ignored dependencies. Result: 1 failed, 7 passed; the new P003 test failed on missing captured-profile/composer behavior. The PR worktree's focused suite passes after the fix.
+- Cleanup of that temporary baseline worktree was rejected by the local shell policy. It remains at `C:\Users\logga\.codex\worktrees\p003-active-models-send-baseline-20261011\lastbrowser` with only the regression-test patch and an ignored `node_modules` junction to the PR worktree. The active PR worktree remains unchanged by the baseline test.

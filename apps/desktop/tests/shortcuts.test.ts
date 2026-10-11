@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   browserShortcutChannel,
@@ -62,6 +64,23 @@ describe('shortcuts system', () => {
     expect(matchBrowserShortcut({ type: 'keyDown', key: '9', control: true })).toEqual({
       action: 'jump-last-tab'
     });
+  });
+
+  it('routes Ctrl/Cmd+1..8 through the tab consumer without a competing pinned-app listener', () => {
+    const app = readFileSync(resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
+    const jumpTabConsumer = app.match(/case 'jump-tab':\s*\{([\s\S]*?)\n\s*case 'jump-last-tab'/)?.[1];
+
+    expect(jumpTabConsumer).toContain('setActiveTabId(allTabs[target].id)');
+    expect(jumpTabConsumer).toContain("setActivePanel('browser')");
+    expect(app).not.toContain('Ctrl+1..8: jump to pinned app');
+    expect(app).not.toContain('const digit = parseInt(event.key, 10)');
+
+    for (let digit = 1; digit <= 8; digit += 1) {
+      expect(matchBrowserShortcut({ type: 'keyDown', key: String(digit), control: true })).toEqual({
+        action: 'jump-tab',
+        payload: { index: digit - 1 }
+      });
+    }
   });
 
   it('matches tools and panels shortcuts', () => {

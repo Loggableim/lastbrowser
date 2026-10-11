@@ -30,9 +30,9 @@ describe('public release download references', () => {
 
   it('proxies only the published tag for both binaries and the real updater metadata', () => {
     const source = readFileSync(path.join(repoRoot, 'lastbrowser.com/functions/downloads/[file].js'), 'utf8');
-    expect(source).toContain("const RELEASE_TAG = 'v0.1.45';");
-    expect(source).toContain('/${RELEASE_TAG}/Lastbrowser-0.1.45-x64-setup.exe');
-    expect(source).toContain('/${RELEASE_TAG}/Lastbrowser-0.1.45-x64-portable.exe');
+    expect(source).toContain("const RELEASE_TAG = 'v0.1.52';");
+    expect(source).toContain('/${RELEASE_TAG}/Lastbrowser-0.1.52-x64-setup.exe');
+    expect(source).toContain('/${RELEASE_TAG}/Lastbrowser-0.1.52-x64-portable.exe');
     expect(source).toContain('/${RELEASE_TAG}/latest.yml');
     expect(source).not.toContain('v0.1.34');
   });

@@ -27,7 +27,7 @@ const pluginApi = {
 window.lastbrowser = {
   extensions: pluginApi,
   i18n: {setLocale: async () => {}},
-  updates: {status: async () => ({state:'idle',currentVersion:'test'})},
+  updates: {status: async () => ({state:'idle',currentVersion:'test'}), onStatus: () => () => {}},
   cdp: {getPreference: async () => ({enabled:false,active:false})},
   system: {isDefaultBrowser: async () => false},
   sidekick: {
@@ -72,10 +72,12 @@ async function main() {
   const root = path.resolve(__dirname, '../../..');
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-settings-plugins-'));
   try {
-    require('esbuild').buildSync({ stdin:{contents:fixture,loader:'tsx',resolveDir:path.join(root,'apps/desktop')}, bundle:true, platform:'browser', format:'iife', target:'chrome130', loader:{'.woff2':'dataurl'}, outfile:path.join(temp,'fixture.js') });
+    require('esbuild').buildSync({ stdin:{contents:fixture,loader:'tsx',resolveDir:path.join(root,'apps/desktop')}, bundle:true, platform:'browser', format:'iife', target:'chrome130', define:{'import.meta.env.VITE_ENABLE_AI_ORCHESTRATION':JSON.stringify('false'),'import.meta.url':JSON.stringify('file:///fixture.js')}, loader:{'.woff2':'dataurl'}, outfile:path.join(temp,'fixture.js') });
     fs.writeFileSync(path.join(temp,'index.html'), '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:"><link rel="stylesheet" href="fixture.css"></head><body><div id="root"></div><script src="fixture.js"></script></body></html>');
     const env={...process.env}; delete env.ELECTRON_RUN_AS_NODE;
-    const child=spawn(require('electron'),[__filename,'--child',temp],{cwd:root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
+    const electronPackage=require.resolve('electron/package.json');
+    const executable=process.platform==='win32'?path.join(path.dirname(electronPackage),'dist','electron.exe'):require('electron');
+    const child=spawn(executable,[__filename,'--child',temp],{cwd:root,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
     let stdout='',stderr=''; child.stdout.on('data',v=>stdout+=v.toString()); child.stderr.on('data',v=>stderr+=v.toString());
     const timer=setTimeout(()=>child.kill(),45000);
     const result=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(code,signal)=>resolve({code,signal}));}); clearTimeout(timer);
@@ -97,15 +99,36 @@ async function child(temp) {
     win.webContents.on('console-message',event=>{if(event.level>=2)consoleErrors.push(event.message);});
     await win.loadFile(path.join(temp,'index.html'));
     const run=script=>win.webContents.executeJavaScript(script);
-    const until=async(script,label)=>{const end=Date.now()+8000;while(Date.now()<end){if(await run(script))return;await new Promise(r=>setTimeout(r,30));}throw Error('Timeout: '+label+'; '+JSON.stringify(await run("({heading:document.querySelector('.settings-editor-head')?.innerText, boundary:document.querySelector('[data-boundary-error]')?.textContent, alerts:[...document.querySelectorAll('[role=alert]')].map(x=>x.innerText), panels:[...document.querySelectorAll('.settings-section-nav button')].map(x=>({text:x.innerText,active:x.className}))})")));};
+    const until=async(script,label)=>{const end=Date.now()+8000;while(Date.now()<end){if(await run(script))return;await new Promise(r=>setTimeout(r,30));}throw Error('Timeout: '+label+'; '+JSON.stringify(await run("({heading:document.querySelector('.settings-editor-head')?.innerText, boundary:document.querySelector('[data-boundary-error]')?.textContent, alerts:[...document.querySelectorAll('[role=alert]')].map(x=>x.innerText), panels:[...document.querySelectorAll('.settings-section-nav button')].map(x=>({text:x.innerText,active:x.className})), body:document.body.innerText.slice(0,400), probe:{mode:window.__settingsProbe?.mode,boundary:window.__settingsProbe?.boundary}})")));};
     await until("!!document.querySelector('.settings-editor-head')?.innerText.includes('Extensions') || !!document.querySelector('.settings-editor-head')?.innerText.includes('Plugins')",'Settings Plugins section selected');
+    const initialTabs=await run("(() => {const tabs=[...document.querySelectorAll('.extension-settings-tabs [role=tab]')];const panel=document.querySelector('#extension-settings-panel');return {tabs:tabs.map(tab=>({id:tab.id,selected:tab.getAttribute('aria-selected'),controls:tab.getAttribute('aria-controls')})),panelId:panel?.id,labelledby:panel?.getAttribute('aria-labelledby')}})()");
+    assert.equal(initialTabs.tabs.length,3,`Expected three extension tabs: ${JSON.stringify(initialTabs)}`);
+    assert(initialTabs.tabs.every(tab=>tab.controls===initialTabs.panelId),`Each extension tab must control its tab panel: ${JSON.stringify(initialTabs)}`);
+    assert.equal(initialTabs.tabs.filter(tab=>tab.selected==='true').length,1,`Exactly one extension tab must be selected: ${JSON.stringify(initialTabs)}`);
+    assert.equal(initialTabs.panelId && initialTabs.tabs.some(tab=>tab.id===initialTabs.labelledby&&tab.selected==='true'),true,`Panel must be labelled by the selected tab: ${JSON.stringify(initialTabs)}`);
+    await run("document.querySelector('#extension-settings-tab-store').click()");
+    await until("document.querySelector('#extension-settings-tab-store')?.getAttribute('aria-selected')==='true'",'store tab click selects its panel');
+    await run("document.querySelector('#extension-settings-tab-store').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}))");
+    await until("document.querySelector('#extension-settings-tab-installed')?.getAttribute('aria-selected')==='true'",'ArrowRight advances extension tab');
+    const keyboardTabs=await run("(() => {const selected=document.querySelector('.extension-settings-tabs [role=tab][aria-selected=true]');const panel=document.querySelector('#extension-settings-panel');return {selectedId:selected?.id,selectedTabIndex:selected?.tabIndex,focusedId:document.activeElement?.id,panelLabel:panel?.getAttribute('aria-labelledby'),panelExists:!!panel}})()");
+    assert.equal(keyboardTabs.selectedId,'extension-settings-tab-installed',`ArrowRight selected the installed tab: ${JSON.stringify(keyboardTabs)}`);
+    assert.equal(keyboardTabs.selectedTabIndex,0,`Selected tab must be in the tab order: ${JSON.stringify(keyboardTabs)}`);
+    assert.equal(keyboardTabs.focusedId,'extension-settings-tab-installed',`Keyboard navigation must move focus: ${JSON.stringify(keyboardTabs)}`);
+    assert.equal(keyboardTabs.panelLabel,keyboardTabs.selectedId,`Tab panel must follow the selected tab: ${JSON.stringify(keyboardTabs)}`);
+    assert.equal(keyboardTabs.panelExists,true);
+    process.stdout.write(JSON.stringify({phase:'extension-tabs-a11y:passed',initialTabs,keyboardTabs})+'\n');
     for(const [mode,expectation] of [['null','empty'],['valid','valid'],['invalid','error']]){
       if(mode!=='null'){
         await run(`window.__settingsProbe.remount(${JSON.stringify(mode)})`);
         await until(`window.__settingsProbe.mode===${JSON.stringify(mode)}`,mode+' renderer mount');
       }
       if(expectation==='empty') await until("document.querySelector('.extension-empty-list')?.textContent.includes('No extensions installed yet.')",'null IPC fixture renders empty list');
-      if(expectation==='valid') await until("document.querySelector('.extension-installed-card')?.textContent.includes('Controlled Reader')",'valid IPC fixture renders extension');
+      if(expectation==='valid') {
+        await until("!!document.querySelector('#extension-settings-tab-installed')",'installed tab rendered for valid fixture');
+        await run("document.querySelector('#extension-settings-tab-installed').click()");
+        await until("document.querySelector('#extension-settings-tab-installed')?.getAttribute('aria-selected')==='true'",'installed tab selected for valid fixture');
+        await until("document.querySelector('.extension-installed-card')?.textContent.includes('Controlled Reader')",'valid IPC fixture renders extension');
+      }
       if(expectation==='error') await until("document.querySelector('[role=alert]')?.textContent.includes('Invalid extensions response')",'invalid IPC fixture displays local error');
       const boundary=await run('window.__settingsProbe.boundary');
       assert.equal(boundary.length,0,`${mode} caused ErrorBoundary: ${JSON.stringify(boundary)}`);

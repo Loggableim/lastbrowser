@@ -48,13 +48,14 @@ import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
 import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQualified } from '../provider-chat-evidence.js';
 import { ProviderBetaCatalogToggle } from '../components/ProviderBetaCatalogToggle.js';
+import { ProviderWorkspace, type ProviderWorkspaceItem } from '../components/ProviderWorkspace.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { clearBrowserDataWithFeedback } from '../utils/clear-browser-data.js';
 import { copyDoctorOutput, runDoctorExclusively } from '../utils/doctor-dashboard.js';
 import { searchEngines } from '../tabs.js';
 import { computeAccentTokens } from '../App.js';
 import { type ExtensionRecord, type ExtensionPreset } from '../bridge.js';
-import { loadExtensionSettingsData } from '../extension-settings-state.js';
+import { chromeWebStoreSearchUrl, EXTENSION_RECOMMENDATION_PAGE_SIZE, filterExtensionRecommendations, loadExtensionSettingsData, paginateExtensionRecommendations, USER_APPROVED_EXTENSION_CANDIDATES } from '../extension-settings-state.js';
 import { useDesktopI18n } from '../i18n.js';
 import type { DoctorReport } from '../shell-state.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
@@ -1598,19 +1599,25 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
 }
 
 export function ExtensionsSettingsSection(): JSX.Element {
+  const { t } = useDesktopI18n();
+  type ExtensionSettingsTab = 'recommended' | 'store' | 'installed';
   const [extensions, setExtensions] = useState<ExtensionRecord[]>([]);
-  const [presets, setPresets] = useState<ExtensionPreset[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [cwsInput, setCwsInput] = useState('');
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const [extensionTab, setExtensionTab] = useState<ExtensionSettingsTab>('recommended');
+  const [recommendationSearch, setRecommendationSearch] = useState('');
+  const [recommendationCategory, setRecommendationCategory] = useState('all');
+  const [recommendationPage, setRecommendationPage] = useState(0);
+  const [storeSearch, setStoreSearch] = useState('');
+  const extensionTabRefs = useRef<Partial<Record<ExtensionSettingsTab, HTMLButtonElement | null>>>({});
 
   const loadData = async () => {
     try {
       if (window.lastbrowser?.extensions) {
         const data = await loadExtensionSettingsData<ExtensionRecord, ExtensionPreset>(window.lastbrowser.extensions);
         setExtensions(data.extensions);
-        setPresets(data.presets);
         setLoadError('');
       } else {
         setLoadError('Extension service is unavailable.');
@@ -1626,19 +1633,6 @@ export function ExtensionsSettingsSection(): JSX.Element {
   useEffect(() => {
     void loadData();
   }, []);
-
-  const handleInstallPreset = async (preset: ExtensionPreset) => {
-    setInstallingId(preset.id);
-    try {
-      await window.lastbrowser.extensions.installCws(preset.cwsId);
-      showToast(`${preset.name} installed successfully!`);
-      await loadData();
-    } catch (err) {
-      showToast(`Failed to install ${preset.name}: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setInstallingId(null);
-    }
-  };
 
   const handleInstallCws = async (e: FormEvent) => {
     e.preventDefault();
@@ -1700,7 +1694,21 @@ export function ExtensionsSettingsSection(): JSX.Element {
     }
   };
 
-  const installedCwsIds = new Set(extensions.map((e) => e.id.toLowerCase()));
+  const approvedRecommendationIds = new Set<string>(USER_APPROVED_EXTENSION_CANDIDATES.map((entry) => entry.id));
+  const recommendations = USER_APPROVED_EXTENSION_CANDIDATES;
+  const recommendationCategories = ['all', ...new Set(recommendations.map((entry) => entry.category))];
+  const filteredRecommendations = filterExtensionRecommendations(recommendations, recommendationSearch, recommendationCategory, approvedRecommendationIds);
+  const recommendationPageSize = EXTENSION_RECOMMENDATION_PAGE_SIZE;
+  const recommendationPageCount = Math.max(1, Math.ceil(filteredRecommendations.length / recommendationPageSize));
+  const currentRecommendations = paginateExtensionRecommendations(filteredRecommendations, recommendationPage, recommendationPageSize);
+
+  const openChromeWebStoreSearch = (event: FormEvent) => {
+    event.preventDefault();
+    const query = storeSearch.trim();
+    if (!query) return;
+    const url = chromeWebStoreSearchUrl(query);
+    if (url) window.open(url, '_blank');
+  };
 
   return (
     <div className="extensions-settings-content">
@@ -1710,68 +1718,104 @@ export function ExtensionsSettingsSection(): JSX.Element {
           <button type="button" className="secondary-action compact" onClick={() => void loadData()}>Retry</button>
         </div>
       )}
+      <div className="extension-settings-tabs" role="tablist" aria-label={t('settings.panels.plugins.extensionTabsLabel')}>
+        {(['recommended', 'store', 'installed'] as ExtensionSettingsTab[]).map((tab) => (
+          <button key={tab} ref={(element) => { extensionTabRefs.current[tab] = element; }} type="button" role="tab"
+            id={`extension-settings-tab-${tab}`} aria-controls="extension-settings-panel" aria-selected={extensionTab === tab}
+            tabIndex={extensionTab === tab ? 0 : -1}
+            className={extensionTab === tab ? 'active' : ''} onClick={() => setExtensionTab(tab)}
+            onKeyDown={(event) => {
+              const tabs: ExtensionSettingsTab[] = ['recommended', 'store', 'installed'];
+              const index = tabs.indexOf(extensionTab);
+              const next = event.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length]
+                : event.key === 'ArrowLeft' ? tabs[(index + tabs.length - 1) % tabs.length]
+                  : event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[tabs.length - 1] : null;
+              if (!next) return;
+              event.preventDefault();
+              setExtensionTab(next);
+              extensionTabRefs.current[next]?.focus();
+            }}>
+            {t(`settings.panels.plugins.extensionTab${tab[0].toUpperCase()}${tab.slice(1)}` as DesktopTranslationKey)}
+          </button>
+        ))}
+      </div>
+      <div id="extension-settings-panel" role="tabpanel"
+        aria-labelledby={`extension-settings-tab-${extensionTab}`} tabIndex={0}>
       {/* Curated Store Presets */}
+      {extensionTab === 'recommended' && <>
       <SettingsCard
-        title="Curated Extension Store"
-        description="Top open-source and privacy extensions verified for Manifest V3 and LastBrowser."
+        title={t('settings.panels.plugins.extensionTabRecommended')}
+        description={t('settings.panels.plugins.recommendationsUnverified')}
       >
+        <div className="extension-recommendation-controls">
+          <input type="search" value={recommendationSearch} onChange={(event) => { setRecommendationSearch(event.target.value); setRecommendationPage(0); }}
+            placeholder={t('settings.panels.plugins.recommendationSearch')} aria-label={t('settings.panels.plugins.recommendationSearch')} />
+          <div className="extension-category-list" role="group" aria-label={t('settings.panels.plugins.recommendationCategory')}>
+            {recommendationCategories.map((category) => <button type="button" key={category}
+              className={recommendationCategory === category ? 'active' : ''}
+              onClick={() => { setRecommendationCategory(category); setRecommendationPage(0); }}>
+              {category === 'all' ? t('settings.panels.plugins.recommendationAll') : category === 'privacy'
+                ? t('settings.panels.plugins.recommendationCategoryPrivacy') : category === 'passwords'
+                  ? t('settings.panels.plugins.recommendationCategoryPasswords') : t('settings.panels.plugins.recommendationCategoryEmail')}
+            </button>)}
+          </div>
+        </div>
         <div className="extension-store-grid">
-          {presets.map((preset) => {
-            const isInstalled = installedCwsIds.has(preset.cwsId.toLowerCase());
-            const isBusy = installingId === preset.id;
+          {currentRecommendations.map((candidate) => {
             return (
-              <div key={preset.id} className="extension-store-card">
+              <div key={candidate.id} className="extension-store-card">
                 <div className="extension-store-card-header">
-                  <span className="extension-store-icon">{preset.icon}</span>
+                  <span className="extension-store-icon"><Puzzle size={18} /></span>
                   <div className="extension-store-info">
                     <div className="extension-store-title-row">
-                      <strong>{preset.name}</strong>
-                      {preset.badge && <span className="extension-badge">{preset.badge}</span>}
+                      <strong>{candidate.name}</strong>
+                      <span className="extension-badge">{t('settings.panels.plugins.unverifiedNoInstall')}</span>
                     </div>
-                    <small className="extension-store-author">by {preset.author} · {preset.category}</small>
+                    <small className="extension-store-author">{candidate.category === 'privacy'
+                      ? t('settings.panels.plugins.recommendationCategoryPrivacy') : candidate.category === 'passwords'
+                        ? t('settings.panels.plugins.recommendationCategoryPasswords') : t('settings.panels.plugins.recommendationCategoryEmail')}</small>
                   </div>
                 </div>
-                <p className="extension-store-desc">{preset.description}</p>
+                <p className="extension-store-desc">{t('settings.panels.plugins.candidateReviewPending')}</p>
                 <div className="extension-store-actions">
-                  {preset.homepageUrl && (
-                    <a
-                      href={preset.homepageUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="extension-link-btn"
-                      title="Visit homepage"
-                    >
-                      <ExternalLink size={12} />
-                    </a>
-                  )}
+                  <a href={`https://chromewebstore.google.com/search/${encodeURIComponent(candidate.name)}`}
+                    target="_blank" rel="noopener noreferrer" className="extension-link-btn" title={t('settings.panels.plugins.openStoreListing')}>
+                    <ExternalLink size={12} />
+                  </a>
                   <button
                     type="button"
-                    className={`secondary-action compact ${isInstalled ? 'installed' : 'primary-accent'}`}
-                    disabled={isInstalled || isBusy}
-                    onClick={() => void handleInstallPreset(preset)}
+                    className="secondary-action compact"
+                    disabled
                   >
-                    {isBusy ? (
-                      <Loader2 size={13} className="spin" />
-                    ) : isInstalled ? (
-                      <>
-                        <Check size={13} />
-                        <span>Installed</span>
-                      </>
-                    ) : (
-                      <>
-                        <Download size={13} />
-                        <span>Add to LastBrowser</span>
-                      </>
-                    )}
+                    <span>{t('settings.panels.plugins.unverifiedNoInstall')}</span>
                   </button>
                 </div>
               </div>
             );
           })}
         </div>
+        {!currentRecommendations.length && <p role="status" className="extension-empty-list">{t('settings.panels.plugins.noRecommendations')}</p>}
+        {filteredRecommendations.length > recommendationPageSize && <nav className="extension-pagination" aria-label={t('settings.panels.plugins.recommendationPages')}>
+          <button type="button" className="secondary-action compact" disabled={recommendationPage === 0} onClick={() => setRecommendationPage((page) => Math.max(0, page - 1))}>{t('settings.panels.plugins.previousPage')}</button>
+          <span>{recommendationPage + 1} / {recommendationPageCount}</span>
+          <button type="button" className="secondary-action compact" disabled={recommendationPage + 1 >= recommendationPageCount} onClick={() => setRecommendationPage((page) => Math.min(recommendationPageCount - 1, page + 1))}>{t('settings.panels.plugins.nextPage')}</button>
+        </nav>}
       </SettingsCard>
+      </>}
+
+      {extensionTab === 'store' && <SettingsCard title={t('settings.panels.plugins.extensionTabStore')}
+        description={t('settings.panels.plugins.storeSearchDescription')}>
+        <form className="extension-store-search" onSubmit={(event) => openChromeWebStoreSearch(event)}>
+          <input type="search" value={storeSearch} onChange={(event) => setStoreSearch(event.target.value)}
+            placeholder={t('settings.panels.plugins.storeSearch')} aria-label={t('settings.panels.plugins.storeSearch')} />
+          <button type="submit" className="primary-action compact" disabled={!storeSearch.trim()}>
+            <Search size={14} /><span>{t('settings.panels.plugins.searchStore')}</span>
+          </button>
+        </form>
+      </SettingsCard>}
 
       {/* Developer & Direct Install */}
+      {extensionTab === 'installed' && <>
       <SettingsCard
         title="Install from Chrome Web Store or Local Disk"
         description="Paste any Chrome Web Store link or load an unpacked extension directory."
@@ -1901,6 +1945,8 @@ export function ExtensionsSettingsSection(): JSX.Element {
           </div>
         )}
       </SettingsCard>
+      </>}
+      </div>
     </div>
   );
 }
@@ -2124,13 +2170,15 @@ function VisionImpairedSettingsCard(): JSX.Element {
 export function normalizeSettingsSectionId(value: string): SettingsSectionId | null {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'extensions') return 'plugins';
+  if (normalized === 'advanced') return 'conversation';
+  if (normalized === 'local-ai') return 'providers';
   if (normalized === 'teamwork' && !AI_ORCHESTRATION_ENABLED) return null;
   return (Object.keys(SETTINGS_SECTIONS) as SettingsSectionId[]).find((key) => key === normalized) ?? null;
 }
 
 export function visibleSettingsSections(orchestrationEnabled = AI_ORCHESTRATION_ENABLED): Array<[SettingsSectionId, SettingsSectionMeta]> {
   return (Object.entries(SETTINGS_SECTIONS) as Array<[SettingsSectionId, SettingsSectionMeta]>)
-    .filter(([key]) => key !== 'teamwork' || orchestrationEnabled);
+    .filter(([key]) => key !== 'advanced' && key !== 'local-ai' && (key !== 'teamwork' || orchestrationEnabled));
 }
 
 export function mergeAppearanceSettings(
@@ -2697,6 +2745,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         isProviderModelQualified(providerId, settingsText(model.id || model.name || model.label, ''), activeProfileId, activeBackendProfileName || 'default', window.localStorage));
     }));
   }, [onboardingStatus, showUntestedBetas, allModelGroups, activeProfileId]);
+  const workspaceProviders: ProviderWorkspaceItem[] = [
+    ...providerOptions.map((option) => {
+      const presentation = providerPresentation(option.id);
+      return { id: option.id, label: option.label, mark: presentation.mark, color: presentation.color,
+        detail: option.id === activeProvider ? t('settings.panels.providers.active') : undefined };
+    }),
+    { id: 'local-ai', label: t('settings.panels.providers.localAi'), mark: '⌂', color: '#596b8a' }
+  ];
   const fallbackState = useApiState(() => window.lastbrowser.sidekick.getFallbackModel(), [ready], ready);
   const fallbackModelConfig = isRecord(fallbackState.data?.fallback_model) ? fallbackState.data.fallback_model : {};
   const fallbackModel = settingsText(fallbackModelConfig.model, '');
@@ -3486,9 +3542,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   action={<span className="settings-badge">{t('settings.panels.conversation.providerBadge', { provider: activeProvider || '—' })}</span>}
                 >
                   <div className="settings-field-grid">
-                    <SettingsField label={t('settings.panels.conversation.defaultModel')} description={t('settings.panels.conversation.defaultModelDescription')}>
-                      {renderModelOptions()}
-                    </SettingsField>
                     <SettingsField label={t('settings.panels.conversation.sendKey')} description={t('settings.panels.conversation.sendKeyDescription')}>
                       <select value={settingsText(draft.send_key ?? settings.send_key, 'enter')} onChange={(event) => updateDraftField('send_key', event.target.value)}>
                         <option value="enter">{t('settings.panels.conversation.enterNewline')}</option>
@@ -3518,36 +3571,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   </div>
                 </SettingsCard>
 
-                <SettingsCard
-                  title={t('settings.panels.conversation.fallbackModel')}
-                  description={t('settings.panels.conversation.fallbackDescription')}
-                  action={fallbackModel ? <span className="settings-badge">{t('settings.panels.conversation.active')}</span> : <span className="settings-badge">{t('settings.panels.conversation.none')}</span>}
-                >
-                  <div className="settings-field-grid">
-                    <SettingsField label={t('settings.panels.conversation.fallbackModel')} description={t('settings.panels.conversation.fallbackDisableDescription')}>
-                      <select
-                        value={fallbackModel}
-                        onChange={(event) => void saveFallbackModel(event.target.value)}
-                        disabled={!ready || saving}
-                      >
-                        <option value="">{t('settings.panels.conversation.none')}</option>
-                        {modelGroups.map((group) => {
-                          const providerLabel = settingsText(group.provider || group.provider_id || 'Provider');
-                          const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
-                          return (
-                            <optgroup key={`fb-${providerLabel}`} label={providerLabel}>
-                              {models.map((model) => {
-                                const id = settingsText(model.id || model.name || model.label);
-                                return <option key={id} value={id}>{settingsText(model.label || model.name || model.id)}</option>;
-                              })}
-                            </optgroup>
-                          );
-                        })}
-                      </select>
-                    </SettingsField>
-                  </div>
-                  <p className="settings-hint">{t('settings.panels.conversation.fallbackHint')}</p>
-                </SettingsCard>
               </>
             )}
 
@@ -4455,9 +4478,23 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             {section === 'local-ai' && <LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||''])} browserProfileId={activeProfileId} workspacePath={activeSpacePath}
               backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible/>}
             {section === 'providers' && (
-              <>
+              <div className="provider-workspace-editor">
                 <ProviderBetaCatalogToggle />
-                <SettingsCard
+                <ProviderWorkspace
+                  providers={workspaceProviders}
+                  initialProviderId={activeProvider || workspaceProviders[0]?.id || 'local-ai'}
+                  scopeKey={JSON.stringify([activeProfileId, activeSpacePath, activeBackendProfileName || 'default'])}
+                  providerListLabel={t('settings.panels.providers.title')}
+                  tabsAriaLabel={t('settings.panels.providers.workspaceTabsLabel')}
+                  emptyMessage={t('settings.panels.providers.workspaceEmpty')}
+                  tabLabels={{
+                    connection: t('settings.panels.providers.workspaceConnection'),
+                    models: t('settings.panels.providers.workspaceModels'),
+                    chat: t('settings.panels.providers.workspaceChatDefault')
+                  }}
+                  panel={(selectedProvider, tab) => {
+                    if (selectedProvider.id === 'local-ai' && tab === 'connection') return <LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||''])} browserProfileId={activeProfileId} workspacePath={activeSpacePath} backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible />;
+                    if (tab === 'connection') return <>                <SettingsCard
                   title={t('settings.panels.providers.title')}
                   description={t('settings.panels.providers.description')}
                   action={<span className="settings-badge">{activeProvider || t('settings.panels.providers.noneActive')}</span>}
@@ -4467,7 +4504,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   {!modelsState.loading && (
                     <div className="provider-status-list">
                       {!providerOptions.length && <p role="status">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
-                      {providerOptions.map((option) => {
+                      {providerOptions.filter((option) => option.id === selectedProvider.id).map((option) => {
                         const meta = providerPresentation(option.id);
                         const chatEvidence = getProviderChatEvidence(option.id, activeProfileId, activeBackendProfileName || 'default', window.localStorage);
                         // Catalog groups can contain static/offline fallback
@@ -4619,6 +4656,109 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   )}
                 </SettingsCard>
 
+</>;
+                    if (tab === 'models') return <>                {selectedProvider.id === 'local-ai' && <LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||''])} browserProfileId={activeProfileId} workspacePath={activeSpacePath} backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible />}
+                <SettingsCard title={t('settings.panels.providers.modelCatalog')} description={t('settings.panels.providers.modelCatalogDescription')}>
+                  {!modelGroups.length && !modelsState.loading && !modelsState.error && <p role="status">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
+
+                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
+                  {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
+                  {!modelsState.loading && !modelsState.error && (
+                    <div className="settings-model-summary">
+                      <span className="settings-badge">{t('settings.panels.providers.default')}: {settingsText(modelsState.data?.default_model, '—')}{settingsText(modelsState.data?.default_model) && !defaultModelQualified ? ` · ${t('settings.panels.providers.betaSavedChoice')}` : ''}</span>
+                      <span className="settings-badge">{t('settings.panels.providers.activeProvider')}: {activeProvider || '—'}</span>
+                      <span className="settings-badge">{t('settings.panels.providers.groups')}: {modelGroups.length}</span>
+                    </div>
+                  )}
+                </SettingsCard>
+
+                <SettingsCard title={t('settings.panels.providers.activeModels')} description={t('settings.panels.providers.activeModelsDescription')}>
+                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
+                  {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
+                  {!modelsState.loading && !modelsState.error && !allModelGroups.some(group =>
+                    (Array.isArray(group.models) && group.models.length > 0)
+                    || (Array.isArray(group.extra_models) && group.extra_models.length > 0))
+                    && <p role="status">{t('settings.panels.providers.noScannedModels')}</p>}
+                  {!modelsState.loading && !modelsState.error && allModelGroups.map(group => {
+                    const providerId = settingsText(group.provider_id || group.provider_id_canonical, '').trim();
+                    if (selectedProvider.id === 'local-ai'
+                      ? providerPresentation(providerId).category !== 'local'
+                      : providerId !== selectedProvider.id) return null;
+                    const scanned = [...(Array.isArray(group.models) ? group.models : []),
+                      ...(Array.isArray(group.extra_models) ? group.extra_models : [])].filter(isRecord);
+                    const models = [...new Map(scanned.map(modelEntry => {
+                      const rawId = settingsText(modelEntry.id || modelEntry.name, '').trim();
+                      return [parseProviderModelId(rawId, providerId).model, modelEntry] as const;
+                    }).filter(([modelId]) => Boolean(modelId))).values()];
+                    if (!providerId || !models.length) return null;
+                    return <fieldset className="settings-active-model-group" key={providerId}>
+                      <legend>{settingsText(group.provider, providerId)}</legend>
+                      {models.map(modelEntry => {
+                        const rawId = settingsText(modelEntry.id || modelEntry.name, '').trim();
+                        const modelId = parseProviderModelId(rawId, providerId).model;
+                        if (!modelId) return null;
+                        return <label className="settings-active-model-row" key={`${providerId}:${modelId}`}>
+                          <input type="checkbox" checked={isModelActive(window.localStorage,
+                            { browserProfileId: activeProfileId, backendProfileName: activeBackendProfileName || 'default' }, providerId, modelId)}
+                            onChange={event => {
+                              try {
+                                setModelActive(window.localStorage,
+                                  { browserProfileId: activeProfileId, backendProfileName: activeBackendProfileName || 'default' },
+                                  providerId, modelId, event.target.checked);
+                              } catch {
+                                showToast(t('settings.panels.providers.activeModelsSaveFailed'));
+                              }
+                            }} />
+                          <span>{settingsText(modelEntry.label || modelEntry.name, modelId)} <small>{modelId}</small></span>
+                        </label>;
+                      })}
+                    </fieldset>;
+                  })}
+                </SettingsCard>
+
+                <SettingsCard title={t('settings.panels.providers.advancedRouting')} description={t('settings.panels.providers.advancedRoutingDescription')}>
+                  <div className="settings-field-grid">
+                    <SettingsField label={t('settings.panels.providers.provider')} description={t('settings.panels.providers.providerDescription')}>
+                      <input value={settingsText(draft.provider ?? settings.provider, '')} disabled={!showUntestedBetas} onChange={(event) => updateDraftField('provider', event.target.value)} placeholder="openai-codex" />
+                    </SettingsField>
+                    <SettingsField label={t('settings.panels.providers.modelProvider')} description={t('settings.panels.providers.modelProviderDescription')}>
+                      <input value={settingsText(draft.model_provider ?? settings.model_provider, '')} disabled={!showUntestedBetas} onChange={(event) => updateDraftField('model_provider', event.target.value)} placeholder="openai-codex" />
+                    </SettingsField>
+                    <SettingsField label={t('settings.panels.providers.gateway')} description={t('settings.panels.providers.gatewayDescription')}>
+                      <input value={settingsText(draft.gateway ?? settings.gateway, '')} onChange={(event) => updateDraftField('gateway', event.target.value)} placeholder="default" />
+                    </SettingsField>
+                    <SettingsField label={t('settings.panels.providers.openaiCodex')} description={t('settings.panels.providers.openaiCodexDescription')}>
+                      <select value={settingsBoolean(draft.openai_codex_enabled ?? settings.openai_codex_enabled, false) ? 'true' : 'false'} disabled={!showUntestedBetas} onChange={(event) => updateDraftField('openai_codex_enabled', event.target.value === 'true')}>
+                        <option value="false">{t('settings.panels.providers.disabled')}</option>
+                        <option value="true">{t('settings.panels.providers.enabled')}</option>
+                      </select>
+                    </SettingsField>
+                    <SettingsField label={t('settings.panels.providers.apiRedaction')} description={t('settings.panels.providers.apiRedactionDescription')}>
+                      <select value={settingsBoolean(draft.api_redact_enabled ?? settings.api_redact_enabled, true) ? 'true' : 'false'} onChange={(event) => updateDraftField('api_redact_enabled', event.target.value === 'true')}>
+                        <option value="true">{t('settings.panels.providers.enabled')}</option>
+                        <option value="false">{t('settings.panels.providers.disabled')}</option>
+                      </select>
+                    </SettingsField>
+                  </div>
+                </SettingsCard>
+
+</>;
+                    return <>
+                      <SettingsCard title={t('settings.panels.conversation.defaults')} description={t('settings.panels.conversation.routingDescription')}>
+                        <SettingsField label={t('settings.panels.conversation.defaultModel')} description={t('settings.panels.conversation.defaultModelDescription')}>{renderModelOptions()}</SettingsField>
+                      </SettingsCard>
+                      {selectedProvider.id === activeProvider && <SettingsCard title={t('settings.panels.conversation.fallbackModel')} description={t('settings.panels.conversation.fallbackDescription')}>
+                        <SettingsField label={t('settings.panels.conversation.fallbackModel')} description={t('settings.panels.conversation.fallbackDisableDescription')}>
+                          <select value={fallbackModel} onChange={(event) => void saveFallbackModel(event.target.value)} disabled={!ready || saving}>
+                            <option value="">{t('settings.panels.conversation.none')}</option>
+                            {modelGroups.map((group) => { const providerLabel = settingsText(group.provider || group.provider_id || 'Provider'); const groupModels = Array.isArray(group.models) ? group.models.filter(isRecord) : []; return <optgroup key={`fb-${providerLabel}`} label={providerLabel}>{groupModels.map((model) => {const id = settingsText(model.id || model.name || model.label); return <option key={id} value={id}>{settingsText(model.label || model.name || model.id)}</option>;})}</optgroup>; })}
+                          </select>
+                        </SettingsField>
+                        <p className="settings-hint">{t('settings.panels.conversation.fallbackHint')}</p>
+                      </SettingsCard>}
+                    </>;
+                  }}
+                />
                 {openRouterModalOpen && (
                   <div className="settings-modal-overlay" onClick={() => setOpenRouterModalOpen(false)}>
                     <div className="settings-modal-box" onClick={(event) => event.stopPropagation()}>
@@ -4881,88 +5021,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   </div>
                 )}
 
-                <SettingsCard title={t('settings.panels.providers.modelCatalog')} description={t('settings.panels.providers.modelCatalogDescription')}>
-                  {!modelGroups.length && !modelsState.loading && !modelsState.error && <p role="status">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
 
-                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
-                  {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
-                  {!modelsState.loading && !modelsState.error && (
-                    <div className="settings-model-summary">
-                      <span className="settings-badge">{t('settings.panels.providers.default')}: {settingsText(modelsState.data?.default_model, '—')}{settingsText(modelsState.data?.default_model) && !defaultModelQualified ? ` · ${t('settings.panels.providers.betaSavedChoice')}` : ''}</span>
-                      <span className="settings-badge">{t('settings.panels.providers.activeProvider')}: {activeProvider || '—'}</span>
-                      <span className="settings-badge">{t('settings.panels.providers.groups')}: {modelGroups.length}</span>
-                    </div>
-                  )}
-                </SettingsCard>
-
-                <SettingsCard title={t('settings.panels.providers.activeModels')} description={t('settings.panels.providers.activeModelsDescription')}>
-                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
-                  {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
-                  {!modelsState.loading && !modelsState.error && !allModelGroups.some(group =>
-                    (Array.isArray(group.models) && group.models.length > 0)
-                    || (Array.isArray(group.extra_models) && group.extra_models.length > 0))
-                    && <p role="status">{t('settings.panels.providers.noScannedModels')}</p>}
-                  {!modelsState.loading && !modelsState.error && allModelGroups.map(group => {
-                    const providerId = settingsText(group.provider_id || group.provider_id_canonical, '').trim();
-                    const scanned = [...(Array.isArray(group.models) ? group.models : []),
-                      ...(Array.isArray(group.extra_models) ? group.extra_models : [])].filter(isRecord);
-                    const models = [...new Map(scanned.map(modelEntry => {
-                      const rawId = settingsText(modelEntry.id || modelEntry.name, '').trim();
-                      return [parseProviderModelId(rawId, providerId).model, modelEntry] as const;
-                    }).filter(([modelId]) => Boolean(modelId))).values()];
-                    if (!providerId || !models.length) return null;
-                    return <fieldset className="settings-active-model-group" key={providerId}>
-                      <legend>{settingsText(group.provider, providerId)}</legend>
-                      {models.map(modelEntry => {
-                        const rawId = settingsText(modelEntry.id || modelEntry.name, '').trim();
-                        const modelId = parseProviderModelId(rawId, providerId).model;
-                        if (!modelId) return null;
-                        return <label className="settings-active-model-row" key={`${providerId}:${modelId}`}>
-                          <input type="checkbox" checked={isModelActive(window.localStorage,
-                            { browserProfileId: activeProfileId, backendProfileName: activeBackendProfileName || 'default' }, providerId, modelId)}
-                            onChange={event => {
-                              try {
-                                setModelActive(window.localStorage,
-                                  { browserProfileId: activeProfileId, backendProfileName: activeBackendProfileName || 'default' },
-                                  providerId, modelId, event.target.checked);
-                              } catch {
-                                showToast(t('settings.panels.providers.activeModelsSaveFailed'));
-                              }
-                            }} />
-                          <span>{settingsText(modelEntry.label || modelEntry.name, modelId)} <small>{modelId}</small></span>
-                        </label>;
-                      })}
-                    </fieldset>;
-                  })}
-                </SettingsCard>
-
-                <SettingsCard title={t('settings.panels.providers.advancedRouting')} description={t('settings.panels.providers.advancedRoutingDescription')}>
-                  <div className="settings-field-grid">
-                    <SettingsField label={t('settings.panels.providers.provider')} description={t('settings.panels.providers.providerDescription')}>
-                      <input value={settingsText(draft.provider ?? settings.provider, '')} disabled={!showUntestedBetas} onChange={(event) => updateDraftField('provider', event.target.value)} placeholder="openai-codex" />
-                    </SettingsField>
-                    <SettingsField label={t('settings.panels.providers.modelProvider')} description={t('settings.panels.providers.modelProviderDescription')}>
-                      <input value={settingsText(draft.model_provider ?? settings.model_provider, '')} disabled={!showUntestedBetas} onChange={(event) => updateDraftField('model_provider', event.target.value)} placeholder="openai-codex" />
-                    </SettingsField>
-                    <SettingsField label={t('settings.panels.providers.gateway')} description={t('settings.panels.providers.gatewayDescription')}>
-                      <input value={settingsText(draft.gateway ?? settings.gateway, '')} onChange={(event) => updateDraftField('gateway', event.target.value)} placeholder="default" />
-                    </SettingsField>
-                    <SettingsField label={t('settings.panels.providers.openaiCodex')} description={t('settings.panels.providers.openaiCodexDescription')}>
-                      <select value={settingsBoolean(draft.openai_codex_enabled ?? settings.openai_codex_enabled, false) ? 'true' : 'false'} disabled={!showUntestedBetas} onChange={(event) => updateDraftField('openai_codex_enabled', event.target.value === 'true')}>
-                        <option value="false">{t('settings.panels.providers.disabled')}</option>
-                        <option value="true">{t('settings.panels.providers.enabled')}</option>
-                      </select>
-                    </SettingsField>
-                    <SettingsField label={t('settings.panels.providers.apiRedaction')} description={t('settings.panels.providers.apiRedactionDescription')}>
-                      <select value={settingsBoolean(draft.api_redact_enabled ?? settings.api_redact_enabled, true) ? 'true' : 'false'} onChange={(event) => updateDraftField('api_redact_enabled', event.target.value === 'true')}>
-                        <option value="true">{t('settings.panels.providers.enabled')}</option>
-                        <option value="false">{t('settings.panels.providers.disabled')}</option>
-                      </select>
-                    </SettingsField>
-                  </div>
-                </SettingsCard>
-
-              </>
+              </div>
             )}
 
             {section === 'teamwork' && AI_ORCHESTRATION_ENABLED && (

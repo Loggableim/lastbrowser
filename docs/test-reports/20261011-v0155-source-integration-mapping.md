@@ -386,3 +386,126 @@ Keep PR55's candidate failure and its uploaded source/package binding intact;
 wait for the tester to provide the exact pushed commit/PR, independent review,
 triaged combined gates, and new package evidence. No source change, merge,
 re-sign, or release action is taken here.
+
+## Latest local review and integration delta (2026-10-11 17:53 CEST)
+
+This section supersedes earlier statements above that PR56 was waiting for a
+review, that no remote P004 PR existed, and that PR58/60 work was not included
+in the local integration branch. These are local source integrations only;
+the current PR55 remote head and previously uploaded signed files are unchanged.
+
+| PR | Exact reviewed head | Integration / review state |
+| --- | --- | --- |
+| 56 | `c65619aa9cd00ace7d0dde7ebed00884ca3a5311` | GitHub PR is closed, not merged. Its changes were already present in the earlier PR55 source snapshot. Independent exact-head re-review found the two reported OpenCode source issues fixed. VM acceptance remains open. |
+| 58 | `2557dd54ced5a5a514749d030510d86aadf57c2f` | Independently reviewed; integrated locally by `b49fca75db312513bd6b6f24f5a23b020c91144f`. |
+| 60 | `ff7e1b4658d52f2430e66cef39042a5d6af7aadc` | Independent review found no actionable source issue; integrated locally by `394dc5452a424e44cbeb53d64c978277d8508020f`. UI source review/screenshots are not packaged or VM acceptance. |
+| 61 | `1b0a3d080fef5893a463ee23c0da90bac30ea029` | Local independent review found no actionable source defects; 37 focused Python tests passed, while 6 `test_native_chat_auto.py` cases could not import `pydantic` under worker Python 3.14. A second independent review raises two P2 follow-ups below. Integrated locally by `f2c113c506ac2756c4fd9ff4a06addad12fa9353`; not pushed. |
+| 63 | `ebe3b0582a1611bba7bbcbb79ba3f43c5fb28fe7` | Not integrated. Independent review found a P2 titlebar overlap: the overlay inset follows `--titlebar-height`, but accessibility styles raise the rendered titlebar to 54/62px without changing that variable. Fix and exact-head re-review are required. |
+
+### Remaining PR61 review and candidate blockers
+
+A second independent review of PR61 notes that OpenCode Go chat has no
+`x-opencode-session` header. This does not establish an inference failure, but
+Go inference must remain unverified; human login and inference are also still
+open. The same review could not audit the reported 15-failure split (10
+baseline / 5 stale assertions): the referenced
+`evidence/p004-0155-20261011/05-baseline-triage.md` is absent from the
+published tree, and the full suite was not rerun after the assertion updates.
+QuickChat early Stop also lacks a latest live retest. The independent reviewer
+reported no complete candidate-acceptance verdict.
+
+The local PR55 integration head is now
+`f2c113c506ac2756c4fd9ff4a06addad12fa9353` (merge commits for #58, #60, and
+#61 atop remote base `1fcc2ca00d3d81a8d82e5fe5537baa9424db1957`). This local
+head has not yet received the combined AGENTS gate run or been pushed. Do not
+build or upload the next installer until the PR63 correction and any remaining
+v0.1.55 Settings/Plugins worker PR are reviewed and integrated, the suite
+failure evidence is reconciled, and the full combined gates pass on the exact
+final source/version commit. Keep the existing signed candidate and its P004
+FAIL binding intact. The authorized next artifact is a separately named,
+visibly UNSIGNED private VM installer; no public release or release-branch
+merge is part of this handoff.
+
+## Follow-up after latest exact-head reviews (2026-10-11)
+
+PR #61 advanced from `1c8ea6dccd16955cc58f2051917ecb60f27b36c9` to
+`74d2e54722e43859c4485e3a9db47453491d53c3`. Independent exact-head review
+found no blocking source defect in the native provider catalog, wire-model IDs,
+grant persistence, profile binding, or session-header paths. The new source
+head was integrated locally in merge commit `818ac12f`. This is source-level
+evidence only. OpenCode human login and real inference remain unverified; the
+owner reports renewed human approval is needed after the earlier version
+discarded the grant.
+
+The follow-up review noted that the backend's sanitized catalog details
+(`field_names`, `packages`, `gateway_paths`) are currently dropped by the
+renderer; the UI retains only the safe error code. This is a diagnostic
+handoff gap, not a newly identified auth/scope defect. It remains useful to
+clarify before claiming actionable diagnostics.
+
+PR #63 remains outside the local branch at head
+`510a734bc96c9d11326725257468c1628ef14eb4`. Its CSS fix passed source-level
+re-review, including accessibility titlebar minimums, but the added test
+checks CSS text rather than calculated geometry. A computed sensor/overlay
+geometry probe is still required before integration.
+
+PR #64 remains outside the local branch at head
+`8cd7d7bfc0942b0fadb70288bb8f604cae90054f`. Its two reviewed P2s remain open:
+provider selection can survive a profile switch from the previous profile,
+and Extensions tabs are not semantically connected to their panels.
+
+The PR61 owner still owes an auditable per-test locale baseline triage, a full
+suite result on the final combined head, and QuickChat early-Stop live evidence.
+The suite is reported as 2,135 passed / 10 locale failures, with those ten said
+to reproduce on the base; this report does not treat that as a green suite or
+as independently reproduced evidence. At the time this status section was written, the combined gates had not been run on merge commit `818ac12f`; see the incremental gate result below. Keep the existing signed
+candidate and its VM FAIL binding intact. The authorized next artifact remains
+a newly named, visibly UNSIGNED installer for the existing VM tester only.
+
+### Incremental combined gates on `818ac12f`
+
+This gate run covers the local integration through PR61 `74d2e547`; PR63 and
+PR64 remain excluded. `npm test` passed all 234 files / 2,160 tests. The ten
+failures cited by the earlier PR61 report were not reproduced in this run; the
+base comparison artifact is still absent, so the historical baseline claim is
+not independently auditable. `npm run verify:store` passed 39 checks with 0
+failures and 2 warnings. The desktop build passed TypeScript and Vite, with
+the existing large-chunk advisory. `python -m compileall -q services/sidekick`
+passed. Focused OpenCode device and inference tests passed 38/38 when invoked
+from `services/sidekick`, which gives their subprocess the expected package
+root; an initial invocation from the repository root had 1 subprocess import
+failure because the child process did not inherit pytest's conftest-only
+`sys.path` change. No installer package was built.
+
+## Combined v0.1.55 follow-up: PR63/64 and renderer evidence (2026-10-11)
+
+The local integration now includes the reviewed PR63 head
+`510a734bc96c9d11326725257468c1628ef14eb4` and PR64 head
+`8cd7d7bfc0942b0fadb70288bb8f604cae90054f`. PR56 remains closed/unmerged on
+GitHub; its reviewed fix is already an ancestor of the local integration.
+PR61 head `74d2e54722e43859c4485e3a9db47453491d53c3` remains included. These
+are local source integrations; no GitHub merge or publication is implied.
+
+The PR64 follow-up resets ProviderWorkspace selection when the resolved
+provider changes after a profile switch, and links each Extensions tab to its
+tabpanel with selected-tab focus and arrow-key navigation. The corresponding
+Electron renderer smokes passed on the final working tree. The PR63 geometry
+smoke loaded the actual renderer stylesheet in Electron and measured the
+titlebar, edge sensor, and sidebar overlay for all three densities with the
+enlarged topbar off, at 54px, and at 62px: all nine combinations stayed aligned.
+
+| Final combined gate | Result |
+| --- | --- |
+| `npm test` | PASS; 238 test files / 2,167 tests. Includes profile-switch renderer smoke, extension tab/panel and keyboard smoke, and nine computed Zen geometry cases. A few DOM tests reported Vite dev-server port fallback because another local listener occupied 5173/5174; tests completed successfully. |
+| `npm run verify:store` | PASS; 39 passed / 2 warnings / 0 failures. The warnings remain provisional Store screenshot localization and no final package supplied for binary signature inspection. |
+| `npm --workspace apps/desktop run build` | PASS; main TypeScript, renderer typecheck, and Vite production build. Existing 2.50 MB JS chunk advisory remains. |
+| `python -m compileall -q services/sidekick` | PASS; exit code 0. |
+| `git diff --check` | PASS before merge completion. |
+
+The full source suite did not reproduce the previously reported ten locale
+failures, but the original per-test base-triage evidence is still absent, so
+that historical comparison is not independently confirmed. Live OpenCode
+login/inference and QuickChat early-Stop remain unverified. This gate set is
+source-level evidence only; the new private VM installer has not yet been
+built or tested. The previous signed candidate's P004 FAIL remains bound to
+that earlier artifact and is not revised by these source tests.

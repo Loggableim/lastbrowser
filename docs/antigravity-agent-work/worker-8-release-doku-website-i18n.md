@@ -138,7 +138,7 @@
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Freigegeben (`run_lock_since`: `null`)
 - **Letzter Rapport:** `2026-10-11T10:32:00+02:00`
-- **Aktiver Cron-Task:** `task-189` (`30 * * * *`, Daemon)
+- **Aktiver Cron-Task:** `task-101` (`30 * * * *`, Daemon)
 
 ---
 

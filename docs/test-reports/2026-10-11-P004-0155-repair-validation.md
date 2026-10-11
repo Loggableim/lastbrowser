@@ -48,3 +48,11 @@ Chat repair commit `195a622f` was pushed and published as draft [PR #61](https:/
 During OpenCode handoff, the live Settings provider list omitted both OpenCode entries, making its existing CLI-login controls unreachable. The authoritative onboarding catalog has now been repaired to expose Zen and Go in pushed commit `e0c2c0ee`, included in PR #61; ten focused backend tests, one renderer catalog test and final build passed. The official native OpenCode Zen login was launched directly with the same profile-isolated XDG data location while this UI repair was being published. The user must enter credentials themselves; no successful authentication or inference is claimed yet. No login-dialog automation was performed.
 
 No credentials, auth files, provider configuration or databases are included. Only synthetic test evidence is retained under `evidence/p004-0155-20261011/`.
+
+## Settings login live verification (follow-up)
+
+After restarting the repaired app, both OpenCode Go and Zen are visibly present under Settings > AI & Local Models with the session beta catalog enabled. The first actual Go login click exposed another defect: the Main WebUI bridge rejected the supplied saved Space binding. Fixed in pushed commit `1b0a3d08` (PR #61). Login/status/cancel now use the same trusted-shell and saved-profile binding path as provider settings; malformed bodies, duplicate query parameters, caller authentication headers and missing bindings remain rejected. Fourteen bridge and ten OpenCode Python tests passed; final desktop build and Python compileall passed.
+
+Live retest through the actual Settings button succeeded: OpenCode Go displayed `Complete the login in the OpenCode window.`, a Cancel button, and disabled parallel login controls. The official CLI was started by LastBrowser, not separately by a shell workaround. Human authentication and inference remain pending; no credentials were entered or read.
+
+A read-only inference-path audit also found no implemented `x-opencode-session` header. The current official OpenCode Go documentation requests a stable conversation header and the client's own User-Agent. This remains an inference compatibility item to verify/fix before claiming Go chat success. Source: https://opencode.ai/docs/go/#where-can-i-use-it .

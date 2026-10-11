@@ -1,7 +1,7 @@
 # antigravity-worker-6 – Statusbericht & Ledger
 
 **Rolle:** Bug-Kurator und Bugsucher (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :10 (`Cron: 10 * * * *`, aktiver Daemon-Task `task-84`)  
+**Taktung:** 1 Lauf pro Stunde, immer um :10 (`Cron: 10 * * * *`, aktiver Daemon-Task `task-35`)  
 **Aktueller Lauf:** Run 8 – 11. Oktober 2026, 09:10–09:15 Uhr CEST  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Vorbereitung für Folgeversion `0.1.53`)  
@@ -85,7 +85,7 @@ Alle Pflichtgates wurden im stündlichen Durchlauf um 09:10 Uhr vollständig und
 - **State-Datei:** [`.agents/state/antigravity-worker-6.json`](file:///c:/projekte/lastbrowser/.agents/state/antigravity-worker-6.json)
 - **Lauf-Zähler (`runs_total`):** 8
 - **Fehler:** Keiner (`last_error`: `null`)
-- **Aktiver Cron-Task:** `task-84` (`Cron: 10 * * * *`, Daemon)
+- **Aktiver Cron-Task:** `task-35` (`Cron: 10 * * * *`, Daemon)
 - **Lock-Status:** Freigegeben (`run_lock_since`: `null`)
 - **Letzter Rapport:** `2026-10-11T09:15:00+02:00` (`last_rapport_date`)
 

@@ -158,6 +158,35 @@ Funktionen, die Lastbrowser zum produktivsten und ergonomischsten Browser auf Wi
 
 ---
 
+## Nutzerwünsche – nach den laufenden Fehlerbehebungen
+
+### Wiederverwendbare Browserworkflows und Ablaufrecorder
+
+* **Einordnung:** Nice-to-have für eine spätere Version. Keine Runtime-Umsetzung im aktuellen Fehlerbehebungs- oder Release-Zyklus. Reihenfolge: zuerst wenige feste, überprüfte Workflows; danach ein Recorder und Editor, die auf denselben geprüften Aktionen aufbauen.
+* **Aufnehmen und pflegen:** Nutzer startet und beendet die Aufnahme bewusst, benennt den Ablauf und kann einzelne Schritte vor dem Speichern bearbeiten oder entfernen. Erfasst werden ausschließlich unterstützte Navigationen, Klicks und Eingaben. Gespeicherte Abläufe lassen sich ansehen, ändern, duplizieren und wiederholen.
+* **Ablaufmodell:** Schritte bilden eine nachvollziehbare Liste aus Aktion, Ziel und Ergebnis. Eingaben können als Variablen angelegt werden, damit persönliche Werte nicht fest eingebettet sind. Für jeden Schritt ist eine konkrete Erfolgsbedingung festlegbar. Ein Folgeschritt beginnt erst, wenn die Bedingung erfüllt ist; andernfalls wird der Schritt sichtbar als fehlgeschlagen markiert.
+* **Kontrollierter Lauf:** Wiederholungen sind begrenzt. Eine Vorschau/Dry-run zeigt geplante Schritte und Variablen, ohne sie auszuführen. Während eines Laufs kann der Nutzer verständlich pausieren, fortsetzen oder abbrechen. Fehler und die letzte abgeschlossene Aktion bleiben sichtbar.
+* **Datenschutz:** Passwörter, Zugangstoken und andere als sensibel markierte Eingaben werden nie aufgezeichnet oder gespeichert. Sensible Felder werden ausgelassen und nicht als Klartextvariablen übernommen. Vor dem Speichern sieht der Nutzer die erfassten Aktionen und Eingaben und kann die Aufnahme verwerfen.
+* **Akzeptanzkriterien für eine spätere Umsetzung:** Aufnahme ist nur nach ausdrücklichem Start aktiv; Navigation/Klick/Eingabe ergeben editierbare Schritte; Variablen ersetzen konkrete Eingabewerte; Erfolgsbedingungen werden pro Schritt geprüft; Wiederholungsgrenzen, Pause und Abbruch greifen; Dry-run löst keine Seitenaktion aus; sensible Eingaben erscheinen weder im gespeicherten Ablauf noch in Vorschau oder Protokoll.
+
+### Chat-Denkanimation mit Sidekick-Icon und Gehirn-Emoji
+
+* **Wunsch vom 11.10.2026:** Den rotierenden Denk-Indikator während einer Antwort durch dasselbe Sidekick-Icon ersetzen, das bereits neben der Assistentenantwort in der Zeile darüber erscheint.
+* **Darstellung:** Das Sidekick-Icon pulsiert sanft; innerhalb der zugehörigen Sprechblase erscheint ein 🧠-Emoji.
+* **Verhalten:** Der Indikator ist nur während der laufenden Antwort sichtbar und endet bei Abschluss, Abbruch oder Fehler. Bei reduzierter Bewegung bleibt das Icon statisch.
+* **Priorisierung:** Zurückgestellte Wunschfunktion; zuerst die laufenden Fehlerbehebungen abschließen. Noch nicht umgesetzt, ohne Versionszusage und keine Voraussetzung für das aktuelle Release.
+
+### Browser-Startseite „Luminous Launchpad“ (Planung v0.1.56)
+
+* **Einordnung:** Geplanter Startseiten-Ausbau für v0.1.56; keine Runtime-Umsetzung in v0.1.55 und keine Aussage, dass Mockup-Funktionen bereits existieren.
+* **Begrenzter Umfang:** Nur Inhalt der leeren Browser-Startseite und zugehörige lokale Styles/Wallpaper-Anbindung. Browser-Shell, Sidebar, Topbar und Dock bleiben unverändert; historische Shell-/Spacefarben-QuickWins sind nicht Teil dieses Vorhabens. Variante 1/Luminous Launchpad ist die Basis; gewünscht sind dunkle, farbige navy Oberflächen, Cyan-/Violett-/Pink-Akzente, sichtbare Wallpapers, dezente Aura/Glas-Anmutung und weniger pillenförmige, leicht gerundete Controls (ca. 6–8 px). Keine Variante ist final abgenommen; Auswahl und Ausarbeitung bleiben reviewbar.
+* **Plan und Referenzen:** [Umsetzungsplan](plans/startpage-luminous-launchpad-v0.1.56.md), [Designquellen und Wallpaper-Referenzen](design-references/v0.1.56/README.md). Die Original-Spezifikation, der Slim-Installer-Plan und drei UI-Mockups liegen im selben Referenzordner.
+* **Ziel:** Begrüßung/Uhr/Datum, eine Intent-Omnibox für Navigation und Sidekick, Space-Karten mit ausschließlich Space-Name und verifizierter aktiver Agentenzahl, Speed Dial sowie Wallpaper-Galerie mit manueller Steuerung und optionaler Rotation. Nur echte, korrekt profil-/spacegebundene laufende Agenten zählen; fehlende oder unvollständige Daten bedeuten „nicht verfügbar“, nie eine erfundene Null. Resume-Karten, Tabvorschauen, Tabzahlen und Session-Infos gehören nicht zu diesem Auftrag. Mockupwerte 2/1/0 sind Beispieldaten, keine Live-Statusaussage.
+* **Wallpaper-Entscheidung offen:** Sechs unveränderte originale JPG-Quelldateien sind in den Referenzen erhalten. Das belegt weder Nutzungsrechte noch technische Prüfung oder Integration. Vor Implementierung bleibt zu entscheiden, ob Wallpaper lokal gebündelt, über HTTPS mit geprüftem Cache oder hybrid ausgeliefert werden; die beiden historischen Quellen widersprechen sich dazu.
+* **Vertrauensgrenze:** Mockup-Inhalte sind Demonstrationsmaterial. Historische Behauptungen über Abnahme, Barrierefreiheit oder fertige Umsetzung sind keine aktuellen Produktnachweise. Die öffentliche Website und GitHub-README sind nicht Gegenstand dieses Plans.
+
+---
+
 ## 8. Umsetzungs-Reihenfolge & Roadmap-Phasen
 
 | Phase | Fokus | Kern-Deliverables | Status |

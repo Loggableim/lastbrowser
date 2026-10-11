@@ -5,6 +5,15 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.55] - 2026-10-11
+
+### Features and fixes
+- Integrate reviewed keyboard, mute, QuickChat, startup readiness, background update, and profile-scoped model work from PRs #45, #48, #49, #50/#54, #51, #52, and #53.
+- Add PR #56 standard-chat scoped model routing and profile-scoped OpenCode CLI login, including fixes for cancellation status and profile switching.
+
+### Candidate status
+- Prepared as a private VM test candidate. Standard-chat timeout/recovery, History error retention, Stop behavior, and live OpenCode login still require VM acceptance. This entry does not represent a public release.
+
 ## [0.1.53] - 2026-10-11
 
 ### Fixes

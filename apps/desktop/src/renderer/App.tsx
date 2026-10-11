@@ -1755,8 +1755,12 @@ function AppContent(): JSX.Element {
           toggleExtensionHub();
           break;
         case 'toggle-sidebar':
-          cycleSidebarMode();
-          setContextSidebarCollapsed((prev) => !prev);
+          if (usePanelStore.getState().sidebarMode === 'hidden') {
+            setZenSidebarRevealed((prev) => !prev);
+          } else {
+            cycleSidebarMode();
+            setContextSidebarCollapsed((prev) => !prev);
+          }
           break;
         case 'toggle-command-palette':
           usePanelStore.getState().toggleCommandPalette();

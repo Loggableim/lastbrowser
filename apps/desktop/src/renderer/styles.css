@@ -19542,6 +19542,12 @@ html[data-a11y-enlarged-topbar='true'] .modern-titlebar {
 html[data-a11y-enlarged-topbar='true'][data-a11y-min-target='64'] .modern-titlebar {
   min-height: 62px;
 }
+html[data-a11y-enlarged-topbar='true'] .app-shell.zen-mode {
+  --zen-titlebar-inset: max(var(--titlebar-height, 42px), 54px);
+}
+html[data-a11y-enlarged-topbar='true'][data-a11y-min-target='64'] .app-shell.zen-mode {
+  --zen-titlebar-inset: max(var(--titlebar-height, 42px), 62px);
+}
 html[data-a11y-enlarged-topbar='true'] .titlebar-tool-btn,
 html[data-a11y-enlarged-topbar='true'] .titlebar-summarize-btn,
 html[data-a11y-enlarged-topbar='true'] .adblock-stats-pill {

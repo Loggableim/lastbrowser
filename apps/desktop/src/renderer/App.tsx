@@ -87,6 +87,7 @@ import {
 } from './bookmarks.js';
 import type { BrowserBookmark } from './bookmarks.js';
 import { mergeBookmarks } from './bookmark-io.js';
+import { createTabMuteControl, handleTabMuteShortcut, syncTabMuteToWebview, type TabMuteControl } from './tab-mute-controls.js';
 import {
   BrowserTab,
   browserStartUrl,
@@ -2780,18 +2781,19 @@ function AppContent(): JSX.Element {
     setTabs((current) => updateTabMediaPlaying(current, tabId, isPlayingAudio));
   }
 
-  function toggleTabMute(tabId: string): void {
-    const target = tabs.find((t) => t.id === tabId);
+  const toggleTabMute = useCallback((tabId: string): void => {
+    const target = useTabStore.getState().tabs.find((t) => t.id === tabId);
     const nextMuted = !target?.isMuted;
     setTabs((current) => updateTabMuted(current, tabId, nextMuted));
     if (tabId === activeTab.id) {
-      try {
-        webviewRef.current?.setAudioMuted(nextMuted);
-      } catch {
-        // ignore
-      }
+      syncTabMuteToWebview(webviewRef.current, nextMuted);
     }
-  }
+  }, [activeTab.id, setTabs]);
+
+  const tabMuteControl = useMemo(
+    () => createTabMuteControl(activeTab, toggleTabMute),
+    [activeTab.id, activeTab.isMuted, toggleTabMute]
+  );
 
   function moveTab(tabId: string, targetTabId: string): void {
     setTabs((current) => reorderTabs(current, tabId, targetTabId));
@@ -4906,17 +4908,8 @@ function AppContent(): JSX.Element {
                   onToggleDownloads={() => usePanelStore.getState().setDownloadsOpen(!usePanelStore.getState().downloadsOpen)}
                   historyOpen={usePanelStore.getState().historyOpen}
                   onToggleHistory={() => usePanelStore.getState().setHistoryOpen(!usePanelStore.getState().historyOpen)}
-                  muted={false}
-                  onToggleMute={() => {
-                    const view = webviewRef.current;
-                    if (isWebviewReady(view) && view && typeof view.isAudioMuted === 'function' && typeof view.setAudioMuted === 'function') {
-                      try {
-                        view.setAudioMuted(!view.isAudioMuted());
-                      } catch {
-                        // The guest may begin navigating after the click.
-                      }
-                    }
-                  }}
+                  muted={tabMuteControl.muted}
+                  onToggleMute={tabMuteControl.onToggleMute}
                   dockMode={actionBarDock}
                   onSetDockMode={setActionBarDock}
                   overlayTools={(
@@ -5218,6 +5211,7 @@ function AppContent(): JSX.Element {
                   onToggleDevTools={toggleDevTools}
                   onDevToolsOpenChange={setDevToolsOpen}
                   onZoomFactorChange={setActiveZoomFactor}
+                  tabMuteControl={tabMuteControl}
                   activeProfile={activeProfile}
                   profiles={profiles}
                   activeProfileId={activeProfileId}
@@ -5593,6 +5587,7 @@ function AppContent(): JSX.Element {
               onToggleDevTools={toggleDevTools}
               onDevToolsOpenChange={setDevToolsOpen}
               onZoomFactorChange={setActiveZoomFactor}
+              tabMuteControl={tabMuteControl}
               activeProfile={activeProfile}
               profiles={profiles}
               activeProfileId={activeProfileId}
@@ -5800,6 +5795,7 @@ function BrowserMain({
   onToggleDevTools,
   onDevToolsOpenChange,
   onZoomFactorChange,
+  tabMuteControl,
   activeProfile,
   profiles,
   activeProfileId,
@@ -5888,6 +5884,7 @@ function BrowserMain({
   onToggleDevTools: () => void;
   onDevToolsOpenChange: (isOpen: boolean) => void;
   onZoomFactorChange: (factor: number) => void;
+  tabMuteControl: TabMuteControl;
   activeProfile: BrowserProfile;
   profiles: BrowserProfile[];
   activeProfileId: string;
@@ -6366,11 +6363,7 @@ function BrowserMain({
   useEffect(() => {
     const view = webviewRef.current;
     if (!view || typeof view.setAudioMuted !== 'function') return;
-    try {
-      view.setAudioMuted(Boolean(activeTab.isMuted));
-    } catch {
-      // ignore
-    }
+    syncTabMuteToWebview(view, activeTab.isMuted);
   }, [activeTab.id, activeTab.isMuted, webviewMountKey, webviewReady]);
 
   // ── Guest navigation events ──────────────────────────────────────────────
@@ -6522,37 +6515,12 @@ function BrowserMain({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onReopenClosedTab]);
 
-  // ── DevTools + per-tab mute ──────────────────────────────────────────────
-  // Both are per-guest: the webContents is recreated on profile/tab switch, so
-  // the state must be re-read whenever the element is (re)created.
-  const [muted, setMuted] = useState(false);
-
-  const toggleMute = useCallback(() => {
-    const view = webviewRef.current;
-    if (!isWebviewReady(view) || !view || typeof view.setAudioMuted !== 'function') return;
-    setMuted((current) => {
-      const next = !current;
-      try {
-        view.setAudioMuted(next);
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }, []);
-
-  // Re-read both flags when the guest is recreated.
+  // Re-read DevTools state when the guest is recreated. Mute is owned by the
+  // active BrowserTab and synchronized to the guest by the effect above.
   useEffect(() => {
     const view = webviewRef.current;
     if (!view || allWebviewRefs.current[activeTab.id] !== view || !isWebviewReady(view)) {
       onDevToolsOpenChange(false);
-      setMuted(Boolean(activeTab.isMuted));
-      return;
-    }
-    try {
-      setMuted(typeof view.isAudioMuted === 'function' ? view.isAudioMuted() : false);
-    } catch {
-      // A navigation can revoke guest readiness between the event and this effect.
       return;
     }
     return subscribeDevToolsState(
@@ -6562,7 +6530,7 @@ function BrowserMain({
         && isWebviewReady(view),
       onDevToolsOpenChange
     );
-  }, [webviewMountKey, webviewReady, webviewReadinessRevision, activeTab.id, activeTab.isMuted, onDevToolsOpenChange]);
+  }, [webviewMountKey, webviewReady, webviewReadinessRevision, activeTab.id, onDevToolsOpenChange]);
 
   // F12 toggles DevTools; Ctrl/Cmd+M mutes the tab.
   useEffect(() => {
@@ -6572,11 +6540,7 @@ function BrowserMain({
         onToggleDevTools();
         return;
       }
-      if ((event.ctrlKey || event.metaKey) && (event.key === 'm' || event.key === 'M')) {
-        event.preventDefault();
-        toggleMute();
-        return;
-      }
+      if (handleTabMuteShortcut(event, tabMuteControl.onToggleMute)) return;
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === 'x' || event.key === 'X')) {
         event.preventDefault();
         usePanelStore.getState().toggleExtensionHub();
@@ -6585,7 +6549,7 @@ function BrowserMain({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onToggleDevTools, toggleMute]);
+  }, [onToggleDevTools, tabMuteControl]);
 
   // ── Find in page ─────────────────────────────────────────────────────────
   // Ctrl+F is muscle memory; without it long pages are unnavigable. The guest
@@ -6856,8 +6820,8 @@ function BrowserMain({
           onToggleDownloads={() => usePanelStore.getState().setDownloadsOpen(!usePanelStore.getState().downloadsOpen)}
           historyOpen={historyOpen}
           onToggleHistory={() => usePanelStore.getState().setHistoryOpen(!usePanelStore.getState().historyOpen)}
-          muted={muted}
-          onToggleMute={toggleMute}
+          muted={tabMuteControl.muted}
+          onToggleMute={tabMuteControl.onToggleMute}
           dockMode={usePanelStore.getState().actionBarDock}
           onSetDockMode={(dock) => usePanelStore.getState().setActionBarDock(dock)}
         />

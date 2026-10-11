@@ -1,8 +1,8 @@
 # antigravity-worker-8 – Statusbericht & Ledger
 
 **Rolle:** Release-, Doku-, Website- und i18n-Worker (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :30 (`Cron: 30 * * * *`, Daemon Task aktiv: `task-95`)  
-**Letzter Lauf:** 11. Oktober 2026, 05:30–05:40 Uhr (Lauf 5 / Cron Iteration 1)  
+**Taktung:** 1 Lauf pro Stunde, immer um :30 (`Cron: 30 * * * *`, Daemon Task aktiv: `task-101`)  
+**Letzter Lauf:** 11. Oktober 2026, 05:30–05:44 Uhr (Lauf 5 / Cron Iteration 1)  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Hotfix-Kandidat: `0.1.53`)  
 
@@ -104,8 +104,8 @@
 - **Lauf-Zähler (`runs_total`):** 5
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Freigegeben (`run_lock_since`: `null`)
-- **Letzter Rapport:** `2026-10-11T05:40:00+02:00`
-- **Aktiver Cron-Task:** `task-95` (`30 * * * *`, Daemon)
+- **Letzter Rapport:** `2026-10-11T05:44:00+02:00`
+- **Aktiver Cron-Task:** `task-101` (`30 * * * *`, Daemon)
 
 ---
 

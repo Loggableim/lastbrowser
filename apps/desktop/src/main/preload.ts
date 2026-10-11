@@ -342,10 +342,14 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
     },
     detachTab: (payload: { tab: unknown; guestWebContentsId: number; screenX: number; screenY: number; spacePath?: string }) =>
       ipcRenderer.invoke('lastbrowser:window:detachTab', payload),
-    getStartupState: () => ipcRenderer.invoke('lastbrowser:window:getStartupState') as Promise<{
-      isDetachedWindow: boolean;
-      transfer: { transferId: string; tab: unknown; spacePath?: string } | null;
-    }>,
+    getStartupState: async () => {
+      const startup = await ipcRenderer.invoke('lastbrowser:window:getStartupState') as {
+        isDetachedWindow: boolean;
+        transfer: { transferId: string; tab: unknown; spacePath?: string } | null;
+        launchIcon: 'sidekick-01' | 'sidekick-02' | 'sidekick-03' | 'sidekick-04' | 'sidekick-05' | 'sidekick-06';
+      };
+      return { ...startup, sandboxed: process.sandboxed === true };
+    },
     ackDetachedTab: (transferId: string, tabId: string, guestWebContentsId: number) => ipcRenderer.invoke('lastbrowser:window:ackDetachedTab', transferId, tabId, guestWebContentsId) as Promise<boolean>,
     getDisplays: () => ipcRenderer.invoke('lastbrowser:window:getDisplays'),
     onInitDetachedTab: (callback: (payload: { tab: unknown; spacePath?: string }) => void) => {

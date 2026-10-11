@@ -596,7 +596,12 @@ declare global {
         onMaximizeChange?: (callback: (maximized: boolean) => void) => () => void;
         onFullScreenChange?: (callback: (fullscreen: boolean) => void) => () => void;
         detachTab?: (payload: { tab: unknown; guestWebContentsId: number; screenX: number; screenY: number; spacePath?: string }) => Promise<{ success: boolean; windowId?: number; error?: string }>;
-        getStartupState?: () => Promise<{ isDetachedWindow: boolean; transfer: { transferId: string; tab: unknown; spacePath?: string } | null }>;
+        getStartupState?: () => Promise<{
+          isDetachedWindow: boolean;
+          transfer: { transferId: string; tab: unknown; spacePath?: string } | null;
+          launchIcon: 'sidekick-01' | 'sidekick-02' | 'sidekick-03' | 'sidekick-04' | 'sidekick-05' | 'sidekick-06';
+          sandboxed: boolean;
+        }>;
         ackDetachedTab?: (transferId: string, tabId: string, guestWebContentsId: number) => Promise<boolean>;
         getDisplays?: () => Promise<Array<{ id: number; bounds: { x: number; y: number; width: number; height: number }; workArea: { x: number; y: number; width: number; height: number }; scaleFactor: number }>>;
         onInitDetachedTab?: (callback: (payload: { tab: unknown; spacePath?: string }) => void) => () => void;

@@ -11,12 +11,16 @@ const preloadPath = path.resolve(process.cwd(), 'src/main/preload.ts');
 describe('desktop access password lock', () => {
   it('gates the browser shell before rendering the app and its webviews', () => {
     const source = readFileSync(appPath, 'utf8');
-    const gate = source.indexOf('if (!canRenderBrowserForAccessAuth(');
-    const lockedScreen = source.indexOf('className="access-lock-screen"', gate);
-    const browserShell = source.indexOf('className={`app-shell panel-', gate);
-    expect(gate).toBeGreaterThanOrEqual(0);
-    expect(lockedScreen).toBeGreaterThan(gate);
-    expect(browserShell).toBeGreaterThan(lockedScreen);
+    const authGate = source.indexOf('const startupAuthAllowsShell = canRenderBrowserForAccessAuth(');
+    const startupGate = source.indexOf("if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged)", authGate);
+    const startupScreen = source.indexOf('<StartupScreen', startupGate);
+    const browserShell = source.indexOf('className={`app-shell panel-', startupGate);
+    expect(authGate).toBeGreaterThanOrEqual(0);
+    expect(startupGate).toBeGreaterThan(authGate);
+    expect(startupScreen).toBeGreaterThan(startupGate);
+    expect(browserShell).toBeGreaterThan(startupScreen);
+    expect(source).toContain('retryContent={accessAuthForm}');
+    expect(source).toContain('canRenderBrowserForAccessAuth(accessAuthChecked');
     expect(source).toContain('getAccessAuthStatus()');
     expect(source).toContain('loginAccessPassword({ password: accessPassword })');
   });

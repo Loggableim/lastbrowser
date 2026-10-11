@@ -13,6 +13,7 @@ import { isCdpEnabled, resolveCdpPort, setPersistedCdpEnabled } from './cdp.js';
 import { loadCdpPreference, saveCdpPreference } from './cdp-settings.js';
 import { moduleDirname } from './module-path.js';
 import { SidecarServices, appResourcesDir, resolveServiceLayout } from './services.js';
+import { getStartupLaunchIcon } from './startup-launch-state.js';
 import { loadSetupState, saveSetupState } from './setup-store.js';
 import {
   addSupermemoryDocument,
@@ -939,7 +940,8 @@ function registerIpc(): void {
     const transfer = detachedTabTransfers.get(contentsId);
     return {
       isDetachedWindow: detachedWindowWebContents.has(contentsId),
-      transfer: transfer ? { transferId: transfer.transferId, ...transfer.payload } : null
+      transfer: transfer ? { transferId: transfer.transferId, ...transfer.payload } : null,
+      launchIcon: getStartupLaunchIcon()
     };
   });
   ipcMain.handle('lastbrowser:window:ackDetachedTab', async (event, transferId: string, tabId: string, guestWebContentsId?: number) => {

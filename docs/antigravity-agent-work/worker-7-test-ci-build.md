@@ -1,8 +1,8 @@
 # antigravity-worker-7 – Statusbericht & Ledger
 
 **Rolle:** Test-, CI- und Build-Worker (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :20 (`Cron: 20 * * * *`, Daemon Task aktiv: `task-126`)  
-**Letzter Lauf:** 11. Oktober 2026, 05:34 Uhr (Iteration 3 / Lauf 4)  
+**Taktung:** 1 Lauf pro Stunde, immer um :20 (`Cron: 20 * * * *`, Daemon Task aktiv: `task-127`)  
+**Letzter Lauf:** 11. Oktober 2026, 05:38 Uhr (Iteration 3 / Lauf 5)  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52`  
 
@@ -37,7 +37,7 @@
   - `apps/desktop/tests/independent-browser-connections.test.ts`: Timeout für `vi.waitFor` auf 10s angehoben (gegen asynchrone Dispatch-Verzögerungen unter Last).
   - `apps/desktop/tests/windows-package-signatures.test.ts`: PowerShell Subprozess-Timeout auf 30s erhöht (7/7 PASS).
   - `apps/desktop/vitest.config.ts`: `testTimeout` und `hookTimeout` auf 25s gesetzt (Schutz gegen I/O-Spitzen bei 215 Testdateien).
-- **Daemon-Status:** Dauerhafter Hintergrund-Daemon `task-126` für stündlichen Cron-Job (`20 * * * *`) aktiv.
+- **Daemon-Status:** Dauerhafter Hintergrund-Daemon `task-127` für stündlichen Cron-Job (`20 * * * *`) aktiv.
 - **Fazit:** 100% grüne Qualitätsgates, null Regressionen über das gesamte Monorepo.
 
 ### Lauf 3 – Iteration 2 (11. Oktober 2026, 05:20–05:25 Uhr)

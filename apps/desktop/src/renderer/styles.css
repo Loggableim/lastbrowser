@@ -1609,6 +1609,18 @@ body.sidebar-resizing * {
   object-fit: contain;
 }
 
+.message-avatar--user {
+  border-color: transparent;
+  background: transparent;
+}
+
+.message-avatar--user img {
+  width: 19px;
+  height: 19px;
+  filter: grayscale(1);
+  opacity: .5;
+}
+
 .message-body {
   display: grid;
   gap: 10px;

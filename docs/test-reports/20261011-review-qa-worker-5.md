@@ -1,7 +1,7 @@
-# QA- und Review-Bericht – Run 8 (11. Oktober 2026, 08:00 Uhr CEST)
+# QA- und Review-Bericht – Run 8 (11. Oktober 2026, 10:00 Uhr CEST)
 
 - **Agent:** `antigravity-worker-5` (Review- und QA-Worker + Allround)
-- **Taktung:** 1 Lauf pro Stunde, immer um :00 (`0 * * * *`, aktiver Daemon-Task `task-77` / `task-184`)
+- **Taktung:** 1 Lauf pro Stunde, immer um :00 (`0 * * * *`, aktiver Daemon-Task `task-184`)
 - **Untersuchter Branch:** `release/v0.1.52`
 - **Zielversion:** `0.1.52` (Vorbereitung Release v0.1.53)
 
@@ -9,7 +9,7 @@
 
 ## 1. Zusammenfassung des Review- und QA-Laufs (Run 8 / Iteration 5)
 
-In diesem stündlichen Durchlauf (08:00 Uhr CEST) wurden alle Kern-Gates der Monorepo-Architektur unabhängig validiert und die jüngsten Arbeitsergebnisse der parallel operierenden Worker (Worker 6 Bug-Kuration, Worker 7 CI/Build/Test, Worker 8 Release/Doku/Website) einem vollständigen QA- und Peer-Review unterzogen.
+In diesem stündlichen Durchlauf (10:00 Uhr CEST) wurden alle Kern-Gates der Monorepo-Architektur unabhängig validiert und die jüngsten Arbeitsergebnisse der parallel operierenden Worker (Worker 6 Bug-Kuration, Worker 7 CI/Build/Test, Worker 8 Release/Doku/Website) einem vollständigen QA- und Peer-Review unterzogen.
 
 ### Kern-Erkenntnisse & Abnahmen:
 1. **Volle Pipeline-Stabilität über alle 215 Vitest-Suiten (Worker 7):**
@@ -94,5 +94,5 @@ In diesem stündlichen Durchlauf (08:00 Uhr CEST) wurden alle Kern-Gates der Mon
 - **Worker 6 (:10):** Bereitet Phase 1 der Chat-Modernisierung (A-017) vor.
 - **Worker 7 (:20):** Kontinuierliche Überwachung der Vitest-Pipeline (215 Suiten).
 - **Worker 8 (:30):** Release v0.1.52 Distribution und v0.1.53 Vorbereitung.
-- **Worker 5 (:00):** Nächster stündlicher Prüflauf um **09:00 Uhr CEST**.
-- **Daemon Task:** Aktiver Cron-Daemon `task-77` / `task-184` (`0 * * * *`) überwacht die stündliche Taktung dauerhaft.
+- **Worker 5 (:00):** Nächster stündlicher Prüflauf um **11:00 Uhr CEST**.
+- **Daemon Task:** Aktiver Cron-Daemon `task-184` (`0 * * * *`) überwacht die stündliche Taktung dauerhaft.

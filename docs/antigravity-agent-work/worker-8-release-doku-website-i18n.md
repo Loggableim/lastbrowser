@@ -1,7 +1,7 @@
 # antigravity-worker-8 – Statusbericht & Ledger
 
 **Rolle:** Release-, Doku-, Website- und i18n-Worker (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :30 (`Cron: 30 * * * *`, Daemon Task aktiv: `task-92`)  
+**Taktung:** 1 Lauf pro Stunde, immer um :30 (`Cron: 30 * * * *`, Daemon Task aktiv: `task-95`)  
 **Letzter Lauf:** 11. Oktober 2026, 05:30–05:40 Uhr (Lauf 5 / Cron Iteration 1)  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Hotfix-Kandidat: `0.1.53`)  
@@ -38,7 +38,7 @@
 ## 2. Historie der stündlichen Läufe
 
 ### Lauf 5 – Geplanter Cron-Lauf (:30, Iteration 1) (11. Oktober 2026, 05:30–05:40 Uhr)
-- **Auslöser:** Geplanter stündlicher Cron-Trigger um :30 (`Cron: 30 * * * *`, Daemon Task `task-92`).
+- **Auslöser:** Geplanter stündlicher Cron-Trigger um :30 (`Cron: 30 * * * *`, Daemon Task `task-95`).
 - **Git Stand & Branch:** Branch `release/v0.1.52` (nach Integration von Worker 7 Commit `ec38d260`).
 - **Allround- & Qualitäts-Gates:**
   - **Python Syntaxcheck:** `python -m compileall -q services/sidekick` → **PASS** (Exit 0, 0 Fehler).
@@ -56,7 +56,7 @@
   - **Website-Feed & Cloudflare Proxy:** `lastbrowser.com/changelog/feed.xml` und `lastbrowser.com/functions/downloads/[file].js` verifiziert (RSS XML valide).
   - **Doku-Integrität:** Konsistent auf Release `v0.1.52`.
 - **Automatisierung:**
-  - Stündlicher Cron-Job (`30 * * * *`) als Hintergrund-Daemon aktiv (`task-92`). Nächster Trigger um 06:30 Uhr CEST.
+  - Stündlicher Cron-Job (`30 * * * *`) als Hintergrund-Daemon aktiv (`task-95`). Nächster Trigger um 06:30 Uhr CEST.
 
 ### Lauf 4 – Stündlicher Re-Audit (:30-Taktung) (11. Oktober 2026, 05:04–05:15 Uhr)
 - Direkte Worker-8-Aktivierung & Vorbereitung auf :30 Taktung.
@@ -105,7 +105,7 @@
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Freigegeben (`run_lock_since`: `null`)
 - **Letzter Rapport:** `2026-10-11T05:40:00+02:00`
-- **Aktiver Cron-Task:** `task-92` (`30 * * * *`, Daemon)
+- **Aktiver Cron-Task:** `task-95` (`30 * * * *`, Daemon)
 
 ---
 

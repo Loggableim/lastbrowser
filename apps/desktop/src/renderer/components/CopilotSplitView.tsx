@@ -122,7 +122,7 @@ export interface CopilotSplitViewProps {
   status?: string;
   allowWorkflows?: boolean;
   onSwitchToSpaceAssistant?: () => void;
-  onSendMessage: (text: string, reasoningEffort?: string) => void;
+  onSendMessage: (text: string, reasoningEffort?: string) => void | boolean | Promise<void | boolean>;
   onStopChat?: () => void;
   activeUrl?: string;
   activeTitle?: string;
@@ -172,6 +172,7 @@ export function CopilotSplitView({
   const activeModelRevision = useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [inputText, setInputText] = useState('');
+  const sendPendingRef = useRef(false);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [workflowsMenuOpen, setWorkflowsMenuOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
@@ -637,12 +638,17 @@ export function CopilotSplitView({
 
   if (!isOpen) return null;
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const trimmed = inputText.trim();
-    if (!trimmed || busy || modelGateReason !== null) return;
-    onSendMessage(trimmed, effectiveReasoningEffort || undefined);
-    setInputText('');
+    if (!trimmed || busy || sendPendingRef.current || modelGateReason !== null) return;
+    sendPendingRef.current = true;
+    try {
+      const accepted = await onSendMessage(trimmed, effectiveReasoningEffort || undefined);
+      if (accepted !== false) setInputText(current => current.trim() === trimmed ? '' : current);
+    } finally {
+      sendPendingRef.current = false;
+    }
   }
 
   function handleCopy(code: string, id: string) {

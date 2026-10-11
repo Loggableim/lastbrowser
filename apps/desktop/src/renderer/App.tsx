@@ -2909,8 +2909,9 @@ function AppContent(): JSX.Element {
     }
   }
 
-  async function readCapturedSpaceModelSelection(context: { profileId: string; spacePath: string }) {
-    const resolved = await assistantController.resolveScope({ browserProfileId: context.profileId, workspacePath: context.spacePath || null });
+  async function readCapturedSpaceModelSelection(context: { profileId: string; spacePath: string; backendProfileName?: string | null }) {
+    const resolved = await assistantController.resolveScope({ browserProfileId: context.profileId, workspacePath: context.spacePath || null },
+      context.backendProfileName ?? activeBackendProfileNameRef.current ?? undefined);
     if (!resolved.ok) throw new Error(resolved.error.message);
     const selection = await assistantController.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope,
       payload: { action: 'get', includeCatalog: true } });
@@ -3373,7 +3374,7 @@ function AppContent(): JSX.Element {
     let failed = false;
 
     try {
-      const modelSelection = await readCapturedSpaceModelSelection(turnContext);
+      const modelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: activeBackendProfileNameRef.current });
       const selectedModel = capturedCommand?.context.model || modelSelection.model || undefined;
       const selectedProvider = capturedCommand?.context.modelProvider || modelSelection.provider || undefined;
 
@@ -3612,7 +3613,7 @@ function AppContent(): JSX.Element {
     if (browserCommand && turnContext.sessionId) {
       const selectionRevision = activeSpaceSelectionRevisionRef.current;
       try {
-        const selection = await readCapturedSpaceModelSelection(turnContext);
+        const selection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName });
         const mode = await requestChatMode(request => window.lastbrowser.sidekick.chatMode(request), {
           action: 'get', sessionId: turnContext.sessionId, workspacePath: turnContext.spacePath, browserProfileId: turnContext.profileId
         }, selection.scope);
@@ -3641,7 +3642,7 @@ function AppContent(): JSX.Element {
 
     let chatModelSelection: Awaited<ReturnType<typeof readCapturedSpaceModelSelection>>;
     try {
-      chatModelSelection = await readCapturedSpaceModelSelection(turnContext);
+      chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName });
     } catch (error) {
       setChatError(error instanceof Error ? error.message : String(error));
       return false;
@@ -4187,12 +4188,12 @@ function AppContent(): JSX.Element {
     });
   }
 
-  async function sendQuickChat(prompt: string, context?: { pageUrl?: string; pageTitle?: string; selectedText?: string; pageText?: string }): Promise<void> {
+  async function sendQuickChat(prompt: string, context?: { pageUrl?: string; pageTitle?: string; selectedText?: string; pageText?: string }): Promise<boolean> {
     const activeScopeKey = `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`;
     if (quickChatBusyRef.current || quickChatStopPendingRef.current || quickChatResetPendingRef.current
       || quickChatBindingScopeKeyRef.current !== null && quickChatBindingScopeKeyRef.current !== activeScopeKey
       || quickChatTranscriptScopeKeyRef.current !== null && quickChatTranscriptScopeKeyRef.current !== activeScopeKey
-      || !prompt.trim()) return;
+      || !prompt.trim()) return false;
     const generation = quickChatGenerationRef.current;
     quickChatStopPendingRef.current = true;
     const chatId = quickChatIdRef.current;
@@ -4202,15 +4203,15 @@ function AppContent(): JSX.Element {
     const capturedScopeKey = `${browserProfileId}::${workspacePath || ''}::${backendProfileName || ''}`;
     let scopedSelection: Awaited<ReturnType<typeof readCapturedSpaceModelSelection>>;
     try {
-      scopedSelection = await readCapturedSpaceModelSelection({ profileId: browserProfileId, spacePath: workspacePath || '' });
+      scopedSelection = await readCapturedSpaceModelSelection({ profileId: browserProfileId, spacePath: workspacePath || '', backendProfileName });
     } catch (error) {
       quickChatStopPendingRef.current = false;
       setQuickChatErrorForScope(capturedScopeKey, error instanceof Error ? error.message : String(error));
-      return;
+      return false;
     }
     if (capturedScopeKey !== `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`) {
       quickChatStopPendingRef.current = false;
-      return;
+      return false;
     }
     const preferredSelection = resolvePreferredChatModelSelection({
       spaceSelection: scopedSelection,
@@ -4230,7 +4231,7 @@ function AppContent(): JSX.Element {
     if (!activeChoice.choice && !virtualChoice) {
       quickChatStopPendingRef.current = false;
       setQuickChatErrorForScope(capturedScopeKey, t('settings.panels.providers.noActiveModels'));
-      return;
+      return false;
     }
     const selection = virtualChoice ? preferredSelection
       : { model: activeChoice.choice!.id, provider: activeChoice.choice!.providerId };
@@ -4259,7 +4260,7 @@ function AppContent(): JSX.Element {
       quickChatStartPromiseRef.current = pendingStart;
       const started = await startPromise;
       if (quickChatStartPromiseRef.current === pendingStart) quickChatStartPromiseRef.current = null;
-      if (quickChatResetPendingRef.current) return;
+      if (quickChatResetPendingRef.current) return false;
       const currentScopeKey = `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`;
       if (!isCurrentQuickChatGeneration(quickChatGenerationRef.current, generation)
         || chatId !== quickChatIdRef.current || capturedScopeKey !== currentScopeKey) {
@@ -4272,7 +4273,7 @@ function AppContent(): JSX.Element {
         else {
           setQuickChatErrorForScope(capturedScopeKey, quickChatResetFailureCopy[locale]);
         }
-        return;
+        return false;
       }
       quickChatAwaitingStartRef.current = false;
       const binding = { quickChatId: started.quickChatId, streamId: started.streamId, scope: started.scope };
@@ -4281,10 +4282,11 @@ function AppContent(): JSX.Element {
       setQuickChatBinding(binding);
       const buffered = quickChatBufferedEventsRef.current.splice(0);
       for (const event of buffered) processQuickChatEvent(event, generation);
+      return true;
     } catch (error) {
       if (quickChatStartPromiseRef.current === pendingStart) quickChatStartPromiseRef.current = null;
       if (quickChatResetPendingRef.current || !isCurrentQuickChatGeneration(quickChatGenerationRef.current, generation)
-        || chatId !== quickChatIdRef.current) return;
+        || chatId !== quickChatIdRef.current) return false;
       quickChatAwaitingStartRef.current = false;
       quickChatBufferedEventsRef.current = [];
       const message = error instanceof Error ? error.message : String(error);
@@ -4292,6 +4294,7 @@ function AppContent(): JSX.Element {
       updateQuickChatMessagesForScope(capturedScopeKey, current => finishLiveChatMessageWithError(current, message));
       quickChatBusyRef.current = false;
       setQuickChatBusy(false);
+      return false;
     }
   }
 
@@ -5315,7 +5318,7 @@ function AppContent(): JSX.Element {
                 status={isQuickChatScopeVisible(quickChatStatusScopeKeyRef.current, `${activeProfileId}::${activeSpacePath}::${activeBackendProfileName || ''}`) ? quickChatStatus : ''}
                 allowWorkflows={false}
                 onSwitchToSpaceAssistant={() => setQuickChatMode(false)}
-                onSendMessage={text => void sendQuickChat(text)}
+                onSendMessage={text => sendQuickChat(text)}
                 onStopChat={() => void stopQuickChat()}
                 activeUrl={activeTab.url}
                 activeTitle={activeTab.title}

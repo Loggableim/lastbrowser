@@ -4,6 +4,8 @@ Date: 2026-10-11 (Europe/Vienna). Integration owner: Codex.
 Branch: `codex/v0155-integration-20261011`.
 Target base: `release/v0.1.52` at `7d3d52bb58114296b66b7eeef290b67581b226bc`.
 Integrated source snapshot: `520fae6c770ea9a6e5ab12383d48fa9fb983009f`.
+Overall review PR: [#55](https://github.com/Loggableim/lastbrowser/pull/55),
+targeting the exact base SHA above.
 
 This is an isolated source integration for review. The primary checkout and
 author worktrees were left untouched. No version, CHANGELOG, package,

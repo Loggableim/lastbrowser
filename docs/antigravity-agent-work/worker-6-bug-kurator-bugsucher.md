@@ -1,7 +1,7 @@
 # antigravity-worker-6 – Statusbericht & Ledger
 
 **Rolle:** Bug-Kurator und Bugsucher (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :10 (`Cron: 10 * * * *`, Daemon Task aktiv: `task-80`)  
+**Taktung:** 1 Lauf pro Stunde, immer um :10 (`Cron: 10 * * * *`, Daemon Task aktiv: `task-84`)  
 **Aktueller Lauf:** Run 5 – 11. Oktober 2026, 05:10–05:18 Uhr CEST  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Hotfix-Kandidat: `0.1.53`)  
@@ -81,7 +81,7 @@ BUG | B-001 / LB-003 | Update-Status meldet ENOENT: app-update.yml in Settings |
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Nach Abschluss des Laufs freigegeben (`run_lock_since`: `null`)
 - **Zuletzt rapportiert:** `2026-10-11T05:18:00+02:00`
-- **Taktung:** Immer um `:10` (`Cron: 10 * * * *`, aktiver Daemon `task-80`)
+- **Taktung:** Immer um `:10` (`Cron: 10 * * * *`, aktiver Daemon `task-84`)
 
 ---
 

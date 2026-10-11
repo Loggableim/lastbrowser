@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 // ---------------------------------------------------------------------------
 // Environment shim for Node environment (localStorage & document)
@@ -62,6 +63,8 @@ import {
   getDomainFromUrl,
   getEffectiveZoomForUrl,
   saveDomainZoom,
+  getNextPageZoomFactor,
+  dispatchBrowserZoomShortcut,
   applyDesktopAppearance,
   watchSystemThemeChanges,
   mergeDesktopSettings,
@@ -321,6 +324,50 @@ describe('Appearance Relaunch & Design-System Engine', () => {
     it('remembers domain-specific zoom factor overrides', () => {
       saveDomainZoom('github.com', 1.15);
       expect(getEffectiveZoomForUrl('https://github.com/Loggableim/lastbrowser', 100)).toBe(1.15);
+    });
+
+    it('restores separate domain overrides and falls back to the configured default', () => {
+      saveDomainZoom('alpha.example', 1.25);
+      saveDomainZoom('beta.example', 0.8);
+
+      expect(getEffectiveZoomForUrl('https://alpha.example/path', 100)).toBe(1.25);
+      expect(getEffectiveZoomForUrl('https://beta.example/other', 100)).toBe(0.8);
+      expect(getEffectiveZoomForUrl('https://new.example', 110)).toBe(1.1);
+    });
+
+    it('steps through browser zoom levels and respects both limits', () => {
+      expect(getNextPageZoomFactor(1, 1)).toBe(1.1);
+      expect(getNextPageZoomFactor(1.1, -1)).toBe(1);
+      expect(getNextPageZoomFactor(0.5, -1)).toBe(0.5);
+      expect(getNextPageZoomFactor(3, 1)).toBe(3);
+    });
+
+    it('routes the main-process zoom actions through the shared React zoom handlers', () => {
+      const calls: string[] = [];
+      const handlers = {
+        stepZoom: (direction: 1 | -1) => calls.push(`step:${direction}`),
+        applyZoom: (factor: number) => calls.push(`apply:${factor}`)
+      };
+
+      expect(dispatchBrowserZoomShortcut('zoom-in', handlers)).toBe(true);
+      expect(dispatchBrowserZoomShortcut('zoom-out', handlers)).toBe(true);
+      expect(dispatchBrowserZoomShortcut('zoom-reset', handlers)).toBe(true);
+      expect(dispatchBrowserZoomShortcut('reload', handlers)).toBe(false);
+      expect(calls).toEqual(['step:1', 'step:-1', 'apply:1']);
+    });
+
+    it('wires the active zoom state into the topbar indicator and reset action', () => {
+      const appSource = readFileSync(new URL('../src/renderer/App.tsx', import.meta.url), 'utf8');
+      const topbarStart = appSource.indexOf('variant="topbar"');
+      const topbarEnd = appSource.indexOf('onFindOpen=', topbarStart);
+      const topbar = appSource.slice(topbarStart, topbarEnd);
+
+      expect(topbarStart).toBeGreaterThanOrEqual(0);
+      expect(topbarEnd).toBeGreaterThan(topbarStart);
+      expect(topbar).toContain('zoomFactor={activeZoomFactor}');
+      expect(topbar).toContain("onResetZoom={() => dispatchBrowserZoomShortcut('zoom-reset', zoomShortcutHandlersRef.current)}");
+      expect(appSource).toContain('dispatchBrowserZoomShortcut(event.action, zoomShortcutHandlersRef.current)');
+      expect(appSource).toContain('onZoomFactorChange(zoomFactor)');
     });
   });
 

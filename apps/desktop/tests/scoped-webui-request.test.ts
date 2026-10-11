@@ -18,6 +18,40 @@ const selectedRequest = { path: '/api/teamwork/config', scopeSelection: selectio
 afterEach(() => clearAccessAuthCookie());
 
 describe('Main-owned Teamwork profile binding', () => {
+  it('binds OpenCode login, polling and cancellation to the captured saved profile', async () => {
+    const { event, options } = fixture();
+    const loginId = 'a'.repeat(32);
+    const requests = [
+      { method: 'POST', path: '/api/providers/opencode-auth/login', body: { provider: 'opencode-go' } },
+      { method: 'POST', path: '/api/providers/opencode-auth/login', body: { provider: 'opencode-zen' } },
+      { method: 'GET', path: `/api/providers/opencode-auth/status?login_id=${loginId}` },
+      { method: 'GET', path: '/api/providers/opencode-auth/status', query: { login_id: loginId } },
+      { method: 'POST', path: '/api/providers/opencode-auth/cancel', body: { login_id: loginId } }
+    ];
+    for (const request of requests) {
+      await requestScopedWebui(event, { ...request, scopeSelection: selection }, options);
+      expect(options.request).toHaveBeenLastCalledWith({ ...request, profile: 'alpha' });
+      await expect(requestScopedWebui(event, request, options)).rejects.toThrow(/Space selection/);
+    }
+    expect(options.lookupBinding).toHaveBeenCalledTimes(requests.length);
+  });
+
+  it('rejects malformed or profile-injecting OpenCode auth requests before transport', async () => {
+    const { event, options } = fixture();
+    const loginId = 'a'.repeat(32);
+    for (const request of [
+      { method: 'POST', path: '/api/providers/opencode-auth/login', body: { provider: 'openai' } },
+      { method: 'POST', path: '/api/providers/opencode-auth/login', body: { provider: ['opencode-go'] } },
+      { method: 'POST', path: '/api/providers/opencode-auth/login', body: { provider: 'opencode-go', profile: 'beta' } },
+      { method: 'GET', path: '/api/providers/opencode-auth/login' },
+      { method: 'GET', path: `/api/providers/opencode-auth/status?login_id=${loginId}&profile=beta` },
+      { method: 'GET', path: `/api/providers/opencode-auth/status?login_id=${loginId}&login_id=${loginId}` },
+      { method: 'POST', path: '/api/providers/opencode-auth/cancel', body: { login_id: '../foreign' } },
+      { method: 'POST', path: '/api/providers/opencode-auth/login', body: { provider: 'opencode-go' }, headers: { Cookie: 'foreign' } }
+    ]) await expect(requestScopedWebui(event, { ...request, scopeSelection: selection }, options)).rejects.toThrow();
+    expect(options.request).not.toHaveBeenCalled();
+  });
+
   it('resolves the captured Space and sends only its saved backend profile', async () => {
     const { event, options } = fixture();
     await expect(requestScopedWebui(event, { ...selectedRequest, method: 'POST', body: { enabled: true } }, options))

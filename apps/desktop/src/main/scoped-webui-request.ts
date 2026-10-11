@@ -28,6 +28,27 @@ const keyProviderIds = new Set(['alibaba', 'anthropic', 'deepseek', 'gemini', 'g
   'minimax', 'minimax-cn', 'mistralai', 'morph', 'nvidia', 'ollama', 'ollama-cloud', 'openai', 'openrouter',
   'opencode-go', 'opencode-zen', 'x-ai', 'xiaomi', 'zai']);
 const ollamaTestProviderIds = new Set(['ollama', 'ollama-cloud', 'xiaomi']);
+const openCodeAuthEndpoints = new Set(['/api/providers/opencode-auth/login',
+  '/api/providers/opencode-auth/status', '/api/providers/opencode-auth/cancel']);
+
+function isOpenCodeAuthRequest(raw: Record<string, unknown>, endpoint: string, url: URL): boolean {
+  const method = raw.method ?? 'GET';
+  if (endpoint === '/api/providers/opencode-auth/status' && method === 'GET') {
+    if (raw.body !== undefined) return false;
+    const entries = raw.query === undefined ? [...url.searchParams.entries()]
+      : url.search === '' && record(raw.query) ? Object.entries(raw.query) : [];
+    return entries.length === 1 && entries[0][0] === 'login_id'
+      && typeof entries[0][1] === 'string' && /^[a-f0-9]{32}$/.test(entries[0][1]);
+  }
+  if (method !== 'POST' || url.search !== '' || raw.query !== undefined || !record(raw.body)) return false;
+  if (endpoint === '/api/providers/opencode-auth/login')
+    return onlyKeys(raw.body, ['provider']) && typeof raw.body.provider === 'string'
+      && ['opencode-zen', 'opencode-go'].includes(raw.body.provider);
+  if (endpoint === '/api/providers/opencode-auth/cancel')
+    return onlyKeys(raw.body, ['login_id']) && typeof raw.body.login_id === 'string'
+      && /^[a-f0-9]{32}$/.test(raw.body.login_id);
+  return false;
+}
 
 function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
   return Object.keys(value).every(key => allowed.includes(key));
@@ -76,6 +97,7 @@ function configurationCatalogProvider(raw: Record<string, unknown>, url: URL): s
 function isProviderSettingsScopedRequest(raw: Record<string, unknown>, endpoint: string, url: URL): boolean {
   const method = raw.method ?? 'GET';
   if (url.pathname !== endpoint) return false;
+  if (openCodeAuthEndpoints.has(endpoint)) return isOpenCodeAuthRequest(raw, endpoint, url);
   if (endpoint === '/api/providers' && method === 'GET') return url.search === '' && raw.query === undefined;
   if (endpoint === '/api/providers' && method === 'POST')
     return url.search === '' && raw.query === undefined && isProviderSaveBody(raw.body);
@@ -108,7 +130,7 @@ export async function requestScopedWebui(
   catch { throw new Error('Invalid WebUI bridge path'); }
   const requiresSpaceBinding = ['/api/teamwork/config', '/api/teamwork/status'].includes(endpoint)
     || endpoint === '/api/providers' || endpoint === '/api/providers/test' || endpoint === '/api/models/live'
-    || endpoint === '/api/models';
+    || endpoint === '/api/models' || openCodeAuthEndpoints.has(endpoint);
   if (requiresSpaceBinding && scopeSelection === undefined)
     throw new Error('A saved Space selection is required for this WebUI endpoint');
   let boundRequest = request as WebuiRequest;

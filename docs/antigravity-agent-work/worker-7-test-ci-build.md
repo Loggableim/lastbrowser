@@ -1,8 +1,8 @@
 # antigravity-worker-7 – Statusbericht & Ledger
 
 **Rolle:** Test-, CI- und Build-Worker (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :20 (`Cron: 20 * * * *`, Daemon Task aktiv: `task-166`)  
-**Letzter Lauf:** 11. Oktober 2026, 10:22 Uhr (Iteration 6 / Lauf 8)  
+**Taktung:** 1 Lauf pro Stunde, immer um :20 (`Cron: 20 * * * *`, Daemon Task aktiv: `task-80`)  
+**Letzter Lauf:** 11. Oktober 2026, 10:23 Uhr (Iteration 6 / Lauf 8)  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52`  
 
@@ -22,17 +22,18 @@
 
 ## 2. Historie der stündlichen Läufe
 
-### Lauf 8 – Stündlicher Cron-Audit (11. Oktober 2026, 10:20–10:22 Uhr)
-- **Auslöser:** Geplanter stündlicher Cron-Trigger (`20 * * * *`, Daemon `task-166`, Iteration 6).
+### Lauf 8 – Stündlicher Cron-Audit (11. Oktober 2026, 10:20–10:23 Uhr)
+- **Auslöser:** Geplanter stündlicher Cron-Trigger (`20 * * * *`, Daemon `task-80`, Iteration 6).
 - **Git Stand:** Branch `release/v0.1.52` (sauberer Working Tree nach Integration der Commits von Worker 5 und 6).
 - **Python Syntaxcheck:** `python -m compileall -q services/sidekick` → **PASS** (Exit 0, 0 Fehler, 0 Warnungen).
-- **Secret-Fixtures Guard:** `npm --workspace apps/desktop run test:run -- tests/secret-fixtures.test.ts` → **PASS** (1/1 bestanden in 1.90s, 0 unzulässige Tokens/Secrets).
-- **Desktop Shell Build:** `npm --workspace apps/desktop run build` → **PASS** (Main, Preload & Vite Client 1834 Module fehlerfrei kompiliert in 4.77s, Exit 0).
+- **Secret-Fixtures Guard:** `npm --workspace apps/desktop run test:run -- tests/secret-fixtures.test.ts` → **PASS** (1/1 bestanden in 1.84s, 0 unzulässige Tokens/Secrets).
+- **Desktop Shell Build:** `npm --workspace apps/desktop run build` → **PASS** (Main, Preload & Vite Client 1834 Module fehlerfrei kompiliert in 5.40s, Exit 0).
 - **Store-Preflight:** `npm run verify:store` → **PASS** (39 Checks bestanden, 2 provisorische Warnungen, 0 FAIL).
-- **Website-Testsuite:** `node lastbrowser.com/tests/download-counter.test.mjs` → **PASS** (15/15 Tests bestanden in 59.5ms).
-- **Sidekick Python Worker-Tests:** `pytest services/sidekick/tests/test_kanban_worker_capacity.py services/sidekick/tests/test_nova_production_workers.py` → **PASS** (18/18 Tests bestanden in 1.09s).
-- **Vollständige Testsuite:** `npm --workspace apps/desktop run test:run` → **PASS** (**215 Testdateien / 1966 Tests bestanden**, 0 Fehler in 30.19s).
-- **Daemon-Status:** Dauerhafter Hintergrund-Daemon `task-166` für stündlichen Cron-Job (`20 * * * *`) aktiv.
+- **Website-Testsuite:** `node lastbrowser.com/tests/download-counter.test.mjs` → **PASS** (15/15 Tests bestanden in 56.1ms).
+- **Sidekick Python Worker-Tests:** `pytest services/sidekick/tests/test_kanban_worker_capacity.py services/sidekick/tests/test_nova_production_workers.py` → **PASS** (18/18 Tests bestanden in 0.92s).
+- **Gezielte Testsuiten:** `public-downloads.test.ts` (5/5 PASS), `windows-package-signatures.test.ts` (7/7 PASS), `i18n.test.ts` (14/14 PASS) → 26/26 Tests bestanden in 3.58s.
+- **Vollständige Testsuite:** `npm --workspace apps/desktop run test:run` → **PASS** (**215 Testdateien / 1966 Tests bestanden**, 0 Fehler in 30.57s).
+- **Daemon-Status:** Dauerhafter Hintergrund-Daemon `task-80` für stündlichen Cron-Job (`20 * * * *`) aktiv.
 - **Fazit:** 100% grüne Qualitätsgates über alle 215 Testsuiten, 0 Fehler, 0 Regressionen.
 
 ### Lauf 7 – Stündlicher Cron-Audit (11. Oktober 2026, 09:20–09:23 Uhr)
@@ -138,7 +139,7 @@
 - **Lauf-Zähler (`runs_total`):** 10
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Nach Abschluss des Durchlaufs ordnungsgemäß freigegeben (`run_lock_since`: `null`)
-- **Nächster regulärer Lauf:** 11. Oktober 2026, **11:20 Uhr** (aktiver Daemon: `task-166`)
+- **Nächster regulärer Lauf:** 11. Oktober 2026, **11:20 Uhr** (aktiver Daemon: `task-80`)
 
 ---
 

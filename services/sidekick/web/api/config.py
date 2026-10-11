@@ -2847,6 +2847,16 @@ def _remove_unavailable_antigravity_catalog(payload: dict) -> None:
         for entry in _custom_provider_entries()
         if is_retired_provider(entry.get("name")) or is_retired_provider(entry.get("base_url"))
     }
+    named_providers = cfg.get("providers", {})
+    if isinstance(named_providers, dict):
+        for provider_id, entry in named_providers.items():
+            if not isinstance(entry, dict) or not any(
+                is_retired_provider(entry.get(field)) for field in ("base_url", "url", "api")
+            ):
+                continue
+            canonical_id = _canonicalise_provider_id(provider_id)
+            if canonical_id:
+                retired_custom_ids.add(canonical_id)
 
     def is_retired_catalog_provider(value: object) -> bool:
         return is_retired_provider(value) or str(value or "").strip().lower() in retired_custom_ids

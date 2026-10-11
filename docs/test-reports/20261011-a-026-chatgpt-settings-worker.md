@@ -105,3 +105,34 @@ Verification after the final code change:
 These are source and test-host results. No Windows package, VM/device Settings
 walkthrough, live provider response, signed artifact, or Store acceptance was
 verified in this follow-up.
+
+## PR #40 second review follow-up (chatgpt-provider-fix-6, 2026-10-11)
+
+Review comment `6106734839` confirmed the first two P1 gaps closed and found a
+second saved custom-provider format: `providers.<name>` could still expose a
+renamed entry whose `base_url` is `cloudcode-pa://antigravity`.
+
+Two new backend regressions were run before implementation and both failed:
+`test_named_providers_entry_with_retired_endpoint_is_absent_from_provider_list`
+returned `legacy-endpoint`, and
+`test_named_providers_entry_with_retired_endpoint_is_absent_from_model_catalog`
+retained its active/default pair and model group. Both tests include an
+unrelated supported provider that must remain available.
+
+The provider-list and cached-model filters now also inspect endpoint URLs in
+`providers.<name>` entries. They remove the retired entry from the provider
+list, active/default selection, model groups, and configured badges without
+changing persisted configuration or credentials. No renderer file was changed
+in this follow-up.
+
+Checks after the follow-up: `npm ci` PASS (424 packages; 33 existing audit
+findings), targeted backend group 76/76 PASS (retirement file 12/12),
+`npm run test:run` 216/216 files and 1969/1969 tests PASS, `npm run build`
+PASS, `python -m compileall -q services/sidekick` PASS, and Store preflight
+39 PASS / 2 WARN / 0 FAIL. As after the first `npm ci`, the matching Windows
+Electron `37.10.3+wvcus` files were restored only to ignored `node_modules`
+before the full frontend suite. The two Store warnings remain provisional
+screenshots and an absent signed package.
+
+Evidence is at source/test-host level. No package, VM/device Settings test,
+live provider response, signed artifact, or Store acceptance was verified.

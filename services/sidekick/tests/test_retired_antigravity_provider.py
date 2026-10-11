@@ -55,6 +55,53 @@ def test_legacy_named_custom_endpoint_is_absent_from_provider_and_model_catalogs
     assert set(catalog['configured_model_badges']) == {'local-model'}
 
 
+def test_named_providers_entry_with_retired_endpoint_is_absent_from_provider_list(monkeypatch):
+    from web.api import providers
+
+    profile = {
+        'model': {'provider': 'legacy-endpoint', 'default': 'legacy-model'},
+        'providers': {
+            'legacy-endpoint': {'base_url': 'cloudcode-pa://antigravity', 'models': ['legacy-model']},
+            'supported-endpoint': {'base_url': 'https://supported.example.invalid/v1', 'models': ['supported-model']},
+        },
+    }
+    monkeypatch.setattr(providers, 'get_config', lambda: profile)
+    monkeypatch.setattr(providers, '_PROVIDER_DISPLAY', {'openai': 'OpenAI'})
+    monkeypatch.setattr(providers, '_PROVIDER_MODELS', {'openai': []})
+    monkeypatch.setattr(providers, '_OAUTH_PROVIDERS', frozenset())
+    monkeypatch.setattr(providers, '_provider_has_key', lambda _: False)
+    result = providers.get_providers()
+    assert 'legacy-endpoint' not in {entry['id'] for entry in result['providers']}
+    assert {'openai', 'supported-endpoint'} <= {entry['id'] for entry in result['providers']}
+    assert result['active_provider'] == ''
+
+
+def test_named_providers_entry_with_retired_endpoint_is_absent_from_model_catalog(monkeypatch):
+    from web.api import config
+
+    monkeypatch.setattr(config, 'cfg', {
+        'providers': {
+            'legacy-endpoint': {'base_url': 'cloudcode-pa://antigravity', 'models': ['legacy-model']},
+            'supported-endpoint': {'base_url': 'https://supported.example.invalid/v1', 'models': ['supported-model']},
+        },
+    })
+    catalog = {
+        'active_provider': 'legacy-endpoint', 'default_model': 'legacy-model',
+        'groups': [
+            {'provider_id': 'legacy-endpoint', 'models': [{'id': 'legacy-model'}]},
+            {'provider_id': 'supported-endpoint', 'models': [{'id': 'supported-model'}]},
+        ],
+        'configured_model_badges': {
+            'legacy-model': {'provider': 'legacy-endpoint'},
+            'supported-model': {'provider': 'supported-endpoint'},
+        },
+    }
+    config._remove_unavailable_antigravity_catalog(catalog)
+    assert catalog['active_provider'] == catalog['default_model'] == ''
+    assert [group['provider_id'] for group in catalog['groups']] == ['supported-endpoint']
+    assert set(catalog['configured_model_badges']) == {'supported-model'}
+
+
 def test_onboarding_does_not_offer_retired_profile_default():
     from web.api.onboarding import _build_setup_catalog
     result = _build_setup_catalog({'model': {'provider': 'antigravity', 'default': 'legacy-model'}})

@@ -190,6 +190,11 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
     updateAllAppstore: () => ipcRenderer.invoke('lastbrowser:sidekick:updateAllAppstore'),
     submitAppstoreApp: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:submitAppstoreApp', request),
     getSettings: () => ipcRenderer.invoke('lastbrowser:sidekick:getSettings'),
+    getAccessAuthStartupPolicy: (requestId: number) => ipcRenderer.invoke('lastbrowser:sidekick:getAccessAuthStartupPolicy', requestId) as Promise<{
+      policy: 'disabled' | 'enabled' | 'unknown';
+      requestId: number;
+      scopeId: string;
+    }>,
     getAccessAuthStatus: () => ipcRenderer.invoke('lastbrowser:sidekick:getAccessAuthStatus'),
     loginAccessPassword: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:loginAccessPassword', request),
     lockAccessWindows: () => ipcRenderer.invoke('lastbrowser:sidekick:lockAccessWindows'),
@@ -344,10 +349,14 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
     },
     detachTab: (payload: { tab: unknown; guestWebContentsId: number; screenX: number; screenY: number; spacePath?: string }) =>
       ipcRenderer.invoke('lastbrowser:window:detachTab', payload),
-    getStartupState: () => ipcRenderer.invoke('lastbrowser:window:getStartupState') as Promise<{
-      isDetachedWindow: boolean;
-      transfer: { transferId: string; tab: unknown; spacePath?: string } | null;
-    }>,
+    getStartupState: async () => {
+      const startup = await ipcRenderer.invoke('lastbrowser:window:getStartupState') as {
+        isDetachedWindow: boolean;
+        transfer: { transferId: string; tab: unknown; spacePath?: string } | null;
+        launchIcon: 'sidekick-01' | 'sidekick-02' | 'sidekick-03' | 'sidekick-04' | 'sidekick-05' | 'sidekick-06';
+      };
+      return startup;
+    },
     ackDetachedTab: (transferId: string, tabId: string, guestWebContentsId: number) => ipcRenderer.invoke('lastbrowser:window:ackDetachedTab', transferId, tabId, guestWebContentsId) as Promise<boolean>,
     getDisplays: () => ipcRenderer.invoke('lastbrowser:window:getDisplays'),
     onInitDetachedTab: (callback: (payload: { tab: unknown; spacePath?: string }) => void) => {

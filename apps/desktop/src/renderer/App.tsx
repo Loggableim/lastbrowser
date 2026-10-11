@@ -60,6 +60,7 @@ import { hideWebviewScrollbars } from './browser-view.js';
 import { subscribeDevToolsState, toggleWebviewDevTools } from './devtools-state.js';
 import { bindWebviewReadiness, isWebviewReady } from './webview-readiness.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
+import { createAccessAuthGateConsumer, isVerifiedAccessAuthLogin } from './access-auth-gate.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
 import { applyLiveTeamworkUpdate, beginLiveTeamworkTurn, bindLiveChatAssistantStream, readTeamworkStreamUpdate } from './teamwork-live-stream.js';
@@ -199,6 +200,9 @@ import {
   workspacePanelCollapsedStorageKey
 } from './shell-state.js';
 import { canCallSidekickApi } from './runtime-readiness.js';
+import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
+import { startupScreenCopy, resolveStartupLocale } from './startup/startup-screen-copy.js';
+import { StartupScreen } from './startup/StartupScreen.js';
 import { describeChatContent, partitionChatMessages } from './chat-display.js';
 import { AdvancedWebUiTools } from './panels/AdvancedWebUiTools.js';
 import { NativeBrowserStartPage } from './panels/NativeBrowserStartPage.js';
@@ -1019,6 +1023,10 @@ function AppContent(): JSX.Element {
   const [desktopSettings, setDesktopSettings] = useState<Record<string, unknown> | null>(() => loadDesktopSettingsFromStorage());
   const [desktopSettingsHydrated, setDesktopSettingsHydrated] = useState(() => loadDesktopSettingsFromStorage() !== null);
   const desktopSettingsRevisionRef = useRef(0);
+  const accessAuthPreflightRequestIdRef = useRef(0);
+  const accessAuthPreflightScopeIdRef = useRef<string | null>(null);
+  const accessAuthGateRef = useRef<ReturnType<typeof createAccessAuthGateConsumer> | null>(null);
+  if (!accessAuthGateRef.current) accessAuthGateRef.current = createAccessAuthGateConsumer();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
@@ -1043,6 +1051,11 @@ function AppContent(): JSX.Element {
   const [setupReopenRequested, setSetupReopenRequested] = useState(false);
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus | null>(null);
   const [onboardingStatusChecked, setOnboardingStatusChecked] = useState(false);
+  const [startupOnboardingState, setStartupOnboardingState] = useState<StartupSignalState>('pending');
+  const startupOnboardingSettledRef = useRef(false);
+  const [startupModelDiscoveryState, setStartupModelDiscoveryState] = useState<StartupSignalState>('pending');
+  const startupModelDiscoverySettledRef = useRef(false);
+  const startupModelRequestRevisionRef = useRef(0);
   const [setupLoading, setSetupLoading] = useState(true);
   const [setupError, setSetupError] = useState('');
   const [setupSaving, setSetupSaving] = useState(false);
@@ -1139,6 +1152,8 @@ function AppContent(): JSX.Element {
   const [composerText, setComposerText] = useState('');
   const [composerMode, setComposerMode] = useState<ComposerMode>('action');
   const [spaces, setSpaces] = useState<SpaceSummary[]>([]);
+  const [startupSpacesState, setStartupSpacesState] = useState<StartupSignalState>('pending');
+  const startupSpacesSettledRef = useRef(false);
   const spaceDirectoryRevisionRef = useRef(0);
   const activeSpaceSelectionRevisionRef = useRef(0);
   const [activeSpacePath, setActiveSpacePath] = useState<string>(() => {
@@ -1177,6 +1192,11 @@ function AppContent(): JSX.Element {
     };
   }, [isDetachedWindow]);
   const [windowStartupReady, setWindowStartupReady] = useState(false);
+  const [startupProfileState, setStartupProfileState] = useState<StartupSignalState>('pending');
+  const [startupAuthPolicy, setStartupAuthPolicy] = useState<StartupAuthPolicy>('pending');
+  const [startupLaunchIcon, setStartupLaunchIcon] = useState<StartupIconId | null>(null);
+  const [startupRetryVersion, setStartupRetryVersion] = useState(0);
+  const [startupReadyAcknowledged, setStartupReadyAcknowledged] = useState(false);
   const [pendingDetachedTransfer, setPendingDetachedTransfer] = useState<{ transferId: string; tabId: string } | null>(null);
   const windowStartupInitializedRef = useRef(false);
   const acknowledgingTransferRef = useRef<string | null>(null);
@@ -1420,6 +1440,35 @@ function AppContent(): JSX.Element {
   }, [canPresentWhatsNew, locale]);
   const sidekickTransportReady = canCallSidekickApi(status);
   const sidekickApiReady = sidekickTransportReady && accessAuthChecked && !accessAuthRequired;
+  const startupReadinessSignals: StartupReadinessSignals = {
+    engine: !status
+      ? 'pending'
+      : status.sidekick === 'error' || status.sidekick === 'missing'
+        ? 'error'
+        : status.sidekick === 'ready' ? 'complete' : 'pending',
+    profile: startupProfileState,
+    spaces: startupSpacesState,
+    connections: startupOnboardingState,
+    models: startupModelDiscoveryState,
+    sidekick: sidekickTransportReady
+      ? 'complete'
+      : status?.webuiHealth === 'unreachable' || status?.sidekick === 'error' || status?.sidekick === 'missing'
+        ? 'error'
+        : 'pending',
+    session: accessAuthRequired
+      ? 'pending'
+      : accessAuthChecked ? 'complete' : accessAuthError ? 'error' : 'pending'
+  };
+  const startupPhase = deriveStartupPhase(startupReadinessSignals, startupAuthPolicy);
+  const startupFailureStage = getStartupFailureStage(startupReadinessSignals, startupAuthPolicy);
+  const startupBackgroundPhase = getStartupBackgroundPhase(startupReadinessSignals, startupAuthPolicy);
+  const startupAuthAllowsShell = canRenderBrowserForAccessAuth(accessAuthChecked, {
+    auth_enabled: accessAuthRequired || !accessAuthChecked,
+    logged_in: accessAuthChecked && !accessAuthRequired
+  });
+  useEffect(() => {
+    setStartupReadyAcknowledged(startupPhase === 'ready' && startupAuthAllowsShell);
+  }, [startupPhase, startupAuthAllowsShell]);
   useEffect(() => {
     let current = true;
     setAssistantSelection(null); setAssistantSelectionError('');
@@ -1444,22 +1493,63 @@ function AppContent(): JSX.Element {
   }, [sidekickApiReady, activeSpacePath, activeProfileId, assistantController, explicitBackendProfileBySpace]);
 
   useEffect(() => {
+    let alive = true;
+    const requestId = ++accessAuthPreflightRequestIdRef.current;
+    const generation = accessAuthGateRef.current!.state.generation;
+    void window.lastbrowser.sidekick.getAccessAuthStartupPolicy(requestId).then((result) => {
+      if (!alive || requestId !== accessAuthPreflightRequestIdRef.current) return;
+      if (!result || result.requestId !== requestId || typeof result.scopeId !== 'string' || !result.scopeId) {
+        setStartupAuthPolicy('unknown');
+        return;
+      }
+      const priorScopeId = accessAuthPreflightScopeIdRef.current;
+      if (priorScopeId && priorScopeId !== result.scopeId) {
+        const state = accessAuthGateRef.current!.dispatch({ type: 'scope-change', scopeId: result.scopeId });
+        accessAuthPreflightScopeIdRef.current = result.scopeId;
+        setStartupAuthPolicy('unknown');
+        setAccessAuthChecked(state.checked);
+        setAccessAuthRequired(state.required);
+        setAccessAuthError(state.error);
+        return;
+      }
+      accessAuthPreflightScopeIdRef.current = result.scopeId;
+      const policy = result.policy === 'disabled' || result.policy === 'enabled' ? result.policy : 'unknown';
+      const previousState = accessAuthGateRef.current!.state;
+      const state = accessAuthGateRef.current!.dispatch({ type: 'preflight', generation, scopeId: result.scopeId, policy });
+      if (generation !== previousState.generation || (previousState.scopeId && previousState.scopeId !== result.scopeId)) return;
+      setStartupAuthPolicy(policy);
+      setAccessAuthRequired(state.required);
+      setAccessAuthChecked(state.checked);
+      setAccessAuthError(state.error);
+    }).catch(() => {
+      if (alive && requestId === accessAuthPreflightRequestIdRef.current) setStartupAuthPolicy('unknown');
+      // Keep the existing fail-closed auth gate until the normal status check succeeds.
+    });
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
     if (!sidekickTransportReady) return;
     let alive = true;
     const checkAccessStatus = async (): Promise<void> => {
+      const generation = accessAuthGateRef.current!.state.generation;
       try {
         const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
         if (!alive) return;
-        setAccessAuthRequired(Boolean(auth.auth_enabled && !auth.logged_in));
-        setAccessAuthChecked(true);
-        setAccessAuthError('');
+        const state = accessAuthGateRef.current!.dispatch({ type: 'status', generation, auth });
+        setAccessAuthRequired(state.required);
+        setAccessAuthChecked(state.checked);
+        setAccessAuthError(state.error);
       } catch (error) {
         if (!alive) return;
-        setAccessAuthError(error instanceof Error ? error.message : String(error));
+        const state = accessAuthGateRef.current!.dispatch({
+          type: 'status-error', generation, error: error instanceof Error ? error.message : String(error)
+        });
+        setAccessAuthError(state.error);
         // A failed auth-status check (including a 401 after the sidecar
         // session token changes) must never leave an already-unlocked shell
         // visible. Keep the retry screen up until status can be verified.
-        setAccessAuthChecked(false);
+        setAccessAuthChecked(state.checked);
       }
     };
     void checkAccessStatus();
@@ -1477,10 +1567,11 @@ function AppContent(): JSX.Element {
 
   useEffect(() => {
     const lockBrowser = () => {
+      const state = accessAuthGateRef.current!.dispatch({ type: 'lock' });
       setAccessPassword('');
-      setAccessAuthError('');
-      setAccessAuthRequired(true);
-      setAccessAuthChecked(true);
+      setAccessAuthError(state.error);
+      setAccessAuthRequired(state.required);
+      setAccessAuthChecked(state.checked);
     };
     return window.lastbrowser.sidekick.onAccessAuthLocked(lockBrowser);
   }, []);
@@ -1488,19 +1579,49 @@ function AppContent(): JSX.Element {
   async function unlockBrowser(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!accessPassword || accessAuthBusy) return;
+    const retry = accessAuthGateRef.current!.dispatch({ type: 'retry' });
+    const loginGeneration = retry.generation;
+    setAccessAuthRequired(retry.required);
+    setAccessAuthChecked(retry.checked);
     setAccessAuthBusy(true);
     setAccessAuthError('');
     try {
       await window.lastbrowser.sidekick.loginAccessPassword({ password: accessPassword });
       const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
-      if (!auth.logged_in) throw new Error('Login did not create an authenticated session.');
-      setAccessAuthRequired(false);
-      setAccessAuthChecked(true);
+      if (!isVerifiedAccessAuthLogin(auth)) throw new Error('Login did not create an authenticated session.');
+      const state = accessAuthGateRef.current!.dispatch({ type: 'login-success', generation: loginGeneration });
+      setAccessAuthRequired(state.required);
+      setAccessAuthChecked(state.checked);
       setAccessPassword('');
     } catch (error) {
-      setAccessAuthError(error instanceof Error ? error.message : String(error));
+      const state = accessAuthGateRef.current!.dispatch({
+        type: 'status-error', generation: loginGeneration,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      setAccessAuthError(state.error);
+      setAccessAuthChecked(state.checked);
     } finally {
       setAccessAuthBusy(false);
+    }
+  }
+
+  async function retryAccessAuthStatus(): Promise<void> {
+    const retry = accessAuthGateRef.current!.dispatch({ type: 'retry' });
+    const generation = retry.generation;
+    setAccessAuthChecked(retry.checked);
+    setAccessAuthError('');
+    try {
+      const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
+      const state = accessAuthGateRef.current!.dispatch({ type: 'status', generation, auth });
+      setAccessAuthRequired(state.required);
+      setAccessAuthChecked(state.checked);
+      setAccessAuthError(state.error);
+    } catch (error) {
+      const state = accessAuthGateRef.current!.dispatch({
+        type: 'status-error', generation, error: error instanceof Error ? error.message : String(error)
+      });
+      setAccessAuthChecked(state.checked);
+      setAccessAuthError(state.error);
     }
   }
 
@@ -1880,23 +2001,58 @@ function AppContent(): JSX.Element {
     };
   }, []);
 
+  const refreshStartupModelDiscovery = useCallback(async (requestRevision = startupModelRequestRevisionRef.current): Promise<void> => {
+    if (startupModelDiscoverySettledRef.current) return;
+    try {
+      const catalog = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' });
+      if (requestRevision !== startupModelRequestRevisionRef.current) return;
+      if (!isValidStartupModelCatalog(catalog)) throw new Error('Model catalog response was invalid.');
+      startupModelDiscoverySettledRef.current = true;
+      setStartupModelDiscoveryState('complete');
+    } catch {
+      if (requestRevision !== startupModelRequestRevisionRef.current) return;
+      startupModelDiscoverySettledRef.current = true;
+      setStartupModelDiscoveryState('error');
+    }
+  }, []);
+
   useEffect(() => {
     let alive = true;
+    const modelRequestRevision = ++startupModelRequestRevisionRef.current;
+    startupOnboardingSettledRef.current = false;
+    startupModelDiscoverySettledRef.current = false;
+    setStartupOnboardingState('pending');
+    setStartupModelDiscoveryState('pending');
     const refresh = async () => {
+      if (!sidekickApiReady) return;
       const onboarding = await window.lastbrowser.sidekick.onboardingStatus().catch(() => null);
       if (!alive) return;
-      if (onboarding) setOnboardingStatus(onboarding as OnboardingStatus);
+      if (onboarding) {
+        setOnboardingStatus(onboarding as OnboardingStatus);
+        if (!startupOnboardingSettledRef.current) {
+          // The endpoint returns one combined result after stored provider
+          // connection checks have completed. Model catalog discovery has its
+          // own real `/api/models` request below.
+          startupOnboardingSettledRef.current = true;
+          setStartupOnboardingState('complete');
+          void refreshStartupModelDiscovery(modelRequestRevision);
+        }
+      } else if (!startupOnboardingSettledRef.current) {
+        startupOnboardingSettledRef.current = true;
+        setStartupOnboardingState('error');
+      }
       // A failed first probe must not block browser use or release notes forever;
       // a later chat_ready=false response will close the same presentation gate.
       setOnboardingStatusChecked(true);
     };
-    void refresh();
+    if (sidekickApiReady) void refresh();
     const timer = window.setInterval(refresh, 2000);
     return () => {
       alive = false;
+      if (startupModelRequestRevisionRef.current === modelRequestRevision) startupModelRequestRevisionRef.current += 1;
       window.clearInterval(timer);
     };
-  }, [status?.webuiUrl]);
+  }, [status?.webuiUrl, status?.runtimeGeneration, sidekickApiReady, refreshStartupModelDiscovery]);
 
   useEffect(() => {
     let alive = true;
@@ -1912,8 +2068,16 @@ function AppContent(): JSX.Element {
 
   const refreshOnboardingStatus = useCallback(async (): Promise<void> => {
     const onboarding = await window.lastbrowser.sidekick.onboardingStatus().catch(() => null);
-    if (onboarding) setOnboardingStatus(onboarding as OnboardingStatus);
-  }, []);
+    if (onboarding) {
+      setOnboardingStatus(onboarding as OnboardingStatus);
+      startupOnboardingSettledRef.current = true;
+      setStartupOnboardingState('complete');
+      await refreshStartupModelDiscovery();
+    } else if (!startupOnboardingSettledRef.current) {
+      startupOnboardingSettledRef.current = true;
+      setStartupOnboardingState('error');
+    }
+  }, [refreshStartupModelDiscovery]);
 
   const refreshSessions = useCallback(async (): Promise<void> => {
     if (!sidekickApiReady) return;
@@ -1962,6 +2126,10 @@ function AppContent(): JSX.Element {
       if (!isCurrentSpaceDirectorySnapshot(directoryRevisionAtRequest, spaceDirectoryRevisionRef.current)) return;
       setSpaces(nextSpaces);
       setSpacesError('');
+      if (!startupSpacesSettledRef.current) {
+        startupSpacesSettledRef.current = true;
+        setStartupSpacesState('complete');
+      }
       setActiveSpacePath((current) => resolveRefreshedActiveSpacePath({
         currentPath: current,
         availablePaths: nextSpaces.map((space) => space.path),
@@ -1972,8 +2140,33 @@ function AppContent(): JSX.Element {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setSpacesError(isTransientSidekickFetchError(message) ? '' : message);
+      if (!startupSpacesSettledRef.current) {
+        startupSpacesSettledRef.current = true;
+        setStartupSpacesState('error');
+      }
     }
   }, [sidekickApiReady]);
+
+  const retryStartupChecks = useCallback(async (): Promise<void> => {
+    startupModelRequestRevisionRef.current += 1;
+    startupOnboardingSettledRef.current = false;
+    startupModelDiscoverySettledRef.current = false;
+    startupSpacesSettledRef.current = false;
+    if (!windowStartupInitializedRef.current) setStartupProfileState('pending');
+    setStartupOnboardingState('pending');
+    setStartupModelDiscoveryState('pending');
+    setStartupSpacesState('pending');
+    setStartupRetryVersion((version) => version + 1);
+    const retryEngine = async () => {
+      try {
+        await window.lastbrowser.services.start();
+        setStatus(await window.lastbrowser.services.status());
+      } catch {
+        // The polled service status will remain the authoritative failure signal.
+      }
+    };
+    await Promise.all([refreshOnboardingStatus(), refreshSpaces(), retryEngine()]);
+  }, [refreshOnboardingStatus, refreshSpaces]);
 
   const loadActiveSession = useCallback(async (
     sessionId: string,
@@ -2570,6 +2763,7 @@ function AppContent(): JSX.Element {
       try {
         const startup = await window.lastbrowser?.window?.getStartupState?.();
         if (cancelled) return;
+        if (startup?.launchIcon) setStartupLaunchIcon(startup.launchIcon);
         setIsDetachedWindow(Boolean(startup?.isDetachedWindow));
         const transfer = startup?.transfer;
         if (transfer?.tab && transfer.transferId) {
@@ -2635,19 +2829,23 @@ function AppContent(): JSX.Element {
         }
         startupInitialized = true;
       } catch (error) {
+        if (!cancelled) {
+          setStartupProfileState('error');
+        }
         console.error('[Lastbrowser] Window startup/transfer failed:', error);
       } finally {
         // Fail closed: a partially initialized window must not persist its
         // placeholder tabs over the source window's shared profile storage.
         if (!cancelled && startupInitialized) {
           windowStartupInitializedRef.current = true;
+          setStartupProfileState('complete');
           setWindowStartupReady(true);
         }
       }
     };
     void initializeWindow();
     return () => { cancelled = true; };
-  }, [activeProfileId, activeSpacePath, tabs, setTabs, setActiveTabId, setActiveSpacePath, setSnapGroup, clearSplitTabs, knownSpacePaths]);
+  }, [activeProfileId, activeSpacePath, tabs, setTabs, setActiveTabId, setActiveSpacePath, setSnapGroup, clearSplitTabs, knownSpacePaths, startupRetryVersion]);
 
   const handleTransferredWebviewReady = useCallback((tabId: string, guestWebContentsId: number) => {
     const transfer = pendingDetachedTransfer;
@@ -4802,42 +5000,47 @@ function AppContent(): JSX.Element {
     allowMultiAgent: AI_ORCHESTRATION_ENABLED && readShowUntestedProviderBetas(),
   });
 
-  if (!canRenderBrowserForAccessAuth(accessAuthChecked, {
-    auth_enabled: accessAuthRequired || !accessAuthChecked,
-    logged_in: accessAuthChecked && !accessAuthRequired
-  })) {
+  const startupCopy = startupScreenCopy[resolveStartupLocale(locale)];
+  const startupError = startupFailureStage
+    ? startupFailureStage === 'session' && !accessAuthRequired && accessAuthError
+      ? accessAuthError
+      : startupCopy.errorDescription
+    : null;
+  const accessAuthForm = accessAuthRequired && !startupFailureStage ? (
+    <section className="startup-screen__auth" aria-labelledby="startup-auth-title">
+      <h1 id="startup-auth-title">{t('access.lock.title')}</h1>
+      <p>{t('access.lock.description')}</p>
+      <form onSubmit={(event) => void unlockBrowser(event)}>
+        <label htmlFor="access-lock-password">{t('access.lock.password')}</label>
+        <input id="access-lock-password" autoFocus type="password" autoComplete="current-password" value={accessPassword} onChange={(event) => setAccessPassword(event.target.value)} />
+        {accessAuthError && <div className="access-lock-error" role="alert">{accessAuthError}</div>}
+        <button type="submit" disabled={!accessPassword || accessAuthBusy}>{accessAuthBusy ? t('access.lock.unlocking') : t('access.lock.unlock')}</button>
+      </form>
+    </section>
+  ) : null;
+
+  if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged) {
     return (
-      <main className="access-lock-screen">
-        <section className="access-lock-card" aria-labelledby="access-lock-title">
-          <div className="access-lock-icon"><ShieldCheck size={28} /></div>
-          <p className="eyebrow">LastBrowser</p>
-          <h1 id="access-lock-title">{accessAuthRequired ? t('access.lock.title') : t('access.lock.checking')}</h1>
-          <p>{accessAuthRequired
-            ? t('access.lock.description')
-            : (accessAuthError || t('access.lock.checking'))}</p>
-          {accessAuthRequired ? (
-            <form onSubmit={(event) => void unlockBrowser(event)}>
-              <label htmlFor="access-lock-password">{t('access.lock.password')}</label>
-              <input id="access-lock-password" autoFocus type="password" autoComplete="current-password" value={accessPassword} onChange={(event) => setAccessPassword(event.target.value)} />
-              {accessAuthError && <div className="access-lock-error" role="alert">{accessAuthError}</div>}
-              <button type="submit" disabled={!accessPassword || accessAuthBusy}>{accessAuthBusy ? t('access.lock.unlocking') : t('access.lock.unlock')}</button>
-            </form>
-          ) : (
-            <button type="button" onClick={() => {
-              void window.lastbrowser.sidekick.getAccessAuthStatus().then((auth) => {
-                setAccessAuthRequired(Boolean(auth.auth_enabled && !auth.logged_in));
-                setAccessAuthChecked(true);
-                setAccessAuthError('');
-              }).catch((error) => setAccessAuthError(error instanceof Error ? error.message : String(error)));
-            }}>{t('access.lock.retry')}</button>
-          )}
-        </section>
-      </main>
+      <StartupScreen
+        locale={locale}
+        launchIcon={startupLaunchIcon}
+        phase={startupPhase}
+        error={startupError}
+        onRetry={startupFailureStage === 'session' ? retryAccessAuthStatus : retryStartupChecks}
+        retryContent={accessAuthForm}
+      />
     );
   }
 
   return (
     <div className={`app-shell panel-${activePanel} ${isModernBrowser ? 'modern-mode' : ''} ${windowMaximized ? 'is-maximized' : ''} ${sidebarMode === 'hidden' ? 'zen-mode' : ''}`}>
+      {startupBackgroundPhase && (
+        <div className="startup-background-status" role="status" aria-live="polite">
+          {startupBackgroundPhase === 'sidekick'
+            ? startupCopy.sidekickWaiting
+            : startupCopy.phases[startupBackgroundPhase]}
+        </div>
+      )}
       {/* Vision-Impaired 2.0: hidden SVG filter defs for color-vision correction (§7.4). */}
       <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
         <defs>

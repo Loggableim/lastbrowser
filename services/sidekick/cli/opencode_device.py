@@ -129,6 +129,11 @@ def credential_status(provider_id):
         credential = _read(get_sidekick_home()).get(provider_id)
         valid = isinstance(credential, dict) and not credential.get("refresh_in_flight") and all(
             isinstance(credential.get(key), str) and credential[key] for key in ("access_token", "refresh_token", "org_id"))
+        if valid:
+            try:
+                _supported_models(credential, provider_id)
+            except DeviceError:
+                return {"logged_in": False, "error_code": "unsupported_workspace_gateway"}
         return {"logged_in": bool(valid), **({} if valid else {"error_code": "device_login_required"})}
     except DeviceError:
         return {"logged_in": False, "error_code": "device_login_required"}
@@ -194,7 +199,6 @@ def login_status(login_id):
             credential = _token_record(payload)
             config = _request("/console/api/v2/config", token=credential["access_token"])
             credential["config"] = config
-            _supported_models(credential, login["provider"])
             with _LOCK:
                 if login["status"] != "running":
                     return _public_status(login)
@@ -206,6 +210,10 @@ def login_status(login_id):
                     records = _read(login["home"])
                     records[login["provider"]] = credential
                     _write(login["home"], records)
+                # Keep a successful OAuth grant even if a newly returned SDK
+                # config is not yet supported. It remains unavailable for chat
+                # until validated; fixing config support need not reauthorize.
+                _supported_models(credential, login["provider"])
                 login["status"] = "connected"
         except DeviceError as error:
             with _LOCK:
@@ -217,6 +225,8 @@ def login_status(login_id):
                 elif str(error) != "authorization_pending":
                     login["status"] = "expired" if str(error) == "expired_token" else "failed"
                     login["error_code"] = str(error)
+                    if "credential" in locals() and "config" in credential:
+                        login["diagnostic"] = _config_diagnostic(credential["config"], login["provider"])
         finally:
             with _LOCK:
                 login["polling"] = False
@@ -228,7 +238,40 @@ def login_status(login_id):
 
 def _public_status(login):
     return {"ok": True, "provider": login["provider"], "status": login["status"],
-            "configured": login["status"] == "connected", **({"error_code": login["error_code"]} if "error_code" in login else {})}
+            "configured": login["status"] == "connected", **({"error_code": login["error_code"]} if "error_code" in login else {}),
+            **({"diagnostic": login["diagnostic"]} if "diagnostic" in login else {})}
+
+
+def _config_diagnostic(config, provider_id):
+    """Only schema field names and known public package/route names, no values."""
+    try:
+        entry = _select_provider(config, provider_id)
+    except DeviceError:
+        return {"provider_match": False}
+    fields = {"package", "npm", "settings", "options", "headers", "models", "canonical", "api", "modelID", "disabled"}
+    model_fields = set()
+    packages = set()
+    routes = set()
+    for row in [entry, *entry["models"].values()]:
+        if not isinstance(row, dict):
+            continue
+        model_fields.update(set(row) & fields)
+        package = row.get("package", row.get("npm", ""))
+        if isinstance(package, str) and package in {
+            "@opencode/ai/providers/openai-compatible", "@opencode/ai/providers/openai/chat",
+            "@opencode/ai/providers/openai", "@opencode/ai/providers/openai/responses",
+            "@opencode/ai/providers/openai-compatible/responses", "@opencode/ai/providers/anthropic",
+            "@opencode/ai/providers/anthropic-compatible", "@opencode/ai/providers/google",
+            "aisdk:@ai-sdk/openai-compatible", "aisdk:@ai-sdk/openai", "aisdk:@ai-sdk/anthropic",
+            "@ai-sdk/openai-compatible", "@ai-sdk/openai", "@ai-sdk/anthropic"}:
+            packages.add(package)
+        for name in ("settings", "options"):
+            settings = row.get(name, {})
+            if isinstance(settings, dict) and isinstance(settings.get("baseURL"), str):
+                parsed = urllib.parse.urlsplit(settings["baseURL"])
+                if parsed.netloc == "opencode.ai" and parsed.path in {"/inference/openai/v1", "/inference/anthropic/v1", "/inference/google/v1beta"}:
+                    routes.add(parsed.path)
+    return {"provider_match": True, "field_names": sorted(model_fields), "packages": sorted(packages), "gateway_paths": sorted(routes)}
 
 
 def cancel_login(login_id):
@@ -291,13 +334,18 @@ def discovered_models(provider_id):
 
 def _supported_models(credential, provider_id):
     result = []
+    errors = []
     for model in _select_provider(credential["config"], provider_id)["models"]:
         try:
             _validated_connection(credential, provider_id, model, None)
             result.append(model)
-        except DeviceError:
+        except DeviceError as error:
+            errors.append(str(error))
             continue
     if not result:
+        for reason in ("workspace_binding_changed", "unsupported_workspace_header", "invalid_workspace_config"):
+            if reason in errors:
+                raise DeviceError(reason)
         raise DeviceError("unsupported_workspace_gateway")
     return result
 
@@ -311,8 +359,15 @@ def _validated_connection(credential, provider_id, model, session_id):
     entry = _select_provider(credential["config"], provider_id)
     models = entry["models"]
     if model not in models:
-        raise DeviceError("workspace_model_unavailable")
+        # The live agent keeps the resolved wire ID between turns. Resolve
+        # it back to exactly one current catalog entry on credential refresh.
+        matches = [key for key, row in models.items() if isinstance(row, dict) and row.get("modelID") == model]
+        if len(matches) != 1:
+            raise DeviceError("workspace_model_unavailable")
+        model = matches[0]
     model_config = models[model] if isinstance(models[model], dict) else {}
+    if model_config.get("disabled") is True:
+        raise DeviceError("workspace_model_unavailable")
     for record in (entry, model_config):
         if not isinstance(record.get("settings", {}), dict) or not isinstance(record.get("headers", {}), dict):
             raise DeviceError("invalid_workspace_config")
@@ -320,7 +375,14 @@ def _validated_connection(credential, provider_id, model, session_id):
     package = model_config.get("package", model_config.get("npm", entry.get("package", entry.get("npm", ""))))
     modes = {"aisdk:@ai-sdk/openai-compatible": "chat_completions", "@ai-sdk/openai-compatible": "chat_completions",
              "aisdk:@ai-sdk/openai": "codex_responses", "@ai-sdk/openai": "codex_responses",
-             "aisdk:@ai-sdk/anthropic": "anthropic_messages", "@ai-sdk/anthropic": "anthropic_messages"}
+             "aisdk:@ai-sdk/anthropic": "anthropic_messages", "@ai-sdk/anthropic": "anthropic_messages",
+             "@opencode/ai/providers/openai-compatible": "chat_completions",
+             "@opencode/ai/providers/openai/chat": "chat_completions",
+             "@opencode/ai/providers/openai": "codex_responses",
+             "@opencode/ai/providers/openai/responses": "codex_responses",
+             "@opencode/ai/providers/openai-compatible/responses": "codex_responses",
+             "@opencode/ai/providers/anthropic": "anthropic_messages",
+             "@opencode/ai/providers/anthropic-compatible": "anthropic_messages"}
     base = settings.get("baseURL", "")
     if not isinstance(base, str) or not isinstance(package, str):
         raise DeviceError("invalid_workspace_config")
@@ -348,5 +410,8 @@ def _validated_connection(credential, provider_id, model, session_id):
         # Anthropic SDK appends /v1/messages; runtime capture must use the
         # same SDK base as its client so request authority remains exact.
         sdk_base = sdk_base[:-3]
+    wire_model = model_config.get("modelID", model)
+    if not isinstance(wire_model, str) or not wire_model or len(wire_model) > 256 or any(ord(char) < 32 for char in wire_model):
+        raise DeviceError("invalid_workspace_config")
     return {"api_key": credential["access_token"], "base_url": sdk_base, "headers": headers,
-            "models": list(models), "model": model, "api_mode": mode}
+            "models": list(models), "model": wire_model, "api_mode": mode}

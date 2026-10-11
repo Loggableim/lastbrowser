@@ -43,7 +43,7 @@ import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { cloudProviderOptions, openProviderOAuthUrl, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
 import { providerPresentation } from '../provider-presentation.js';
 import { isOpenCodeLoginBusyInScope, isProviderSettingsScopeCurrent, isXiaomiProviderSaveAck, readXiaomiProviderStatus, requestProviderModelCatalog, requestProviderSettingsInScope, safeXiaomiErrorCode, saveAndLoadXiaomiModels, testXiaomiConnection, validateXiaomiBaseUrl, type ProviderSettingsRequest } from '../provider-settings.js';
-import { startOpenCodeDeviceLogin, cancelOpenCodeDeviceLogin, validatedOpenCodeVerificationUrl, isOpenCodeDeviceFlowCurrent, readOpenCodeDeviceStatus } from '../opencode-device-login.js';
+import { startOpenCodeDeviceLogin, cancelOpenCodeDeviceLogin, validatedOpenCodeVerificationUrl, isOpenCodeDeviceFlowCurrent, readOpenCodeDeviceStatus, readOpenCodeFailure, type OpenCodeFailureKey } from '../opencode-device-login.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
 import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQualified } from '../provider-chat-evidence.js';
@@ -2449,7 +2449,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     userCode?: string;
     interval?: number;
     cancelling?: boolean;
-    errorCode?: 'openCodeCliMissing' | 'openCodeCliPlatform' | 'openCodeCliStartFailed' | 'connectionError';
+    errorCode?: 'openCodeCliMissing' | 'openCodeCliPlatform' | 'openCodeCliStartFailed' | 'connectionError' | OpenCodeFailureKey;
+    errorDiagnostic?: string;
   } | null>(null);
   const openCodeGenerationRef = useRef(0);
   const openCodeScopeRef = useRef(activeProviderScope); openCodeScopeRef.current = activeProviderScope;
@@ -2479,12 +2480,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         const status = readOpenCodeDeviceStatus(response);
         if (!status) return;
         if (status === 'connected') {
-          setOpenCodeLogin({ ...captured, status: 'connected', errorCode: undefined });
+          setOpenCodeLogin({ ...captured, status: 'connected', errorCode: undefined, errorDiagnostic: undefined });
           void modelsState.refresh();
           void authState.refresh();
           void providerAuthState.refresh();
         } else if (status === 'cancelled' || status === 'failed' || status === 'expired') {
-          setOpenCodeLogin({ ...captured, status, ...(status === 'failed' ? { errorCode: 'openCodeCliStartFailed' as const } : {}) });
+          const failure = readOpenCodeFailure(response);
+          setOpenCodeLogin({ ...captured, status, errorCode: status === 'failed' ? failure.key : undefined,
+            errorDiagnostic: status === 'failed' ? failure.diagnostic : undefined });
         }
       } catch {
         // Keep the last known state; transient API restarts must not look like auth failure.
@@ -4546,6 +4549,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                             : openCodeLogin.status === 'expired' ? t('settings.panels.providers.codexExpired')
                                             : t('settings.panels.providers.openCodeLoginCancelled')}</span>
                                     {openCodeLogin.status === 'running' && openCodeLogin.userCode && <code>{openCodeLogin.userCode}</code>}
+                                    {openCodeLogin.status === 'failed' && openCodeLogin.errorDiagnostic && <code>{openCodeLogin.errorDiagnostic}</code>}
                                     {openCodeLogin.status === 'running' && openCodeLogin.verificationUrl && (
                                       <button type="button" className="secondary-action compact" onClick={() => {
                                         if (isOpenCodeDeviceFlowCurrent(openCodeLogin.scope, openCodeScopeRef.current,

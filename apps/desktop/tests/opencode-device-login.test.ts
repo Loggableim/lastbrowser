@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isOpenCodeDeviceFlowCurrent, startOpenCodeDeviceLogin, cancelOpenCodeDeviceLogin, validatedOpenCodeVerificationUrl, readOpenCodeDeviceStatus } from '../src/renderer/opencode-device-login.js';
+import { isOpenCodeDeviceFlowCurrent, startOpenCodeDeviceLogin, cancelOpenCodeDeviceLogin, validatedOpenCodeVerificationUrl, readOpenCodeDeviceStatus, readOpenCodeFailure } from '../src/renderer/opencode-device-login.js';
 
 const scope = { browserProfileId: 'home', workspacePath: null, backendProfileName: 'default' };
 const response = { ok: true, login_id: 'a'.repeat(32), verification_url: 'https://opencode.ai/console/device?user_code=ABCD-EFGH', user_code: 'ABCD-EFGH', interval: 5 };
@@ -9,6 +9,18 @@ function fixture() {
   return { request, openBrowser, provider: 'opencode-go', scope, isCurrent: () => true };
 }
 describe('OpenCode browser device login', () => {
+  it.each(['unsupported_workspace_gateway', 'workspace_model_unavailable', 'invalid_workspace_config'])(
+    'identifies post-authorization catalog failures %s without blaming login startup', error_code => {
+      expect(readOpenCodeFailure({ error_code })).toEqual({ key: 'openCodeWorkspaceFailed', diagnostic: error_code });
+    });
+  it('distinguishes denied authorization and connection loss', () => {
+    expect(readOpenCodeFailure({ error_code: 'access_denied' }).key).toBe('openCodeLoginDenied');
+    expect(readOpenCodeFailure({ error_code: 'device_request_failed' }).key).toBe('openCodeConnectionFailed');
+  });
+  it.each(['private credential payload', 'https://private.example/?auth=private', '__proto__', 'toString', null])(
+    'never forwards unknown diagnostic data %s', error_code => {
+      expect(readOpenCodeFailure({ error_code, access_token: 'private' })).toEqual({ key: 'openCodeLoginFinishFailed' });
+    });
   it.each(['http://opencode.ai/console/device?user_code=A', 'https://opencode.ai.evil/console/device?user_code=A',
     'https://user@opencode.ai/console/device?user_code=A', 'https://opencode.ai:443/console/device?user_code=A',
     'https://opencode.ai/console/device?user_code=A&user_code=B', 'https://opencode.ai/console/device?user_code=A&token=B',

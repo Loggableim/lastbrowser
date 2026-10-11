@@ -240,3 +240,37 @@ def test_anthropic_gateway_returns_sdk_base_matching_captured_request_authority(
     connection = device.resolve_connection("opencode-go", "synthetic-model", "session")
     assert connection["api_mode"] == "anthropic_messages"
     assert connection["base_url"] == "https://opencode.ai/inference/anthropic"
+
+
+def test_native_opencode_runtime_package_and_wire_model_id_are_supported(home):
+    value = config()
+    entry = value["providers"]["opencode-go"]
+    entry["package"] = "@opencode/ai/providers/openai-compatible"
+    entry["models"]["synthetic-model"] = {"modelID": "actual-wire-model"}
+    device._write(home, {"opencode-go": device._token_record(tokens()) | {"config": value}})
+    assert device.resolve_connection("opencode-go", "synthetic-model", "session")["model"] == "actual-wire-model"
+    assert device.resolve_connection("opencode-go", "actual-wire-model", "session")["model"] == "actual-wire-model"
+
+
+def test_valid_oauth_credentials_survive_unsupported_catalog_without_claiming_connected(home, monkeypatch):
+    login, _ = start(home, monkeypatch)
+    value = config()
+    value["providers"]["opencode-go"]["package"] = "unsupported-sdk"
+    monkeypatch.setattr(device, "_request", lambda path, **_kwargs: tokens() if path.endswith("/token") else value)
+    device._PENDING[login]["next_poll"] = 0
+    status = device.login_status(login)
+    assert status["status"] == "failed" and status["configured"] is False
+    assert status["error_code"] == "unsupported_workspace_gateway"
+    assert device.has_credentials("opencode-go")
+    assert device.credential_status("opencode-go")["logged_in"] is False
+    assert "synthetic-access" not in str(status)
+    assert "synthetic-org" not in str(status)
+    assert status["diagnostic"]["provider_match"] is True
+
+
+def test_catalog_errors_preserve_workspace_mismatch_reason(home):
+    value = config()
+    value["providers"]["opencode-go"]["headers"]["x-opencode-org-id"] = "foreign-org"
+    device._write(home, {"opencode-go": device._token_record(tokens()) | {"config": value}})
+    with pytest.raises(device.DeviceError, match="workspace_binding_changed"):
+        device.discovered_models("opencode-go")

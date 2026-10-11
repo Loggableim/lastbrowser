@@ -15,6 +15,22 @@ export function validatedOpenCodeVerificationUrl(value: unknown): string {
 }
 
 export type OpenCodeDeviceLogin = { loginId: string; verificationUrl: string; userCode: string; interval: number };
+export type OpenCodeFailureKey = 'openCodeLoginFinishFailed' | 'openCodeLoginDenied' | 'openCodeWorkspaceFailed' | 'openCodeConnectionFailed';
+const openCodeFailureKeys: Record<string, OpenCodeFailureKey> = {
+  access_denied: 'openCodeLoginDenied', invalid_grant: 'openCodeLoginFinishFailed',
+  unsupported_workspace_gateway: 'openCodeWorkspaceFailed', unsupported_workspace_header: 'openCodeWorkspaceFailed',
+  workspace_provider_unavailable: 'openCodeWorkspaceFailed', workspace_model_unavailable: 'openCodeWorkspaceFailed',
+  invalid_workspace_config: 'openCodeWorkspaceFailed', workspace_binding_changed: 'openCodeWorkspaceFailed',
+  device_request_failed: 'openCodeConnectionFailed', credential_refresh_busy: 'openCodeConnectionFailed',
+  invalid_token_response: 'openCodeLoginFinishFailed', invalid_device_response: 'openCodeLoginFinishFailed',
+  invalid_verification_url: 'openCodeLoginFinishFailed', device_login_required: 'openCodeLoginFinishFailed'
+};
+/** Never render arbitrary provider error strings, URLs, or credential payloads. */
+export function readOpenCodeFailure(value: unknown): { key: OpenCodeFailureKey; diagnostic?: string } {
+  const code = value && typeof value === 'object' ? (value as Record<string, unknown>).error_code : null;
+  return typeof code === 'string' && Object.hasOwn(openCodeFailureKeys, code)
+    ? { key: openCodeFailureKeys[code], diagnostic: code } : { key: 'openCodeLoginFinishFailed' };
+}
 export async function cancelOpenCodeDeviceLogin(request: ProviderSettingsRequester, loginId: string, scope: ProviderScopeSelection): Promise<void> {
   const result = await request({ method: 'POST', path: '/api/providers/opencode-auth/cancel', body: { login_id: loginId }, scopeSelection: scope });
   if (!result || typeof result !== 'object' || (result as Record<string, unknown>).ok !== true

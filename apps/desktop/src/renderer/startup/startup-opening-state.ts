@@ -1,4 +1,4 @@
-export type StartupOpeningState = 'idle' | 'pending' | 'opening';
+export type StartupOpeningState = 'idle' | 'pending' | 'opening' | 'completed';
 
 export type StartupOpeningAction =
   | { type: 'verified-password-login'; passwordProtected: boolean }
@@ -15,12 +15,13 @@ export function reduceStartupOpeningState(
       return action.passwordProtected ? 'pending' : 'idle';
     case 'readiness':
       if (!action.authAllowed) return 'idle';
-      if (state === 'pending' && action.ready) return action.reducedMotion ? 'idle' : 'opening';
+      if (state === 'pending' && action.ready) return action.reducedMotion ? 'completed' : 'opening';
       if (state === 'opening' && !action.ready) return 'idle';
       return state;
     case 'lock':
     case 'scope-change':
-    case 'complete':
       return 'idle';
+    case 'complete':
+      return 'completed';
   }
 }

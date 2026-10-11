@@ -24,13 +24,13 @@ describe('startup screen launch state', () => {
     expect(reduceStartupOpeningState(pending, { type: 'readiness', authAllowed: true, ready: true, reducedMotion: false })).toBe('opening');
   });
 
-  it('skips motion when reduced and cancels the opening for lock, scope change, or completion', () => {
+  it('skips motion when reduced and cancels the opening for lock or scope change', () => {
     const pending = reduceStartupOpeningState('idle', { type: 'verified-password-login', passwordProtected: true });
-    expect(reduceStartupOpeningState(pending, { type: 'readiness', authAllowed: true, ready: true, reducedMotion: true })).toBe('idle');
+    expect(reduceStartupOpeningState(pending, { type: 'readiness', authAllowed: true, ready: true, reducedMotion: true })).toBe('completed');
     const opening = reduceStartupOpeningState(pending, { type: 'readiness', authAllowed: true, ready: true, reducedMotion: false });
     expect(reduceStartupOpeningState(opening, { type: 'lock' })).toBe('idle');
     expect(reduceStartupOpeningState(opening, { type: 'scope-change' })).toBe('idle');
-    expect(reduceStartupOpeningState(opening, { type: 'complete' })).toBe('idle');
+    expect(reduceStartupOpeningState(opening, { type: 'complete' })).toBe('completed');
   });
 
   it('makes each launch icon reachable through an injected random source', () => {

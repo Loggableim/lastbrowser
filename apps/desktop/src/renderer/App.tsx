@@ -1200,7 +1200,7 @@ function AppContent(): JSX.Element {
   const [startupReadyAcknowledged, setStartupReadyAcknowledged] = useState(false);
   const [startupOpeningState, setStartupOpeningState] = useState<StartupOpeningState>('idle');
   const appShellRef = useRef<HTMLDivElement | null>(null);
-  const startupOpeningWasActiveRef = useRef(false);
+  const previousStartupOpeningStateRef = useRef<StartupOpeningState>('idle');
   const [pendingDetachedTransfer, setPendingDetachedTransfer] = useState<{ transferId: string; tabId: string } | null>(null);
   const windowStartupInitializedRef = useRef(false);
   const acknowledgingTransferRef = useRef<string | null>(null);
@@ -1485,12 +1485,12 @@ function AppContent(): JSX.Element {
     }));
   }, [startupAuthAllowsShell, startupOpeningState, startupPhase, startupReadyAcknowledged]);
   useEffect(() => {
-    const wasOpening = startupOpeningWasActiveRef.current;
-    const isOpening = startupOpeningState === 'opening';
-    if (wasOpening && !isOpening && startupAuthAllowsShell && startupPhase === 'ready' && startupReadyAcknowledged) {
+    const previousState = previousStartupOpeningStateRef.current;
+    const finishedOpening = startupOpeningState === 'completed' && (previousState === 'opening' || previousState === 'pending');
+    if (finishedOpening && startupAuthAllowsShell && startupPhase === 'ready' && startupReadyAcknowledged) {
       appShellRef.current?.focus({ preventScroll: true });
     }
-    startupOpeningWasActiveRef.current = isOpening;
+    previousStartupOpeningStateRef.current = startupOpeningState;
   }, [startupAuthAllowsShell, startupOpeningState, startupPhase, startupReadyAcknowledged]);
   useEffect(() => {
     let current = true;

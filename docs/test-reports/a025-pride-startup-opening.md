@@ -45,4 +45,11 @@ The reduced-motion loading frame keeps the Pride border static while the locked 
 - Full repository unit and integration suite: 228 files passed, 2,075 tests passed, 19 skipped.
 - Desktop renderer and main-process build passed; Vite reported the existing large JavaScript chunk warning.
 - Browser preview checked frame movement, all three controlled opening times, normal completion, and direct reduced-motion completion.
-- Store preflight: 39 checks passed, 0 failed, 2 warnings (provisional screenshots and no final package).\n- Desktop renderer and main-process build passed.\n- Python syntax compilation passed.\n- System integration policy suite: 20 tests passed.\n- `git diff --check` passed.
+- Store preflight: 39 checks passed, 0 failed, 2 warnings (provisional screenshots and no final package).
+- Python syntax compilation passed.
+- System integration policy suite: 20 tests passed.
+- `git diff --check` passed.
+
+## Independent review correction
+
+The independent reviewer found that Reduced Motion skipped the animation and also skipped the app-shell focus handoff. The opening state now records direct completion, and App returns focus to the shell after either animated or direct completion once the auth and readiness gates still pass. The focused startup integration test asserts this handoff.

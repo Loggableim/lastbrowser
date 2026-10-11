@@ -48,6 +48,8 @@ describe('startup readiness App and Main IPC integration contract', () => {
     expect(app).toContain('}, [activeProfileId]);');
     expect(app).toContain('inert={startupOpeningState === \'opening\'}');
     expect(app).toContain('onOpeningComplete={completeStartupOpening}');
+    expect(app).toContain("startupOpeningState === 'completed' && (previousState === 'opening' || previousState === 'pending')");
+    expect(app).toContain("appShellRef.current?.focus({ preventScroll: true })");
     expect(app).toContain('getStartupBackgroundPhase(startupReadinessSignals, startupAuthPolicy)');
   });
 

@@ -39,6 +39,10 @@ One intermediate application restart showed a blank surface; Ctrl+R restored it.
 
 ## Pending live gate
 
-Successful user browser approval, authenticated workspace catalog retrieval and real OpenCode chat are not yet claimed. No automated authentication-dialog interaction or model call was performed in these checks.
+Follow-up after the human approval: the embedded Console visibly reports `Device authorized`. Sanitized backend status is `failed`, `configured=false`, `error_code=unsupported_workspace_gateway`. The token exchange and workspace configuration request succeeded, but LastBrowser rejected the returned catalog/connection interpretation before saving the credential. This is a LastBrowser integration failure, not evidence that the displayed `Unknown client` prevents authorization. Real OpenCode chat remains blocked and has not passed.
+
+The signed-in Console's Integrations, Settings > General and Settings > Security expose no custom OAuth client registration option. No registration was created and no account/security setting was changed. The official device-flow documentation explicitly permits other CLIs to use their own client ID; a way to customize the displayed client name is still unverified.
+
+No automated authentication-dialog interaction or model call was performed in these checks. A repair and renewed live verification are in progress.
 
 No credentials, auth/config files, databases, private device codes or raw provider logs are included in this report.

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type AnimationEvent, type ReactNode } from 'react';
 import { startupScreenCopy, resolveStartupLocale } from './startup-screen-copy.js';
 import { chooseStartupQuoteIndex, nextStartupQuoteIndex, type StartupIconId, type StartupPhaseId } from './startup-screen-state.js';
 import './StartupScreen.css';
@@ -22,16 +22,19 @@ export type StartupScreenProps = {
   retryContent?: ReactNode;
   reducedMotion?: boolean;
   random?: () => number;
+  opening?: boolean;
+  onOpeningComplete?: () => void;
 };
 
-function readReducedMotionPreference(): boolean {
+export function readReducedMotionPreference(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
     ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
     : false;
 }
 
-export function StartupScreen({ locale, launchIcon, phase, error = null, onRetry, retryContent, reducedMotion, random }: StartupScreenProps) {
+export function StartupScreen({ locale, launchIcon, phase, error = null, onRetry, retryContent, reducedMotion, random, opening = false, onOpeningComplete }: StartupScreenProps) {
   const copy = startupScreenCopy[resolveStartupLocale(locale)];
+  const screenRef = useRef<HTMLElement>(null);
   const [quoteIndex, setQuoteIndex] = useState(() => chooseStartupQuoteIndex(random));
   const [systemReducedMotion, setSystemReducedMotion] = useState(readReducedMotionPreference);
   const motionIsReduced = reducedMotion ?? systemReducedMotion;
@@ -45,13 +48,28 @@ export function StartupScreen({ locale, launchIcon, phase, error = null, onRetry
   }, []);
 
   useEffect(() => {
+    if (!opening) return;
+    screenRef.current?.focus({ preventScroll: true });
+    if (motionIsReduced) onOpeningComplete?.();
+  }, [motionIsReduced, onOpeningComplete, opening]);
+
+  useEffect(() => {
     if (error || motionIsReduced) return undefined;
     const timer = window.setInterval(() => setQuoteIndex((current) => nextStartupQuoteIndex(current, copy.quotes.length)), 4_000);
     return () => window.clearInterval(timer);
   }, [copy.quotes.length, error, motionIsReduced]);
 
   return (
-    <main className={`startup-screen${error ? ' startup-screen--error' : ''}${motionIsReduced ? ' startup-screen--reduced-motion' : ''}`}>
+    <main
+      ref={screenRef}
+      tabIndex={opening ? -1 : undefined}
+      onAnimationEnd={(event: AnimationEvent<HTMLElement>) => {
+        if (opening && event.target === event.currentTarget && event.animationName === 'startup-open-overlay') {
+          onOpeningComplete?.();
+        }
+      }}
+      className={`startup-screen${error ? ' startup-screen--error' : ''}${motionIsReduced ? ' startup-screen--reduced-motion' : ''}${opening ? ' startup-screen--opening' : ''}`}
+    >
       <div className="startup-screen__content">
         <div className="startup-screen__art" aria-hidden="true">
           <div className="startup-screen__glow" />

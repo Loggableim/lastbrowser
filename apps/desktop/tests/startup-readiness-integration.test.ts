@@ -39,6 +39,17 @@ describe('startup readiness App and Main IPC integration contract', () => {
     expect(app).toContain('const generation = accessAuthGateRef.current!.state.generation');
     expect(app).toContain("deriveStartupPhase(startupReadinessSignals, startupAuthPolicy)");
     expect(app).toContain("if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged)");
+    expect(app).toContain("type: 'verified-password-login'");
+    expect(app).toContain('passwordProtectedAtSubmit && auth.auth_enabled === true');
+    expect(app).toContain("ready: startupPhase === 'ready' && startupReadyAcknowledged");
+    expect(app).toContain("type: 'readiness'");
+    expect(app).toContain("setStartupOpeningState((current) => reduceStartupOpeningState(current, { type: 'lock' }))");
+    expect(app).toContain("setStartupOpeningState((current) => reduceStartupOpeningState(current, { type: 'scope-change' }))");
+    expect(app).toContain('}, [activeProfileId]);');
+    expect(app).toContain('inert={startupOpeningState === \'opening\'}');
+    expect(app).toContain('onOpeningComplete={completeStartupOpening}');
+    expect(app).toContain("startupOpeningState === 'completed' && (previousState === 'opening' || previousState === 'pending')");
+    expect(app).toContain("appShellRef.current?.focus({ preventScroll: true })");
     expect(app).toContain('getStartupBackgroundPhase(startupReadinessSignals, startupAuthPolicy)');
   });
 

@@ -1,5 +1,6 @@
 .startup-screen {
   --startup-navy: #071426;
+  --startup-pride-angle: 0deg;
   position: fixed;
   inset: 0;
   z-index: 2000;
@@ -7,27 +8,20 @@
   place-items: center;
   overflow: hidden;
   padding: clamp(28px, 6vw, 72px);
-  border: 1px solid transparent;
+  border: 3px solid transparent;
   border-radius: 18px;
   background:
     linear-gradient(145deg, #071426 0%, #0a1b31 55%, #071426 100%) padding-box,
-    conic-gradient(from 0deg, #2dd4bf, #4f9cff, #a855f7, #ff6ba5, #ff9d52, #2dd4bf) border-box;
+    conic-gradient(from var(--startup-pride-angle), #ff0018 0deg 60deg, #ff8c00 60deg 120deg, #ffe600 120deg 180deg, #008026 180deg 240deg, #004dff 240deg 300deg, #750787 300deg 360deg) border-box;
   color: #f4f7ff;
   isolation: isolate;
+  animation: startup-pride-lap 12s linear infinite;
 }
 
-.startup-screen::before {
-  position: absolute;
-  z-index: -1;
-  inset: -1px;
-  border: 1px solid transparent;
-  border-radius: inherit;
-  background: conic-gradient(from 0deg, transparent 0 62%, rgb(109 222 255 / 18%) 69%, #68e5ff 73%, #ae78ff 78%, rgb(255 113 190 / 32%) 82%, transparent 89%) border-box;
-  content: '';
-  filter: blur(5px);
-  opacity: 0.45;
-  pointer-events: none;
-  animation: startup-rainbow-trail 9s linear infinite;
+@property --startup-pride-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
 }
 
 .startup-screen__content {
@@ -49,12 +43,12 @@
 
 .startup-screen__glow {
   position: absolute;
-  width: 76%;
+  width: 58%;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: radial-gradient(circle, rgb(47 219 255 / 34%) 0%, rgb(115 95 255 / 24%) 42%, transparent 72%);
-  filter: blur(28px);
-  animation: startup-glow-breathe 4.8s ease-in-out infinite;
+  background: radial-gradient(circle, rgb(47 219 255 / 30%) 0%, rgb(115 95 255 / 18%) 48%, transparent 72%);
+  filter: blur(18px);
+  animation: startup-glow-breathe 3.2s ease-in-out infinite;
 }
 
 .startup-screen__icon {
@@ -190,26 +184,38 @@
 }
 
 .startup-screen--error .startup-screen__glow,
-.startup-screen--error::before,
+.startup-screen--reduced-motion,
 .startup-screen--reduced-motion .startup-screen__glow,
-.startup-screen--reduced-motion::before,
 .startup-screen--reduced-motion .startup-screen__quote {
   animation: none;
 }
 
-.startup-screen--error::before,
 .startup-screen--error .startup-screen__glow {
   opacity: 0;
 }
 
+.startup-screen--opening {
+  animation: startup-open-overlay 650ms cubic-bezier(0.2, 0.72, 0.24, 1) both;
+  box-shadow: 0 0 0 0 rgb(255 255 255 / 0%);
+}
+
+.startup-screen--opening .startup-screen__art {
+  animation: startup-open-mascot 650ms cubic-bezier(0.2, 0.72, 0.24, 1) both;
+}
+
+.startup-screen--opening .startup-screen__glow {
+  animation: startup-open-glow 650ms ease-out both;
+}
+
 .startup-screen--error {
+  animation: none;
   background:
     linear-gradient(145deg, #071426 0%, #0a1b31 55%, #071426 100%) padding-box,
     linear-gradient(#314259, #314259) border-box;
 }
 
-@keyframes startup-rainbow-trail {
-  to { transform: rotate(1turn); }
+@keyframes startup-pride-lap {
+  to { --startup-pride-angle: 360deg; }
 }
 
 @keyframes startup-glow-breathe {
@@ -222,6 +228,22 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes startup-open-overlay {
+  0% { opacity: 1; box-shadow: 0 0 0 0 rgb(255 255 255 / 0%); }
+  18% { opacity: 1; box-shadow: 0 0 20px 5px rgb(255 255 255 / 42%); }
+  100% { opacity: 0; box-shadow: 0 0 2px 0 rgb(255 255 255 / 0%); }
+}
+
+@keyframes startup-open-mascot {
+  from { transform: scale(1); }
+  to { transform: scale(0.78); }
+}
+
+@keyframes startup-open-glow {
+  from { opacity: 0.86; transform: scale(1.08); }
+  to { opacity: 0; transform: scale(0.6); }
+}
+
 @media (max-width: 520px) {
   .startup-screen { padding: 24px; }
   .startup-screen__brand { margin-bottom: 17px; }
@@ -230,7 +252,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .startup-screen::before,
+  .startup-screen,
   .startup-screen__glow,
-  .startup-screen__quote { animation: none; }
+  .startup-screen__quote,
+  .startup-screen--opening .startup-screen__art { animation: none; }
 }

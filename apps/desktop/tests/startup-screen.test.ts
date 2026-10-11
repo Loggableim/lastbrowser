@@ -6,12 +6,33 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { desktopLocaleIds } from '../src/renderer/i18n/keys.js';
 import { StartupScreen } from '../src/renderer/startup/StartupScreen.js';
+import { reduceStartupOpeningState } from '../src/renderer/startup/startup-opening-state.js';
 import { startupScreenCopy, startupLocaleIds } from '../src/renderer/startup/startup-screen-copy.js';
 import { chooseStartupIcon, chooseStartupQuoteIndex, deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isStartupReady, isValidStartupModelCatalog, nextStartupQuoteIndex, startupIconIds, type StartupReadinessSignals } from '../src/renderer/startup/startup-screen-state.js';
 
 const sourceRoot = path.resolve(process.cwd(), 'src/renderer/startup');
 
 describe('startup screen launch state', () => {
+  it('opens only after a verified protected login and completed auth plus browser readiness', () => {
+    expect(reduceStartupOpeningState('idle', { type: 'verified-password-login', passwordProtected: false })).toBe('idle');
+    expect(reduceStartupOpeningState('idle', { type: 'readiness', authAllowed: true, ready: true, reducedMotion: false })).toBe('idle');
+
+    const pending = reduceStartupOpeningState('idle', { type: 'verified-password-login', passwordProtected: true });
+    expect(pending).toBe('pending');
+    expect(reduceStartupOpeningState(pending, { type: 'readiness', authAllowed: true, ready: false, reducedMotion: false })).toBe('pending');
+    expect(reduceStartupOpeningState(pending, { type: 'readiness', authAllowed: false, ready: true, reducedMotion: false })).toBe('idle');
+    expect(reduceStartupOpeningState(pending, { type: 'readiness', authAllowed: true, ready: true, reducedMotion: false })).toBe('opening');
+  });
+
+  it('skips motion when reduced and cancels the opening for lock or scope change', () => {
+    const pending = reduceStartupOpeningState('idle', { type: 'verified-password-login', passwordProtected: true });
+    expect(reduceStartupOpeningState(pending, { type: 'readiness', authAllowed: true, ready: true, reducedMotion: true })).toBe('completed');
+    const opening = reduceStartupOpeningState(pending, { type: 'readiness', authAllowed: true, ready: true, reducedMotion: false });
+    expect(reduceStartupOpeningState(opening, { type: 'lock' })).toBe('idle');
+    expect(reduceStartupOpeningState(opening, { type: 'scope-change' })).toBe('idle');
+    expect(reduceStartupOpeningState(opening, { type: 'complete' })).toBe('completed');
+  });
+
   it('makes each launch icon reachable through an injected random source', () => {
     const selected = startupIconIds.map((_, index) => chooseStartupIcon(() => index / startupIconIds.length));
     expect(selected).toEqual(startupIconIds);
@@ -112,6 +133,12 @@ describe('startup screen copy and motion rules', () => {
     }));
     expect(ready).toContain('Dein Browser ist bereit.');
 
+    const opening = renderToStaticMarkup(createElement(StartupScreen, {
+      locale: 'de', launchIcon: 'sidekick-03', phase: 'ready', opening: true, reducedMotion: false
+    }));
+    expect(opening).toContain('startup-screen--opening');
+    expect(opening).toContain('tabindex="-1"');
+
     const error = renderToStaticMarkup(createElement(StartupScreen, {
       locale: 'de', launchIcon: 'sidekick-03', phase: 'engine', error: 'Ein Testfehler', onRetry: () => undefined
     }));
@@ -130,6 +157,15 @@ describe('startup screen copy and motion rules', () => {
     expect(styles).toContain('aspect-ratio: 1.071 / 1');
     expect(styles).toContain('.startup-screen--error {');
     expect(styles).toContain('linear-gradient(#314259, #314259) border-box');
+    expect(styles).toContain('#ff0018 0deg 60deg');
+    expect(styles).toContain('#ff8c00 60deg 120deg');
+    expect(styles).toContain('#ffe600 120deg 180deg');
+    expect(styles).toContain('#008026 180deg 240deg');
+    expect(styles).toContain('#004dff 240deg 300deg');
+    expect(styles).toContain('#750787 300deg 360deg');
+    expect(styles).not.toContain('startup-rainbow-trail');
+    expect(styles).toContain('startup-open-overlay 650ms');
+    expect(styles).toContain('startup-open-mascot 650ms');
   });
 
   it('keeps all six original icon assets byte-bound to their documented sources', () => {

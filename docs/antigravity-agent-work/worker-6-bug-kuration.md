@@ -1,7 +1,7 @@
 # antigravity-worker-6 – Bug-Kurator und Bugsucher (+ Allround)
 
 **Rolle:** Bug-Kurator und Bugsucher (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :10 (`Cron: 10 * * * *`, aktiver Daemon-Task `task-62`)  
+**Taktung:** 1 Lauf pro Stunde, immer um :10 (`Cron: 10 * * * *`, aktiver Daemon-Task `task-80`)  
 **Aktueller Lauf:** Run 5 – 11. Oktober 2026, 05:10–05:18 Uhr CEST  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Folgeversion: `0.1.53`)  
@@ -97,7 +97,7 @@
 - **State File:** [`.agents/state/antigravity-worker-6.json`](file:///c:/projekte/lastbrowser/.agents/state/antigravity-worker-6.json)
 - **Lauf-Zähler (`runs_total`):** 5
 - **Fehler:** Keiner (`last_error`: `null`)
-- **Aktiver Daemon-Job:** Stündliche Ausführung immer um `:10` (`Cron: 10 * * * *`, Task `task-62`)
+- **Aktiver Daemon-Job:** Stündliche Ausführung immer um `:10` (`Cron: 10 * * * *`, Task `task-80`)
 - **Run-Lock:** Nach Abschluss des Laufs freigegeben (`run_lock_since`: `null`)
 - **Letzter Rapport:** `2026-10-11T05:18:00+02:00`
 

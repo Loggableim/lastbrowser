@@ -9995,7 +9995,7 @@ html.theme-light .browser-start-search input {
 /* ─── Zen Mode Left Edge Hover Sensor & Floating Sidebar ─────────────────── */
 .zen-left-hover-sensor {
   position: absolute;
-  top: 0;
+  top: var(--zen-titlebar-inset, 42px);
   left: 0;
   bottom: 0;
   width: 10px;
@@ -10012,7 +10012,7 @@ html.theme-light .browser-start-search input {
 
 .zen-sidebar-overlay {
   position: absolute;
-  top: 0;
+  top: var(--zen-titlebar-inset, 42px);
   left: 0;
   bottom: 0;
   z-index: 120;
@@ -10070,6 +10070,11 @@ html.theme-light .browser-start-search input {
 
 .app-shell.zen-mode .browser-zen-workspace {
   height: 100vh;
+}
+
+/* Keep the revealed Zen sidebar and its edge hit area below the autohiding chrome. */
+.app-shell.zen-mode {
+  --zen-titlebar-inset: var(--titlebar-height, 42px);
 }
 
 /* ─── Multi-Tab Splitscreen (2, 3, 4 Viewports) ────────────────────────── */

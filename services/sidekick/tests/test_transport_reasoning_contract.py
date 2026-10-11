@@ -30,6 +30,21 @@ def test_codex_responses_transport_validates_usable_and_failed_responses():
     assert transport.validate_response(SimpleNamespace(status="completed", output=[], output_text="  ")) is False
 
 
+def test_codex_model_catalog_uses_the_bound_runtime_credential_pool(monkeypatch):
+    from cli.models import provider_model_ids
+
+    resolved = []
+    def resolve_runtime_provider(*, requested):
+        resolved.append(requested)
+        return {"api_key": "synthetic-bound-profile-token"}
+    monkeypatch.setattr("cli.runtime_provider.resolve_runtime_provider", resolve_runtime_provider)
+    monkeypatch.setattr(codex_models, "get_codex_model_ids",
+                        lambda *, access_token: ["gpt-bound-fixture"] if access_token == "synthetic-bound-profile-token" else [])
+
+    assert provider_model_ids("openai-codex") == ["gpt-bound-fixture"]
+    assert resolved == ["openai-codex"]
+
+
 def test_anthropic_messages_transport_validates_content_blocks():
     transport = AnthropicMessagesTransport()
 

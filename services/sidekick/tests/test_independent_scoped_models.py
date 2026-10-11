@@ -178,6 +178,32 @@ def test_model_catalog_resolves_codex_models_before_the_shared_cache_builder(mon
     assert raw["groups"][0]["models"] == [{"id": "stale-local-model"}]
 
 
+def test_capability_catalog_reuses_capture_and_rejects_stale_evidence(monkeypatch):
+    import threading
+    from pathlib import Path
+    from runtime.independent.capabilities import CapabilityService
+    from runtime.independent.contracts import new_id
+    from runtime.independent.policy import PolicyDenied
+
+    scope = Scope(backend_profile_id=new_id(), space_id=new_id(), browser_profile_id="default")
+    profile_home = Path("profile-fixture")
+    manager = SimpleNamespace(store=None, _lock=threading.RLock(),
+        resolver=SimpleNamespace(resolve=lambda _scope: SimpleNamespace(profile_home=profile_home)))
+    service = CapabilityService(manager)
+    catalog = {"groups": [], "providers": [], "capabilityInventory":
+        {"plugins": [], "mcp": [], "evidenceDigest": "same-profile-digest"}}
+    probe = []
+    monkeypatch.setattr("runtime.independent.capabilities.evidence_digest", lambda _home: "same-profile-digest")
+    monkeypatch.setattr("runtime.independent.scoped_models.probe_catalog", lambda *args, **kwargs: probe.append(True))
+
+    assert "entries" in service.catalog(scope, refresh=True, discovered_catalog=catalog)
+    assert not probe
+    monkeypatch.setattr("runtime.independent.capabilities.evidence_digest", lambda _home: "changed-profile-digest")
+    with pytest.raises(PolicyDenied, match="capability_configuration_changed"):
+        service.catalog(scope, refresh=True, discovered_catalog=catalog)
+    assert not probe
+
+
 def test_set_is_atomic_preserves_other_settings_and_retry_survives_reopen(bound):
     hub, _, resolver, manager, scope = bound
     resolved = resolver.resolve(scope)

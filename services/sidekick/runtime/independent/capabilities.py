@@ -117,7 +117,7 @@ class CapabilityService:
             self._cache = manager._capability_evidence
         self._lock = manager._lock
 
-    def catalog(self, scope: Scope, *, refresh: bool = False) -> dict[str, Any]:
+    def catalog(self, scope: Scope, *, refresh: bool = False, discovered_catalog: dict | None = None) -> dict[str, Any]:
         resolved = self.manager.resolver.resolve(scope)
         fingerprint = evidence_digest(resolved.profile_home)
         with self._lock:
@@ -129,7 +129,8 @@ class CapabilityService:
         if cached_catalog is not None:
             return self._with_browser_entries(scope, cached_catalog)
         from .scoped_models import probe_catalog
-        raw = probe_catalog(self.manager, scope, resolved=resolved, include_capabilities=True)
+        raw = discovered_catalog if discovered_catalog is not None else probe_catalog(
+            self.manager, scope, resolved=resolved, include_capabilities=True)
         inventory = raw.get("capabilityInventory") or {}
         if inventory.get("evidenceDigest") != fingerprint or evidence_digest(resolved.profile_home) != fingerprint:
             raise PolicyDenied("capability_configuration_changed")

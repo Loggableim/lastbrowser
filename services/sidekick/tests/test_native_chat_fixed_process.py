@@ -32,7 +32,9 @@ def captured_fixed(context,store,monkeypatch):
     manager.capabilities=CapabilityService(manager)
     manager.connection_validator=manager.capabilities.validate
     resolved=resolver.resolve(context.scope,authenticated_profile_name=context.profile_name)
+    probe_calls = []
     def catalog(actual_manager, actual_scope, **kwargs):
+        probe_calls.append(kwargs.get("include_capabilities"))
         # Explicit controlled catalog metadata; SDK/provider requests remain real.
         actual_home = actual_manager.resolver.resolve(actual_scope,
             authenticated_profile_name=actual_manager.store.get_profile_ref(actual_scope.backend_profile_id).name).profile_home
@@ -54,7 +56,9 @@ def captured_fixed(context,store,monkeypatch):
     context=context.model_copy(update={"writer_lease_id":lease["leaseId"]})
     session=SimpleNamespace(**json.loads((Path(context.sessions_dir)/(context.session_id+".json")).read_text("utf-8")))
     monkeypatch.setattr("web.api.model_policy.service_for_native_chat",lambda *_,**__: (service,resolved))
+    probe_calls.clear()
     capture=capture_fixed_provider(session)
+    service._catalog_probe_calls = probe_calls
     context=NativeChatContext.model_validate({**context.model_dump(mode="json"),
         "provider_capture":capture.model_dump(mode="json")})
     return context,session,service,resolver
@@ -65,6 +69,7 @@ def test_parent_capture_fixed_uses_actual_writer_and_scoped_provider(tmp_path,mo
     context,store=fixture_context(tmp_path,"a")
     try:
         context,session,service,resolver=captured_fixed(context,store,monkeypatch)
+        assert service._catalog_probe_calls == [True]
         hub=SimpleNamespace(by_scope=lambda *_:(store,resolver))
         actual=capture_native_chat_context(session,context.stream_id,
             NativeChatWriter(store,context.writer_lease_id,context.writer_generation),profile_hub=hub)

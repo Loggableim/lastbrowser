@@ -509,3 +509,68 @@ login/inference and QuickChat early-Stop remain unverified. This gate set is
 source-level evidence only; the new private VM installer has not yet been
 built or tested. The previous signed candidate's P004 FAIL remains bound to
 that earlier artifact and is not revised by these source tests.
+
+## Private unsigned VM candidate (2026-10-11)
+
+**Source binding:** commit
+`ca564a91d453623c96740c629cd00320c0455034` on
+`codex/v0155-integration-20261011`; root and desktop package versions are both
+`0.1.55`. The working tree was clean at package start. PR56's fix and reviewed
+heads for PR58, PR60, PR61, PR63, and PR64 are ancestors of this commit. PR56
+remains closed/unmerged on GitHub. PR62 and PR57 target v0.1.56 and were
+excluded. PR55's remote head was not advanced by this private test handoff.
+
+The offline preview was built with
+`node scripts/package-feature-preview.cjs` into
+`output/feature-preview-2026-10-11T17-05-58-119Z-38ad0181`; its receipt reports
+10,235 resource files, `blocked: []`, `unsigned: true`, `published: false`, and
+`fullAcceptanceVerified: false`. A scan of packaged resources found no
+`.db`, SQLite sidecars, `.gguf`, `auth.json`, or `config.yaml`. The app
+executable reports `NotSigned`. The installer/portable files were then created
+from this exact unpacked preview with
+`node scripts/package-dist-preview.cjs
+output/feature-preview-2026-10-11T17-05-58-119Z-38ad0181`; the builder log
+confirms signing skipped and no publish target was used.
+
+| Artifact | Path in this worktree | Bytes | SHA-256 | Version | Authenticode |
+| --- | --- | ---: | --- | --- | --- |
+| Setup | `output/dist-preview-2026-10-11T17-05-58-119Z-38ad0181/Lastbrowser-0.1.55-UNSIGNED-VMTEST-ca564a91-x64-setup.exe` | 167,156,908 | `680622c72e4b613a9feea3326f69dc2dc9ad7280c0653de827214ff1d068e337` | File/Product 0.1.55 | NotSigned |
+| Portable | `output/dist-preview-2026-10-11T17-05-58-119Z-38ad0181/Lastbrowser-0.1.55-UNSIGNED-VMTEST-ca564a91-x64-portable.exe` | 166,802,667 | `82275076b2ade012919ad149940de76bc48f511521f1865ecf9b37e9e9f4c8c2` | File/Product 0.1.55 | NotSigned |
+
+Both artifacts were uploaded to the existing GitHub draft release
+[v0.1.54 + v0.1.55 VM-Testkandidaten (NICHT VEROEFFENTLICHEN)](https://github.com/Loggableim/lastbrowser/releases/tag/untagged-db01e8964de38692c212).
+After upload, the release still reported `isDraft: true`; GitHub's asset byte
+sizes and SHA-256 digests matched the local files above. The draft still also
+contains older signed candidates, so the VM handoff calls out the unique
+`UNSIGNED-VMTEST-ca564a91` names explicitly. No public release was created.
+
+**Local executable evidence:**
+`scripts/probe-preview-executable.cjs` passed against the exact unpacked
+preview (`output/direct-exe-3b1a5d93-2dd1-498f-8941-72d58f256b8a.json`), and
+`scripts/probe-portable-executable.cjs` passed against the exact portable
+(`output/portable-exe-ef351fbc-4539-49b3-8ae2-03339357d2c4.json`). Both
+observed the app shell and first-run view with bundled Sidekick ready, used an
+owned temporary profile/runtime, exited 0, and cleaned that temporary data.
+These are host launch probes; no NSIS installation or VM interaction was
+performed here.
+
+**VM evidence reconciliation and handoff:** the earlier P004 failure remains
+attached to the previous signed candidate bound to source `68c2cddf` and its
+recorded hashes. It is not carried forward as a result for this build, which
+is currently **untested in the VM**. The existing P004 Slack task was updated
+with source commit, exact uploaded asset names/links, sizes, hashes, and PR
+coverage. Cid's direct instruction for this handoff specifies an unsigned
+private installer, so the old P004 trigger's valid-signature requirement is
+superseded for these two assets only: the tester was asked to verify the
+expected `NotSigned` state, stop if the VM blocks unsigned execution without
+bypassing policy, and bind every result to this source/package hash. The
+existing VM tester remains the sole owner; no second VM was driven. The P004
+task requests the full existing matrix, including both chat paths and the
+new Zen geometry, profile-switch, extension-tab, startup/password, avatar,
+and OpenCode review points. No VM PASS is claimed until that report arrives.
+
+The source gates above passed before packaging: 238 files / 2,167 tests;
+Store preflight 39 PASS / 2 WARN / 0 FAIL; desktop build passed with the
+existing 2.50 MB JS chunk advisory; Python compileall passed. These results
+remain source/package-preparation evidence and do not certify VM behavior,
+live model inference, or public release readiness.

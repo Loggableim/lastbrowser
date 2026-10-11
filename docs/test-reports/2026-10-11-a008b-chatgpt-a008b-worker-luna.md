@@ -1,8 +1,12 @@
 # A-008b verification report
 
 Date: 2026-10-11  
-Base: `release/v0.1.52` (`ca616df01796975f560a60060ae11c979de301e0`)  
-Branch: `codex/a-008b-ctrl-num-20261010`
+Base: `release/v0.1.52` (`7d3d52bb58114296b66b7eeef290b67581b226bc`)
+Branch: `codex/a-008b-ctrl-num-clean-20261011`
+
+## PR basis correction
+
+The first PR (#47) was based on a stale divergent history. Its full diff against the current release head included unrelated release version/download changes, deleted documentation and tests, and other renderer/backend changes. The A-008b commit was cherry-picked onto the current GitHub release head above. This replacement branch contains only `App.tsx`, `tests/shortcuts.test.ts`, and this report; no release metadata, public download, unrelated test, docs, or backend changes are included.
 
 ## Decision and change
 
@@ -19,7 +23,7 @@ Added a regression in `tests/shortcuts.test.ts` covering all eight Ctrl mappings
 | Focused regression before source change | Failed as expected on the competing Pinned App listener. |
 | Focused regression after source change | Passed: `tests/shortcuts.test.ts`, 10/10 tests. |
 | Electron DOM suite | Passed after local binary restore: `tests/address-autocomplete-dom.test.ts`, 17/17 tests. |
-| `npm run test:run` | Passed: 215/215 files, 1,967/1,967 tests. |
+| `npm run test:run` | Passed on the corrected base: 220/220 files, 1,995/1,995 tests. |
 | `npm run build` | Passed; TypeScript and Vite build succeeded. Vite emitted its existing large-chunk advisory. |
 | `npm run verify:store` | 39 passed, 0 failures, 2 warnings (screenshots provisional; no final package supplied). This is a preflight, not package certification. |
 | `python -m compileall -q services/sidekick` | Passed. |

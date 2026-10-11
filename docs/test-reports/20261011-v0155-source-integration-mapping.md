@@ -574,3 +574,41 @@ Store preflight 39 PASS / 2 WARN / 0 FAIL; desktop build passed with the
 existing 2.50 MB JS chunk advisory; Python compileall passed. These results
 remain source/package-preparation evidence and do not certify VM behavior,
 live model inference, or public release readiness.
+
+## Exact VM intake pins and fetchable source
+
+The VM tester reported that a direct fetch by SHA failed because the source
+commit was not advertised as a ref. The exact source commit is now reachable by
+a normal fast-forward push on `refs/heads/codex/v0155-integration-20261011`;
+the pushed branch tip is `e63641ebaa4dd0ea538c1ff49b7d7571e5e757f6`, whose
+parent is the unchanged build commit `ca564a91d453623c96740c629cd00320c0455034`.
+Fetch that branch first, then check out the build commit itself. No force push
+or source rewrite was used, and no rebuild was performed.
+
+The VM's observed `resources/app.asar` independently matches the local unpacked
+candidate: 73,124,546 bytes, SHA-256
+`ed6a385a5c85a591875fec23a735f2a32264afe5aa11458eafd8929aa73df165`. The
+packaged resource inventory is
+`output/feature-preview-2026-10-11T17-05-58-119Z-38ad0181/resource-hashes.json`
+(1,452,591 bytes, SHA-256
+`d4d3700de50f48b4293444e06281b8a47cf220f98849319eaedbf01962b3ea17`); it
+contains individual hashes for the 10,235 packaged resource files. Key entries
+include `services/sidekick-source.json` (171 bytes,
+`b78375e6b68f0dd61443170c33008db097ab84023087dc8fe9182de182ae61e5`) and
+`runtime/python/python.exe`
+(`4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a`). The
+packaged build marker is `resources/lastbrowser-build-variant.json` (67 bytes,
+SHA-256 `f2d2a0a7c244d7ebf81415ecb00c19d728133253323f833a71dccd5ca0b4e765`)
+and states schema 1, `offline-test`, appVersion `0.1.55`.
+
+The offline build receipt is
+`output/feature-preview-2026-10-11T17-05-58-119Z-38ad0181/preview-result.json`
+(184 bytes, SHA-256
+`33dee33105a5c33dbbf3cbf6d0872b0edfef276cd33507eea83f79ec6e6285c7`); it
+records 10,235 resources, no blocked resources, unsigned true, published
+false, and fullAcceptanceVerified false. Its `artifacts` array is empty, so
+the receipt does not itself cryptographically bind the installer or portable
+EXE. This report supplies the explicit outer mapping from that receipt and
+inventory to the unchanged source build commit, the matching app.asar, and the
+setup/portable SHA-256 values listed above. The installers remain `NotSigned`;
+the VM tester must still report its own run before any acceptance claim.

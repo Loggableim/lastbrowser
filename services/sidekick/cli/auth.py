@@ -2972,6 +2972,12 @@ def get_codex_auth_status() -> Dict[str, Any]:
 
 def get_api_key_provider_status(provider_id: str) -> Dict[str, Any]:
     """Status snapshot for API-key providers (z.ai, Kimi, MiniMax)."""
+    if provider_id in {"opencode-zen", "opencode-go"}:
+        from cli.opencode_device import has_credentials, credential_status
+        if has_credentials(provider_id):
+            status = credential_status(provider_id)
+            return {"provider": provider_id, "key_source": "opencode_device", "base_url": "",
+                    "configured": bool(status.get("logged_in")), **status}
     pconfig = PROVIDER_REGISTRY.get(provider_id)
     if not pconfig or pconfig.auth_type != "api_key":
         return {"configured": False}
@@ -3079,6 +3085,12 @@ def resolve_api_key_provider_credentials(provider_id: str) -> Dict[str, Any]:
 
     Returns dict with: provider, api_key, base_url, source.
     """
+    if provider_id in {"opencode-zen", "opencode-go"}:
+        from cli.opencode_device import has_credentials, resolve_connection
+        if has_credentials(provider_id):
+            from cli.models import get_default_model_for_provider
+            model = get_default_model_for_provider(provider_id)
+            return {"provider": provider_id, "source": "opencode_device", **resolve_connection(provider_id, model=model)}
     pconfig = PROVIDER_REGISTRY.get(provider_id)
     if not pconfig or pconfig.auth_type != "api_key":
         raise AuthError(

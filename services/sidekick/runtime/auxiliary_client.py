@@ -1211,6 +1211,27 @@ def _read_codex_access_token() -> Optional[str]:
         return None
 
 
+def _resolve_opencode_device_client(provider, model=None, *, raw_codex=False):
+    """Build the actual SDK transport from the authenticated workspace config."""
+    from cli.opencode_device import discovered_models, resolve_connection
+    session_id = _RUNTIME_MAIN_SESSION.get()
+    if not session_id:
+        raise PermissionError("opencode_device_session_required")
+    models = discovered_models(provider)
+    selected = model or (models[0] if models else "")
+    connection = resolve_connection(provider, model=selected, session_id=session_id)
+    if connection["api_mode"] == "anthropic_messages":
+        from runtime.anthropic_adapter import build_anthropic_client
+        real_client = build_anthropic_client(connection["api_key"], connection["base_url"],
+            default_headers=connection["headers"])
+        return AnthropicAuxiliaryClient(real_client, connection["model"], connection["api_key"], connection["base_url"]), connection["model"]
+    client = OpenAI(api_key=connection["api_key"], base_url=connection["base_url"],
+        default_headers=connection["headers"])
+    if connection["api_mode"] == "codex_responses" and not raw_codex:
+        client = CodexAuxiliaryClient(client, connection["model"])
+    return client, connection["model"]
+
+
 def _resolve_api_key_provider() -> Tuple[Optional[OpenAI], Optional[str]]:
     """Try each API-key provider in PROVIDER_REGISTRY order.
 
@@ -1226,6 +1247,10 @@ def _resolve_api_key_provider() -> Tuple[Optional[OpenAI], Optional[str]]:
     for provider_id, pconfig in PROVIDER_REGISTRY.items():
         if pconfig.auth_type != "api_key":
             continue
+        if provider_id in {"opencode-go", "opencode-zen"}:
+            from cli.opencode_device import has_credentials
+            if has_credentials(provider_id):
+                return _resolve_opencode_device_client(provider_id)
         if provider_id == "anthropic":
             # Only try anthropic when the user has explicitly configured it.
             # Without this gate, Claude Code credentials get silently used
@@ -1422,9 +1447,11 @@ def _read_main_provider() -> str:
 # per turn — no lock needed. Cleared by ``clear_runtime_main()``.
 _RUNTIME_MAIN_PROVIDER: str = ""
 _RUNTIME_MAIN_MODEL: str = ""
+from contextvars import ContextVar
+_RUNTIME_MAIN_SESSION = ContextVar("auxiliary_main_session", default="")
 
 
-def set_runtime_main(provider: str, model: str) -> None:
+def set_runtime_main(provider: str, model: str, session_id: str = "") -> None:
     """Record the live runtime provider/model for the current AIAgent.
 
     Called by ``run_agent.AIAgent._sync_runtime_main_for_aux_routing`` (or
@@ -1435,6 +1462,7 @@ def set_runtime_main(provider: str, model: str) -> None:
     global _RUNTIME_MAIN_PROVIDER, _RUNTIME_MAIN_MODEL
     _RUNTIME_MAIN_PROVIDER = (provider or "").strip().lower()
     _RUNTIME_MAIN_MODEL = (model or "").strip()
+    _RUNTIME_MAIN_SESSION.set(str(session_id or ""))
 
 
 def clear_runtime_main() -> None:
@@ -1442,6 +1470,7 @@ def clear_runtime_main() -> None:
     global _RUNTIME_MAIN_PROVIDER, _RUNTIME_MAIN_MODEL
     _RUNTIME_MAIN_PROVIDER = ""
     _RUNTIME_MAIN_MODEL = ""
+    _RUNTIME_MAIN_SESSION.set("")
 
 
 def _resolve_custom_runtime() -> Tuple[Optional[str], Optional[str], Optional[str]]:
@@ -2466,7 +2495,9 @@ def _to_async_client(sync_client, model: str, is_vision: bool = False):
         "base_url": str(sync_client.base_url),
     }
     sync_base_url = str(sync_client.base_url)
-    if base_url_host_matches(sync_base_url, "openrouter.ai"):
+    if base_url_host_matches(sync_base_url, "opencode.ai") and "/inference/" in sync_base_url:
+        async_kwargs["default_headers"] = dict(sync_client._custom_headers)
+    elif base_url_host_matches(sync_base_url, "openrouter.ai"):
         async_kwargs["default_headers"] = build_or_headers()
     elif base_url_host_matches(sync_base_url, "api.githubcopilot.com"):
         from cli.copilot_auth import copilot_request_headers
@@ -2555,6 +2586,11 @@ def resolve_provider_client(
     original_provider = (provider or "").strip().lower()
     # Normalise aliases
     provider = _normalize_aux_provider(provider)
+    if provider in {"opencode-go", "opencode-zen"}:
+        from cli.opencode_device import has_credentials
+        if has_credentials(provider):
+            client, resolved = _resolve_opencode_device_client(provider, model, raw_codex=raw_codex)
+            return _to_async_client(client, resolved, is_vision=is_vision) if async_mode else (client, resolved)
 
     def _needs_codex_wrap(client_obj, base_url_str: str, model_str: str) -> bool:
         """Decide if a plain OpenAI client should be wrapped for Responses API.

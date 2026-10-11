@@ -77,6 +77,12 @@ export function openAuthConnectWindow(options: AuthWindowOptions): BrowserWindow
     onCallbackReached
   } = options;
 
+  let target: URL;
+  try { target = new URL(url); }
+  catch { throw new Error('Invalid connect window URL'); }
+  if (!['https:', 'http:'].includes(target.protocol) || target.username || target.password)
+    throw new Error('Invalid connect window URL');
+
   const win = new BrowserWindowConstructor({
     width: 640,
     height: 780,

@@ -444,6 +444,11 @@ def get_default_model_for_provider(provider: str) -> str:
     selected a model (e.g. ``sidekick auth add openai-codex`` without
     ``sidekick model``).
     """
+    if provider in {"opencode-zen", "opencode-go"}:
+        from cli.opencode_device import has_credentials, discovered_models
+        if has_credentials(provider):
+            models = discovered_models(provider)
+            return models[0] if models else ""
     models = _PROVIDER_MODELS.get(provider, [])
     return models[0] if models else ""
 
@@ -976,6 +981,10 @@ def curated_models_for_provider(
     normalized = normalize_provider(provider)
     if normalized in _UNAVAILABLE_INFERENCE_PROVIDERS:
         return []
+    if normalized in {"opencode-zen", "opencode-go"}:
+        from cli.opencode_device import has_credentials, discovered_models
+        if has_credentials(normalized):
+            return [(model, "") for model in discovered_models(normalized)]
     if normalized == "openrouter":
         return fetch_openrouter_models(force_refresh=force_refresh)
 
@@ -1424,6 +1433,10 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
     unavailable.
     """
     normalized = normalize_provider(provider)
+    if normalized in {"opencode-zen", "opencode-go"}:
+        from cli.opencode_device import has_credentials, discovered_models
+        if has_credentials(normalized):
+            return discovered_models(normalized)
     if normalized == "antigravity":
         # Do not advertise a static or CLI-global catalog as account-bound.
         return []
@@ -2332,6 +2345,10 @@ def opencode_provider_for_model(provider_id: Optional[str], model_id: Optional[s
     if provider not in {"opencode-zen", "opencode-go"}:
         return provider
 
+    from cli.opencode_device import has_credentials
+    if has_credentials(provider):
+        return provider
+
     model = normalize_opencode_model_id(provider, model_id).lower()
     if not model:
         return provider
@@ -2360,6 +2377,10 @@ def opencode_model_api_mode(provider_id: Optional[str], model_id: Optional[str])
     This follows the published OpenCode docs for Zen and Go endpoints.
     """
     provider = normalize_provider(provider_id)
+    if provider in {"opencode-zen", "opencode-go"}:
+        from cli.opencode_device import has_credentials, resolve_connection
+        if has_credentials(provider):
+            return resolve_connection(provider, model=model_id)["api_mode"]
     normalized = normalize_opencode_model_id(provider_id, model_id).lower()
     if not normalized:
         return "chat_completions"

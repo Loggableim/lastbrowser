@@ -11,6 +11,16 @@ import {
 } from '../src/main/auth-window.js';
 
 describe('auth-window logic', () => {
+  it('rejects executable URLs and embedded credentials before creating a window', () => {
+    const constructor = vi.fn();
+    for (const url of ['javascript:alert(1)', 'file:///C:/private', 'data:text/html,test',
+      'https://user:password@opencode.ai/console/device', 'invalid']) {
+      expect(() => openAuthConnectWindow({ url, BrowserWindowConstructor: constructor as never }))
+        .toThrow('Invalid connect window URL');
+    }
+    expect(constructor).not.toHaveBeenCalled();
+  });
+
   it('preserves Chromium automation and identity signals while retaining response security policy', () => {
     const mainSource = readFileSync(new URL('../src/main/main.ts', import.meta.url), 'utf8');
     const authSource = readFileSync(new URL('../src/main/auth-window.ts', import.meta.url), 'utf8');

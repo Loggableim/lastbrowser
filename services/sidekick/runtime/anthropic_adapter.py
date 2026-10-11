@@ -517,6 +517,7 @@ def build_anthropic_client(
     timeout: float = None,
     *,
     drop_context_1m_beta: bool = False,
+    default_headers: dict | None = None,
 ):
     """Create an Anthropic client, auto-detecting setup-tokens vs API keys.
 
@@ -544,12 +545,19 @@ def build_anthropic_client(
     normalize_proxy_env_vars()
 
     from httpx import Timeout
+    # Use the SDK's exported timeout type (newer releases use httpx2).
+    Timeout = getattr(_anthropic_sdk, "Timeout", Timeout)
 
     normalized_base_url = _normalize_base_url_text(base_url)
+    if base_url_host_matches(normalized_base_url, "opencode.ai") and "/inference/anthropic/" in normalized_base_url:
+        # Anthropic SDK resources append /v1/messages themselves.
+        normalized_base_url = normalized_base_url.rstrip("/").removesuffix("/v1")
     _read_timeout = timeout if (isinstance(timeout, (int, float)) and timeout > 0) else 900.0
     kwargs = {
         "timeout": Timeout(timeout=float(_read_timeout), connect=10.0),
     }
+    if default_headers:
+        kwargs["default_headers"] = dict(default_headers)
     if normalized_base_url:
         # Azure Anthropic endpoints require an ``api-version`` query parameter.
         # Pass it via default_query so the SDK appends it to every request URL
@@ -610,6 +618,12 @@ def build_anthropic_client(
         if common_betas:
             kwargs["default_headers"] = {"anthropic-beta": ",".join(common_betas)}
 
+    if default_headers:
+        kwargs["default_headers"] = {**kwargs.get("default_headers", {}), **default_headers}
+    if base_url_host_matches(normalized_base_url, "opencode.ai") and "/inference/" in normalized_base_url:
+        # Browser-device access tokens are bearer credentials, not Anthropic keys.
+        kwargs.pop("api_key", None)
+        kwargs["auth_token"] = api_key
     return _anthropic_sdk.Anthropic(**kwargs)
 
 

@@ -1,7 +1,7 @@
 # antigravity-worker-5 – Statusbericht & Ledger
 
 **Rolle:** Review- und QA-Worker (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :00 (`Cron: 0 * * * *`, aktiver Daemon-Task `task-184`)  
+**Taktung:** 1 Lauf pro Stunde, immer um :00 (`Cron: 0 * * * *`, aktiver Daemon-Task `task-131`)  
 **Letzter Lauf:** 11. Oktober 2026, 05:27–05:36 Uhr (Run 5)  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Hotfix-Kandidat: `0.1.53`)  
@@ -133,7 +133,7 @@
 - **Rapport abgeschlossen:** `2026-10-11T05:36:00+02:00`
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Freigegeben (`run_lock_since`: `null`)
-- **Aktiver Daemon-Job:** Stündliche Ausführung immer um `:00` (`Cron: 0 * * * *`, Task `task-184`)
+- **Aktiver Daemon-Job:** Stündliche Ausführung immer um `:00` (`Cron: 0 * * * *`, Task `task-131`)
 - **Nächster geplanter Lauf:** 11. Oktober 2026, **06:00 Uhr CEST**
 
 ---

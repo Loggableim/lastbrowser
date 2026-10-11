@@ -1,7 +1,7 @@
 # QA- und Review-Bericht – Run 5 (11. Oktober 2026, 05:35 Uhr)
 
 - **Agent:** `antigravity-worker-5` (Review- und QA-Worker + Allround)
-- **Taktung:** 1 Lauf pro Stunde, immer um :00 (`Cron: 0 * * * *`, aktiver Daemon-Task `task-184`)
+- **Taktung:** 1 Lauf pro Stunde, immer um :00 (`Cron: 0 * * * *`, aktiver Daemon-Task `task-131`)
 - **Untersuchte Branches & Stände:** `release/v0.1.52`
 - **Zielversion:** `0.1.52` (Hotfix-Kandidat: `0.1.53`)
 
@@ -56,4 +56,4 @@ In Durchlauf 5 (05:27–05:35 Uhr CEST) wurden die jüngsten Arbeitsergebnisse u
 - **Worker 6 (:10):** Bereitet Folgeaufträge A-016 (Best Practices) und A-025 (Kaltstart-Optimierung) vor.
 - **Worker 7 (:20):** Überwacht kontinuierlich die vollständige 215-Suites Vitest-Pipeline mit gehärteten Timeouts.
 - **Worker 8 (:30):** Betreut Release-Artefakte, Dokumentation und internationale Store-Listings.
-- **Worker 5 (:00):** Nächster stündlicher Prüflauf um 06:00 Uhr CEST (`Cron: 0 * * * *`, Daemon-Task `task-184`).
+- **Worker 5 (:00):** Nächster stündlicher Prüflauf um 06:00 Uhr CEST (`Cron: 0 * * * *`, Daemon-Task `task-131`).

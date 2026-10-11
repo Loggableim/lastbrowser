@@ -4,17 +4,23 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
-import { createUpdateController, type LastbrowserUpdateStatus, type UpdateController } from './update-controller.js';
+import { createUpdateController, type LastbrowserUpdateStatus, type UpdateChannel, type UpdateController } from './update-controller.js';
 import { isOfflineTestBuild } from './update-build-variant.js';
 import { acknowledgeUpdateNotice, decideUpdateNotice, parseUpdateNoticeState, recordDownloadedUpdate } from './update-notice-state.js';
 
 const { autoUpdater } = electronUpdater;
 
 let controller: UpdateController | null = null;
-let autoChecksEnabled = true;
+type PersistedUpdatePreferences = { automaticUpdatesEnabled: boolean; channel: UpdateChannel };
+const DEFAULT_UPDATE_PREFERENCES: PersistedUpdatePreferences = { automaticUpdatesEnabled: true, channel: 'stable' };
+const AUTO_CHECK_INTERVAL = 4 * 60 * 60 * 1000;
+const AUTO_CHECK_RETRY_DELAYS = [30_000, 2 * 60_000, 10 * 60_000];
+let preferences = { ...DEFAULT_UPDATE_PREFERENCES };
 let autoCheckPreferenceReceived = false;
 let autoCheckPreferenceTimer: ReturnType<typeof setTimeout> | null = null;
 let autoCheckTimer: ReturnType<typeof setTimeout> | null = null;
+let consecutiveAutoCheckRetries = 0;
+let preferencesPath = '';
 
 /**
  * Electron 37's native `net.request()` with custom in-memory partitions (like
@@ -35,6 +41,14 @@ function patchHttpExecutor(updater: unknown): void {
 }
 
 export function registerUpdateIpc(getMainWindow: () => BrowserWindow | null): void {
+  preferencesPath = path.join(app.getPath('userData'), 'update-preferences.json');
+  preferences = readUpdatePreferences(preferencesPath);
+  autoCheckPreferenceReceived = false;
+  if (autoCheckPreferenceTimer) clearTimeout(autoCheckPreferenceTimer);
+  autoCheckPreferenceTimer = null;
+  if (autoCheckTimer) clearTimeout(autoCheckTimer);
+  autoCheckTimer = null;
+  consecutiveAutoCheckRetries = 0;
   const noticeStatePath = path.join(app.getPath('userData'), 'update-notice.json');
   const readNoticeState = () => {
     try {
@@ -59,8 +73,19 @@ export function registerUpdateIpc(getMainWindow: () => BrowserWindow | null): vo
     currentVersion,
     offlineTestBuild,
     forceDevUpdates: process.env.LASTBROWSER_FORCE_DEV_UPDATES === '1',
-    allowPrerelease: process.env.LASTBROWSER_ALLOW_PRERELEASE_UPDATES === '1',
-    onStatusChange: (status) => broadcastUpdateStatus(getMainWindow(), status),
+    automaticUpdatesEnabled: preferences.automaticUpdatesEnabled,
+    updateChannel: preferences.channel,
+    onStatusChange: (status) => {
+      broadcastUpdateStatus(getMainWindow(), status);
+      if (status.state === 'error') scheduleAutoUpdateRetry();
+      else if (status.state === 'downloaded' || status.state === 'available' || status.state === 'not-available') {
+        consecutiveAutoCheckRetries = 0;
+        if (status.state !== 'not-available' && autoCheckTimer) {
+          clearTimeout(autoCheckTimer);
+          autoCheckTimer = null;
+        }
+      }
+    },
     onUpdateDownloaded: (fromVersion, targetVersion) => {
       try {
         writeNoticeState(recordDownloadedUpdate(readNoticeState(), fromVersion, targetVersion));
@@ -71,6 +96,7 @@ export function registerUpdateIpc(getMainWindow: () => BrowserWindow | null): vo
   });
 
   ipcMain.handle('lastbrowser:updates:status', () => controller?.getStatus());
+  ipcMain.handle('lastbrowser:updates:preferences', () => ({ ...preferences }));
   ipcMain.handle('lastbrowser:updates:check', () => controller?.checkForUpdates());
   ipcMain.handle('lastbrowser:updates:download', () => controller?.downloadUpdate());
   ipcMain.handle('lastbrowser:updates:install', () => controller?.quitAndInstall());
@@ -97,30 +123,25 @@ export function registerUpdateIpc(getMainWindow: () => BrowserWindow | null): vo
   });
   ipcMain.handle('lastbrowser:updates:set-auto-check-enabled', (_event, enabled: unknown) => {
     autoCheckPreferenceReceived = true;
-    if (autoCheckPreferenceTimer) {
-      clearTimeout(autoCheckPreferenceTimer);
-      autoCheckPreferenceTimer = null;
-    }
-    autoChecksEnabled = enabled !== false;
-    if (!autoChecksEnabled && autoCheckTimer) {
-      clearTimeout(autoCheckTimer);
-      autoCheckTimer = null;
-    }
-    if (autoChecksEnabled) scheduleAutoUpdateCheck();
-    return { enabled: autoChecksEnabled };
+    clearAutoCheckPreferenceTimer();
+    const persisted = applyPreferences({ ...preferences, automaticUpdatesEnabled: enabled !== false });
+    return { enabled: preferences.automaticUpdatesEnabled, persisted };
+  });
+  ipcMain.handle('lastbrowser:updates:set-channel', (_event, channel: unknown) => {
+    if (channel !== 'stable' && channel !== 'preview') return { ...preferences, persisted: false };
+    const persisted = applyPreferences({ ...preferences, channel });
+    return { ...preferences, persisted };
   });
 }
 
 export function startAutoUpdateChecks(): void {
   if (autoCheckPreferenceReceived || autoCheckPreferenceTimer) return;
-  // Give the renderer time to hydrate local or Sidekick settings. If it
-  // cannot provide a preference, retain the historical enabled-by-default
-  // behavior after the grace period.
+  // Allow older persisted settings to hydrate before the default-on check starts.
   autoCheckPreferenceTimer = windowDelay(() => {
     autoCheckPreferenceTimer = null;
     if (!autoCheckPreferenceReceived) {
       autoCheckPreferenceReceived = true;
-      scheduleAutoUpdateCheck();
+      if (preferences.automaticUpdatesEnabled) scheduleAutoUpdateCheck(6000);
     }
   }, 15000);
 }
@@ -130,15 +151,82 @@ export function installDownloadedUpdateForAppRestart(): LastbrowserUpdateStatus 
   return controller?.quitAndInstall() ?? null;
 }
 
-function scheduleAutoUpdateCheck(): void {
-  if (!controller || !autoCheckPreferenceReceived || !autoChecksEnabled || autoCheckTimer) return;
+function applyPreferences(next: PersistedUpdatePreferences): boolean {
+  const channelChanged = next.channel !== preferences.channel;
+  const normalized: PersistedUpdatePreferences = {
+    automaticUpdatesEnabled: next.automaticUpdatesEnabled === true,
+    channel: next.channel === 'preview' ? 'preview' : 'stable'
+  };
+  try {
+    mkdirSync(path.dirname(preferencesPath), { recursive: true });
+    const temporaryPath = `${preferencesPath}.${process.pid}.tmp`;
+    writeFileSync(temporaryPath, `${JSON.stringify(normalized, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    renameSync(temporaryPath, preferencesPath);
+  } catch (error) {
+    console.warn('[updates] Could not persist update preferences:', error);
+    return false;
+  }
+  preferences = normalized;
+  controller?.setPreferences(preferences);
+  if (preferences.automaticUpdatesEnabled) {
+    if (channelChanged && autoCheckTimer) {
+      clearTimeout(autoCheckTimer);
+      autoCheckTimer = null;
+    }
+    if (autoCheckPreferenceTimer) clearAutoCheckPreferenceTimer();
+    scheduleAutoUpdateCheck(6000);
+  } else {
+    if (autoCheckTimer) clearTimeout(autoCheckTimer);
+    autoCheckTimer = null;
+    consecutiveAutoCheckRetries = 0;
+  }
+  return true;
+}
+
+function clearAutoCheckPreferenceTimer(): void {
+  if (autoCheckPreferenceTimer) clearTimeout(autoCheckPreferenceTimer);
+  autoCheckPreferenceTimer = null;
+}
+
+function readUpdatePreferences(filePath: string): PersistedUpdatePreferences {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(filePath, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ...DEFAULT_UPDATE_PREFERENCES };
+    const record = parsed as Record<string, unknown>;
+    return {
+      automaticUpdatesEnabled: record.automaticUpdatesEnabled !== false,
+      channel: record.channel === 'preview' ? 'preview' : 'stable'
+    };
+  } catch {
+    return { ...DEFAULT_UPDATE_PREFERENCES };
+  }
+}
+
+function scheduleAutoUpdateRetry(): void {
+  if (!preferences.automaticUpdatesEnabled || !autoCheckPreferenceReceived || autoCheckTimer) return;
+  const retryDelay = AUTO_CHECK_RETRY_DELAYS[consecutiveAutoCheckRetries];
+  if (retryDelay === undefined) {
+    consecutiveAutoCheckRetries = 0;
+    scheduleAutoUpdateCheck(AUTO_CHECK_INTERVAL);
+    return;
+  }
+  consecutiveAutoCheckRetries += 1;
+  scheduleAutoUpdateCheck(retryDelay);
+}
+
+function scheduleAutoUpdateCheck(delay: number): void {
+  if (!controller || !autoCheckPreferenceReceived || !preferences.automaticUpdatesEnabled || autoCheckTimer) return;
   autoCheckTimer = windowDelay(() => {
     autoCheckTimer = null;
-    if (!autoChecksEnabled) return;
-    controller?.checkForUpdates().catch((err) => {
+    if (!preferences.automaticUpdatesEnabled) return;
+    void controller?.checkForUpdates().then((status) => {
+      if (status.state === 'error') scheduleAutoUpdateRetry();
+      else if (['idle', 'disabled', 'not-available'].includes(status.state) && !autoCheckTimer) scheduleAutoUpdateCheck(AUTO_CHECK_INTERVAL);
+    }).catch((err) => {
       console.warn('[updates] Auto update check failed:', err);
+      scheduleAutoUpdateRetry();
     });
-  }, 6000);
+  }, delay);
 }
 
 function broadcastUpdateStatus(window: BrowserWindow | null, status: LastbrowserUpdateStatus): void {

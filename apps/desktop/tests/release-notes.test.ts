@@ -19,10 +19,23 @@ describe('offline versioned release notes', () => {
     expect(releaseNotesBetween({ fromVersion: null, toVersion: '0.1.46' }, 'de')).toHaveLength(1);
   });
 
+  it('shows the published release notes for the 0.1.53 upgrade seen in P-003', () => {
+    const notes = releaseNotesBetween({ fromVersion: '0.1.52', toVersion: '0.1.53' }, 'en');
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ version: '0.1.53' });
+    expect(notes[0].changes).toContain('First-run setup no longer blocks the sidebar or top navigation.');
+  });
+
+  it('shows an honest update confirmation when the real upgrade has no bundled release notes', () => {
+    expect(releaseNotesBetween({ fromVersion: '0.1.53', toVersion: '0.1.54' }, 'de')).toEqual([{
+      version: '0.1.54',
+      changes: ['Lastbrowser wurde auf Version 0.1.54 aktualisiert.']
+    }]);
+  });
+
   it('does not fabricate notes for an unknown or non-upgrade range', () => {
     expect(releaseNotesBetween({ fromVersion: '0.1.46', toVersion: '0.1.45' }, 'en')).toEqual([]);
     expect(releaseNotesBetween({ fromVersion: 'unknown', toVersion: '0.1.46' }, 'en')).toEqual([]);
-    expect(releaseNotesBetween({ fromVersion: '0.1.48', toVersion: '0.1.49' }, 'en')).toEqual([]);
   });
 
   it('shows only the new localized notes for a 0.1.46 to 0.1.47 upgrade', () => {

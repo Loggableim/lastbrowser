@@ -147,6 +147,7 @@
         "portable"
       ],
       "icon": "build/icon.ico",
+      "verifyUpdateCodeSignature": true,
       "signExts": [
         ".dll",
         ".pyd",

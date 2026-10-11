@@ -2,7 +2,7 @@
 
 **Rolle:** Bug-Kurator und Bugsucher (+ Allround)  
 **Taktung:** 1 Lauf pro Stunde, immer um :10 (`Cron: 10 * * * *`, aktiver Daemon-Task `task-62`)  
-**Aktueller Lauf:** Run 8 – 11. Oktober 2026, 09:10–09:15 Uhr CEST  
+**Aktueller Lauf:** Run 9 – 11. Oktober 2026, 10:10–10:15 Uhr CEST  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Vorbereitung für Folgeversion `0.1.53`)  
 
@@ -20,15 +20,15 @@
    - Verifikation von Fehler-Root-Causes in enger Koordination mit Worker 5 (Review/QA), Worker 7 (CI/Build) und Worker 8 (Release/i18n).
 3. **Allround-Qualitätskontrolle & Release-Gates:**
    - Regelmäßige Verifikation der Monorepo-Kernkriterien:
-     - Vitest Testsuite (Unit & Integration, 97/97 Tests PASS in 3.52s)
+     - Vitest Testsuite (Unit & Integration, 97/97 Tests PASS in 3.70s)
      - Microsoft Store Readiness Preflight (39 PASS / 0 FAIL)
-     - TypeScript Main & Renderer Build / Vite Bundle (1834 Module fehlerfrei in 4.27s)
-     - Python Sidekick Backend Syntax (`compileall -q services/sidekick`)
-     - Secret-Fixtures Hygiene (`tests/secret-fixtures.test.ts` in 1.82s)
-     - Python Worker Capacity Pytest (18/18 PASS in 0.82s)
-     - Website Download Counter Testsuite (15/15 PASS in 55ms)
+     - TypeScript Main & Renderer Build / Vite Bundle (1834 Module fehlerfrei in 5.06s)
+     - Python Sidekick Backend Syntax (`compileall -q services/sidekick` in <1s)
+     - Secret-Fixtures Hygiene (`tests/secret-fixtures.test.ts` in 1.85s)
+     - Python Worker Capacity Pytest (18/18 PASS in 1.14s)
+     - Website Download Counter Testsuite (15/15 PASS in 69.7ms)
 4. **Spezialaufträge (A-017, A-021 & A-025):**
-   - [`docs/analysis/A-017-chat-portierungsplan.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-017-chat-portierungsplan.md): Modularer Chat-Portierungsplan für v0.1.53, von Worker 5 (QA) im Run-7-Audit freigegeben.
+   - [`docs/analysis/A-017-chat-portierungsplan.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-017-chat-portierungsplan.md): Modularer Chat-Portierungsplan für v0.1.53, von Worker 5 (QA) im Run-7- und Run-8-Audit bestätigt und freigegeben.
    - [`docs/analysis/A-021-naming-inventory.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-021-naming-inventory.md): Nomenklatur-Kanon („Lastbrowser mit Sidekick Engine, Standard-Agent Nova“) für Website und i18n vorbereitet.
    - [`docs/analysis/A-025-start-secure-session.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-025-start-secure-session.md): Ursachenanalyse und Lösungsarchitektur für den Kaltstart-Sperrbildschirm dokumentiert.
 5. **Status-Ledger & Automatisierung:**
@@ -72,7 +72,7 @@
   - Native `ThinkingCard` mit Live-Pulsieren und Laufzeit-Stoppuhr.
   - `/api/chat/steer` Steering-Button im Chat-Composer.
   - *Fail-Open Local-First*: Chat-Verlauf lädt sofort aus dem lokalen Cache (< 100ms), während Sidekick Uvicorn asynchron startet.
-- **Status:** Im Run-7-Audit durch Worker 5 (QA) offiziell freigegeben.
+- **Status:** Im Run-7- und Run-8-Audit durch Worker 5 (QA) offiziell bestätigt und freigegeben.
 
 ### C. Auftrag A-021: Namensinventar & Definition „Nova AI“ vs. „Sidekick“
 - **Detailbericht:** [`docs/analysis/A-021-naming-inventory.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-021-naming-inventory.md)
@@ -89,17 +89,17 @@
 
 ---
 
-## 4. Qualitäts- und Allround-Gates (Run 8)
+## 4. Qualitäts- und Allround-Gates (Run 9)
 
 | Gate | Kriterium | Ergebnis | Details |
 | :--- | :--- | :---: | :--- |
-| **Python Sidekick Syntax** | Exit Code 0, 0 Warnings | **PASS** | `python -m compileall -q services/sidekick` fehlerfrei |
+| **Python Sidekick Syntax** | Exit Code 0, 0 Warnings | **PASS** | `python -m compileall -q services/sidekick` fehlerfrei (< 1s) |
 | **Store Preflight Check** | 27+ automatische Checks | **PASS** | **39 PASS / 2 WARN / 0 FAIL** (100% Win32 Store Compliance) |
-| **Desktop Shell Build** | 0 TS-Fehler, 0 Vite-Fehler | **PASS** | Main, Preload & Renderer (1834 Module) fehlerfrei gebaut (4.27s) |
-| **Secret-Fixtures Hygiene** | Keine Leak-Literale in Git | **PASS** | `tests/secret-fixtures.test.ts` grün (1.82s) |
-| **Vitest Integrations-Gates** | 5 Testdateien / Verträge | **PASS** | `public-downloads`, `updates-ipc`, `i18n`, `independent-controller`, `windows-package-signatures` (**97/97 PASS in 3.52s**) |
-| **Python Worker Pytest** | Worker Capacity & Nova Gates | **PASS** | `test_kanban_worker_capacity.py`, `test_nova_production_workers.py` (**18/18 PASS in 0.82s**) |
-| **Website Download Counter** | 15 Tests grün | **PASS** | `download-counter.test.mjs` (**15/15 PASS in 55ms**) |
+| **Desktop Shell Build** | 0 TS-Fehler, 0 Vite-Fehler | **PASS** | Main, Preload & Renderer (1834 Module) fehlerfrei gebaut (5.06s) |
+| **Secret-Fixtures Hygiene** | Keine Leak-Literale in Git | **PASS** | `tests/secret-fixtures.test.ts` grün (1.85s) |
+| **Vitest Integrations-Gates** | 5 Testdateien / Verträge | **PASS** | `public-downloads`, `updates-ipc`, `i18n`, `independent-controller`, `windows-package-signatures` (**97/97 PASS in 3.70s**) |
+| **Python Worker Pytest** | Worker Capacity & Nova Gates | **PASS** | `test_kanban_worker_capacity.py`, `test_nova_production_workers.py` (**18/18 PASS in 1.14s**) |
+| **Website Download Counter** | 15 Tests grün | **PASS** | `download-counter.test.mjs` (**15/15 PASS in 69.7ms**) |
 | **Monorepo In-Tree Engine** | `services/sidekick` als Source of Truth | **PASS** | Keine externen Clones, kein altes `webui` |
 
 ---
@@ -107,16 +107,16 @@
 ## 5. Status- und Lock-Verwaltung
 
 - **State File:** [`.agents/state/antigravity-worker-6.json`](file:///c:/projekte/lastbrowser/.agents/state/antigravity-worker-6.json)
-- **Lauf-Zähler (`runs_total`):** 8
+- **Lauf-Zähler (`runs_total`):** 9
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Aktiver Daemon-Job:** Stündliche Ausführung immer um `:10` (`Cron: 10 * * * *`, Task `task-62`)
 - **Run-Lock:** Nach Abschluss des Laufs freigegeben (`run_lock_since`: `null`)
-- **Letzter Rapport:** `2026-10-11T09:15:00+02:00`
+- **Letzter Rapport:** `2026-10-11T10:15:00+02:00`
 
 ---
 
-## 6. Geplante Aktionen für den nächsten stündlichen Lauf (:10 um 10:10 CEST)
+## 6. Geplante Aktionen für den nächsten stündlichen Lauf (:10 um 11:10 CEST)
 
 1. **Bug-Status-Tracking:** Fortlaufende Überwachung der offenen P0/P1-Tickets (LB-001 bis LB-004) bei einlaufenden Fixes.
 2. **Review-Koordination:** Unterstützung von Worker 5 bei der Abnahme von anstehenden PRs (insbesondere PR #30, #32, #33, #34).
-3. **Stündliche Re-Validierung aller Kern-Gates:** Vollständiger Gate-Lauf um 10:10 Uhr CEST.
+3. **Stündliche Re-Validierung aller Kern-Gates:** Vollständiger Gate-Lauf um 11:10 Uhr CEST.

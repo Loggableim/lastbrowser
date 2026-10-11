@@ -1,8 +1,8 @@
 # antigravity-worker-6 – Statusbericht & Ledger
 
 **Rolle:** Bug-Kurator und Bugsucher (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :10 (`Cron: 10 * * * *`, aktiver Daemon-Task `task-35`)  
-**Aktueller Lauf:** Run 8 – 11. Oktober 2026, 09:10–09:15 Uhr CEST  
+**Taktung:** 1 Lauf pro Stunde, immer um :10 (`Cron: 10 * * * *`, aktiver Daemon-Task `task-84`)  
+**Aktueller Lauf:** Run 9 – 11. Oktober 2026, 10:10–10:15 Uhr CEST  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Vorbereitung für Folgeversion `0.1.53`)  
 **Meilensteine:** A-020 (Lizenzen), A-025 (Kaltstart-Analyse), A-021 (Nomenklatur-Inventar), A-015 (Chat-Istzustand), A-016 (Vorbilder & Best Practices), **A-017 (Modularer Chat-Portierungsplan – QA-Freigabe erteilt)**  
@@ -16,29 +16,29 @@
 1. **Bug-Kuration & Dauerauftrag BUGSUCHE:** Systematische Überwachung der Kernbereiche (B-001 bis B-011, Matrix LB-001 bis LB-010), Analyse von VM-Testberichten, Runner-Logs und Pflege der Kurationstabelle.
 2. **Proaktives Bug Hunting & Beseitigung:**
    - LB-009 / B-011 in Run 4 behoben (`[file].js` und `public-downloads.test.ts`), in Run 5 von Worker 5 im QA-Review vollständig abgenommen.
-   - Run 8 Re-Verifikation aller Monorepo-Kern-Gates: 100% PASS (Python Syntax, Store Preflight 39/0, Desktop Build 1834 Module, Secret-Fixtures, Vitest Suites, Pytest Worker Capacity, Download-Counter).
+   - Run 9 Re-Verifikation aller Monorepo-Kern-Gates: 100% PASS (Python Syntax in <1s, Store Preflight 39/0, Desktop Build 1834 Module in 5.06s, Secret-Fixtures in 1.85s, Vitest Suites 97/97 in 3.70s, Pytest Worker Capacity 18/18 in 1.14s, Download-Counter 15/15 in 69ms).
 3. **Auftragsprogramm Chat-Modernisierung:**
    - **Analyse A-015 fertiggestellt:** [`docs/analysis/A-015-lastbrowser-chat-istzustand.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-015-lastbrowser-chat-istzustand.md) dokumentiert den Komponentenbaum von `NativeChatMain.tsx`, den Datenfluss und 6 strukturelle Schwachstellen im Vergleich zum Original-Sidekick (A-014).
    - **Analyse A-016 fertiggestellt:** [`docs/analysis/A-016-chat-vorbilder-best-practices.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-016-chat-vorbilder-best-practices.md) benchmarkt führende Chat-Architekturen (Open WebUI, LibreChat, TypingMind, Claude Desktop, ChatGPT Canvas) und definiert konkrete Zielmuster (RAF-Throttling, ThinkingCard, Steering-Integration, Fail-Open Kaltstart).
-   - **Portierungsplan A-017 fertiggestellt & von QA freigegeben:** [`docs/analysis/A-017-chat-portierungsplan.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-017-chat-portierungsplan.md) und [`docs/analysis/A-017-modularer-chat-portierungsplan.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-017-modularer-chat-portierungsplan.md) entflechten den 939-Zeilen-Monolithen in modulare Hooks und Komponenten. Durch Worker 5 (QA) im Run-7-Audit vollständig freigegeben.
+   - **Portierungsplan A-017 fertiggestellt & von QA freigegeben:** [`docs/analysis/A-017-chat-portierungsplan.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-017-chat-portierungsplan.md) und [`docs/analysis/A-017-modularer-chat-portierungsplan.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-017-modularer-chat-portierungsplan.md) entflechten den 939-Zeilen-Monolithen in modulare Hooks und Komponenten. Durch Worker 5 (QA) im Run-7- und Run-8-Audit vollständig bestätigt und freigegeben.
 
 ---
 
-## 2. Ergebnisse des aktuellen Laufs (Run 8)
+## 2. Ergebnisse des aktuellen Laufs (Run 9)
 
 ### A. Allround- und Qualitäts-Gates
 
-Alle Pflichtgates wurden im stündlichen Durchlauf um 09:10 Uhr vollständig und fehlerfrei re-validiert:
+Alle Pflichtgates wurden im stündlichen Durchlauf um 10:10 Uhr vollständig und fehlerfrei re-validiert:
 
 | Gate | Befehl / Kriterium | Ergebnis | Details |
 | :--- | :--- | :---: | :--- |
-| **Python Backend Syntax** | `python -m compileall -q services/sidekick` | **PASS** | Exit Code 0, alle Sidekick-Module fehlerfrei |
-| **Secret-Fixtures Guard** | `npm --workspace apps/desktop test tests/secret-fixtures.test.ts` | **PASS** | 1/1 bestanden in 1.82s, 0 unzulässige Tokens/Keys |
-| **Desktop Shell Build** | `npm --workspace apps/desktop run build` | **PASS** | TS Main & Preload kompiliert, Vite Renderer 1.834 Module fehlerfrei (4.27s) |
+| **Python Backend Syntax** | `python -m compileall -q services/sidekick` | **PASS** | Exit Code 0, 0 Fehler, Bytecode-Cache synchron (< 1s) |
+| **Secret-Fixtures Guard** | `npm --workspace apps/desktop test tests/secret-fixtures.test.ts` | **PASS** | 1/1 bestanden in 1.85s, 0 unzulässige Tokens/Keys |
+| **Desktop Shell Build** | `npm --workspace apps/desktop run build` | **PASS** | TS Main & Preload kompiliert, Vite Renderer 1.834 Module fehlerfrei (5.06s) |
 | **Store Preflight Check** | `npm run verify:store` | **PASS** | **39 PASS, 2 WARN, 0 FAIL** (100% Win32 Store Compliance) |
-| **Vitest Integrations-Gates** | `public-downloads`, `updates-ipc`, `i18n`, `independent-controller`, `windows-package-signatures` | **PASS** | **97/97 Tests bestanden in 3.52s** |
-| **Python Worker Pytest** | `pytest test_kanban_worker_capacity.py test_nova_production_workers.py` | **PASS** | **18/18 Tests bestanden in 0.82s** |
-| **Website Download Counter** | `node lastbrowser.com/tests/download-counter.test.mjs` | **PASS** | **15/15 Tests bestanden in 55ms** |
+| **Vitest Integrations-Gates** | `public-downloads`, `updates-ipc`, `i18n`, `independent-controller`, `windows-package-signatures` | **PASS** | **97/97 Tests bestanden in 3.70s** |
+| **Python Worker Pytest** | `pytest test_kanban_worker_capacity.py test_nova_production_workers.py` | **PASS** | **18/18 Tests bestanden in 1.14s** |
+| **Website Download Counter** | `node lastbrowser.com/tests/download-counter.test.mjs` | **PASS** | **15/15 Tests bestanden in 69.7ms** |
 | **Working Tree Hygiene** | `git status` | **PASS** | Arbeitsbaum sauber, isolierte Grenzen gewahrt |
 
 ---
@@ -53,7 +53,7 @@ Alle Pflichtgates wurden im stündlichen Durchlauf um 09:10 Uhr vollständig und
      - `useTabContextBridge`: Auszug aktiver Tab-Inhalte und DOM-Kontexte.
    - UI-Subkomponenten: `ThinkingCard`, `ChatComposer`, `ToolExecutionCard`, `MessageList`.
    - Entkopplung vom Python-Kaltstart (*Fail-Open Local-First*): Sofortiger Chat-Start in < 100ms.
-   - **QA-Freigabe:** Durch Worker 5 im Run-7-Audit erteilt.
+   - **QA-Freigabe:** Durch Worker 5 im Run-7- und Run-8-Audit bestätigt.
 
 2. **Auftrag A-021: Namensgebung vereinheitlichen**
    - [`docs/analysis/A-021-naming-inventory.md`](file:///c:/projekte/lastbrowser/docs/analysis/A-021-naming-inventory.md): Nomenklatur-Kanon („Lastbrowser mit Sidekick Engine, Standard-Agent Nova“) vorbereitet für Rollout mit Auftrag A-022.
@@ -76,18 +76,18 @@ Alle Pflichtgates wurden im stündlichen Durchlauf um 09:10 Uhr vollständig und
 | **LB-007** | **P2** | UI / CSS | Responsive Viewport Clipping (< 1100px) | Bei schmalen Fenstern überlappen Einstellungsbereiche und Assistant-Panels. CSS-Reflow in `styles.css` empfohlen. | **In Beobachtung** |
 | **LB-008** | **P2** | Desktop Startup | Erststart-Latenz *„Checking the secure session...“* (~15-30s) [A-025] | Asynchroner Uvicorn-Handshake blockiert UI-Freigabe bis HTTP `/api/health` 200 liefert. | **Analysiert & von QA freigegeben für v0.1.53** |
 | **LB-009 / B-011** | **P1** | Cloudflare Proxy & Tests | `[file].js` und `public-downloads.test.ts` auf v0.1.45 gepinnt | Cloudflare Pages Function `/functions/downloads/[file].js` und Tests synchronisiert auf v0.1.52. | **BEHOBEN & ABGENOMMEN (5/5 PASS)** |
-| **LB-010** | **P2** | CI / Tests | Test- und Download-Integrität auf `release/v0.1.52` | `public-downloads.test.ts` (5/5 PASS), `windows-package-signatures.test.ts` (7/7 PASS) verifiziert. | **Verifiziert (PASS)** |
+| **LB-010** | **P2** | CI / Tests | Test- und Download-Integrität auf `release/v0.1.52` | `public-downloads.test.ts` (5/5 PASS), `windows-package-signatures.test.ts` (7/7 PASS), Pytest (18/18 PASS) verifiziert. | **Verifiziert (PASS)** |
 
 ---
 
 ## 3. Status- & Lock-Verwaltung
 
 - **State-Datei:** [`.agents/state/antigravity-worker-6.json`](file:///c:/projekte/lastbrowser/.agents/state/antigravity-worker-6.json)
-- **Lauf-Zähler (`runs_total`):** 8
+- **Lauf-Zähler (`runs_total`):** 9
 - **Fehler:** Keiner (`last_error`: `null`)
-- **Aktiver Cron-Task:** `task-35` (`Cron: 10 * * * *`, Daemon)
+- **Aktiver Cron-Task:** `task-84` (`Cron: 10 * * * *`, Daemon)
 - **Lock-Status:** Freigegeben (`run_lock_since`: `null`)
-- **Letzter Rapport:** `2026-10-11T09:15:00+02:00` (`last_rapport_date`)
+- **Letzter Rapport:** `2026-10-11T10:15:00+02:00` (`last_rapport_date`)
 
 ---
 
@@ -102,8 +102,8 @@ Alle Pflichtgates wurden im stündlichen Durchlauf um 09:10 Uhr vollständig und
 
 ---
 
-## 5. Geplante Aktionen für den nächsten stündlichen Lauf (:10 um 10:10 CEST)
+## 5. Geplante Aktionen für den nächsten stündlichen Lauf (:10 um 11:10 CEST)
 
 1. **Bug-Status-Tracking:** Fortlaufende Überwachung der offenen P0- und P1-Bugs (LB-001 bis LB-004) bei einlaufenden Fixes.
 2. **Review-Koordination:** Unterstützung von Worker 5 bei der Abnahme von anstehenden PRs (insbesondere PR #30, #32, #33, #34).
-3. **Stündliche Re-Validierung aller Kern-Gates:** Vollständiger Gate-Lauf um 10:10 Uhr CEST.
+3. **Stündliche Re-Validierung aller Kern-Gates:** Vollständiger Gate-Lauf um 11:10 Uhr CEST.

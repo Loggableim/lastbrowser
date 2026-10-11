@@ -45,17 +45,21 @@ current PR head and review status before any later integration.
 
 | PR | Head | Scope | Current disposition |
 | --- | --- | --- | --- |
-| 50 | `7935cb1f6d85421809e3b1948e3ecfca9666d037` | Auth startup preflight | Pending; P1 auth-lock race remains. Fast worker correction is expected before startup UI is layered on. |
-| 54 | `964214f4bb29ce05c5affac433686c9b2a01a8e0` | Startup gate UI | **Pending; do not integrate yet.** Wait for PR50 auth-lock correction, then port startup UI while retaining startup readiness behavior. Prior review also identified auth-disabled early release and optional model/onboarding errors blocking the shell; require correction and re-review. |
+| 50 | `a978bf516a41ac6d8d6b84ea0cba0c687fa02217` | Auth startup preflight | Pending independent reviewer result. The previous head `7935cb1f6d85421809e3b1948e3ecfca9666d037` is superseded and must not be integrated. Author reports 223 files / 2,024 tests passed on the new head. |
+| 54 | `964214f4bb29ce05c5affac433686c9b2a01a8e0` | Startup gate UI | **Pending; do not integrate yet.** Startup worker is porting the corrected productive generation contract from PR50; wait for the new PR54 head and independent re-review. Prior review also identified auth-disabled early release and optional model/onboarding errors blocking the shell; require correction and re-review. |
 
-The current CTO handoff identifies a P1 auth-lock race across PR50/PR54.
-Integrate the fast PR50 correction first, then port/re-review the startup UI
-from PR54. The earlier PR54 review additionally identified that auth-disabled
-startup must preserve PR50's early release and optional model/onboarding errors
-must not block the shell. All startup readiness signals still need to gate
-shell readiness. PR50 and PR54 remain unapplied. The CTO now marks PR51/52/53
-independently reviewed without code blockers and authorizes these exact heads
-for this interim integration. No aggregate-ready or merge status is asserted.
+The current CTO handoff identifies a P1 auth-lock race across PR50/PR54. PR50
+now has the corrected head `a978bf516a41ac6d8d6b84ea0cba0c687fa02217` and a
+reported author run of 223 files / 2,024 tests, but independent re-review is
+active; keep it pending and do not use the superseded `7935cb1f` head. PR54 is
+being updated to port PR50's productive generation contract and must publish
+its new head for independent re-review. Earlier PR54 review additionally
+identified that auth-disabled startup must preserve PR50's early release and
+optional model/onboarding errors must not block the shell. All startup
+readiness signals still need to gate shell readiness. PR50 and PR54 remain
+unapplied. The CTO marks PR51/52/53 independently reviewed without code
+blockers and authorizes those exact heads for this interim integration. No
+aggregate-ready or merge status is asserted.
 
 Historical evidence remains scoped to each individual PR head. PR53's report
 also records that the previous VM upgrade showed v0.1.52 ProductVersion after
@@ -99,10 +103,12 @@ the shared component boundaries, preserving QuickChat, zoom, and mute behavior.
 - PR47 is closed/replaced by PR48 and is stale/divergent; it is excluded.
 - PR44 carries v0.1.54 candidate metadata/evidence and is excluded. No version
   or CHANGELOG change is included for v0.1.55.
-- PR50 and PR54 stay pending. The P1 auth-lock race must be fixed in PR50
-  first; then port and independently review the startup UI. Preserve earlier
-  PR54 feedback on auth-disabled early release and optional model/onboarding
-  failures.
+- PR50 and PR54 stay pending. Use only PR50 head
+  `a978bf516a41ac6d8d6b84ea0cba0c687fa02217` after independent re-review;
+  the former `7935cb1f` head is superseded. Wait for the PR54 port of the
+  productive generation contract, its new head, and independent re-review.
+  Preserve earlier PR54 feedback on auth-disabled early release and optional
+  model/onboarding failures.
 - PR51/52/53 are included at the exact reviewed heads above. This is an interim
   handoff: the combined branch needs its own requested gates and independent
   integration review before any merge decision.

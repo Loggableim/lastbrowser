@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "snapshot_date": "2026-10-11",
-  "source_commit": "925514db5b40f91f1d9acfeacfe786e96fef61f4",
+  "source_commit": "57e13680ac1e2b3c324e1337a6612cf5284ee283",
   "purpose": "Draft inventory of package-lock and pinned desktop Python runtime metadata; metadata is not a legal license-text verification or rights-chain finding.",
   "inputs": {
     "package_lock": {

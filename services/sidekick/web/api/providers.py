@@ -77,17 +77,17 @@ _OPENCODE_CLI_PROVIDER_IDS = {"opencode-zen", "opencode-go"}
 
 
 def start_opencode_auth_login(provider_id: str) -> dict[str, Any]:
-    from cli.opencode_login import start_login
+    from cli.opencode_device import start_login
     return start_login(provider_id)
 
 
 def get_opencode_auth_login_status(login_id: str) -> dict[str, Any]:
-    from cli.opencode_login import login_status
+    from cli.opencode_device import login_status
     return login_status(login_id)
 
 
 def cancel_opencode_auth_login(login_id: str) -> dict[str, Any]:
-    from cli.opencode_login import cancel_login
+    from cli.opencode_device import cancel_login
     return cancel_login(login_id)
 
 # Parent-death-signal setup: on Linux, arrange for the quota-probe child to
@@ -590,6 +590,10 @@ def _provider_has_key(provider_id: str) -> bool:
     4. ``config.yaml → providers.<id>.api_key``
     5. ``config.yaml → custom_providers[].api_key`` (for custom providers)
     """
+    if provider_id in _OPENCODE_CLI_PROVIDER_IDS:
+        from cli.opencode_device import has_credentials, credential_status
+        if has_credentials(provider_id):
+            return credential_status(provider_id)["logged_in"]
     if provider_id == "xiaomi":
         # Xiaomi credentials are deliberately profile-scoped. Do not let a
         # machine-wide XIAOMI_API_KEY make unrelated profiles appear connected.
@@ -1522,12 +1526,17 @@ def get_providers() -> dict[str, Any]:
                     key_source = "env_var"
                 elif pid in _OPENCODE_CLI_PROVIDER_IDS:
                     try:
-                        from cli.auth import _resolve_api_key_provider_secret, PROVIDER_REGISTRY
-                        pconfig = PROVIDER_REGISTRY.get(pid)
-                        _key, source = _resolve_api_key_provider_secret(pid, pconfig) if pconfig else ("", "")
-                        key_source = source if source == "opencode_cli" else "config_yaml"
-                        if source == "opencode_cli":
+                        from cli.opencode_device import has_credentials
+                        if has_credentials(pid):
+                            key_source = "opencode_device"
                             auth_state = "connected"
+                        else:
+                            from cli.auth import _resolve_api_key_provider_secret, PROVIDER_REGISTRY
+                            pconfig = PROVIDER_REGISTRY.get(pid)
+                            _key, source = _resolve_api_key_provider_secret(pid, pconfig) if pconfig else ("", "")
+                            key_source = source if source == "opencode_cli" else "config_yaml"
+                            if source == "opencode_cli":
+                                auth_state = "connected"
                     except Exception:
                         key_source = "config_yaml"
                 else:

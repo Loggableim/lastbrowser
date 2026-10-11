@@ -631,7 +631,8 @@ function registerIpc(): void {
     String(request?.flowId || ''),
     String(request?.provider || 'openai-codex')
   ));
-  ipcMain.handle('lastbrowser:auth:openConnectWindow', (_event, url: string) => {
+  ipcMain.handle('lastbrowser:auth:openConnectWindow', (event, url: string) => {
+    captureTrustedShellSender(event, isTrustedShell)();
     openAuthConnectWindow({ url: String(url || ''), parentWindow: mainWindow });
     return true;
   });

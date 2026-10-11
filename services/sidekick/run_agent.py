@@ -1281,6 +1281,17 @@ class AIAgent:
         self._credential_pool = credential_pool
         self.log_prefix_chars = log_prefix_chars
         self.log_prefix = f"{log_prefix} " if log_prefix else ""
+        self._opencode_device_connection = None
+        if provider in {"opencode-go", "opencode-zen"}:
+            from cli.opencode_device import has_credentials, resolve_connection
+            if has_credentials(provider):
+                # The real chat session identity is stable across token refreshes.
+                session_id = session_id or f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+                connection = resolve_connection(provider, model=model, session_id=session_id)
+                self._opencode_device_connection = connection
+                api_key, base_url, api_mode = connection["api_key"], connection["base_url"], connection["api_mode"]
+                model = connection["model"]
+                self.model = model
         # Store effective base URL for feature detection (prompt caching, reasoning, etc.)
         self.base_url = base_url or ""
         provider_name = provider.strip().lower() if isinstance(provider, str) and provider.strip() else None
@@ -1638,7 +1649,8 @@ class AIAgent:
                 # the third-party identity-injection bug.
                 from runtime.anthropic_adapter import _is_oauth_token as _is_oat
                 self._is_anthropic_oauth = _is_oat(effective_key) if _is_native_anthropic else False
-                self._anthropic_client = build_anthropic_client(effective_key, base_url, timeout=_provider_timeout)
+                self._anthropic_client = build_anthropic_client(effective_key, base_url, timeout=_provider_timeout,
+                    default_headers=(self._opencode_device_connection or {}).get("headers"))
                 if self._native_auto_bridge is not None:
                     self._anthropic_client = self._native_auto_bridge.wrap(self._anthropic_client, agent=self)
                 # No OpenAI client needed for Anthropic mode
@@ -1646,7 +1658,7 @@ class AIAgent:
                 self._client_kwargs = {}
                 if not self.quiet_mode:
                     print(f"🤖 AI Agent initialized with model: {self.model} (Anthropic native)")
-                    if effective_key and len(effective_key) > 12:
+                    if effective_key and len(effective_key) > 12 and self._opencode_device_connection is None:
                         print(f"🔑 Using token: {effective_key[:8]}...{effective_key[-4:]}")
         elif self.api_mode == "bedrock_converse":
             # AWS Bedrock — uses boto3 directly, no OpenAI client needed.
@@ -1700,7 +1712,9 @@ class AIAgent:
                     client_kwargs["command"] = self.acp_command
                     client_kwargs["args"] = self.acp_args
                 effective_base = base_url
-                if base_url_host_matches(effective_base, "openrouter.ai"):
+                if self._opencode_device_connection is not None:
+                    client_kwargs["default_headers"] = dict(self._opencode_device_connection["headers"])
+                elif base_url_host_matches(effective_base, "openrouter.ai"):
                     from runtime.auxiliary_client import build_or_headers
                     client_kwargs["default_headers"] = build_or_headers()
                 elif base_url_host_matches(effective_base, "api.routermint.com"):
@@ -1847,8 +1861,9 @@ class AIAgent:
                     # Always show API key info (masked) for debugging auth issues
                     key_used = client_kwargs.get("api_key", "none")
                     if key_used and key_used != "dummy-key" and len(key_used) > 12:
-                        print(f"🔑 Using API key: {key_used[:8]}...{key_used[-4:]}")
-                    else:
+                        if self._opencode_device_connection is None:
+                            print(f"🔑 Using API key: {key_used[:8]}...{key_used[-4:]}")
+                    elif self._opencode_device_connection is None:
                         print(f"⚠️  Warning: API key appears invalid or missing (got: '{key_used[:20] if key_used else 'none'}...')")
             except Exception as e:
                 raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
@@ -7120,6 +7135,38 @@ class AIAgent:
             return terminal_response
         raise RuntimeError("Responses create(stream=True) fallback did not emit a terminal response.")
 
+    def _refresh_opencode_device_connection(self) -> None:
+        """Refresh profile-scoped device credentials before a new chat turn."""
+        if self.provider not in {"opencode-go", "opencode-zen"}:
+            return
+        from cli.opencode_device import has_credentials, resolve_connection
+        if not has_credentials(self.provider):
+            if getattr(self, "_opencode_device_connection", None) is not None:
+                raise PermissionError("opencode_device_login_required")
+            return
+        connection = resolve_connection(self.provider, model=self.model, session_id=self.session_id)
+        if connection["api_mode"] != self.api_mode:
+            raise PermissionError("opencode_device_model_configuration_changed")
+        self._opencode_device_connection = connection
+        self.api_key, self.base_url = connection["api_key"], connection["base_url"]
+        if self.api_mode == "anthropic_messages":
+            from runtime.anthropic_adapter import build_anthropic_client
+            client = build_anthropic_client(self.api_key, self.base_url,
+                timeout=get_provider_request_timeout(self.provider, self.model),
+                default_headers=connection["headers"])
+            old_client = self._anthropic_client
+            self._anthropic_client = self._native_auto_bridge.wrap(client, agent=self) if self._native_auto_bridge is not None else client
+            self._anthropic_api_key, self._anthropic_base_url = self.api_key, self.base_url
+            try:
+                old_client.close()
+            except Exception:
+                pass
+        else:
+            self._client_kwargs.update(api_key=self.api_key, base_url=self.base_url,
+                default_headers=dict(connection["headers"]))
+            if not self._replace_primary_openai_client(reason="opencode_device_refresh"):
+                raise PermissionError("opencode_device_client_refresh_failed")
+
     def _try_refresh_codex_client_credentials(self, *, force: bool = True) -> bool:
         if self.api_mode != "codex_responses" or self.provider != "openai-codex":
             return False
@@ -7238,7 +7285,9 @@ class AIAgent:
     def _apply_client_headers_for_base_url(self, base_url: str) -> None:
         from runtime.auxiliary_client import _AI_GATEWAY_HEADERS, build_or_headers
 
-        if base_url_host_matches(base_url, "openrouter.ai"):
+        if getattr(self, "_opencode_device_connection", None) is not None and self.provider in {"opencode-go", "opencode-zen"}:
+            self._client_kwargs["default_headers"] = dict(self._opencode_device_connection["headers"])
+        elif base_url_host_matches(base_url, "openrouter.ai"):
             self._client_kwargs["default_headers"] = build_or_headers()
         elif base_url_host_matches(base_url, "ai-gateway.vercel.sh"):
             self._client_kwargs["default_headers"] = dict(_AI_GATEWAY_HEADERS)
@@ -11915,6 +11964,7 @@ class AIAgent:
         # Installed once, transparent when streams are healthy, prevents crash on write.
         _install_safe_stdio()
 
+        self._refresh_opencode_device_connection()
         self._ensure_db_session()
 
         # Tell auxiliary_client what the live main provider/model are for
@@ -11927,6 +11977,7 @@ class AIAgent:
             set_runtime_main(
                 getattr(self, "provider", "") or "",
                 getattr(self, "model", "") or "",
+                session_id=self.session_id,
             )
         except Exception:
             pass

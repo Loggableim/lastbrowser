@@ -995,6 +995,15 @@ def resolve_runtime_provider(
     from runtime.retired_providers import is_retired_provider
     model_cfg = _get_model_config()
     configured_provider = str(model_cfg.get("provider") or "").strip().lower()
+    if requested_provider in {"opencode-go", "opencode-zen"}:
+        from cli.opencode_device import has_credentials, resolve_connection
+        if has_credentials(requested_provider):
+            # Workspace config owns the model protocol and endpoint. Stale
+            # persisted URLs and manually supplied keys must not override it.
+            model = target_model or model_cfg.get("default", "")
+            connection = resolve_connection(requested_provider, model=model)
+            return {**connection, "provider": requested_provider,
+                    "source": "opencode_device", "requested_provider": requested_provider}
     stored_url_applies = not explicit_base_url and (not requested or requested_provider == configured_provider)
     if (is_retired_provider(requested_provider) or is_retired_provider(explicit_base_url)
             or (stored_url_applies and is_retired_provider(model_cfg.get("base_url")))):

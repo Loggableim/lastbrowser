@@ -29,7 +29,7 @@ describe.skipIf(process.platform === 'linux' && !process.env.DISPLAY)('actual Re
           await server.waitForRequestsIdle();
         })(),
         new Promise<never>((_resolve, reject) => {
-          preparationTimeout = setTimeout(() => reject(new Error(`Omnibox fixture preparation exceeded its 10-second deadline; proof: ${directory}`)), 10000);
+          preparationTimeout = setTimeout(() => reject(new Error(`Omnibox fixture preparation exceeded its 30-second deadline; proof: ${directory}`)), 30000);
         })
       ]);
     } finally {

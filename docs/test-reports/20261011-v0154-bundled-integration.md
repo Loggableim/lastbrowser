@@ -22,7 +22,7 @@ deployment is part of this integration.
 | 32 | Five website commits, integrated as `c3c1c7e4`, `caa4b510`, `3d6c43b5`, `509814e1`, `8f80c3ae` | Localized v0.1.53 pages and release metadata, RSS/proxy changes, and regression notes. No public deployment. |
 | 33 | Reviewed source head `9e507619` | Legal inventory and supplied draft files corrected. A reproducible inventory generator and dated JSON snapshot record exact npm/Python manifests and hashes. Missing license metadata, absent `mcp==1.26.0`, Sidekick upstream rights, and `jo.wav` provenance remain unresolved. Drafts make no compatibility, ownership, CLA, or dual-licensing determination. GPL text matches the official GPLv3 text; legal draft status is retained. |
 | 34 | Reviewed source head `06a42b78` | Chat analysis rewritten against current in-tree producer/consumer sources. It records supported event names and same-`stream_id` reconnect behavior, and explicitly leaves runtime, performance, and stability unverified. |
-| 35 | Reviewed source head `54195917` | Release checklist and worker report corrected; `.gitignore` adds only `!docs/release/`. Version-history audit anchors published versions to tags and labels unsupported candidate history as unverified. Changelog history for published v0.1.44/v0.1.45 is corrected; candidate bump remains with the candidate owner. |
+| 35 | Reviewed source head `54195917` | Release checklist and worker report corrected; `.gitignore` adds only `!docs/release/`. Version-history audit anchors published versions to tags and distinguishes GitHub test/prereleases 0.1.46–0.1.50 from the absence of regular releases 0.1.46–0.1.51. Changelog history for published v0.1.44/v0.1.45 is corrected; candidate bump remains with the candidate owner. |
 | 36 | `a56cf7bb` → `d3f99581` | A007 navigation smoke, already present in PR42. |
 | 37 | `2a417cb336d86c442f60414a980a620b7b630175` | A029b readable WebUI errors, already present in PR42. |
 | 38 | `a4bdd2df011cec25042b98e88957c8740bdf6d9d` | A029a named profile persistence, already present in PR42. |
@@ -34,7 +34,18 @@ deployment is part of this integration.
 PR33–35 findings and their corrections are recorded in
 `20261011-a020-license-audit-antigravity-worker-6.md`,
 `20261011-a-019-antigravity-worker-7.md`, the legal draft inventory, chat
-analysis, and release history audit. PR42's original CTO review remains at
+analysis, and release history audit. A later CTO review also identified
+operative-sounding license, commercial offer, CLA, bot, and inventory claims
+in the license-section, contributor-terms, notice, and inventory drafts.
+These were marked as incomplete and non-operative, with conditional wording.
+The Python snapshot was expanded to record all additional installed
+distributions in the supplied interpreter: `pip==25.0.1` and local
+`sidekick==0.8.84` (with its `direct_url`). The runtime set is still not a
+complete dependency graph and says nothing about other interpreters or
+development environments. The README's obsolete Store-preflight count was
+removed; the current run reports 39 PASS and 2 WARN. `LICENSE` itself remains
+the exact provided GNU GPLv3 text; legal authority remains unestablished.
+PR42's original CTO review remains at
 GitHub comment `6106822228`; the final integrated head requires a fresh
 independent review.
 
@@ -66,9 +77,12 @@ EVS/VMP, installation, and start evidence. No signing or installation was
 performed by the integration owner. Source merge alone does not establish a
 signed, installed, started, provider-connected, or release-ready candidate.
 
-Merge sequence: independently review and merge this complete PR into
-`release/v0.1.52`; then hand the resulting merge SHA and this report to the
-candidate worker. Keep the website's public version at v0.1.53 until the
-candidate is approved for public release. Close original PR31–41 as superseded
-only after confirming the merged PR contains every row above; PR42 closes as
-merged through the integration PR.
+Merge sequence: independently review and merge this complete [PR43](https://github.com/Loggableim/lastbrowser/pull/43)
+into `release/v0.1.52`; then hand the resulting merge SHA and this report to
+the candidate worker. Keep the website's public version at v0.1.53 until the
+candidate is approved for public release. After the atomic merge, close each
+original PR31–41 individually as superseded, including its source head and
+the corresponding row above with the PR43 link in the closeout; do not close
+an item with an unresolved material review finding. PR42's provenance is the
+aggregate source head listed above and it closes through its inclusion in
+PR43.

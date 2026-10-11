@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "snapshot_date": "2026-10-11",
-  "source_commit": "8f80c3ae3f41fb6690daf8ef1317c1e3f47c0230",
+  "source_commit": "925514db5b40f91f1d9acfeacfe786e96fef61f4",
   "purpose": "Draft inventory of package-lock and pinned desktop Python runtime metadata; metadata is not a legal license-text verification or rights-chain finding.",
   "inputs": {
     "package_lock": {
@@ -30,7 +30,9 @@
     "npm_unknown_workspace_license_metadata": 2,
     "python_pinned_runtime_entries": 51,
     "python_missing_or_mismatched_pins": 0,
-    "python_unknown_license_metadata": 5
+    "python_unknown_license_metadata": 5,
+    "python_installed_unpinned_entries": 2,
+    "python_installed_unpinned_unknown_license_metadata": 1
   },
   "npm_packages": [
     {
@@ -5098,6 +5100,41 @@
       "evidence": "requirements-runtime.txt pin + importlib.metadata in supplied interpreter"
     }
   ],
+  "python_installed_unpinned_distributions": [
+    {
+      "name": "pip",
+      "version": "25.0.1",
+      "scope": "installer_tooling",
+      "license_expression_metadata": null,
+      "license_metadata": "MIT",
+      "project_urls": [
+        "Homepage, https://pip.pypa.io/",
+        "Documentation, https://pip.pypa.io",
+        "Source, https://github.com/pypa/pip",
+        "Changelog, https://pip.pypa.io/en/stable/news/"
+      ],
+      "installer": "pip\n",
+      "direct_url": null,
+      "evidence": "importlib.metadata in supplied interpreter; not present in requirements-runtime.txt pins"
+    },
+    {
+      "name": "sidekick",
+      "version": "0.8.84",
+      "scope": "local_project_distribution",
+      "license_expression_metadata": null,
+      "license_metadata": null,
+      "project_urls": [
+        "Homepage, https://github.com/sidekick-ai/sidekick",
+        "Documentation, https://docs.sidekick-agent.dev"
+      ],
+      "installer": "pip\n",
+      "direct_url": {
+        "dir_info": {},
+        "url": "file:///C:/projekte/lastbrowser/services/sidekick"
+      },
+      "evidence": "importlib.metadata in supplied interpreter; not present in requirements-runtime.txt pins"
+    }
+  ],
   "unresolved_review_items": [
     {
       "name": "mcp",
@@ -5121,7 +5158,7 @@
   ],
   "limitations": [
     "npm license values are package-lock metadata, not inspected license texts; each non-project package still needs notice and obligation review.",
-    "Python rows cover the exact pinned desktop runtime requirements and metadata reported by the supplied interpreter; pyproject optional groups and any non-runtime development environment are not claimed complete by this snapshot.",
+    "Pinned Python rows cover the exact desktop runtime requirements; every installed distribution not in that pin list is recorded separately with version and available provenance metadata. This is not a complete dependency graph and does not cover other interpreters, optional pyproject groups, or development environments.",
     "This inventory makes no GPL compatibility, copyright ownership, CLA sufficiency, or dual-licensing determination."
   ]
 }

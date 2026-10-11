@@ -20,6 +20,8 @@ for dist in metadata.distributions():
         "license_expression": md.get("License-Expression"),
         "license_metadata": md.get("License"),
         "project_urls": md.get_all("Project-URL") or [],
+        "installer": dist.read_text("INSTALLER"),
+        "direct_url": dist.read_text("direct_url.json"),
     })
 print(json.dumps(rows, ensure_ascii=False))'''
 
@@ -84,6 +86,7 @@ def main() -> None:
     installed = json.loads(process.stdout)
     runtime_by_name = {row["name"].lower().replace("_", "-"): row for row in installed}
     pins = python_pins(requirements_path)
+    pin_names = {pin["name"].lower().replace("_", "-") for pin in pins}
     python_rows = []
     for pin in pins:
         key = pin["name"].lower().replace("_", "-")
@@ -97,6 +100,30 @@ def main() -> None:
             "evidence": "requirements-runtime.txt pin + importlib.metadata in supplied interpreter",
         })
     python_rows.sort(key=lambda row: row["name"].lower())
+    python_unpinned_rows = []
+    for row in installed:
+        normalized_name = row["name"].lower().replace("_", "-")
+        if normalized_name in pin_names:
+            continue
+        direct_url = json.loads(row["direct_url"]) if row["direct_url"] else None
+        if normalized_name == "pip":
+            scope = "installer_tooling"
+        elif normalized_name == "sidekick" and direct_url and str(direct_url.get("url", "")).startswith("file:"):
+            scope = "local_project_distribution"
+        else:
+            scope = "unclassified_unpinned_runtime_distribution"
+        python_unpinned_rows.append({
+            "name": row["name"],
+            "version": row["version"],
+            "scope": scope,
+            "license_expression_metadata": row["license_expression"],
+            "license_metadata": row["license_metadata"],
+            "project_urls": row["project_urls"],
+            "installer": row["installer"],
+            "direct_url": direct_url,
+            "evidence": "importlib.metadata in supplied interpreter; not present in requirements-runtime.txt pins",
+        })
+    python_unpinned_rows.sort(key=lambda row: (row["name"].lower(), row["version"]))
 
     unknown_npm = [row for row in npm_rows if row["license_metadata"] == "UNKNOWN"]
     unknown_python = [row for row in python_rows if not (row["license_expression_metadata"] or row["license_metadata"])]
@@ -121,9 +148,12 @@ def main() -> None:
             "python_pinned_runtime_entries": len(python_rows),
             "python_missing_or_mismatched_pins": len(mismatched_python),
             "python_unknown_license_metadata": len(unknown_python),
+            "python_installed_unpinned_entries": len(python_unpinned_rows),
+            "python_installed_unpinned_unknown_license_metadata": sum(not (row["license_expression_metadata"] or row["license_metadata"]) for row in python_unpinned_rows),
         },
         "npm_packages": npm_rows,
         "python_runtime_packages": python_rows,
+        "python_installed_unpinned_distributions": python_unpinned_rows,
         "unresolved_review_items": [
             {"name": "mcp", "reported_version": "1.26.0", "status": "not found in this source lock, pyproject, pinned runtime requirements, or supplied runtime metadata", "license": "UNKNOWN", "origin": "UNKNOWN", "action": "confirm whether this is a shipped dependency and provide source evidence before any compatibility conclusion"},
             {"name": "services/sidekick inherited code", "status": "upstream/fork rights chain not established by Git authorship or the local MIT file alone", "action": "obtain provenance and rights evidence; do not claim commercial relicensing rights until reviewed"},
@@ -131,7 +161,7 @@ def main() -> None:
         ],
         "limitations": [
             "npm license values are package-lock metadata, not inspected license texts; each non-project package still needs notice and obligation review.",
-            "Python rows cover the exact pinned desktop runtime requirements and metadata reported by the supplied interpreter; pyproject optional groups and any non-runtime development environment are not claimed complete by this snapshot.",
+            "Pinned Python rows cover the exact desktop runtime requirements; every installed distribution not in that pin list is recorded separately with version and available provenance metadata. This is not a complete dependency graph and does not cover other interpreters, optional pyproject groups, or development environments.",
             "This inventory makes no GPL compatibility, copyright ownership, CLA sufficiency, or dual-licensing determination.",
         ],
     }

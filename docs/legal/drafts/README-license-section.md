@@ -1,21 +1,19 @@
-# License & Commercial Use
+# Draft: License and commercial use
 
-LastBrowser is free and open source software licensed under the **GNU General Public License v3.0 (GPL-3.0-or-later)**.
+**Status: proposal only. This text is not approved, published, or operative.**
 
-```
-Copyright (C) 2026 LastBrowser Project and Contributors
+The project has not established through this draft that every component may
+be distributed under GPL-3.0-or-later, or that the project has authority to
+offer a separate commercial license. The project-wide rights and dependency
+questions in `../license-audit.md` remain open.
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-```
+If the relevant rights holders approve a project-wide GPL grant after the
+rights review is complete, a final notice could identify the exact license,
+covered work, and authorized copyright holders. The accompanying `LICENSE`
+file contains the unmodified GNU GPL version 3 text; its presence here does
+not establish that the project is authorized to apply it to all repository
+contents.
 
-## Commercial Dual Licensing
-
-For enterprises, original equipment manufacturers (OEMs), or integration partners wishing to embed, white-label, or distribute LastBrowser without the reciprocal copyleft requirements of the GPL-3.0:
-
-A **Commercial License** is available directly from the project author.
-
-- **Inquiries & Custom Licensing:** [rainer@dominik.in](mailto:rainer@dominik.in)
-- **Enterprise Portal:** [https://lastbrowser.com/enterprise/](https://lastbrowser.com/enterprise/)
+Any commercial-license offer would require separate confirmation of authority,
+approved terms, and an approved contact channel. This draft makes no such offer
+and provides no verified commercial licensing contact or portal.

@@ -1,54 +1,35 @@
-LastBrowser
-Copyright (c) 2026 LastBrowser Project and Contributors
+DRAFT NOTICE — INCOMPLETE, UNAPPROVED, AND NOT FOR DISTRIBUTION AS A FINAL NOTICE
 
-This product includes software developed by the LastBrowser Project
-(https://lastbrowser.com / https://github.com/Loggableim/lastbrowser).
+This working list contains examples of components and provenance claims that
+were identified during a preliminary source review. It is not a complete
+third-party inventory, does not establish copyright ownership or license
+compatibility, and has not been approved by the relevant rights holders.
+See `../license-audit.md` and `THIRD-PARTY-LICENSES.md` for the current scope
+and unresolved items.
 
-========================================================================
-Origin & Derived Works Notice
-========================================================================
-
-Portions of this software (specifically the Sidekick backend service under
-`services/sidekick/`) are derived from:
-- Hermes Agent by Nous Research (https://github.com/NousResearch)
-  Copyright (c) 2025 Nous Research
-  Licensed under the MIT License.
-- Sidekick Agent
-  Copyright (c) 2025 Sidekick
-  Licensed under the MIT License.
+The entries below require confirmation against the exact shipped files,
+upstream notices, and applicable license texts before use in a release notice.
+In particular, this draft makes no conclusion about whether linking,
+combination, or distribution conditions apply to the product as a whole.
 
 ========================================================================
-Third-Party Bundled Software & Libraries
+Preliminary examples — verify before publication
 ========================================================================
 
 - llama.cpp
-  Copyright (c) 2023-2025 Georgi Gerganov and llama.cpp contributors
-  Licensed under the MIT License.
+  Preliminary license reference: MIT License.
 
 - LLVM OpenMP Runtime (libomp)
-  Copyright (c) 1997-2025 LLVM Team / Intel Corporation
-  Licensed under the Apache License v2.0 with LLVM Exceptions.
+  Preliminary license reference: Apache License 2.0 with LLVM Exceptions.
 
-- CastLabs Electron Shell (Widevine CDM Integration)
-  Copyright (c) 2013-2025 GitHub Inc. and CastLabs Technologies
-  Licensed under the MIT License.
+- CastLabs Electron build
+  Preliminary license reference: MIT License. Verify the exact package and
+  bundled components for the shipped build.
 
 - Ghostery Adblocker Engine (@ghostery/adblocker-electron)
-  Copyright (c) Ghostery, Inc. and contributors
-  Licensed under the Mozilla Public License 2.0 (MPL-2.0).
-  Combined with LastBrowser as a Larger Work pursuant to MPL-2.0 Section 3.3.
+  Preliminary license reference: Mozilla Public License 2.0 (MPL-2.0).
+  Product-level obligations and applicability have not been assessed here.
 
-- Atkinson Hyperlegible Font
-  Copyright (c) 2020-2021 Braille Institute of America
-  Licensed under the SIL Open Font License, Version 1.1.
-
-- Lexend Font Family
-  Copyright (c) 2019-2021 Thomas Jockin and Lexend Authors
-  Licensed under the SIL Open Font License, Version 1.1.
-
-- OpenDyslexic Font
-  Copyright (c) 2011-2025 Abbie Gonzalez
-  Licensed under the SIL Open Font License, Version 1.1 / Bitstream Vera.
-
-For full license texts and complete dependency inventories, please refer to
-THIRD-PARTY-LICENSES.md.
+- Atkinson Hyperlegible, Lexend, and OpenDyslexic fonts
+  Preliminary license reference: SIL Open Font License for the respective
+  packages. Verify exact versions, notices, and bundled font files.

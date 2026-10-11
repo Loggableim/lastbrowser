@@ -16,7 +16,7 @@ Lastbrowser is a Windows-first Electron browser shell with Sidekick integrated a
 ```powershell
 npm install
 npm test                  # 1,994 Vitest unit & integration tests
-npm run verify:store      # Automated Microsoft Store release readiness preflight (27 checks)
+npm run verify:store      # Automated Microsoft Store release readiness preflight
 npm run build             # Build main TypeScript and renderer Vite bundles
 ```
 

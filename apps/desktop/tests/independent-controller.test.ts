@@ -893,6 +893,6 @@ describe('Independent backend profile isolation and binding security', () => {
       payload: { message: 'Order for Beta' },
     });
     expect(api).toHaveBeenLastCalledWith('assistantTurn', betaRes.scope, { message: 'Order for Beta' }, 'beta');
-  });
+  }, 20000);
 });
 

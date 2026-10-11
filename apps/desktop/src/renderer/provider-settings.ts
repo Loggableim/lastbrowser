@@ -16,6 +16,12 @@ export function isProviderSettingsScopeCurrent(captured: ProviderScopeSelection,
     && captured.workspacePath === current.workspacePath && (captured.backendProfileName ?? '') === (current.backendProfileName ?? '');
 }
 
+export function isOpenCodeLoginBusyInScope(status: string | undefined, captured: ProviderScopeSelection | undefined,
+  current: ProviderScopeSelection): boolean {
+  return (status === 'starting' || status === 'running') && Boolean(captured)
+    && isProviderSettingsScopeCurrent(captured!, current, 0, 0);
+}
+
 export function requestProviderSettingsInScope(requester: ProviderSettingsRequester, request: ProviderSettingsRequest,
   scope: ProviderScopeSelection, isCurrent: () => boolean): Promise<unknown> {
   if (!isCurrent()) return Promise.reject(new Error('provider_settings_scope_stale'));

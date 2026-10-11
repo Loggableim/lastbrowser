@@ -13,7 +13,6 @@ export const desktopJaOverrides = {
   'whatsNew.versionRange': '{fromVersion} から {toVersion} までの更新',
   'whatsNew.versionOnly': 'バージョン {toVersion}',
   'whatsNew.close': '閉じる',
-  'spaceAssistant.switchToAssistant': 'Space Assistant',
   'spaceAssistant.switchToQuickChat': 'Quickchat',
   ...group('access.lock', {
     checking: '安全なセッションを確認中…', description: 'ブラウザーを開くにはアクセスパスワードを入力してください。', password: 'アクセスパスワード', retry: '再試行', title: 'ブラウザーはロックされています', unlock: 'ロックを解除', unlocking: 'ロックを解除中…'

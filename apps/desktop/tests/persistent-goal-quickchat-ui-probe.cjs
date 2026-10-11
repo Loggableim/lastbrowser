@@ -501,13 +501,15 @@ async function electronChild() {
     assert((await providerKinds()).includes('quickchat_summary'), 'Summary provider received selected controlled page context');
     result.quickchatSummary = { actualToolbarAction: true, markerDelivered: true, responseRendered: true,
       panel: await run("document.querySelector('.copilot-split-panel')?.getAttribute('aria-label')") };
-    await run("document.querySelector('.copilot-mode-switch')?.click();true");
-    await until(() => run("Boolean(document.querySelector('.space-assistant'))"), 'actual Space Assistant mode switch');
-    await run("document.querySelector('.space-assistant-mode-switch')?.click();true");
-    await until(() => run("Boolean(document.querySelector('.copilot-split-panel'))"), 'return to the same Quickchat after Assistant mode switch');
+    assert.equal(await run("document.querySelector('.copilot-mode-switch')===null"), true,
+      'Quickchat does not expose a Space Assistant switch');
+    await run("document.querySelector('.copilot-toggle-btn')?.click();true");
+    await until(() => run("document.querySelector('.copilot-split-panel')===null"), 'Quickchat closed from the topbar');
+    await run("document.querySelector('.copilot-toggle-btn')?.click();true");
+    await until(() => run("Boolean(document.querySelector('.copilot-split-panel'))"), 'Quickchat reopened from the topbar');
     assert(await run("[...document.querySelectorAll('.copilot-bubble.assistant')].some(e=>e.innerText.includes('E9_SUMMARY_OK'))"),
-      'Switching to Space Assistant and back preserves Quickchat transcript');
-    result.quickchatSummary.spaceAssistantModeSwitchPreservedQuickchat = true;
+      'Closing and reopening Quickchat from the topbar preserves its transcript');
+    result.quickchatSummary.topbarReopenPreservedQuickchat = true;
 
     result.phase = 'reset_only_own_quickchat';
     await inputText('.copilot-input-field', 'E9_QUICKCHAT_RESET_SENTINEL');

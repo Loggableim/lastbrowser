@@ -89,6 +89,28 @@ describe('A-027 release model choices', () => {
       .toEqual({ choice: null, changed: true });
   });
 
+  it('sends the checked P003 catalog models from the captured backend profile', () => {
+    const storage = memoryStorage();
+    const scope = { browserProfileId: 'browser-a', backendProfileName: 'connected-profile' };
+    const reportedChoices = [
+      { providerId: 'ollama-cloud', id: 'deepseek-v4.1-flash' },
+      { providerId: 'openai-codex', id: 'gpt-6-luna' },
+      { providerId: 'xiaomi', id: 'mimo-v2.6-flash' },
+    ];
+    for (const choice of reportedChoices) {
+      expect(isModelActive(storage, scope, choice.providerId, choice.id)).toBe(true);
+      expect(chooseActiveModel(reportedChoices, { provider: choice.providerId, model: choice.id }, storage, scope))
+        .toEqual({ choice, changed: false });
+    }
+
+    const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
+    expect(app).toContain('context.backendProfileName ?? activeBackendProfileNameRef.current ?? undefined');
+    expect(app).toContain('backendProfileName });');
+    const composer = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8');
+    expect(composer).toContain('const accepted = await onSendMessage');
+    expect(composer).toContain('if (accepted !== false) setInputText');
+  });
+
   it('refuses a model disabled in Settings at the native send guard', () => {
     const storage = memoryStorage();
     setModelActive(storage, { browserProfileId: 'browser-a', backendProfileName: 'personal' }, 'provider-a', 'model-a', false);

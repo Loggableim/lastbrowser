@@ -59,7 +59,7 @@ describe('provider-aware model selection', () => {
     expect(validBReason).toBeNull();
     expect(submitted).toBe(1);
     const component = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8').replace(/\r\n/g, '\n');
-    expect(component).toContain('if (!trimmed || busy || modelGateReason !== null) return;');
+    expect(component).toContain('if (!trimmed || busy || sendPendingRef.current || modelGateReason !== null) return;');
     expect(component).toContain('disabled={!inputText.trim() || modelGateReason !== null}');
     expect(component.indexOf('modelGateReason !== null) return;')).toBeLessThan(component.indexOf('onSendMessage(trimmed'));
     expect(isModelCatalogResponseCurrent(scopeA, scopeB)).toBe(false);
@@ -372,7 +372,7 @@ describe('provider-aware model selection', () => {
     expect(chat).toContain("operation: 'modelSelection'");
     expect(chat).not.toContain('sidekick.setDefaultModel');
     expect(chat).toContain('modelProvider={modelProvider}');
-    expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
+    expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName })');
     expect(app).toContain("includeCatalog: true");
     expect(app).toContain('const copilotModelSelection = resolvePreferredChatModelSelection({');
     expect(copilot).toContain('const activeModelId = modelName || selectedModel;');
@@ -383,7 +383,7 @@ describe('provider-aware model selection', () => {
   it('sends the active scoped model selection as an explicit chat model/provider pair', () => {
     const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
     const startContract = readFileSync(path.resolve(process.cwd(), 'src/renderer/guarded-native-chat-start.ts'), 'utf8');
-    const selectionRead = app.indexOf('chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
+    const selectionRead = app.indexOf('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName })');
     const guard = app.indexOf('prepareGuardedNativeChatStart(createGuardedStartInput())', selectionRead);
     const transport = app.indexOf('(payload) => window.lastbrowser.sidekick.startChat(payload)', guard);
 

@@ -263,6 +263,7 @@
   <url><loc>https://lastbrowser.com/spaces/</loc><priority>0.8</priority></url>
   <url><loc>https://lastbrowser.com/roadmap/</loc><priority>0.75</priority></url>
   <url><loc>https://lastbrowser.com/releases/</loc><priority>0.75</priority></url>
+  <url><loc>https://lastbrowser.com/en/releases/</loc><priority>0.75</priority></url>
   <url><loc>https://lastbrowser.com/security/</loc><priority>0.8</priority></url>
   <url><loc>https://lastbrowser.com/press/</loc><priority>0.6</priority></url>
   <url>

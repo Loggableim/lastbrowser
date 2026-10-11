@@ -7,3 +7,8 @@
 /skills      /hub/ 301
 /mcp         /hub/ 301
 /rss         /changelog/feed.xml 301
+/es/releases/* /releases/ 302
+/fr/releases/* /releases/ 302
+/it/releases/* /releases/ 302
+/pt/releases/* /releases/ 302
+/ja/releases/* /releases/ 302

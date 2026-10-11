@@ -1,7 +1,7 @@
 # Technisches Lizenz- und Provenienz-Audit (A-020)
 
-**Stand:** 11. Oktober 2026  
-**Status:** Arbeitsentwurf, unvollständig, keine Freigabeentscheidung  
+**Stand:** 11. Oktober 2026<br>
+**Status:** Arbeitsentwurf, unvollständig, keine Freigabeentscheidung<br>
 **Quellbasis:** v0.1.54 Source-Integration auf PR42-Head `353146c3cdb50977b7b8938e800122be24e2b019`, ergänzt um PR31-Metadaten. Die Inventurdatei bindet ihre konkreten Eingaben und SHA-256-Werte.
 
 ## Ergebnis in Kürze

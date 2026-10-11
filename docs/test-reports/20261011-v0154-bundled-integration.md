@@ -1,9 +1,9 @@
 # v0.1.54 source integration: PR31–42
 
-Date: 2026-10-11 (Europe/Vienna)  
-Integration owner: Codex Worker 2  
-Branch: `codex/v0154-bundle-20261011`  
-Integration base: reviewed PR42 head `353146c3cdb50977b7b8938e800122be24e2b019`  
+Date: 2026-10-11 (Europe/Vienna)<br>
+Integration owner: Codex Worker 2<br>
+Branch: `codex/v0154-bundle-20261011`<br>
+Integration base: reviewed PR42 head `353146c3cdb50977b7b8938e800122be24e2b019`<br>
 Target: `release/v0.1.52`
 
 This branch combines PR31–35 with PR42. PR42 already contains the reviewed

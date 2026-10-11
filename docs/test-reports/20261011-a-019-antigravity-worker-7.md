@@ -1,6 +1,6 @@
 # A-019 Release-Konsistenz: Quellbasis- und Historienkorrektur
 
-**Datum:** 2026-10-11  
+**Datum:** 2026-10-11<br>
 **Status:** PR35-Inhalte selektiv korrigiert und auf dem PR42-Integrationsstand verankert
 
 ## Korrektur

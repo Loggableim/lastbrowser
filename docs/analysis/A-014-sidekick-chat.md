@@ -1,8 +1,8 @@
 # Sidekick Chat: statische Analyse des In-Tree-Quellstands (A-014)
 
-**Stand:** 11. Oktober 2026  
-**Analysierter Quellstand:** v0.1.54 Source-Integration auf PR42-Head `353146c3cdb50977b7b8938e800122be24e2b019`  
-**Geltungsbereich:** `services/sidekick/`, insbesondere `web/static/messages.js` und `web/api/streaming.py`  
+**Stand:** 11. Oktober 2026<br>
+**Analysierter Quellstand:** v0.1.54 Source-Integration auf PR42-Head `353146c3cdb50977b7b8938e800122be24e2b019`<br>
+**Geltungsbereich:** `services/sidekick/`, insbesondere `web/static/messages.js` und `web/api/streaming.py`<br>
 **Methode:** statische Prüfung der im Repository vorhandenen Producer- und Consumerpfade. Kein Laufzeit-, Timing- oder Modelltest.
 
 Diese Notiz beschreibt den aktuellen In-Tree-Backendpfad. Sie beansprucht keine Untersuchung eines externen Original-Repositories oder einer unveränderten Upstream-Version. Dateinamen und Eventvertrag beziehen sich auf den oben genannten Quellstand.

@@ -1,7 +1,7 @@
 # A-020 Lizenzinventur: Reproduzierbarer Metadaten-Snapshot
 
-**Datum:** 2026-10-11  
-**Status:** Teilinventur, keine rechtliche Freigabe  
+**Datum:** 2026-10-11<br>
+**Status:** Teilinventur, keine rechtliche Freigabe<br>
 **Source-Basis:** PR42 Source-Integration plus PR31 v0.1.53-Metadaten
 
 ## Erzeugung

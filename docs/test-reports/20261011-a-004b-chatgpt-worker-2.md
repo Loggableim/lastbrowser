@@ -27,7 +27,8 @@ GitHub Release API Asset-Digests und Größen wurden zuvor gegen die lokal signi
 | --- | --- |
 | `npm ci` | Bestanden; 424 Pakete installiert. npm meldet 33 Abhängigkeitsschwachstellen (2 niedrig, 6 moderat, 22 hoch, 3 kritisch); nicht Teil dieser Website-Änderung. |
 | `node --test lastbrowser.com/tests/download-counter.test.mjs` | Bestanden: 15 Tests. |
-| `npm run build` | Bestanden; TypeScript und Vite-Build erfolgreich. Vite meldet bestehende große Chunks. |
+| `npm run build` | Bestanden; Desktop-TypeScript und Vite-Build erfolgreich. Vite meldet bestehende große Chunks. |
+| Website-Build | Kein separates Website-Build-Skript im Repository gefunden; die Website besteht aus statischen HTML-Seiten und Cloudflare Functions. |
 | `npm run verify:store` | Exit 0; 39 PASS, 2 WARN, 0 FAIL. Warnungen: Store-Screenshots bleiben vorläufig; kein Windows-Paket wurde für Signaturprüfung übergeben. Das ist kein Store-Zertifizierungsnachweis. |
 | `python -m compileall -q services/sidekick` | Bestanden, Exit 0. |
 | `npm run test:run` | Nicht bestanden: 213 Dateien bestanden, 2 fehlgeschlagen; 1,945 Tests bestanden, 4 fehlgeschlagen, 17 übersprungen. `public-downloads.test.ts` erwartet noch Website-Version/Assets v0.1.45 und muss mit dem Website-PR synchronisiert werden. Ein DOM-Test konnte `electron.exe` nach `npm ci` nicht starten (`ENOENT`). |

@@ -1,8 +1,8 @@
 # antigravity-worker-8 – Statusbericht & Ledger
 
 **Rolle:** Release-, Doku-, Website- und i18n-Worker (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :30 (`Cron: 30 * * * *`, Daemon Task aktiv: `task-101`)  
-**Letzter Lauf:** 11. Oktober 2026, 05:30–05:44 Uhr (Lauf 5 / Cron Iteration 1)  
+**Taktung:** 1 Lauf pro Stunde, immer um :30 (`Cron: 30 * * * *`, Daemon Task aktiv: `task-93`)  
+**Letzter Lauf:** 11. Oktober 2026, 09:30–09:32 Uhr (Lauf 6 / Cron Iteration 6)  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Hotfix-Kandidat: `0.1.53`)  
 
@@ -36,6 +36,22 @@
 ---
 
 ## 2. Historie der stündlichen Läufe
+
+### Lauf 6 – Geplanter Cron-Lauf (:30, Iteration 6) (11. Oktober 2026, 09:30–09:32 Uhr)
+- **Auslöser:** Geplanter stündlicher Cron-Trigger um :30 (`Cron: 30 * * * *`, Daemon Task `task-93`).
+- **Git Stand & Branch:** Branch `release/v0.1.52`, Arbeitsbereich sauber (`working tree clean`).
+- **Allround- & Qualitäts-Gates:**
+  - **Python Syntaxcheck:** `python -m compileall -q services/sidekick` → **PASS** (Exit 0, 0 Fehler).
+  - **Secret-Fixtures:** `tests/secret-fixtures.test.ts` → **PASS** (1/1 bestanden in 9.10s, keine Secrets).
+  - **Desktop Shell Build:** `build:main` und `typecheck:renderer` → **PASS** (Exit 0, 0 TS-Fehler).
+  - **Store Preflight:** `npm run verify:store` → **PASS** (39 Checks PASS, 2 WARN, 0 FAIL).
+  - **i18n Key Parity:** `tests/i18n.test.ts` → **PASS** (14/14 Tests bestanden in 416ms).
+  - **Public Downloads:** `tests/public-downloads.test.ts` → **PASS** (5/5 Tests bestanden in 38ms).
+  - **Website Testsuite:** `node lastbrowser.com/tests/download-counter.test.mjs` → **PASS** (15/15 Tests bestanden in 70.9ms).
+- **Release-, Doku- und Website-Audit:**
+  - **Release v0.1.52:** Vollständig verifiziert und stabil publiziert.
+  - **Website & i18n:** Alle 7 Sprachpfade der Website und alle 8 Desktop-Locales sind fehlerfrei synchron.
+  - **Kandidat v0.1.53:** Bleibt im Review auf Zweig `codex/hotfix-v0.1.53`.
 
 ### Lauf 5 – Geplanter Cron-Lauf (:30, Iteration 1) (11. Oktober 2026, 05:30–05:40 Uhr)
 - **Auslöser:** Geplanter stündlicher Cron-Trigger um :30 (`Cron: 30 * * * *`, Daemon Task `task-95`).
@@ -101,15 +117,15 @@
 ## 5. Status- und Lock-Verwaltung
 
 - **State File:** [`.agents/state/antigravity-worker-8.json`](file:///c:/projekte/lastbrowser/.agents/state/antigravity-worker-8.json)
-- **Lauf-Zähler (`runs_total`):** 5
+- **Lauf-Zähler (`runs_total`):** 6
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Freigegeben (`run_lock_since`: `null`)
-- **Letzter Rapport:** `2026-10-11T05:44:00+02:00`
-- **Aktiver Cron-Task:** `task-101` (`30 * * * *`, Daemon)
+- **Letzter Rapport:** `2026-10-11T09:32:00+02:00`
+- **Aktiver Cron-Task:** `task-93` (`30 * * * *`, Daemon)
 
 ---
 
-## 6. Geplante Aktionen für den nächsten stündlichen Lauf (:30 / 06:30 Uhr CEST)
+## 6. Geplante Aktionen für den nächsten stündlichen Lauf (:30 / 10:30 Uhr CEST)
 
 1. Stündliche Neuvalidierung aller Qualitäts-Gates (`verify:store`, `compileall`, Desktop-Build, `secret-fixtures`, `i18n.test.ts`, `download-counter.test.mjs`, `public-downloads.test.ts`).
 2. Begleitung der Vorbereitung von Patch-Release `0.1.53` (Hotfix für Kaltstart-Latenz A-025) hinsichtlich Versionserhöhung in Doku, Store-Drafts und Website.

@@ -150,3 +150,44 @@ This branch is prepared for one reviewable overall PR against
 `release/v0.1.52`. No version bump, package creation, signing, upload, Store
 submission, publication, deployment, or merge into the release branch was
 performed.
+
+## Local v0.1.55 VM candidate preparation
+
+This section records a reversible handoff plan; no installer or portable executable has been built.
+
+### Source and package binding
+
+- Current PR55 branch head: `dd5c31bc79e0d671b47508c28e6047516756f37a`. It is a report/source integration snapshot, not the final VM candidate commit.
+- Candidate source commit remains **pending** the independently reviewed standard-chat add-on, its integration, and a fresh full combined gate run. The eventual candidate must record that final full Git commit SHA and build only from that checkout.
+- Root and desktop `package.json` both currently declare `0.1.53`. The intended source target is v0.1.55, but the package version binding is **open** until the owner-authorized version/CHANGELOG step. Do not label an output v0.1.55 while the embedded package version remains 0.1.53.
+- Electron Builder writes under `apps/desktop/release` (ignored by Git). Planned absolute outputs, not created: `C:\Users\logga\.codex\worktrees\v0155-integration\lastbrowser\apps\desktop\release\Lastbrowser-0.1.55-x64-setup.exe` and `C:\Users\logga\.codex\worktrees\v0155-integration\lastbrowser\apps\desktop\release\Lastbrowser-0.1.55-x64-portable.exe`. Builder artifact names derive from package version, so the planned names require the owner version step first.
+- `package:win` prepares Python, generates installer assets, builds the desktop, then builds NSIS and portable targets. Windows configuration includes `afterSign: scripts/evs-sign.cjs`, signature verification, a configured certificate thumbprint, and a custom signature-preservation hook. Consequently, invoking the package command can enter signing behavior; it was not invoked. No publisher/upload step was run.
+- Dependencies are already installed in the isolated worktree (`apps/desktop/node_modules`); earlier source gates passed on `520fae6c770ea9a6e5ab12383d48fa9fb983009f`. The ignored Electron runtime had been copied for tests. These facts do not establish a built candidate or packaged dependency integrity. After the final source integration, rerun the required gates and prepare the packaging environment against that exact commit before producing the candidate.
+
+### Candidate evidence still open
+
+For each final executable, record the exact file name, absolute path, byte size, SHA-256, embedded/file/product version, Authenticode signer and timestamp verification result. Record the installation or portable launch path, installed version, upgrade source/version if applicable, and the exact installed executable hash. None of these package, signature, timestamp, or install observations exists yet. Keep any setup and portable evidence separate.
+
+### P004 VM test matrix
+
+Run only after the final candidate has been built and its source commit, version, hashes, signature, and timestamp are bound in the handoff. Use the existing VM tester and standard chat scope.
+
+| Scenario | Required observation |
+| --- | --- |
+| Fresh install or controlled upgrade | Candidate file/hash and installed executable match; installed version is 0.1.55; startup completes. Record the exact installation path and whether the What's New view appears. |
+| MiMo standard-chat send | Send a short prompt and a follow-up; capture successful response plus actual provider/model/session metadata. |
+| Codex standard-chat send | Send using the selected Codex model; verify provider/model/session metadata and the profile-bound model context metadata. Do not infer routing from response text or the picker label. |
+| Ollama standard-chat send | Attempt only if the existing account/service is usable. Record HTTP 403 or other account/service refusal as external and do not count it as product acceptance. |
+| Model switch during a conversation | Switch to a second available model and verify the selected model and subsequent session metadata; no silent cross-provider fallback. |
+| Stop and failed start | Stop an active response and verify the placeholder finalizes; a rejected/failed send retains the composer draft. |
+| Restart and history | Restart, reopen the conversation, send a follow-up, and verify history and provider/model binding remain consistent. |
+
+The pass/fail record must name the candidate hash used, distinguish product behavior from account/service blockers, and leave QuickChat deferred. The active VM tester remains uninterrupted; candidate testing is a later handoff.
+
+### Owner sequence
+
+1. Obtain independent review of the exact standard-chat add-on PR head; integrate only after that review.
+2. Rerun focused regressions and every AGENTS gate on the resulting candidate source; record the final commit SHA.
+3. Owner performs the version/CHANGELOG step to 0.1.55, then build the isolated VM candidate with the configured signing path.
+4. Capture per-file hash/size/version and Authenticode signer/timestamp evidence, then pass the candidate and matrix to the existing VM tester for P004.
+5. Keep merge, tag, public release, Store submission, and publication as separate owner decisions.

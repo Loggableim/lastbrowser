@@ -340,3 +340,20 @@ source edits. Any future fix must arrive as an exact commit with regression
 and live evidence, receive independent review, pass combined gates, and be
 bound to a newly built candidate before another VM run. PR #55 remains open;
 no release merge or publication is authorized by this failed candidate run.
+
+## Additional v0.1.55 integration point: provider workspace settings
+
+Cid has selected mockup variant 3: implement an **Anbieter-Arbeitsbereich** in
+AI & Local Models. Remove the separate Local AI Settings destination and
+integrate Local AI under provider/local-model settings. Hide Advanced from this
+settings flow. This scope is not present in the uploaded v0.1.55 package and
+must not be attributed to its source, binary, or P004 results.
+
+The existing Settings worker `01a12b1a-d194-75e0-a8db-6f0ce21f5c68` owns the
+cohesive implementation PR and coordination with the P004 shared hotspots.
+This integration branch makes no competing source edits. Treat the exact PR
+head as a further v0.1.55 candidate dependency; integrate only after
+independent exact-head review, combined regressions, and all AGENTS gates. If
+integrated, bind it to a newly built and signed package before further VM
+acceptance. Keep the current uploaded package and its source/hash binding
+unchanged.

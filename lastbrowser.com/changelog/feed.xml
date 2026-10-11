@@ -5,8 +5,20 @@
     <link>https://lastbrowser.com/changelog/</link>
     <description>Offizieller Release- und Update-Feed für Lastbrowser – Der AI-native Windows-Browser.</description>
     <language>de</language>
-    <lastBuildDate>Mon, 05 Oct 2026 08:57:03 GMT</lastBuildDate>
+    <lastBuildDate>Sat, 10 Oct 2026 22:00:00 GMT</lastBuildDate>
     <atom:link href="https://lastbrowser.com/changelog/feed.xml" rel="self" type="application/rss+xml"/>
+    
+    <item>
+      <title>Lastbrowser v0.1.52 Beta – Tab Pinning, Profilmenü &amp; Chromium OAuth Identity</title>
+      <link>https://lastbrowser.com/releases/#v0.1.52</link>
+      <guid isPermaLink="false">lastbrowser-v0.1.52</guid>
+      <pubDate>Sat, 10 Oct 2026 22:00:00 GMT</pubDate>
+      <description><![CDATA[
+        <p>Release 0.1.52 konsolidiert alle Hotfixes für Tab-Pinning, Profilmenü-Interaktionen, Chromium-Identitätserhalt bei OAuth sowie Performance-Optimierungen und Long-Path-Unterstützung auf Windows.</p>
+        <p>Vollständig Authenticode-signiert (Certum SimplySign) und Google Widevine VMP signiert für Medien-Streaming (119 von 119 Binärdateien verifiziert).</p>
+        <p><a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.52">Verifizierte Downloads und Release-Notizen auf GitHub</a>.</p>
+      ]]></description>
+    </item>
     
     <item>
       <title>Lastbrowser v0.1.45 Beta – Compact composer and setup updates</title>

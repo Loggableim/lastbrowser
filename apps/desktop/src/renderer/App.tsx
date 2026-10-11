@@ -566,6 +566,39 @@ export function getEffectiveZoomForUrl(url: string, defaultZoomPercent: number =
   return base;
 }
 
+const PAGE_ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+
+export function getNextPageZoomFactor(current: number, direction: 1 | -1): number {
+  const index = PAGE_ZOOM_STEPS.findIndex((step) => step >= current - 0.001);
+  const from = index >= 0 ? index : PAGE_ZOOM_STEPS.length - 1;
+  return PAGE_ZOOM_STEPS[Math.min(PAGE_ZOOM_STEPS.length - 1, Math.max(0, from + direction))];
+}
+
+export interface BrowserZoomShortcutHandlers {
+  stepZoom: (direction: 1 | -1) => void;
+  applyZoom: (factor: number) => void;
+}
+
+export function dispatchBrowserZoomShortcut(
+  action: string,
+  handlers: BrowserZoomShortcutHandlers | null
+): boolean {
+  if (!handlers) return false;
+  switch (action) {
+    case 'zoom-in':
+      handlers.stepZoom(1);
+      return true;
+    case 'zoom-out':
+      handlers.stepZoom(-1);
+      return true;
+    case 'zoom-reset':
+      handlers.applyZoom(1);
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function normalizeAppearanceTheme(value: string): 'light' | 'dark' | 'system' | 'oled' | 'vision-impaired' {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'light' || normalized === 'system' || normalized === 'oled' || normalized === 'vision-impaired') return normalized;
@@ -1340,6 +1373,8 @@ function AppContent(): JSX.Element {
   const createSessionRequestRef = useRef(0);
   const browserFrameRef = useRef<HTMLDivElement | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
+  const zoomShortcutHandlersRef = useRef<BrowserZoomShortcutHandlers | null>(null);
+  const [activeZoomFactor, setActiveZoomFactor] = useState(1);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const toggleDevTools = useCallback(() => {
     const view = webviewRef.current;
@@ -1627,6 +1662,7 @@ function AppContent(): JSX.Element {
   useEffect(() => {
     if (!window.lastbrowser?.browser?.onShortcut) return;
     return window.lastbrowser.browser.onShortcut((event: { action: string; payload?: { index?: number } }) => {
+      if (dispatchBrowserZoomShortcut(event.action, zoomShortcutHandlersRef.current)) return;
       switch (event.action) {
         case 'new-tab':
           addTabAndFocusStartSearch();
@@ -1759,27 +1795,6 @@ function AppContent(): JSX.Element {
         case 'toggle-devtools':
           toggleDevTools();
           break;
-        case 'zoom-in': {
-          const view = webviewRef.current;
-          if (view && typeof view.getZoomFactor === 'function' && typeof view.setZoomFactor === 'function') {
-            view.setZoomFactor(Math.min(3, view.getZoomFactor() + 0.1));
-          }
-          break;
-        }
-        case 'zoom-out': {
-          const view = webviewRef.current;
-          if (view && typeof view.getZoomFactor === 'function' && typeof view.setZoomFactor === 'function') {
-            view.setZoomFactor(Math.max(0.25, view.getZoomFactor() - 0.1));
-          }
-          break;
-        }
-        case 'zoom-reset': {
-          const view = webviewRef.current;
-          if (view && typeof view.setZoomFactor === 'function') {
-            view.setZoomFactor(1);
-          }
-          break;
-        }
       }
     });
   }, [addTab, closeTab, reopenClosedTab, setActiveTabId, setActivePanel, setContextSidebarCollapsed, toggleDevTools]);
@@ -4880,13 +4895,8 @@ function AppContent(): JSX.Element {
                   variant="topbar"
                   busy={sidekickBusy}
                   onAction={runSidekickAction}
-                  zoomFactor={1}
-                  onResetZoom={() => {
-                    const view = webviewRef.current;
-                    if (view && typeof view.setZoomFactor === 'function') {
-                      view.setZoomFactor(1);
-                    }
-                  }}
+                  zoomFactor={activeZoomFactor}
+                  onResetZoom={() => dispatchBrowserZoomShortcut('zoom-reset', zoomShortcutHandlersRef.current)}
                   onFindOpen={() => usePanelStore.getState().setFindOpen(!usePanelStore.getState().findOpen)}
                   downloadsOpen={usePanelStore.getState().downloadsOpen}
                   hasActiveDownloads={hasActiveDownloads}
@@ -5204,6 +5214,7 @@ function AppContent(): JSX.Element {
                   onStartSearchFocusConsumed={() => setPendingStartSearchFocus(current => current?.tabId === activeTab.id ? null : current)}
                   onToggleDevTools={toggleDevTools}
                   onDevToolsOpenChange={setDevToolsOpen}
+                  onZoomFactorChange={setActiveZoomFactor}
                   activeProfile={activeProfile}
                   profiles={profiles}
                   activeProfileId={activeProfileId}
@@ -5254,6 +5265,7 @@ function AppContent(): JSX.Element {
                   browserFrameRef={browserFrameRef}
                   activeContextItem={activeContextItem}
                   webviewRef={webviewRef}
+                  zoomShortcutHandlersRef={zoomShortcutHandlersRef}
                   onAction={runSidekickAction}
                   onComposerMode={setComposerMode}
                   onComposerText={setComposerText}
@@ -5576,6 +5588,7 @@ function AppContent(): JSX.Element {
               onStartSearchFocusConsumed={() => setPendingStartSearchFocus(current => current?.tabId === activeTab.id ? null : current)}
               onToggleDevTools={toggleDevTools}
               onDevToolsOpenChange={setDevToolsOpen}
+              onZoomFactorChange={setActiveZoomFactor}
               activeProfile={activeProfile}
               profiles={profiles}
               activeProfileId={activeProfileId}
@@ -5624,6 +5637,7 @@ function AppContent(): JSX.Element {
               browserFrameRef={browserFrameRef}
               activeContextItem={activeContextItem}
               webviewRef={webviewRef}
+              zoomShortcutHandlersRef={zoomShortcutHandlersRef}
               onAction={runSidekickAction}
               onComposerMode={setComposerMode}
               onComposerText={setComposerText}
@@ -5781,6 +5795,7 @@ function BrowserMain({
   onStartSearchFocusConsumed,
   onToggleDevTools,
   onDevToolsOpenChange,
+  onZoomFactorChange,
   activeProfile,
   profiles,
   activeProfileId,
@@ -5812,6 +5827,7 @@ function BrowserMain({
   visitedSites,
   browserFrameRef,
   webviewRef,
+  zoomShortcutHandlersRef,
   onAction,
   onAddSpace,
   onComposerMode,
@@ -5867,6 +5883,7 @@ function BrowserMain({
   onStartSearchFocusConsumed: () => void;
   onToggleDevTools: () => void;
   onDevToolsOpenChange: (isOpen: boolean) => void;
+  onZoomFactorChange: (factor: number) => void;
   activeProfile: BrowserProfile;
   profiles: BrowserProfile[];
   activeProfileId: string;
@@ -5898,6 +5915,7 @@ function BrowserMain({
   visitedSites: BrowserVisit[];
   browserFrameRef: React.MutableRefObject<HTMLDivElement | null>;
   webviewRef: React.MutableRefObject<Electron.WebviewTag | null>;
+  zoomShortcutHandlersRef: React.MutableRefObject<BrowserZoomShortcutHandlers | null>;
   onAction: (action: SidekickActionId) => Promise<void>;
   onAddSpace: (path: string, name: string) => void;
   onComposerMode: (mode: ComposerMode) => void;
@@ -6255,7 +6273,6 @@ function BrowserMain({
   // Browsers are unusable without zoom: dense pages need scaling down, small
   // text needs scaling up. The guest webContents owns the zoom factor, so it
   // must be re-applied whenever the webview is recreated (profile/tab switch).
-  const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
   const [zoomFactor, setZoomFactor] = useState<number>(() => {
     try {
       const defaultZoom = Number(desktopSettings?.default_zoom ?? loadDesktopSettingsFromStorage()?.default_zoom) || 100;
@@ -6264,6 +6281,10 @@ function BrowserMain({
       return 1;
     }
   });
+
+  useEffect(() => {
+    onZoomFactorChange(zoomFactor);
+  }, [zoomFactor, onZoomFactorChange]);
 
   const applyZoom = useCallback((next: number) => {
     const clamped = Math.min(3, Math.max(0.5, next));
@@ -6289,10 +6310,7 @@ function BrowserMain({
 
   const stepZoom = useCallback((direction: 1 | -1) => {
     setZoomFactor((current) => {
-      const index = ZOOM_STEPS.findIndex((step) => step >= current - 0.001);
-      const from = index >= 0 ? index : ZOOM_STEPS.length - 1;
-      const next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, Math.max(0, from + direction))];
-      const clamped = Math.min(3, Math.max(0.5, next));
+      const clamped = getNextPageZoomFactor(current, direction);
       const domain = getDomainFromUrl(activeTab.url);
       if (domain) {
         saveDomainZoom(domain, clamped);
@@ -6313,6 +6331,8 @@ function BrowserMain({
       return clamped;
     });
   }, [activeTab.url]);
+
+  zoomShortcutHandlersRef.current = { stepZoom, applyZoom };
 
   // Synchronize domain-specific or default appearance zoom on navigation / tab switch
   useEffect(() => {

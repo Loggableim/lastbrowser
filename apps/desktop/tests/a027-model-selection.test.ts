@@ -107,8 +107,9 @@ describe('A-027 release model choices', () => {
     expect(app).toContain('context.backendProfileName ?? activeBackendProfileNameRef.current ?? undefined');
     expect(app).toContain('backendProfileName });');
     const composer = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8');
-    expect(composer).toContain('const accepted = await onSendMessage');
-    expect(composer).toContain('if (accepted !== false) setInputText');
+    expect(composer).toContain('await submitQuickChatDraft({ gate: draftGateRef.current, draft: inputText,');
+    expect(composer).toContain('current: () => ({ revision: draftRevisionRef.current, scope: draftScopeRef.current })');
+    expect(composer).toContain('setDraft: setInputText, send: () => onSendMessage(trimmed, effectiveReasoningEffort || undefined)');
   });
 
   it('refuses a model disabled in Settings at the native send guard', () => {

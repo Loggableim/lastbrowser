@@ -297,6 +297,8 @@ import { acceptQuickChatModelChoice } from './quick-chat-model-choice.js';
 import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
 import { canSelectNativeModel, mapScopedModelPickerOptions } from './model-picker-options.js';
 import { prepareGuardedNativeChatStart, startGuardedNativeChat } from './guarded-native-chat-start.js';
+import { ChatDraftSubmissionGate, isDefiniteChatStartRejection, type ChatDraftSubmission } from './chat-draft-submission.js';
+import { resolveQuickChatStopTarget } from './quick-chat-stop.js';
 import { selectNativeSession as selectNativeChatSession } from './native-session-selection.js';
 import { createQuickChatScopeKey, selectScopedQuickChatValue, toggleQuickChatFromToolbar, updateScopedQuickChatState } from './quick-chat-view-state.js';
 import { CommandPalette } from './components/CommandPalette.js';
@@ -1133,6 +1135,7 @@ function AppContent(): JSX.Element {
   const quickChatAwaitingStartRef = useRef(false);
   const quickChatStoppedStreamIdRef = useRef<string | null>(null);
   const quickChatStopPendingRef = useRef(false);
+  const quickChatStopEpochRef = useRef(0);
   const quickChatGenerationRef = useRef(0);
   const quickChatBufferedEventsRef = useRef<import('../main/quick-chat-controller.js').QuickChatStreamEvent[]>([]);
   const quickChatScopeKeyRef = useRef<string | null>(null);
@@ -1150,7 +1153,15 @@ function AppContent(): JSX.Element {
     activeStreamIdRef.current = streamId;
     setActiveStreamId(streamId);
   };
-  const [composerText, setComposerText] = useState('');
+  const [composerText, setComposerTextState] = useState('');
+  const composerTextRef = useRef('');
+  const composerRevisionRef = useRef(0);
+  const nativeChatSubmissionGateRef = useRef(new ChatDraftSubmissionGate());
+  const setComposerText = (text: string): void => {
+    composerTextRef.current = text;
+    composerRevisionRef.current += 1;
+    setComposerTextState(text);
+  };
   const [composerMode, setComposerMode] = useState<ComposerMode>('action');
   const [spaces, setSpaces] = useState<SpaceSummary[]>([]);
   const [startupSpacesState, setStartupSpacesState] = useState<StartupSignalState>('pending');
@@ -3802,6 +3813,40 @@ function AppContent(): JSX.Element {
     continuation?: { sessionId: string; profileId: string; spacePath: string },
     reasoningEffort?: string
   ): Promise<boolean> {
+    if (continuation || parsePersistentGoalCommand(message.trim())) {
+      return startNativeChatTurn(message, displayText, continuation, reasoningEffort);
+    }
+    if (!message.trim() || sidekickBusy || chatRunState === 'starting' || chatRunState === 'streaming'
+      || chatRunState === 'cancelling') return false;
+    if (activeSession?.session_id === activeSessionIdRef.current && isIndependentWriterProtected(activeSession)) {
+      setChatError(t('spaceAssistant.writerProtected')); return false;
+    }
+    const contextKey = (): string => JSON.stringify([activeSessionIdRef.current,
+      activeProfileIdRef.current, activeSpacePathRef.current, activeBackendProfileNameRef.current]);
+    const gate = nativeChatSubmissionGateRef.current;
+    const submission = gate.begin(composerTextRef.current, composerRevisionRef.current + 1, contextKey());
+    if (!submission) return false;
+    setComposerText('');
+    let accepted = false;
+    try {
+      accepted = await startNativeChatTurn(message, displayText, continuation, reasoningEffort, submission);
+      return accepted;
+    } finally {
+      if (!accepted) {
+        const restored = gate.restore(submission, composerRevisionRef.current, contextKey());
+        if (restored !== null) setComposerText(restored);
+      }
+      gate.finish(submission);
+    }
+  }
+
+  async function startNativeChatTurn(
+    message: string,
+    displayText = message,
+    continuation?: { sessionId: string; profileId: string; spacePath: string },
+    reasoningEffort?: string,
+    submission?: ChatDraftSubmission
+  ): Promise<boolean> {
     const trimmed = message.trim();
     if (!trimmed) return false;
     setQuickChatMode(false);
@@ -3860,7 +3905,7 @@ function AppContent(): JSX.Element {
       const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
       setChatMessages((current) => [...current, visibleUserMessage]);
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', content: displayText }]);
-      setComposerText('');
+      if (!submission) setComposerText('');
 
       const result = await executeBrowserAction(browserCommand);
       const assistantReply = `### 🛠️ ${result.title}\n\n${result.message}`;
@@ -3983,10 +4028,16 @@ function AppContent(): JSX.Element {
       // qualification and captured scope immediately before the IPC boundary.
       const guardedStart = await startGuardedNativeChat(
         createGuardedStartInput(teamworkGroundingContext),
-        (payload) => window.lastbrowser.sidekick.startChat(payload)
+        (payload) => {
+          if (submission) submission.definitelyRejected = false;
+          return window.lastbrowser.sidekick.startChat(payload);
+        }
       );
       if (!guardedStart.ok) {
-        if (guardedStart.reason === 'transport_error') throw guardedStart.error;
+        if (guardedStart.reason === 'transport_error') {
+          if (submission) submission.definitelyRejected = isDefiniteChatStartRejection(guardedStart.error);
+          throw guardedStart.error;
+        }
         captureEarlyEvents = false;
         unsubscribeEarly();
         if (guardedStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
@@ -4033,14 +4084,14 @@ function AppContent(): JSX.Element {
       });
       if (turnContextStillCurrentAfterStream) {
         updateActiveStreamId(response.streamId);
-        setComposerText('');
+        if (!submission) setComposerText('');
         setChatRunState('streaming');
       }
       // Do not delay the SSE subscription on draft persistence. The draft is
       // already captured by startChat; clearing it can finish in the background.
       void window.lastbrowser.sidekick.saveDraft({
         sessionId: response.sessionId,
-        text: '',
+        text: activeTurnIsCurrent() ? composerTextRef.current : '',
         files: [],
         profile: turnContext.profileId,
         workspacePath: turnContext.spacePath
@@ -4418,13 +4469,14 @@ function AppContent(): JSX.Element {
     });
   }
 
-  async function sendQuickChat(prompt: string, context?: { pageUrl?: string; pageTitle?: string; selectedText?: string; pageText?: string }): Promise<boolean> {
+  async function sendQuickChat(prompt: string, context?: { pageUrl?: string; pageTitle?: string; selectedText?: string; pageText?: string }, preserveUnknownOutcome = false): Promise<boolean> {
     const activeScopeKey = `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`;
     if (quickChatBusyRef.current || quickChatStopPendingRef.current || quickChatResetPendingRef.current
       || quickChatBindingScopeKeyRef.current !== null && quickChatBindingScopeKeyRef.current !== activeScopeKey
       || quickChatTranscriptScopeKeyRef.current !== null && quickChatTranscriptScopeKeyRef.current !== activeScopeKey
       || !prompt.trim()) return false;
     const generation = quickChatGenerationRef.current;
+    const stopEpoch = quickChatStopEpochRef.current;
     quickChatStopPendingRef.current = true;
     const chatId = quickChatIdRef.current;
     const browserProfileId = activeProfileIdRef.current;
@@ -4437,6 +4489,13 @@ function AppContent(): JSX.Element {
     } catch (error) {
       quickChatStopPendingRef.current = false;
       setQuickChatErrorForScope(capturedScopeKey, error instanceof Error ? error.message : String(error));
+      return false;
+    }
+    if (stopEpoch !== quickChatStopEpochRef.current) {
+      quickChatStopPendingRef.current = false;
+      // Stop during preflight never reached inference. Keep the cleared draft
+      // cleared rather than undoing the user's explicit cancellation.
+      if (preserveUnknownOutcome) throw new Error('Quickchat stopped before start');
       return false;
     }
     if (capturedScopeKey !== `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`) {
@@ -4468,6 +4527,9 @@ function AppContent(): JSX.Element {
     if (!virtualChoice && (activeChoice.changed || preferredSelection.migratedFromMultiAgent)) setQuickChatStatusForScope(capturedScopeKey,
       t('settings.panels.providers.activeModelFallback'));
     quickChatBusyRef.current = true;
+    // The synchronous busy reservation now owns the turn. Leaving the
+    // preflight/stop gate set here prevents every later follow-up send.
+    quickChatStopPendingRef.current = false;
     quickChatTranscriptScopeKeyRef.current = capturedScopeKey;
     quickChatErrorScopeKeyRef.current = capturedScopeKey;
     setQuickChatBusy(true);
@@ -4490,7 +4552,10 @@ function AppContent(): JSX.Element {
       quickChatStartPromiseRef.current = pendingStart;
       const started = await startPromise;
       if (quickChatStartPromiseRef.current === pendingStart) quickChatStartPromiseRef.current = null;
-      if (quickChatResetPendingRef.current) return false;
+      if (quickChatResetPendingRef.current) {
+        if (preserveUnknownOutcome) throw new Error('Quickchat start superseded after acceptance');
+        return false;
+      }
       const currentScopeKey = `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`;
       if (!isCurrentQuickChatGeneration(quickChatGenerationRef.current, generation)
         || chatId !== quickChatIdRef.current || capturedScopeKey !== currentScopeKey) {
@@ -4503,6 +4568,7 @@ function AppContent(): JSX.Element {
         else {
           setQuickChatErrorForScope(capturedScopeKey, quickChatResetFailureCopy[locale]);
         }
+        if (preserveUnknownOutcome) throw new Error('Quickchat scope changed after acceptance');
         return false;
       }
       quickChatAwaitingStartRef.current = false;
@@ -4516,7 +4582,10 @@ function AppContent(): JSX.Element {
     } catch (error) {
       if (quickChatStartPromiseRef.current === pendingStart) quickChatStartPromiseRef.current = null;
       if (quickChatResetPendingRef.current || !isCurrentQuickChatGeneration(quickChatGenerationRef.current, generation)
-        || chatId !== quickChatIdRef.current) return false;
+        || chatId !== quickChatIdRef.current) {
+        if (preserveUnknownOutcome) throw error;
+        return false;
+      }
       quickChatAwaitingStartRef.current = false;
       quickChatBufferedEventsRef.current = [];
       const message = error instanceof Error ? error.message : String(error);
@@ -4524,22 +4593,42 @@ function AppContent(): JSX.Element {
       updateQuickChatMessagesForScope(capturedScopeKey, current => finishLiveChatMessageWithError(current, message));
       quickChatBusyRef.current = false;
       setQuickChatBusy(false);
+      if (preserveUnknownOutcome && !isDefiniteChatStartRejection(error)) throw error;
       return false;
     }
   }
 
   async function stopQuickChat(): Promise<void> {
     if (quickChatResetPendingRef.current) return;
-    const binding = quickChatBindingRef.current;
-    if (!binding || quickChatAwaitingStartRef.current) {
-      await resetQuickChat(true);
+    const generation = quickChatGenerationRef.current;
+    quickChatStopEpochRef.current += 1;
+    if (quickChatStopPendingRef.current && !quickChatBusyRef.current && !quickChatAwaitingStartRef.current) return;
+    const pendingStart = quickChatStartPromiseRef.current;
+    // A follow-up still carries the preceding turn's binding until its start
+    // acknowledgement arrives. Stop that new turn, never reset the chat.
+    let binding = quickChatBindingRef.current;
+    if (quickChatAwaitingStartRef.current && pendingStart) {
+      if (quickChatStopPromiseRef.current) return;
+      quickChatStopPendingRef.current = true;
+      const waiting = pendingStart.promise;
+      quickChatStopPromiseRef.current = waiting;
+      try { binding = await resolveQuickChatStopTarget(binding, waiting); }
+      catch {
+        quickChatStopPendingRef.current = false;
+        return;
+      } finally {
+        if (quickChatStopPromiseRef.current === waiting) quickChatStopPromiseRef.current = null;
+      }
+    }
+    if (!binding || !binding.streamId) {
       return;
     }
-    const generation = quickChatGenerationRef.current;
+    if (!isCurrentQuickChatGeneration(quickChatGenerationRef.current, generation)) return;
+    quickChatStopPendingRef.current = true;
     quickChatStoppedStreamIdRef.current = binding.streamId;
     quickChatBusyRef.current = false;
     setQuickChatBusy(false);
-    const bindingScopeKey = quickChatBindingScopeKeyRef.current;
+    const bindingScopeKey = pendingStart?.scopeKey ?? quickChatBindingScopeKeyRef.current;
     if (bindingScopeKey) updateQuickChatMessagesForScope(bindingScopeKey, current => finishLiveChatMessage(current));
     const stopPromise = window.lastbrowser.quickChat.stop({
       quickChatId: binding.quickChatId, streamId: binding.streamId, scope: binding.scope
@@ -5554,7 +5643,7 @@ function AppContent(): JSX.Element {
                   createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), '')}
                 allowWorkflows={false}
                 onSwitchToSpaceAssistant={() => setQuickChatMode(false)}
-                onSendMessage={text => sendQuickChat(text)}
+                onSendMessage={text => sendQuickChat(text, undefined, true)}
                 onStopChat={() => void stopQuickChat()}
                 activeUrl={activeTab.url}
                 activeTitle={activeTab.title}

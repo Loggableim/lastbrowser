@@ -15,6 +15,15 @@ import {
 } from '../src/renderer/setup-state.js';
 
 describe('cloud first-run setup state', () => {
+  it('keeps authoritative OpenCode Zen and Go available for their dedicated CLI login', () => {
+    const options = cloudProviderOptions({ setup: { providers: [
+      { id: 'opencode-zen', label: 'OpenCode Zen', key_optional: false },
+      { id: 'opencode-go', label: 'OpenCode Go', key_optional: false }
+    ] } } as never);
+    for (const id of ['opencode-zen', 'opencode-go']) {
+      expect(options.find((option) => option.id === id)).toMatchObject({ id, keyOptional: false });
+    }
+  });
   it('identifies Gemini CLI by provider ID, not by model family', () => {
     expect(isGeminiCliProvider('google-gemini-cli')).toBe(true);
     expect(isGeminiCliProvider('Gemini-OAuth')).toBe(true);

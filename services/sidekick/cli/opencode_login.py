@@ -25,6 +25,25 @@ def _profile_auth_path() -> Path:
     return get_sidekick_home() / "opencode-data" / "opencode" / "auth.json"
 
 
+def _find_opencode_executable() -> str | None:
+    """Find the CLI even when a running desktop has an older PATH snapshot."""
+    executable = shutil.which("opencode")
+    if executable:
+        return executable
+    # npm's normal Windows user prefix is not necessarily in Electron's PATH.
+    # Prefer the native package executable: it does not require Node on PATH.
+    app_data = os.environ.get("APPDATA")
+    if app_data:
+        prefix = Path(app_data) / "npm"
+        for candidate in (
+            prefix / "node_modules" / "opencode-ai" / "bin" / "opencode.exe",
+            prefix / "opencode.exe",
+        ):
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
 def _has_profile_credentials(provider_id: str) -> bool:
     cli_provider = _CLI_PROVIDER_IDS.get(provider_id)
     if not cli_provider:
@@ -51,7 +70,7 @@ def start_login(provider_id: str) -> dict[str, Any]:
     if os.name != "nt":
         return {"ok": False, "error_code": "unsupported_platform"}
 
-    executable = shutil.which("opencode")
+    executable = _find_opencode_executable()
     if not executable:
         return {"ok": False, "error_code": "opencode_cli_not_found"}
 

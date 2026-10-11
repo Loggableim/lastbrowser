@@ -26,7 +26,8 @@ export function ModelPolicyControls({value,candidates,pending,error,open,onOpen,
   const formatter=new Intl.NumberFormat(locale),time=(at:string)=>new Date(at).toLocaleString(locale);
   return <details className="persistent-goal-controls model-policy-controls" open={open} onToggle={event=>onOpen(event.currentTarget.open)}>
     <summary>{copy.title} · {copy[value.policy.mode==='auto'?'automatic':'fixed']}</summary>
-    <p role="status">{copy[enabled?'available':'unavailable']}{!enabled&&` · ${modelPolicyReason(locale,value.executionAvailability.reasonCode)}`}</p>
+    <p role="status">{value.executionAvailability.reasonCode==='auto_policy_not_selected'
+      ?copy.fixed: <>{copy[enabled?'available':'unavailable']}{!enabled&&` · ${modelPolicyReason(locale,value.executionAvailability.reasonCode)}`}</>}</p>
     <p className="space-assistant-note">{copy.privacy}</p>
     {value.policy.mode==='auto'&&<div className="model-policy-decision" role="status" aria-label={copy.actualDecision}>
       <p><strong>{copy.actualDecision}</strong>: {observedDecision ? `${observedDecision.provider} · ${observedDecision.model}${observedDecision.isHistorical ? ` (${copy.lastCompletedTurn})` : ''}` : copy.decisionUnknown}</p>

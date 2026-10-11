@@ -119,7 +119,7 @@ class ProfileHub:
             path = home / "state.db"
             if not path.is_file():
                 continue
-            if not canonical_path(path).is_relative_to(home):
+            if not same_path(canonical_path(path).parent, home):
                 raise ScopeError("Profile store escapes its registered Home")
             with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as connection:
                 if not connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ia_profile_refs'").fetchone():

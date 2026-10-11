@@ -45,6 +45,7 @@ describe('Live Webview CDP-Automatisierung & Visueller Assistent (Phase 10.3)', 
       };
 
       const env = buildSidecarEnvironment(layout, 8420);
+      expect(env.SIDEKICK_BASE_HOME).toBe(layout.runtimeDir);
       expect(env.BROWSER_CDP_URL).toBeUndefined();
       expect(env.LASTBROWSER_CDP_URL).toBeUndefined();
       expect(env.LASTBROWSER_CDP_PORT).toBeUndefined();

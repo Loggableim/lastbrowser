@@ -13217,6 +13217,13 @@ def _handle_model_policy(handler, body):
             raise PermissionError("Model policy requires the original native chat scope")
         require_native_scope_header(handler, body["space_scope"])
         actor = str(get_active_profile_name() or "default")
+        if body.get("action", "get") == "get":
+            # Scope/catalog validation performs filesystem and provider probes.
+            # A settings read must not hold the chat mutation lock throughout
+            # those probes and starve the user's first Send.
+            with _get_session_agent_lock(body["session_id"]):
+                snapshot = copy.deepcopy(get_session(body["session_id"]))
+            return j(handler, handle_model_policy(snapshot, body, actor=actor))
         with _get_session_agent_lock(body["session_id"]):
             s = get_session(body["session_id"])
             return j(handler, handle_model_policy(s, body, actor=actor))
@@ -13263,6 +13270,12 @@ def _handle_chat_mode(handler, body):
             raise PermissionError("Chat modes require a Lastbrowser native scope")
         require_native_scope_header(handler, body["space_scope"])
         actor = str(get_active_profile_name() or "default")
+        if body["action"] == "get":
+            with _get_session_agent_lock(body["session_id"]):
+                snapshot = copy.deepcopy(get_session(body["session_id"]))
+            result = read_chat_mode(snapshot, body["space_scope"], actor=actor)
+            result["session"] = snapshot.compact(include_runtime=True)
+            return j(handler, result)
         with _get_session_agent_lock(body["session_id"]):
             s = get_session(body["session_id"])
             result = (read_chat_mode(s, body["space_scope"], actor=actor)

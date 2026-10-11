@@ -39,12 +39,35 @@ def test_login_launcher_is_profile_scoped_and_uses_official_provider_id(tmp_path
 
 
 def test_login_launcher_reports_missing_cli_and_rejects_unknown_provider(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "empty-app-data"))
     monkeypatch.setattr(opencode_login, "get_sidekick_home", lambda: tmp_path)
     monkeypatch.setattr(opencode_login.os, "name", "nt")
     monkeypatch.setattr(opencode_login.shutil, "which", lambda _name: None)
 
     assert opencode_login.start_login("opencode-zen")["error_code"] == "opencode_cli_not_found"
     assert opencode_login.start_login("not-opencode")["error_code"] == "unsupported_provider"
+
+
+def test_cli_discovery_finds_native_user_npm_binary_without_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(opencode_login.shutil, "which", lambda _name: None)
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    executable = tmp_path / "npm" / "node_modules" / "opencode-ai" / "bin" / "opencode.exe"
+    executable.parent.mkdir(parents=True)
+    executable.touch()
+    assert opencode_login._find_opencode_executable() == str(executable)
+
+
+def test_cli_discovery_preserves_explicit_path_installation(tmp_path, monkeypatch):
+    monkeypatch.setattr(opencode_login.shutil, "which", lambda _name: "preferred-opencode.exe")
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    assert opencode_login._find_opencode_executable() == "preferred-opencode.exe"
+
+
+def test_cli_discovery_does_not_treat_npm_directory_as_executable(tmp_path, monkeypatch):
+    monkeypatch.setattr(opencode_login.shutil, "which", lambda _name: None)
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    (tmp_path / "npm" / "opencode.exe").mkdir(parents=True)
+    assert opencode_login._find_opencode_executable() is None
 
 
 def test_profile_status_reads_only_profile_scoped_opencode_auth(tmp_path, monkeypatch):

@@ -345,7 +345,7 @@ def test_native_child_closed_claim_cannot_reacquire_compute(tmp_path):
         server.close()
 
 
-def test_native_auto_availability_uses_actual_factory_session_binding_and_catalog(tmp_path):
+def test_native_auto_availability_uses_actual_factory_session_binding_and_catalog(tmp_path, monkeypatch):
     server = ControlledServer(parties=1)
     manager = store = broker = None
     try:
@@ -353,10 +353,19 @@ def test_native_auto_availability_uses_actual_factory_session_binding_and_catalo
         session = SimpleNamespace(session_id=context.session_id, space_scope=context.scope.model_dump(mode="json", by_alias=True),
             profile=context.profile_name, workspace=context.workspace)
         resolved = manager.resolver.resolve(context.scope)
+        from runtime.independent import scoped_models
+        real_probe = scoped_models.probe_catalog
+        probes = []
+        def probe(*args, **kwargs):
+            probes.append(kwargs.get("include_capabilities"))
+            return real_probe(*args, **kwargs)
+        monkeypatch.setattr(scoped_models, "probe_catalog", probe)
+        manager.capabilities._cache.clear()
         manager.native_auto_broker_factory = lambda *args: None
         assert manager.native_auto_execution_availability(resolved, session)["available"] is False
         manager.native_auto_broker_factory = NativeAutoSessionBroker
         available = manager.native_auto_execution_availability(resolved, session)
+        assert probes == [True], "AUTO discovery must share one capability-bearing catalog worker"
         assert available == {"available": True, "sealedWorker": True, "managedCallAuthorizer": False}
         assert not server.requests and not ComputeAdmission._owners
         assert not store._many("SELECT request_id FROM ia_request_results WHERE operation IN ('auto_turn','provider_claim')")

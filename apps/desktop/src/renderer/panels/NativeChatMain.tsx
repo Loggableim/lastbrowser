@@ -70,6 +70,7 @@ import { isIndependentRecord, isIndependentScope } from '../independent-assistan
 import { requestNativeGrill,readNativeGrillEvent,readNativeGrillFallbackMarker,NativeGrillError,type NativeGrillState,type NativeGrillMutation } from '../native-grill-client.js';
 import { NativeGrillControls } from '../components/NativeGrillControls.js';
 import { NativeChatBrowserActivity } from '../components/NativeChatBrowserView.js';
+import { hasCurrentTurnBrowserUse } from '../chat-browser-use.js';
 import { nativeGrillCopy } from '../i18n/native-grill-copy.js';
 
 const noCommandCapabilities:CommandCapabilities={plan:false,grill_me:false,boost:false,goal:false,gquota:false,plugins:false};
@@ -814,7 +815,7 @@ export function NativeChatMain({
         <span>{t(`spaceAssistant.${independentRun.state}`)}{writerProtected ? ` · ${t('spaceAssistant.writerProtected')}` : ''}</span>
         {writerProtected && <button type="button" disabled={independentRun.state === 'cancelling'} onClick={onStop}>{t('chat.stop')}</button>}
       </div>}
-      {!writerProtected&&ready&&currentModeGate&&activeSessionId&&activeSession?.session_id===activeSessionId&&isIndependentScope(activeSession.space_scope)
+      {hasCurrentTurnBrowserUse(visibleMessages)&&!writerProtected&&ready&&currentModeGate&&activeSessionId&&activeSession?.session_id===activeSessionId&&isIndependentScope(activeSession.space_scope)
         &&assistantScopeKey(activeSession.space_scope)===assistantScopeKey(currentModeGate.scope)&&<NativeChatBrowserActivity key={modeViewKey}
           scope={currentModeGate.scope} sessionId={activeSessionId} client={modelClient}/>}
       <ChatTranscript

@@ -31,13 +31,21 @@ def test_get_readonly_policy_and_set_real_native_metadata_writer_cas(tmp_path, m
     body = {"space_scope": session.space_scope, "session_id": session.session_id}
     try:
         before = path.read_bytes()
+        def unexpected_auto_probe(*_args, **_kwargs):
+            pytest.fail("Fixed chat settings must not start AUTO discovery")
+        monkeypatch.setattr(manager, "native_auto_execution_availability", unexpected_auto_probe)
         got = handle_model_policy(session, body, "research", hub)
         assert got["policy"]["mode"] == "fixed" and got["policy"]["revision"] == 0
         assert got["executionAvailability"]["available"] is False and got["status"] == []
+        assert got["executionAvailability"]["reasonCode"] == "auto_policy_not_selected"
         assert path.read_bytes() == before
+        probes = []
+        monkeypatch.setattr(manager, "native_auto_execution_availability", lambda *_: (
+            probes.append(True) or {"available": False, "reasonCode": "native_auto_execution_adapter_required"}))
         request = {**body, "action": "set", "draft": draft(), "expectedRevision": 0, "clientRequestId": new_id()}
         saved = handle_model_policy(session, request, "research", hub)
         assert saved["policy"]["revision"] == 1 and saved["policy"]["mode"] == "auto"
+        assert probes == [True]
         assert handle_model_policy(session, request, "research", hub)["policy"] == saved["policy"]
         assert all(row["snapshots"] == [] for row in saved["status"])
         assert store.list_leases(active_only=True) == () and path.read_bytes() == before

@@ -38,7 +38,12 @@ def service_for_native_chat(session, raw_scope, *, actor, profile_hub=None):
     return service, resolved
 
 
-def _execution_availability(manager, resolved, session):
+def _execution_availability(manager, resolved, session, policy):
+    if policy.mode == "fixed":
+        # Reading settings for an ordinary chat must not launch AUTO catalog
+        # workers. Fixed Send still captures and validates its actual provider.
+        return {"available": False, "sealedWorker": False, "managedCallAuthorizer": False,
+                "reasonCode": "auto_policy_not_selected"}
     # A module/file being present is not an execution proof. The active host
     # must explicitly advertise its sealed worker and actual governance gate.
     probe = getattr(manager, "native_auto_execution_availability", None)
@@ -76,4 +81,4 @@ def handle_model_policy(session, body: dict[str, Any], actor: str, profile_hub=N
               for provider in dict.fromkeys(pair.provider for pair in policy.allowed_models)]
     return {"schemaVersion": 1, "scope": scope.model_dump(mode="json", by_alias=True),
             "sessionId": session.session_id, "policy": policy.model_dump(mode="json", by_alias=True),
-            "status": status, "executionAvailability": _execution_availability(service.manager, resolved, session)}
+            "status": status, "executionAvailability": _execution_availability(service.manager, resolved, session, policy)}

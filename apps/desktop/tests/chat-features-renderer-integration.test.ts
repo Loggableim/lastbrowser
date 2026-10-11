@@ -282,6 +282,19 @@ describe('chat auxiliary features renderer integration (controlled contract veri
       executionAvailability: { available: true, sealedWorker: true },
     };
 
+    it('keeps AUTO configuration editable before fixed chats request any AUTO execution probe', () => {
+      const html = renderToStaticMarkup(createElement(ModelPolicyControls, {
+        value: { ...autoPolicyResponse, policy: { ...autoPolicyResponse.policy, mode: 'fixed' },
+          executionAvailability: { available: false, sealedWorker: false, reasonCode: 'auto_policy_not_selected' } },
+        candidates: [], pending: false, error: '', open: true,
+        onOpen: () => {}, onSave: () => {}, onRefresh: () => {}, locale: 'en',
+      }));
+      expect(html).toContain('<option value="auto">AUTO</option>');
+      expect(html).toContain('<p role="status">Fixed model</p>');
+      expect(html).not.toContain('<fieldset disabled');
+      expect(html).not.toContain('Execution unavailable');
+    });
+
     it('displays decision unknown prior to execution while clearly showing configured routing preference', () => {
       // In German
       const htmlDe = renderToStaticMarkup(createElement(ModelPolicyControls, {

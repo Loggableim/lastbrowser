@@ -1,7 +1,7 @@
 # antigravity-worker-7 – Statusbericht & Ledger
 
 **Rolle:** Test-, CI- und Build-Worker (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :20 (`Cron: 20 * * * *`, Daemon Task aktiv: `task-127`)  
+**Taktung:** 1 Lauf pro Stunde, immer um :20 (`Cron: 20 * * * *`, Daemon Task aktiv: `task-95`)  
 **Letzter Lauf:** 11. Oktober 2026, 05:38 Uhr (Iteration 3 / Lauf 5)  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52`  

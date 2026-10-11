@@ -1082,6 +1082,9 @@ def get_provider_quota(provider_id: str | None = None) -> dict[str, Any]:
     stays aligned with CLI/Gateway provider semantics.
     """
     provider = (provider_id or _active_provider_id() or "").strip().lower()
+    from runtime.retired_providers import is_retired_provider
+    if is_retired_provider(provider):
+        return {"ok": False, "supported": False, "status": "unavailable", "message": "This provider has been removed."}
     if not provider:
         return {
             "ok": False,
@@ -1361,13 +1364,24 @@ def get_providers() -> dict[str, Any]:
     # Also detect providers from config.yaml providers section
     cfg = get_config()
     providers_cfg = cfg.get("providers", {})
+    from runtime.retired_providers import is_retired_provider
+    retired_named_ids: set[str] = set()
     if isinstance(providers_cfg, dict):
         known_ids.update(providers_cfg.keys())
+        retired_named_ids = {
+            str(pid).strip().lower()
+            for pid, entry in providers_cfg.items()
+            if isinstance(entry, dict) and any(
+                is_retired_provider(entry.get(field)) for field in ("base_url", "url", "api")
+            )
+        }
 
     # Add OAuth providers even if not in _PROVIDER_DISPLAY
     known_ids.update(_OAUTH_PROVIDERS)
 
     for pid in sorted(known_ids):
+        if is_retired_provider(pid) or str(pid).strip().lower() in retired_named_ids:
+            continue
         display_name = _PROVIDER_DISPLAY.get(pid, pid.replace("-", " ").title())
         is_oauth = _provider_is_oauth(pid)
         has_key = _provider_has_key(pid)
@@ -1642,12 +1656,16 @@ def get_providers() -> dict[str, Any]:
 
     # Scan custom_providers from config.yaml (e.g. glmcode, timicc)
     custom_providers_cfg = cfg.get("custom_providers", [])
+    retired_custom_ids: set[str] = set()
     if isinstance(custom_providers_cfg, list):
         for cp in custom_providers_cfg:
             if not isinstance(cp, dict) or not cp.get("name"):
                 continue
             cp_name = str(cp["name"]).strip()
             cp_id = _custom_provider_slug_from_name(cp_name)
+            if is_retired_provider(cp_name) or is_retired_provider(cp.get("base_url")):
+                retired_custom_ids.add(cp_id)
+                continue
             if not cp_id:
                 logger.warning(
                     "Custom provider entry %r produced empty slug; skipping",
@@ -1678,6 +1696,10 @@ def get_providers() -> dict[str, Any]:
 
     # Determine active provider
     active_provider = resolve_active_provider_context(cfg).get("provider")
+    providers = [provider for provider in providers if not is_retired_provider(provider.get("id"))]
+    if (is_retired_provider(active_provider) or active_provider in retired_custom_ids
+            or str(active_provider or "").strip().lower() in retired_named_ids):
+        active_provider = ""
 
     return {
         "providers": providers,
@@ -1695,6 +1717,10 @@ def set_provider_key(provider_id: str, api_key: str | None, base_url: str | None
     Returns a status dict with the operation result.
     """
     provider_id = provider_id.strip().lower()
+
+    from runtime.retired_providers import is_retired_provider
+    if is_retired_provider(provider_id) or is_retired_provider(base_url):
+        return {"ok": False, "error": "This provider has been removed."}
 
     if not provider_id:
         return {"ok": False, "error": "Provider ID is required."}

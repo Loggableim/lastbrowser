@@ -1,0 +1,35 @@
+DRAFT NOTICE — INCOMPLETE, UNAPPROVED, AND NOT FOR DISTRIBUTION AS A FINAL NOTICE
+
+This working list contains examples of components and provenance claims that
+were identified during a preliminary source review. It is not a complete
+third-party inventory, does not establish copyright ownership or license
+compatibility, and has not been approved by the relevant rights holders.
+See `../license-audit.md` and `THIRD-PARTY-LICENSES.md` for the current scope
+and unresolved items.
+
+The entries below require confirmation against the exact shipped files,
+upstream notices, and applicable license texts before use in a release notice.
+In particular, this draft makes no conclusion about whether linking,
+combination, or distribution conditions apply to the product as a whole.
+
+========================================================================
+Preliminary examples — verify before publication
+========================================================================
+
+- llama.cpp
+  Preliminary license reference: MIT License.
+
+- LLVM OpenMP Runtime (libomp)
+  Preliminary license reference: Apache License 2.0 with LLVM Exceptions.
+
+- CastLabs Electron build
+  Preliminary license reference: MIT License. Verify the exact package and
+  bundled components for the shipped build.
+
+- Ghostery Adblocker Engine (@ghostery/adblocker-electron)
+  Preliminary license reference: Mozilla Public License 2.0 (MPL-2.0).
+  Product-level obligations and applicability have not been assessed here.
+
+- Atkinson Hyperlegible, Lexend, and OpenDyslexic fonts
+  Preliminary license reference: SIL Open Font License for the respective
+  packages. Verify exact versions, notices, and bundled font files.

@@ -25,17 +25,17 @@ describe('provider-aware model selection', () => {
     const catalogFor = (scope: string, available: boolean) => ({
       schemaVersion: 1 as const,
       scope: { backendProfileId: `backend-${scope}`, spaceId: `space-${scope}`, browserProfileId: 'profile' },
-      revision: 1, model: 'gemini-3.1-pro', provider: 'antigravity', configured: available, supportsIndependent: true,
-      groups: [{ provider: 'Antigravity', provider_id: 'antigravity', configured: available,
+      revision: 1, model: 'gemini-3.1-pro', provider: 'gemini', configured: available, supportsIndependent: true,
+      groups: [{ provider: 'Google Gemini', provider_id: 'gemini', configured: available,
         models: [{ id: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', supportsIndependent: true }] }],
-      providers: [{ id: 'antigravity', display_name: 'Antigravity', has_key: available, oauth_connected: available,
+      providers: [{ id: 'gemini', display_name: 'Google Gemini', has_key: available, oauth_connected: available,
         auth_state: available ? 'connected' as const : 'not_configured' as const, provider_available: available, models: [] }]
     });
     const available = mapScopedModelPickerOptions(catalogFor('a', true));
     const unavailable = mapScopedModelPickerOptions(catalogFor('b', false));
-    expect(available).toContainEqual(expect.objectContaining({ providerId: 'antigravity', configured: true,
+    expect(available).toContainEqual(expect.objectContaining({ providerId: 'gemini', configured: true,
       models: [expect.objectContaining({ id: 'gemini-3.1-pro' })] }));
-    expect(unavailable).toContainEqual(expect.objectContaining({ providerId: 'antigravity', configured: false,
+    expect(unavailable).toContainEqual(expect.objectContaining({ providerId: 'gemini', configured: false,
       disabledReason: 'unavailable', models: [expect.objectContaining({ id: 'gemini-3.1-pro' })] }));
     const scopeA = JSON.stringify({ browserProfileId: 'profile', workspacePath: 'C:/space-a', backendProfileName: 'backend-a' });
     const scopeB = JSON.stringify({ browserProfileId: 'profile', workspacePath: 'C:/space-b', backendProfileName: 'backend-b' });
@@ -46,7 +46,7 @@ describe('provider-aware model selection', () => {
     const scopeA = JSON.stringify({ browserProfileId: 'profile', workspacePath: 'C:/space-a', backendProfileName: 'backend-a' });
     const scopeB = JSON.stringify({ browserProfileId: 'profile', workspacePath: 'C:/space-b', backendProfileName: 'backend-b' });
     const selectedModel = 'gemini-3.1-pro';
-    const selectedProvider = 'antigravity';
+    const selectedProvider = 'gemini';
     const staleSelectionReason = quickChatModelGateReason({ selectedModel, selectedProvider, activeScopeKey: scopeB,
       loadedCatalogScopeKey: scopeB, failedCatalogScopeKey: null, availableModels: [] });
     let submitted = 0;
@@ -67,7 +67,7 @@ describe('provider-aware model selection', () => {
   it('marks provider/model/scope/revision-mismatched native availability as a binding mismatch', () => {
     const scope = { backendProfileId: 'backend-b', spaceId: 'space-b', browserProfileId: 'profile' };
     const availability = { schemaVersion: 1 as const, supported: true, available: true, reasonCode: null,
-      provider: 'antigravity', model: 'gemini-3.1-pro', scope, selectionRevision: 7 };
+      provider: 'gemini', model: 'gemini-3.1-pro', scope, selectionRevision: 7 };
     const mismatchCases = [
       { ...availability, provider: 'other-provider' },
       { ...availability, model: 'gemini-2.5-pro' },
@@ -75,12 +75,12 @@ describe('provider-aware model selection', () => {
       { ...availability, selectionRevision: 6 }
     ];
     for (const nativeAvailability of mismatchCases) {
-      const mapped = mapScopedModelPickerOptions({ schemaVersion: 1, scope, revision: 7, model: 'gemini-3.1-pro', provider: 'antigravity',
-        configured: true, supportsIndependent: true, groups: [{ provider: 'Antigravity', provider_id: 'antigravity', configured: true,
+      const mapped = mapScopedModelPickerOptions({ schemaVersion: 1, scope, revision: 7, model: 'gemini-3.1-pro', provider: 'gemini',
+        configured: true, supportsIndependent: true, groups: [{ provider: 'Google Gemini', provider_id: 'gemini', configured: true,
           models: [{ id: 'gemini-3.1-pro', label: 'Gemini', supportsIndependent: true, nativeAvailability }] }] });
       const mappedAvailability = mapped[0]?.models[0]?.nativeAvailability;
       expect(mappedAvailability).toMatchObject({ supported: false, available: false, reasonCode: 'binding_mismatch' });
-      expect(canSelectNativeModel('antigravity', mappedAvailability)).toBe(false);
+      expect(canSelectNativeModel('gemini', mappedAvailability)).toBe(false);
     }
     const nativeChat = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8').replace(/\r\n/g, '\n');
     expect(nativeChat).toContain('const cataloguedData = { ...data, catalog_status: statusMap }');
@@ -98,13 +98,14 @@ describe('provider-aware model selection', () => {
     expect(all.find(group=>group.providerId==='configured')?.models).toHaveLength(2);
     expect(all.find(group=>group.providerId==='configured')?.models[0].reasoningEfforts).toEqual(['low','high']);
     expect(all.find(group=>group.providerId==='offline')).toMatchObject({configured:false,disabledReason:'unavailable'});
-    expect(manualModelPickerOptions(all).find(group=>group.providerId==='')?.models.map(model=>model.id)).toEqual(['teamwork']);
+    expect(manualModelPickerOptions(all).find(group=>group.providerId==='')).toBeUndefined();
+    expect(manualModelPickerOptions(all, true).find(group=>group.providerId==='')?.models.map(model=>model.id)).toEqual(['teamwork']);
     expect(manualModelPickerOptions([
       { providerId: '', models: [{ id: 'teamwork' }, { id: 'smart-track-low' }, { id: 'smart-track-medium' }, { id: 'smart-track-high' }] },
       { providerId: '', models: [{ id: 'unknown-providerless-model' }] },
       { providerId: '', models: [{ id: 'teamwork' }, { id: 'unknown-providerless-model' }] },
       { providerId: 'configured-real-provider', models: [{ id: 'real-model' }] }
-    ])).toEqual([
+    ], true)).toEqual([
       { providerId: '', models: [{ id: 'teamwork' }, { id: 'smart-track-low' }, { id: 'smart-track-medium' }, { id: 'smart-track-high' }] },
       { providerId: 'configured-real-provider', models: [{ id: 'real-model' }] }
     ]);
@@ -362,7 +363,7 @@ describe('provider-aware model selection', () => {
     const chat = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8');
     const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
     const copilot = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8');
-    expect(composer).toContain('value={qualifyModelForProvider(model, modelProvider)}');
+    expect(composer).toContain('selectedModelVisible?qualifyModelForProvider(model, modelProvider)');
     expect(composer).toContain('<label className="composer-model composer-current-model"');
     expect(composer).not.toContain('{modelOptions.length > 0 && (');
     expect(composer).toContain('value={qualifyModelForProvider(m.id, group.providerId)}');
@@ -372,7 +373,7 @@ describe('provider-aware model selection', () => {
     expect(chat).not.toContain('sidekick.setDefaultModel');
     expect(chat).toContain('modelProvider={modelProvider}');
     expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
-    expect(app).toContain("includeCatalog: false");
+    expect(app).toContain("includeCatalog: true");
     expect(app).toContain('const copilotModelSelection = resolvePreferredChatModelSelection({');
     expect(copilot).toContain('const activeModelId = modelName || selectedModel;');
     expect(chat).toContain('setModelCatalogError(true)');

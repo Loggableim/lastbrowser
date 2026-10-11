@@ -5,6 +5,15 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.53] - 2026-10-11
+
+### Fixes
+- Prevent the first-run setup backdrop from intercepting sidebar and top-navigation input; allow Escape to skip or close setup when it is safe to do so.
+
+### Verification
+- Source, build, EVS/VMP and Authenticode candidate checks are recorded in `docs/test-reports/20261011-hotfix-release-chatgpt-worker-2.md`.
+- Fresh-profile runtime click and Escape verification passed on the signed candidate. Live website download/update references remain pending; this entry is not publication evidence.
+
 ## [0.1.52] - 2026-10-09
 
 ### Fixes
@@ -15,6 +24,17 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Verification
 - Release verification is pending for the final frozen source candidate.
+
+## [0.1.45] - 2026-10-05
+
+### Fixes
+- Publish the signed setup and portable package metadata for the 0.1.45 release and synchronize localized website download references.
+
+## [0.1.44] - 2026-10-03
+
+### Fixes
+- Stabilize the packaged Python runtime and installer startup for the 0.1.44 release.
+- Integrate the verified browser, chat, memory and independent-agent changes present in the tagged source history.
 
 ## [0.1.43] - 2026-10-01
 

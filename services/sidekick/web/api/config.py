@@ -2841,12 +2841,35 @@ def _remove_unavailable_antigravity_catalog(payload: dict) -> None:
     or a provider-global/CLI account is not evidence that a model belongs to
     the active profile's catalog.
     """
+    from runtime.retired_providers import is_retired_provider
+    retired_custom_ids = {
+        _custom_provider_slug_from_name(entry.get("name"))
+        for entry in _custom_provider_entries()
+        if is_retired_provider(entry.get("name")) or is_retired_provider(entry.get("base_url"))
+    }
+    named_providers = cfg.get("providers", {})
+    if isinstance(named_providers, dict):
+        for provider_id, entry in named_providers.items():
+            if not isinstance(entry, dict) or not any(
+                is_retired_provider(entry.get(field)) for field in ("base_url", "url", "api")
+            ):
+                continue
+            canonical_id = _canonicalise_provider_id(provider_id)
+            if canonical_id:
+                retired_custom_ids.add(canonical_id)
+
+    def is_retired_catalog_provider(value: object) -> bool:
+        return is_retired_provider(value) or str(value or "").strip().lower() in retired_custom_ids
+
+    if is_retired_catalog_provider(payload.get("active_provider")):
+        payload["active_provider"] = ""
+        payload["default_model"] = ""
     groups = payload.get("groups")
     if isinstance(groups, list):
         payload["groups"] = [
             group for group in groups
             if not isinstance(group, dict)
-            or _canonicalise_provider_id(group.get("provider_id") or group.get("provider")) != "antigravity"
+            or not is_retired_catalog_provider(group.get("provider_id") or group.get("provider"))
         ]
     # The renderer may append configured badge keys as model rows even when
     # no provider group exists. Keep saved configuration in its own fields,
@@ -2857,7 +2880,7 @@ def _remove_unavailable_antigravity_catalog(payload: dict) -> None:
             model_id: badge
             for model_id, badge in badges.items()
             if not isinstance(badge, dict)
-            or _canonicalise_provider_id(badge.get("provider")) != "antigravity"
+            or not is_retired_catalog_provider(badge.get("provider"))
         }
     status = payload.setdefault("catalog_status", {})
     if isinstance(status, dict):
@@ -4663,6 +4686,7 @@ def get_available_models() -> dict:
             _cache_build_in_progress = True
         try:
             result = _build_available_models_uncached()
+            _remove_unavailable_antigravity_catalog(result)
         except Exception:
             # Always reset the flag so waiting threads don't block for 60s
             with _cache_build_cv:

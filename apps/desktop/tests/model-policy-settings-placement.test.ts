@@ -14,7 +14,7 @@ describe('model policy settings placement', () => {
     expect(chat).toMatch(/selection==='__lastbrowser_auto_policy__'[\s\S]*?saveModelPolicy\(\{mode:'auto'/);
     expect(composer).toContain("t('chat.chooseModelShort')");
     expect(composer).not.toContain('auto-policy-chip');
-    expect(composer).toContain("value={automaticPolicy?.active?'__lastbrowser_auto_policy__'");
+    expect(composer).toContain("value={AI_ORCHESTRATION_ENABLED && automaticPolicy?.active?'__lastbrowser_auto_policy__'");
   });
 
   it('places advanced controls behind the Advanced settings section and binds them to the active session scope', () => {

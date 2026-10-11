@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Navigation smoke</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #090e1f; }
+      #root { min-height: 100%; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.lastbrowser = {
+        downloads: {
+          onChanged: function () { return function () {}; },
+          onStarted: function () { return function () {}; },
+          list: function () { return Promise.resolve([]); },
+          cancel: function () { return Promise.resolve(); },
+          clear: function () { return Promise.resolve([]); }
+        },
+        window: {
+          isMaximized: function () { return Promise.resolve(false); },
+          onMaximizeChange: function () { return function () {}; },
+          toggleMaximize: function () { return Promise.resolve(); },
+          minimize: function () { return Promise.resolve(); },
+          close: function () { return Promise.resolve(); },
+          unmaximize: function () { return Promise.resolve(); },
+          getBounds: function () { return Promise.resolve({ width: 1600, height: 900 }); },
+          setPosition: function () { return Promise.resolve(); }
+        },
+        i18n: { setLocale: function () { return Promise.resolve(); } }
+      };
+    </script>
+    <script type="module" src="./nav-smoke.tsx"></script>
+  </body>
+</html>

@@ -1,3 +1,4 @@
+import { isRetiredProvider } from '../retired-providers.js';
 /**
  * Native chat panel for Lastbrowser.
  *
@@ -35,7 +36,7 @@ import {
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
 import { saveSpaceModel } from '../space-models.js';
-import { isMultiAgentModelSelection, resolveLiteralCatalogModelSelection, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
+import { isMultiAgentModelSelection, parseProviderModelId, resolveLiteralCatalogModelSelection, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
 import { getProviderModelEvidence, isProviderModelQualified } from '../provider-chat-evidence.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { IndependentAssistantClient } from '../independent-assistant-client.js';
@@ -46,6 +47,8 @@ import { useDesktopI18n } from '../i18n.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, resolveSessionReasoningEffort, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { mapScopedModelPickerOptions } from '../model-picker-options.js';
 import { canSelectNativeModel } from '../model-picker-options.js';
+import { chooseActiveModel, isModelActive, useActiveModelRevision } from '../active-model-selection.js';
+import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { isIndependentOwnedSession, isIndependentWriterProtected, readIndependentSessionRun } from '../independent-work-chat.js';
 import { captureCommandContext,isCommandContextCurrent,type CommandAction,type CommandCapabilities,type CommandContext } from '../CommandActionContracts.js';
 import { CHAT_COMMANDS } from '../chat-command-registry.js';
@@ -75,7 +78,7 @@ const CHAT_DEFAULT_PREFERENCE_KEY = 'lastbrowser.chatDefaultPreference.v1';
 function readRequestedChatDefault(): { provider: string; model: string } {
   try {
     const saved = JSON.parse(window.localStorage.getItem(CHAT_DEFAULT_PREFERENCE_KEY) || 'null');
-    if (saved && typeof saved.provider === 'string' && saved.provider.trim()
+    if (saved && !isRetiredProvider(saved.provider) && typeof saved.provider === 'string' && saved.provider.trim()
       && typeof saved.model === 'string' && saved.model.trim()) return { provider: saved.provider.trim(), model: saved.model.trim() };
   } catch {}
   return REQUESTED_CHAT_DEFAULT;
@@ -107,6 +110,7 @@ export type NativeChatMainProps = {
   simplifiedToolCalling: boolean;
   latestTurnUsage: NativeChatTurnUsage | null;
   modelFallbackNotice?: string | null;
+  onOpenModelSettings?: () => void;
   onComposerMode: (mode: ComposerMode) => void;
   onComposerText: (text: string) => void;
   onCreateSession: () => void;
@@ -137,6 +141,7 @@ export function NativeChatMain({
   simplifiedToolCalling,
   latestTurnUsage,
   modelFallbackNotice = null,
+  onOpenModelSettings,
   onComposerMode,
   onComposerText,
   onCreateSession,
@@ -144,6 +149,7 @@ export function NativeChatMain({
   onStop
 }: NativeChatMainProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
+  const activeModelRevision = useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const independentRun = isIndependentOwnedSession(activeSession) ? readIndependentSessionRun(activeSession) : null;
   const independentRunState = useSpaceAssistantStore(state => {
@@ -226,8 +232,7 @@ export function NativeChatMain({
           ...((liveModelsRes as any)?.catalog_status || {})
         };
         const reportedAntigravityStatus = String(statusMap.antigravity || '').trim().toLowerCase();
-        statusMap.antigravity = reportedAntigravityStatus === 'unavailable' ? 'unavailable'
-          : reportedAntigravityStatus === 'ready' ? 'ready' : 'unknown';
+        statusMap.antigravity = 'unavailable';
         setCatalogStatus(statusMap);
         const cataloguedData = { ...data, catalog_status: statusMap };
         const isAntigravityCatalogUnavailable = String(statusMap.antigravity || '').toLowerCase() === 'unavailable';
@@ -235,27 +240,33 @@ export function NativeChatMain({
         const sessionModel = String(activeSession?.model || '').trim().toLowerCase();
         const hasExplicitSessionModel = Boolean(sessionModel && !['default', 'auto'].includes(sessionModel));
         const rawParsed = mapScopedModelPickerOptions(cataloguedData).map(group=>({...group,models:group.models.map(entry=>({...entry,reasoningEfforts:normalizeReasoningEfforts(entry.reasoningEfforts)}))}));
-        if (!showUntestedBetas && isMultiAgentModelSelection({ model: data.model, provider: data.provider })) {
-          const fallback = rawParsed.flatMap(group => group.providerId ? group.models
-            .filter(entry => group.configured && entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)
-              && isProviderModelQualified(group.providerId, entry.id, activeBrowserProfileId,
-                activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage))
-            .map(entry => ({ provider: group.providerId!, model: entry.id })) : [])[0];
-          if (fallback) {
-            const migrated = await modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: {
-              action: 'set', model: fallback.model, provider: fallback.provider, expectedRevision: data.revision, clientRequestId: newIndependentRequestId()
-            } });
-            if (!migrated.ok) throw new Error(migrated.error.message);
-            data = migrated.value;
-            setStatusMessage(t('settings.panels.providers.singleModelMigration'));
-          }
-        }
         // GPT-6 Luna is the requested product default only when this exact pair
         // may execute with current profile/runtime/build/config-bound evidence.
         // Until then the UI retains the requested pair behind the beta gate.
-        const selectionForView = !data.configured && !hasExplicitSessionModel
+        let selectionForView = isRetiredProvider(data.provider)
+          ? { ...data, provider: '', model: '', configured: false }
+          : !data.configured && !hasExplicitSessionModel
           ? { ...data, model: requestedChatDefault.model, provider: requestedChatDefault.provider }
           : data;
+        const eligible = rawParsed.flatMap(group => group.configured && group.providerId ? group.models
+          .filter(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability))
+          .map(entry => ({ providerId: group.providerId, id: parseProviderModelId(entry.id, group.providerId).model })) : []);
+        const activeChoice = chooseActiveModel(eligible,
+          { model: selectionForView.model, provider: selectionForView.provider }, window.localStorage,
+          { browserProfileId: activeBrowserProfileId, backendProfileName: activeBackendProfileName || (activeSession as any)?.profile || 'default' });
+        if (!(AI_ORCHESTRATION_ENABLED && isMultiAgentModelSelection(selectionForView))
+          && activeChoice.choice && (selectionForView.model !== activeChoice.choice.id || selectionForView.provider !== activeChoice.choice.providerId)) {
+          const migrated = await modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: {
+            action: 'set', model: activeChoice.choice.id, provider: activeChoice.choice.providerId,
+            expectedRevision: data.revision, clientRequestId: newIndependentRequestId()
+          } });
+          if (!migrated.ok) throw new Error(migrated.error.message);
+          data = migrated.value;
+          selectionForView = data;
+          setStatusMessage(t('settings.panels.providers.activeModelFallback'));
+        } else if (!(AI_ORCHESTRATION_ENABLED && isMultiAgentModelSelection(selectionForView)) && !activeChoice.choice) {
+          selectionForView = { ...selectionForView, model: '', provider: '', configured: false };
+        }
         setScopedModel({ viewKey: modelViewKey, selection: selectionForView });
         const isSelectedAntigravity = selectionForView.provider === 'antigravity';
         const selectedModelQualified = Boolean(selectionForView.provider && selectionForView.model
@@ -265,7 +276,7 @@ export function NativeChatMain({
         setCatalogDefaultModel((selectedModelQualified && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) ? selectionForView.model : '');
         if (selectedModelQualified && selectionForView.model && activeSpacePath && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) saveSpaceModel(activeSpacePath, selectionForView.model, window.localStorage, selectionForView.provider);
         setModelCatalog(isAntigravityCatalogUnverified
-          ? rawParsed.filter(group => group.providerId.toLowerCase() !== 'antigravity')
+          ? rawParsed.filter(group => !isRetiredProvider(group.providerId))
           : rawParsed);
         setModelCatalogLoaded(true);
       } catch {
@@ -280,18 +291,18 @@ export function NativeChatMain({
     };
     void load();
     return () => { alive = false; };
-  }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry, showUntestedBetas, activeBackendProfileName, activeSession?.profile, activeSession?.model, requestedChatDefault, t]);
+  }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry, showUntestedBetas, activeBackendProfileName, activeSession?.profile, activeSession?.model, requestedChatDefault, t, activeModelRevision]);
 
   /** Change only this bound Space preference; executing runs keep their captured model. */
   const commitComposerModelChoice = useCallback((selection: string) => {
     if (!selection || !spaceModelSelection) return;
     const candidate = resolveLiteralCatalogModelSelection(selection, modelCatalog);
     if (!candidate?.provider) return;
+    if (!isModelActive(window.localStorage, { browserProfileId: activeBrowserProfileId,
+      backendProfileName: activeBackendProfileName || (activeSession as any)?.profile || 'default' }, candidate.provider, candidate.model)) return;
     const selectedEntry = modelCatalog.find(group => group.providerId === (candidate.provider ?? '') && group.models.some(entry => entry.id === candidate.model))
       ?.models.find(entry => entry.id === candidate.model);
     if (!canSelectNativeModel(candidate.provider, selectedEntry?.nativeAvailability)) return;
-    if (!showUntestedBetas && !isProviderModelQualified(candidate.provider, candidate.model, activeBrowserProfileId,
-      activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)) return;
     const nextModel = candidate.model, provider = candidate.provider ?? '';
     if (nextModel === model && provider === modelProvider) return;
     const capturedKey = modelViewKey;
@@ -323,15 +334,17 @@ export function NativeChatMain({
     if (isAntigravityCatalogUnverified && (group.providerId === 'antigravity' || group.provider === 'antigravity')) {
       return [];
     }
-    const models = group.models.map(entry => {
+    const models = group.models.filter(entry => (AI_ORCHESTRATION_ENABLED && showUntestedBetas && !group.providerId
+      && isMultiAgentModelSelection({ model: entry.id, provider: group.providerId })) || isModelActive(window.localStorage,
+      { browserProfileId: activeBrowserProfileId, backendProfileName: activeBackendProfileName || (activeSession as any)?.profile || 'default' },
+      group.providerId, entry.id)).map(entry => {
       const evidence = getProviderModelEvidence(group.providerId, entry.id, activeBrowserProfileId,
         activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage);
       return { ...entry, qualified: Boolean(evidence), qualification: evidence,
         label: evidence ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
     });
     return models.length ? [{ ...group, models }] : [];
-  }), [modelCatalog, activeBrowserProfileId, activeBackendProfileName, activeSession?.profile, isAntigravityCatalogUnverified, t]);
-  const hasQualifiedCatalogModel = visibleModelCatalog.some(group => group.models.some(entry => entry.qualified));
+  }), [modelCatalog, activeBrowserProfileId, activeBackendProfileName, activeSession?.profile, isAntigravityCatalogUnverified, t, activeModelRevision, showUntestedBetas]);
   const requestedDefaultGroup = modelCatalog.find(group => group.providerId === requestedChatDefault.provider
     && group.models.some(entry => entry.id === requestedChatDefault.model));
   const requestedLunaInCatalog = modelCatalogLoaded && Boolean(requestedDefaultGroup);
@@ -405,10 +418,13 @@ export function NativeChatMain({
     || (!showUntestedBetas && currentPolicy.response.policy.allowedModels.some(pair =>
       !isProviderModelQualified(pair.provider, pair.model, activeBrowserProfileId, activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)));
   const multiAgentSelection = isMultiAgentModelSelection({ model, provider: modelProvider });
-  const multiAgentBetaBlocked = !showUntestedBetas && (multiAgentSelection || Boolean(automaticSelected && currentPolicy?.response.policy.orchestrator));
+  const multiAgentBetaBlocked = (!AI_ORCHESTRATION_ENABLED || !showUntestedBetas)
+    && (multiAgentSelection || Boolean(automaticSelected && currentPolicy?.response.policy.orchestrator));
   const betaSelectionBlocked = automaticSelected
     ? unqualifiedAutoModels || Boolean(currentPolicy?.response.policy.orchestrator && !showUntestedBetas)
-    : multiAgentSelection ? !showUntestedBetas : !modelPairAvailable || (!modelQualified && !showUntestedBetas);
+    : multiAgentSelection ? multiAgentBetaBlocked : !modelPairAvailable
+      || !isModelActive(window.localStorage, { browserProfileId: activeBrowserProfileId,
+        backendProfileName: activeBackendProfileName || (activeSession as any)?.profile || 'default' }, modelProvider, model);
   const automaticAvailable=currentPolicy?canExecuteAutomaticPolicy(currentPolicy.response):false;
   const automaticBlocked=Boolean(automaticSelected&&!automaticAvailable);
   const availableCommands=writerProtected?noCommandCapabilities:currentModeGate?.response.capabilities??commandCapabilities;
@@ -535,8 +551,9 @@ export function NativeChatMain({
     }
     const candidate=resolveLiteralCatalogModelSelection(selection,modelCatalog);
     if(!candidate)return;
-    if(candidate?.provider&&!isProviderModelQualified(candidate.provider,candidate.model,activeBrowserProfileId,activeBackendProfileName || (activeSession as any)?.profile || 'default',window.localStorage)&&!showUntestedBetas){
-      setStatusMessage(t('settings.panels.providers.betaCatalogEmpty'));return;
+    if(candidate?.provider&&!isModelActive(window.localStorage,{browserProfileId:activeBrowserProfileId,
+      backendProfileName:activeBackendProfileName||(activeSession as any)?.profile||'default'},candidate.provider,candidate.model)){
+      setStatusMessage(t('settings.panels.providers.noActiveModels'));return;
     }
     if(automaticSelected&&currentPolicy){const policy=currentPolicy.response.policy;
       void saveModelPolicy({mode:'fixed',allowedModels:policy.allowedModels,orchestrator:policy.orchestrator,cloudPolicy:policy.cloudPolicy,
@@ -879,8 +896,10 @@ export function NativeChatMain({
         modelProvider={modelProvider}
         modelProviderLabel={modelProviderLabel}
         modelOptions={visibleModelCatalog}
+        noActiveModels={modelCatalogLoaded && !visibleModelCatalog.some(group => group.configured && group.providerId
+          && group.models.some(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)))}
+        onOpenModelSettings={onOpenModelSettings}
         requestedLunaInCatalog={modelCatalogLoaded ? requestedLunaInCatalog : undefined}
-        emptyQualifiedCatalog={modelCatalogLoaded && modelCatalog.length > 0 && !hasQualifiedCatalogModel && !showUntestedBetas}
         modelCatalogError={modelCatalogError}
         antigravityCatalogUnavailable={modelCatalogLoaded && isAntigravityCatalogUnavailable}
         antigravityCatalogUnknown={(modelCatalogLoaded || modelCatalogError) && isAntigravityCatalogUnknown}

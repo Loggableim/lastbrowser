@@ -803,6 +803,21 @@ function appendQuery(url: URL, query: WebuiRequest['query']): void {
   }
 }
 
+/** Read only documented error fields; never stringify a response containing credentials. */
+function webuiErrorMessage(payload: unknown, status: number): string {
+  const record = (value: unknown): Record<string, unknown> =>
+    value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown> : {};
+  const text = (value: unknown): string => typeof value === 'string' ? value.trim().slice(0, 500) : '';
+  const body = record(payload);
+  const error = record(body.error);
+  const message = text(error.message) || text(error.error) || text(error.detail)
+    || text(body.error) || text(body.message) || text(body.detail);
+  const details = text(error.details) || text(body.details);
+  const parts = [message, details].filter((value, index, all) => value && all.indexOf(value) === index);
+  return `HTTP ${status}${parts.length ? `: ${parts.join(' — ')}` : ''}`;
+}
+
 export async function requestWebui(
   webuiUrl: string,
   request: WebuiRequest,
@@ -886,7 +901,7 @@ export async function requestWebui(
       payload = { text: raw };
     }
     if (!response.ok) {
-      throw new Error(String(payload.error || payload.message || `HTTP ${response.status}`));
+      throw new Error(webuiErrorMessage(payload, response.status));
     }
     if (path === '/api/auth/logout') _sidekickAuthCookie = null;
     return payload;

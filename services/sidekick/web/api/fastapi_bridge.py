@@ -255,7 +255,17 @@ def _prepare_webui_runtime() -> None:
             return
         from web.api import agents, models, profiles, routes
 
-        profiles.refresh_profile_base_home_from_env()
+        # Reinitializing only the base home resets the active profile to
+        # "default". Restore the persisted selection and its environment
+        # together, otherwise a desktop restart reads providers/models from
+        # the root config despite the named profile still existing on disk.
+        # Independent workers already carry an immutable, filtered profile
+        # environment and must not load the interactive sticky selection.
+        if os.environ.get("LASTBROWSER_INDEPENDENT_WORKER") != "1":
+            profiles.init_profile_state()
+            config_mod.reload_config()
+        else:
+            profiles.refresh_profile_base_home_from_env()
         routes.STATE_DIR = config_mod.STATE_DIR
         routes.SESSION_DIR = config_mod.SESSION_DIR
         models._SESSION_LIST_CACHE.clear()

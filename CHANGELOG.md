@@ -5,6 +5,67 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.52] - 2026-10-10
+
+### Fixes
+- Make GPT-6 Luna with its OpenAI Codex provider the requested chat default, while showing provider-qualified model choices and keeping unqualified catalog entries behind the explicit Beta opt-in.
+- Keep unavailable Antigravity catalogs fail-closed and make reduced Local-AI operations validate profile/Space scope before returning the unavailable response.
+- Prevent judge-only goal retries from emitting regular chat-routing events that the restricted worker host rejects.
+- Clarify the four-worker Teamwork execution cap while preserving the full manually selected model pool as eligible choices.
+
+### Verification
+- Vitest suite: 147 test suites, 1,298 tests passed completely; Store release preflight 27/27 [PASS]; Desktop build and Python syntax validation green.
+- Released signed Windows artifacts on GitHub: Setup SHA-256 `D09747A3A5F55D9A4DA02A8644DE976D342EB2C811798B3778C242515F6BDACE`, Portable SHA-256 `16EEC42D1D335112E90EC04A2AC66ACB2941A81A2D7DD229E35EAD7905C51BFF`.
+
+## [0.1.48] - 2026-10-08
+
+### Fixes
+- Persistente Ziele explizit abschließen oder abbrechen, mit bestätigtem Speicherzustand, Revision und Schreibownerprüfung.
+- Teamwork verwirft verspätete Inhalte nach Stop; Gesamtfristablauf wird als Timeout statt Benutzerabbruch behandelt.
+- Akzentfarben gelten für Browser-Bedienelemente; Seitenwerkzeuge sind im vorhandenen Aktionsmenü integriert. DevTools-Anzeige folgt geöffnetem/geschlossenem Fenster und Tabwechsel.
+- Hardwareprüfung akzeptiert stabile umgeleitete Profil-Elternpfade und verwirft verlinkte Endverzeichnisse sowie wechselnde Zielpfade.
+- Der Shutdown-Watchdog verwendet den normalen Beenden-Pfad, damit die automatische Installation vollständig heruntergeladener Updates nicht umgangen wird.
+
+## [0.1.47] - 2026-10-07
+
+### Fixes
+- Profilgebundene Provider- und Modellrequests: Der Main-Prozess akzeptiert Katalogpfade nur innerhalb der aufgelösten Space-/Profilbindung.
+- Chatstart-Diagnostik: Frühe Bridge-Ausnahmen werden im geschützten Fehlerpfad abgefangen.
+- Quickchat nach Scopewechsel: Transcript, Fehler- und Resetstatus bleiben dem ursprünglichen Space zugeordnet.
+- MiMo-Einstellungen erhalten eine eigene Feldbeschriftung und Readback-Bestätigung.
+
+### Verification
+- Pflichtpipeline für den 0.1.47-Stand: 1.839 Tests in 195 Dateien, Store-Preflight 39 PASS / 2 WARN / 0 FAIL, Desktop-Build und Python-Syntaxprüfung erfolgreich.
+
+## [0.1.46] - 2026-10-06
+
+### Fixes
+- Fokusmodus schneller erreichbar: Kompaktes NovaDock bietet direkten, lokalisierten Zugang zum Zen-/Fokusmodus.
+- Quickchat-Start unter Windows stabilisiert.
+- Manuelle Modellauswahl: Teamwork-Modelle können manuell ausgewählt werden.
+- Authentifizierungsstatus-Abfragen bleiben rein lesend.
+- Reine Reasoning-Ausgaben werden nicht mehr fälschlich als fertige Antwortentwürfe übernommen.
+
+## [0.1.45] - 2026-10-05
+
+### Fixes
+- Öffentliche Bereitstellung der signierten Setup- und Portable-Binärdateien mit Authenticode und Castlabs Widevine VMP.
+- Verifizierte SHA-256-Prüfsummen: Setup `CCF1435947A415FE5A97BB5D908EDB79A519106877128C3E4D5F1B210236BC96`, Portable `8078CF5481CF9FA371FDB6DA79D39B85741FE97FC15ED30D4FE30B7D37B6A577`.
+- Cloudflare Pages Deployment für lastbrowser.com mit Download-Proxy und konsistenten Metadaten.
+
+### Verification
+- 1.727 Desktop-Tests bestanden; Store-Preflight 27 Checks bestanden.
+
+## [0.1.44] - 2026-10-05
+
+### Fixes
+- Integration der in-tree unabhängigen Agenten, isolierten Profil-Scopes und persistenten Ziele.
+- Kompakte Chat-Steuerungen, erweiterte Modellrichtlinien-Einstellungen und AUTO-Routing.
+- Vereinfachtes Local-AI-Setup und aktualisierte Website-Kandidatennotizen.
+
+### Verification
+- 1.727 Desktop-Tests passed; Store-Preflight 39 PASS / 2 WARN / 0 FAIL; Multi-Provider Loopback-Test passed.
+
 ## [0.1.43] - 2026-10-01
 
 ### Fixes

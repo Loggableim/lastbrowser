@@ -283,3 +283,60 @@ login, cancellation and profile switching; and update What's New plus displayed
 EXE version. Do not retry the known Ollama Cloud HTTP 403. Record each tested
 feature and each PR's coverage separately; report live/package observations
 separately from source gates.
+
+## P004 initial live result on the exact v0.1.55 package (latest update)
+
+This section supersedes the earlier statement that VM download/access and
+installation were still pending. The tester confirmed authenticated download
+of setup asset `630908836`; downloaded SHA-256 exactly matches
+`b8ab33f2a495e524501cb097928f04f429b82dc96019170ae1969941dca68922`.
+Authenticode is Valid with the expected signer and DigiCert SHA256 timestamp.
+Installation exited 0 in 152.54 seconds. The installed executable reports
+ProductVersion `0.1.55.0` and FileVersion `0.1.55`; installed EXE SHA-256 is
+`a08507f223f61eac4d8437aff5003d33dee88dcd072840b02cb525950ef719fe` and ASAR
+SHA-256 is `2a306192e5419bdac35088b372713c61273165d84ba38d4c0dad8c3c5cd99086`.
+
+### Passed observations
+
+- The What's New view for 0.1.55 appeared and Escape closed it.
+- External URL navigation, Back, Forward, and Reload passed.
+- Ctrl+1 and Ctrl+2 switched between the first and second tabs without an
+  observed pinned-app side effect.
+- After closing only an old invisible A-033 development process that held
+  the singleton lock, the installed candidate launched. This initial process
+  collision is not counted as a candidate startup failure.
+- Composer draft retention passed on the failed synthetic QuickChat send and
+  the failed Standardchat send.
+- With the existing canonical MSIX user-data directory explicitly selected,
+  the bound provider catalog loaded and prior profile history remained visible.
+  This is diagnostic evidence for a default path-alias conflict, not a fix.
+
+### Failed or blocked observations
+
+- **Overall P004 candidate acceptance: FAIL.**
+- QuickChat, on the retained Home Space with GPT-6 Luna, failed before an
+  inference response with `Profile reference is ambiguous or has moved`. No
+  provider success is claimed and the request was not repeated.
+- Standard launch initially showed no matching models and disabled Send,
+  although read-only state showed one active default profile. Explicitly
+  selecting the existing canonical user-data directory restored catalog
+  loading; the standard-launch profile-alias problem remains unresolved.
+- Standardchat with Codex GPT-6 Luna failed its UI start at about 28 seconds
+  with `route handler did not start a response in time`. Later backend/session
+  evidence persisted `SC READY` and confirmed `openai-codex/gpt-6-luna`.
+  Thus provider routing/backend completion occurred, but the user-facing send
+  remains a failure and timeout recovery is not accepted.
+- The OpenCode CLI is absent from PATH, so live CLI login/cancel/profile
+  switching is blocked. No CLI was installed as part of this candidate test.
+- At 1440px the QuickChat reasoning controls looked cramped/clipped; LB007
+  responsive acceptance remains open. Keyboard zoom and audio/mute behavior
+  were not confirmed (no audio fixture). History error retention and Stop
+  completion/placeholder were not yet tested.
+
+The existing VM tester is the sole authorized repair owner on branch
+`codex/p004-chat-opencode-fix` based on `68c2cddf`. The installer run did not
+authorize a source fix in this integration branch. Do not make competing
+source edits. Any future fix must arrive as an exact commit with regression
+and live evidence, receive independent review, pass combined gates, and be
+bound to a newly built candidate before another VM run. PR #55 remains open;
+no release merge or publication is authorized by this failed candidate run.

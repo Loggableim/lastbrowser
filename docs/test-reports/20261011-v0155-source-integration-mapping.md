@@ -13,6 +13,11 @@ signature, publication, deployment, or release metadata change is included.
 The combined source gates have passed. This report is not an authorization to
 merge into `release/v0.1.52` or to create a release artifact.
 
+**Open release blocker:** PR51's source fix is not a verified live-send fix.
+The A-033 tester withdrew the earlier Codex live PASS after session metadata
+still identified Xiaomi/MiMo. A separate standard-chat production fix is being
+prepared and is not included here; QuickChat live validation is deferred.
+
 ## Integrated source map
 
 | PR | Scope | Reviewed source head/range | Integration commits | State |
@@ -20,7 +25,7 @@ merge into `release/v0.1.52` or to create a release artifact.
 | 45 | A-030 Quickchat toolbar opens without switching assistant | `28c2153253e5d64777027769d98b62a249bea154` | `31a12c2e` | Applied |
 | 48 | A-008b reserve Ctrl+1..8 for tab switching | `b8f9445311558b4a94ab29ab847435edd42331a6` → `2ea5abdd876ac759ff35d4b73be86eaa81757173` → `c863a20717dd0c51d4b34a2afcebcaf5f1f78165` | `4c390a31`, `80db92e5`, `e2cf9c7f` | Applied; three additive commits |
 | 49 | A-008c synchronize keyboard zoom and toolbar state | `87ba3020e3b226488c58412c39246288510db617` | `7cac12c9` | Applied |
-| 51 | P0 Active Models / QuickChat scope and failed-start behavior | `2e80dd1a539f9f766d8c53444470c8dc192d42af` → `8bf990ece43c309d9d3cf667996925a1acce70b3` → `ef0d6c5980cb3da3684a70490bca8b81c0a2e7df` | `829b742f`, `731da3da`, `9b9e0523` | Applied |
+| 51 | P0 Active Models / QuickChat scope and failed-start behavior | `2e80dd1a539f9f766d8c53444470c8dc192d42af` → `8bf990ece43c309d9d3cf667996925a1acce70b3` → `ef0d6c5980cb3da3684a70490bca8b81c0a2e7df` | `829b742f`, `731da3da`, `9b9e0523` | Applied as source fix; live-send blocker remains open |
 | 52 | A-008d active-tab mute | `60f84674efdf3c0dd7b70d6f811bcd2bbc37d9b6` | `4a70f3e5` | Applied |
 | 53 | A-032 background updates, downgrade-safe channel setter | `ee0583e9935c65555d7af86d341da5a696a1976a` → `a1472b66c0a2e1955032895c3ed607c93d9faf81` | `7a6bbe10`, `a926d50b` | Applied; downgrade correction included |
 | 50 | Auth startup preflight, included in PR54's reviewed stack | `597f6c9647718129cd7179dd520dc7f096a3dce8` is an ancestor of PR54 | No separate cherry-pick; included once by merge `520fae6c` | Standalone PR50 is superseded for this integration; its earlier open findings are resolved by PR54's stack |
@@ -107,6 +112,35 @@ installation, VM upgrade, or What's New display was tested in this
 integration. The earlier P-003 VM report's cause for the retained v0.1.52
 ProductVersion and missing What's New remains unknown. No VM or release
 acceptance is claimed.
+
+## Open release blocker: live standard-chat send
+
+The A-033 VM report says PR51 alone still fails the live send path. The earlier
+`CODEX OK` observation was withdrawn after the QuickChat session metadata still
+showed `provider=xiaomi/model=mimo-v2.6-flash`; actual Codex routing is **not
+verified**. MiMo's real first and follow-up responses were observed in that
+tester run, while Ollama returned HTTP 403 for an external past-due
+subscription. That account response is an external blocker, not product
+acceptance. Cid's latest scope is standard chat only; QuickChat testing is
+deferred.
+
+The A-033 thread reports an `Invalid backend profile for chat binding` in
+standard chat when the renderer sends an empty `backendProfileName`. Omitting
+that empty optional hint changed a focused regression from 1/5 failing to 5/5
+passing, and the latest MiMo standard-chat request started, but its response
+was still pending. The thread also identifies a Codex catalog path that omits
+profile-bound context metadata and a Stop path that can leave a `Working on
+it…` placeholder. These are tester-reported findings; they are not changes in
+this integration.
+
+The earlier interim Codex PASS is withdrawn. The corrected A-033 report is
+identified by commit `94d5df683404`; the tester and existing model-fix worker
+are coordinating a separate minimal production PR. It has no reviewed PR head
+yet. Keep this blocker open and do not add that fix to PR55 until its exact
+head has independent review. After the reviewed change is incorporated, rerun
+the combined scope/auth/startup/live-send focused regressions and all AGENTS
+gates above. The current 2,071-test source suite does not prove live provider
+routing or response delivery.
 
 PR46 is plan-only Sidekick personas and excluded. PR47 is closed/replaced by
 PR48 and stale/divergent. PR44 contains v0.1.54 candidate metadata and is

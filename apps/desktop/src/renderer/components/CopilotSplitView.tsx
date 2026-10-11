@@ -121,7 +121,6 @@ export interface CopilotSplitViewProps {
   error?: string;
   status?: string;
   allowWorkflows?: boolean;
-  onSwitchToSpaceAssistant?: () => void;
   onSendMessage: (text: string, reasoningEffort?: string) => void;
   onStopChat?: () => void;
   activeUrl?: string;
@@ -151,7 +150,6 @@ export function CopilotSplitView({
   error,
   status,
   allowWorkflows = true,
-  onSwitchToSpaceAssistant,
   onSendMessage,
   onStopChat,
   activeUrl,
@@ -714,13 +712,6 @@ export function CopilotSplitView({
           <span className="copilot-header-title">{botName} AI</span>
         </div>
         <div className="copilot-header-actions">
-          {onSwitchToSpaceAssistant && <button
-            type="button"
-            className="copilot-action-btn copilot-mode-switch"
-            aria-label={t('spaceAssistant.switchToAssistant')}
-            title={t('spaceAssistant.switchToAssistant')}
-            onClick={onSwitchToSpaceAssistant}
-          ><span>{t('spaceAssistant.switchToAssistant')}</span></button>}
           {/* Universal Model Picker in Header */}
           <div className="copilot-header-model-wrapper" ref={modelPickerRef} style={{ position: 'relative' }}>
             <button

@@ -1,6 +1,5 @@
 import type { LegacyDesktopLocaleId as DesktopLocaleId } from './keys.js';
 const copy = {
-  'spaceAssistant.switchToAssistant': ['Space Assistant', 'Space Assistant', 'Space Assistant', 'Space Assistant', 'Space Assistant', 'Space Assistant', 'Space Assistant'],
   'spaceAssistant.switchToQuickChat': ['Quickchat', 'Quickchat', 'Quickchat', 'Quickchat', 'Quickchat', 'Quickchat', 'Quickchat'],
   'spaceAssistant.refreshPermissions': ['Reload saved permissions', 'Gespeicherte Rechte neu laden', 'Recargar permisos guardados', 'Recharger les autorisations enregistrées', 'Ricarica permessi salvati', 'Recarregar permissões salvas', 'Перезагрузить сохранённые разрешения'],
   'spaceAssistant.browserPermissions': ['Browser action permissions', 'Handlungsrechte im Browser', 'Permisos de acciones del navegador', 'Autorisations d’action dans le navigateur', 'Permessi per azioni del browser', 'Permissões de ações no navegador', 'Разрешения действий в браузере'],

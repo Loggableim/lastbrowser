@@ -8,8 +8,15 @@ import { assistantScopeKey, type IndependentScope } from '../src/renderer/indepe
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SpaceAssistantPanel } from '../src/renderer/components/SpaceAssistantPanel.js';
+import { CopilotSplitView } from '../src/renderer/components/CopilotSplitView.js';
 import { DesktopI18nProvider } from '../src/renderer/i18n.js';
-import { isQuickChatScopeVisible } from '../src/renderer/quick-chat-view-state.js';
+import {
+  createQuickChatScopeKey,
+  isQuickChatScopeVisible,
+  selectScopedQuickChatValue,
+  toggleQuickChatFromToolbar,
+  updateScopedQuickChatState
+} from '../src/renderer/quick-chat-view-state.js';
 
 vi.mock('../src/main/ipc-sender.js', () => ({
   captureTrustedShellSender: vi.fn((event: any) => () => {
@@ -82,22 +89,71 @@ describe('Assistant and Quickchat identity boundary', () => {
     await quickchat.close();
   });
 
-  it('keeps the in-flight scoped Assistant turn intact when the panel mode is toggled', async () => {
+  it('renders Quickchat without the Space Assistant switch, including when the legacy switch callback is supplied', () => {
+    vi.stubGlobal('window', { localStorage: { getItem: () => null, setItem: () => {} } });
+    let markup = '';
+    try {
+      markup = renderToStaticMarkup(React.createElement(DesktopI18nProvider, null, React.createElement(CopilotSplitView, {
+        isOpen: true,
+        onClose: () => {},
+        botName: 'Nova',
+        modelName: 'Controlled model',
+        messages: [{ role: 'user', content: 'Keep this Quickchat message' }],
+        busy: false,
+        allowWorkflows: false,
+        onSwitchToSpaceAssistant: () => {},
+        onSendMessage: () => {},
+        browserProfileId: 'profile-a',
+        workspacePath: 'C:\\work\\space-a',
+        backendProfileName: 'default'
+      } as any)));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(markup).toContain('Keep this Quickchat message');
+    expect(markup).not.toContain('Space Assistant');
+    expect(markup).not.toContain('copilot-mode-switch');
+  });
+
+  it('keeps Quickchat history visible only in the matching profile, space, and backend scope', () => {
+    const scopeA = createQuickChatScopeKey('profile-a', 'C:\\work\\space-a', 'backend-a');
+    const scopeB = createQuickChatScopeKey('profile-a', 'C:\\work\\space-b', 'backend-a');
+    const scopeOtherProfile = createQuickChatScopeKey('profile-b', 'C:\\work\\space-a', 'backend-a');
+    const transcripts = new Map<string, string[]>();
+    updateScopedQuickChatState(transcripts, scopeA, () => ['A user message', 'A assistant reply']);
+    updateScopedQuickChatState(transcripts, scopeB, () => ['B user message', 'B assistant reply']);
+
+    expect(isQuickChatScopeVisible(scopeA, scopeA)).toBe(true);
+    expect(isQuickChatScopeVisible(scopeA, scopeB)).toBe(false);
+    expect(isQuickChatScopeVisible(scopeA, scopeOtherProfile)).toBe(false);
+    expect(transcripts.get(scopeA)).toEqual(['A user message', 'A assistant reply']);
+    expect(transcripts.get(scopeB)).toEqual(['B user message', 'B assistant reply']);
+    expect(isQuickChatScopeVisible(null, scopeA)).toBe(false);
+    expect(selectScopedQuickChatValue(transcripts.get(scopeA), scopeA, scopeA, [])).toEqual(transcripts.get(scopeA));
+    expect(selectScopedQuickChatValue(transcripts.get(scopeA), scopeA, scopeB, [])).toEqual([]);
+  });
+
+  it('opens Quickchat from the toolbar despite a legacy Assistant panel and preserves the normal close toggle', () => {
+    const setQuickChatMode = vi.fn();
+    const toggleCopilot = vi.fn();
+
+    toggleQuickChatFromToolbar({ copilotOpen: true, quickChatMode: false, setQuickChatMode, toggleCopilot });
+    expect(setQuickChatMode).toHaveBeenCalledExactlyOnceWith(true);
+    expect(toggleCopilot).not.toHaveBeenCalled();
+
+    toggleQuickChatFromToolbar({ copilotOpen: false, quickChatMode: false, setQuickChatMode, toggleCopilot });
+    expect(toggleCopilot).toHaveBeenCalledTimes(1);
+
+    toggleQuickChatFromToolbar({ copilotOpen: true, quickChatMode: true, setQuickChatMode, toggleCopilot });
+    expect(toggleCopilot).toHaveBeenCalledTimes(2);
+  });
+
+  it('wires the real topbar Copilot button through the Quickchat toolbar handler', async () => {
     const source = await import('node:fs/promises');
     const appSource = await source.readFile(new URL('../src/renderer/App.tsx', import.meta.url), 'utf8');
-    expect(appSource).toContain('onSwitchToSpaceAssistant={() => setQuickChatMode(false)}');
-    expect(appSource).toContain('onSwitchToQuickChat={() => setQuickChatMode(true)}');
-    const quickchatMessages = appSource.match(/const \[quickChatMessages, setQuickChatMessages\] = useState<DesktopChatMessage\[]>\(\[\]\)/);
-    expect(quickchatMessages).not.toBeNull();
-    expect(appSource).toContain('messages={isQuickChatScopeVisible(quickChatTranscriptScopeKeyRef.current, `${activeProfileId}::${activeSpacePath}::${activeBackendProfileName || \'\'}`)');
-    expect(appSource).toContain('? quickChatMessages : []}');
-    expect(isQuickChatScopeVisible('profile-a::space-a::backend-a', 'profile-a::space-a::backend-a')).toBe(true);
-    expect(isQuickChatScopeVisible('profile-a::space-a::backend-a', 'profile-b::space-b::backend-b')).toBe(false);
-    expect(isQuickChatScopeVisible(null, 'profile-a::space-a::backend-a')).toBe(false);
-    expect(appSource).toContain('busy={quickChatBusy && isQuickChatScopeVisible(quickChatBindingScopeKeyRef.current ?? quickChatStartPromiseRef.current?.scopeKey ?? null,');
-    expect(appSource).toContain('const [assistantController] = useState(() => new IndependentAssistantController(');
-    expect(appSource).toContain('controller={assistantController}');
-    expect(appSource).not.toMatch(/onSwitchTo(?:SpaceAssistant|QuickChat)=\{[^\n]*(?:resetQuickChat|assistantController\.(?:reset|send)|createSession)/);
+    expect(appSource).toContain('onToggleCopilot={handleQuickChatToolbarToggle}');
+    expect(appSource).toContain('toggleQuickChatFromToolbar({');
   });
 
   it('keeps the Quickchat binding until acknowledged cleanup and prevents cross-scope transcript reuse', async () => {

@@ -292,7 +292,7 @@ import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
 import { canSelectNativeModel, mapScopedModelPickerOptions } from './model-picker-options.js';
 import { prepareGuardedNativeChatStart, startGuardedNativeChat } from './guarded-native-chat-start.js';
 import { selectNativeSession as selectNativeChatSession } from './native-session-selection.js';
-import { isQuickChatScopeVisible, updateScopedQuickChatState } from './quick-chat-view-state.js';
+import { createQuickChatScopeKey, selectScopedQuickChatValue, toggleQuickChatFromToolbar, updateScopedQuickChatState } from './quick-chat-view-state.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { LiveAutomationBanner } from './components/LiveAutomationBanner.js';
 import { detectPageCategory, executeQuickAction, getQuickActionChips } from './quick-actions.js';
@@ -1109,6 +1109,9 @@ function AppContent(): JSX.Element {
   const quickChatBufferedEventsRef = useRef<import('../main/quick-chat-controller.js').QuickChatStreamEvent[]>([]);
   const quickChatScopeKeyRef = useRef<string | null>(null);
   const [quickChatMode, setQuickChatMode] = useState(false);
+  const handleQuickChatToolbarToggle = (): void => toggleQuickChatFromToolbar({
+    copilotOpen, quickChatMode, setQuickChatMode, toggleCopilot
+  });
   const [lastChatTurnUsage, setLastChatTurnUsage] = useState<{ sessionId: string; usage: NativeChatTurnUsage } | null>(null);
   const [nativeModelResolutionNotice, setNativeModelResolutionNotice] = useState<{ sessionId: string; profileId: string; spacePath: string; backendProfileName: string | null; resolution: NativeModelResolution } | null>(null);
   const [chatError, setChatError] = useState('');
@@ -1268,7 +1271,9 @@ function AppContent(): JSX.Element {
   assistantSelectionRequestScopeRef.current = assistantSelectionRequestScope;
   quickChatIdRef.current = quickChatId;
   quickChatBindingRef.current = quickChatBinding;
-  const currentQuickChatScopeKey = (): string => `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`;
+  const currentQuickChatScopeKey = (): string => createQuickChatScopeKey(
+    activeProfileIdRef.current, activeSpacePathRef.current, activeBackendProfileNameRef.current
+  );
   const updateQuickChatMessagesForScope = (scopeKey: string, update: React.SetStateAction<DesktopChatMessage[]>): void => {
     const next = updateScopedQuickChatState(quickChatMessagesByScopeRef.current, scopeKey, stored => {
       const current = stored ?? (quickChatTranscriptScopeKeyRef.current === scopeKey ? quickChatMessagesRef.current : []);
@@ -4878,7 +4883,7 @@ function AppContent(): JSX.Element {
               toggleExtensionHub();
             }}
             copilotOpen={copilotOpen}
-            onToggleCopilot={toggleCopilot}
+            onToggleCopilot={handleQuickChatToolbarToggle}
             loupeActive={visionImpaired.enabled && visionImpaired.cursorLoupeEnabled}
             onToggleLoupe={() => {
               const store = usePanelStore.getState();
@@ -5307,14 +5312,15 @@ function AppContent(): JSX.Element {
                 botName={setupState.botName || 'Nova'}
                 modelName={copilotModelSelection.model || setupState.model || 'AI'}
                 modelProvider={copilotModelSelection.provider}
-                messages={isQuickChatScopeVisible(quickChatTranscriptScopeKeyRef.current, `${activeProfileId}::${activeSpacePath}::${activeBackendProfileName || ''}`)
-                  ? quickChatMessages : []}
-                busy={quickChatBusy && isQuickChatScopeVisible(quickChatBindingScopeKeyRef.current ?? quickChatStartPromiseRef.current?.scopeKey ?? null,
-                  `${activeProfileId}::${activeSpacePath}::${activeBackendProfileName || ''}`)}
-                error={isQuickChatScopeVisible(quickChatErrorScopeKeyRef.current, `${activeProfileId}::${activeSpacePath}::${activeBackendProfileName || ''}`) ? quickChatError : ''}
-                status={isQuickChatScopeVisible(quickChatStatusScopeKeyRef.current, `${activeProfileId}::${activeSpacePath}::${activeBackendProfileName || ''}`) ? quickChatStatus : ''}
+                messages={selectScopedQuickChatValue(quickChatMessages, quickChatTranscriptScopeKeyRef.current,
+                  createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), [])}
+                busy={selectScopedQuickChatValue(quickChatBusy, quickChatBindingScopeKeyRef.current ?? quickChatStartPromiseRef.current?.scopeKey ?? null,
+                  createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), false)}
+                error={selectScopedQuickChatValue(quickChatError, quickChatErrorScopeKeyRef.current,
+                  createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), '')}
+                status={selectScopedQuickChatValue(quickChatStatus, quickChatStatusScopeKeyRef.current,
+                  createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), '')}
                 allowWorkflows={false}
-                onSwitchToSpaceAssistant={() => setQuickChatMode(false)}
                 onSendMessage={text => void sendQuickChat(text)}
                 onStopChat={() => void stopQuickChat()}
                 activeUrl={activeTab.url}

@@ -22,6 +22,20 @@
 
 ## 2. Historie der stündlichen Läufe
 
+### Lauf 5 – Stündlicher Cron-Audit (11. Oktober 2026, 05:32–05:38 Uhr)
+- **Auslöser:** Geplanter stündlicher Cron-Trigger (`20 * * * *`, Daemon `task-95`).
+- **Git Stand:** Branch `release/v0.1.52` (sauberer Working Tree; Isolierung der parallelen Worker 5, 6, 8 gewahrt).
+- **Python Syntaxcheck:** `python -m compileall -q services/sidekick` → **PASS** (Exit 0, 0 Fehler, 0 Warnungen).
+- **Secret-Fixtures Guard:** `npm --workspace apps/desktop run test:run -- tests/secret-fixtures.test.ts` → **PASS** (1/1 bestanden in 5.03s, 0 unzulässige Tokens/Secrets).
+- **Desktop Shell Build:** `npm --workspace apps/desktop run build` → **PASS** (Main, Preload & Vite Client 1834 Module fehlerfrei kompiliert in 8.08s, Exit 0).
+- **Store-Preflight:** `npm run verify:store` → **PASS** (39 Checks bestanden, 2 provisorische Warnungen, 0 FAIL).
+- **Website-Testsuite:** `node lastbrowser.com/tests/download-counter.test.mjs` → **PASS** (15/15 Tests bestanden in 72.4ms).
+- **Gezielte Testsuiten:** `public-downloads.test.ts` (5/5 PASS), `windows-package-signatures.test.ts` (7/7 PASS in 6.78s).
+- **Vollständige Testsuite:** `npm --workspace apps/desktop run test:run` → **PASS** (**215 Testdateien / 1966 Tests bestanden**, 0 Fehler in 42.28s).
+- **Sidekick Python Worker-Tests:** `pytest services/sidekick/tests/test_kanban_worker_capacity.py services/sidekick/tests/test_nova_production_workers.py` → **PASS** (18/18 Tests bestanden in 2.31s).
+- **Daemon-Status:** Dauerhafter Hintergrund-Daemon `task-95` für stündlichen Cron-Job (`20 * * * *`) aktiv.
+- **Fazit:** 100% grüne Qualitätsgates über alle 215 Testsuiten, 0 Fehler, 0 Regressionen.
+
 ### Lauf 4 – Stündlicher Cron-Audit (11. Oktober 2026, 05:20–05:34 Uhr)
 - **Auslöser:** Geplanter stündlicher Cron-Trigger (`20 * * * *`, Iteration 3).
 - **Git Stand:** Branch `release/v0.1.52` (sauberer Working Tree nach Integration der Commits von Worker 5, 6 und 8).

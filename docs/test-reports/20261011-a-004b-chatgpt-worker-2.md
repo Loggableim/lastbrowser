@@ -42,3 +42,12 @@ Die Website verwendet weiterhin die bestehende Produktkennzeichnung „Beta“. 
 ## Nachtrag aus dem Hotfix-Worktree
 
 Die dort bei `npm run test:run` zunächst sichtbaren Download-Vertragsfehler wurden in PR #31 durch eine versionsbewusste Prüfung für v0.1.52 und v0.1.53 behoben. Anschließend liefen dort 215 Testdateien / 1.967 Tests erfolgreich. Der separate Website-Worktree hatte nach `npm ci` weiterhin kein installiertes Electron-Binary; daher war dort nur der gezielte Website-Counter-Test mit 15/15 direkt erfolgreich.
+
+
+## CTO-Nachprüfung mit unabhängigem Worker
+
+- Download-URLs, SHA-256 und Byte-Größen aller sieben Seiten gegen GitHub-Release-API bestätigt.
+- RSS-Historie unverändert erhalten.
+- Changelogs markieren ausschließlich v0.1.53 als aktuell; alte v0.1.52/v0.1.38-Stylingmarkierungen entfernt. Fünf historische, versehentlich als v0.1.52 beschriftete Karten wieder als v0.1.45 benannt, passend zu ihrem erhaltenen Inhalt und Datum.
+- Neue Release-Linklabels lokalisiert. Strukturprüfung: je Changelog genau eine current-Karte und Hervorhebung.
+- Countertests nach Nacharbeit erneut 15/15 bestanden; git diff --check erfolgreich.

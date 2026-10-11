@@ -46,7 +46,7 @@ current PR head and review status before any later integration.
 | PR | Head | Scope | Current disposition |
 | --- | --- | --- | --- |
 | 50 | `597f6c9647718129cd7179dd520dc7f096a3dce8` | Auth startup preflight | Pending independent reviewer result. This head is code-identical to `a978bf516a41ac6d8d6b84ea0cba0c687fa02217` and adds the red-before report; the earlier `7935cb1f6d85421809e3b1948e3ecfca9666d037` is superseded. The callback race was reproduced red with controls, and the fix passed 9/9 focused tests. Author also reports 223 files / 2,024 tests passed. |
-| 54 | `3dcd45b35725afadf5e13c29258eb0e4facdc076` | Startup gate UI | **Pending; do not integrate yet.** Stacked on PR50 head `597f6c9647718129cd7179dd520dc7f096a3dce8`; do not cherry-pick PR50 a second time when taking this stack. Author reports 2,043 tests passed and the AuthGenerationConsumer contract was ported. Independent re-review is pending. |
+| 54 | `176221f49e1e88b773426d8a43953aa8eb72d034` | Startup gate UI and post-login auth policy | **Pending Auth re-review; do not integrate yet.** Its ancestry contains PR50 head `597f6c9647718129cd7179dd520dc7f096a3dce8`; when cleared, take the stack once and do not cherry-pick PR50 again. Startup re-review reported no findings and 17/17 focused tests. The author reports 2,043 tests passed and the AuthGenerationConsumer contract was ported. A second reviewer is checking whether the stack resolves all open PR50 findings, including the reported `auth_enabled` discrepancy. |
 
 The current CTO handoff identifies a P1 auth-lock race across PR50/PR54. PR50
 now has final pending head `597f6c9647718129cd7179dd520dc7f096a3dce8`,
@@ -54,19 +54,21 @@ code-identical to `a978bf516a41ac6d8d6b84ea0cba0c687fa02217` with a red-before
 report addition. The callback race was reproduced red with controls and the
 fix passed 9/9 focused tests; the author reports 223 files / 2,024 tests.
 Independent re-review is still active; keep PR50 pending and integrate only
-this exact head after clearance. PR54 now has head
-`3dcd45b35725afadf5e13c29258eb0e4facdc076`, stacked on PR50's
-`597f6c9647718129cd7179dd520dc7f096a3dce8`. The author reports 2,043 tests
-passed and the AuthGenerationConsumer contract was ported; independent
-re-review is still pending. Do not integrate this stack until review clears it,
-and avoid cherry-picking PR50 twice. Reviewers are resolving a reported
-`auth_enabled` discrepancy across PR50/54; do not infer a resolution or
-approval. Earlier PR54 review also identified that auth-disabled startup must
-preserve PR50's early release and optional model/onboarding errors must not
-block the shell. All startup readiness signals still need to gate shell
-readiness. PR50 and PR54 remain unapplied. The CTO marks PR51/52/53
-independently reviewed without code blockers and authorizes those exact heads
-for this interim integration. No aggregate-ready or merge status is asserted.
+this exact head after clearance. PR54's current head is
+`176221f49e1e88b773426d8a43953aa8eb72d034`; it contains PR50 head
+`597f6c9647718129cd7179dd520dc7f096a3dce8` in its ancestry. Startup re-review
+reports no findings and 17/17 focused tests; the author reports 2,043 tests
+passed and the AuthGenerationConsumer contract was ported. A second reviewer
+is checking whether this stack resolves all open PR50 findings, including the
+reported `auth_enabled` discrepancy. That Auth re-review remains pending, so do
+not integrate PR54 yet and do not cherry-pick PR50 twice. Do not infer that the
+discrepancy is resolved or that either PR is approved. Earlier PR54 review also
+identified that auth-disabled startup must preserve PR50's early release and
+optional model/onboarding errors must not block the shell. All startup
+readiness signals still need to gate shell readiness. PR50 and PR54 remain
+unapplied. The CTO marks PR51/52/53 independently reviewed without code
+blockers and authorizes those exact heads for this interim integration. No
+aggregate-ready or merge status is asserted.
 
 Historical evidence remains scoped to each individual PR head. PR53's report
 also records that the previous VM upgrade showed v0.1.52 ProductVersion after
@@ -79,16 +81,17 @@ and What's New cause remain explicit limits for updater evidence.
 Read-only `git merge-tree --write-tree` simulations used the exact fetched PR
 heads against the initial three-PR integration snapshot, before PR51/52/53 were
 applied. A clean simulation reports textual mergeability only; it does not
-approve a pending PR or establish semantic correctness. PR54's current head is
-stacked on PR50 and was not part of those simulations.
+approve a pending PR or establish semantic correctness. The current PR54 head
+was additionally simulated against the present integration branch and merged
+textually with exit 0; semantic Auth re-review remains pending.
 
-| Pending PR | Result against current integration | Paths / follow-up |
+| PR | Result against current integration | Paths / follow-up |
 | --- | --- | --- |
 | 50 | Clean | No textual conflict. Review its startup policy alongside PR54 only after PR54's P1 corrections and re-review. |
 | 51 | Conflicts, resolved | `App.tsx`, `CopilotSplitView.tsx`. Kept PR45's `onSwitchToSpaceAssistant` behavior and passed through PR51's boolean start result so failed starts retain the draft. |
 | 52 | Conflicts, resolved | `App.tsx`. Kept PR49's `onZoomFactorChange` and PR52's `tabMuteControl` prop at both `BrowserMain` call sites and its interface. |
 | 53 | Clean | Two commits applied; separate updater API and settings surfaces remain distinct from auth/startup APIs. |
-| 54 | Earlier head was textually clean; current head not simulated | Current PR54 head is stacked on PR50 and remains unapplied pending re-review; do not cherry-pick PR50 twice. Resolve the `auth_enabled` discrepancy with both reviewers first. |
+| 54 | Current `176221f4` stack textually clean against current integration (exit 0) | Head contains PR50 `597f6c96` ancestry; integrate the stack once only after positive Auth re-review. The `auth_enabled` discrepancy is still under review. |
 
 Historical pairwise simulations against the PR54 head available at that time:
 
@@ -96,9 +99,9 @@ Historical pairwise simulations against the PR54 head available at that time:
 | --- | --- | --- |
 | PR45 + PR51 | Conflicts in `App.tsx` and `CopilotSplitView.tsx` | Preserve A-030 Quickchat behavior and P0 model failure/draft retention together. |
 | PR49 + PR52 | Conflict in `App.tsx` | Preserve zoom state and active-tab mute state/wiring. |
-| PR50 + earlier PR54 head | Conflict in `apps/desktop/src/main/main.ts` | Resolve auth-lock race in PR50 first; preserve disabled-auth early release and require all remaining startup readiness signals before shell release. The current PR54 stack includes PR50 ancestry and has not been re-simulated. |
+| PR50 + earlier PR54 head | Conflict in `apps/desktop/src/main/main.ts` | Historical conflict: preserve disabled-auth early release and require all remaining startup readiness signals before shell release. Current stacked head `176221f4` was separately simulated against the current integration including PR51/52/53 and is textually clean. |
 | PR51 + PR52 | Textually clean | Still requires semantic review at shared model/chat/tab behavior boundaries. |
-| PR53 + earlier PR54 head | Textually clean | Review separate updater, startup, and auth preload/global APIs together. Current PR54 stack has not been re-simulated. |
+| PR53 + earlier PR54 head | Textually clean | Historical pair result. Current stacked head `176221f4` was separately simulated against the current integration including PR53. |
 | PR48 with PR50–54 | Textually clean | No content conflict found in pair simulations; review remains independently required. |
 
 The PR50/PR54 main-process conflict involves auth startup policy/preflight and
@@ -115,10 +118,12 @@ the shared component boundaries, preserving QuickChat, zoom, and mute behavior.
   `597f6c9647718129cd7179dd520dc7f096a3dce8` after independent re-review;
   it is code-identical to `a978bf516a41ac6d8d6b84ea0cba0c687fa02217` with a
   red-before report addition, and `7935cb1f` is superseded. PR54 head
-  `3dcd45b35725afadf5e13c29258eb0e4facdc076` is stacked on that PR50 head;
-  wait for independent re-review, resolve the reported `auth_enabled`
-  discrepancy, and do not cherry-pick PR50 twice. Preserve earlier PR54
-  feedback on auth-disabled early release and optional model/onboarding failures.
+  `176221f49e1e88b773426d8a43953aa8eb72d034` is stacked on that PR50 head;
+  startup review reports 17/17 focused tests with no findings, while Auth
+  re-review still checks the open PR50 findings and reported `auth_enabled`
+  discrepancy. Do not infer clearance or cherry-pick PR50 twice. Preserve
+  earlier PR54 feedback on auth-disabled early release and optional
+  model/onboarding failures.
 - PR51/52/53 are included at the exact reviewed heads above. This is an interim
   handoff: the combined branch needs its own requested gates and independent
   integration review before any merge decision.

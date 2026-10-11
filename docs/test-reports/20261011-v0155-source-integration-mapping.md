@@ -191,3 +191,11 @@ The pass/fail record must name the candidate hash used, distinguish product beha
 3. Owner performs the version/CHANGELOG step to 0.1.55, then build the isolated VM candidate with the configured signing path.
 4. Capture per-file hash/size/version and Authenticode signer/timestamp evidence, then pass the candidate and matrix to the existing VM tester for P004.
 5. Keep merge, tag, public release, Store submission, and publication as separate owner decisions.
+
+## A-033 follow-up evidence and PR56 status (latest update)
+
+This section supersedes the earlier statement that actual Codex routing was not verified. The A-033 follow-up commit `ffe82dda9426` records real standard-chat Codex routing to `openai-codex/gpt-6-luna`; the VM trace also observed MiMo's first real response. This does not close the live-send blocker: the GPT-6 Luna end-to-end send failed at the UI start timeout, with a 21.360-second route against a 20-second header limit and 12.328 seconds spent waiting for the lock. A MiMo follow-up hit the same timeout even though the backend later completed and stored the response; reloading history made the visible error disappear. The current evidence therefore shows routing and backend completion on those attempts, alongside a failed UI outcome and lost error visibility.
+
+PR56 (`a9371aaaa8cf04169489d4b441d9808cf574deec`) is the separate production-fix PR against `release/v0.1.52`. GitHub currently reports it open and mergeable, with no formal review decision, reviews, or check runs recorded. The existing model-fix worker is reconciling the latest VM deltas represented by `ffe82dda9426` with PR56. That follow-up commit is a tester-side report/patch snapshot, not the PR56 head or an independently reviewed fix. Do not integrate PR56 until the exact reconciled fix head has independent review; then rerun the combined regressions and every AGENTS gate before preparing a candidate.
+
+The shared API model catalog work is deferred to v0.1.56 planning and is outside the v0.1.55 candidate. The current v0.1.55 blocker is specifically the standard-chat timeout/recovery and error-retention behavior. QuickChat remains deferred; Ollama Cloud remains unavailable under the reported HTTP 403 and must not be counted as product acceptance.

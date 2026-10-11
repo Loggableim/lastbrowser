@@ -326,7 +326,6 @@ CANONICAL_PROVIDERS: list[ProviderEntry] = [
     ProviderEntry("opencode-go",    "OpenCode Go",              "OpenCode Go (open models, $10/month subscription)"),
     ProviderEntry("azure-foundry",  "Azure Foundry",            "Azure Foundry (OpenAI-style or Anthropic-style endpoint — your Azure AI deployment)"),
     ProviderEntry("qwen-oauth",     "Qwen OAuth (Portal)",      "Qwen OAuth (reuses local Qwen CLI login)"),
-    ProviderEntry("antigravity",    "Antigravity",              "Antigravity (Google consumer tier — multi-account round-robin)"),
 ]
 
 # Auto-extend CANONICAL_PROVIDERS with any provider registered in providers/

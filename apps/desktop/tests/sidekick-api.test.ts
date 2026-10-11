@@ -1247,6 +1247,21 @@ describe('sidekick api client', () => {
       .rejects.toThrow('Only local WebUI API paths are allowed');
   });
 
+  it.each([
+    [{ error: { code: 'error', message: 'provider_unreachable' } }, 'HTTP 400: provider_unreachable'],
+    [{ error: { message: 'Provider rejected request', details: 'Check the selected endpoint', api_key: 'private-fixture' } }, 'HTTP 400: Provider rejected request — Check the selected endpoint'],
+    [{ detail: 'Backend not ready' }, 'HTTP 400: Backend not ready'],
+    [{ error: 'provider_http_error' }, 'HTTP 400: provider_http_error'],
+    [{ error: { unexpected: 'private-fixture' } }, 'HTTP 400'],
+    [null, 'HTTP 400'],
+    [{ error: { message: { unexpected: 'private-fixture' } }, message: 'Connection failed' }, 'HTTP 400: Connection failed']
+  ])('reports readable WebUI errors without dumping arbitrary response fields (%j)', async (payload, expected) => {
+    const fetchImpl = async () => new Response(JSON.stringify(payload), { status: 400 });
+    await expect(requestWebui('http://127.0.0.1:8787', {
+      method: 'POST', path: '/api/providers/test', body: { provider: 'ollama', base_url: 'http://localhost:11434' }
+    }, fetchImpl)).rejects.toMatchObject({ message: expected });
+  });
+
   it('aborts a hung WebUI request at its overall deadline with a sanitized error', async () => {
     vi.useFakeTimers();
     let requestSignal: AbortSignal | undefined;

@@ -1,4 +1,6 @@
 import type { NativeAvailabilityReason, NativeModelAvailability, ScopedModelSelection } from './independent-contracts.js';
+import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
+import { isRetiredProvider } from './retired-providers.js';
 
 export type ModelPickerOptionGroup = Readonly<{
   provider: string;
@@ -18,6 +20,7 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
   return (selection.groups ?? [])
     .filter(group => {
       const pid = String(group.provider_id || '').toLowerCase();
+      if (isRetiredProvider(pid)) return false;
       if (catalogStatus) {
         if (pid === 'antigravity' && String(catalogStatus.antigravity || '').toLowerCase() !== 'ready') {
           return false;
@@ -71,9 +74,11 @@ const VIRTUAL_ORCHESTRATION_MODEL_IDS = new Set([
   'smart-track-high'
 ]);
 
-export function manualModelPickerOptions<T extends Readonly<{ providerId?: string; models?: readonly Readonly<{ id?: string }>[] }>>(groups: readonly T[]): T[] {
+export function manualModelPickerOptions<T extends Readonly<{ providerId?: string; models?: readonly Readonly<{ id?: string }>[] }>>(
+  groups: readonly T[], orchestrationEnabled = AI_ORCHESTRATION_ENABLED): T[] {
   return groups.filter(group => {
     if (group.providerId) return true;
+    if (!orchestrationEnabled) return false;
     // Empty provider IDs are reserved for the renderer's fixed orchestration entries.
     // Do not let arbitrary catalog groups masquerade as selectable virtual models.
     return Boolean(group.models?.length) && group.models!.every(model => VIRTUAL_ORCHESTRATION_MODEL_IDS.has(model.id ?? ''));

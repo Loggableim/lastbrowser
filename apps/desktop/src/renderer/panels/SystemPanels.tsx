@@ -1,3 +1,4 @@
+import { isRetiredProvider } from '../retired-providers.js';
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '../appearance.css';
 import { LocalAiSetupPane } from '../components/LocalAiSetupPane.js';
@@ -77,6 +78,9 @@ import type { BrowserProfile } from '../profiles.js';
 import { ModelPolicyControls, type ModelPolicyCandidate } from '../components/ModelPolicyControls.js';
 import { IndependentAssistantClient } from '../independent-assistant-client.js';
 import { mapScopedModelPickerOptions } from '../model-picker-options.js';
+import { isModelActive, setModelActive, useActiveModelRevision } from '../active-model-selection.js';
+import { parseProviderModelId } from '../provider-model-selection.js';
+import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { canExecuteAutomaticPolicy, readObservedDecisionFromSession, requestModelPolicy, type ModelPolicyDraft, type ModelPolicyResponse } from '../model-policy-client.js';
 import { modelPolicyCopy, modelPolicyReason } from '../i18n/model-policy-copy.js';
 import { modelPolicySettingsCopy } from '../i18n/model-policy-settings-copy.js';
@@ -2119,7 +2123,13 @@ function VisionImpairedSettingsCard(): JSX.Element {
 export function normalizeSettingsSectionId(value: string): SettingsSectionId | null {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'extensions') return 'plugins';
+  if (normalized === 'teamwork' && !AI_ORCHESTRATION_ENABLED) return null;
   return (Object.keys(SETTINGS_SECTIONS) as SettingsSectionId[]).find((key) => key === normalized) ?? null;
+}
+
+export function visibleSettingsSections(orchestrationEnabled = AI_ORCHESTRATION_ENABLED): Array<[SettingsSectionId, SettingsSectionMeta]> {
+  return (Object.entries(SETTINGS_SECTIONS) as Array<[SettingsSectionId, SettingsSectionMeta]>)
+    .filter(([key]) => key !== 'teamwork' || orchestrationEnabled);
 }
 
 export function mergeAppearanceSettings(
@@ -2323,6 +2333,7 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
 
 export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
+  useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const ready = isReady(serviceStatus);
   const activeProviderScope = { browserProfileId: activeProfileId, workspacePath: activeSpacePath || null,
@@ -2534,14 +2545,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const passwordEnvLocked = settingsBoolean(settings.password_env_var, false);
   const catalogStatusMap = isRecord(modelsState.data?.catalog_status) ? (modelsState.data.catalog_status as Record<string, unknown>) : {};
   const antigravityStatus = String(catalogStatusMap.antigravity || '').toLowerCase();
-  const isAntigravityReady = antigravityStatus === 'ready';
+  const isAntigravityReady = false;
   const isAntigravityUnavailable = antigravityStatus === 'unavailable';
   const isAntigravityUnknown = !isAntigravityReady && !isAntigravityUnavailable;
   const isAntigravityUnverified = !isAntigravityReady;
   const rawModelGroups: AnyRecord[] = arrayFrom(modelsState.data, ['groups']) as AnyRecord[];
-  const allModelGroups: AnyRecord[] = isAntigravityUnverified
-    ? rawModelGroups.filter((group) => settingsText(group.provider_id || group.provider_id_canonical, '').trim().toLowerCase() !== 'antigravity')
-    : rawModelGroups;
+  const allModelGroups: AnyRecord[] = rawModelGroups.filter((group) =>
+    !isRetiredProvider(group.provider_id || group.provider_id_canonical || group.provider));
   const modelGroups: AnyRecord[] = (showUntestedBetas ? allModelGroups : allModelGroups.flatMap((group) => {
     const providerId = settingsText(group.provider_id || group.provider_id_canonical, '');
     const models = Array.isArray(group.models) ? group.models.filter(isRecord).filter(model =>
@@ -2553,7 +2563,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     const qualified = isProviderModelQualified(providerId, modelId, activeProfileId, activeBackendProfileName || 'default', window.localStorage);
     return showUntestedBetas && !qualified ? { ...model, label: `${settingsText(model.label || model.name || model.id)} · ${t('settings.panels.providers.betaUntested')}` } : model;
   }) }));
-  const activeProvider = settingsText(modelsState.data?.active_provider, settingsText(settings.provider || settings.model_provider));
+  const storedActiveProvider = settingsText(modelsState.data?.active_provider, settingsText(settings.provider || settings.model_provider));
+  const activeProvider = isRetiredProvider(storedActiveProvider) ? '' : storedActiveProvider;
   const defaultModel = settingsText(draft.default_model ?? settings.default_model ?? modelsState.data?.default_model, '');
   const defaultModelQualified = Boolean(defaultModel && activeProvider && isProviderModelQualified(activeProvider, defaultModel, activeProfileId, activeBackendProfileName || 'default', window.localStorage));
   const webuiVersion = settingsText(settings.webui_version, 'not detected');
@@ -3302,7 +3313,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     );
   }
 
-  const sectionList = Object.entries(SETTINGS_SECTIONS) as Array<[SettingsSectionId, SettingsSectionMeta]>;
+  const sectionList = visibleSettingsSections();
   const updateAvailable = updateState === 'available';
 
   return (
@@ -4358,16 +4369,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 <span>{t('settings.panels.providers.connect')}</span>
                               </button>
                             )}
-                            {option.id === 'antigravity' && (
-                              <div className="provider-antigravity-accounts">
-                                <GeminiAccountsPanel
-                                  sidekickReady={ready}
-                                  onAccountsChanged={() => void modelsState.refresh()}
-                                  catalogStatus={antigravityStatus || undefined}
-                                  providerId={option.id}
-                                />
-                              </div>
-                            )}
                             {option.id === 'openai-codex' && codexConnect && (
                               <div className="provider-connect-status" role="status" aria-live="polite">
                                 <span>{codexConnect.message}</span>
@@ -4713,6 +4714,47 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   )}
                 </SettingsCard>
 
+                <SettingsCard title={t('settings.panels.providers.activeModels')} description={t('settings.panels.providers.activeModelsDescription')}>
+                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
+                  {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
+                  {!modelsState.loading && !modelsState.error && !allModelGroups.some(group =>
+                    (Array.isArray(group.models) && group.models.length > 0)
+                    || (Array.isArray(group.extra_models) && group.extra_models.length > 0))
+                    && <p role="status">{t('settings.panels.providers.noScannedModels')}</p>}
+                  {!modelsState.loading && !modelsState.error && allModelGroups.map(group => {
+                    const providerId = settingsText(group.provider_id || group.provider_id_canonical, '').trim();
+                    const scanned = [...(Array.isArray(group.models) ? group.models : []),
+                      ...(Array.isArray(group.extra_models) ? group.extra_models : [])].filter(isRecord);
+                    const models = [...new Map(scanned.map(modelEntry => {
+                      const rawId = settingsText(modelEntry.id || modelEntry.name, '').trim();
+                      return [parseProviderModelId(rawId, providerId).model, modelEntry] as const;
+                    }).filter(([modelId]) => Boolean(modelId))).values()];
+                    if (!providerId || !models.length) return null;
+                    return <fieldset className="settings-active-model-group" key={providerId}>
+                      <legend>{settingsText(group.provider, providerId)}</legend>
+                      {models.map(modelEntry => {
+                        const rawId = settingsText(modelEntry.id || modelEntry.name, '').trim();
+                        const modelId = parseProviderModelId(rawId, providerId).model;
+                        if (!modelId) return null;
+                        return <label className="settings-active-model-row" key={`${providerId}:${modelId}`}>
+                          <input type="checkbox" checked={isModelActive(window.localStorage,
+                            { browserProfileId: activeProfileId, backendProfileName: activeBackendProfileName || 'default' }, providerId, modelId)}
+                            onChange={event => {
+                              try {
+                                setModelActive(window.localStorage,
+                                  { browserProfileId: activeProfileId, backendProfileName: activeBackendProfileName || 'default' },
+                                  providerId, modelId, event.target.checked);
+                              } catch {
+                                showToast(t('settings.panels.providers.activeModelsSaveFailed'));
+                              }
+                            }} />
+                          <span>{settingsText(modelEntry.label || modelEntry.name, modelId)} <small>{modelId}</small></span>
+                        </label>;
+                      })}
+                    </fieldset>;
+                  })}
+                </SettingsCard>
+
                 <SettingsCard title={t('settings.panels.providers.advancedRouting')} description={t('settings.panels.providers.advancedRoutingDescription')}>
                   <div className="settings-field-grid">
                     <SettingsField label={t('settings.panels.providers.provider')} description={t('settings.panels.providers.providerDescription')}>
@@ -4742,7 +4784,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
               </>
             )}
 
-            {section === 'teamwork' && (
+            {section === 'teamwork' && AI_ORCHESTRATION_ENABLED && (
               <TeamworkSettingsPanel browserProfileId={activeProfileId} workspacePath={activeSpacePath || null} backendProfileName={activeBackendProfileName} />
             )}
 

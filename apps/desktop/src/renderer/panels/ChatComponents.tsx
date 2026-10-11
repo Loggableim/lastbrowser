@@ -38,7 +38,7 @@ import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import type { DesktopChatMessage, DesktopSessionDetail, ChatRunState } from '../shell-state.js';
 import { shouldShowNativeTurnUsage, type NativeChatTurnUsage } from '../chat-usage.js';
 import { useDesktopI18n } from '../i18n.js';
-import { qualifyModelForProvider } from '../provider-model-selection.js';
+import { parseProviderModelId, qualifyModelForProvider } from '../provider-model-selection.js';
 import { ReasoningEffortPicker } from '../components/ReasoningEffortPicker.js';
 import { toBionicSegments } from '../utils/bionic-reading.js';
 import { usePanelStore } from '../stores/usePanelStore.js';
@@ -48,6 +48,7 @@ import type { CommandAction, CommandCapabilities, CommandContext } from '../Comm
 import { createChatCommandAction, parseChatCommand } from '../chat-command-registry.js';
 import { chatCommandCopy } from '../chat-command-copy.js';
 import { canSelectNativeModel, manualModelPickerOptions } from '../model-picker-options.js';
+import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { ProviderBetaCatalogToggle } from '../components/ProviderBetaCatalogToggle.js';
 import type { NativeModelAvailability } from '../independent-contracts.js';
@@ -429,6 +430,8 @@ export type ChatComposerProps = {
   modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; qualification?:ProviderChatEvidence }> }>;
   /** True when a loaded catalog exists but every provider/model pair is still unqualified. */
   emptyQualifiedCatalog?: boolean;
+  noActiveModels?: boolean;
+  onOpenModelSettings?: () => void;
   modelCatalogError?: boolean;
   antigravityCatalogUnavailable?: boolean;
   antigravityCatalogUnknown?: boolean;
@@ -481,6 +484,8 @@ export function ChatComposer({
   reasoningCapabilityState,
   modelOptions,
   emptyQualifiedCatalog = false,
+  noActiveModels = false,
+  onOpenModelSettings,
   modelCatalogError=false,
   antigravityCatalogUnavailable=false,
   antigravityCatalogUnknown=false,
@@ -503,6 +508,8 @@ export function ChatComposer({
   const showUntestedBetas = useShowUntestedProviderBetas();
   const commandCopy=chatCommandCopy(locale);
   const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;
+  const selectedModelVisible = modelOptions.some(group => group.providerId === modelProvider
+    && group.models.some(entry => parseProviderModelId(entry.id, group.providerId).model === model));
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
   const displayedModelQualified=automaticPolicy?.active?Boolean(automaticPolicy.qualified):modelQualified;
   const qualificationScope=automaticPolicy?.active
@@ -611,27 +618,19 @@ export function ChatComposer({
               <select
                 aria-label={`${t('chat.model')}: ${model || 'default'}`}
                 title={`${model || 'default'} · ${modelProvider || 'current'}`}
-                value={automaticPolicy?.active?'__lastbrowser_auto_policy__':qualifyModelForProvider(model, modelProvider)}
+                value={AI_ORCHESTRATION_ENABLED && automaticPolicy?.active?'__lastbrowser_auto_policy__':selectedModelVisible?qualifyModelForProvider(model, modelProvider):''}
                 disabled={!ready || running}
                 onChange={(event) => onModelChange(event.target.value)}
                 style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}
               >
-                {automaticPolicy&&<option value="__lastbrowser_auto_policy__" disabled={!automaticPolicy.available || !ready || running}>AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
-                {!automaticPolicy?.active&&!modelOptions.some(group=>!group.providerId&&group.models.some(entry=>entry.id===model))&& (
-                  antigravityCatalogUnavailable && (modelProvider === 'antigravity' || modelProvider?.includes('antigravity')) ? (
-                    <option value="" disabled style={{ backgroundColor: '#0b1325', color: 'rgba(232, 242, 255, 0.45)' }}>
-                      {t('settings.panels.providers.antigravityCatalogUnavailableShort')}
-                    </option>
-                  ) : (
-                    <option value={qualifyModelForProvider(model, modelProvider)} disabled={betaSelectionBlocked}>
-                      {model || 'default'} · {modelProviderLabel || modelProvider || 'current'}{betaSelectionBlocked ? ` · ${t('settings.panels.providers.betaUntested')}` : ''}
-                    </option>
-                  )
-                )}
-                {modelOptions.filter(group=>!group.providerId).map((group) => (
-                  <optgroup key={group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
+                {AI_ORCHESTRATION_ENABLED&&automaticPolicy&&<option value="__lastbrowser_auto_policy__" disabled={!automaticPolicy.available || !ready || running}>AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
+                {!selectedModelVisible && <option value="" disabled>
+                  {noActiveModels ? t('settings.panels.providers.noActiveModels') : t('chat.noManualModels')}
+                </option>}
+                {manualModelPickerOptions(modelOptions).map((group) => (
+                  <optgroup key={group.providerId || group.provider} label={group.provider} disabled={group.configured===false} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
                     {group.models.map((m) => (
-                      <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={!canSelectNativeModel(group.providerId,m.nativeAvailability)||(!m.qualified&&!showUntestedBetas)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={m.supportsIndependent===false||!canSelectNativeModel(group.providerId,m.nativeAvailability)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
                         {m.label} · {group.provider}
                       </option>
                     ))}
@@ -672,6 +671,10 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
+      {noActiveModels && !modelCatalogError && <div className="composer-model-notice" role="status">
+        <span>{t('settings.panels.providers.noActiveModels')}</span>
+        {onOpenModelSettings && <button type="button" className="secondary-action compact" onClick={onOpenModelSettings}>{t('settings.panels.providers.openActiveModels')}</button>}
+      </div>}
       {modelOptions.length>0&&emptyQualifiedCatalog&&!showUntestedBetas&&<div className="composer-model-notice composer-beta-catalog-opt-in">
         <span role="status">{t('settings.panels.providers.betaCatalogEmpty')}</span>
         <ProviderBetaCatalogToggle />
@@ -696,13 +699,13 @@ export function ChatComposer({
         </div>}
         {manualModelGroups.map(group=><fieldset key={group.providerId||group.provider} disabled={group.configured===false}>
           <legend>{group.provider}{group.configured===false&&` · ${t(group.disabledReason==='unavailable'?'chat.modelProviderUnavailable':'chat.modelProviderNotConfigured')}`}</legend>
-          {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);const betaBlocked=!entry.qualified&&!showUntestedBetas;
+          {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);
             const desiredDefault=group.providerId==='openai-codex'&&entry.id==='gpt-6-luna';
             const expiry=entry.qualification?new Date(entry.qualification.recordedAt+24*60*60*1000).toLocaleString(locale):'';
             const evidenceDetails=entry.qualification
               ? `${t('settings.panels.providers.qualificationUntil')}: ${expiry}; ${t('settings.panels.providers.browserProfileLabel')}: ${entry.qualification.browserProfileId}; ${t('settings.panels.providers.backendProfileLabel')}: ${entry.qualification.backendProfileName}; ${t('settings.panels.providers.runtimeLabel')}: ${entry.qualification.runtimeGeneration}; ${t('settings.panels.providers.buildLabel')}: ${entry.qualification.appBuildId}; ${t('settings.panels.providers.providerConfigLabel')}: ${entry.qualification.providerConfigGeneration}; ${t('settings.panels.providers.backendConfigLabel')}: ${entry.qualification.backendConfigGeneration}`
               : `${t('settings.panels.providers.betaUntested')}; ${t('settings.panels.providers.browserProfileLabel')}: ${browserProfileId||profile}; ${t('settings.panels.providers.backendProfileLabel')}: ${backendProfileName}`;
-            return <button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||entry.supportsIndependent===false||unavailable||betaBlocked||!ready||running}
+            return <button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||entry.supportsIndependent===false||unavailable||!ready||running}
             title={`${group.provider} · ${entry.id} · ${evidenceDetails}`}
             aria-pressed={model===entry.id&&modelProvider===group.providerId} onClick={()=>{onModelChange(qualifyModelForProvider(entry.id,group.providerId));setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}>
             <span className="composer-manual-model-name">{desiredDefault?'GPT-6 Luna':entry.label}{desiredDefault?` · ${t('settings.panels.providers.requestedChatDefault')}`:''}</span>

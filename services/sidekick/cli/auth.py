@@ -171,12 +171,6 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
         auth_type="oauth_external",
         inference_base_url=DEFAULT_GEMINI_CLOUDCODE_BASE_URL,
     ),
-    "antigravity": ProviderConfig(
-        id="antigravity",
-        name="Antigravity",
-        auth_type="oauth_external",
-        inference_base_url="cloudcode-pa://antigravity",
-    ),
     "lmstudio": ProviderConfig(
         id="lmstudio",
         name="LM Studio",

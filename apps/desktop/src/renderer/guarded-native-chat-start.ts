@@ -1,8 +1,12 @@
 import { isActiveTurnContextCurrent } from './goal-continuation.js';
 import type { TeamworkGroundingContext } from './bridge.js';
 import type { IndependentScope } from './independent-contracts.js';
-import { isMultiAgentModelSelection } from './provider-model-selection.js';
+import { isMultiAgentModelSelection, parseProviderModelId } from './provider-model-selection.js';
 import { isProviderModelQualified } from './provider-chat-evidence.js';
+import { isModelActive } from './active-model-selection.js';
+import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
+import { canSelectNativeModel } from './model-picker-options.js';
+import type { ScopedModelGroup } from './independent-contracts.js';
 
 export type NativeChatStartBinding = Readonly<{
   sessionId: string;
@@ -36,6 +40,7 @@ export type GuardedNativeChatStartInput = Readonly<{
   captured: NativeChatStartBinding;
   current: Readonly<Omit<NativeChatStartBinding, 'sessionId'>> & Readonly<{ sessionId: string | null }>;
   selection: NativeChatStartSelection;
+  availableModels?: readonly ScopedModelGroup[];
   allowUntestedBetas: boolean;
   qualificationBackendProfileName: string;
   storage: Pick<Storage, 'getItem' | 'setItem'>;
@@ -47,7 +52,10 @@ export type GuardedNativeChatStartBlockReason =
   | 'empty_message'
   | 'stale_context'
   | 'multi_agent_beta_required'
-  | 'model_unqualified';
+  | 'model_unqualified'
+  | 'model_inactive'
+  | 'no_active_models'
+  | 'model_unavailable';
 
 export type PreparedNativeChatStart =
   | Readonly<{ ok: true; payload: NativeChatStartPayload }>
@@ -72,8 +80,19 @@ export function prepareGuardedNativeChatStart(input: GuardedNativeChatStartInput
 
   const pair = { model: input.selection.model ?? '', provider: input.selection.provider ?? '' };
   const multiAgent = isMultiAgentModelSelection(pair);
-  if (multiAgent && !input.allowUntestedBetas) return { ok: false, reason: 'multi_agent_beta_required' };
-  if (!multiAgent && !input.allowUntestedBetas
+  if (multiAgent && (!AI_ORCHESTRATION_ENABLED || !input.allowUntestedBetas)) return { ok: false, reason: 'multi_agent_beta_required' };
+  if (input.availableModels && !multiAgent) {
+    const candidates = input.availableModels.flatMap(group => group.configured ? [...group.models, ...(group.extra_models ?? [])]
+      .filter(entry => entry.supportsIndependent && canSelectNativeModel(group.provider_id, entry.nativeAvailability))
+      .map(entry => ({ provider: group.provider_id, model: parseProviderModelId(entry.id, group.provider_id).model })) : []);
+    const scope = { browserProfileId: input.captured.profileId, backendProfileName: input.captured.backendProfileName };
+    const active = candidates.filter(candidate => isModelActive(input.storage, scope, candidate.provider, candidate.model));
+    if (!active.length) return { ok: false, reason: 'no_active_models' };
+    if (!isModelActive(input.storage, scope, pair.provider, pair.model)) return { ok: false, reason: 'model_inactive' };
+    if (!active.some(candidate => candidate.provider === pair.provider && candidate.model === pair.model)) {
+      return { ok: false, reason: 'model_unavailable' };
+    }
+  } else if (!multiAgent && !input.allowUntestedBetas
     && (!pair.provider || !pair.model || !isProviderModelQualified(
       pair.provider,
       pair.model,

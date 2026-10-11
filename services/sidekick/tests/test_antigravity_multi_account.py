@@ -409,7 +409,7 @@ def test_oauth_flow_does_not_persist_on_malformed_onboarding_json(monkeypatch):
     assert persisted == []
 
 
-def test_antigravity_is_listed_as_oauth_provider_before_account_connection(pool_env, monkeypatch):
+def test_antigravity_is_not_listed_before_account_connection(pool_env, monkeypatch):
     from cli import auth as auth_mod
     from web.api import providers
 
@@ -425,17 +425,10 @@ def test_antigravity_is_listed_as_oauth_provider_before_account_connection(pool_
     monkeypatch.setattr(auth_mod, "get_auth_status", lambda _provider_id: {"logged_in": False})
 
     result = providers.get_providers()["providers"]
-    antigravity = next(provider for provider in result if provider["id"] == "antigravity")
-
-    assert antigravity["is_oauth"] is True
-    assert antigravity["configurable"] is False
-    assert antigravity["has_key"] is False
-    assert antigravity["models"] == [
-        {"id": "gemini-3-flash-preview", "label": "Gemini 3 Flash Preview"}
-    ]
+    assert all(provider["id"] != "antigravity" for provider in result)
 
 
-def test_antigravity_provider_status_reflects_round_robin_accounts(pool_env, monkeypatch):
+def test_antigravity_provider_is_hidden_with_legacy_accounts(pool_env, monkeypatch):
     from contextlib import nullcontext
     from cli import auth as auth_mod
     from web.api import providers
@@ -451,13 +444,8 @@ def test_antigravity_provider_status_reflects_round_robin_accounts(pool_env, mon
     monkeypatch.setattr(profiles, "cron_profile_context", nullcontext)
 
     result = providers.get_providers()["providers"]
-    antigravity = next(provider for provider in result if provider["id"] == "antigravity")
-
-    assert antigravity["is_oauth"] is True
-    assert antigravity["has_key"] is True
-    assert antigravity["oauth_connected"] is True
-    assert antigravity["auth_state"] == "connected"
-    assert antigravity["oauth_email"] == "connected@example.com"
+    assert all(provider["id"] != "antigravity" for provider in result)
+    assert ag.list_connected_accounts()[0]["email"] == "connected@example.com"
 
 
 def test_antigravity_oauth_worker_pins_credentials_to_starting_profile(tmp_path, monkeypatch):
@@ -652,16 +640,14 @@ def test_runtime_resolver_requires_connected_account(pool_env, monkeypatch):
     from cli.runtime_provider import resolve_runtime_provider
     with pytest.raises(Exception) as excinfo:
         resolve_runtime_provider(requested="antigravity")
-    assert "antigravity" in str(excinfo.value).lower() or "No Antigravity account" in str(excinfo.value)
+    assert "removed" in str(excinfo.value).lower()
 
 
-def test_runtime_resolver_returns_marker_base_url_with_account(pool_env):
+def test_runtime_resolver_rejects_retired_provider_with_account(pool_env):
     _add_account("ready@example.com")
     from cli.runtime_provider import resolve_runtime_provider
-    resolved = resolve_runtime_provider(requested="antigravity")
-    assert resolved["provider"] == "antigravity"
-    assert resolved["api_mode"] == "chat_completions"
-    assert resolved["base_url"] == "cloudcode-pa://antigravity"
+    with pytest.raises(Exception, match="removed"):
+        resolve_runtime_provider(requested="antigravity")
 
 
 def test_provider_alias_resolution():
@@ -843,7 +829,7 @@ def test_antigravity_quota_status_is_account_scoped_and_does_not_infer_exhaustio
         return []
 
     monkeypatch.setattr(google_code_assist, "retrieve_user_quota", quota_lookup)
-    result = providers.get_provider_quota("antigravity")
+    result = providers._antigravity_quota_status("Antigravity")
 
     assert seen == [
         ("token-first@example.com", "project-first@example.com", ""),
@@ -870,7 +856,7 @@ def test_antigravity_quota_status_reports_disabled_control_plane_without_claimin
         ),
     )
 
-    result = providers.get_provider_quota("antigravity")
+    result = providers._antigravity_quota_status("Antigravity")
 
     assert result["status"] == "unsupported"
     assert result["quota"][0]["status"] == "unsupported"
@@ -962,16 +948,9 @@ def test_antigravity_provider_status_reports_oauth_key_source_when_connected(poo
     monkeypatch.setattr(profiles, "cron_profile_context", nullcontext)
 
     result = providers.get_providers()["providers"]
-    assert [provider["id"] for provider in result] == ["antigravity"]
-    assert generic_auth_status_calls == ["antigravity"]
-    antigravity = next(provider for provider in result if provider["id"] == "antigravity")
-
-    assert antigravity["is_oauth"] is True
-    assert antigravity["has_key"] is True
-    assert antigravity["oauth_connected"] is True
-    assert antigravity["auth_state"] == "connected"
-    assert antigravity["key_source"] == "oauth"
-    assert antigravity["oauth_email"] == "user@example.com"
+    assert result == []
+    assert generic_auth_status_calls == []
+    assert ag.list_connected_accounts()[0]["email"] == "user@example.com"
 
 
 def test_quota_429_does_not_disable_account_or_mark_exhausted(pool_env):

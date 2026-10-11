@@ -5885,10 +5885,7 @@ def handle_get(handler, parsed) -> bool:
     # ── Antigravity multi-account management (GET) ─────────────────────────
     # GET /api/antigravity/accounts → list connected accounts (no secrets)
     if parsed.path == "/api/antigravity/accounts":
-        from runtime import antigravity_oauth as _ag_oauth
-        from web.api.profiles import cron_profile_context
-        with cron_profile_context():
-            return j(handler, _ag_oauth.get_antigravity_auth_status())
+        return j(handler, {"ok": False, "error": "This provider has been removed."}, 410)
 
     # ── Cron API (GET) ──
     # All cron handlers touch cron.jobs which resolves SIDEKICK_HOME from
@@ -9086,17 +9083,7 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
     # ── Antigravity multi-account management (POST) ────────────────────────
     # POST /api/antigravity/accounts → {"action": "remove", "email": "..."}
     if parsed.path == "/api/antigravity/accounts":
-        from runtime import antigravity_oauth as _ag_oauth
-        from web.api.profiles import cron_profile_context
-        action = str((body or {}).get("action") or "").strip().lower()
-        if action == "remove":
-            email = str((body or {}).get("email") or "").strip()
-            if not email:
-                return bad(handler, "email is required")
-            with cron_profile_context():
-                removed = _ag_oauth.remove_account(email)
-            return j(handler, {"ok": bool(removed), "email": email})
-        return bad(handler, "action must be 'remove'")
+        return j(handler, {"ok": False, "error": "This provider has been removed."}, 410)
 
     # â”€â”€ Discord Bot API (POST) â”€â”€
     if parsed.path.startswith("/api/discord/"):

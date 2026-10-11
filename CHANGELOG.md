@@ -5,6 +5,20 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.54] - 2026-10-11 (local test candidate)
+
+### Fixes
+- Preserve named Sidekick provider profiles and their selections across backend restarts while keeping independent profiles isolated.
+- Retire Antigravity provider entries from onboarding, settings, and model pickers, including legacy aliases; preserve unrelated provider configuration.
+- Let users choose active models, retain explicit opt-outs across rescans, and show a usable fallback or Settings link when a selected model becomes unavailable. Keep AI Orchestration hidden unless its feature flag is enabled.
+- Show readable connection errors for the Ollama test action instead of an object placeholder.
+- Make Ctrl+B in Zen mode toggle the sidebar overlay without changing the underlying layout, and cover first-run navigation clicks in the desktop smoke suite.
+
+### Verification
+- Source integration and PR mapping: `docs/test-reports/20261011-v0154-bundled-integration.md`.
+- Candidate package, signature, installation, and start evidence: `docs/test-reports/20261011-v0154-local-candidate-chatgpt-worker-6.md`.
+- This is a local test candidate; Cid's hands-on acceptance and public release decision are pending.
+
 ## [0.1.53] - 2026-10-11
 
 ### Fixes

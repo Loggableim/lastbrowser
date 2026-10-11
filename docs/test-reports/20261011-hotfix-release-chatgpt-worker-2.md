@@ -34,3 +34,14 @@ Candidate source tree: `6bae8d70` (the package was built from this exact tracked
 
 - Website proxy/feed and localized download references still need to match these signed candidate hashes before a public website update.
 - This report records a locally built candidate only. No tag, GitHub release, deployment, or public upload was performed.
+
+
+## Nachtrag, verifiziert am 11. Oktober 2026
+
+Der frühere Abschnitt „Still required before publication“ war ein Zwischenstand vor der Freigabe und ist durch diesen Nachtrag ersetzt:
+
+- Tag `v0.1.53` und öffentliches GitHub-Release sind live: https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.53 (veröffentlicht 2026-10-11 01:42:02 UTC).
+- GitHub API meldet alle vier Release-Assets als hochgeladen; Setup- und Portable-Digests sowie Größen stimmen mit den lokal geprüften Paketen überein.
+- Public `latest.yml` liefert HTTP 200 und enthält beide v0.1.53-Artefakte. Website-Proxy, lokalisierte Seiten und RSS werden getrennt in PR #32 aktualisiert; kein Website-Deploy wurde ausgeführt.
+- `apps/desktop/tests/public-downloads.test.ts` wurde so angepasst, dass beide veröffentlichten, signierten Paare v0.1.52 und v0.1.53 abgedeckt sind, während die bekannten v0.1.45/v0.1.34-Downloadpfade ausgeschlossen bleiben. Gezielter Lauf: 5/5 bestanden.
+- Danach vollständiger Lauf `npm run test:run` auf diesem Hotfix-Worktree: 215 Dateien, 1.967 Tests bestanden.

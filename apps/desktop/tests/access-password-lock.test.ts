@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { canReleaseAccessGateFromStartupPreflight, canRenderBrowserForAccessAuth } from '../src/renderer/access-auth.js';
+import { initialAccessAuthGateState, reduceAccessAuthGate } from '../src/renderer/access-auth-gate.js';
 
 const appPath = path.resolve(process.cwd(), 'src/renderer/App.tsx');
 const settingsPanelsPath = path.resolve(process.cwd(), 'src/renderer/panels/SystemPanels.tsx');
@@ -55,6 +56,87 @@ describe('desktop access password lock', () => {
     expect(canReleaseAccessGateFromStartupPreflight('disabled')).toBe(true);
     expect(canReleaseAccessGateFromStartupPreflight('enabled')).toBe(false);
     expect(canReleaseAccessGateFromStartupPreflight('unknown')).toBe(false);
+  });
+
+  it('keeps the real auth consumer locked when a disabled preflight resolves after a lock event', () => {
+    const preflightGeneration = initialAccessAuthGateState.generation;
+    const locked = reduceAccessAuthGate(initialAccessAuthGateState, { type: 'lock' });
+    const afterLatePreflight = reduceAccessAuthGate(locked, {
+      type: 'preflight', generation: preflightGeneration, scopeId: 'profile-a', policy: 'disabled'
+    });
+
+    expect(afterLatePreflight.required).toBe(true);
+    expect(afterLatePreflight.checked).toBe(true);
+    expect(canRenderBrowserForAccessAuth(afterLatePreflight.checked, {
+      auth_enabled: afterLatePreflight.required, logged_in: !afterLatePreflight.required
+    })).toBe(false);
+  });
+
+  it('invalidates pending auth status on lock and pending results on scope change', () => {
+    const firstScope = reduceAccessAuthGate(initialAccessAuthGateState, { type: 'scope-change', scopeId: 'profile-a' });
+    const statusGeneration = firstScope.generation;
+    const locked = reduceAccessAuthGate(firstScope, { type: 'lock' });
+    const afterLateStatus = reduceAccessAuthGate(locked, {
+      type: 'status', generation: statusGeneration, auth: { auth_enabled: false, logged_in: false }
+    });
+    expect(afterLateStatus.required).toBe(true);
+
+    const beforeScopeSwitch = reduceAccessAuthGate(initialAccessAuthGateState, { type: 'scope-change', scopeId: 'profile-a' });
+    const afterScopeSwitch = reduceAccessAuthGate(beforeScopeSwitch, { type: 'scope-change', scopeId: 'profile-b' });
+    const staleScopeResult = reduceAccessAuthGate(afterScopeSwitch, {
+      type: 'preflight', generation: beforeScopeSwitch.generation, scopeId: 'profile-a', policy: 'disabled'
+    });
+    expect(staleScopeResult).toMatchObject({ checked: false, required: true, scopeId: 'profile-b' });
+  });
+
+  it('allows a fresh retry or verified login while remaining fail-closed for enabled and unknown policy', () => {
+    const locked = reduceAccessAuthGate(initialAccessAuthGateState, { type: 'lock' });
+    const retry = reduceAccessAuthGate(locked, { type: 'retry' });
+    expect(reduceAccessAuthGate(retry, {
+      type: 'preflight', generation: retry.generation, scopeId: 'profile-a', policy: 'disabled'
+    })).toMatchObject({ checked: true, required: false });
+
+    const enabled = reduceAccessAuthGate(initialAccessAuthGateState, {
+      type: 'preflight', generation: 0, scopeId: 'profile-a', policy: 'enabled'
+    });
+    const unknown = reduceAccessAuthGate(initialAccessAuthGateState, {
+      type: 'preflight', generation: 0, scopeId: 'profile-a', policy: 'unknown'
+    });
+    expect(enabled.checked).toBe(false);
+    expect(unknown.checked).toBe(false);
+    const unknownStatus = reduceAccessAuthGate(initialAccessAuthGateState, {
+      type: 'status', generation: 0, auth: { logged_in: false }
+    });
+    expect(unknownStatus).toMatchObject({ checked: true, required: true });
+
+    const loginAttempt = reduceAccessAuthGate(locked, { type: 'retry' });
+    const loggedIn = reduceAccessAuthGate(loginAttempt, { type: 'login-success', generation: loginAttempt.generation });
+    expect(loggedIn).toMatchObject({ checked: true, required: false });
+
+    const pendingLoginGeneration = loginAttempt.generation;
+    const relocked = reduceAccessAuthGate(loginAttempt, { type: 'lock' });
+    const staleLogin = reduceAccessAuthGate(relocked, { type: 'login-success', generation: pendingLoginGeneration });
+    expect(staleLogin).toMatchObject({ checked: true, required: true });
+  });
+
+  it('keeps auth disabled usable when Python is offline while blocking enabled and unknown auth', () => {
+    const disabled = reduceAccessAuthGate(initialAccessAuthGateState, {
+      type: 'preflight', generation: 0, scopeId: 'profile-a', policy: 'disabled'
+    });
+    const sidekickTransportReady = false;
+    expect(sidekickTransportReady).toBe(false);
+    expect(canRenderBrowserForAccessAuth(disabled.checked, {
+      auth_enabled: disabled.required, logged_in: !disabled.required
+    })).toBe(true);
+
+    for (const policy of ['enabled', 'unknown'] as const) {
+      const blocked = reduceAccessAuthGate(initialAccessAuthGateState, {
+        type: 'preflight', generation: 0, scopeId: 'profile-a', policy
+      });
+      expect(canRenderBrowserForAccessAuth(blocked.checked, {
+        auth_enabled: policy === 'enabled', logged_in: false
+      })).toBe(false);
+    }
   });
 
   it('shows the disabled auth state after removing the password gate', () => {

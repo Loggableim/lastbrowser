@@ -367,6 +367,18 @@ describe('Vision-Impaired 2.0 §5: super tabs, chrome & click targets (CSS)', ()
     ).toContain('min-height: 62px');
   });
 
+  it('keeps Zen reveal hit areas below the effective accessible titlebar height', () => {
+    expect(block('.zen-left-hover-sensor {')).toContain('top: var(--zen-titlebar-inset, 42px)');
+    expect(block('.zen-sidebar-overlay {')).toContain('top: var(--zen-titlebar-inset, 42px)');
+    expect(block('.app-shell.zen-mode {')).toContain('--zen-titlebar-inset: var(--titlebar-height, 42px)');
+    expect(block("html[data-a11y-enlarged-topbar='true'] .app-shell.zen-mode {")).toContain(
+      '--zen-titlebar-inset: max(var(--titlebar-height, 42px), 54px)'
+    );
+    expect(block("html[data-a11y-enlarged-topbar='true'][data-a11y-min-target='64'] .app-shell.zen-mode {")).toContain(
+      '--zen-titlebar-inset: max(var(--titlebar-height, 42px), 62px)'
+    );
+  });
+
   it('binds all buttons to the --lb-min-target-size token (Feature 58)', () => {
     const targetBlock = block("html[data-a11y-vi-enabled='true'] body button,");
     expect(targetBlock).toContain('min-height: var(--lb-min-target-size, 48px)');

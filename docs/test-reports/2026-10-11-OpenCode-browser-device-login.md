@@ -43,6 +43,8 @@ Follow-up after the human approval: the embedded Console visibly reports `Device
 
 The signed-in Console's Integrations, Settings > General and Settings > Security expose no custom OAuth client registration option. No registration was created and no account/security setting was changed. The official device-flow documentation explicitly permits other CLIs to use their own client ID; a way to customize the displayed client name is still unverified.
 
-No automated authentication-dialog interaction or model call was performed in these checks. A repair and renewed live verification are in progress.
+Repair pushed to PR #61 as `74d2e547`: accepts the documented native `@opencode/ai/providers/...` packages, preserves model IDs, filters disabled models, retains valid OAuth credentials when catalog validation fails, and displays a safe phase-specific error. Gateway restrictions remain in place. Backend validation: 38 combined tests passed, followed by 27 latest device tests passed (overlapping counts). Renderer/i18n focused validation: 48 passed; renderer typecheck passed. Desktop build passed (8.28 seconds), store preflight 39 passed / 2 warnings / 0 failures, Python compileall passed.
+
+The repaired source build was restarted and the ordinary Settings sign-in button opened the embedded OpenCode authorization screen again. A fresh human approval is required because the previous implementation discarded the grant after catalog rejection. No automated authentication-dialog interaction or model call was performed. First response, follow-up context and stop/recovery with the OpenCode engine remain blocked on that approval and catalog verification.
 
 No credentials, auth/config files, databases, private device codes or raw provider logs are included in this report.

@@ -14,5 +14,7 @@ describe('notification and activity settings wiring', () => {
     expect(appSource).toContain('resolveAutoUpdateCheckPreference(desktopSettings, desktopSettingsHydrated)');
     expect(appSource).toContain('if (enabled === null) return;');
     expect(appSource).toContain('window.lastbrowser.updates.setAutoCheckEnabled(enabled)');
+    expect(source).toContain('window.lastbrowser.updates.setChannel(next)');
+    expect(source).toContain('window.lastbrowser?.updates?.preferences?.()');
   });
 });

@@ -8,6 +8,19 @@ export type LocalReleaseNotes = { version: string; changes: readonly string[] };
 // the current UI or from an online changelog at runtime.
 const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, readonly string[]> }> = [
   {
+    version: '0.1.53',
+    changes: {
+      en: ['First-run setup no longer blocks the sidebar or top navigation.', 'Escape lets you leave the AI choice and finish browser-only setup safely.'],
+      de: ['Die Ersteinrichtung blockiert die Seitenleiste und obere Navigation nicht mehr.', 'Mit Escape lässt sich die KI-Auswahl verlassen und die reine Browser-Einrichtung sicher abschließen.'],
+      it: ['La configurazione iniziale non blocca più la barra laterale o la navigazione superiore.', 'Con Escape puoi uscire dalla scelta dell’IA e completare in sicurezza la configurazione del solo browser.'],
+      es: ['La configuración inicial ya no bloquea la barra lateral ni la navegación superior.', 'Escape permite salir de la selección de IA y completar de forma segura la configuración solo del navegador.'],
+      fr: ['La première configuration ne bloque plus la barre latérale ni la navigation supérieure.', 'Échap permet de quitter le choix de l’IA et de terminer la configuration du navigateur seul en toute sécurité.'],
+      'pt-BR': ['A configuração inicial não bloqueia mais a barra lateral nem a navegação superior.', 'Escape permite sair da escolha de IA e concluir com segurança a configuração somente do navegador.'],
+      ru: ['Первоначальная настройка больше не блокирует боковую панель и верхнюю навигацию.', 'Клавиша Escape позволяет выйти из выбора ИИ и безопасно завершить настройку только браузера.'],
+      ja: ['初回設定でサイドバーや上部ナビゲーションが操作できなくなる問題を修正しました。', 'Escape キーで AI の選択を終了し、ブラウザーのみの設定を安全に完了できます。']
+    }
+  },
+  {
     version: '0.1.48',
     changes: {
       en: ['Complete or cancel persistent goals with confirmed saved state.', 'Teamwork discards late results after Stop and distinguishes timeouts.', 'Accent colors apply to browser controls; page tools are in the action menu.', 'Hardware checks accept stable redirected profile paths.', 'Downloaded updates retain the normal quit path when shutdown times out.'],
@@ -103,12 +116,32 @@ export function releaseNotesBetween(
   if (!isVersion(candidate.toVersion)
     || (candidate.fromVersion !== null
       && (!isVersion(candidate.fromVersion) || compareVersions(candidate.toVersion, candidate.fromVersion) <= 0))) return [];
-  return releaseNotes
+  const notes = releaseNotes
     .filter((entry) => isVersion(entry.version)
       && (candidate.fromVersion === null || compareVersions(entry.version, candidate.fromVersion) > 0)
       && compareVersions(entry.version, candidate.toVersion) <= 0)
     .sort((a, b) => compareVersions(a.version, b.version))
     .map((entry) => ({ version: entry.version, changes: entry.changes[locale] || entry.changes.en }));
+  if (notes.some((entry) => compareVersions(entry.version, candidate.toVersion) === 0)) return notes;
+
+  return [...notes, {
+    version: candidate.toVersion,
+    changes: [updateConfirmation(candidate.toVersion, locale)]
+  }];
+}
+
+function updateConfirmation(version: string, locale: DesktopLocaleId): string {
+  const messages: Record<DesktopLocaleId, string> = {
+    en: `Lastbrowser is now updated to version ${version}.`,
+    de: `Lastbrowser wurde auf Version ${version} aktualisiert.`,
+    it: `Lastbrowser è stato aggiornato alla versione ${version}.`,
+    es: `Lastbrowser se ha actualizado a la versión ${version}.`,
+    fr: `Lastbrowser a été mis à jour vers la version ${version}.`,
+    'pt-BR': `O Lastbrowser foi atualizado para a versão ${version}.`,
+    ru: `Lastbrowser обновлён до версии ${version}.`,
+    ja: `Lastbrowser をバージョン ${version} に更新しました。`
+  };
+  return messages[locale] || messages.en;
 }
 
 function compareVersions(left: string, right: string): number {

@@ -2347,6 +2347,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const pluginsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/plugins' }), [ready], ready);
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null);
   const updateStatusRef = useRef<DesktopUpdateStatus | null>(null);
+  const [updateChannel, setUpdateChannel] = useState<'stable' | 'preview'>('stable');
+  const [updateChannelLoading, setUpdateChannelLoading] = useState(true);
   const updateInstallPendingRef = useRef(false);
   const [updateInstallPending, setUpdateInstallPending] = useState(false);
   const [updateInstallError, setUpdateInstallError] = useState('');
@@ -2358,6 +2360,17 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   }, (error) => {
     setUpdateStatusReadError(error instanceof Error ? error.message : String(error));
   }), []);
+  useEffect(() => {
+    let active = true;
+    void window.lastbrowser?.updates?.preferences?.().then((preferences) => {
+      if (active) setUpdateChannel(preferences.channel === 'preview' ? 'preview' : 'stable');
+    }).catch((error) => {
+      if (active) showToast(`Could not load update channel: ${error instanceof Error ? error.message : String(error)}`);
+    }).finally(() => {
+      if (active) setUpdateChannelLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
   const [section, setSection] = useState<SettingsSectionId>('conversation');
   const [draft, setDraft] = useState<AnyRecord>({});
   const draftRef = useRef<AnyRecord>({});
@@ -4250,6 +4263,31 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       checked={autoUpdateChecksEnabled}
                       onChange={(value) => updateDraftToggle('check_for_updates', value)}
                     />
+                    <SettingsField
+                      label={t('settings.panels.notifications.updateChannel')}
+                      description={t('settings.panels.notifications.updateChannelDescription')}
+                    >
+                      <select
+                        value={updateChannel}
+                        disabled={updateChannelLoading || ['available', 'downloading', 'downloaded'].includes(updateStatus?.state || '')}
+                        onChange={(event) => {
+                          const previous = updateChannel;
+                          const next = event.currentTarget.value === 'preview' ? 'preview' : 'stable';
+                          setUpdateChannel(next);
+                          void window.lastbrowser.updates.setChannel(next).then((result) => {
+                            if (result.persisted) return;
+                            setUpdateChannel(previous);
+                            showToast('Could not save the update channel.');
+                          }).catch((error) => {
+                            setUpdateChannel(previous);
+                            showToast(`Could not save update channel: ${error instanceof Error ? error.message : String(error)}`);
+                          });
+                        }}
+                      >
+                        <option value="stable">{t('settings.panels.notifications.updateChannelStable')}</option>
+                        <option value="preview">{t('settings.panels.notifications.updateChannelPreview')}</option>
+                      </select>
+                    </SettingsField>
                   </div>
                 </SettingsCard>
                 {/* === Accessibility Card === */}

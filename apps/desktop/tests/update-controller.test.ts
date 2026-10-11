@@ -6,6 +6,8 @@ type FakeUpdater = EventEmitter & {
   autoDownload: boolean;
   autoInstallOnAppQuit: boolean;
   allowPrerelease: boolean;
+  allowDowngrade: boolean;
+  channel: string;
   checkCalls: number;
   downloadCalls: number;
   quitCalls: number;
@@ -21,6 +23,8 @@ function fakeUpdater(): FakeUpdater {
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = false;
   updater.allowPrerelease = false;
+  updater.allowDowngrade = false;
+  updater.channel = 'latest';
   updater.checkCalls = 0;
   updater.downloadCalls = 0;
   updater.quitCalls = 0;
@@ -39,6 +43,103 @@ function fakeUpdater(): FakeUpdater {
 }
 
 describe('update controller', () => {
+  it('defaults to background downloads, silent install-on-quit, and the stable release channel', () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({
+      updater,
+      isPackaged: true,
+      currentVersion: '0.1.3'
+    });
+
+    expect(updater.autoDownload).toBe(true);
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+    expect(updater.allowPrerelease).toBe(false);
+    expect(updater.allowDowngrade).toBe(false);
+    expect(updater.channel).toBe('latest');
+    expect(controller.getStatus().state).toBe('idle');
+  });
+
+  it('applies automatic-update and channel preferences without enabling prereleases on stable', () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '0.1.3' });
+
+    controller.setPreferences({ automaticUpdatesEnabled: false, channel: 'preview' });
+    expect(updater.autoDownload).toBe(false);
+    expect(updater.autoInstallOnAppQuit).toBe(false);
+    expect(updater.allowPrerelease).toBe(true);
+    expect(updater.channel).toBe('beta');
+
+    controller.setPreferences({ automaticUpdatesEnabled: true, channel: 'stable' });
+    expect(updater.autoDownload).toBe(true);
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+    expect(updater.allowPrerelease).toBe(false);
+    expect(updater.channel).toBe('latest');
+  });
+
+  it('coalesces concurrent checks and preserves a downloaded update across later events', async () => {
+    const updater = fakeUpdater();
+    let finish!: () => void;
+    updater.checkForUpdates = () => {
+      updater.checkCalls += 1;
+      return new Promise<void>((resolve) => { finish = resolve; });
+    };
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '0.1.3' });
+    const first = controller.checkForUpdates();
+    const second = controller.checkForUpdates();
+    expect(updater.checkCalls).toBe(1);
+    updater.emit('update-downloaded', { version: '0.1.4' });
+    finish();
+    await Promise.all([first, second]);
+    await controller.checkForUpdates();
+    updater.emit('checking-for-update');
+    updater.emit('update-not-available');
+    updater.emit('error', new Error('temporary network failure'));
+    expect(controller.getStatus()).toMatchObject({ state: 'downloaded', availableVersion: '0.1.4', percent: 100 });
+    expect(updater.checkCalls).toBe(1);
+  });
+
+  it('does not start a duplicate manual download while autoDownload owns the transfer', async () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '0.1.3' });
+    updater.emit('update-available', { version: '0.1.4' });
+
+    await controller.downloadUpdate();
+
+    expect(updater.downloadCalls).toBe(0);
+  });
+
+  it('keeps a verified download available when the silent installer cannot launch', () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '0.1.3' });
+    updater.emit('update-downloaded', { version: '0.1.4' });
+    updater.quitAndInstall = () => { throw new Error('installer could not start'); };
+
+    expect(controller.quitAndInstall()).toMatchObject({ state: 'downloaded', message: 'installer could not start' });
+    updater.quitAndInstall = (...args: unknown[]) => { updater.quitCalls += 1; updater.quitArgs = args; };
+    controller.quitAndInstall();
+
+    expect(updater.quitCalls).toBe(1);
+    expect(updater.quitArgs).toEqual([true, true]);
+  });
+
+  it.each([
+    'sha512 checksum does not match',
+    'ERR_UPDATER_INVALID_SIGNATURE: publisher mismatch',
+    'ENOSPC: no space left on device'
+  ])('does not install a failed download and allows a later retry (%s)', async (errorMessage) => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '0.1.3' });
+    updater.emit('update-available', { version: '0.1.4' });
+    updater.emit('error', new Error(errorMessage));
+
+    expect(controller.getStatus()).toMatchObject({ state: 'error', message: errorMessage });
+    expect(controller.quitAndInstall().state).toBe('error');
+    expect(updater.quitCalls).toBe(0);
+
+    await controller.downloadUpdate();
+    expect(updater.downloadCalls).toBe(1);
+  });
+
   it('skips update checks for local development unless explicitly forced', async () => {
     const updater = fakeUpdater();
     const controller = createUpdateController({

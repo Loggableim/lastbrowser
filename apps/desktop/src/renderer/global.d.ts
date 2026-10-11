@@ -111,6 +111,11 @@ type LastbrowserUpdateStatus = {
   message: string | null;
 };
 
+type LastbrowserUpdatePreferences = {
+  automaticUpdatesEnabled: boolean;
+  channel: 'stable' | 'preview';
+};
+
 type WebuiBridgeRequest = {
   method?: 'GET' | 'HEAD' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   path: string;
@@ -479,12 +484,14 @@ declare global {
       };
       updates: {
         status: () => Promise<LastbrowserUpdateStatus>;
+        preferences: () => Promise<LastbrowserUpdatePreferences>;
         check: () => Promise<LastbrowserUpdateStatus>;
         download: () => Promise<LastbrowserUpdateStatus>;
         install: () => Promise<LastbrowserUpdateStatus>;
         whatsNewCandidate: () => Promise<{ fromVersion: string | null; toVersion: string } | null>;
         acknowledgeWhatsNew: (version: string) => Promise<{ acknowledged: boolean }>;
         setAutoCheckEnabled: (enabled: boolean) => Promise<{ enabled: boolean }>;
+        setChannel: (channel: 'stable' | 'preview') => Promise<LastbrowserUpdatePreferences & { persisted: boolean }>;
         onStatus: (callback: (status: LastbrowserUpdateStatus) => void) => () => void;
       };
       terminal: {

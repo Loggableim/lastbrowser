@@ -263,12 +263,14 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
   },
   updates: {
     status: () => ipcRenderer.invoke('lastbrowser:updates:status'),
+    preferences: () => ipcRenderer.invoke('lastbrowser:updates:preferences'),
     check: () => ipcRenderer.invoke('lastbrowser:updates:check'),
     download: () => ipcRenderer.invoke('lastbrowser:updates:download'),
     install: () => ipcRenderer.invoke('lastbrowser:updates:install'),
     whatsNewCandidate: () => ipcRenderer.invoke('lastbrowser:updates:whats-new-candidate'),
     acknowledgeWhatsNew: (version: string) => ipcRenderer.invoke('lastbrowser:updates:whats-new-acknowledge', version),
     setAutoCheckEnabled: (enabled: boolean) => ipcRenderer.invoke('lastbrowser:updates:set-auto-check-enabled', enabled),
+    setChannel: (channel: 'stable' | 'preview') => ipcRenderer.invoke('lastbrowser:updates:set-channel', channel),
     onStatus: (callback: (status: unknown) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
       ipcRenderer.on('lastbrowser:updates:status', listener);

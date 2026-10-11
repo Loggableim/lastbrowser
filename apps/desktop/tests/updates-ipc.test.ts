@@ -18,6 +18,7 @@ const { handlers, updater, files, appVersion } = vi.hoisted(() => {
 });
 const resourcesRoot = 'C:/lastbrowser-test-resources';
 const variantMarkerPath = path.join(resourcesRoot, 'lastbrowser-build-variant.json');
+const updatePreferencesPath = path.join('C:/lastbrowser-test-user-data', 'update-preferences.json');
 const priorResourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
 
 vi.mock('electron', () => ({
@@ -71,7 +72,7 @@ describe('native update preference IPC', () => {
     const manualCheck = handlers.get('lastbrowser:updates:check');
     expect(setEnabled).toBeDefined();
     expect(manualCheck).toBeDefined();
-    expect(setEnabled?.({}, false)).toEqual({ enabled: false });
+    expect(setEnabled?.({}, false)).toEqual({ enabled: false, persisted: true });
     await vi.advanceTimersByTimeAsync(7000);
     expect(updater.checkForUpdates).not.toHaveBeenCalled();
 
@@ -83,12 +84,59 @@ describe('native update preference IPC', () => {
   it('schedules one automatic check after the renderer enables updates', async () => {
     startAutoUpdateChecks();
     const setEnabled = handlers.get('lastbrowser:updates:set-auto-check-enabled');
-    expect(setEnabled?.({}, true)).toEqual({ enabled: true });
+    expect(setEnabled?.({}, true)).toEqual({ enabled: true, persisted: true });
     await vi.advanceTimersByTimeAsync(5999);
     expect(updater.checkForUpdates).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
+  });
+
+  it('defaults to stable automatic updates and persists the selected channel in user data', () => {
+    expect(handlers.get('lastbrowser:updates:preferences')?.({})).toEqual({ automaticUpdatesEnabled: true, channel: 'stable' });
+    expect(updater.autoDownload).toBe(true);
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+    expect(updater.allowPrerelease).toBe(false);
+    expect(updater.allowDowngrade).toBe(false);
+    expect(updater.channel).toBe('latest');
+
+    const setChannel = handlers.get('lastbrowser:updates:set-channel');
+    expect(setChannel?.({}, 'preview')).toMatchObject({ automaticUpdatesEnabled: true, channel: 'preview', persisted: true });
+    expect(updater.allowPrerelease).toBe(true);
+    expect(updater.channel).toBe('beta');
+    expect(JSON.parse(files.get(updatePreferencesPath) || '{}')).toMatchObject({ channel: 'preview' });
+
+    registerUpdateIpc(() => null);
+    expect(handlers.get('lastbrowser:updates:preferences')?.({})).toEqual({ automaticUpdatesEnabled: true, channel: 'preview' });
+  });
+
+  it('disables automatic download and install when the user opts out but keeps manual checks', async () => {
+    const setEnabled = handlers.get('lastbrowser:updates:set-auto-check-enabled');
+    expect(setEnabled?.({}, false)).toEqual({ enabled: false, persisted: true });
+    expect(updater.autoDownload).toBe(false);
+    expect(updater.autoInstallOnAppQuit).toBe(false);
+
+    await handlers.get('lastbrowser:updates:check')?.({});
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it('limits automatic error retries and backs off to the normal check interval', async () => {
+    updater.checkForUpdates.mockRejectedValue(new Error('temporary network error'));
+    startAutoUpdateChecks();
+    handlers.get('lastbrowser:updates:set-auto-check-enabled')?.({}, true);
+
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(4 * 60 * 60 * 1000 - 1);
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(5);
   });
 
   it('disables update checks only for an exact version-bound offline preview marker', async () => {
@@ -131,7 +179,7 @@ describe('native update preference IPC', () => {
     expect(candidate?.({})).toBeNull();
   });
 
-  it('does not mark an update as seen when the current candidate has no release notes to present', async () => {
+  it("does not mark an update as seen before its What's new notice is acknowledged", async () => {
     const candidate = handlers.get('lastbrowser:updates:whats-new-candidate');
     const acknowledge = handlers.get('lastbrowser:updates:whats-new-acknowledge');
     expect(candidate?.({})).toBeNull();

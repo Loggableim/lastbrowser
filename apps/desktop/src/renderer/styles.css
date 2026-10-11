@@ -14003,6 +14003,78 @@ html[data-message-layout="expanded"] .copilot-bubble.user {
   gap: 20px;
 }
 
+.extension-settings-tabs,
+.extension-category-list,
+.extension-pagination,
+.extension-store-search {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.extension-settings-tabs {
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, .12));
+}
+
+.extension-settings-tabs button,
+.extension-category-list button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px 8px 0 0;
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.extension-settings-tabs button[aria-selected="true"],
+.extension-category-list button.active {
+  color: var(--accent-primary, #00d9ff);
+  border-color: var(--border-subtle, rgba(255, 255, 255, .12));
+  border-bottom-color: var(--accent-primary, #00d9ff);
+  background: color-mix(in srgb, var(--accent-primary, #00d9ff) 8%, transparent);
+}
+
+.extension-recommendation-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.extension-recommendation-controls > input,
+.extension-store-search > input {
+  width: 100%;
+  min-width: 0;
+}
+
+.extension-category-list {
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  padding-bottom: 3px;
+}
+
+.extension-category-list button {
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.extension-store-search > input {
+  flex: 1 1 260px;
+}
+
+.extension-pagination {
+  justify-content: center;
+  margin-top: 14px;
+}
+
+.extension-settings-tabs button:focus-visible,
+.extension-category-list button:focus-visible,
+.extension-pagination button:focus-visible,
+.extension-store-search button:focus-visible {
+  outline: 2px solid var(--accent-primary, #00d9ff);
+  outline-offset: 2px;
+}
+
 .extension-store-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

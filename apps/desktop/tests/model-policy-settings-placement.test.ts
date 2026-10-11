@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { modelPolicySettingsCopy } from '../src/renderer/i18n/model-policy-settings-copy.js';
-import { normalizeSettingsSectionId, SETTINGS_SECTIONS } from '../src/renderer/panels/SystemPanels.js';
+import { normalizeSettingsSectionId, SETTINGS_SECTIONS, visibleSettingsSections } from '../src/renderer/panels/SystemPanels.js';
 
 const source = (file: string) => readFileSync(path.resolve(process.cwd(), 'src/renderer', file), 'utf8');
 
@@ -17,11 +17,12 @@ describe('model policy settings placement', () => {
     expect(composer).toContain("value={AI_ORCHESTRATION_ENABLED && automaticPolicy?.active?'__lastbrowser_auto_policy__'");
   });
 
-  it('places advanced controls behind the Advanced settings section and binds them to the active session scope', () => {
+  it('keeps model policy controls intact while hiding the legacy Advanced section and falling back safely', () => {
     const settings = source('panels/SystemPanels.tsx');
     const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
     expect(SETTINGS_SECTIONS.advanced.title).toBe('Advanced');
-    expect(normalizeSettingsSectionId('advanced')).toBe('advanced');
+    expect(visibleSettingsSections().map(([id]) => id)).not.toContain('advanced');
+    expect(normalizeSettingsSectionId('advanced')).toBe('conversation');
     expect(settings).toContain("section === 'advanced' && <AdvancedModelPolicySettings");
     expect(settings).toContain("operation: 'resolveScope'");
     expect(settings).toContain('backendProfileName });');

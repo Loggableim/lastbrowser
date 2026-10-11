@@ -93,8 +93,10 @@ export function createUpdateController(options: UpdateControllerOptions): Update
   // successful app quit when this is enabled. Its quit handler uses
   // install(true, false), so the app is not relaunched unexpectedly.
   updater.autoInstallOnAppQuit = automaticUpdatesEnabled;
-  updater.allowDowngrade = false;
   updater.channel = channel === 'preview' ? 'beta' : 'latest';
+  // electron-updater 6.8.3's channel setter enables downgrades. Reassert the
+  // guard after assigning the channel so beta/stable changes cannot bypass it.
+  updater.allowDowngrade = false;
   updater.allowPrerelease = channel === 'preview';
 
   function publish(next: Partial<LastbrowserUpdateStatus>): LastbrowserUpdateStatus {
@@ -108,8 +110,8 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     channel = preferences.channel === 'preview' ? 'preview' : 'stable';
     updater.autoDownload = automaticUpdatesEnabled;
     updater.autoInstallOnAppQuit = automaticUpdatesEnabled;
-    updater.allowDowngrade = false;
     updater.channel = channel === 'preview' ? 'beta' : 'latest';
+    updater.allowDowngrade = false;
     updater.allowPrerelease = channel === 'preview';
   }
 

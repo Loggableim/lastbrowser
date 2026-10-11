@@ -20,11 +20,21 @@ type FakeUpdater = EventEmitter & {
 
 function fakeUpdater(): FakeUpdater {
   const updater = new EventEmitter() as FakeUpdater;
+  let currentChannel = 'latest';
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = false;
   updater.allowPrerelease = false;
   updater.allowDowngrade = false;
-  updater.channel = 'latest';
+  Object.defineProperty(updater, 'channel', {
+    configurable: true,
+    enumerable: true,
+    get: () => currentChannel,
+    set: (value: string) => {
+      currentChannel = value;
+      // Mirrors the locked electron-updater 6.8.3 AppUpdater.channel setter.
+      updater.allowDowngrade = true;
+    }
+  });
   updater.checkCalls = 0;
   updater.downloadCalls = 0;
   updater.quitCalls = 0;
@@ -59,21 +69,44 @@ describe('update controller', () => {
     expect(controller.getStatus().state).toBe('idle');
   });
 
+  it('does not allow downgrades when a saved preview channel is applied at startup', () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({
+      updater,
+      isPackaged: true,
+      currentVersion: '0.1.3',
+      updateChannel: 'preview'
+    });
+
+    expect(updater.channel).toBe('beta');
+    expect(updater.allowPrerelease).toBe(true);
+    expect(updater.allowDowngrade).toBe(false);
+    expect(controller.getStatus().state).toBe('idle');
+  });
+
   it('applies automatic-update and channel preferences without enabling prereleases on stable', () => {
     const updater = fakeUpdater();
+    // The fake models electron-updater's actual side effect before exercising
+    // the controller consumer, so this fails if the controller only sets the
+    // downgrade guard before assigning a channel.
+    updater.channel = 'beta';
+    expect(updater.allowDowngrade).toBe(true);
     const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '0.1.3' });
+    expect(updater.allowDowngrade).toBe(false);
 
     controller.setPreferences({ automaticUpdatesEnabled: false, channel: 'preview' });
     expect(updater.autoDownload).toBe(false);
     expect(updater.autoInstallOnAppQuit).toBe(false);
     expect(updater.allowPrerelease).toBe(true);
     expect(updater.channel).toBe('beta');
+    expect(updater.allowDowngrade).toBe(false);
 
     controller.setPreferences({ automaticUpdatesEnabled: true, channel: 'stable' });
     expect(updater.autoDownload).toBe(true);
     expect(updater.autoInstallOnAppQuit).toBe(true);
     expect(updater.allowPrerelease).toBe(false);
     expect(updater.channel).toBe('latest');
+    expect(updater.allowDowngrade).toBe(false);
   });
 
   it('coalesces concurrent checks and preserves a downloaded update across later events', async () => {

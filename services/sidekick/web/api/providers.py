@@ -73,6 +73,23 @@ _RESPONSE_METADATA_MAX_AGE_SECONDS = 15 * 60
 # already 35 s and probe I/O is lightweight HTTP calls.
 _MAX_CONCURRENT_ACCOUNT_USAGE_PROBES = 2
 
+_OPENCODE_CLI_PROVIDER_IDS = {"opencode-zen", "opencode-go"}
+
+
+def start_opencode_auth_login(provider_id: str) -> dict[str, Any]:
+    from cli.opencode_login import start_login
+    return start_login(provider_id)
+
+
+def get_opencode_auth_login_status(login_id: str) -> dict[str, Any]:
+    from cli.opencode_login import login_status
+    return login_status(login_id)
+
+
+def cancel_opencode_auth_login(login_id: str) -> dict[str, Any]:
+    from cli.opencode_login import cancel_login
+    return cancel_login(login_id)
+
 # Parent-death-signal setup: on Linux, arrange for the quota-probe child to
 # receive SIGTERM when the WebUI parent dies (e.g. systemctl restart, OOM kill).
 # This prevents probe children from becoming orphaned zombies that continue
@@ -596,6 +613,17 @@ def _provider_has_key(provider_id: str) -> bool:
                 return True
             if os.getenv(alias):
                 return True
+
+    if provider_id in _OPENCODE_CLI_PROVIDER_IDS:
+        try:
+            from cli.auth import _resolve_api_key_provider_secret, PROVIDER_REGISTRY
+            pconfig = PROVIDER_REGISTRY.get(provider_id)
+            if pconfig:
+                _key, source = _resolve_api_key_provider_secret(provider_id, pconfig)
+                if source == "opencode_cli":
+                    return True
+        except Exception:
+            logger.debug("Could not resolve profile OpenCode CLI credentials", exc_info=True)
 
     cfg = get_config()
     # Check model.api_key — only match if this provider is the active one.
@@ -1492,6 +1520,16 @@ def get_providers() -> dict[str, Any]:
                     key_source = "env_file"
                 elif os.getenv(env_var):
                     key_source = "env_var"
+                elif pid in _OPENCODE_CLI_PROVIDER_IDS:
+                    try:
+                        from cli.auth import _resolve_api_key_provider_secret, PROVIDER_REGISTRY
+                        pconfig = PROVIDER_REGISTRY.get(pid)
+                        _key, source = _resolve_api_key_provider_secret(pid, pconfig) if pconfig else ("", "")
+                        key_source = source if source == "opencode_cli" else "config_yaml"
+                        if source == "opencode_cli":
+                            auth_state = "connected"
+                    except Exception:
+                        key_source = "config_yaml"
                 else:
                     # Canonical name not set; check legacy aliases (e.g. lmstudio's
                     # pre-#1500 LMSTUDIO_API_KEY) so existing users see "env_file"

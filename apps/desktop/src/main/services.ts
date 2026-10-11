@@ -6,6 +6,7 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { app } from 'electron';
 import { formatCdpUrl, isCdpEnabled, resolveCdpPort } from './cdp.js';
+import { withAbortTimeout } from './bounded-request.js';
 
 export type ServiceLayout = {
   resourcesDir: string;
@@ -34,6 +35,11 @@ export type ServiceStatus = {
 
 export type PortResolver = (preferredPort: number) => Promise<number>;
 export type WebuiHealthChecker = (webuiUrl: string) => Promise<{ ok: boolean; error?: string }>;
+
+/** The state directory injected into the Sidekick process for auth/settings. */
+export function getSidecarStateDirectory(layout: ServiceLayout): string {
+  return path.join(layout.runtimeDir, 'webui');
+}
 
 export type SidecarLaunch = {
   args: string[];
@@ -119,11 +125,12 @@ export function resolveServiceLayout(
 export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number): NodeJS.ProcessEnv {
   const webuiPortValue = String(webuiPort);
   const webuiBaseUrl = `http://127.0.0.1:${webuiPortValue}`;
+  const stateDirectory = getSidecarStateDirectory(layout);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     LASTBROWSER_HOME: layout.runtimeDir,
     LASTBROWSER_WEBUI_AGENT_DIR: layout.sidekickDir,
-    LASTBROWSER_WEBUI_STATE_DIR: path.join(layout.runtimeDir, 'webui'),
+    LASTBROWSER_WEBUI_STATE_DIR: stateDirectory,
     LASTBROWSER_WEBUI_PORT: webuiPortValue,
     LASTBROWSER_WEBUI_URL: webuiBaseUrl,
     LASTBROWSER_WEBUI_PYTHON: layout.pythonExe,
@@ -137,14 +144,14 @@ export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number
     // SIDEKICK_WEBUI_PORT. Without these the WebUI falls back to defaults and
     // writes state (settings, auth, sessions) to the wrong directory.
     SIDEKICK_WEBUI_AGENT_DIR: layout.sidekickDir,
-    SIDEKICK_WEBUI_STATE_DIR: path.join(layout.runtimeDir, 'webui'),
+    SIDEKICK_WEBUI_STATE_DIR: stateDirectory,
     SIDEKICK_WEBUI_PYTHON: layout.pythonExe,
     SIDEKICK_WEBUI_PORT: webuiPortValue,
     SIDEKICK_WEBUI_NO_BROWSER: '1',
-    SIDEKICK_STATE_DIR: path.join(layout.runtimeDir, 'webui'),
+    SIDEKICK_STATE_DIR: stateDirectory,
     HERMES_HOME: layout.runtimeDir,
     HERMES_WEBUI_AGENT_DIR: layout.sidekickDir,
-    HERMES_WEBUI_STATE_DIR: path.join(layout.runtimeDir, 'webui'),
+    HERMES_WEBUI_STATE_DIR: stateDirectory,
     HERMES_WEBUI_PORT: webuiPortValue,
     HERMES_WEBUI_BROWSER_BASE_URL: webuiBaseUrl,
     HERMES_WEBUI_PYTHON: layout.pythonExe,
@@ -184,19 +191,26 @@ export async function findAvailablePort(preferredPort: number, host = '127.0.0.1
   throw new Error(`No free local WebUI port found from ${preferredPort} to ${preferredPort + attempts - 1}.`);
 }
 
-export async function checkWebuiHealth(webuiUrl: string): Promise<{ ok: boolean; error?: string }> {
+export async function checkWebuiHealth(
+  webuiUrl: string,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = 3000
+): Promise<{ ok: boolean; error?: string }> {
   try {
-    const response = await fetch(new URL('/api/onboarding/status', webuiUrl));
-    // 401/403 still prove the server is up and routing — the newer FastAPI
-    // WebUI protects this endpoint with auth, so treating those as failure
-    // would leave the sidecar permanently "unreachable".
-    if (response.status === 401 || response.status === 403) {
+    const result = await withAbortTimeout(async (signal) => {
+      const response = await fetchImpl(new URL('/api/onboarding/status', webuiUrl), { signal });
+      // 401/403 still prove the server is up and routing — the newer FastAPI
+      // WebUI protects this endpoint with auth, so treating those as failure
+      // would leave the sidecar permanently "unreachable".
+      if (response.status === 401 || response.status === 403) {
+        await response.arrayBuffer();
+        return { ok: true as const };
+      }
+      if (!response.ok) return { ok: false as const, error: `HTTP ${response.status}` };
       await response.arrayBuffer();
-      return { ok: true };
-    }
-    if (!response.ok) return { ok: false, error: `HTTP ${response.status}` };
-    await response.arrayBuffer();
-    return { ok: true };
+      return { ok: true as const };
+    }, timeoutMs);
+    return result;
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -380,6 +394,7 @@ export class SidecarServices {
   private gatewayProcess: ChildProcess | null = null;
   private startPromise: Promise<ServiceStatus> | null = null;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private healthCheckInFlight = false;
   private status: ServiceStatus;
   private gatewayStatus: GatewayStatus = {
     running: false,
@@ -719,9 +734,15 @@ export class SidecarServices {
 
   private async refreshHealth(): Promise<void> {
     const webuiUrl = this.status.webuiUrl;
-    if (!webuiUrl || this.status.sidekick !== 'ready') return;
+    if (!webuiUrl || this.status.sidekick !== 'ready' || this.healthCheckInFlight) return;
 
-    const result = await this.healthChecker(webuiUrl);
+    this.healthCheckInFlight = true;
+    let result: { ok: boolean; error?: string };
+    try {
+      result = await this.healthChecker(webuiUrl);
+    } finally {
+      this.healthCheckInFlight = false;
+    }
     if (result.ok) {
       this.status = { ...this.status, webuiHealth: 'ready', lastError: null };
       return;

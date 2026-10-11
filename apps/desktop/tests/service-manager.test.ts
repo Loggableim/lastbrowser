@@ -16,6 +16,7 @@ describe('sidecar service layout', () => {
   it('uses Lastbrowser public environment variables while preserving Hermes compatibility aliases', () => {
     const layout = resolveServiceLayout('C:/Apps/Lastbrowser/resources');
     const env = buildSidecarEnvironment(layout, 8787);
+    const stateDirectory = path.join(layout.runtimeDir, 'webui');
 
     expect(env.LASTBROWSER_HOME).toMatch(/Lastbrowser[\\/]runtime$/);
     expect(env.SIDEKICK_HOME).toBe(env.LASTBROWSER_HOME);
@@ -23,6 +24,10 @@ describe('sidecar service layout', () => {
     expect(env.LASTBROWSER_WEBUI_PORT).toBe('8787');
     expect(env.HERMES_WEBUI_PORT).toBe('8787');
     expect(env.LASTBROWSER_WEBUI_AGENT_DIR).toContain('services');
+    expect(env.LASTBROWSER_WEBUI_STATE_DIR).toBe(stateDirectory);
+    expect(env.SIDEKICK_WEBUI_STATE_DIR).toBe(stateDirectory);
+    expect(env.SIDEKICK_STATE_DIR).toBe(stateDirectory);
+    expect(env.HERMES_WEBUI_STATE_DIR).toBe(stateDirectory);
     expect(env.HERMES_WEBUI_AGENT_DIR).toBe(env.LASTBROWSER_WEBUI_AGENT_DIR);
     expect(env.LASTBROWSER_INTEGRATED).toBe('1');
     expect(env.PYTHONPATH).toContain('services');

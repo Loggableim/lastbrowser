@@ -170,6 +170,25 @@
 
 .startup-screen__auth button:disabled { opacity: 0.55; cursor: default; }
 
+.startup-background-status {
+  position: fixed;
+  z-index: 1200;
+  top: 12px;
+  left: 50%;
+  max-width: min(92vw, 560px);
+  padding: 7px 12px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(126, 165, 211, 0.28);
+  border-radius: 999px;
+  background: rgba(10, 22, 38, 0.9);
+  color: #c9d7e8;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+  backdrop-filter: blur(12px);
+}
+
 .startup-screen--error .startup-screen__glow,
 .startup-screen--error::before,
 .startup-screen--reduced-motion .startup-screen__glow,

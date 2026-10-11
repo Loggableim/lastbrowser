@@ -1,7 +1,8 @@
 export const startupIconIds = ['sidekick-01', 'sidekick-02', 'sidekick-03', 'sidekick-04', 'sidekick-05', 'sidekick-06'] as const;
 
 export type StartupIconId = (typeof startupIconIds)[number];
-export type StartupPhaseId = 'engine' | 'profile' | 'spaces' | 'connections' | 'models' | 'sidekick' | 'session' | 'sandbox' | 'ready';
+export type StartupAuthPolicy = 'pending' | 'disabled' | 'enabled' | 'unknown';
+export type StartupPhaseId = 'engine' | 'profile' | 'spaces' | 'connections' | 'models' | 'sidekick' | 'session' | 'ready';
 export type StartupSignalState = 'pending' | 'complete' | 'error';
 
 export type StartupReadinessSignals = {
@@ -12,34 +13,45 @@ export type StartupReadinessSignals = {
   models: StartupSignalState;
   sidekick: StartupSignalState;
   session: StartupSignalState;
-  sandbox: StartupSignalState;
 };
 
-const startupSignalOrder = [
-  'engine',
-  'sandbox',
-  'profile',
-  'sidekick',
-  'session',
-  'spaces',
-  'connections',
-  'models'
-] as const satisfies readonly (keyof StartupReadinessSignals)[];
+function blockingStartupStages(policy: StartupAuthPolicy): readonly (keyof StartupReadinessSignals)[] {
+  return policy === 'disabled'
+    ? ['profile', 'session']
+    : ['engine', 'profile', 'sidekick', 'session'];
+}
 
-/** Return the first actual startup stage that has not completed. */
-export function deriveStartupPhase(signals: StartupReadinessSignals): StartupPhaseId {
-  const failedStage = startupSignalOrder.find((stage) => signals[stage] === 'error');
+/** Optional discovery never controls browser-shell availability. */
+export function deriveStartupPhase(
+  signals: StartupReadinessSignals,
+  policy: StartupAuthPolicy = 'unknown'
+): StartupPhaseId {
+  const stages = blockingStartupStages(policy);
+  const failedStage = stages.find((stage) => signals[stage] === 'error');
   if (failedStage) return failedStage;
-  const activeStage = startupSignalOrder.find((stage) => signals[stage] !== 'complete');
+  const activeStage = stages.find((stage) => signals[stage] !== 'complete');
   return activeStage ?? 'ready';
 }
 
-export function isStartupReady(signals: StartupReadinessSignals): boolean {
-  return deriveStartupPhase(signals) === 'ready';
+export function isStartupReady(signals: StartupReadinessSignals, policy: StartupAuthPolicy = 'unknown'): boolean {
+  return deriveStartupPhase(signals, policy) === 'ready';
 }
 
-export function getStartupFailureStage(signals: StartupReadinessSignals): keyof StartupReadinessSignals | null {
-  return startupSignalOrder.find((stage) => signals[stage] === 'error') ?? null;
+export function getStartupFailureStage(
+  signals: StartupReadinessSignals,
+  policy: StartupAuthPolicy = 'unknown'
+): keyof StartupReadinessSignals | null {
+  return blockingStartupStages(policy).find((stage) => signals[stage] === 'error') ?? null;
+}
+
+/** Real, non-blocking work that can still be reported after the shell is usable. */
+export function getStartupBackgroundPhase(signals: StartupReadinessSignals, policy: StartupAuthPolicy): StartupPhaseId | null {
+  if (!isStartupReady(signals, policy)) return null;
+  if (signals.engine !== 'complete' || signals.sidekick !== 'complete') return 'sidekick';
+  for (const stage of ['spaces', 'connections', 'models'] as const) {
+    if (signals[stage] === 'pending') return stage;
+  }
+  return null;
 }
 
 export function isValidStartupModelCatalog(value: unknown): boolean {

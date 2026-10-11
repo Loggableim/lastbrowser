@@ -59,7 +59,7 @@ import {
 import { hideWebviewScrollbars } from './browser-view.js';
 import { subscribeDevToolsState, toggleWebviewDevTools } from './devtools-state.js';
 import { bindWebviewReadiness, isWebviewReady } from './webview-readiness.js';
-import { canRenderBrowserForAccessAuth } from './access-auth.js';
+import { canReleaseAccessGateFromStartupPreflight, canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
 import { applyLiveTeamworkUpdate, beginLiveTeamworkTurn, bindLiveChatAssistantStream, readTeamworkStreamUpdate } from './teamwork-live-stream.js';
@@ -198,7 +198,7 @@ import {
   workspacePanelCollapsedStorageKey
 } from './shell-state.js';
 import { canCallSidekickApi } from './runtime-readiness.js';
-import { deriveStartupPhase, getStartupFailureStage, isValidStartupModelCatalog, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
+import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
 import { startupScreenCopy, resolveStartupLocale } from './startup/startup-screen-copy.js';
 import { StartupScreen } from './startup/StartupScreen.js';
 import { describeChatContent, partitionChatMessages } from './chat-display.js';
@@ -1008,6 +1008,8 @@ function AppContent(): JSX.Element {
   const [desktopSettings, setDesktopSettings] = useState<Record<string, unknown> | null>(() => loadDesktopSettingsFromStorage());
   const [desktopSettingsHydrated, setDesktopSettingsHydrated] = useState(() => loadDesktopSettingsFromStorage() !== null);
   const desktopSettingsRevisionRef = useRef(0);
+  const accessAuthPreflightRequestIdRef = useRef(0);
+  const accessAuthPreflightScopeIdRef = useRef<string | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
@@ -1171,7 +1173,7 @@ function AppContent(): JSX.Element {
   }, [isDetachedWindow]);
   const [windowStartupReady, setWindowStartupReady] = useState(false);
   const [startupProfileState, setStartupProfileState] = useState<StartupSignalState>('pending');
-  const [startupSandboxState, setStartupSandboxState] = useState<StartupSignalState>('pending');
+  const [startupAuthPolicy, setStartupAuthPolicy] = useState<StartupAuthPolicy>('pending');
   const [startupLaunchIcon, setStartupLaunchIcon] = useState<StartupIconId | null>(null);
   const [startupRetryVersion, setStartupRetryVersion] = useState(0);
   const [startupReadyAcknowledged, setStartupReadyAcknowledged] = useState(false);
@@ -1431,11 +1433,11 @@ function AppContent(): JSX.Element {
         : 'pending',
     session: accessAuthRequired
       ? 'pending'
-      : accessAuthChecked ? 'complete' : accessAuthError ? 'error' : 'pending',
-    sandbox: startupSandboxState
+      : accessAuthChecked ? 'complete' : accessAuthError ? 'error' : 'pending'
   };
-  const startupPhase = deriveStartupPhase(startupReadinessSignals);
-  const startupFailureStage = getStartupFailureStage(startupReadinessSignals);
+  const startupPhase = deriveStartupPhase(startupReadinessSignals, startupAuthPolicy);
+  const startupFailureStage = getStartupFailureStage(startupReadinessSignals, startupAuthPolicy);
+  const startupBackgroundPhase = getStartupBackgroundPhase(startupReadinessSignals, startupAuthPolicy);
   const startupAuthAllowsShell = canRenderBrowserForAccessAuth(accessAuthChecked, {
     auth_enabled: accessAuthRequired || !accessAuthChecked,
     logged_in: accessAuthChecked && !accessAuthRequired
@@ -1465,6 +1467,34 @@ function AppContent(): JSX.Element {
     });
     return () => { current = false; resolution.abort(); };
   }, [sidekickApiReady, activeSpacePath, activeProfileId, assistantController, explicitBackendProfileBySpace]);
+
+  useEffect(() => {
+    let alive = true;
+    const requestId = ++accessAuthPreflightRequestIdRef.current;
+    void window.lastbrowser.sidekick.getAccessAuthStartupPolicy(requestId).then((result) => {
+      if (!alive || requestId !== accessAuthPreflightRequestIdRef.current) return;
+      if (!result || result.requestId !== requestId || typeof result.scopeId !== 'string' || !result.scopeId) {
+        setStartupAuthPolicy('unknown');
+        return;
+      }
+      const priorScopeId = accessAuthPreflightScopeIdRef.current;
+      if (priorScopeId && priorScopeId !== result.scopeId) {
+        setStartupAuthPolicy('unknown');
+        return;
+      }
+      accessAuthPreflightScopeIdRef.current = result.scopeId;
+      const policy = result.policy === 'disabled' || result.policy === 'enabled' ? result.policy : 'unknown';
+      setStartupAuthPolicy(policy);
+      if (!canReleaseAccessGateFromStartupPreflight(policy)) return;
+      setAccessAuthRequired(false);
+      setAccessAuthChecked(true);
+      setAccessAuthError('');
+    }).catch(() => {
+      if (alive && requestId === accessAuthPreflightRequestIdRef.current) setStartupAuthPolicy('unknown');
+      // Keep the existing fail-closed auth gate until the normal status check succeeds.
+    });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (!sidekickTransportReady) return;
@@ -2087,24 +2117,10 @@ function AppContent(): JSX.Element {
     startupModelDiscoverySettledRef.current = false;
     startupSpacesSettledRef.current = false;
     if (!windowStartupInitializedRef.current) setStartupProfileState('pending');
-    setStartupSandboxState('pending');
     setStartupOnboardingState('pending');
     setStartupModelDiscoveryState('pending');
     setStartupSpacesState('pending');
     setStartupRetryVersion((version) => version + 1);
-    const retrySandboxProbe = async () => {
-      try {
-        const result = await window.lastbrowser?.window?.getStartupState?.();
-        if (!result) {
-          setStartupSandboxState('error');
-          return;
-        }
-        setStartupLaunchIcon(result.launchIcon);
-        setStartupSandboxState(result.sandboxed ? 'complete' : 'error');
-      } catch {
-        setStartupSandboxState('error');
-      }
-    };
     const retryEngine = async () => {
       try {
         await window.lastbrowser.services.start();
@@ -2113,7 +2129,7 @@ function AppContent(): JSX.Element {
         // The polled service status will remain the authoritative failure signal.
       }
     };
-    await Promise.all([refreshOnboardingStatus(), refreshSpaces(), retrySandboxProbe(), retryEngine()]);
+    await Promise.all([refreshOnboardingStatus(), refreshSpaces(), retryEngine()]);
   }, [refreshOnboardingStatus, refreshSpaces]);
 
   const loadActiveSession = useCallback(async (
@@ -2711,7 +2727,6 @@ function AppContent(): JSX.Element {
       try {
         const startup = await window.lastbrowser?.window?.getStartupState?.();
         if (cancelled) return;
-        setStartupSandboxState(startup?.sandboxed ? 'complete' : 'error');
         if (startup?.launchIcon) setStartupLaunchIcon(startup.launchIcon);
         setIsDetachedWindow(Boolean(startup?.isDetachedWindow));
         const transfer = startup?.transfer;
@@ -2779,7 +2794,6 @@ function AppContent(): JSX.Element {
         startupInitialized = true;
       } catch (error) {
         if (!cancelled) {
-          setStartupSandboxState('error');
           setStartupProfileState('error');
         }
         console.error('[Lastbrowser] Window startup/transfer failed:', error);
@@ -4980,6 +4994,13 @@ function AppContent(): JSX.Element {
 
   return (
     <div className={`app-shell panel-${activePanel} ${isModernBrowser ? 'modern-mode' : ''} ${windowMaximized ? 'is-maximized' : ''} ${sidebarMode === 'hidden' ? 'zen-mode' : ''}`}>
+      {startupBackgroundPhase && (
+        <div className="startup-background-status" role="status" aria-live="polite">
+          {startupBackgroundPhase === 'sidekick'
+            ? startupCopy.sidekickWaiting
+            : startupCopy.phases[startupBackgroundPhase]}
+        </div>
+      )}
       {/* Vision-Impaired 2.0: hidden SVG filter defs for color-vision correction (§7.4). */}
       <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
         <defs>

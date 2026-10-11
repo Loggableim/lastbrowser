@@ -425,6 +425,11 @@ declare global {
         updateAllAppstore: () => Promise<Record<string, unknown>>;
         submitAppstoreApp: (request: { manifest: Record<string, unknown> }) => Promise<Record<string, unknown>>;
         getSettings: () => Promise<Record<string, unknown>>;
+        getAccessAuthStartupPolicy: (requestId: number) => Promise<{
+          policy: 'disabled' | 'enabled' | 'unknown';
+          requestId: number;
+          scopeId: string;
+        }>;
         getAccessAuthStatus: () => Promise<{ auth_enabled: boolean; logged_in: boolean }>;
         loginAccessPassword: (request: { password: string }) => Promise<{ ok: boolean }>;
         lockAccessWindows: () => Promise<{ ok: boolean }>;
@@ -600,7 +605,6 @@ declare global {
           isDetachedWindow: boolean;
           transfer: { transferId: string; tab: unknown; spacePath?: string } | null;
           launchIcon: 'sidekick-01' | 'sidekick-02' | 'sidekick-03' | 'sidekick-04' | 'sidekick-05' | 'sidekick-06';
-          sandboxed: boolean;
         }>;
         ackDetachedTab?: (transferId: string, tabId: string, guestWebContentsId: number) => Promise<boolean>;
         getDisplays?: () => Promise<Array<{ id: number; bounds: { x: number; y: number; width: number; height: number }; workArea: { x: number; y: number; width: number; height: number }; scaleFactor: number }>>;

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { desktopLocaleIds } from '../src/renderer/i18n/keys.js';
 import { StartupScreen } from '../src/renderer/startup/StartupScreen.js';
 import { startupScreenCopy, startupLocaleIds } from '../src/renderer/startup/startup-screen-copy.js';
-import { chooseStartupIcon, chooseStartupQuoteIndex, deriveStartupPhase, getStartupFailureStage, isStartupReady, isValidStartupModelCatalog, nextStartupQuoteIndex, startupIconIds, type StartupReadinessSignals } from '../src/renderer/startup/startup-screen-state.js';
+import { chooseStartupIcon, chooseStartupQuoteIndex, deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isStartupReady, isValidStartupModelCatalog, nextStartupQuoteIndex, startupIconIds, type StartupReadinessSignals } from '../src/renderer/startup/startup-screen-state.js';
 
 const sourceRoot = path.resolve(process.cwd(), 'src/renderer/startup');
 
@@ -34,11 +34,11 @@ describe('startup screen launch state', () => {
   it('derives phases only from explicit stage signals and keeps aggregate readiness fail-closed', () => {
     const ready: StartupReadinessSignals = {
       engine: 'complete', profile: 'complete', spaces: 'complete', connections: 'complete',
-      models: 'complete', sidekick: 'complete', session: 'complete', sandbox: 'complete'
+      models: 'complete', sidekick: 'complete', session: 'complete'
     };
     expect(isStartupReady(ready)).toBe(true);
     expect(deriveStartupPhase(ready)).toBe('ready');
-    for (const phase of ['engine', 'profile', 'spaces', 'connections', 'models', 'sidekick', 'session', 'sandbox'] as const) {
+    for (const phase of ['engine', 'profile', 'sidekick', 'session'] as const) {
       expect(deriveStartupPhase({ ...ready, [phase]: 'pending' })).toBe(phase);
       expect(isStartupReady({ ...ready, [phase]: 'pending' })).toBe(false);
       expect(deriveStartupPhase({ ...ready, [phase]: 'error' })).toBe(phase);
@@ -47,7 +47,17 @@ describe('startup screen launch state', () => {
     const failedSession = { ...ready, profile: 'pending' as const, session: 'error' as const };
     expect(deriveStartupPhase(failedSession)).toBe('session');
     expect(getStartupFailureStage(failedSession)).toBe('session');
-    expect(deriveStartupPhase(ready)).not.toBe('sandbox');
+    const offlineButDisabled: StartupReadinessSignals = {
+      engine: 'error', profile: 'complete', spaces: 'error', connections: 'error',
+      models: 'error', sidekick: 'error', session: 'complete'
+    };
+    expect(isStartupReady(offlineButDisabled, 'disabled')).toBe(true);
+    expect(deriveStartupPhase(offlineButDisabled, 'disabled')).toBe('ready');
+    expect(getStartupBackgroundPhase(offlineButDisabled, 'disabled')).toBe('sidekick');
+    expect(isStartupReady(offlineButDisabled, 'enabled')).toBe(false);
+    expect(isStartupReady(offlineButDisabled, 'unknown')).toBe(false);
+    expect(isStartupReady({ ...ready, connections: 'error', models: 'error' }, 'enabled')).toBe(true);
+    expect(isStartupReady({ ...ready, session: 'error' }, 'disabled')).toBe(false);
     expect(isValidStartupModelCatalog({ groups: [] })).toBe(true);
     expect(isValidStartupModelCatalog({ detail: 'failed' })).toBe(false);
     expect(isValidStartupModelCatalog(null)).toBe(false);
@@ -55,12 +65,13 @@ describe('startup screen launch state', () => {
 });
 
 describe('startup screen copy and motion rules', () => {
-  it('covers every current app locale with seven quotes and all nine real phase labels', () => {
+  it('covers every current app locale with seven quotes and all eight real phase labels', () => {
     expect(startupLocaleIds).toEqual(desktopLocaleIds);
     for (const locale of desktopLocaleIds) {
       expect(startupScreenCopy[locale].quotes).toHaveLength(7);
-      expect(Object.values(startupScreenCopy[locale].phases)).toHaveLength(9);
+      expect(Object.values(startupScreenCopy[locale].phases)).toHaveLength(8);
       expect(Object.values(startupScreenCopy[locale].phases).every((text) => text.trim().length > 0)).toBe(true);
+      expect(startupScreenCopy[locale].sidekickWaiting.trim().length).toBeGreaterThan(0);
       expect(startupScreenCopy[locale].errorDescription.trim().length).toBeGreaterThan(0);
     }
   });

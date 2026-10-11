@@ -357,3 +357,32 @@ independent exact-head review, combined regressions, and all AGENTS gates. If
 integrated, bind it to a newly built and signed package before further VM
 acceptance. Keep the current uploaded package and its source/hash binding
 unchanged.
+
+## Latest P004 repair progress (reported source build; candidate still fails)
+
+The latest VM-thread report is commit `82f44f0eabc72527181e195a5cd3a98fd7d11909`
+(`docs: record partial P004 candidate and chat repair validation`):
+<https://github.com/Loggableim/lastbrowser/blob/codex/lastbrowser-electron-shell/docs/test-reports/2026-10-11-P004-0155-progress.md>.
+These are tester-reported observations from a separate source build, not the
+signed v0.1.55 package and not new acceptance for the uploaded candidate.
+
+Reported improvements: Windows profile alias resolution via filesystem
+identity; settings catalog acquisition under the mutation lock; zero lock wait
+on the repaired start path; redundant AUTO catalog probes removed when a model
+is fixed; MiMo first and follow-up responses with amber context plus correctly
+rendered Markdown/code; GPT-5.6 Luna model switch with an amber response. The
+OpenCode CLI is now installed, but a human login remains pending.
+
+Remaining evidence: the full suite has 13 failures across 7 files and requires
+individual baseline-versus-regression triage; no all-green suite claim. Stop,
+restart, QuickChat, and History behavior remain open. The repaired start path
+still needs a latency follow-up with provider/model binding and measured
+response-start, lock, and catalog timing.
+
+The VM tester remains the sole chat repair owner. As of this update the
+integration host sees no remote ref for `codex/p004-chat-opencode-fix` and no
+open PR with that head, so there is no exact reviewable fix head to incorporate.
+Keep PR55's candidate failure and its uploaded source/package binding intact;
+wait for the tester to provide the exact pushed commit/PR, independent review,
+triaged combined gates, and new package evidence. No source change, merge,
+re-sign, or release action is taken here.

@@ -1,7 +1,7 @@
 # antigravity-worker-8 – Statusbericht & Ledger
 
 **Rolle:** Release-, Doku-, Website- und i18n-Worker (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :30 (`Cron: 30 * * * *`, Daemon Task aktiv: `task-89`)  
+**Taktung:** 1 Lauf pro Stunde, immer um :30 (`Cron: 30 * * * *`, Daemon Task aktiv: `task-93`)  
 **Letzter Lauf:** 11. Oktober 2026, 10:30–10:33 Uhr (Lauf 7 / Cron-Trigger)  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Hotfix-Kandidat: `0.1.53`)  
@@ -104,18 +104,18 @@
 
 ---
 
-## 3. Matrix der aktuellen Qualitäts- und Release-Gates (Run 6)
+## 3. Matrix der aktuellen Qualitäts- und Release-Gates (Run 7)
 
 | Gate / Prüfung | Vorgeschriebenes Kriterium | Aktueller Status | Details |
 | :--- | :--- | :--- | :--- |
 | **Python Syntax Check** | Exit Code 0, 0 Warnings | **PASS** | `compileall -q services/sidekick` fehlerfrei (Exit 0) |
-| **Secret-Fixtures Guard** | Keine Secrets in git-Dateien | **PASS** | `tests/secret-fixtures.test.ts` (1/1 in 2.14s) |
-| **Desktop Shell Build** | 0 TS-Fehler, 0 Vite-Fehler | **PASS** | Main, Preload & Renderer kompiliert (1834 Module in 4.22s, Exit 0) |
+| **Secret-Fixtures Guard** | Keine Secrets in git-Dateien | **PASS** | `tests/secret-fixtures.test.ts` (1/1 in 1.73s) |
+| **Desktop Shell Build** | 0 TS-Fehler, 0 Vite-Fehler | **PASS** | Main, Preload & Renderer kompiliert (1834 Module in 4.39s, Exit 0) |
 | **Store Release Preflight** | 27+ Checks PASS, 0 FAIL | **PASS** | **39 PASS, 2 WARN, 0 FAIL** (100% Richtlinienkonformität) |
-| **i18n Key Parity Suite** | Parität über alle 8 Locales | **PASS** | `tests/i18n.test.ts` (14/14 Tests in 517ms) |
-| **Website Testsuite** | Download-Counter Tests | **PASS** | `download-counter.test.mjs` (15/15 Tests in 70ms) |
-| **Public Downloads Test** | Parität Proxy vs. Release | **PASS** | `tests/public-downloads.test.ts` (5/5 Tests in 44ms) |
-| **Release Notes Test** | Validierung aller Release-Notizen | **PASS** | `tests/release-notes.test.ts` (6/6 Tests in 7ms) |
+| **i18n Key Parity Suite** | Parität über alle 8 Locales | **PASS** | `tests/i18n.test.ts` (14/14 Tests in 406ms) |
+| **Website Testsuite** | Download-Counter Tests | **PASS** | `download-counter.test.mjs` (15/15 Tests in 457ms) |
+| **Public Downloads Test** | Parität Proxy vs. Release | **PASS** | `tests/public-downloads.test.ts` (5/5 Tests in 34ms) |
+| **Release Notes Test** | Validierung aller Release-Notizen | **PASS** | `tests/release-notes.test.ts` (6/6 Tests in 6ms) |
 | **Git Working Tree Hygiene** | Monorepo In-Tree Engine | **PASS** | Stream-B-Grenzen eingehalten, Clean Working Tree |
 
 ---
@@ -138,7 +138,7 @@
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Freigegeben (`run_lock_since`: `null`)
 - **Letzter Rapport:** `2026-10-11T10:32:00+02:00`
-- **Aktiver Cron-Task:** `task-93` (`30 * * * *`, Daemon)
+- **Aktiver Cron-Task:** `task-189` (`30 * * * *`, Daemon)
 
 ---
 

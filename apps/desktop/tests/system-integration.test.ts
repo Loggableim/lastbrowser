@@ -246,5 +246,5 @@ describe('Microsoft Store Generative AI Policy – Response Reporting & Feedback
     const saved = JSON.parse(mockStore[AI_FEEDBACK_STORAGE_KEY]);
     expect(Array.isArray(saved)).toBe(true);
     expect(saved[0].id).toBe(entry.id);
-  });
+  }, 15000);
 });

@@ -60,7 +60,7 @@ import { hideWebviewScrollbars } from './browser-view.js';
 import { subscribeDevToolsState, toggleWebviewDevTools } from './devtools-state.js';
 import { bindWebviewReadiness, isWebviewReady } from './webview-readiness.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
-import { createAccessAuthGateConsumer } from './access-auth-gate.js';
+import { createAccessAuthGateConsumer, isVerifiedAccessAuthLogin } from './access-auth-gate.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
 import { applyLiveTeamworkUpdate, beginLiveTeamworkTurn, bindLiveChatAssistantStream, readTeamworkStreamUpdate } from './teamwork-live-stream.js';
@@ -1567,7 +1567,7 @@ function AppContent(): JSX.Element {
     try {
       await window.lastbrowser.sidekick.loginAccessPassword({ password: accessPassword });
       const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
-      if (!auth.logged_in) throw new Error('Login did not create an authenticated session.');
+      if (!isVerifiedAccessAuthLogin(auth)) throw new Error('Login did not create an authenticated session.');
       const state = accessAuthGateRef.current!.dispatch({ type: 'login-success', generation: loginGeneration });
       setAccessAuthRequired(state.required);
       setAccessAuthChecked(state.checked);

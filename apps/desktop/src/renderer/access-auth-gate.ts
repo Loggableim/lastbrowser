@@ -28,6 +28,11 @@ export const initialAccessAuthGateState: AccessAuthGateState = {
   scopeId: null
 };
 
+/** Login may proceed only when the response confirms both policy and session status. */
+export function isVerifiedAccessAuthLogin(auth: AccessAuthStatus): boolean {
+  return typeof auth.auth_enabled === 'boolean' && auth.logged_in === true;
+}
+
 /** Applies auth results only while their captured generation and scope remain current. */
 export function reduceAccessAuthGate(
   state: AccessAuthGateState,

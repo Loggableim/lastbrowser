@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { canRenderBrowserForAccessAuth } from '../src/renderer/access-auth.js';
-import { createAccessAuthGateConsumer } from '../src/renderer/access-auth-gate.js';
+import { createAccessAuthGateConsumer, isVerifiedAccessAuthLogin } from '../src/renderer/access-auth-gate.js';
 import { deriveStartupPhase, getStartupFailureStage, isStartupReady, type StartupReadinessSignals } from '../src/renderer/startup/startup-screen-state.js';
 
 const appPath = path.resolve(process.cwd(), 'src/renderer/App.tsx');
@@ -35,8 +35,8 @@ describe('startup readiness App and Main IPC integration contract', () => {
     expect(app).toContain("dispatch({ type: 'lock' })");
     expect(app).toContain("dispatch({ type: 'status'");
     expect(app).toContain("dispatch({ type: 'login-success'");
+    expect(app).toContain('isVerifiedAccessAuthLogin(auth)');
     expect(app).toContain('const generation = accessAuthGateRef.current!.state.generation');
-    expect(app).toContain("if (!auth.logged_in) throw new Error('Login did not create an authenticated session.')");
     expect(app).toContain("deriveStartupPhase(startupReadinessSignals, startupAuthPolicy)");
     expect(app).toContain("if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged)");
     expect(app).toContain('getStartupBackgroundPhase(startupReadinessSignals, startupAuthPolicy)');
@@ -143,5 +143,23 @@ describe('startup readiness App and Main IPC integration contract', () => {
     });
     expect(result).toMatchObject({ checked: true, required: true });
     expect(canRenderBrowserForAccessAuth(result.checked, { auth_enabled: undefined, logged_in: true })).toBe(false);
+  });
+
+  it('requires explicit auth policy and a verified login status before accepting a login result', () => {
+    expect(isVerifiedAccessAuthLogin({ auth_enabled: true, logged_in: true })).toBe(true);
+    expect(isVerifiedAccessAuthLogin({ auth_enabled: false, logged_in: true })).toBe(true);
+    expect(isVerifiedAccessAuthLogin({ logged_in: true })).toBe(false);
+    expect(isVerifiedAccessAuthLogin({ auth_enabled: true, logged_in: false })).toBe(false);
+
+    const consumer = createAccessAuthGateConsumer();
+    const locked = consumer.dispatch({ type: 'lock' });
+    const retry = consumer.dispatch({ type: 'retry' });
+    const malformedResponse = { logged_in: true };
+    const loginState = isVerifiedAccessAuthLogin(malformedResponse)
+      ? consumer.dispatch({ type: 'login-success', generation: retry.generation })
+      : consumer.dispatch({ type: 'status-error', generation: retry.generation, error: 'Incomplete auth status' });
+    expect(loginState).toMatchObject({ checked: false, required: true, error: 'Incomplete auth status' });
+    expect(canRenderBrowserForAccessAuth(loginState.checked, { auth_enabled: true, logged_in: false })).toBe(false);
+    expect(locked.required).toBe(true);
   });
 });

@@ -29,4 +29,4 @@ The VM follow-up's measured start-timeout and error-disappearance failures remai
 | `python -m compileall -q services/sidekick` | Passed |
 | `git diff --check` | Passed |
 
-These local checks do not establish E2E acceptance. The VM results above are from the tester's separate source candidate, not PR #56's current commit. PR #56 remains open for independent review and combined gates; no candidate, merge, package, signature or release acceptance is claimed.
+These local source gates passed on PR #56's current commit, but they do not establish E2E acceptance. The VM results above are from the tester's separate source candidate, not PR #56's current commit. Independent review and exact-candidate VM/package acceptance remain pending; no candidate, merge, package, signature or release acceptance is claimed.

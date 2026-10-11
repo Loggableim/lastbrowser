@@ -120,7 +120,7 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None, account_i
     if not model or not provider or (not native_sdk_supported(provider)
             and not (provider == "antigravity" and antigravity_binding is not None)):
         raise PolicyDenied("native_fixed_sdk_adapter_unavailable")
-    catalog = probe_catalog(service.manager, scope, resolved=resolved, include_capabilities=False)
+    catalog = probe_catalog(service.manager, scope, resolved=resolved, include_capabilities=True)
     group, entry = _entry(catalog, model, provider)
     if not group or group.get("configured") is not True or not entry or entry.get("supportsIndependent") is not True:
         raise PolicyDenied("native_fixed_model_not_in_bound_catalog")
@@ -129,7 +129,7 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None, account_i
         raise PolicyDenied("context_metadata_required")
     selected = ProviderSelection(provider=provider, model=model, provider_config_ref=catalog["providerConfigurationDigest"], context_length=length)
     capabilities = service.manager.capabilities
-    capabilities.catalog(scope, refresh=True)
+    capabilities.catalog(scope, refresh=True, discovered_catalog=catalog)
     # A fixed UI-selected native call can use its explicit own-profile legacy
     # configuration. Existing confirmed bindings are captured, never minted.
     refs = tuple(capabilities.capture_provider(scope, selected, purpose="conversation"))

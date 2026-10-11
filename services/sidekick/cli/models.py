@@ -1442,9 +1442,11 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
         # or the endpoint is unreachable.
         access_token = None
         try:
-            from cli.auth import resolve_codex_runtime_credentials
+            from cli.runtime_provider import resolve_runtime_provider
 
-            creds = resolve_codex_runtime_credentials(refresh_if_expiring=True)
+            # Match inference: use the current bound profile's credential pool
+            # before any legacy provider-specific auth store.
+            creds = resolve_runtime_provider(requested="openai-codex")
             access_token = creds.get("api_key")
         except Exception:
             access_token = None

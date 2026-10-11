@@ -30,6 +30,21 @@ def test_codex_responses_transport_validates_usable_and_failed_responses():
     assert transport.validate_response(SimpleNamespace(status="completed", output=[], output_text="  ")) is False
 
 
+def test_codex_model_catalog_uses_the_bound_runtime_credential_pool(monkeypatch):
+    from cli.models import provider_model_ids
+
+    resolved = []
+    def resolve_runtime_provider(*, requested):
+        resolved.append(requested)
+        return {"api_key": "synthetic-bound-profile-token"}
+    monkeypatch.setattr("cli.runtime_provider.resolve_runtime_provider", resolve_runtime_provider)
+    monkeypatch.setattr(codex_models, "get_codex_model_ids",
+                        lambda *, access_token: ["gpt-bound-fixture"] if access_token == "synthetic-bound-profile-token" else [])
+
+    assert provider_model_ids("openai-codex") == ["gpt-bound-fixture"]
+    assert resolved == ["openai-codex"]
+
+
 def test_anthropic_messages_transport_validates_content_blocks():
     transport = AnthropicMessagesTransport()
 
@@ -187,6 +202,7 @@ def test_codex_api_model_catalog_preserves_cached_effort_metadata(monkeypatch):
                     {
                         "slug": "gpt-6.1-sol",
                         "priority": 1,
+                        "context_window": 1048500,
                         "supported_reasoning_levels": current_levels,
                     }
                 ]
@@ -201,9 +217,18 @@ def test_codex_api_model_catalog_preserves_cached_effort_metadata(monkeypatch):
     assert codex_models.get_codex_model_reasoning_efforts("gpt-6.1-sol") == [
         "low", "xhigh", "max"
     ]
+    assert codex_models.get_codex_model_context_length("gpt-6.1-sol") == 1048500
+    assert codex_models.get_codex_model_context_length("unknown-model") is None
     current_levels.clear()
     assert codex_models._fetch_models_from_api("test credential") == ["gpt-6.1-sol"]
     assert codex_models.get_codex_model_reasoning_efforts("gpt-6.1-sol") == []
+
+    class UnauthorizedResponse:
+        status_code = 401
+
+    monkeypatch.setattr(httpx, "get", lambda *args, **kwargs: UnauthorizedResponse())
+    assert codex_models._fetch_models_from_api("expired test credential") == []
+    assert codex_models.get_codex_model_context_length("gpt-6.1-sol") is None
 
 
 def test_unknown_model_lookup_does_not_erase_live_reasoning_capabilities(tmp_path, monkeypatch):

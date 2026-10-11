@@ -2427,7 +2427,7 @@ from web.api.streaming import (
     cancel_stream,
     _materialize_pending_user_turn_before_error,
 )
-from web.api.providers import get_providers, get_provider_quota, set_provider_key, set_provider_models, normalize_provider_model_allowlist, remove_provider_key, probe_ollama_connection
+from web.api.providers import get_providers, get_provider_quota, set_provider_key, set_provider_models, normalize_provider_model_allowlist, remove_provider_key, probe_ollama_connection, start_opencode_auth_login, get_opencode_auth_login_status, cancel_opencode_auth_login
 from web.api.onboarding import (
     apply_onboarding_setup,
     get_onboarding_status,
@@ -4821,6 +4821,10 @@ def handle_get(handler, parsed) -> bool:
         return True
 
     # â”€â”€ Providers (GET) â”€â”€
+    if parsed.path == "/api/providers/opencode-auth/status":
+        login_id = parse_qs(parsed.query).get("login_id", [""])[0]
+        return j(handler, get_opencode_auth_login_status(login_id))
+
     if parsed.path == "/api/providers":
         return j(handler, get_providers())
 
@@ -7317,6 +7321,18 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             return bad(handler, str(e), 500)
 
     # â”€â”€ Providers (POST) â”€â”€
+    if parsed.path == "/api/providers/opencode-auth/login":
+        result = start_opencode_auth_login(body.get("provider"))
+        if not result.get("ok"):
+            return bad(handler, result.get("error_code", "opencode_cli_start_failed"), 400)
+        return j(handler, result)
+
+    if parsed.path == "/api/providers/opencode-auth/cancel":
+        result = cancel_opencode_auth_login(body.get("login_id", ""))
+        if not result.get("ok"):
+            return bad(handler, result.get("error_code", "cancel_failed"), 400)
+        return j(handler, result)
+
     if parsed.path == "/api/providers/test":
         provider_id = str(body.get("provider") or "").strip().lower()
         if provider_id == "xiaomi":

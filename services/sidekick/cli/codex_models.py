@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 _SUPPORTED_API_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
 _MODEL_REASONING_EFFORTS: dict[str, list[str]] = {}
 _MODEL_REASONING_SOURCES: dict[str, str] = {}
+_MODEL_CONTEXT_WINDOWS: dict[str, int] = {}
 # Exact, officially documented models only. This is capability metadata,
 # never evidence of account entitlement or successful OAuth inference.
 # https://developers.openai.com/api/docs/models/gpt-5.3-codex
@@ -91,6 +92,12 @@ def get_codex_model_reasoning_efforts(model_id: str) -> list[str]:
     """Return model-specific effort levels without provider/network requests."""
     return get_codex_model_reasoning_metadata(model_id)[0]
 
+
+def get_codex_model_context_length(model_id: str) -> Optional[int]:
+    """Return exact context metadata from the current Codex OAuth catalog only."""
+    model = _reasoning_model_id(model_id)
+    return _MODEL_CONTEXT_WINDOWS.get(model) if model else None
+
 DEFAULT_CODEX_MODELS: List[str] = [
     "gpt-5.5",
     "gpt-5.4-mini",
@@ -136,6 +143,9 @@ def _add_forward_compat_models(model_ids: List[str]) -> List[str]:
 
 def _fetch_models_from_api(access_token: str) -> List[str]:
     """Fetch available models from the Codex API. Returns visible models sorted by priority."""
+    # Context is account-catalog evidence; do not reuse it after an attempted
+    # refresh fails or returns an unusable response.
+    _MODEL_CONTEXT_WINDOWS.clear()
     try:
         import httpx
         resp = httpx.get(
@@ -153,6 +163,7 @@ def _fetch_models_from_api(access_token: str) -> List[str]:
 
     sortable = []
     discovered_efforts: dict[str, list[str]] = {}
+    discovered_context: dict[str, int] = {}
     for item in entries:
         if not isinstance(item, dict):
             continue
@@ -160,6 +171,9 @@ def _fetch_models_from_api(access_token: str) -> List[str]:
         if not isinstance(slug, str) or not slug.strip():
             continue
         slug = slug.strip()
+        context_window = item.get("context_window")
+        if type(context_window) is int and 1 <= context_window <= 16000000:
+            discovered_context[_reasoning_model_id(slug)] = context_window
         # Codex CLI's catalog uses ``supported_in_api`` for the public OpenAI
         # API, not for the OAuth-backed Codex backend that this provider uses.
         # Some valid Codex CLI models (for example gpt-5.3-codex-spark) are
@@ -177,6 +191,8 @@ def _fetch_models_from_api(access_token: str) -> List[str]:
     sortable.sort(key=lambda x: (x[0], x[1]))
     _MODEL_REASONING_EFFORTS.clear()
     _MODEL_REASONING_EFFORTS.update(discovered_efforts)
+    _MODEL_CONTEXT_WINDOWS.clear()
+    _MODEL_CONTEXT_WINDOWS.update(discovered_context)
     _MODEL_REASONING_SOURCES.clear()
     _MODEL_REASONING_SOURCES.update({model: 'live_catalog' for model in discovered_efforts})
     return _add_forward_compat_models([slug for _, slug in sortable])

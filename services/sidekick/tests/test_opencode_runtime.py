@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import importlib
 import builtins
+import json
 from pathlib import Path
+import cli.auth as auth
 from cli.models import normalize_opencode_model_id, opencode_model_api_mode, opencode_provider_for_model
 import cli.runtime_provider as runtime_provider
+from web.api import providers as provider_api
 from runtime.auxiliary_client import _API_KEY_PROVIDER_AUX_MODELS_FALLBACK
 from runtime.transports import ChatCompletionsTransport
 from types import SimpleNamespace
@@ -19,6 +22,49 @@ def test_opencode_go_keeps_deepseek_model_ids():
     # provider selection disambiguates which endpoint should receive it.
     assert opencode_provider_for_model("opencode-zen", "deepseek-v4-flash") == "opencode-zen"
     assert opencode_provider_for_model("opencode-go", "deepseek-v4-flash") == "opencode-go"
+
+
+def test_opencode_cli_credentials_are_profile_scoped_for_zen_and_go(tmp_path, monkeypatch):
+    monkeypatch.setattr(auth, "get_sidekick_home", lambda: tmp_path)
+    auth_dir = tmp_path / "opencode-data" / "opencode"
+    auth_dir.mkdir(parents=True)
+    (auth_dir / "auth.json").write_text(json.dumps({
+        "opencode": {"type": "api", "key": "zen-test-key"},
+        "opencode-go": {"type": "api", "key": "go-test-key"},
+    }), encoding="utf-8")
+
+    zen = auth.get_api_key_provider_status("opencode-zen")
+    go = auth.get_api_key_provider_status("opencode-go")
+    assert zen["configured"] is True
+    assert zen["key_source"] == "opencode_cli"
+    assert go["configured"] is True
+    assert go["key_source"] == "opencode_cli"
+    assert auth.resolve_api_key_provider_credentials("opencode-zen")["api_key"] == "zen-test-key"
+    assert auth.resolve_api_key_provider_credentials("opencode-go")["api_key"] == "go-test-key"
+
+
+def test_opencode_cli_does_not_read_global_auth_store(tmp_path, monkeypatch):
+    monkeypatch.setattr(auth, "get_sidekick_home", lambda: tmp_path / "profile")
+    global_data = tmp_path / "global" / "opencode"
+    global_data.mkdir(parents=True)
+    (global_data / "auth.json").write_text(json.dumps({
+        "opencode": {"type": "api", "key": "global-only-test-key"},
+    }), encoding="utf-8")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "global"))
+
+    status = auth.get_api_key_provider_status("opencode-zen")
+    assert status["configured"] is False
+
+
+def test_provider_list_sees_profile_bound_opencode_cli_credentials(tmp_path, monkeypatch):
+    monkeypatch.setattr(auth, "get_sidekick_home", lambda: tmp_path)
+    auth_dir = tmp_path / "opencode-data" / "opencode"
+    auth_dir.mkdir(parents=True)
+    (auth_dir / "auth.json").write_text(json.dumps({
+        "opencode": {"type": "api", "key": "zen-test-key"},
+    }), encoding="utf-8")
+
+    assert provider_api._provider_has_key("opencode-zen") is True
 
 
 def test_opencode_go_aux_default_has_large_context_for_compression():

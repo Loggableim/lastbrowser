@@ -2343,6 +2343,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
   const modelsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models', scopeSelection: activeProviderScope }),
     [ready, activeProfileId, activeSpacePath, activeBackendProfileName], ready);
+  const providerAuthState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection: activeProviderScope }),
+    [ready, activeProfileId, activeSpacePath, activeBackendProfileName], ready);
   const authState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/auth/status' }), [ready], ready);
   const pluginsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/plugins' }), [ready], ready);
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null);
@@ -2436,6 +2438,82 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     pollIntervalSeconds?: number;
     expiresAt?: number;
   } | null>(null);
+  const [openCodeLogin, setOpenCodeLogin] = useState<{
+    providerId: string;
+    loginId?: string;
+    status: 'starting' | 'running' | 'connected' | 'failed' | 'cancelled';
+    scope: typeof activeProviderScope;
+    errorCode?: 'openCodeCliMissing' | 'openCodeCliPlatform' | 'openCodeCliStartFailed';
+  } | null>(null);
+
+  useEffect(() => {
+    if (!openCodeLogin?.loginId || openCodeLogin.status !== 'running') return;
+    const captured = openCodeLogin;
+    let active = true;
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const response = await window.lastbrowser.sidekick.requestWebui({
+          method: 'GET',
+          path: `/api/providers/opencode-auth/status?login_id=${encodeURIComponent(captured.loginId!)}`,
+          scopeSelection: captured.scope
+        });
+        if (!active || !isProviderSettingsScopeCurrent(captured.scope, {
+          browserProfileId: activeProfileId,
+          workspacePath: activeSpacePath || null,
+          ...(activeBackendProfileName ? { backendProfileName: activeBackendProfileName } : {})
+        }, 0, 0)) return;
+        if (!isRecord(response) || response.ok !== true) return;
+        const status = String(response.status || 'running');
+        if (status === 'connected') {
+          setOpenCodeLogin({ ...captured, status: 'connected' });
+          void modelsState.refresh();
+          void authState.refresh();
+          void providerAuthState.refresh();
+        } else if (status === 'cancelled' || status === 'failed') {
+          setOpenCodeLogin({ ...captured, status });
+        }
+      } catch {
+        // Keep the last known state; transient API restarts must not look like auth failure.
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 1500);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [openCodeLogin?.loginId, openCodeLogin?.status, activeProfileId, activeSpacePath, activeBackendProfileName]);
+
+  async function startOpenCodeLogin(providerId: string): Promise<void> {
+    const scope = { ...activeProviderScope };
+    setOpenCodeLogin({ providerId, status: 'starting', scope });
+    try {
+      const response = await window.lastbrowser.sidekick.requestWebui({
+        method: 'POST', path: '/api/providers/opencode-auth/login', body: { provider: providerId }, scopeSelection: scope
+      });
+      if (!isRecord(response) || response.ok !== true || typeof response.login_id !== 'string') {
+        throw new Error(String(isRecord(response) ? response.error_code || 'opencode_cli_start_failed' : 'opencode_cli_start_failed'));
+      }
+      setOpenCodeLogin({ providerId, loginId: response.login_id, status: 'running', scope });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const errorCode = message.includes('opencode_cli_not_found') ? 'openCodeCliMissing'
+        : message.includes('unsupported_platform') ? 'openCodeCliPlatform'
+          : 'openCodeCliStartFailed';
+      setOpenCodeLogin({ providerId, status: 'failed', scope, errorCode });
+    }
+  }
+
+  async function cancelOpenCodeLogin(): Promise<void> {
+    const current = openCodeLogin;
+    if (!current?.loginId) return;
+    try {
+      await window.lastbrowser.sidekick.requestWebui({
+        method: 'POST', path: '/api/providers/opencode-auth/cancel', body: { login_id: current.loginId }, scopeSelection: current.scope
+      });
+      setOpenCodeLogin({ ...current, status: 'cancelled' });
+    } catch {
+      setOpenCodeLogin({ ...current, status: 'failed', errorCode: 'openCodeCliStartFailed' });
+    }
+  }
 
 
   const [zenExitMode, setZenExitModeState] = useState<ZenExitDefaultMode>(() => {
@@ -4378,6 +4456,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                           successfulChat: Boolean(chatEvidence),
                           modelId: chatEvidence?.modelId,
                         });
+                        const providerRows = isRecord(providerAuthState.data) && Array.isArray(providerAuthState.data.providers)
+                          ? providerAuthState.data.providers.filter(isRecord) : [];
+                        const providerAuth = providerRows.find((row) => row.id === option.id);
+                        const isOpenCodeProvider = ['opencode-zen', 'opencode-go'].includes(option.id);
                         const isActive = option.id === activeProvider;
                         return (
                           <div key={option.id} className={`provider-status-row ${isActive ? 'active' : ''}`}>
@@ -4393,6 +4475,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                               )}
                               {verification.evidenceKey && (
                                 <small className="provider-verification-evidence">{t(verification.evidenceKey)}</small>
+                              )}
+                              {isOpenCodeProvider && providerAuth?.has_key === true && (
+                                <small className="provider-verification-note verified">{t('settings.panels.providers.openCodeProfileConfigured')}</small>
                               )}
                             </span>
                             {isActive && <span className="provider-badge">{t('settings.panels.providers.active')}</span>}
@@ -4422,7 +4507,35 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 )}
                               </div>
                             )}
-                            {['openrouter', 'alibaba'].includes(option.id) ? (
+                            {['opencode-zen', 'opencode-go'].includes(option.id) ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="secondary-action compact"
+                                  onClick={() => void startOpenCodeLogin(option.id)}
+                                  disabled={!ready || saving || openCodeLogin?.status === 'starting' || openCodeLogin?.status === 'running'}
+                                >
+                                  <LogIn size={14} />
+                                  <span>{t('settings.panels.providers.openCodeLogin')}</span>
+                                </button>
+                                {openCodeLogin?.providerId === option.id
+                                  && isProviderSettingsScopeCurrent(openCodeLogin.scope, activeProviderScope, 0, 0) && (
+                                  <div className="provider-connect-status" role="status" aria-live="polite">
+                                    <span>{openCodeLogin.errorCode
+                                      ? t(`settings.panels.providers.${openCodeLogin.errorCode}`)
+                                      : openCodeLogin.status === 'starting' ? t('settings.panels.providers.openCodeLoginStarting')
+                                        : openCodeLogin.status === 'running' ? t('settings.panels.providers.openCodeLoginRunning')
+                                          : openCodeLogin.status === 'connected' ? t('settings.panels.providers.openCodeLoginConnected')
+                                            : t('settings.panels.providers.openCodeLoginCancelled')}</span>
+                                    {openCodeLogin.status === 'running' && (
+                                      <button type="button" className="secondary-action compact" onClick={() => void cancelOpenCodeLogin()}>
+                                        {t('settings.panels.providers.cancel')}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </>
+                            ) : ['openrouter', 'alibaba'].includes(option.id) ? (
                               <button
                                 type="button"
                                 className="secondary-action compact"

@@ -97,6 +97,19 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
                 length = model.get("context_length")
                 if type(length) is not int or not 1 <= length <= 16000000:
                     length = configured_context_length(configuration, model_id, pid)
+                if length is None and pid == "openai-codex":
+                    # Codex OAuth context comes only from that account's own
+                    # live catalog, never the public OpenAI API model catalog.
+                    from cli.codex_models import get_codex_model_context_length
+                    length = get_codex_model_context_length(model_id)
+                elif length is None:
+                    # Provider-scoped exact metadata from the bundled models.dev
+                    # registry. Unknown pairs remain without a context limit.
+                    try:
+                        from runtime.models_dev import lookup_models_dev_context
+                        length = lookup_models_dev_context(pid, model_id)
+                    except Exception:
+                        length = None
                 if length is not None:
                     clean_model["contextLength"] = length
                 for source, public in (("supportsVision", "supportsVision"), ("supportsTools", "supportsTools"),

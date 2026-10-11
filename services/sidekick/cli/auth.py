@@ -564,6 +564,27 @@ def _resolve_api_key_provider_secret(
         if has_usable_secret(val):
             return val, env_var
 
+    # OpenCode's official CLI writes provider credentials to its own auth.json.
+    # LastBrowser launches it with XDG_DATA_HOME rooted inside the active
+    # Sidekick profile, so this read never imports the user's global credentials.
+    opencode_provider_id = {
+        "opencode-zen": "opencode",
+        "opencode-go": "opencode-go",
+    }.get(provider_id)
+    if opencode_provider_id:
+        try:
+            auth_path = get_sidekick_home() / "opencode-data" / "opencode" / "auth.json"
+            payload = json.loads(auth_path.read_text(encoding="utf-8"))
+            entry = payload.get(opencode_provider_id) if isinstance(payload, dict) else None
+            if isinstance(entry, dict) and entry.get("type") == "api":
+                key = str(entry.get("key") or "").strip()
+                if has_usable_secret(key):
+                    return key, "opencode_cli"
+        except (OSError, ValueError, TypeError):
+            pass
+        except Exception:
+            logger.debug("Could not read profile OpenCode CLI credentials", exc_info=True)
+
     # A provider-scoped key in config.yaml is also an explicit credential
     # source. Keep the lookup scoped to this provider so local/cloud Ollama
     # credentials (and other vendors) cannot bleed into each other.

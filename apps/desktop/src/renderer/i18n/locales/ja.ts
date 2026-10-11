@@ -224,5 +224,14 @@ export const desktopJaOverrides = {
   'settings.panels.providers.providerConfigLabel': 'プロバイダー設定',
   'settings.panels.providers.backendConfigLabel': 'バックエンド設定',
   'settings.panels.providers.multiAgentBetaRequired': '保存された選択はマルチエージェントモードを実行します。このセッションでベータ版を有効にしてモードを明示的に選ぶか、このプロフィールで最近チャットが正常に完了したモデルとプロバイダーの組み合わせを選んでください。',
-  'settings.panels.providers.singleModelMigration': '保存されたマルチエージェントの既定値を、このプロフィールで最近チャットが正常に完了したモデルとプロバイダーの組み合わせに置き換えました。ベータ版を有効にして選択しない限り、再実行されません。'
+  'settings.panels.providers.singleModelMigration': '保存されたマルチエージェントの既定値を、このプロフィールで最近チャットが正常に完了したモデルとプロバイダーの組み合わせに置き換えました。ベータ版を有効にして選択しない限り、再実行されません。',
+  'settings.panels.providers.openCodeLogin': 'OpenCode CLI にログイン',
+  'settings.panels.providers.openCodeLoginStarting': 'OpenCode のログインを開始しています…',
+  'settings.panels.providers.openCodeLoginRunning': 'OpenCode のウィンドウでログインを完了してください。',
+  'settings.panels.providers.openCodeLoginConnected': 'OpenCode の認証情報をこのプロフィールに保存しました。',
+  'settings.panels.providers.openCodeProfileConfigured': 'OpenCode API キーをこのプロフィールに保存しました。',
+  'settings.panels.providers.openCodeLoginCancelled': 'OpenCode のログインをキャンセルしました。',
+  'settings.panels.providers.openCodeCliMissing': 'OpenCode CLI が見つかりません。インストールしてから再試行してください。',
+  'settings.panels.providers.openCodeCliPlatform': 'OpenCode CLI のログインは現在 Windows でのみ利用できます。',
+  'settings.panels.providers.openCodeCliStartFailed': 'OpenCode のログインを開始できませんでした。もう一度お試しください。'
 } satisfies Record<DesktopTranslationKey, string>;

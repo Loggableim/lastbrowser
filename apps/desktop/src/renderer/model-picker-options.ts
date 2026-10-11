@@ -1,4 +1,5 @@
 import type { NativeAvailabilityReason, NativeModelAvailability, ScopedModelSelection } from './independent-contracts.js';
+import { isRetiredProvider } from './retired-providers.js';
 
 export type ModelPickerOptionGroup = Readonly<{
   provider: string;
@@ -18,6 +19,7 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
   return (selection.groups ?? [])
     .filter(group => {
       const pid = String(group.provider_id || '').toLowerCase();
+      if (isRetiredProvider(pid)) return false;
       if (catalogStatus) {
         if (pid === 'antigravity' && String(catalogStatus.antigravity || '').toLowerCase() !== 'ready') {
           return false;

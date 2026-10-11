@@ -1082,6 +1082,9 @@ def get_provider_quota(provider_id: str | None = None) -> dict[str, Any]:
     stays aligned with CLI/Gateway provider semantics.
     """
     provider = (provider_id or _active_provider_id() or "").strip().lower()
+    from runtime.retired_providers import is_retired_provider
+    if is_retired_provider(provider):
+        return {"ok": False, "supported": False, "status": "unavailable", "message": "This provider has been removed."}
     if not provider:
         return {
             "ok": False,
@@ -1367,7 +1370,10 @@ def get_providers() -> dict[str, Any]:
     # Add OAuth providers even if not in _PROVIDER_DISPLAY
     known_ids.update(_OAUTH_PROVIDERS)
 
+    from runtime.retired_providers import is_retired_provider
     for pid in sorted(known_ids):
+        if is_retired_provider(pid):
+            continue
         display_name = _PROVIDER_DISPLAY.get(pid, pid.replace("-", " ").title())
         is_oauth = _provider_is_oauth(pid)
         has_key = _provider_has_key(pid)
@@ -1678,6 +1684,9 @@ def get_providers() -> dict[str, Any]:
 
     # Determine active provider
     active_provider = resolve_active_provider_context(cfg).get("provider")
+    providers = [provider for provider in providers if not is_retired_provider(provider.get("id"))]
+    if is_retired_provider(active_provider):
+        active_provider = ""
 
     return {
         "providers": providers,
@@ -1695,6 +1704,10 @@ def set_provider_key(provider_id: str, api_key: str | None, base_url: str | None
     Returns a status dict with the operation result.
     """
     provider_id = provider_id.strip().lower()
+
+    from runtime.retired_providers import is_retired_provider
+    if is_retired_provider(provider_id) or is_retired_provider(base_url):
+        return {"ok": False, "error": "This provider has been removed."}
 
     if not provider_id:
         return {"ok": False, "error": "Provider ID is required."}

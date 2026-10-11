@@ -992,29 +992,12 @@ def resolve_runtime_provider(
     """
     requested_provider = resolve_requested_provider(requested)
 
+    from runtime.retired_providers import is_retired_provider
+    if is_retired_provider(requested_provider) or is_retired_provider(explicit_base_url) or is_retired_provider(_get_model_config().get("base_url")):
+        raise auth_mod.AuthError("This provider has been removed. Choose a supported provider.", provider="antigravity", code="provider_removed")
+
     if requested_provider in {"google-gemini-cli", "gemini-cli", "gemini-oauth"}:
         raise auth_mod._google_gemini_cli_unavailable()
-
-    # Antigravity: the successor to consumer Gemini CLI sign-in. Multi-account
-    # OAuth pool with round-robin rotation (runtime.antigravity_oauth).
-    if requested_provider == "antigravity":
-        from runtime.antigravity_oauth import get_antigravity_auth_status
-
-        status = get_antigravity_auth_status()
-        if not status.get("connected_accounts"):
-            raise auth_mod.AuthError(
-                "No Antigravity account is connected. Add one in Settings → Providers → Antigravity.",
-                provider="antigravity",
-                code="antigravity_not_logged_in",
-            )
-        return {
-            "provider": "antigravity",
-            "api_mode": "chat_completions",
-            "base_url": "cloudcode-pa://antigravity",
-            "api_key": "antigravity-oauth",
-            "source": "antigravity-oauth",
-            "requested_provider": requested_provider,
-        }
 
     if any(
         str(url or "").strip().lower().startswith("cloudcode-pa://google")

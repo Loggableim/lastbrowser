@@ -1,3 +1,4 @@
+import { isRetiredProvider } from '../retired-providers.js';
 /**
  * Native chat panel for Lastbrowser.
  *
@@ -75,7 +76,7 @@ const CHAT_DEFAULT_PREFERENCE_KEY = 'lastbrowser.chatDefaultPreference.v1';
 function readRequestedChatDefault(): { provider: string; model: string } {
   try {
     const saved = JSON.parse(window.localStorage.getItem(CHAT_DEFAULT_PREFERENCE_KEY) || 'null');
-    if (saved && typeof saved.provider === 'string' && saved.provider.trim()
+    if (saved && !isRetiredProvider(saved.provider) && typeof saved.provider === 'string' && saved.provider.trim()
       && typeof saved.model === 'string' && saved.model.trim()) return { provider: saved.provider.trim(), model: saved.model.trim() };
   } catch {}
   return REQUESTED_CHAT_DEFAULT;
@@ -226,8 +227,7 @@ export function NativeChatMain({
           ...((liveModelsRes as any)?.catalog_status || {})
         };
         const reportedAntigravityStatus = String(statusMap.antigravity || '').trim().toLowerCase();
-        statusMap.antigravity = reportedAntigravityStatus === 'unavailable' ? 'unavailable'
-          : reportedAntigravityStatus === 'ready' ? 'ready' : 'unknown';
+        statusMap.antigravity = 'unavailable';
         setCatalogStatus(statusMap);
         const cataloguedData = { ...data, catalog_status: statusMap };
         const isAntigravityCatalogUnavailable = String(statusMap.antigravity || '').toLowerCase() === 'unavailable';
@@ -253,7 +253,9 @@ export function NativeChatMain({
         // GPT-6 Luna is the requested product default only when this exact pair
         // may execute with current profile/runtime/build/config-bound evidence.
         // Until then the UI retains the requested pair behind the beta gate.
-        const selectionForView = !data.configured && !hasExplicitSessionModel
+        const selectionForView = isRetiredProvider(data.provider)
+          ? { ...data, provider: '', model: '', configured: false }
+          : !data.configured && !hasExplicitSessionModel
           ? { ...data, model: requestedChatDefault.model, provider: requestedChatDefault.provider }
           : data;
         setScopedModel({ viewKey: modelViewKey, selection: selectionForView });
@@ -265,7 +267,7 @@ export function NativeChatMain({
         setCatalogDefaultModel((selectedModelQualified && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) ? selectionForView.model : '');
         if (selectedModelQualified && selectionForView.model && activeSpacePath && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) saveSpaceModel(activeSpacePath, selectionForView.model, window.localStorage, selectionForView.provider);
         setModelCatalog(isAntigravityCatalogUnverified
-          ? rawParsed.filter(group => group.providerId.toLowerCase() !== 'antigravity')
+          ? rawParsed.filter(group => !isRetiredProvider(group.providerId))
           : rawParsed);
         setModelCatalogLoaded(true);
       } catch {

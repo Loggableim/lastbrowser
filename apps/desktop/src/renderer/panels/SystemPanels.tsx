@@ -1,3 +1,4 @@
+import { isRetiredProvider } from '../retired-providers.js';
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '../appearance.css';
 import { LocalAiSetupPane } from '../components/LocalAiSetupPane.js';
@@ -2534,14 +2535,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const passwordEnvLocked = settingsBoolean(settings.password_env_var, false);
   const catalogStatusMap = isRecord(modelsState.data?.catalog_status) ? (modelsState.data.catalog_status as Record<string, unknown>) : {};
   const antigravityStatus = String(catalogStatusMap.antigravity || '').toLowerCase();
-  const isAntigravityReady = antigravityStatus === 'ready';
+  const isAntigravityReady = false;
   const isAntigravityUnavailable = antigravityStatus === 'unavailable';
   const isAntigravityUnknown = !isAntigravityReady && !isAntigravityUnavailable;
   const isAntigravityUnverified = !isAntigravityReady;
   const rawModelGroups: AnyRecord[] = arrayFrom(modelsState.data, ['groups']) as AnyRecord[];
-  const allModelGroups: AnyRecord[] = isAntigravityUnverified
-    ? rawModelGroups.filter((group) => settingsText(group.provider_id || group.provider_id_canonical, '').trim().toLowerCase() !== 'antigravity')
-    : rawModelGroups;
+  const allModelGroups: AnyRecord[] = rawModelGroups.filter((group) =>
+    !isRetiredProvider(group.provider_id || group.provider_id_canonical || group.provider));
   const modelGroups: AnyRecord[] = (showUntestedBetas ? allModelGroups : allModelGroups.flatMap((group) => {
     const providerId = settingsText(group.provider_id || group.provider_id_canonical, '');
     const models = Array.isArray(group.models) ? group.models.filter(isRecord).filter(model =>
@@ -2553,7 +2553,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     const qualified = isProviderModelQualified(providerId, modelId, activeProfileId, activeBackendProfileName || 'default', window.localStorage);
     return showUntestedBetas && !qualified ? { ...model, label: `${settingsText(model.label || model.name || model.id)} · ${t('settings.panels.providers.betaUntested')}` } : model;
   }) }));
-  const activeProvider = settingsText(modelsState.data?.active_provider, settingsText(settings.provider || settings.model_provider));
+  const storedActiveProvider = settingsText(modelsState.data?.active_provider, settingsText(settings.provider || settings.model_provider));
+  const activeProvider = isRetiredProvider(storedActiveProvider) ? '' : storedActiveProvider;
   const defaultModel = settingsText(draft.default_model ?? settings.default_model ?? modelsState.data?.default_model, '');
   const defaultModelQualified = Boolean(defaultModel && activeProvider && isProviderModelQualified(activeProvider, defaultModel, activeProfileId, activeBackendProfileName || 'default', window.localStorage));
   const webuiVersion = settingsText(settings.webui_version, 'not detected');
@@ -4357,16 +4358,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                 <LogIn size={14} />
                                 <span>{t('settings.panels.providers.connect')}</span>
                               </button>
-                            )}
-                            {option.id === 'antigravity' && (
-                              <div className="provider-antigravity-accounts">
-                                <GeminiAccountsPanel
-                                  sidekickReady={ready}
-                                  onAccountsChanged={() => void modelsState.refresh()}
-                                  catalogStatus={antigravityStatus || undefined}
-                                  providerId={option.id}
-                                />
-                              </div>
                             )}
                             {option.id === 'openai-codex' && codexConnect && (
                               <div className="provider-connect-status" role="status" aria-live="polite">

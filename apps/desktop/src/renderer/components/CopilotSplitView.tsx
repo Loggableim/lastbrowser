@@ -1,3 +1,4 @@
+import { isRetiredProvider } from '../retired-providers.js';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Bot,
@@ -274,7 +275,7 @@ export function CopilotSplitView({
           // The retired Gemini CLI / Code Assist provider stays in backend
           // migration data, but must never appear as a selectable model source.
           if (['google-gemini-cli', 'gemini-cli', 'gemini-oauth'].includes(pid)) continue;
-          if (isAntigravityUnavailable && pid.includes('antigravity')) continue;
+          if (isRetiredProvider(pid)) continue;
           const gAccount = g.account;
 
           let category: 'gemini' | 'claude' | 'openai' | 'local' | 'other' = 'other';
@@ -599,7 +600,7 @@ export function CopilotSplitView({
           )}
 
           {/* 1. Google AI Studio API key and Antigravity OAuth models */}
-          {visibleModelList.some((m) => m.category === 'gemini') && <div className="model-group-title">Google Gemini / Antigravity</div>}
+          {visibleModelList.some((m) => m.category === 'gemini') && <div className="model-group-title">Google Gemini</div>}
           {visibleModelList.filter((m) => m.category === 'gemini').map(renderModelItem)}
 
           {/* 2. Anthropic */}

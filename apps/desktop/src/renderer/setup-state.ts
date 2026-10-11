@@ -1,3 +1,5 @@
+import { isRetiredProvider } from './retired-providers.js';
+
 export type SetupState = {
   cloudSetupComplete: boolean;
   provider: string;
@@ -66,18 +68,8 @@ export async function openProviderOAuthUrl(
     openWindow?: (url: string) => void;
   }
 ): Promise<boolean> {
-  if (!url.trim()) return false;
+  if (!url.trim() || isRetiredProvider(providerId)) return false;
   if (isGeminiCliProvider(providerId)) {
-    return false;
-  }
-  // Google blocks OAuth inside embedded Electron/WebView windows — the
-  // Antigravity flow must always open in the OS browser.
-  if (providerId === 'antigravity' && integrations.openExternal) {
-    try {
-      if (await integrations.openExternal(url)) return true;
-    } catch {
-      return false;
-    }
     return false;
   }
   if (providerId === 'openai-codex' && integrations.openExternal) {
@@ -97,7 +89,6 @@ export async function openProviderOAuthUrl(
 
 const fallbackCloudProviders = [
   { id: 'openai-codex', label: 'OpenAI Codex (ChatGPT)', oauth_provider: 'openai-codex', oauth_label: 'ChatGPT Account' },
-  { id: 'antigravity', label: 'Antigravity (Google)', oauth_provider: 'antigravity', oauth_label: 'Google Account' },
   { id: 'ollama', label: 'Ollama (Lokal)', requires_base_url: false, key_optional: true, default_base_url: 'http://127.0.0.1:11434/v1' },
   { id: 'ollama-cloud', label: 'Ollama Cloud', requires_base_url: false, key_optional: false, default_base_url: 'https://ollama.com/v1' },
   { id: 'openrouter', label: 'OpenRouter', key_optional: false },
@@ -170,8 +161,8 @@ export function normalizeSetupState(raw: unknown): SetupState {
   const aiChoice = data.aiChoice === 'enabled' || data.aiChoice === 'disabled' ? data.aiChoice : undefined;
   return {
     cloudSetupComplete: data.cloudSetupComplete === true,
-    provider: String(data.provider || '').trim(),
-    model: String(data.model || '').trim(),
+    provider: isRetiredProvider(data.provider) ? '' : String(data.provider || '').trim(),
+    model: isRetiredProvider(data.provider) ? '' : String(data.model || '').trim(),
     ...(aiChoice ? { aiChoice } : {}),
     ...(typeof data.browserSetupComplete === 'boolean' ? { browserSetupComplete: data.browserSetupComplete } : {}),
     ...(botName ? { botName } : {}),
@@ -307,6 +298,7 @@ export function cloudProviderOptions(status: OnboardingStatus | null | undefined
     ]
     : fallbackCloudProviders;
   return mergedProviders
+    .filter((provider) => !isRetiredProvider(provider.id) && !isRetiredProvider(provider.oauth_provider))
     .filter((provider) => Boolean(String(provider.id || '').trim()))
     // Subscription-backed Gemini CLI is not available to consumer accounts
     // through Lastbrowser. Gemini API-key access remains a separate provider.
@@ -332,6 +324,7 @@ export function providerOption(
 }
 
 export function modelsForProvider(status: OnboardingStatus | null | undefined, providerId: string): Array<{ id: string; label: string }> {
+  if (isRetiredProvider(providerId)) return [];
   const provider = status?.setup?.providers?.find((item) => item.id === providerId);
   const models = provider?.models || [];
   const normalized = models

@@ -1042,28 +1042,13 @@ def start_onboarding_oauth_flow(body: dict[str, Any] | None) -> dict[str, Any]:
     """
     _cleanup_oauth_flows()
     provider = str((body or {}).get("provider") or "").strip().lower()
-    if provider == "antigravity":
-        # Antigravity multi-account OAuth: each completed login adds one
-        # Google account to the round-robin pool.
-        flow_id = uuid.uuid4().hex
-        flow = {
-            "provider": "antigravity",
-            "sidekick_home": str(_get_active_profile_home()),
-            "status": "pending",
-            "expires_at": time.time() + GOOGLE_FLOW_MAX_WAIT_SECONDS,
-            "poll_interval_seconds": 3,
-            "cancel_event": threading.Event(),
-            "created_at": time.time(),
-            "updated_at": time.time(),
-        }
-        with _OAUTH_FLOWS_LOCK:
-            _OAUTH_FLOWS[flow_id] = flow
-        _spawn_antigravity_oauth_worker(flow_id)
-        return _antigravity_public_start_payload(flow_id, flow)
+    from runtime.retired_providers import is_retired_provider
+    if is_retired_provider(provider):
+        raise ValueError("This provider has been removed. Choose a supported provider.")
     if provider not in _ALLOWED_ONBOARDING_OAUTH_PROVIDERS:
         if provider in _REJECTED_ONBOARDING_OAUTH_PROVIDERS or provider:
             raise ValueError(
-                "Only OpenAI Codex, Anthropic/Claude, and Antigravity OAuth are supported "
+                "Only OpenAI Codex and Anthropic/Claude OAuth are supported "
                 "in WebUI onboarding right now"
             )
         raise ValueError("provider is required")

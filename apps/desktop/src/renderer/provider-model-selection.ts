@@ -1,3 +1,5 @@
+import { isRetiredProvider } from './retired-providers.js';
+
 export interface ProviderModelSelection {
   model: string;
   provider?: string;
@@ -35,6 +37,7 @@ export function resolvePreferredChatModelSelection(input: PreferredChatModelSele
     if (!rawModel) continue;
     const rawProvider = typeof candidate?.provider === 'string' ? candidate.provider.trim() : '';
     const parsed = parseProviderModelId(rawModel, rawProvider);
+    if (isRetiredProvider(parsed.provider)) continue;
     if (isMultiAgentModelSelection(parsed) && input.allowMultiAgent !== true) {
       skippedMultiAgent = true;
       continue;
@@ -51,6 +54,7 @@ export function resolveCatalogModelSelection(
   activeProvider?: unknown,
 ): ProviderModelSelection {
   const value = typeof rawId === 'string' ? rawId.trim() : '';
+  if (isRetiredProvider(activeProvider) || isRetiredProvider(parseProviderModelId(value).provider)) return { model: '' };
   if (!value) {
     const provider = typeof activeProvider === 'string' ? activeProvider.trim() : '';
     const activeGroup = provider

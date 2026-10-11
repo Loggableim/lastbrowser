@@ -56,13 +56,13 @@ describe('cloud first-run setup state', () => {
     expect(openConnectWindow).not.toHaveBeenCalled();
   });
 
-  it('opens Antigravity OAuth only in the system browser', async () => {
+  it('does not open retired Antigravity OAuth', async () => {
     const openExternal = vi.fn(async () => true);
     const openConnectWindow = vi.fn(async () => true);
     expect(await openProviderOAuthUrl('antigravity', 'https://accounts.google.com/oauth', {
       openExternal, openConnectWindow
-    })).toBe(true);
-    expect(openExternal).toHaveBeenCalledOnce();
+    })).toBe(false);
+    expect(openExternal).not.toHaveBeenCalled();
     expect(openConnectWindow).not.toHaveBeenCalled();
 
     expect(await openProviderOAuthUrl('antigravity', 'https://accounts.google.com/oauth', {
@@ -163,7 +163,6 @@ describe('cloud first-run setup state', () => {
     // wizard must offer Ollama and LM Studio alongside the cloud providers.
     expect(options.map((option) => option.id)).toEqual([
       'openai-codex',
-      'antigravity',
       'alibaba',
       'openrouter',
       'anthropic',
@@ -185,11 +184,11 @@ describe('cloud first-run setup state', () => {
     expect(options.find((option) => option.id === 'anthropic')?.oauthProvider).toBe('anthropic');
   });
 
-  it('keeps Antigravity connectable when onboarding metadata omits oauth_provider', () => {
+  it('filters retired Antigravity when onboarding metadata omits oauth_provider', () => {
     const options = cloudProviderOptions({ setup: { providers: [
       { id: 'antigravity', label: 'Antigravity (Google)' }
     ] } });
-    expect(options.find((option) => option.id === 'antigravity')?.oauthProvider).toBe('antigravity');
+    expect(options.find((option) => option.id === 'antigravity')).toBeUndefined();
   });
 
   it('filters unsupported personal Gemini subscription connectors from provider selection', () => {
@@ -204,7 +203,6 @@ describe('cloud first-run setup state', () => {
   it('shows cloud provider fallbacks before the onboarding API responds', () => {
     expect(cloudProviderOptions(null).map((option) => option.id)).toEqual([
       'openai-codex',
-      'antigravity',
       'ollama',
       'ollama-cloud',
       'openrouter',
@@ -220,12 +218,12 @@ describe('cloud first-run setup state', () => {
     });
   });
 
-  it('keeps Antigravity in provider settings even when the runtime catalog omits it', () => {
+  it('does not restore retired Antigravity when the runtime catalog omits it', () => {
     const options = cloudProviderOptions({ setup: { providers: [
       { id: 'openrouter', label: 'OpenRouter' },
       { id: 'ollama-cloud', label: 'Ollama Cloud' }
     ] } });
-    expect(options.map((option) => option.id)).toEqual(['openai-codex', 'antigravity', 'alibaba', 'openrouter', 'ollama-cloud']);
+    expect(options.map((option) => option.id)).toEqual(['openai-codex', 'alibaba', 'openrouter', 'ollama-cloud']);
     expect(modelsForProvider(null, 'antigravity')).toEqual([]);
   });
 
@@ -239,7 +237,6 @@ describe('cloud first-run setup state', () => {
       }
     }).map((option) => option.id)).toEqual([
       'openai-codex',
-      'antigravity',
       'alibaba',
       'openrouter',
       'openai'

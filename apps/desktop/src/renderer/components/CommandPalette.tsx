@@ -682,18 +682,6 @@ export function CommandPalette({
         }
       },
       {
-        id: 'sidekick-google-accounts',
-        title: 'Google Accounts & Round-Robin verwalten',
-        description: 'Google-Konten für Antigravity-Round-Robin verwalten',
-        category: 'Nova AI',
-        icon: <Users size={16} />,
-        keywords: ['google', 'account', 'oauth', 'round-robin', 'gemini', 'gravity', 'antigravity', 'token', 'verbrauch'],
-        action: () => {
-          setActivePanel('settings');
-          usePanelStore.getState().setActiveContextItem('providers');
-        }
-      },
-      {
         id: 'sidekick-terminal',
         title: 'TUI / Terminal öffnen',
         description: 'Integriertes Developer-Terminal und Shell starten',

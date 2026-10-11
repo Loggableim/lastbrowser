@@ -78,20 +78,6 @@ _SUPPORTED_PROVIDER_SETUPS = {
         "oauth_provider": "openai-codex",
         "oauth_label": "ChatGPT account",
     },
-    "antigravity": {
-        "label": "Antigravity (Google)",
-        # Antigravity uses per-account OAuth tokens in the credential pool
-        # (multi-account round-robin). No API key; the provider must be written
-        # into config.yaml after login so the runtime selects it.
-        "env_var": "SIDEKICK_ANTIGRAVITY_UNUSED",
-        "default_model": "",
-        "requires_base_url": False,
-        "key_optional": True,
-        "models": list(_PROVIDER_MODELS.get("antigravity", [])),
-        "category": "easy_start",
-        "oauth_provider": "antigravity",
-        "oauth_label": "Google account",
-    },
     "openai": {
         "label": "OpenAI",
         "env_var": "OPENAI_API_KEY",
@@ -812,6 +798,9 @@ def _build_setup_catalog(cfg: dict) -> dict:
     current_provider = _extract_current_provider(cfg) or "openrouter"
     current_model = _extract_current_model(cfg)
     current_base_url = _extract_current_base_url(cfg)
+    from runtime.retired_providers import is_retired_provider
+    if is_retired_provider(current_provider) or is_retired_provider(current_base_url):
+        current_provider, current_model, current_base_url = "openrouter", "", ""
 
     providers = []
     for provider_id, meta in _SUPPORTED_PROVIDER_SETUPS.items():

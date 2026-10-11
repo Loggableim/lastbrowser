@@ -19,8 +19,8 @@ Vor Implementierung schlugen vier neue A-027-Regressionen auf der Erstaufnahme f
 | Schritt | Ergebnis |
 | --- | --- |
 | `npm ci` | PASS; 424 Pakete installiert |
-| `npm run test:run` | PASS; 216 Testdateien, 1.974 Tests |
-| `CI=1 npm test` | PASS; 216 Testdateien, 1.974 Tests |
+| `npm run test:run` | PASS; 217 Testdateien, 1.975 Tests |
+| `CI=1 npm test` | PASS; 217 Testdateien, 1.975 Tests |
 | `npm --workspace apps/desktop run build` | PASS; TypeScript und Vite, Hinweis auf bestehende Bundlegröße |
 | `npm run build` | PASS; TypeScript und Vite |
 | `npm run verify:store` | PASS; 39 PASS, 2 WARN, 0 FAIL |
@@ -28,6 +28,10 @@ Vor Implementierung schlugen vier neue A-027-Regressionen auf der Erstaufnahme f
 | `git diff --check` | PASS |
 
 Die erste vollständige Testsuite war durch eine fehlende lokale Windows-Electron-Testdatei und eine alte Quelltext-Erwartung rot. Das passende Electron-Archiv lag bereits im lokalen Cache und wurde nur im ignorierten `node_modules` wiederhergestellt; die veraltete Erwartung wurde an den neuen Fallback angepasst. Danach lief die DOM-Probe mit dem tatsächlichen Electron-Prozess grün.
+
+## Review-Nacharbeit zu PR #41
+
+Der [Cross-Review-Kommentar](https://github.com/Loggableim/lastbrowser/pull/41#issuecomment-6106713917) deckte eine Vorrangslücke auf: Eine gespeicherte Space-Auswahl A in `lastbrowser.spaceModels.v1` übersteuerte nach dem Copilot-Fallback weiterhin den Chat-Store mit B. Der neue Regressionstest `a027-space-model-fallback.test.ts` wurde vor dem Fix ausgeführt und scheiterte konkret mit gespeicherten `model-a` statt erwarteten `model-b`. Er durchläuft die App-Auswahlauflösung, den Copilot-Fallback und den von App verwendeten Auswahl-Handler; nach dem Fix rendert die echte `CopilotSplitView`-Komponente B auch beim zweiten Render/Wiederöffnen. Der App-Handler schreibt B jetzt profil- und Space-gebunden vor dem Chat-Store-Update in die Space-Auswahl und verwirft veraltete Scope-Callbacks. Die Nacharbeit ist ein zusätzlicher Commit auf demselben PR-Branch.
 
 Die zwei Store-Warnungen betreffen vorläufige Screenshots und das nicht bereitgestellte signierte Windows-Paket. Diese Quell- und Build-Prüfung belegt weder ein geprüftes Release-Paket noch VM-, Konto-, Geräte- oder Store-Akzeptanz. Reale Provider-Anmeldung und Live-Chat wurden nicht durchgeführt.
 

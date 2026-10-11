@@ -286,7 +286,8 @@ import { isQuickChatAction, type QuickActionChip } from './quick-actions.js';
 import { loadSpaceModelSelection, removeSpaceModel, saveSpaceModel } from './space-models.js';
 import { isMultiAgentModelSelection, parseProviderModelId, resolvePreferredChatModel, resolvePreferredChatModelSelection } from './provider-model-selection.js';
 import { readShowUntestedProviderBetas } from './provider-beta-preferences.js';
-import { chooseActiveModel, isModelActive } from './active-model-selection.js';
+import { chooseActiveModel } from './active-model-selection.js';
+import { acceptQuickChatModelChoice } from './quick-chat-model-choice.js';
 import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
 import { canSelectNativeModel, mapScopedModelPickerOptions } from './model-picker-options.js';
 import { prepareGuardedNativeChatStart, startGuardedNativeChat } from './guarded-native-chat-start.js';
@@ -5317,18 +5318,25 @@ function AppContent(): JSX.Element {
                 quickActions={quickActions}
                 onExecuteQuickAction={handleExecuteQuickAction}
                 onSelectModel={(model, provider) => {
-                  if (!(AI_ORCHESTRATION_ENABLED && isMultiAgentModelSelection({ model, provider }))
-                    && (!provider || !isModelActive(window.localStorage,
-                    { browserProfileId: activeProfileIdRef.current, backendProfileName: activeBackendProfileNameRef.current || 'default' },
-                    provider, model))) return;
-                  useChatStore.getState().setSelectedModel(model);
-                  useChatStore.getState().setSelectedModelProvider(provider || '');
+                  const capturedProfileId = activeProfileId;
+                  const capturedSpacePath = activeSpacePath;
+                  const capturedBackendProfileName = activeBackendProfileName || 'default';
+                  if (activeProfileIdRef.current !== capturedProfileId || activeSpacePathRef.current !== capturedSpacePath
+                    || (activeBackendProfileNameRef.current || 'default') !== capturedBackendProfileName) return;
+                  if (!acceptQuickChatModelChoice({ storage: window.localStorage,
+                    browserProfileId: capturedProfileId, backendProfileName: capturedBackendProfileName,
+                    spacePath: capturedSpacePath, model, provider,
+                    allowMultiAgent: AI_ORCHESTRATION_ENABLED && readShowUntestedProviderBetas(),
+                    setSelectedModel: useChatStore.getState().setSelectedModel,
+                    setSelectedModelProvider: useChatStore.getState().setSelectedModelProvider })) return;
                   void (async () => {
                     const resolved = await assistantController.resolveScope(
-                      { browserProfileId: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current || null },
-                      activeBackendProfileNameRef.current || undefined
+                      { browserProfileId: capturedProfileId, workspacePath: capturedSpacePath || null },
+                      capturedBackendProfileName
                     );
                     if (!resolved.ok) return;
+                    if (activeProfileIdRef.current !== capturedProfileId || activeSpacePathRef.current !== capturedSpacePath
+                      || (activeBackendProfileNameRef.current || 'default') !== capturedBackendProfileName) return;
                     const current = await assistantController.request({ schemaVersion: 1, operation: 'modelSelection',
                       scope: resolved.value.scope, payload: { action: 'get' } });
                     if (!current.ok) return;

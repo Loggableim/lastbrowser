@@ -20,7 +20,17 @@ Produktiv verwendeter `reduceAccessAuthGate` wird direkt mit den Ereignisfolgen 
 - `enabled`, `unknown`, fehlendes `auth_enabled` bleiben fail-closed.
 - Bestätigt deaktivierte Auth lässt die Browser-Shell bei nicht verfügbarem Python/Sidekick starten.
 
-Eine separate rote Vorher-Ausführung auf dem Basis-Head wurde nicht durchgeführt. Der zuvor reproduzierte P1-Befund ist im GitHub-Review für `7935cb1f6d85421809e3b1948e3ecfca9666d037` dokumentiert.
+## Rot-vor-Evidenz am alten Consumer
+
+Im separaten temporären Worktree `C:\Users\logga\.codex\worktrees\a025-auth-race-red-before-20261011` auf dem unveränderten PR50-Head `7935cb1f6d85421809e3b1948e3ecfca9666d037` wurde ein kurzlebiger Node-Harness ausgeführt. Er extrahierte per TypeScript-AST die tatsächlichen alten `lockBrowser`- und Startup-Preflight-Callbacks aus `App.tsx`; produktiver Code und Regressionstestdateien wurden in diesem Worktree nicht verändert. Das temporäre Harness wurde danach entfernt.
+
+| Ablauf | Ergebnis |
+| --- | --- |
+| Lock-Callback setzt `required=true`, `checked=true` | Kontrolle bestanden |
+| Danach `enabled`-Preflight im selben Scope | Kontrolle bestanden; Gate bleibt gesperrt |
+| Danach verspätetes `disabled`-Preflight im selben Scope | **Race reproduziert:** alter Consumer setzt `required=false`, erwartet war `true`; Harness exit 1 |
+
+Grüner Nachweis nach Fix: der Consumer-Regressionstest führt `reduceAccessAuthGate` aus; Lock vor verspätetem `disabled` bleibt gesperrt. Der fokussierte Testlauf auf dem korrigierten Head endete mit exit 0 (1 Datei, 9 Tests).
 
 ## Pflichtprüfungen
 
@@ -28,6 +38,7 @@ Ausgangs-Head: `7935cb1f6d85421809e3b1948e3ecfca9666d037`.
 
 | Befehl | Exit | Ergebnis |
 | --- | ---: | --- |
+| Temporärer AST-Harness mit extrahierten alten App-Callbacks auf `7935cb1f6d85421809e3b1948e3ecfca9666d037` | 1 (erwartet) | `enabled`-Kontrolle PASS; Lock → verzögertes `disabled` reproduziert Entsperren und verletzt die Assertion |
 | `npm --workspace apps/desktop run test:run -- tests/access-password-lock.test.ts` | 0 | 1 Datei, 9 Tests bestanden |
 | `npm test -- --runInBand` | 0 | 223 Dateien, 2.024 Tests bestanden; npm meldete `--runInBand` als unbekannte CLI-Konfiguration, Vitest lief vollständig |
 | `npm run verify:store` | 0 | 39 Pass, 0 Fehler, 2 Warnungen (provisorische Store-Screenshots; kein finales Paket zur Signaturprüfung) |
@@ -37,6 +48,5 @@ Ausgangs-Head: `7935cb1f6d85421809e3b1948e3ecfca9666d037`.
 
 ## Nicht verifiziert
 
-- Separate rote Vorher-Ausführung des neuen Consumer-Tests.
 - Startzeitmessung, GUI/VM und P003-Installation wurden nicht durchgeführt.
 - Build-Warnungen sind keine Paket-, Signatur-, Installations- oder Releaseabnahme.

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { canRenderBrowserForAccessAuth } from '../src/renderer/access-auth.js';
+import { canReleaseAccessGateFromStartupPreflight, canRenderBrowserForAccessAuth } from '../src/renderer/access-auth.js';
 
 const appPath = path.resolve(process.cwd(), 'src/renderer/App.tsx');
 const settingsPanelsPath = path.resolve(process.cwd(), 'src/renderer/panels/SystemPanels.tsx');
@@ -45,6 +45,12 @@ describe('desktop access password lock', () => {
     expect(source).toContain('setInterval(() => void checkAccessStatus(), 10_000)');
     expect(source).toContain('setAccessAuthChecked(false)');
     expect(source).toContain("document.addEventListener('visibilitychange', onVisible)");
+  });
+
+  it('releases the startup auth wait only when Main confirms authentication is disabled', () => {
+    expect(canReleaseAccessGateFromStartupPreflight('disabled')).toBe(true);
+    expect(canReleaseAccessGateFromStartupPreflight('enabled')).toBe(false);
+    expect(canReleaseAccessGateFromStartupPreflight('unknown')).toBe(false);
   });
 
   it('shows the disabled auth state after removing the password gate', () => {

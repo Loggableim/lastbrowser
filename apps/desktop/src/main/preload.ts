@@ -190,6 +190,11 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
     updateAllAppstore: () => ipcRenderer.invoke('lastbrowser:sidekick:updateAllAppstore'),
     submitAppstoreApp: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:submitAppstoreApp', request),
     getSettings: () => ipcRenderer.invoke('lastbrowser:sidekick:getSettings'),
+    getAccessAuthStartupPolicy: (requestId: number) => ipcRenderer.invoke('lastbrowser:sidekick:getAccessAuthStartupPolicy', requestId) as Promise<{
+      policy: 'disabled' | 'enabled' | 'unknown';
+      requestId: number;
+      scopeId: string;
+    }>,
     getAccessAuthStatus: () => ipcRenderer.invoke('lastbrowser:sidekick:getAccessAuthStatus'),
     loginAccessPassword: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:loginAccessPassword', request),
     lockAccessWindows: () => ipcRenderer.invoke('lastbrowser:sidekick:lockAccessWindows'),

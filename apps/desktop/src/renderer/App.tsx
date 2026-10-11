@@ -59,7 +59,7 @@ import {
 import { hideWebviewScrollbars } from './browser-view.js';
 import { subscribeDevToolsState, toggleWebviewDevTools } from './devtools-state.js';
 import { bindWebviewReadiness, isWebviewReady } from './webview-readiness.js';
-import { canRenderBrowserForAccessAuth } from './access-auth.js';
+import { canReleaseAccessGateFromStartupPreflight, canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
 import { applyLiveTeamworkUpdate, beginLiveTeamworkTurn, bindLiveChatAssistantStream, readTeamworkStreamUpdate } from './teamwork-live-stream.js';
@@ -1005,6 +1005,8 @@ function AppContent(): JSX.Element {
   const [desktopSettings, setDesktopSettings] = useState<Record<string, unknown> | null>(() => loadDesktopSettingsFromStorage());
   const [desktopSettingsHydrated, setDesktopSettingsHydrated] = useState(() => loadDesktopSettingsFromStorage() !== null);
   const desktopSettingsRevisionRef = useRef(0);
+  const accessAuthPreflightRequestIdRef = useRef(0);
+  const accessAuthPreflightScopeIdRef = useRef<string | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
@@ -1421,6 +1423,25 @@ function AppContent(): JSX.Element {
     });
     return () => { current = false; resolution.abort(); };
   }, [sidekickApiReady, activeSpacePath, activeProfileId, assistantController, explicitBackendProfileBySpace]);
+
+  useEffect(() => {
+    let alive = true;
+    const requestId = ++accessAuthPreflightRequestIdRef.current;
+    void window.lastbrowser.sidekick.getAccessAuthStartupPolicy(requestId).then((result) => {
+      if (!alive || requestId !== accessAuthPreflightRequestIdRef.current) return;
+      if (result.requestId !== requestId || typeof result.scopeId !== 'string' || !result.scopeId) return;
+      const priorScopeId = accessAuthPreflightScopeIdRef.current;
+      if (priorScopeId && priorScopeId !== result.scopeId) return;
+      accessAuthPreflightScopeIdRef.current = result.scopeId;
+      if (!canReleaseAccessGateFromStartupPreflight(result.policy)) return;
+      setAccessAuthRequired(false);
+      setAccessAuthChecked(true);
+      setAccessAuthError('');
+    }).catch(() => {
+      // Keep the existing fail-closed auth gate until the normal status check succeeds.
+    });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (!sidekickTransportReady) return;

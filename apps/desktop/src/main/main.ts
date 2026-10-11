@@ -12,7 +12,8 @@ import { ExtensionManager } from './extensions.js';
 import { isCdpEnabled, resolveCdpPort, setPersistedCdpEnabled } from './cdp.js';
 import { loadCdpPreference, saveCdpPreference } from './cdp-settings.js';
 import { moduleDirname } from './module-path.js';
-import { SidecarServices, appResourcesDir, resolveServiceLayout } from './services.js';
+import { isAccessAuthPreflightCurrent, readAccessAuthStartupPolicy, type AccessAuthPreflightContext } from './access-auth-preflight.js';
+import { SidecarServices, appResourcesDir, getSidecarStateDirectory, resolveServiceLayout } from './services.js';
 import { loadSetupState, saveSetupState } from './setup-store.js';
 import {
   addSupermemoryDocument,
@@ -296,6 +297,8 @@ async function restoreDetachedNavigationHistory(
 }
 
 let services: SidecarServices | null = null;
+const accessAuthPreflightScopeId = randomUUID();
+const latestAccessAuthPreflightRequestBySender = new WeakMap<Electron.WebContents, number>();
 let appTray: TrayController | null = null;
 let isQuitting = false;
 let widevineReadiness: WidevineReadiness = { status: 'pending', reason: 'initializing' };
@@ -814,6 +817,39 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:updateAllAppstore', () => updateAllAppstore(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:submitAppstoreApp', (_event, request) => submitAppstoreApp(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:getSettings', () => getSettings(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:sidekick:getAccessAuthStartupPolicy', async (event, rawRequestId: unknown) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
+    const sender = recheck();
+    const requestId = typeof rawRequestId === 'number' && Number.isSafeInteger(rawRequestId) && rawRequestId >= 0
+      ? rawRequestId
+      : -1;
+    if (requestId < 0) return { policy: 'unknown' as const, requestId, scopeId: accessAuthPreflightScopeId };
+    latestAccessAuthPreflightRequestBySender.set(sender, requestId);
+
+    const layout = services?.getLayout();
+    if (!layout) return { policy: 'unknown' as const, requestId, scopeId: accessAuthPreflightScopeId };
+    const stateDirectory = getSidecarStateDirectory(layout);
+    const policy = await readAccessAuthStartupPolicy({
+      runtimeStateDirectory: stateDirectory,
+      sidecarStateDirectory: stateDirectory,
+      passwordEnvironmentConfigured: [
+        process.env.SIDEKICK_WEBUI_PASSWORD,
+        process.env.HERMES_WEBUI_PASSWORD
+      ].some((value) => typeof value === 'string' && value.trim().length > 0)
+    });
+    recheck();
+
+    const resultContext: AccessAuthPreflightContext = { requestId, scopeId: accessAuthPreflightScopeId };
+    const currentContext: AccessAuthPreflightContext = {
+      requestId: latestAccessAuthPreflightRequestBySender.get(sender) ?? -1,
+      scopeId: accessAuthPreflightScopeId
+    };
+    return {
+      policy: isAccessAuthPreflightCurrent(resultContext, currentContext) ? policy : 'unknown',
+      requestId,
+      scopeId: accessAuthPreflightScopeId
+    };
+  });
   ipcMain.handle('lastbrowser:sidekick:getAccessAuthStatus', () => getAccessAuthStatus(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:loginAccessPassword', (_event, request) => loginAccessPassword(requireWebuiUrl(), String(request?.password || '')));
   ipcMain.handle('lastbrowser:sidekick:lockAccessWindows', () => {

@@ -425,6 +425,11 @@ declare global {
         updateAllAppstore: () => Promise<Record<string, unknown>>;
         submitAppstoreApp: (request: { manifest: Record<string, unknown> }) => Promise<Record<string, unknown>>;
         getSettings: () => Promise<Record<string, unknown>>;
+        getAccessAuthStartupPolicy: (requestId: number) => Promise<{
+          policy: 'disabled' | 'enabled' | 'unknown';
+          requestId: number;
+          scopeId: string;
+        }>;
         getAccessAuthStatus: () => Promise<{ auth_enabled: boolean; logged_in: boolean }>;
         loginAccessPassword: (request: { password: string }) => Promise<{ ok: boolean }>;
         lockAccessWindows: () => Promise<{ ok: boolean }>;

@@ -29,7 +29,6 @@ import {
   Send,
   Sparkles,
   StopCircle,
-  UserCircle
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import { describeChatContent } from '../chat-display.js';
@@ -173,8 +172,8 @@ export function ChatTranscript({
 
         return (
         <article key={`${message.role || 'message'}-${index}`} className={`chat-message ${message.role || 'assistant'} ${message.pending ? 'pending' : ''}`}>
-          <div className="message-avatar">
-            {message.role === 'user' ? <UserCircle size={17} /> : <img src={brandAssets.sidekickAvatar} alt="" />}
+          <div className={`message-avatar${message.role === 'user' ? ' message-avatar--user' : ''}`}>
+            <img src={brandAssets.sidekickAvatar} alt="" />
           </div>
           <div className="message-body">
             <div className="message-meta">
@@ -227,7 +226,7 @@ export function ChatTranscript({
         {childRunLabels[locale==='pt-BR'?'pt':locale].resync} · {turn}</button>)}
       {pendingUserMessage && !pendingUserMessageAlreadyInTranscript && (
         <article className="chat-message user pending">
-          <div className="message-avatar"><UserCircle size={17} /></div>
+          <div className="message-avatar message-avatar--user"><img src={brandAssets.sidekickAvatar} alt="" /></div>
           <div className="message-body">
             <div className="message-meta"><strong>You</strong><Loader2 size={13} className="spin" /></div>
             <ChatMessageBody content={pendingUserMessage} />

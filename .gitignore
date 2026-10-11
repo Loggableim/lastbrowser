@@ -45,3 +45,4 @@ smoke-output/
 $payload/
 .playwright-cli/
 .permission-adblock-live-audit.mjs
+/apps/desktop/vendor/

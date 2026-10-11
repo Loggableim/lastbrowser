@@ -221,3 +221,65 @@ Per Cid's explicit test-build direction, PR56 head `683ff163e8de249c1bdb3fde50ba
 The independent reviewer then identified two P2 OpenCode source findings on PR56 head `683ff163e8de249c1bdb3fde50ba63bcbd80b68b`: the Cancel endpoint reports success even when `taskkill` fails, and an in-flight login scoped to an old profile can leave login controls disabled after the user switches profiles. The existing OpenCode worker is implementing minimal fixes with regressions on PR56. Neither finding is closed or reviewed on a post-fix head yet. Do not describe this snapshot as reviewed/ready. Run the combined gates now on the frozen pre-fix merge for baseline evidence; if the fixes land before upload, integrate the newer exact PR56 head and rerun all gates before packaging.
 
 The live OpenCode login, standard-chat timeout/recovery, History error retention, and Stop flow remain VM acceptance tasks. No version bump, package, signature, timestamp, or upload has occurred.
+
+## Final v0.1.55 candidate record (2026-10-11)
+
+This section supersedes the earlier provisional status above. PR56 exact head
+`c65619aa9cd00ace7d0dde7ebed00884ca3a5311` is integrated in PR55. The
+independent exact-head re-review found no remaining source blocker from the two
+reported OpenCode cancellation/profile-scope findings; this is technical
+review evidence, not a formal GitHub `APPROVED` state. PR55's pushed source and
+versioned candidate commit is `68c2cddf4a0f787f6adc858d181a3e0c8898c867`.
+It contains the earlier integrated PRs in the source map and PR56 as a
+first-parent add-on; PR57 remains planning-only and outside runtime scope.
+
+### Final source gates
+
+- `npm test`: PASS, 228 test files / 2,073 tests.
+- `npm run verify:store`: PASS, 39 PASS / 2 WARN / 0 FAIL. Warnings are
+  provisional localized Store screenshots and absent final package input to
+  that preflight; binary signatures were verified separately below.
+- `npm --workspace apps/desktop run build`: PASS; existing Vite large-chunk
+  advisory remains (renderer bundle about 2.47 MB).
+- `python -m compileall -q services/sidekick`: PASS.
+- Focused backend regressions for scoped models, reasoning transport, OpenCode
+  login/runtime, and fixed-process chat: PASS, 56 tests.
+- The first full-suite run after the authorized version bump exposed one
+  release-flow assertion still hard-coded to 0.1.53. The assertion was updated
+  for 0.1.55 and the final full suite above passed.
+
+### Built package and cryptographic evidence
+
+Built on Windows x64 from candidate source commit
+`68c2cddf4a0f787f6adc858d181a3e0c8898c867`, with `--publish never`, into the
+unique ignored output directory
+`apps/desktop/release-local-0.1.55-20261011-r1`.
+The package builder signed the files with the configured Authenticode
+certificate. EVS/VMP streaming signing and its verification succeeded for the
+application executable. Final executable signatures both report `Valid` and
+have DigiCert SHA256 timestamp certificates.
+
+| Artifact | Size | SHA-256 | Authenticode | Version |
+| --- | ---: | --- | --- | --- |
+| `Lastbrowser-0.1.55-x64-setup.exe` | 167,717,976 bytes | `b8ab33f2a495e524501cb097928f04f429b82dc96019170ae1969941dca68922` | Valid, DigiCert timestamp | File/Product 0.1.55 |
+| `Lastbrowser-0.1.55-x64-portable.exe` | 167,354,560 bytes | `dc8960e1f22908f1c40d3232cfbd7f165884428e44ad6fd762fc6361680dee7d` | Valid, DigiCert timestamp | File/Product 0.1.55 |
+
+### Private draft append and VM scope
+
+Both 0.1.55 artifacts were appended to the existing private draft alongside
+its original 0.1.54 setup and portable artifacts. The 0.1.54 assets and their
+hashes remain intact. Draft title now identifies both test versions and still
+says not to publish:
+<https://github.com/Loggableim/lastbrowser/releases/tag/untagged-db01e8964de38692c212>.
+
+The VM agent has not yet confirmed download/access or performed installation;
+no VM acceptance is claimed. Keep the candidate and tested hash bound throughout
+P004. The updated acceptance scope includes both QuickChat and Standardchat,
+first/follow-up sends, model changes and actual provider/session metadata;
+startup/auth; browser basics/navigation; shortcuts, zoom and mute; provider and
+model persistence; LB006 composer/draft retention and LB007 responsive layout;
+timeout recovery, History error retention and Stop completion; OpenCode live
+login, cancellation and profile switching; and update What's New plus displayed
+EXE version. Do not retry the known Ollama Cloud HTTP 403. Record each tested
+feature and each PR's coverage separately; report live/package observations
+separately from source gates.

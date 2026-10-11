@@ -1,6 +1,6 @@
 # A-008b verification report
 
-Date: 2026-10-11  
+Date: 2026-10-11
 Base: `release/v0.1.52` (`7d3d52bb58114296b66b7eeef290b67581b226bc`)
 Branch: `codex/a-008b-ctrl-num-clean-20261011`
 
@@ -27,4 +27,3 @@ Added a regression in `tests/shortcuts.test.ts` covering all eight Ctrl mappings
 | `npm run build` | Passed; TypeScript and Vite build succeeded. Vite emitted its existing large-chunk advisory. |
 | `npm run verify:store` | 39 passed, 0 failures, 2 warnings (screenshots provisional; no final package supplied). This is a preflight, not package certification. |
 | `python -m compileall -q services/sidekick` | Passed. |
-

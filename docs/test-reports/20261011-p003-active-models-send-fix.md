@@ -1,7 +1,7 @@
 # P003: active models rejected by Quick Chat
 
-Date: 2026-10-11  
-Base: `release/v0.1.52` at `7d3d52bb58114296b66b7eeef290b67581b226bc`  
+Date: 2026-10-11
+Base: `release/v0.1.52` at `7d3d52bb58114296b66b7eeef290b67581b226bc`
 Branch: `codex/p003-active-models-send-20261011`
 
 ## Finding and change

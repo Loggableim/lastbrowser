@@ -1,35 +1,78 @@
-# Lastbrowser
+<div align="center">
+  <img src="brand/assets/lastbrowser-logo.png" alt="Lastbrowser" width="560">
 
-Lastbrowser is a Windows-first Electron browser shell with Sidekick integrated as a first-class browser sidebar. It is seeded from the Hermes Portable codebase, but the public product surface is Lastbrowser and Sidekick.
+  <h1>Lastbrowser</h1>
+  <p><strong>A Windows browser with Sidekick built into the browser workspace.</strong></p>
+  <p>Browse the web, organize work in Spaces and profiles, and bring Sidekick alongside your tabs.</p>
+  <p>
+    <a href="https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.53">Download the published Windows release</a>
+    · <a href="docs/release.md">Release and installation notes</a>
+    · <a href="apps/desktop/README.md">Desktop architecture</a>
+  </p>
+</div>
 
-## Structure
+---
 
-- `apps/desktop` - Electron, TypeScript, Vite and React browser shell (`src/main/` and `src/renderer/`).
-- `services/sidekick` - In-tree Sidekick Python backend engine, FastAPI server, CLI tools, runtime & skills.
-- `assets/store` - Microsoft Store certification asset pack (512/1024 icons, 1920x1080 screenshots).
-- `brand` - Vector brand assets, icons, and logos.
-- `docs` - Technical architecture, Microsoft Store listing metadata, and release planning.
-- `lastbrowser.com` - Official product landing page, GDPR/Store privacy policy, and support portal.
+## See the browser
 
-## Development & Verification
+These existing product images show the browser shell and integrated Sidekick interface.
+
+| Browser workspace | Sidekick alongside a page |
+|---|---|
+| ![Lastbrowser browser workspace with sidebar and tabs](assets/store/store-screen-1-zen-sidebar.png) | ![Lastbrowser page with Sidekick chat in a split view](assets/store/store-screen-2-copilot-splitview.png) |
+
+## What it includes
+
+- **A desktop browser shell:** Electron tabs and web pages, with browser work grouped into Spaces and switchable browser profiles.
+- **Sidekick in the workspace:** Open Sidekick beside the page for chat and browser-aware assistance.
+- **Provider choice:** Configure supported AI providers and select models for Sidekick. Provider access may require a separately configured account or API key.
+- **Local-first components:** The browser shell and Sidekick service run on the computer. Sidekick can use configured local model engines as well as remote providers; remote provider requests still go to those providers.
+
+Feature availability depends on the selected mode, provider setup and current release. Read the release notes for the published build before installing.
+
+## Install on Windows
+
+1. Open the [published v0.1.53 release](https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.53).
+2. Under **Assets**, download `Lastbrowser-0.1.53-x64-setup.exe` to install, or `Lastbrowser-0.1.53-x64-portable.exe` to run the portable build.
+3. Review the release notes and asset details on that page. Newer test candidates may be drafts and are not public releases.
+
+This links to the latest verified public stable release as of **11 October 2026**. Check [all releases](https://github.com/Loggableim/lastbrowser/releases) for later published versions.
+
+## Getting started
+
+- [Desktop app overview](apps/desktop/README.md)
+- [Release flow and Windows artifacts](docs/release.md)
+- [Developer guide: MCP and browser architecture](docs/MCP_DEVELOPER_GUIDE.md)
+- [Built-in Sidekick service](services/sidekick/README.md)
+- [Repository structure and contributor rules](AGENTS.md)
+
+## Build from source
+
+Requirements: Windows, Node.js 22, and Python 3.12 for the bundled Sidekick engine.
 
 ```powershell
-npm install
-npm test                  # 514+ Vitest unit & integration tests
-npm run verify:store      # Automated Microsoft Store release readiness preflight (27 checks)
-npm run build             # Build main TypeScript and renderer Vite bundles
+git clone https://github.com/Loggableim/lastbrowser.git
+cd lastbrowser
+npm ci
+npm run build
 ```
 
-For local UI work, run the renderer and Electron separately:
+To launch the renderer and Electron app during UI development:
 
 ```powershell
 npm run dev
 npm --workspace apps/desktop run start:dev
 ```
 
-## Architecture Notes
+For full source test and release checks, see the commands in [AGENTS.md](AGENTS.md). No historical test totals are pinned here.
 
-- Lastbrowser is a **fully integrated Monorepo**: `services/sidekick` is maintained in-tree as the native Python engine.
-- See [`AGENTS.md`](./AGENTS.md) and [`GEMINI.md`](./GEMINI.md) for mandatory agent conventions and workflow boundaries.
-- Offline-ready: Builds and packaging do not depend on external repository syncing.
+## Project layout
 
+- `apps/desktop` — Electron desktop browser shell and React renderer.
+- `services/sidekick` — in-tree Python service, API, CLI and runtime.
+- `brand` — Lastbrowser logos and interface assets.
+- `docs` — architecture, development and release documentation.
+
+## Licensing and attribution
+
+The repository includes components with their own license and provenance records. Preserve those records when using or redistributing the source. Review the [Sidekick license](services/sidekick/LICENSE) and [xterm provenance](apps/desktop/src/renderer/vendor/xterm/PROVENANCE.md), along with any other component notices. This README makes no claim about ownership or relicensing of third-party components.

@@ -5,15 +5,28 @@ const { handlers, updater, files, appVersion } = vi.hoisted(() => {
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
   const files = new Map<string, string>();
   const appVersion = { current: '0.1.45' };
+  let currentChannel = 'latest';
   const updater = {
     on: vi.fn(),
     autoDownload: false,
     autoInstallOnAppQuit: false,
     allowPrerelease: false,
+    allowDowngrade: false,
+    channel: 'latest',
     checkForUpdates: vi.fn(async () => undefined),
     downloadUpdate: vi.fn(async () => undefined),
     quitAndInstall: vi.fn()
   };
+  Object.defineProperty(updater, 'channel', {
+    configurable: true,
+    enumerable: true,
+    get: () => currentChannel,
+    set: (value: string) => {
+      currentChannel = value;
+      // Mirrors electron-updater 6.8.3 AppUpdater.channel setter behavior.
+      updater.allowDowngrade = true;
+    }
+  });
   return { handlers, updater, files, appVersion };
 });
 const resourcesRoot = 'C:/lastbrowser-test-resources';
@@ -104,10 +117,12 @@ describe('native update preference IPC', () => {
     expect(setChannel?.({}, 'preview')).toMatchObject({ automaticUpdatesEnabled: true, channel: 'preview', persisted: true });
     expect(updater.allowPrerelease).toBe(true);
     expect(updater.channel).toBe('beta');
+    expect(updater.allowDowngrade).toBe(false);
     expect(JSON.parse(files.get(updatePreferencesPath) || '{}')).toMatchObject({ channel: 'preview' });
 
     registerUpdateIpc(() => null);
     expect(handlers.get('lastbrowser:updates:preferences')?.({})).toEqual({ automaticUpdatesEnabled: true, channel: 'preview' });
+    expect(updater.allowDowngrade).toBe(false);
   });
 
   it('disables automatic download and install when the user opts out but keeps manual checks', async () => {

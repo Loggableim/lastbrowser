@@ -59,7 +59,8 @@ import {
 import { hideWebviewScrollbars } from './browser-view.js';
 import { subscribeDevToolsState, toggleWebviewDevTools } from './devtools-state.js';
 import { bindWebviewReadiness, isWebviewReady } from './webview-readiness.js';
-import { canReleaseAccessGateFromStartupPreflight, canRenderBrowserForAccessAuth } from './access-auth.js';
+import { canRenderBrowserForAccessAuth } from './access-auth.js';
+import { createAccessAuthGateConsumer } from './access-auth-gate.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
 import { applyLiveTeamworkUpdate, beginLiveTeamworkTurn, bindLiveChatAssistantStream, readTeamworkStreamUpdate } from './teamwork-live-stream.js';
@@ -1010,6 +1011,8 @@ function AppContent(): JSX.Element {
   const desktopSettingsRevisionRef = useRef(0);
   const accessAuthPreflightRequestIdRef = useRef(0);
   const accessAuthPreflightScopeIdRef = useRef<string | null>(null);
+  const accessAuthGateRef = useRef<ReturnType<typeof createAccessAuthGateConsumer> | null>(null);
+  if (!accessAuthGateRef.current) accessAuthGateRef.current = createAccessAuthGateConsumer();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
@@ -1471,6 +1474,7 @@ function AppContent(): JSX.Element {
   useEffect(() => {
     let alive = true;
     const requestId = ++accessAuthPreflightRequestIdRef.current;
+    const generation = accessAuthGateRef.current!.state.generation;
     void window.lastbrowser.sidekick.getAccessAuthStartupPolicy(requestId).then((result) => {
       if (!alive || requestId !== accessAuthPreflightRequestIdRef.current) return;
       if (!result || result.requestId !== requestId || typeof result.scopeId !== 'string' || !result.scopeId) {
@@ -1479,16 +1483,23 @@ function AppContent(): JSX.Element {
       }
       const priorScopeId = accessAuthPreflightScopeIdRef.current;
       if (priorScopeId && priorScopeId !== result.scopeId) {
+        const state = accessAuthGateRef.current!.dispatch({ type: 'scope-change', scopeId: result.scopeId });
+        accessAuthPreflightScopeIdRef.current = result.scopeId;
         setStartupAuthPolicy('unknown');
+        setAccessAuthChecked(state.checked);
+        setAccessAuthRequired(state.required);
+        setAccessAuthError(state.error);
         return;
       }
       accessAuthPreflightScopeIdRef.current = result.scopeId;
       const policy = result.policy === 'disabled' || result.policy === 'enabled' ? result.policy : 'unknown';
+      const previousState = accessAuthGateRef.current!.state;
+      const state = accessAuthGateRef.current!.dispatch({ type: 'preflight', generation, scopeId: result.scopeId, policy });
+      if (generation !== previousState.generation || (previousState.scopeId && previousState.scopeId !== result.scopeId)) return;
       setStartupAuthPolicy(policy);
-      if (!canReleaseAccessGateFromStartupPreflight(policy)) return;
-      setAccessAuthRequired(false);
-      setAccessAuthChecked(true);
-      setAccessAuthError('');
+      setAccessAuthRequired(state.required);
+      setAccessAuthChecked(state.checked);
+      setAccessAuthError(state.error);
     }).catch(() => {
       if (alive && requestId === accessAuthPreflightRequestIdRef.current) setStartupAuthPolicy('unknown');
       // Keep the existing fail-closed auth gate until the normal status check succeeds.
@@ -1500,19 +1511,24 @@ function AppContent(): JSX.Element {
     if (!sidekickTransportReady) return;
     let alive = true;
     const checkAccessStatus = async (): Promise<void> => {
+      const generation = accessAuthGateRef.current!.state.generation;
       try {
         const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
         if (!alive) return;
-        setAccessAuthRequired(Boolean(auth.auth_enabled && !auth.logged_in));
-        setAccessAuthChecked(true);
-        setAccessAuthError('');
+        const state = accessAuthGateRef.current!.dispatch({ type: 'status', generation, auth });
+        setAccessAuthRequired(state.required);
+        setAccessAuthChecked(state.checked);
+        setAccessAuthError(state.error);
       } catch (error) {
         if (!alive) return;
-        setAccessAuthError(error instanceof Error ? error.message : String(error));
+        const state = accessAuthGateRef.current!.dispatch({
+          type: 'status-error', generation, error: error instanceof Error ? error.message : String(error)
+        });
+        setAccessAuthError(state.error);
         // A failed auth-status check (including a 401 after the sidecar
         // session token changes) must never leave an already-unlocked shell
         // visible. Keep the retry screen up until status can be verified.
-        setAccessAuthChecked(false);
+        setAccessAuthChecked(state.checked);
       }
     };
     void checkAccessStatus();
@@ -1530,10 +1546,11 @@ function AppContent(): JSX.Element {
 
   useEffect(() => {
     const lockBrowser = () => {
+      const state = accessAuthGateRef.current!.dispatch({ type: 'lock' });
       setAccessPassword('');
-      setAccessAuthError('');
-      setAccessAuthRequired(true);
-      setAccessAuthChecked(true);
+      setAccessAuthError(state.error);
+      setAccessAuthRequired(state.required);
+      setAccessAuthChecked(state.checked);
     };
     return window.lastbrowser.sidekick.onAccessAuthLocked(lockBrowser);
   }, []);
@@ -1541,31 +1558,49 @@ function AppContent(): JSX.Element {
   async function unlockBrowser(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!accessPassword || accessAuthBusy) return;
+    const retry = accessAuthGateRef.current!.dispatch({ type: 'retry' });
+    const loginGeneration = retry.generation;
+    setAccessAuthRequired(retry.required);
+    setAccessAuthChecked(retry.checked);
     setAccessAuthBusy(true);
     setAccessAuthError('');
     try {
       await window.lastbrowser.sidekick.loginAccessPassword({ password: accessPassword });
       const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
       if (!auth.logged_in) throw new Error('Login did not create an authenticated session.');
-      setAccessAuthRequired(false);
-      setAccessAuthChecked(true);
+      const state = accessAuthGateRef.current!.dispatch({ type: 'login-success', generation: loginGeneration });
+      setAccessAuthRequired(state.required);
+      setAccessAuthChecked(state.checked);
       setAccessPassword('');
     } catch (error) {
-      setAccessAuthError(error instanceof Error ? error.message : String(error));
+      const state = accessAuthGateRef.current!.dispatch({
+        type: 'status-error', generation: loginGeneration,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      setAccessAuthError(state.error);
+      setAccessAuthChecked(state.checked);
     } finally {
       setAccessAuthBusy(false);
     }
   }
 
   async function retryAccessAuthStatus(): Promise<void> {
+    const retry = accessAuthGateRef.current!.dispatch({ type: 'retry' });
+    const generation = retry.generation;
+    setAccessAuthChecked(retry.checked);
     setAccessAuthError('');
     try {
       const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
-      setAccessAuthRequired(Boolean(auth.auth_enabled && !auth.logged_in));
-      setAccessAuthChecked(true);
+      const state = accessAuthGateRef.current!.dispatch({ type: 'status', generation, auth });
+      setAccessAuthRequired(state.required);
+      setAccessAuthChecked(state.checked);
+      setAccessAuthError(state.error);
     } catch (error) {
-      setAccessAuthChecked(false);
-      setAccessAuthError(error instanceof Error ? error.message : String(error));
+      const state = accessAuthGateRef.current!.dispatch({
+        type: 'status-error', generation, error: error instanceof Error ? error.message : String(error)
+      });
+      setAccessAuthChecked(state.checked);
+      setAccessAuthError(state.error);
     }
   }
 

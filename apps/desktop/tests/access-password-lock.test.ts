@@ -36,7 +36,7 @@ describe('desktop access password lock', () => {
     expect(preload).toContain("'lastbrowser:access-auth-locked'");
     const app = readFileSync(appPath, 'utf8');
     expect(app).toContain('onAccessAuthLocked(lockBrowser)');
-    expect(app).toContain('setAccessAuthRequired(true)');
+    expect(app).toContain("dispatch({ type: 'lock' })");
   });
 
   it('keeps the browser locked when the auth check fails or the session has expired', () => {
@@ -47,7 +47,7 @@ describe('desktop access password lock', () => {
 
     const source = readFileSync(appPath, 'utf8');
     expect(source).toContain('setInterval(() => void checkAccessStatus(), 10_000)');
-    expect(source).toContain('setAccessAuthChecked(false)');
+    expect(source).toContain("type: 'status-error'");
     expect(source).toContain("document.addEventListener('visibilitychange', onVisible)");
   });
 

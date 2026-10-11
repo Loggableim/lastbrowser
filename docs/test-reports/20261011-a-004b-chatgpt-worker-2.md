@@ -37,3 +37,8 @@ GitHub Release API Asset-Digests und Größen wurden zuvor gegen die lokal signi
 ## Noch ausstehende redaktionelle Entscheidung
 
 Die Website verwendet weiterhin die bestehende Produktkennzeichnung „Beta“. Das GitHub-Release v0.1.53 ist als nicht-Prerelease veröffentlicht. Die Änderung entfernt „Beta“ nicht ohne gesonderte Produktentscheidung.
+
+
+## Nachtrag aus dem Hotfix-Worktree
+
+Die dort bei `npm run test:run` zunächst sichtbaren Download-Vertragsfehler wurden in PR #31 durch eine versionsbewusste Prüfung für v0.1.52 und v0.1.53 behoben. Anschließend liefen dort 215 Testdateien / 1.967 Tests erfolgreich. Der separate Website-Worktree hatte nach `npm ci` weiterhin kein installiertes Electron-Binary; daher war dort nur der gezielte Website-Counter-Test mit 15/15 direkt erfolgreich.

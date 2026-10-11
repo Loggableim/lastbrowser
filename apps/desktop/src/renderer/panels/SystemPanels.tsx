@@ -42,7 +42,7 @@ import { TeamworkSettingsPanel } from './TeamworkSettingsPanel.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { cloudProviderOptions, openProviderOAuthUrl, type OnboardingStatus, type ProviderOption } from '../setup-state.js';
 import { providerPresentation } from '../provider-presentation.js';
-import { isProviderSettingsScopeCurrent, isXiaomiProviderSaveAck, readXiaomiProviderStatus, requestProviderModelCatalog, requestProviderSettingsInScope, safeXiaomiErrorCode, saveAndLoadXiaomiModels, testXiaomiConnection, validateXiaomiBaseUrl, type ProviderSettingsRequest } from '../provider-settings.js';
+import { isOpenCodeLoginBusyInScope, isProviderSettingsScopeCurrent, isXiaomiProviderSaveAck, readXiaomiProviderStatus, requestProviderModelCatalog, requestProviderSettingsInScope, safeXiaomiErrorCode, saveAndLoadXiaomiModels, testXiaomiConnection, validateXiaomiBaseUrl, type ProviderSettingsRequest } from '../provider-settings.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
 import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQualified } from '../provider-chat-evidence.js';
@@ -4513,7 +4513,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                   type="button"
                                   className="secondary-action compact"
                                   onClick={() => void startOpenCodeLogin(option.id)}
-                                  disabled={!ready || saving || openCodeLogin?.status === 'starting' || openCodeLogin?.status === 'running'}
+                                  disabled={!ready || saving || isOpenCodeLoginBusyInScope(openCodeLogin?.status, openCodeLogin?.scope, activeProviderScope)}
                                 >
                                   <LogIn size={14} />
                                   <span>{t('settings.panels.providers.openCodeLogin')}</span>

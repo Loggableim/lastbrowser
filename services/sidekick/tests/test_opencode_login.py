@@ -98,7 +98,11 @@ def test_login_cancel_is_limited_to_the_active_profile(tmp_path, monkeypatch):
             "process": FakeProcess(),
             "exit_code": None,
         }
-    monkeypatch.setattr(opencode_login.subprocess, "run", lambda args, **kwargs: calls.append(args))
+    monkeypatch.setattr(
+        opencode_login.subprocess,
+        "run",
+        lambda args, **kwargs: (calls.append(args) or type("Result", (), {"returncode": 0})()),
+    )
 
     assert opencode_login.cancel_login(login_id) == {"ok": True, "status": "cancelled"}
     assert calls == [["taskkill.exe", "/PID", "2345", "/T", "/F"]]
@@ -106,3 +110,52 @@ def test_login_cancel_is_limited_to_the_active_profile(tmp_path, monkeypatch):
     monkeypatch.setattr(opencode_login, "get_sidekick_home", lambda: tmp_path / "another-profile")
     assert opencode_login.cancel_login(login_id) == {"ok": False, "error_code": "login_not_found"}
     assert len(calls) == 1
+
+
+def test_login_cancel_reports_taskkill_failure_and_actual_process_state(tmp_path, monkeypatch):
+    monkeypatch.setattr(opencode_login, "get_sidekick_home", lambda: tmp_path)
+    taskkill_result = type("Result", (), {"returncode": 128})()
+
+    class FakeProcess:
+        pid = 3456
+
+        def __init__(self, exit_codes):
+            self.exit_codes = list(exit_codes)
+
+        def poll(self):
+            return self.exit_codes.pop(0) if len(self.exit_codes) > 1 else self.exit_codes[0]
+
+    login_id = "cancel-failed-running-id"
+    process = FakeProcess([None])
+    with opencode_login._LOGINS_LOCK:
+        opencode_login._LOGINS[login_id] = {
+            "provider": "opencode-go",
+            "profile_home": str(tmp_path.resolve()),
+            "process": process,
+            "exit_code": None,
+        }
+    monkeypatch.setattr(opencode_login.subprocess, "run", lambda *args, **kwargs: taskkill_result)
+
+    assert opencode_login.cancel_login(login_id) == {
+        "ok": False,
+        "error_code": "cancel_failed",
+        "status": "running",
+        "taskkill_exit_code": 128,
+    }
+
+    login_id = "cancel-failed-finished-id"
+    process = FakeProcess([None, 1])
+    with opencode_login._LOGINS_LOCK:
+        opencode_login._LOGINS[login_id] = {
+            "provider": "opencode-go",
+            "profile_home": str(tmp_path.resolve()),
+            "process": process,
+            "exit_code": None,
+        }
+    assert opencode_login.cancel_login(login_id) == {
+        "ok": False,
+        "error_code": "cancel_failed",
+        "status": "finished",
+        "process_exit_code": 1,
+        "taskkill_exit_code": 128,
+    }

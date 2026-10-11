@@ -138,9 +138,30 @@ def cancel_login(login_id: str) -> dict[str, Any]:
         pid = process.pid
 
     try:
-        subprocess.run(["taskkill.exe", "/PID", str(pid), "/T", "/F"],
-                       capture_output=True, timeout=5, check=False)
+        result = subprocess.run(
+            ["taskkill.exe", "/PID", str(pid), "/T", "/F"],
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
     except Exception:
         logger.warning("Could not cancel OpenCode CLI login process", exc_info=True)
-        return {"ok": False, "error_code": "cancel_failed"}
+        return {"ok": False, "error_code": "cancel_failed", "status": "running"}
+
+    if result.returncode != 0:
+        exit_code = process.poll()
+        if exit_code is None:
+            return {
+                "ok": False,
+                "error_code": "cancel_failed",
+                "status": "running",
+                "taskkill_exit_code": result.returncode,
+            }
+        return {
+            "ok": False,
+            "error_code": "cancel_failed",
+            "status": "finished",
+            "process_exit_code": exit_code,
+            "taskkill_exit_code": result.returncode,
+        }
     return {"ok": True, "status": "cancelled"}

@@ -52,6 +52,8 @@ import { isModelCatalogResponseCurrent } from '../model-picker-options.js';
 import { quickChatModelGateCopy, quickChatModelGateReason } from '../quick-chat-model-gate.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
+import { ChatDraftSubmissionGate } from '../chat-draft-submission.js';
+import { submitQuickChatDraft } from '../quick-chat-draft.js';
 
 export interface AvailableModelItem {
   id: string;
@@ -172,6 +174,10 @@ export function CopilotSplitView({
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [inputText, setInputText] = useState('');
   const sendPendingRef = useRef(false);
+  const draftRevisionRef = useRef(0);
+  const draftGateRef = useRef(new ChatDraftSubmissionGate());
+  const draftScope = JSON.stringify([browserProfileId, workspacePath, backendProfileName, activeSessionId]);
+  const draftScopeRef = useRef(draftScope); draftScopeRef.current = draftScope;
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [workflowsMenuOpen, setWorkflowsMenuOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
@@ -643,8 +649,10 @@ export function CopilotSplitView({
     if (!trimmed || busy || sendPendingRef.current || modelGateReason !== null) return;
     sendPendingRef.current = true;
     try {
-      const accepted = await onSendMessage(trimmed, effectiveReasoningEffort || undefined);
-      if (accepted !== false) setInputText(current => current.trim() === trimmed ? '' : current);
+      await submitQuickChatDraft({ gate: draftGateRef.current, draft: inputText,
+        revision: draftRevisionRef.current, scope: draftScope,
+        current: () => ({ revision: draftRevisionRef.current, scope: draftScopeRef.current }),
+        setDraft: setInputText, send: () => onSendMessage(trimmed, effectiveReasoningEffort || undefined) });
     } finally {
       sendPendingRef.current = false;
     }
@@ -1166,7 +1174,7 @@ export function CopilotSplitView({
             type="text"
             className="copilot-input-field"
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={(e) => { draftRevisionRef.current += 1; setInputText(e.target.value); }}
             placeholder={t('chat.composerPlaceholder')} /* Ask about this page... */
             disabled={busy}
           />

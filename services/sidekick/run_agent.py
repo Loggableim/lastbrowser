@@ -12442,17 +12442,9 @@ class AIAgent:
             # landed after an orphan tool result). Most providers return
             # empty content on malformed sequences, which would otherwise
             # retrigger the empty-retry loop indefinitely.
-            repaired_seq = self._repair_message_sequence(messages)
-            if repaired_seq > 0:
-                request_logger.info(
-                    "Repaired %s message-alternation violations before request (session=%s)",
-                    repaired_seq,
-                    self.session_id or "-",
-                )
-
             api_messages = []
             for idx, msg in enumerate(messages):
-                api_msg = msg.copy()
+                api_msg = copy.deepcopy(msg)
 
                 # Inject ephemeral context into the current turn's user message.
                 # Sources: memory manager prefetch + plugin pre_llm_call hooks
@@ -12494,6 +12486,17 @@ class AIAgent:
                 # Keep 'reasoning_details' - OpenRouter uses this for multi-turn reasoning context
                 # The signature field helps maintain reasoning continuity
                 api_messages.append(api_msg)
+
+            # Role repair belongs to the provider copy. Merging unanswered
+            # user turns in authoritative history invalidates the current-turn
+            # persistence index and leaks workspace context into the transcript.
+            repaired_seq = self._repair_message_sequence(api_messages)
+            if repaired_seq > 0:
+                request_logger.info(
+                    "Repaired %s message-alternation violations before request (session=%s)",
+                    repaired_seq,
+                    self.session_id or "-",
+                )
 
             # Build the final system message: cached prompt + ephemeral system prompt.
             # Ephemeral additions are API-call-time only (not persisted to session DB).

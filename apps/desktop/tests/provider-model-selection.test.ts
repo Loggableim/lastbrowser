@@ -385,7 +385,7 @@ describe('provider-aware model selection', () => {
     const startContract = readFileSync(path.resolve(process.cwd(), 'src/renderer/guarded-native-chat-start.ts'), 'utf8');
     const selectionRead = app.indexOf('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName })');
     const guard = app.indexOf('prepareGuardedNativeChatStart(createGuardedStartInput())', selectionRead);
-    const transport = app.indexOf('(payload) => window.lastbrowser.sidekick.startChat(payload)', guard);
+    const transport = app.indexOf('return window.lastbrowser.sidekick.startChat(payload);', guard);
 
     expect(selectionRead).toBeGreaterThanOrEqual(0);
     expect(guard).toBeGreaterThan(selectionRead);

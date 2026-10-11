@@ -193,8 +193,10 @@ class RunManager:
             if capabilities is None:
                 result["reasonCode"] = "auto_provider_binding_required"
                 return result
-            capabilities.catalog(scope)
-            catalog = probe_catalog(self, scope, resolved=current, include_capabilities=False)
+            # One fresh discovery supplies both model metadata and capability
+            # evidence; do not start a second worker for the same settings read.
+            catalog = probe_catalog(self, scope, resolved=current, include_capabilities=True)
+            capabilities.catalog(scope, discovered_catalog=catalog)
             def owner(expected_scope, session_id):
                 if expected_scope != scope or session_id != session.session_id:
                     raise ScopeError("AUTO policy belongs to another native chat")

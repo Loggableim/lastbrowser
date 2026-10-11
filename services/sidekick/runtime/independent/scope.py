@@ -33,7 +33,17 @@ def canonical_path(value: str | Path, *, must_exist: bool = True) -> Path:
 
 
 def same_path(left: str | Path, right: str | Path) -> bool:
-    return os.path.normcase(str(canonical_path(left))) == os.path.normcase(str(canonical_path(right)))
+    left_path, right_path = canonical_path(left), canonical_path(right)
+    if os.path.normcase(str(left_path)) == os.path.normcase(str(right_path)):
+        return True
+    # Windows packaged applications can see the same directory through both
+    # APPDATA and the package LocalCache alias. Path.resolve does not collapse
+    # that virtualization. Compare actual filesystem identity, never suffixes
+    # or a guessed replacement path; a different/moved Home stays rejected.
+    try:
+        return os.path.samefile(left_path, right_path)
+    except OSError:
+        return False
 
 
 @dataclass(frozen=True)

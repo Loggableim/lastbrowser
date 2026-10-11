@@ -45,6 +45,6 @@ describe('native chat ownership transitions', () => {
   it('wires the real guarded operation to the final Sidekick startChat transport', () => {
     expect(appSource).toContain('prepareGuardedNativeChatStart(createGuardedStartInput())');
     expect(appSource).toContain('startGuardedNativeChat(');
-    expect(appSource).toContain('(payload) => window.lastbrowser.sidekick.startChat(payload)');
+    expect(appSource).toMatch(/startGuardedNativeChat\(\s*createGuardedStartInput\(teamworkGroundingContext\),\s*\(payload\) => \{\s*if \(submission\) submission.definitelyRejected = false;\s*return window\.lastbrowser\.sidekick\.startChat\(payload\);/);
   });
 });

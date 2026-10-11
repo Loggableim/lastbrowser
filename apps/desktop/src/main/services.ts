@@ -1,7 +1,7 @@
 import { ChildProcess, spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { app } from 'electron';
@@ -84,13 +84,27 @@ export function buildSidecarLaunch(layout: ServiceLayout, webuiPort: number): Si
   };
 }
 
+export function resolveExistingRuntimeDirectory(directory: string): string {
+  // MSIX redirects files but can leave directory realpath results virtual.
+  // Use the existing store's physical parent only after proving it is the
+  // very same directory. Never follow a store symlink into another Home.
+  try {
+    const physical = path.dirname(realpathSync.native(path.join(directory, 'state.db')));
+    const source = statSync(directory, { bigint: true });
+    const target = statSync(physical, { bigint: true });
+    if (source.isDirectory() && target.isDirectory() && source.ino !== 0n
+      && source.dev === target.dev && source.ino === target.ino) return physical;
+  } catch { /* New profiles have no store yet. Keep their configured Home. */ }
+  return directory;
+}
+
 export function resolveServiceLayout(
   resourcesDir: string,
   runtimeRoot = defaultRuntimeRoot(),
   env: Partial<Record<'LASTBROWSER_WEBUI_PYTHON' | 'HERMES_WEBUI_PYTHON', string>> = process.env
 ): ServiceLayout {
   const normalizedResources = path.normalize(resourcesDir);
-  const runtimeDir = path.join(runtimeRoot, 'runtime');
+  const runtimeDir = resolveExistingRuntimeDirectory(path.join(runtimeRoot, 'runtime'));
   const servicesDir = path.join(normalizedResources, 'services');
   const bundledSidekickDir = path.join(servicesDir, 'sidekick');
   const webuiDir = bundledSidekickDir;
@@ -137,6 +151,7 @@ export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number
     LASTBROWSER_BRIDGE_TOKEN: layout.bridgeToken,
     LASTBROWSER_INTEGRATED: '1',
     SIDEKICK_HOME: layout.runtimeDir,
+    SIDEKICK_BASE_HOME: layout.runtimeDir,
     SIDEKICK_AGENT_DIR: layout.sidekickDir,
     SIDEKICK_BRIDGE_TOKEN: layout.bridgeToken,
     // The live monorepo resolves its agent dir via SIDEKICK_WEBUI_AGENT_DIR,

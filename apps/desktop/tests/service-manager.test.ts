@@ -1,18 +1,39 @@
 import { EventEmitter } from 'node:events';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   SidecarServices,
   buildSidecarEnvironment,
   findAvailablePort,
   findDevelopmentResourcesDir,
-  resolveServiceLayout
+  resolveServiceLayout,
+  resolveExistingRuntimeDirectory
 } from '../src/main/services.js';
 
 describe('sidecar service layout', () => {
+  it('resolves an existing runtime alias but never adopts a foreign store parent', () => {
+    const root = mkdtempResourceRoot();
+    const home = path.join(root, 'home');
+    const foreign = path.join(root, 'foreign');
+    const alias = path.join(root, 'alias');
+    mkdirSync(home, { recursive: true }); mkdirSync(foreign, { recursive: true });
+    writeFileSync(path.join(foreign, 'state.db'), 'fixture');
+    const nativeRealpath = realpathSync.native;
+    const probe = vi.spyOn(realpathSync, 'native').mockImplementation((file, options) =>
+      String(file) === path.join(home, 'state.db')
+        ? path.join(foreign, 'state.db')
+        : nativeRealpath(file, options as any));
+    try {
+      expect(resolveExistingRuntimeDirectory(home)).toBe(home);
+      probe.mockRestore();
+      symlinkSync(foreign, alias, 'junction');
+      expect(resolveExistingRuntimeDirectory(alias)).toBe(foreign);
+      expect(resolveExistingRuntimeDirectory(path.join(root, 'new'))).toBe(path.join(root, 'new'));
+    } finally { probe.mockRestore(); rmSync(root, { recursive: true, force: true }); }
+  });
   it('uses Lastbrowser public environment variables while preserving Hermes compatibility aliases', () => {
     const layout = resolveServiceLayout('C:/Apps/Lastbrowser/resources');
     const env = buildSidecarEnvironment(layout, 8787);

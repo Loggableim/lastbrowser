@@ -57,7 +57,6 @@ export function NativeChatBrowserView({scope,sessionId,streamId,observedAt,activ
   }
   return <section className="native-chat-browser" aria-label={copy.title} data-native-browser-session={sessionId}>
     <strong>{copy.title}</strong>
-    <time dateTime={view?.observedAt??observedAt}>{new Date(view?.observedAt??observedAt).toLocaleString(locale)}</time>
     <div className="native-chat-browser-actions">
       <button type="button" disabled={busy||!live||Boolean(pending.current)} onClick={()=>void open()}>{view?copy.refresh:copy.view}</button>
       {pending.current?<button type="button" disabled={busy||!live||!proofMatches} onClick={()=>void takeover()}>{copy.retry}</button>
@@ -68,7 +67,6 @@ export function NativeChatBrowserView({scope,sessionId,streamId,observedAt,activ
     {(!live||!proofMatches)&&<p role="status">{copy.stale}</p>}
     {error&&<p role="alert">{copy[error]}</p>}
     {view?.automationPaused&&live&&proofMatches&&<p role="status">{copy.paused}</p>}
-    <p>{copy.effect}</p>
     {view&&<p>{independentBrowserSessionCopy[locale]}</p>}
     {view?.kind==='native_browser_preview'&&<figure>
       <img src={`data:${view.preview.mimeType};base64,${view.preview.base64}`} alt={copy.preview}/>

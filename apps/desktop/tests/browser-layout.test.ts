@@ -27,7 +27,8 @@ describe('browser shell layout', () => {
     expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName })');
     expect(chatMain).toContain("operation: 'modelSelection'");
     expect(app).toContain('prepareGuardedNativeChatStart(createGuardedStartInput())');
-    expect(app).toContain('(payload) => window.lastbrowser.sidekick.startChat(payload)');
+    expect(app).toContain('return window.lastbrowser.sidekick.startChat(payload);');
+    expect(app).toContain('if (submission) submission.definitelyRejected = false;');
     expect(guardedStart).toContain('model: input.selection.model || undefined');
     expect(guardedStart).toContain('modelProvider: input.selection.provider || undefined');
   });

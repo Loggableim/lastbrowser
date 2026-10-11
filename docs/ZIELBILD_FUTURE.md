@@ -176,6 +176,15 @@ Funktionen, die Lastbrowser zum produktivsten und ergonomischsten Browser auf Wi
 * **Verhalten:** Der Indikator ist nur während der laufenden Antwort sichtbar und endet bei Abschluss, Abbruch oder Fehler. Bei reduzierter Bewegung bleibt das Icon statisch.
 * **Priorisierung:** Zurückgestellte Wunschfunktion; zuerst die laufenden Fehlerbehebungen abschließen. Noch nicht umgesetzt, ohne Versionszusage und keine Voraussetzung für das aktuelle Release.
 
+### Browser-Startseite „Luminous Launchpad“ (Planung v0.1.56)
+
+* **Einordnung:** Geplanter Startseiten-Ausbau für v0.1.56; keine Runtime-Umsetzung in v0.1.55 und keine Aussage, dass Mockup-Funktionen bereits existieren.
+* **Begrenzter Umfang:** Nur Inhalt der leeren Browser-Startseite und zugehörige lokale Styles/Wallpaper-Anbindung. Browser-Shell, Sidebar, Topbar und Dock bleiben unverändert; historische Shell-/Spacefarben-QuickWins sind nicht Teil dieses Vorhabens. Variante 1/Luminous Launchpad ist die Basis; gewünscht sind dunkle, farbige navy Oberflächen, Cyan-/Violett-/Pink-Akzente, sichtbare Wallpapers, dezente Aura/Glas-Anmutung und weniger pillenförmige, leicht gerundete Controls (ca. 6–8 px). Keine Variante ist final abgenommen; Auswahl und Ausarbeitung bleiben reviewbar.
+* **Plan und Referenzen:** [Umsetzungsplan](plans/startpage-luminous-launchpad-v0.1.56.md), [Designquellen und Wallpaper-Referenzen](design-references/v0.1.56/README.md). Die Original-Spezifikation, der Slim-Installer-Plan und drei UI-Mockups liegen im selben Referenzordner.
+* **Ziel:** Begrüßung/Uhr/Datum, eine Intent-Omnibox für Navigation und Sidekick, Space-Karten mit ausschließlich Space-Name und verifizierter aktiver Agentenzahl, Speed Dial sowie Wallpaper-Galerie mit manueller Steuerung und optionaler Rotation. Nur echte, korrekt profil-/spacegebundene laufende Agenten zählen; fehlende oder unvollständige Daten bedeuten „nicht verfügbar“, nie eine erfundene Null. Resume-Karten, Tabvorschauen, Tabzahlen und Session-Infos gehören nicht zu diesem Auftrag. Mockupwerte 2/1/0 sind Beispieldaten, keine Live-Statusaussage.
+* **Wallpaper-Entscheidung offen:** Sechs unveränderte originale JPG-Quelldateien sind in den Referenzen erhalten. Das belegt weder Nutzungsrechte noch technische Prüfung oder Integration. Vor Implementierung bleibt zu entscheiden, ob Wallpaper lokal gebündelt, über HTTPS mit geprüftem Cache oder hybrid ausgeliefert werden; die beiden historischen Quellen widersprechen sich dazu.
+* **Vertrauensgrenze:** Mockup-Inhalte sind Demonstrationsmaterial. Historische Behauptungen über Abnahme, Barrierefreiheit oder fertige Umsetzung sind keine aktuellen Produktnachweise. Die öffentliche Website und GitHub-README sind nicht Gegenstand dieses Plans.
+
 ---
 
 ## 8. Umsetzungs-Reihenfolge & Roadmap-Phasen

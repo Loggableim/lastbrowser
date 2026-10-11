@@ -1,6 +1,12 @@
-import { readFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createServer, type ViteDevServer } from 'vite';
+import electronPath from 'electron';
 import { matchBrowserShortcut } from '../src/main/shortcuts.js';
 
 const renderer = resolve(process.cwd(), 'src/renderer');
@@ -58,5 +64,84 @@ describe('A-007 navigation smoke', () => {
     expect(app).toContain('setActiveTabId(allTabs[nextIdx].id)');
     expect(app).toContain('setActiveTabId(allTabs[prevIdx].id)');
     expect(app).toContain('cycleSidebarMode();');
+  });
+});
+
+describe('A-007 navigation clicks through the real controls', () => {
+  let server: ViteDevServer;
+  let directory = '';
+  let result: {
+    clicked: {
+      clicks: Record<string, { ok: boolean; reason?: string; wrapEvents?: string | null; hit?: string | null }>;
+      beforeKeys: { log: string; state: string };
+      afterKeys: { log: string; state: string };
+    };
+  };
+
+  beforeAll(async () => {
+    directory = mkdtempSync(path.join(tmpdir(), 'lastbrowser-nav-smoke-'));
+    server = await createServer({
+      configFile: false,
+      root: process.cwd(),
+      cacheDir: path.join(directory, 'vite-cache'),
+      optimizeDeps: { entries: ['tests/fixtures/nav-smoke.html'], include: ['dompurify', 'marked'] },
+      server: { host: '127.0.0.1', port: 0, watch: null }
+    });
+    await server.listen();
+    await server.warmupRequest('/tests/fixtures/nav-smoke.tsx');
+    await server.waitForRequestsIdle();
+    const address = server.httpServer!.address() as { port: number };
+    const env = {
+      ...process.env,
+      LASTBROWSER_NAV_PROOF_DIR: directory,
+      LASTBROWSER_NAV_PROOF_URL: `http://127.0.0.1:${address.port}/tests/fixtures/nav-smoke.html`
+    };
+    delete env.ELECTRON_RUN_AS_NODE;
+    await new Promise<void>((resolvePromise, reject) => {
+      const require = createRequire(import.meta.url);
+      const executable = process.platform === 'win32'
+        ? path.join(path.dirname(require.resolve('electron/package.json')), 'dist', 'electron.exe')
+        : String(electronPath);
+      const child = spawn(executable, [path.resolve('tests/fixtures/nav-smoke-probe.cjs')], {
+        env,
+        windowsHide: true,
+        stdio: 'pipe'
+      });
+      let output = '';
+      const errorFile = path.join(directory, 'error.txt');
+      const diagnostics = () => `${output}\n${existsSync(errorFile) ? readFileSync(errorFile, 'utf8') : 'No probe error was written'}\nProof: ${directory}`;
+      const timeout = setTimeout(() => {
+        child.kill();
+        reject(new Error(`Navigation DOM probe exceeded its 60-second deadline: ${diagnostics()}`));
+      }, 60000);
+      child.stderr.on('data', (chunk) => { output += chunk; });
+      child.stdout.on('data', (chunk) => { output += chunk; });
+      child.on('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      child.on('exit', (code) => {
+        clearTimeout(timeout);
+        code === 0 ? resolvePromise() : reject(new Error(`Navigation DOM probe failed (${code}): ${diagnostics()}`));
+      });
+    });
+    result = JSON.parse(readFileSync(path.join(directory, 'result.json'), 'utf8'));
+  }, 90000);
+
+  afterAll(async () => {
+    await server?.close();
+  });
+
+  it('clicks sidebar, tab strip and top navigation through the first-run backdrop', () => {
+    for (const name of ['ai', 'slim', 'back', 'forward', 'reload', 'tab', 'newTab', 'toggle']) {
+      expect(result.clicked.clicks[name], name).toMatchObject({ ok: true, wrapEvents: 'none' });
+    }
+    expect(result.clicked.beforeKeys.log).toBe('drawer:ai,set-mode:slim,back,forward,reload,activate:tab-b,new-tab,click-toggle-sidebar');
+    expect(result.clicked.beforeKeys.state).toBe('expanded|tab-b|ai');
+  });
+
+  it('applies tab and sidebar shortcut effects', () => {
+    expect(result.clicked.afterKeys.log).toBe('drawer:ai,set-mode:slim,back,forward,reload,activate:tab-b,new-tab,click-toggle-sidebar,next-tab,prev-tab,toggle-sidebar');
+    expect(result.clicked.afterKeys.state).toBe('hidden|tab-b|ai');
   });
 });

@@ -163,7 +163,7 @@
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Freigegeben (`run_lock_since`: `null`)
 - **Nächster geplanter Lauf:** 11. Oktober 2026, **11:00 Uhr CEST**
-- **Aktiver Daemon-Task:** `task-144` (`Cron: 0 * * * *`, Dauerläufer)
+- **Aktiver Daemon-Task:** `task-184` (`Cron: 0 * * * *`, Dauerläufer)
 
 ---
 

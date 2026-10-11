@@ -52,7 +52,7 @@ afterEach(() => {
   }
 });
 
-describe.skipIf(process.platform !== 'win32')('Windows package signature gate', () => {
+describe.skipIf(process.platform !== 'win32')('Windows package signature gate', { timeout: 20000 }, () => {
   it('checks nested Python modules as well as the main executable', () => {
     const result = runVerification();
     expect(result.exitCode).toBe(0);

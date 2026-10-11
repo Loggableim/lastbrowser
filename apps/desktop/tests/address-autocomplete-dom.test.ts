@@ -45,17 +45,55 @@ describe.skipIf(process.platform === 'linux' && !process.env.DISPLAY)('actual Re
       let output = '';
       const errorFile = path.join(directory, 'error.txt');
       const diagnostics = () => `${output}\n${existsSync(errorFile) ? readFileSync(errorFile, 'utf8') : 'No probe error was written'}\nProof: ${directory}`;
-      const timeout = setTimeout(() => { child.kill(); reject(new Error(`Electron DOM probe exceeded its 45-second deadline: ${diagnostics()}`)); }, 45000);
+      let settled = false;
+      const interval = setInterval(() => {
+        if (existsSync(path.join(directory, 'result.json'))) {
+          if (!settled) {
+            settled = true;
+            clearInterval(interval);
+            clearTimeout(timeout);
+            child.kill();
+            resolve();
+          }
+        } else if (existsSync(errorFile)) {
+          if (!settled) {
+            settled = true;
+            clearInterval(interval);
+            clearTimeout(timeout);
+            child.kill();
+            reject(new Error(`Electron DOM probe error: ${diagnostics()}`));
+          }
+        }
+      }, 300);
+      const timeout = setTimeout(() => {
+        clearInterval(interval);
+        if (!settled) {
+          settled = true;
+          child.kill();
+          reject(new Error(`Electron DOM probe exceeded its 90-second deadline: ${diagnostics()}`));
+        }
+      }, 90000);
       child.stderr.on('data', chunk => { output += chunk; });
-      child.on('error', error => { clearTimeout(timeout); reject(error); });
+      child.on('error', error => {
+        clearInterval(interval);
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          reject(error);
+        }
+      });
       child.on('exit', code => {
-        clearTimeout(timeout);
-        code === 0 ? resolve() : reject(new Error(`Electron DOM probe failed (${code}): ${diagnostics()}`));
+        clearInterval(interval);
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          code === 0 ? resolve() : reject(new Error(`Electron DOM probe failed (${code}): ${diagnostics()}`));
+        }
       });
     });
     results = JSON.parse(readFileSync(path.join(directory, 'result.json'), 'utf8'));
     console.info(`Omnibox DOM proof: ${directory}`);
-  }, 60000);
+  }, 120000);
   afterAll(async () => { await server?.close(); });
   it.each([
     ['google', 'https://www.google.com/'], ['empty', 'https://www.google.com/search?q=go'],

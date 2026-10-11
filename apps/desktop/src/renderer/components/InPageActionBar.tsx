@@ -317,6 +317,16 @@ export function InPageActionBar({
         >
           <Sparkles size={14} className="research-sparkles-icon" />
         </button>
+        <button
+          type="button"
+          className={`titlebar-tool-btn mute-trigger ${muted ? 'active' : ''}`}
+          onClick={onToggleMute}
+          title={muted ? 'Tab entstummen (Ctrl+M)' : 'Tab stummschalten (Ctrl+M)'}
+          aria-label={muted ? 'Tab entstummen' : 'Tab stummschalten'}
+          aria-pressed={muted}
+        >
+          {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+        </button>
 
         {isFlyoutOpen && (
           <div

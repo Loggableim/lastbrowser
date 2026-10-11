@@ -2842,7 +2842,16 @@ def _remove_unavailable_antigravity_catalog(payload: dict) -> None:
     the active profile's catalog.
     """
     from runtime.retired_providers import is_retired_provider
-    if is_retired_provider(payload.get("active_provider")):
+    retired_custom_ids = {
+        _custom_provider_slug_from_name(entry.get("name"))
+        for entry in _custom_provider_entries()
+        if is_retired_provider(entry.get("name")) or is_retired_provider(entry.get("base_url"))
+    }
+
+    def is_retired_catalog_provider(value: object) -> bool:
+        return is_retired_provider(value) or str(value or "").strip().lower() in retired_custom_ids
+
+    if is_retired_catalog_provider(payload.get("active_provider")):
         payload["active_provider"] = ""
         payload["default_model"] = ""
     groups = payload.get("groups")
@@ -2850,7 +2859,7 @@ def _remove_unavailable_antigravity_catalog(payload: dict) -> None:
         payload["groups"] = [
             group for group in groups
             if not isinstance(group, dict)
-            or not is_retired_provider(group.get("provider_id") or group.get("provider"))
+            or not is_retired_catalog_provider(group.get("provider_id") or group.get("provider"))
         ]
     # The renderer may append configured badge keys as model rows even when
     # no provider group exists. Keep saved configuration in its own fields,
@@ -2861,7 +2870,7 @@ def _remove_unavailable_antigravity_catalog(payload: dict) -> None:
             model_id: badge
             for model_id, badge in badges.items()
             if not isinstance(badge, dict)
-            or not is_retired_provider(badge.get("provider"))
+            or not is_retired_catalog_provider(badge.get("provider"))
         }
     status = payload.setdefault("catalog_status", {})
     if isinstance(status, dict):

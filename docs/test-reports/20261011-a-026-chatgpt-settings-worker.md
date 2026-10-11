@@ -58,3 +58,50 @@ frontend suite passed. No tracked dependency or lockfile changed.
 
 No packaged/device/manual Settings UI acceptance or full Python repository suite
 was run. No version, CHANGELOG, merge, tag, signing or release changes are included.
+
+## PR #40 review follow-up (chatgpt-provider-fix-6, 2026-10-11)
+
+Review comment `6106307791` found two P1 gaps on `b77dc15f6a9de50a3c341af697d5625dac8065f7`:
+
+1. A saved `custom_providers[].name: Antigravity (Google)` becomes
+   `custom:antigravity-google`, which survived the provider, model, and default
+   filters. A renamed custom entry pointing to `cloudcode-pa://antigravity`
+   could also survive under its unrelated slug.
+2. A stale `model.base_url: cloudcode-pa://antigravity` rejected an explicit
+   OpenAI request with a supported explicit URL and `provider_removed`.
+
+New regressions were run before each related code change. The first targeted
+Python run failed 2/8 tests (legacy custom catalog, explicit OpenAI); the first
+targeted Vitest run failed 2/2 tests (legacy provider list and model catalog).
+Additional red checks found an executable renamed retired custom endpoint, an
+unrelated explicit custom provider blocked by the stale stored URL, and an
+active renamed custom provider still advertised after its row was filtered.
+
+The follow-up recognizes the normalized legacy slug and qualified saved model
+IDs, filters custom rows by both name and endpoint, and removes their model
+groups, badges, and active/default selection. Runtime resolution rejects a
+retired endpoint when it is the selected custom runtime or the selected
+provider's applicable stored URL. Explicit selection of another supported
+provider is no longer blocked by an unrelated stored URL. Supported custom
+and OpenAI entries remain available. The saved profile and credentials were
+neither modified nor deleted.
+
+Verification after the final code change:
+
+- Targeted backend group: 74/74 PASS across the five Python files listed above;
+  the new retirement file has 10/10 PASS.
+- Frontend: `npm run test:run` 216/216 files, 1969/1969 tests PASS, including
+  the 17 actual Omnibox DOM tests. The first full run after `npm ci` failed
+  because npm installed a macOS Electron path on this Windows host. The same
+  existing `37.10.3+wvcus` Windows Electron distribution was copied from the
+  primary checkout into ignored `node_modules`; the unchanged full suite then
+  passed. This is a test-host dependency repair, not a tracked source change.
+- `npm ci` PASS (424 packages; audit reported 33 existing vulnerabilities).
+- `npm run build` PASS; Vite emitted the existing large-chunk warning.
+- `npm run verify:store`: 39 PASS / 2 WARN / 0 FAIL; provisional screenshots
+  and absent signed package remain the two warnings.
+- `python -m compileall -q services/sidekick` and `git diff --check`: PASS.
+
+These are source and test-host results. No Windows package, VM/device Settings
+walkthrough, live provider response, signed artifact, or Store acceptance was
+verified in this follow-up.

@@ -1648,12 +1648,16 @@ def get_providers() -> dict[str, Any]:
 
     # Scan custom_providers from config.yaml (e.g. glmcode, timicc)
     custom_providers_cfg = cfg.get("custom_providers", [])
+    retired_custom_ids: set[str] = set()
     if isinstance(custom_providers_cfg, list):
         for cp in custom_providers_cfg:
             if not isinstance(cp, dict) or not cp.get("name"):
                 continue
             cp_name = str(cp["name"]).strip()
             cp_id = _custom_provider_slug_from_name(cp_name)
+            if is_retired_provider(cp_name) or is_retired_provider(cp.get("base_url")):
+                retired_custom_ids.add(cp_id)
+                continue
             if not cp_id:
                 logger.warning(
                     "Custom provider entry %r produced empty slug; skipping",
@@ -1685,7 +1689,7 @@ def get_providers() -> dict[str, Any]:
     # Determine active provider
     active_provider = resolve_active_provider_context(cfg).get("provider")
     providers = [provider for provider in providers if not is_retired_provider(provider.get("id"))]
-    if is_retired_provider(active_provider):
+    if is_retired_provider(active_provider) or active_provider in retired_custom_ids:
         active_provider = ""
 
     return {

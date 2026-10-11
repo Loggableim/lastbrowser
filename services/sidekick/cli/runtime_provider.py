@@ -993,7 +993,11 @@ def resolve_runtime_provider(
     requested_provider = resolve_requested_provider(requested)
 
     from runtime.retired_providers import is_retired_provider
-    if is_retired_provider(requested_provider) or is_retired_provider(explicit_base_url) or is_retired_provider(_get_model_config().get("base_url")):
+    model_cfg = _get_model_config()
+    configured_provider = str(model_cfg.get("provider") or "").strip().lower()
+    stored_url_applies = not explicit_base_url and (not requested or requested_provider == configured_provider)
+    if (is_retired_provider(requested_provider) or is_retired_provider(explicit_base_url)
+            or (stored_url_applies and is_retired_provider(model_cfg.get("base_url")))):
         raise auth_mod.AuthError("This provider has been removed. Choose a supported provider.", provider="antigravity", code="provider_removed")
 
     if requested_provider in {"google-gemini-cli", "gemini-cli", "gemini-oauth"}:
@@ -1046,6 +1050,8 @@ def resolve_runtime_provider(
         explicit_base_url=explicit_base_url,
     )
     if custom_runtime:
+        if is_retired_provider(custom_runtime.get("base_url")):
+            raise auth_mod.AuthError("This provider has been removed. Choose a supported provider.", provider="antigravity", code="provider_removed")
         custom_runtime["requested_provider"] = requested_provider
         return custom_runtime
 

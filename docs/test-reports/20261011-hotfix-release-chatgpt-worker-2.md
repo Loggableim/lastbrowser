@@ -3,11 +3,13 @@
 Date: 2026-10-11 (UTC)
 Branch: `codex/hotfix-v0.1.53`
 Base: PR #30 head `2497c560a49a0dec3092a7ce5c60699542916c79` (`codex/hotfix-nav-20261010`)
+Candidate source tree: `6bae8d70` (the package was built from this exact tracked tree before the report was committed).
 
 ## Source checks
 
 - `npm run build`: passed (TypeScript main/preload and renderer checks; Vite production build). Vite reports the existing >500 kB JavaScript chunk warning.
 - `npm run test:run`: passed, 215 files / 1967 tests.
+- `npm run verify:store -- -Quick`: exit 0, 38 pass / 3 warnings / 0 failures. Quick mode skipped Vitest and package signature checks; the full test suite and package signature check are recorded separately above.
 - `npm run package:win`: passed after setting `LASTBROWSER_WHEELHOUSE` to the existing main-checkout wheelhouse and `PSModulePath` to the Windows PowerShell module directories. The first attempt stopped before signing because PowerShell could not auto-load `Microsoft.PowerShell.Security`; no source change was made for this environment issue.
 
 ## Candidate package evidence
@@ -18,8 +20,17 @@ Base: PR #30 head `2497c560a49a0dec3092a7ce5c60699542916c79` (`codex/hotfix-nav-
 - Portable: `Lastbrowser-0.1.53-x64-portable.exe`, 160,349,776 bytes, SHA-256 `9821B152B3AE3248C9E3990D833AE047D711DE5391960D92FED02CC654A27663`.
 - Generated `latest.yml` points to the setup installer and records its SHA-512 and size.
 
+## Fresh-profile runtime probe
+
+- Command: `node runtime-candidate-probe.cjs` (temporary probe; not retained in the repository).
+- Launched the candidate's signed `Lastbrowser.exe` payload from `apps/desktop/release/win-unpacked` with a new temporary user-data directory, `--headless=new`, and a local CDP endpoint; the profile was removed after the run.
+- With the first-run AI-choice dialog visible, `elementFromPoint` at the Settings sidebar button resolved to the real button (`wrap pointer-events: none`, panel `auto`). CDP mouse press/release activated that sidebar item.
+- A real mouse click on the top titlebar sidebar toggle changed the browser workspace from `mode-slim` to `mode-expanded` while first-run setup remained visible.
+- Real Escape input moved from the AI-choice screen to browser-only first-run setup; a second Escape closed setup. All assertions passed.
+- The New Tab button is not rendered in this first-run view; the top titlebar sidebar toggle was the available top-navigation control exercised.
+- Startup logs showed transient connection retries while the isolated in-tree Sidekick service came up. The navigation and Escape assertions passed after renderer mount; no user profile or credentials were used.
+
 ## Still required before publication
 
-- Fresh-profile runtime verification of the setup overlay behavior and actual sidebar/top-navigation clicks has not been performed. Source tests do not establish runtime click behavior.
-- Website proxy/feed and localized download references still need to match these signed candidate hashes before website updates are prepared.
+- Website proxy/feed and localized download references still need to match these signed candidate hashes before a public website update.
 - This report records a locally built candidate only. No tag, GitHub release, deployment, or public upload was performed.

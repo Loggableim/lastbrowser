@@ -12,7 +12,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Verification
 - Source, build, EVS/VMP and Authenticode candidate checks are recorded in `docs/test-reports/20261011-hotfix-release-chatgpt-worker-2.md`.
-- Fresh-profile runtime click verification and live website download/update references remain pending; this entry is not publication evidence.
+- Fresh-profile runtime click and Escape verification passed on the signed candidate. Live website download/update references remain pending; this entry is not publication evidence.
 
 ## [0.1.52] - 2026-10-09
 

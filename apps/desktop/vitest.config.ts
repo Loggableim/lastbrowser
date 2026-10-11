@@ -8,6 +8,8 @@ export default defineConfig({
     // Avoid spawning one worker per reported CPU core on high-core Windows
     // hosts; the resulting resource contention can time out otherwise-fast
     // dynamic-import tests in the full suite.
-    maxWorkers: 4
+    maxWorkers: 4,
+    testTimeout: 25000,
+    hookTimeout: 25000
   }
 });

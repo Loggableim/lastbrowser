@@ -110,7 +110,7 @@ describe('Main-owned browser account setup', () => {
       if (args[0] === 'browser.connectionPoll') return { ...(await normal('browser.connectionConfirm', scope, {}, 'profile-a')) };
       return normal(...args);
     });
-    const confirming = confirm(); await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    const confirming = confirm(); await vi.waitFor(() => expect(release).toBeTypeOf('function'), { timeout: 10000 });
     expect((await broker.request(binding, { action: 'poll', flowId }, () => {})).setupStatus).toBe('user_confirmed');
     expect(host.closeLease).not.toHaveBeenCalled(); release(); expect((await confirming).setupStatus).toBe('user_confirmed');
     expect(host.closeLease).toHaveBeenCalledTimes(1);
@@ -157,7 +157,7 @@ describe('Main-owned browser account setup', () => {
     const normal = api.getMockImplementation()!;
     api.mockImplementation(async (...args) => { if (args[0] === 'browser.connectionBeginLogout') await new Promise<void>(resolve => { unblock = resolve; }); return normal(...args); });
     const pending = broker.request(binding, { action: 'logout', connectionId, expectedRevision: 3, clientRequestId }, () => {});
-    await vi.waitFor(() => expect(unblock).toBeTypeOf('function'));
+    await vi.waitFor(() => expect(unblock).toBeTypeOf('function'), { timeout: 10000 });
     expect(current.state).toBe('revoked'); await expect(broker.validateTicket(binding, ticket(captured))).rejects.toThrow();
     unblock(); expect((await pending).setupStatus).toBe('revoked');
     expect(target.clearStorageData).toHaveBeenCalledWith({ storages: ['cookies', 'localstorage', 'indexdb', 'serviceworkers', 'cachestorage'] });

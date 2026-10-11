@@ -38,7 +38,7 @@ function Get-AuthenticodeSignature {
 }
 & ${psLiteral(verifier)} -PackageDirectory ${psLiteral(payload)} -ReportPath ${psLiteral(report)} ${options.installerStatus ? `-InstallerPath ${psLiteral(installer)}` : ''}
 `, 'utf8');
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', wrapper], { encoding: 'utf8', timeout: 20_000, windowsHide: true });
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', wrapper], { encoding: 'utf8', timeout: 30_000, windowsHide: true });
   if (result.error) throw result.error;
   return { exitCode: result.status, report: JSON.parse(readFileSync(report, 'utf8')), output: result.stdout + result.stderr };
 }
@@ -52,7 +52,7 @@ afterEach(() => {
   }
 });
 
-describe.skipIf(process.platform !== 'win32')('Windows package signature gate', { timeout: 20000 }, () => {
+describe.skipIf(process.platform !== 'win32')('Windows package signature gate', { timeout: 30000 }, () => {
   it('checks nested Python modules as well as the main executable', () => {
     const result = runVerification();
     expect(result.exitCode).toBe(0);

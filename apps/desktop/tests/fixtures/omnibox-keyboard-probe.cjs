@@ -43,7 +43,9 @@ app.whenReady().then(async () => {
     await start('legacy-multi', 'go'); await key('Enter'); results.legacyMulti = await read();
     await start('legacy-single', 'go'); await key('Enter'); results.legacySingle = await read();
     await start('loose-title', 'og'); await key('Enter'); results.loose = await read();
-    fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(results, null, 2));
+    const tmp = path.join(output, 'result.json.tmp');
+    fs.writeFileSync(tmp, JSON.stringify(results, null, 2));
+    fs.renameSync(tmp, path.join(output, 'result.json'));
     app.exit(0);
   } catch (error) { fs.writeFileSync(path.join(output, 'error.txt'), String(error.stack || error)); app.exit(1); }
 });

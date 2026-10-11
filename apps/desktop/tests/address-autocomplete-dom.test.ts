@@ -47,13 +47,22 @@ describe.skipIf(process.platform === 'linux' && !process.env.DISPLAY)('actual Re
       const diagnostics = () => `${output}\n${existsSync(errorFile) ? readFileSync(errorFile, 'utf8') : 'No probe error was written'}\nProof: ${directory}`;
       let settled = false;
       const interval = setInterval(() => {
-        if (existsSync(path.join(directory, 'result.json'))) {
-          if (!settled) {
-            settled = true;
-            clearInterval(interval);
-            clearTimeout(timeout);
-            child.kill();
-            resolve();
+        const resultFile = path.join(directory, 'result.json');
+        if (existsSync(resultFile)) {
+          try {
+            const raw = readFileSync(resultFile, 'utf8');
+            if (raw.trim().length > 0) {
+              JSON.parse(raw);
+              if (!settled) {
+                settled = true;
+                clearInterval(interval);
+                clearTimeout(timeout);
+                child.kill();
+                resolve();
+              }
+            }
+          } catch {
+            // Buffer write / rename in progress, wait for next tick
           }
         } else if (existsSync(errorFile)) {
           if (!settled) {

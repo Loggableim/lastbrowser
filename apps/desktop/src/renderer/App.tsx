@@ -202,7 +202,8 @@ import {
 import { canCallSidekickApi } from './runtime-readiness.js';
 import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
 import { startupScreenCopy, resolveStartupLocale } from './startup/startup-screen-copy.js';
-import { StartupScreen } from './startup/StartupScreen.js';
+import { readReducedMotionPreference, StartupScreen } from './startup/StartupScreen.js';
+import { reduceStartupOpeningState, type StartupOpeningState } from './startup/startup-opening-state.js';
 import { describeChatContent, partitionChatMessages } from './chat-display.js';
 import { AdvancedWebUiTools } from './panels/AdvancedWebUiTools.js';
 import { NativeBrowserStartPage } from './panels/NativeBrowserStartPage.js';
@@ -1197,6 +1198,9 @@ function AppContent(): JSX.Element {
   const [startupLaunchIcon, setStartupLaunchIcon] = useState<StartupIconId | null>(null);
   const [startupRetryVersion, setStartupRetryVersion] = useState(0);
   const [startupReadyAcknowledged, setStartupReadyAcknowledged] = useState(false);
+  const [startupOpeningState, setStartupOpeningState] = useState<StartupOpeningState>('idle');
+  const appShellRef = useRef<HTMLDivElement | null>(null);
+  const startupOpeningWasActiveRef = useRef(false);
   const [pendingDetachedTransfer, setPendingDetachedTransfer] = useState<{ transferId: string; tabId: string } | null>(null);
   const windowStartupInitializedRef = useRef(false);
   const acknowledgingTransferRef = useRef<string | null>(null);
@@ -1470,6 +1474,25 @@ function AppContent(): JSX.Element {
     setStartupReadyAcknowledged(startupPhase === 'ready' && startupAuthAllowsShell);
   }, [startupPhase, startupAuthAllowsShell]);
   useEffect(() => {
+    setStartupOpeningState((current) => reduceStartupOpeningState(current, { type: 'scope-change' }));
+  }, [activeProfileId]);
+  useEffect(() => {
+    setStartupOpeningState((current) => reduceStartupOpeningState(current, {
+      type: 'readiness',
+      authAllowed: startupAuthAllowsShell,
+      ready: startupPhase === 'ready' && startupReadyAcknowledged,
+      reducedMotion: readReducedMotionPreference()
+    }));
+  }, [startupAuthAllowsShell, startupOpeningState, startupPhase, startupReadyAcknowledged]);
+  useEffect(() => {
+    const wasOpening = startupOpeningWasActiveRef.current;
+    const isOpening = startupOpeningState === 'opening';
+    if (wasOpening && !isOpening && startupAuthAllowsShell && startupPhase === 'ready' && startupReadyAcknowledged) {
+      appShellRef.current?.focus({ preventScroll: true });
+    }
+    startupOpeningWasActiveRef.current = isOpening;
+  }, [startupAuthAllowsShell, startupOpeningState, startupPhase, startupReadyAcknowledged]);
+  useEffect(() => {
     let current = true;
     setAssistantSelection(null); setAssistantSelectionError('');
     setAssistantSelectionRequestScope(null);
@@ -1505,6 +1528,7 @@ function AppContent(): JSX.Element {
       const priorScopeId = accessAuthPreflightScopeIdRef.current;
       if (priorScopeId && priorScopeId !== result.scopeId) {
         const state = accessAuthGateRef.current!.dispatch({ type: 'scope-change', scopeId: result.scopeId });
+        setStartupOpeningState((current) => reduceStartupOpeningState(current, { type: 'scope-change' }));
         accessAuthPreflightScopeIdRef.current = result.scopeId;
         setStartupAuthPolicy('unknown');
         setAccessAuthChecked(state.checked);
@@ -1568,6 +1592,7 @@ function AppContent(): JSX.Element {
   useEffect(() => {
     const lockBrowser = () => {
       const state = accessAuthGateRef.current!.dispatch({ type: 'lock' });
+      setStartupOpeningState((current) => reduceStartupOpeningState(current, { type: 'lock' }));
       setAccessPassword('');
       setAccessAuthError(state.error);
       setAccessAuthRequired(state.required);
@@ -1579,6 +1604,7 @@ function AppContent(): JSX.Element {
   async function unlockBrowser(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!accessPassword || accessAuthBusy) return;
+    const passwordProtectedAtSubmit = accessAuthRequired;
     const retry = accessAuthGateRef.current!.dispatch({ type: 'retry' });
     const loginGeneration = retry.generation;
     setAccessAuthRequired(retry.required);
@@ -1593,6 +1619,10 @@ function AppContent(): JSX.Element {
       setAccessAuthRequired(state.required);
       setAccessAuthChecked(state.checked);
       setAccessPassword('');
+      setStartupOpeningState((current) => reduceStartupOpeningState(current, {
+        type: 'verified-password-login',
+        passwordProtected: passwordProtectedAtSubmit && auth.auth_enabled === true
+      }));
     } catch (error) {
       const state = accessAuthGateRef.current!.dispatch({
         type: 'status-error', generation: loginGeneration,
@@ -5018,6 +5048,9 @@ function AppContent(): JSX.Element {
       </form>
     </section>
   ) : null;
+  const completeStartupOpening = useCallback(() => {
+    setStartupOpeningState((current) => reduceStartupOpeningState(current, { type: 'complete' }));
+  }, []);
 
   if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged) {
     return (
@@ -5033,7 +5066,14 @@ function AppContent(): JSX.Element {
   }
 
   return (
-    <div className={`app-shell panel-${activePanel} ${isModernBrowser ? 'modern-mode' : ''} ${windowMaximized ? 'is-maximized' : ''} ${sidebarMode === 'hidden' ? 'zen-mode' : ''}`}>
+    <>
+    <div
+      ref={appShellRef}
+      tabIndex={-1}
+      inert={startupOpeningState === 'opening'}
+      aria-hidden={startupOpeningState === 'opening' || undefined}
+      className={`app-shell panel-${activePanel} ${isModernBrowser ? 'modern-mode' : ''} ${windowMaximized ? 'is-maximized' : ''} ${sidebarMode === 'hidden' ? 'zen-mode' : ''}`}
+    >
       {startupBackgroundPhase && (
         <div className="startup-background-status" role="status" aria-live="polite">
           {startupBackgroundPhase === 'sidekick'
@@ -5985,6 +6025,16 @@ function AppContent(): JSX.Element {
         <CommandPalette onToggleTabPinned={toggleTabPinned} onToggleTabMute={toggleTabMute} />
 
     </div>
+    {startupOpeningState === 'opening' && (
+      <StartupScreen
+        locale={locale}
+        launchIcon={startupLaunchIcon}
+        phase="ready"
+        opening
+        onOpeningComplete={completeStartupOpening}
+      />
+    )}
+    </>
   );
 }
 

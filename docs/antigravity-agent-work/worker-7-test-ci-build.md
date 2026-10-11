@@ -95,10 +95,10 @@
 ## 4. Status- und Lock-Verwaltung
 
 - **State File:** [`.agents/state/antigravity-worker-7.json`](file:///C:/projekte/lastbrowser/.agents/state/antigravity-worker-7.json)
-- **Lauf-Zähler (`runs_total`):** 6
+- **Lauf-Zähler (`runs_total`):** 7
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Nach Abschluss des Durchlaufs ordnungsgemäß freigegeben (`run_lock_since`: `null`)
-- **Nächster regulärer Lauf:** 11. Oktober 2026, **06:20 Uhr**
+- **Nächster regulärer Lauf:** 11. Oktober 2026, **06:20 Uhr** (aktiver Daemon: `task-95`)
 
 ---
 

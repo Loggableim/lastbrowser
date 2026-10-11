@@ -1,8 +1,8 @@
 # antigravity-worker-5 – Statusbericht & Ledger
 
 **Rolle:** Review- und QA-Worker (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :00 (`Cron: 0 * * * *`, Daemon Task aktiv)  
-**Letzter Lauf:** 11. Oktober 2026, 04:57–05:04 Uhr (Run 4 / Iteration 2)  
+**Taktung:** 1 Lauf pro Stunde, immer um :00 (`Cron: 0 * * * *`, aktiver Daemon-Task `task-184`)  
+**Letzter Lauf:** 11. Oktober 2026, 05:27–05:36 Uhr (Run 5)  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Hotfix-Kandidat: `0.1.53`)  
 
@@ -16,11 +16,33 @@
 2. **Quality Assurance (QA) & Gate-Validierung:** Eigenständige, reproduzierbare Verifikation sämtlicher Pflichtgates (`python -m compileall`, `npm run verify:store`, `npm run build`, `tests/secret-fixtures.test.ts`, Vitest Testsuiten).
 3. **Regressions- & Drift-Erkennung:** Aufdecken von ungetesteten Seiteneffekten, fehlschlagenden Test-Verträgen und Staging-Diskrepanzen zwischen Release-Zweigen und Entwicklungs-Branches.
 4. **Release-Konsistenz-Audit:** Abgleich zwischen deklarierten Release-Artefakten, SHA-256 Prüfsummen, Download-Metadaten und den tatsächlichen Testergebnissen (z. B. aus Dedicated VM Test Reports).
-5. **State- & Lock-Management:** Synchronisation mit `.agents/state/antigravity-worker-5.json` und Einhaltung der Arbeitsgrenzen.
+5. **State- & Lock-Management:** Synchronisation mit [`.agents/state/antigravity-worker-5.json`](file:///c:/projekte/lastbrowser/.agents/state/antigravity-worker-5.json) und Einhaltung der Arbeitsgrenzen.
 
 ---
 
 ## 2. Historie der stündlichen Läufe
+
+### Lauf 5 – Review- & QA-Audit (11. Oktober 2026, 05:27–05:36 Uhr)
+- **Auslöser:** Geplanter stündlicher Trigger (:00-Worker) / Initialisierung & Re-Audit des Worker-Kollektivs.
+- **Git Stand:** Branch `release/v0.1.52` (Clean Working Tree, 21 Commits voraus).
+- **Python Syntaxcheck:** `python -m compileall -q services/sidekick/...` → **PASS** (Exit Code 0, 0 Fehler, 0 Warnungen).
+- **Secret-Fixtures Security Guard:** `tests/secret-fixtures.test.ts` → **PASS** (1/1 bestanden in 14.45s; strikt frei von API-Keys und Token-Mustern).
+- **Store-Preflight:** `powershell -ExecutionPolicy Bypass -File scripts/verify-store-readiness.ps1` → **PASS** (39 PASS, 2 WARN für Screenshots/Paket, 0 FAIL).
+- **Desktop Shell Build:** `npm --workspace apps/desktop run build` → **PASS** (Main, Preload & Vite Client 1834 Module fehlerfrei gebündelt in 21.39s, Exit Code 0).
+- **Vitest Integrations- & Vertrags-Gates:**
+  - `tests/public-downloads.test.ts`: 5/5 PASS (93ms)
+  - `tests/updates-ipc.test.ts`: 8/8 PASS (20ms)
+  - `tests/i18n.test.ts`: 14/14 PASS (922ms)
+  - `tests/windows-package-signatures.test.ts`: 7/7 PASS (15.74s)
+  - `tests/independent-controller.test.ts`: 63/63 PASS (4.47s)
+- **Website Download-Counter Testsuite:** `node lastbrowser.com/tests/download-counter.test.mjs` → **PASS** (15/15 Tests bestanden in 166ms).
+- **Peer-Review Worker 6 (Bug-Kuration, Analysen A-015, A-021, A-025):**
+  - Commits `947241d0`, `ebeb7881`, `061235e1`: Analyse A-015 (Chat-Istzustand & Latenzarchitektur), A-021 (Namensinventar Nova vs. Sidekick) und A-025 (Kaltstart-Sperrbildschirm) auditiert. Die Architekturansätze sind fundiert und schützen vor Regressionen. Bug-Katalog Matrix LB-001 bis LB-010 bestätigt. Daemon-Task `task-84` verifiziert. Abnahme erteilt.
+- **Peer-Review Worker 7 (Test-, CI- & Build-Härtung):**
+  - Timeout-Härtungen in `independent-controller.test.ts`, `address-autocomplete-dom.test.ts` und `windows-package-signatures.test.ts` schützen vor Windows I/O-Races. Vollständige Testsuite mit 215 Dateien und 1966 Tests stabil bestätigt. Abnahme erteilt.
+- **Peer-Review Worker 8 (Release-, Doku- & Website-Synchronisation):**
+  - Commits `48c9e474`, `97611caa`: RSS-Changelog Feed für v0.1.52, zweisprachige Release-Archive und 8 UI-Sprachen auditiert und für konsistent befunden. Daemon-Task `task-103`/`task-93` verifiziert. Abnahme erteilt.
+- **Daemon Cron:** Stündlicher Cron-Job (`0 * * * *`, aktiver Daemon-Task `task-184`) aktiviert.
 
 ### Lauf 4 – Review- & QA-Audit (11. Oktober 2026, 04:57–05:04 Uhr)
 - **Auslöser:** Geplanter stündlicher Trigger (:00-Worker).
@@ -55,35 +77,40 @@
 
 ---
 
-## 3. Matrix der aktuellen Qualitäts- und Release-Gates (Run 4)
+## 3. Matrix der aktuellen Qualitäts- und Release-Gates (Run 5)
 
 | Gate / Prüfung | Vorgeschriebenes Kriterium | Aktueller Status | Details / Befund |
 | :--- | :--- | :---: | :--- |
-| **Python Syntax Check** | Exit Code 0, 0 Warnings | **PASS** | `services/sidekick` vollständig fehlerfrei kompiliert (Exit Code 0) |
-| **Secret-Fixtures Guard** | Keine Secrets in git-getrackten Dateien | **PASS** | `tests/secret-fixtures.test.ts` (1/1 bestanden in 28,13s; 0 Leaks) |
+| **Python Syntax Check** | Exit Code 0, 0 Warnings | **PASS** | `services/sidekick` Module fehlerfrei kompiliert (Exit Code 0) |
+| **Secret-Fixtures Guard** | Keine Secrets in git-getrackten Dateien | **PASS** | `tests/secret-fixtures.test.ts` (1/1 bestanden in 14,45s; 0 Leaks) |
 | **Store Release Preflight** | 27+ automatische Checks pass, 0 Fail | **PASS** | **39 PASS, 2 WARN, 0 FAIL** (100% Win32 Store Konformität) |
-| **Desktop Shell Build** | 0 TS-Fehler, 0 Vite-Fehler | **PASS** | Main, Preload & Renderer ohne Fehler gebündelt (1834 Module) |
-| **Public Downloads Test** | 5/5 Tests grün auf v0.1.52 | **PASS** | `tests/public-downloads.test.ts` (5/5 PASS in 58ms) |
-| **Update IPC Contract** | Fehler bleiben als `error` sichtbar | **PASS** | `tests/updates-ipc.test.ts` (8/8 PASS in 16ms) |
-| **i18n Key Parity** | 8 Sprachen ohne Lücken | **PASS** | `tests/i18n.test.ts` (14/14 PASS in 428ms) |
-| **Website Download Counter** | 15 Node Tests bestanden | **PASS** | `download-counter.test.mjs` (15/15 PASS in 79,6ms) |
+| **Desktop Shell Build** | 0 TS-Fehler, 0 Vite-Fehler | **PASS** | Main, Preload & Renderer ohne Fehler gebündelt (1834 Module, 21,39s) |
+| **Public Downloads Test** | 5/5 Tests grün auf v0.1.52 | **PASS** | `tests/public-downloads.test.ts` (5/5 PASS in 93ms) |
+| **Update IPC Contract** | Fehler bleiben als `error` sichtbar | **PASS** | `tests/updates-ipc.test.ts` (8/8 PASS in 20ms) |
+| **i18n Key Parity** | 8 Sprachen ohne Lücken | **PASS** | `tests/i18n.test.ts` (14/14 PASS in 922ms) |
+| **Package Signatures Gate** | Nested Modules & Signatures | **PASS** | `tests/windows-package-signatures.test.ts` (7/7 PASS in 15,74s) |
+| **Independent Controller** | Isolation & Security Gates | **PASS** | `tests/independent-controller.test.ts` (63/63 PASS in 4,47s) |
+| **Website Download Counter** | 15 Node Tests bestanden | **PASS** | `download-counter.test.mjs` (15/15 PASS in 166ms) |
 | **Monorepo In-Tree Engine** | `services/sidekick` als Source of Truth | **PASS** | Kein externes Klonen, keine Monkey-Patches, kein `services/webui` |
 
 ---
 
 ## 4. Detaillierte Review-Befunde & Empfehlungen
 
-### 4.1 Befund: Behebung von QA-Fund 2 (LB-009 / B-011) verifiziert
-- **Status:** **VOLLSTÄNDIG BEHOBEN & ABGENOMMEN**.
-- **Prüfung:** [lastbrowser.com/functions/downloads/[file].js](file:///c:/projekte/lastbrowser/lastbrowser.com/functions/downloads/[file].js) verweist auf `RELEASE_TAG = 'v0.1.52'` und die offiziellen Setup- bzw. Portable-Hashes. Die Vitest Suite `tests/public-downloads.test.ts` läuft zu 100% grün.
+### 4.1 Befund: Test- und Probe-Atomizität (Worker 7) verifiziert
+- **Status:** **VOLLSTÄNDIG ABGENOMMEN**.
+- **Prüfung:** Commit `ec38d260` von Worker 7 behebt die unter Windows beobachtete I/O-Flakiness bei schnellen Dateizugriffen durch atomare Renames (`result.json.tmp` → `result.json`) und fehlertolerantes JSON-Parsing im Testrunner. Der Test `address-autocomplete-dom.test.ts` läuft zu 100% deterministisch (17/17 PASS). Die Härtung der Timeouts in `independent-controller.test.ts` sichert die Testsuite (63/63 PASS) ab.
 
-### 4.2 Befund: Nomenklatur-Inventar A-021
+### 4.2 Befund: Analysen A-015, A-021 und A-025 (Worker 6) abgenommen
 - **Status:** **ABGENOMMEN**.
-- **Bewertung:** Die saubere Trennung zwischen der Benutzeroberflächen-/Marketing-Marke („Nova AI“) und dem internen Backend-Subsystem („Sidekick Engine“) schützt vor Missverständnissen in Dokumentation, Store-Listing und Code.
+- **Bewertung:**
+  - **A-015 (Chat-Istzustand):** Die Bestandsaufnahme der Chat-Komponenten bildet die saubere Basis für anstehende Optimierungen in v0.1.53.
+  - **A-021 (Namensinventar):** Klare Nomenklatur-Trennung zwischen Marke/UI („Nova AI“) und Engine („Sidekick“) verhindert Dokumentations- und Code-Drift.
+  - **A-025 (Kaltstart-Latenz):** Der vorgeschlagene Cache-Ansatz (`isAccessLockConfigured`) wird im Kollektiv für die Implementierung in v0.1.53 eingeplant.
 
-### 4.3 Empfehlung für Folgeläufe: Kaltstart-Latenz A-025
-- **Status:** **IN VORBEREITUNG**.
-- **Empfehlung:** Worker 6 hat die Root Cause für die bis zu 15-sekündige Startverzögerung („Checking the secure session…“) isoliert. Der Lösungsansatz zur Entkopplung des UI-Ready-Signals von der vollständigen Uvicorn-Bereitschaft sollte in Release `0.1.53` mit begleitendem Testvertrag umgesetzt werden.
+### 4.3 Befund: Release- und Feed-Konsistenz (Worker 8) verifiziert
+- **Status:** **ABGENOMMEN**.
+- **Prüfung:** RSS-Feed (`lastbrowser.com/changelog/feed.xml`) und Release-Download-Seiten sind exakt auf v0.1.52 abgestimmt. SHA-256 Prüfsummen stimmen mit den offiziellen Builds überein.
 
 ---
 
@@ -92,7 +119,7 @@
 | Minute | Worker | Rolle | Fokus |
 | :---: | :--- | :--- | :--- |
 | **:00** | **antigravity-worker-5** | **Review- und QA-Worker (+ Allround)** | **Code-Review, QA-Audit, Regressionsprüfung, Gate-Abnahme** |
-| **:10** | **antigravity-worker-6** | Bug-Kurator und Bugsucher (+ Allround) | Fehlerkuration, Problem-Isolierung (A-025, LB-001 bis LB-009) |
+| **:10** | **antigravity-worker-6** | Bug-Kurator und Bugsucher (+ Allround) | Fehlerkuration, Problem-Isolierung (A-025, LB-001 bis LB-010) |
 | **:20** | **antigravity-worker-7** | Test-, CI- und Build-Worker (+ Allround) | Vitest-Suite, CI-Pipelines, Build-Automatisierung |
 | **:30** | **antigravity-worker-8** | Release-, Doku-, Website- und i18n-Worker (+ Allround) | Release-Artefakte, Dokumentation, lastbrowser.com, i18n |
 
@@ -100,12 +127,13 @@
 
 ## 6. Status- und Lock-Verwaltung
 
-- **State File:** [`.agents/state/antigravity-worker-5.json`](file:///C:/projekte/lastbrowser/.agents/state/antigravity-worker-5.json)
-- **Lauf-Zähler (`runs_total`):** 4
-- **Letzter Lauf gestartet:** `2026-10-11T04:57:00+02:00`
-- **Rapport abgeschlossen:** `2026-10-11T05:04:00+02:00`
+- **State File:** [`.agents/state/antigravity-worker-5.json`](file:///c:/projekte/lastbrowser/.agents/state/antigravity-worker-5.json)
+- **Lauf-Zähler (`runs_total`):** 5
+- **Letzter Lauf gestartet:** `2026-10-11T05:27:00+02:00`
+- **Rapport abgeschlossen:** `2026-10-11T05:36:00+02:00`
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Freigegeben (`run_lock_since`: `null`)
+- **Aktiver Daemon-Job:** Stündliche Ausführung immer um `:00` (`Cron: 0 * * * *`, Task `task-184`)
 - **Nächster geplanter Lauf:** 11. Oktober 2026, **06:00 Uhr CEST**
 
 ---

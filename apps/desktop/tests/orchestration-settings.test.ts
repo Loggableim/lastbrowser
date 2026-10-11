@@ -27,7 +27,7 @@ describe('Teamwork and Smart Track settings contracts', () => {
     expect(copilot).toContain("if (model.id === 'teamwork' && !teamworkEnabled) return false;");
     expect(copilot).toContain("if (model.id.startsWith('smart-track') && !smartTrackEnabled) return false;");
     expect(copilot).toContain('isMultiAgentModelSelection({ model: activeModelId, provider: activeModelProvider })');
-    expect(copilot).toContain('setSelectedModel(fallback.id);');
+    expect(copilot).toContain('setSelectedModel(choice.choice.id);');
     expect(copilot).toContain('lastbrowser:orchestration-config-updated');
   });
 

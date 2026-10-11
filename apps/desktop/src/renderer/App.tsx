@@ -284,9 +284,11 @@ import { recordCompletedChatEvidence, setProviderChatEvidenceRuntime } from './p
 import { saveChatReasoningEffort } from './chat-reasoning-effort.js';
 import { isQuickChatAction, type QuickActionChip } from './quick-actions.js';
 import { loadSpaceModelSelection, removeSpaceModel, saveSpaceModel } from './space-models.js';
-import { isMultiAgentModelSelection, resolvePreferredChatModel, resolvePreferredChatModelSelection } from './provider-model-selection.js';
+import { isMultiAgentModelSelection, parseProviderModelId, resolvePreferredChatModel, resolvePreferredChatModelSelection } from './provider-model-selection.js';
 import { readShowUntestedProviderBetas } from './provider-beta-preferences.js';
-import { isProviderModelQualified } from './provider-chat-evidence.js';
+import { chooseActiveModel, isModelActive } from './active-model-selection.js';
+import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
+import { canSelectNativeModel, mapScopedModelPickerOptions } from './model-picker-options.js';
 import { prepareGuardedNativeChatStart, startGuardedNativeChat } from './guarded-native-chat-start.js';
 import { selectNativeSession as selectNativeChatSession } from './native-session-selection.js';
 import { isQuickChatScopeVisible, updateScopedQuickChatState } from './quick-chat-view-state.js';
@@ -2906,9 +2908,9 @@ function AppContent(): JSX.Element {
     const resolved = await assistantController.resolveScope({ browserProfileId: context.profileId, workspacePath: context.spacePath || null });
     if (!resolved.ok) throw new Error(resolved.error.message);
     const selection = await assistantController.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope,
-      payload: { action: 'get', includeCatalog: false } });
+      payload: { action: 'get', includeCatalog: true } });
     if (!selection.ok) throw new Error(selection.error.message);
-    return { model: selection.value.model, provider: selection.value.provider,scope:resolved.value.scope };
+    return { ...selection.value, scope: resolved.value.scope };
   }
 
   async function createNativeSession(): Promise<void> {
@@ -3654,6 +3656,7 @@ function AppContent(): JSX.Element {
         backendProfileName: activeBackendProfileNameRef.current || ''
       },
       selection: chatModelSelection,
+      availableModels: chatModelSelection.groups,
       allowUntestedBetas: readShowUntestedProviderBetas(),
       qualificationBackendProfileName: turnBackendProfileName
         || (activeSession?.session_id === turnContext.sessionId ? activeSession.profile : '')
@@ -3665,6 +3668,9 @@ function AppContent(): JSX.Element {
     const initialStart = prepareGuardedNativeChatStart(createGuardedStartInput());
     if (!initialStart.ok) {
       if (initialStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
+      else if (initialStart.reason === 'no_active_models') setChatError(t('settings.panels.providers.noActiveModels'));
+      else if (initialStart.reason === 'model_inactive') setChatError(t('settings.panels.providers.activeModelFallback'));
+      else if (initialStart.reason === 'model_unavailable') setChatError(t('chat.modelUnavailableInSpace'));
       else if (initialStart.reason === 'model_unqualified') setChatError(t('settings.panels.providers.betaCatalogEmpty'));
       return false;
     }
@@ -3748,6 +3754,9 @@ function AppContent(): JSX.Element {
         captureEarlyEvents = false;
         unsubscribeEarly();
         if (guardedStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
+        else if (guardedStart.reason === 'no_active_models') setChatError(t('settings.panels.providers.noActiveModels'));
+        else if (guardedStart.reason === 'model_inactive') setChatError(t('settings.panels.providers.activeModelFallback'));
+        else if (guardedStart.reason === 'model_unavailable') setChatError(t('chat.modelUnavailableInSpace'));
         else if (guardedStart.reason === 'model_unqualified') setChatError(t('settings.panels.providers.betaCatalogEmpty'));
         return false;
       }
@@ -4198,28 +4207,30 @@ function AppContent(): JSX.Element {
       quickChatStopPendingRef.current = false;
       return;
     }
-    const selection = resolvePreferredChatModelSelection({
+    const preferredSelection = resolvePreferredChatModelSelection({
       spaceSelection: scopedSelection,
       selectedModel: selectedChatModel,
       selectedModelProvider: selectedChatModelProvider,
       setupModel: setupState.model,
       setupProvider: setupState.provider,
-      allowMultiAgent: readShowUntestedProviderBetas()
+      allowMultiAgent: AI_ORCHESTRATION_ENABLED && readShowUntestedProviderBetas()
     });
-    if (selection.migratedFromMultiAgent) setQuickChatStatusForScope(capturedScopeKey,
-      selection.model ? t('settings.panels.providers.singleModelMigration') : t('settings.panels.providers.multiAgentBetaRequired'));
-    if (isMultiAgentModelSelection(selection) && !readShowUntestedProviderBetas()) {
+    const selectable = mapScopedModelPickerOptions(scopedSelection).flatMap(group => group.configured ? group.models
+      .filter(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability))
+      .map(entry => ({ id: parseProviderModelId(entry.id, group.providerId).model, providerId: group.providerId })) : []);
+    const activeChoice = chooseActiveModel(selectable, preferredSelection, window.localStorage,
+      { browserProfileId, backendProfileName: backendProfileName || 'default' });
+    const virtualChoice = AI_ORCHESTRATION_ENABLED && readShowUntestedProviderBetas()
+      && isMultiAgentModelSelection(preferredSelection);
+    if (!activeChoice.choice && !virtualChoice) {
       quickChatStopPendingRef.current = false;
-      setQuickChatErrorForScope(capturedScopeKey, t('settings.panels.providers.multiAgentBetaRequired'));
+      setQuickChatErrorForScope(capturedScopeKey, t('settings.panels.providers.noActiveModels'));
       return;
     }
-    if (!readShowUntestedProviderBetas() && (!selection.provider || !selection.model
-      || !isProviderModelQualified(selection.provider, selection.model, browserProfileId,
-        backendProfileName || 'default', window.localStorage))) {
-      quickChatStopPendingRef.current = false;
-      setQuickChatErrorForScope(capturedScopeKey, t('settings.panels.providers.betaCatalogEmpty'));
-      return;
-    }
+    const selection = virtualChoice ? preferredSelection
+      : { model: activeChoice.choice!.id, provider: activeChoice.choice!.providerId };
+    if (!virtualChoice && (activeChoice.changed || preferredSelection.migratedFromMultiAgent)) setQuickChatStatusForScope(capturedScopeKey,
+      t('settings.panels.providers.activeModelFallback'));
     quickChatBusyRef.current = true;
     quickChatTranscriptScopeKeyRef.current = capturedScopeKey;
     quickChatErrorScopeKeyRef.current = capturedScopeKey;
@@ -4778,7 +4789,7 @@ function AppContent(): JSX.Element {
     selectedModelProvider: selectedChatModelProvider,
     setupModel: setupState.model,
     setupProvider: setupState.provider,
-    allowMultiAgent: readShowUntestedProviderBetas(),
+    allowMultiAgent: AI_ORCHESTRATION_ENABLED && readShowUntestedProviderBetas(),
   });
 
   if (!canRenderBrowserForAccessAuth(accessAuthChecked, {
@@ -5306,6 +5317,10 @@ function AppContent(): JSX.Element {
                 quickActions={quickActions}
                 onExecuteQuickAction={handleExecuteQuickAction}
                 onSelectModel={(model, provider) => {
+                  if (!(AI_ORCHESTRATION_ENABLED && isMultiAgentModelSelection({ model, provider }))
+                    && (!provider || !isModelActive(window.localStorage,
+                    { browserProfileId: activeProfileIdRef.current, backendProfileName: activeBackendProfileNameRef.current || 'default' },
+                    provider, model))) return;
                   useChatStore.getState().setSelectedModel(model);
                   useChatStore.getState().setSelectedModelProvider(provider || '');
                   void (async () => {
@@ -6789,7 +6804,7 @@ function BrowserMain({
       case 'terminal':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeChatMain activeSession={activeSession} activeSessionId={activeSessionId} busy={busy} chatError={chatError} messages={chatMessages} runState={chatRunState} composerMode={composerMode} composerText={composerText} serviceStatus={serviceStatus} sessionLoading={sessionLoading} setupModel={setupModel} activeSpacePath={activeSpacePath} activeBrowserProfileId={activeProfileId} activeBackendProfileName={activeBackendProfileName} showTokenUsage={desktopSettings?.show_token_usage === true} showTps={desktopSettings?.show_tps === true} showThinking={desktopSettings?.show_thinking === true} simplifiedToolCalling={desktopSettings?.simplified_tool_calling !== false} latestTurnUsage={lastChatTurnUsage?.sessionId === activeSessionId ? lastChatTurnUsage.usage : null} modelFallbackNotice={modelFallbackNotice} onComposerMode={onComposerMode} onComposerText={onComposerText} onCreateSession={onCreateSession} onSend={onSendChat} onCommandAction={onNativeCommandAction} onStop={onStopChat} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeChatMain activeSession={activeSession} activeSessionId={activeSessionId} busy={busy} chatError={chatError} messages={chatMessages} runState={chatRunState} composerMode={composerMode} composerText={composerText} serviceStatus={serviceStatus} sessionLoading={sessionLoading} setupModel={setupModel} activeSpacePath={activeSpacePath} activeBrowserProfileId={activeProfileId} activeBackendProfileName={activeBackendProfileName} showTokenUsage={desktopSettings?.show_token_usage === true} showTps={desktopSettings?.show_tps === true} showThinking={desktopSettings?.show_thinking === true} simplifiedToolCalling={desktopSettings?.simplified_tool_calling !== false} latestTurnUsage={lastChatTurnUsage?.sessionId === activeSessionId ? lastChatTurnUsage.usage : null} modelFallbackNotice={modelFallbackNotice} onOpenModelSettings={() => { usePanelStore.getState().setActiveContextItem('providers'); usePanelStore.getState().setActivePanel('settings'); }} onComposerMode={onComposerMode} onComposerText={onComposerText} onCreateSession={onCreateSession} onSend={onSendChat} onCommandAction={onNativeCommandAction} onStop={onStopChat} /></PanelErrorBoundary>;
     }
   }
 

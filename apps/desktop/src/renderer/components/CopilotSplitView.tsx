@@ -44,7 +44,8 @@ import { useChatStore } from '../stores/useChatStore.js';
 import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isMultiAgentModelSelection, isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
-import { isProviderModelQualified } from '../provider-chat-evidence.js';
+import { chooseActiveModel, isModelActive, useActiveModelRevision } from '../active-model-selection.js';
+import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { isModelCatalogResponseCurrent } from '../model-picker-options.js';
 import { quickChatModelGateCopy, quickChatModelGateReason } from '../quick-chat-model-gate.js';
@@ -167,6 +168,7 @@ export function CopilotSplitView({
   onOpenSettings
 }: CopilotSplitViewProps): React.JSX.Element | null {
   const { t, locale } = useDesktopI18n();
+  const activeModelRevision = useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [inputText, setInputText] = useState('');
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
@@ -252,7 +254,7 @@ export function CopilotSplitView({
           method: 'GET',
           path: '/api/models',
           scopeSelection: orchestrationScope
-        })) as { groups?: Array<{ provider_id?: string; provider?: string; account?: string; models?: Array<any> }> } | null;
+        })) as { groups?: Array<{ provider_id?: string; provider?: string; account?: string; configured?: boolean; models?: Array<any>; extra_models?: Array<any> }> } | null;
         if (!alive || generation !== orchestrationScopeGenerationRef.current || orchestrationScopeKeyRef.current !== orchestrationScopeKey) return;
         if (!res || !Array.isArray(res.groups)) {
           setModelList(AVAILABLE_MODELS);
@@ -270,6 +272,7 @@ export function CopilotSplitView({
         const isAntigravityUnavailable = String(catalogStatus.antigravity || '').toLowerCase() === 'unavailable';
 
         for (const g of res.groups) {
+          if (g.configured === false) continue;
           const pid = String(g.provider_id || g.provider || '').toLowerCase();
           // The retired Gemini CLI / Code Assist provider stays in backend
           // migration data, but must never appear as a selectable model source.
@@ -303,7 +306,7 @@ export function CopilotSplitView({
             badgeClass = 'deepseek';
           }
 
-          for (const m of g.models || []) {
+          for (const m of [...(g.models || []), ...(g.extra_models || [])]) {
             const rawId = String(m.id || '');
             const identity = parseProviderModelId(rawId, pid);
             const cleanId = identity.model;
@@ -314,6 +317,7 @@ export function CopilotSplitView({
               ? `${pct}% Kontingent verfügbar`
               : (pid.includes('cloud') ? 'Ollama Cloud' : (category === 'gemini' ? 'Live Quota Discovery' : providerLabel));
 
+            if (dynamicModels.some(model => model.id === cleanId && model.providerId === identity.provider)) continue;
             dynamicModels.push({
               id: cleanId,
               providerId: identity.provider,
@@ -356,22 +360,20 @@ export function CopilotSplitView({
     return () => {
       alive = false;
     };
-  }, [modelProvider, setSelectedModel, setSelectedModelProvider, orchestrationScope, orchestrationScopeKey]);
+  }, [modelProvider, setSelectedModel, setSelectedModelProvider, orchestrationScope, orchestrationScopeKey, modelPickerOpen]);
 
   const visibleModelList = useMemo(() => modelList.filter((model) => {
     const multiAgent = model.category === 'teamwork' || isMultiAgentModelSelection({ model: model.id, provider: model.providerId });
     if (multiAgent) {
+      if (!AI_ORCHESTRATION_ENABLED) return false;
       if (!showUntestedBetas) return false;
       if (model.id === 'teamwork' && !teamworkEnabled) return false;
       if (model.id.startsWith('smart-track') && !smartTrackEnabled) return false;
       return true;
     }
-    return showUntestedBetas || Boolean(model.providerId && isProviderModelQualified(model.providerId, model.id,
-      browserProfileId, backendProfileName || 'default', window.localStorage));
-  }).map(model => showUntestedBetas && model.providerId
-    && !isProviderModelQualified(model.providerId, model.id, browserProfileId, backendProfileName || 'default', window.localStorage)
-    ? { ...model, label: `${model.label} · ${t('settings.panels.providers.betaUntested')}` }
-    : model), [modelList, smartTrackEnabled, teamworkEnabled, showUntestedBetas, browserProfileId, backendProfileName, t]);
+    return Boolean(model.providerId && isModelActive(window.localStorage,
+      { browserProfileId, backendProfileName: backendProfileName || 'default' }, model.providerId, model.id));
+  }), [modelList, smartTrackEnabled, teamworkEnabled, showUntestedBetas, browserProfileId, backendProfileName, activeModelRevision]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workflowDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -382,6 +384,7 @@ export function CopilotSplitView({
   const activeModelId = modelName || selectedModel;
   const activeModelProvider = modelProvider || selectedModelProvider;
   const [singleModelMigrationNotice, setSingleModelMigrationNotice] = useState(false);
+  const [activeModelFallbackNotice, setActiveModelFallbackNotice] = useState(false);
   const modelGateReason = quickChatModelGateReason({ selectedModel: activeModelId, selectedProvider: activeModelProvider,
     activeScopeKey: orchestrationScopeKey, loadedCatalogScopeKey: modelCatalogLoadedScopeKeyRef.current,
     failedCatalogScopeKey: modelCatalogFailureScopeKey, availableModels: visibleModelList });
@@ -424,17 +427,22 @@ export function CopilotSplitView({
   }
 
   useEffect(() => {
-    if (!modelCapabilitiesLoaded || showUntestedBetas
-      || !isMultiAgentModelSelection({ model: activeModelId, provider: activeModelProvider })) return;
-    const fallback = visibleModelList.find((model) => model.category !== 'teamwork' && model.providerId
-      && !isMultiAgentModelSelection({ model: model.id, provider: model.providerId }));
-    if (!fallback) return;
-    setSelectedModel(fallback.id);
-    setSelectedModelProvider(fallback.providerId || '');
-    onSelectModel?.(fallback.id, fallback.providerId);
-    setSingleModelMigrationNotice(true);
+    if (!modelCapabilitiesLoaded) return;
+    if (AI_ORCHESTRATION_ENABLED && showUntestedBetas
+      && isMultiAgentModelSelection({ model: activeModelId, provider: activeModelProvider })) return;
+    const choice = chooseActiveModel(visibleModelList.filter(model => Boolean(model.providerId))
+      .map(model => ({ id: model.id, providerId: model.providerId! })),
+      { model: activeModelId, provider: activeModelProvider }, window.localStorage,
+      { browserProfileId, backendProfileName: backendProfileName || 'default' });
+    if (!choice.changed || !choice.choice) return;
+    const wasMultiAgent = isMultiAgentModelSelection({ model: activeModelId, provider: activeModelProvider });
+    setSelectedModel(choice.choice.id);
+    setSelectedModelProvider(choice.choice.providerId);
+    onSelectModel?.(choice.choice.id, choice.choice.providerId);
+    if (wasMultiAgent) setSingleModelMigrationNotice(true);
+    else setActiveModelFallbackNotice(true);
   }, [activeModelId, activeModelProvider, modelCapabilitiesLoaded, onSelectModel, setSelectedModel,
-    setSelectedModelProvider, showUntestedBetas, visibleModelList]);
+    setSelectedModelProvider, visibleModelList, browserProfileId, backendProfileName, showUntestedBetas]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -731,7 +739,7 @@ export function CopilotSplitView({
             {modelPickerOpen && renderModelDropdown('header')}
           </div>
 
-          {activeModelItem.id === 'teamwork' && onOpenSettings && (
+          {AI_ORCHESTRATION_ENABLED && activeModelItem.id === 'teamwork' && onOpenSettings && (
             <button
               type="button"
               className="copilot-action-btn"
@@ -1112,9 +1120,13 @@ export function CopilotSplitView({
 
       {/* Bottom Controls: Dynamic Model Selector & Input */}
       <div className="copilot-footer">
-        {!showUntestedBetas && isMultiAgentModelSelection({ model: activeModelId, provider: activeModelProvider })
+        {!AI_ORCHESTRATION_ENABLED && isMultiAgentModelSelection({ model: activeModelId, provider: activeModelProvider })
           && <div className="copilot-model-gate-notice" role="status">{t('settings.panels.providers.multiAgentBetaRequired')}</div>}
         {singleModelMigrationNotice && <div className="copilot-model-gate-notice" role="status">{t('settings.panels.providers.singleModelMigration')}</div>}
+        {activeModelFallbackNotice && <div className="copilot-model-gate-notice" role="status">{t('settings.panels.providers.activeModelFallback')}</div>}
+        {modelCapabilitiesLoaded && visibleModelList.length === 0 && <div className="copilot-model-gate-notice" role="status">
+          {t('settings.panels.providers.noActiveModels')} {onOpenSettings && <button type="button" onClick={() => onOpenSettings('providers')}>{t('settings.panels.providers.openActiveModels')}</button>}
+        </div>}
         {modelGateReason && <div className="copilot-model-gate-notice" role={modelGateReason === 'loading' ? 'status' : 'alert'}>
           {quickChatModelGateCopy[locale][modelGateReason]}
         </div>}

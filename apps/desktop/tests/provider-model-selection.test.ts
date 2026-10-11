@@ -98,13 +98,14 @@ describe('provider-aware model selection', () => {
     expect(all.find(group=>group.providerId==='configured')?.models).toHaveLength(2);
     expect(all.find(group=>group.providerId==='configured')?.models[0].reasoningEfforts).toEqual(['low','high']);
     expect(all.find(group=>group.providerId==='offline')).toMatchObject({configured:false,disabledReason:'unavailable'});
-    expect(manualModelPickerOptions(all).find(group=>group.providerId==='')?.models.map(model=>model.id)).toEqual(['teamwork']);
+    expect(manualModelPickerOptions(all).find(group=>group.providerId==='')).toBeUndefined();
+    expect(manualModelPickerOptions(all, true).find(group=>group.providerId==='')?.models.map(model=>model.id)).toEqual(['teamwork']);
     expect(manualModelPickerOptions([
       { providerId: '', models: [{ id: 'teamwork' }, { id: 'smart-track-low' }, { id: 'smart-track-medium' }, { id: 'smart-track-high' }] },
       { providerId: '', models: [{ id: 'unknown-providerless-model' }] },
       { providerId: '', models: [{ id: 'teamwork' }, { id: 'unknown-providerless-model' }] },
       { providerId: 'configured-real-provider', models: [{ id: 'real-model' }] }
-    ])).toEqual([
+    ], true)).toEqual([
       { providerId: '', models: [{ id: 'teamwork' }, { id: 'smart-track-low' }, { id: 'smart-track-medium' }, { id: 'smart-track-high' }] },
       { providerId: 'configured-real-provider', models: [{ id: 'real-model' }] }
     ]);
@@ -362,7 +363,7 @@ describe('provider-aware model selection', () => {
     const chat = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8');
     const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
     const copilot = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8');
-    expect(composer).toContain('value={qualifyModelForProvider(model, modelProvider)}');
+    expect(composer).toContain('selectedModelVisible?qualifyModelForProvider(model, modelProvider)');
     expect(composer).toContain('<label className="composer-model composer-current-model"');
     expect(composer).not.toContain('{modelOptions.length > 0 && (');
     expect(composer).toContain('value={qualifyModelForProvider(m.id, group.providerId)}');
@@ -372,7 +373,7 @@ describe('provider-aware model selection', () => {
     expect(chat).not.toContain('sidekick.setDefaultModel');
     expect(chat).toContain('modelProvider={modelProvider}');
     expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection(turnContext)');
-    expect(app).toContain("includeCatalog: false");
+    expect(app).toContain("includeCatalog: true");
     expect(app).toContain('const copilotModelSelection = resolvePreferredChatModelSelection({');
     expect(copilot).toContain('const activeModelId = modelName || selectedModel;');
     expect(chat).toContain('setModelCatalogError(true)');

@@ -1,8 +1,8 @@
 # antigravity-worker-8 – Statusbericht & Ledger
 
 **Rolle:** Release-, Doku-, Website- und i18n-Worker (+ Allround)  
-**Taktung:** 1 Lauf pro Stunde, immer um :30 (`Cron: 30 * * * *`, Daemon Task aktiv: `task-63`)  
-**Letzter Lauf:** 11. Oktober 2026, 05:30–05:36 Uhr (Iteration 1 des Cron-Jobs / Run 5)  
+**Taktung:** 1 Lauf pro Stunde, immer um :30 (`Cron: 30 * * * *`, Daemon Task aktiv: `task-73`)  
+**Letzter Lauf:** 11. Oktober 2026, 05:30–05:40 Uhr (Lauf 5 / Cron Iteration 1)  
 **Branch:** `release/v0.1.52`  
 **Zielversion:** `0.1.52` (Hotfix-Kandidat: `0.1.53`)  
 
@@ -37,27 +37,28 @@
 
 ## 2. Historie der stündlichen Läufe
 
-### Lauf 4 – Iteration 1 des Cron-Jobs (11. Oktober 2026, 05:30–05:36 Uhr / Run 5)
-- **Auslöser:** Geplanter stündlicher Cron-Trigger um :30 (`Cron: 30 * * * *`, Daemon Task `task-63`).
-- **Git Stand & Branch:** Branch `release/v0.1.52` (Commits bis `406ed323`).
+### Lauf 5 – Geplanter Cron-Lauf (:30, Iteration 1) (11. Oktober 2026, 05:30–05:40 Uhr)
+- **Auslöser:** Geplanter stündlicher Cron-Trigger um :30 (`Cron: 30 * * * *`, Daemon Task `task-73`).
+- **Git Stand & Branch:** Branch `release/v0.1.52` (nach Integration von Worker 7 Commit `ec38d260`).
 - **Allround- & Qualitäts-Gates:**
   - **Python Syntaxcheck:** `python -m compileall -q services/sidekick` → **PASS** (Exit 0, 0 Fehler).
-  - **Secret-Fixtures:** `npm --workspace apps/desktop run test:run -- tests/secret-fixtures.test.ts` → **PASS** (1/1 bestanden in 16.97s, keine unzulässigen Tokens/Secrets).
-  - **Desktop Shell Build:** `npm --workspace apps/desktop run build` → **PASS** (Main, Preload & Renderer Vite Bundle 1834 Module fehlerfrei kompiliert in 17.74s; transiente Windows-Dateisperre in `dist/renderer` erfolgreich bereinigt).
+  - **Secret-Fixtures:** `npm --workspace apps/desktop run test:run -- tests/secret-fixtures.test.ts` → **PASS** (1/1 bestanden in 15.39s, keine unzulässigen Tokens/Secrets).
+  - **Desktop Shell Build:** `npm --workspace apps/desktop run build` → **PASS** (Main, Preload & Renderer Vite Bundle 1834 Module fehlerfrei kompiliert in 24.87s, Exit 0).
   - **Store Preflight:** `npm run verify:store` → **PASS** (39 Checks PASS, 2 WARN für provisorische Screenshots / unsignierte Dev-Artefakte, 0 FAIL).
-  - **i18n Key Parity:** `npm --workspace apps/desktop run test:run -- tests/i18n.test.ts` → **PASS** (14/14 Tests bestanden in 1.53s).
-  - **Website Testsuite:** `node lastbrowser.com/tests/download-counter.test.mjs` → **PASS** (15/15 Tests bestanden in 76ms).
-  - **Public Downloads:** `npm --workspace apps/desktop run test:run -- tests/public-downloads.test.ts` → **PASS** (5/5 Tests bestanden in 954ms).
+  - **i18n Key Parity:** `npm --workspace apps/desktop run test:run -- tests/i18n.test.ts` → **PASS** (14/14 Tests bestanden in 1.75s).
+  - **Website Testsuite:** `node lastbrowser.com/tests/download-counter.test.mjs` → **PASS** (15/15 Tests bestanden in 121ms).
+  - **Public Downloads:** `npm --workspace apps/desktop run test:run -- tests/public-downloads.test.ts` → **PASS** (5/5 Tests bestanden in 504ms).
+  - **Release Notes Test:** `npm --workspace apps/desktop run test:run -- tests/release-notes.test.ts` → **PASS** (6/6 Tests bestanden in 430ms).
 - **Release-, Doku- und Website-Audit:**
   - **Release v0.1.52:** Vollständige Übereinstimmung aller Prüfsummen und URLs über alle Kanäle:
     - Setup (`Lastbrowser-0.1.52-x64-setup.exe`): `D09747A3A5F55D9A4DA02A8644DE976D342EB2C811798B3778C242515F6BDACE` (161.228.424 Bytes)
     - Portable (`Lastbrowser-0.1.52-x64-portable.exe`): `16EEC42D1D335112E90EC04A2AC66ACB2941A81A2D7DD229E35EAD7905C51BFF` (160.865.088 Bytes)
-  - **Website-Feed & Cloudflare Proxy:** `lastbrowser.com/changelog/feed.xml` und `lastbrowser.com/functions/downloads/[file].js` verifiziert.
-  - **Doku-Integrität:** Neue Analyse-Dokumente aus Vorläufen (`A-015-lastbrowser-chat-istzustand.md`, `A-021-naming-inventory.md`, `A-025-start-secure-session.md`) integriert und konsistent.
+  - **Website-Feed & Cloudflare Proxy:** `lastbrowser.com/changelog/feed.xml` und `lastbrowser.com/functions/downloads/[file].js` verifiziert (RSS XML valide).
+  - **Doku-Integrität:** Konsistent auf Release `v0.1.52`.
 - **Automatisierung:**
-  - Stündlicher Cron-Job (`30 * * * *`) als Hintergrund-Daemon aktiv (`task-63`). Nächster Trigger um 06:30 Uhr CEST.
+  - Stündlicher Cron-Job (`30 * * * *`) als Hintergrund-Daemon aktiv (`task-73`). Nächster Trigger um 06:30 Uhr CEST.
 
-### Lauf 3 – Initialer Audit Run 4 (11. Oktober 2026, 05:05–05:12 Uhr)
+### Lauf 4 – Stündlicher Re-Audit (:30-Taktung) (11. Oktober 2026, 05:04–05:15 Uhr)
 - Direkte Worker-8-Aktivierung & Vorbereitung auf :30 Taktung.
 - Alle 7 Qualitäts-Gates erfolgreich validiert.
 - `lastbrowser.com/changelog/feed.xml` mit v0.1.52 Release synchronisiert.
@@ -103,8 +104,8 @@
 - **Lauf-Zähler (`runs_total`):** 5
 - **Fehler:** Keiner (`last_error`: `null`)
 - **Run-Lock:** Freigegeben (`run_lock_since`: `null`)
-- **Letzter Rapport:** `2026-10-11T05:36:30+02:00`
-- **Aktiver Cron-Task:** `task-63` (`30 * * * *`, Daemon)
+- **Letzter Rapport:** `2026-10-11T05:40:00+02:00`
+- **Aktiver Cron-Task:** `task-73` (`30 * * * *`, Daemon)
 
 ---
 

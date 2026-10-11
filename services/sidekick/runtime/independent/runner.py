@@ -25,6 +25,45 @@ class WorkerCancelled(RuntimeError):
     pass
 
 
+def _discover_model_catalog(context, include_capabilities, *, available_models=None,
+                            configuration=None, providers=None, capability_inventory=None,
+                            provider_model_ids=None):
+    """Resolve account evidence for every catalog; capability inventory is optional."""
+    if available_models is None:
+        from web.api.config import get_available_models as available_models
+    if configuration is None:
+        from web.api.config import get_config as configuration
+    if providers is None:
+        from web.api.providers import get_providers as providers
+    from .scoped_models import public_catalog
+
+    # Resolve this optional account catalog before get_available_models enters
+    # its shared cache lock. The worker environment is already bound to exactly
+    # one profile, so this uses only that profile's Sidekick OAuth state.
+    if provider_model_ids is None:
+        from cli.models import provider_model_ids as provider_model_ids
+    try:
+        codex_ids = [mid for mid in (provider_model_ids("openai-codex") or []) if isinstance(mid, str) and mid]
+    except Exception:
+        codex_ids = []
+    raw = copy.deepcopy(available_models())
+    if codex_ids and isinstance(raw, dict) and isinstance(raw.get("groups"), list):
+        codex_group = next((group for group in raw["groups"]
+                            if isinstance(group, dict) and group.get("provider_id") == "openai-codex"), None)
+        if codex_group is None:
+            codex_group = {"provider_id": "openai-codex", "provider": "OpenAI Codex", "models": []}
+            raw["groups"].append(codex_group)
+        codex_group["models"] = [{"id": model_id, "label": model_id} for model_id in codex_ids]
+
+    config = configuration()
+    result = public_catalog(raw, providers(), config)
+    if include_capabilities:
+        if capability_inventory is None:
+            from .capabilities import public_inventory as capability_inventory
+        result["capabilityInventory"] = capability_inventory(context, config)
+    return result
+
+
 class ProviderRequestProxy:
     """Meter actual SDK entry calls, including internal engine retries.
 
@@ -460,16 +499,7 @@ def main() -> int:
                 # catalogs without touching parent environment/module caches.
                 if provider_configuration_digest(Path(context.resolved_profile_home)) != payload.get("providerConfigurationDigest"):
                     raise PolicyDenied("provider_connection_changed")
-                from web.api.config import get_available_models, get_config
-                from .scoped_models import public_catalog
-                accounts = {}
-                if payload.get("includeCapabilities") is True:
-                    from web.api.providers import get_providers
-                    accounts = get_providers()
-                result = public_catalog(get_available_models(), accounts, get_config())
-                if payload.get("includeCapabilities") is True:
-                    from .capabilities import public_inventory
-                    result["capabilityInventory"] = public_inventory(context, get_config())
+                result = _discover_model_catalog(context, payload.get("includeCapabilities") is True)
                 result["providerConfigurationDigest"] = payload["providerConfigurationDigest"]
                 if provider_configuration_digest(Path(context.resolved_profile_home)) != result["providerConfigurationDigest"]:
                     raise PolicyDenied("provider_connection_changed")

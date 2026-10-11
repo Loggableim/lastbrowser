@@ -68,6 +68,23 @@ describe('guarded native chat start', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('omits an empty optional backend profile hint while preserving the captured binding', async () => {
+    const storage = memoryStorage();
+    const calls: NativeChatStartPayload[] = [];
+    const result = await startGuardedNativeChat(input(storage, {
+      allowUntestedBetas: true,
+      captured: { sessionId: 'session-a', profileId: 'profile-a', spacePath: 'C:/spaces/a', backendProfileName: '' },
+      current: { sessionId: 'session-a', profileId: 'profile-a', spacePath: 'C:/spaces/a', backendProfileName: '' },
+    }), async (payload) => {
+      calls.push(payload);
+      return { sessionId: 'session-a', streamId: 'stream-a' };
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).not.toHaveProperty('backendProfileName');
+  });
+
   it('surfaces transport rejection without recording successful qualification', async () => {
     const storage = memoryStorage();
     const result = await startGuardedNativeChat(input(storage, { allowUntestedBetas: true }), async () => {

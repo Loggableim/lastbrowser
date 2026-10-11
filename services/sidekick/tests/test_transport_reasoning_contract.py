@@ -187,6 +187,7 @@ def test_codex_api_model_catalog_preserves_cached_effort_metadata(monkeypatch):
                     {
                         "slug": "gpt-6.1-sol",
                         "priority": 1,
+                        "context_window": 1048500,
                         "supported_reasoning_levels": current_levels,
                     }
                 ]
@@ -201,9 +202,18 @@ def test_codex_api_model_catalog_preserves_cached_effort_metadata(monkeypatch):
     assert codex_models.get_codex_model_reasoning_efforts("gpt-6.1-sol") == [
         "low", "xhigh", "max"
     ]
+    assert codex_models.get_codex_model_context_length("gpt-6.1-sol") == 1048500
+    assert codex_models.get_codex_model_context_length("unknown-model") is None
     current_levels.clear()
     assert codex_models._fetch_models_from_api("test credential") == ["gpt-6.1-sol"]
     assert codex_models.get_codex_model_reasoning_efforts("gpt-6.1-sol") == []
+
+    class UnauthorizedResponse:
+        status_code = 401
+
+    monkeypatch.setattr(httpx, "get", lambda *args, **kwargs: UnauthorizedResponse())
+    assert codex_models._fetch_models_from_api("expired test credential") == []
+    assert codex_models.get_codex_model_context_length("gpt-6.1-sol") is None
 
 
 def test_unknown_model_lookup_does_not_erase_live_reasoning_capabilities(tmp_path, monkeypatch):

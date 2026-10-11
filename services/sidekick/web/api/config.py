@@ -4170,12 +4170,8 @@ def get_available_models() -> dict:
                             }
                         )
                 elif pid == "openai-codex":
-                    # Codex account catalogs drift faster than WebUI releases
-                    # (for example gpt-5.3-codex-spark in #1680). For WebUI
-                    # chat-start compatibility checks this path must stay
-                    # non-blocking: do not hit the live Codex HTTP API while
-                    # holding the model-cache lock. Use local Codex cache and
-                    # static defaults; explicit model refresh can do network IO.
+                    # Keep this cache builder non-blocking. Scoped discovery
+                    # primes Codex's profile-bound catalog before calling here.
                     raw_models = []
                     codex_ids = []
                     try:

@@ -28,7 +28,7 @@ export type NativeChatStartPayload = Readonly<{
   modelProvider?: string;
   profile: string;
   workspace: string;
-  backendProfileName: string;
+  backendProfileName?: string;
   reasoningEffort?: string;
   groundingContext?: TeamworkGroundingContext;
 }>;
@@ -112,7 +112,7 @@ export function prepareGuardedNativeChatStart(input: GuardedNativeChatStartInput
       modelProvider: input.selection.provider || undefined,
       profile: input.captured.profileId,
       workspace: input.captured.spacePath,
-      backendProfileName: input.captured.backendProfileName,
+      ...(input.captured.backendProfileName.trim() ? { backendProfileName: input.captured.backendProfileName } : {}),
       ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
       ...(input.groundingContext ? { groundingContext: input.groundingContext } : {}),
     },

@@ -8,7 +8,7 @@ import yaml
 
 from runtime.independent.contracts import Scope
 from runtime.independent.policy import PolicyDenied
-from runtime.independent.runner import provider_configuration_digest
+from runtime.independent.runner import _discover_model_catalog, provider_configuration_digest
 from runtime.independent.scope_binding import ProfileHub, provider_selection
 from runtime.independent.scoped_models import handle_model_selection, public_catalog
 from runtime.independent.store import RevisionConflict
@@ -100,6 +100,82 @@ def test_public_catalog_unqualifies_only_the_exact_provider_picker_prefix():
     ]}]}, {}, {})
     assert [row["id"] for row in public["groups"][0]["models"]] == [
         "root-gemini-fixture", "qwen3:8b"]
+
+
+def test_public_catalog_uses_exact_provider_context_and_leaves_unknown_unbounded(monkeypatch):
+    from cli.codex_models import _MODEL_CONTEXT_WINDOWS
+
+    _MODEL_CONTEXT_WINDOWS.clear()
+    _MODEL_CONTEXT_WINDOWS["gpt-6-luna"] = 272000
+    monkeypatch.setattr("runtime.models_dev.lookup_models_dev_context",
+                        lambda provider, model: {("ollama-cloud", "deepseek-v4-flash"): 1048576,
+                                                ("xiaomi", "mimo-v2.6-flash"): 1048576}.get((provider, model)))
+    public = public_catalog({"groups": [
+        {"provider_id": "ollama-cloud", "models": [{"id": "deepseek-v4-flash"}]},
+        {"provider_id": "xiaomi", "models": [{"id": "mimo-v2.6-flash"}]},
+        {"provider_id": "openai-codex", "models": [{"id": "gpt-6-luna"}, {"id": "unknown-codex"}]},
+        {"provider_id": "new-provider", "models": [{"id": "new-model"}]},
+    ]}, {}, {})
+    models = {group["provider_id"]: {row["id"]: row for row in group["models"]}
+              for group in public["groups"] if group.get("provider_id")}
+    assert models["ollama-cloud"]["deepseek-v4-flash"]["contextLength"] == 1048576
+    assert models["xiaomi"]["mimo-v2.6-flash"]["contextLength"] == 1048576
+    assert models["openai-codex"]["gpt-6-luna"]["contextLength"] == 272000
+    assert "contextLength" not in models["openai-codex"]["unknown-codex"]
+    assert "contextLength" not in models["new-provider"]["new-model"]
+
+
+def test_model_catalog_account_evidence_is_independent_of_capability_inventory():
+    calls = []
+    raw = {"groups": [{"provider_id": "xiaomi", "models": [{"id": "mimo-v2.6-flash"}]}]}
+    accounts = {"providers": [{"id": "xiaomi", "has_key": True}]}
+    def providers():
+        calls.append("accounts")
+        return accounts
+    def capabilities(_context, _configuration):
+        calls.append("capabilities")
+        return {"items": []}
+
+    basic = _discover_model_catalog(object(), False, available_models=lambda: raw,
+                                    configuration=lambda: {}, providers=providers,
+                                    capability_inventory=capabilities, provider_model_ids=lambda _provider: [])
+    expanded = _discover_model_catalog(object(), True, available_models=lambda: raw,
+                                       configuration=lambda: {}, providers=providers,
+                                       capability_inventory=capabilities, provider_model_ids=lambda _provider: [])
+    assert basic["providers"] == expanded["providers"] == [{
+        "id": "xiaomi", "display_name": "xiaomi", "has_key": True,
+        "oauth_connected": False, "auth_state": "not_connected",
+        "provider_available": True, "models": [],
+    }]
+    assert "capabilityInventory" not in basic
+    assert expanded["capabilityInventory"] == {"items": []}
+    assert calls == ["accounts", "accounts", "capabilities"]
+
+
+def test_model_catalog_resolves_codex_models_before_the_shared_cache_builder(monkeypatch):
+    from cli.codex_models import _MODEL_CONTEXT_WINDOWS
+
+    _MODEL_CONTEXT_WINDOWS.clear()
+    _MODEL_CONTEXT_WINDOWS["gpt-6-luna"] = 272000
+    order = []
+    raw = {"groups": [{"provider_id": "openai-codex", "provider": "OpenAI Codex",
+                       "models": [{"id": "stale-local-model"}]}]}
+    def account_bound_ids(provider):
+        order.append("profile-catalog")
+        assert provider == "openai-codex"
+        return ["gpt-6-luna"]
+    def cached_models():
+        order.append("shared-cache")
+        return raw
+
+    result = _discover_model_catalog(object(), False, available_models=cached_models,
+                                     configuration=lambda: {}, providers=lambda: {"providers": []},
+                                     provider_model_ids=account_bound_ids)
+    codex = next(group for group in result["groups"] if group["provider_id"] == "openai-codex")
+    assert order == ["profile-catalog", "shared-cache"]
+    assert [row["id"] for row in codex["models"]] == ["gpt-6-luna"]
+    assert codex["models"][0]["contextLength"] == 272000
+    assert raw["groups"][0]["models"] == [{"id": "stale-local-model"}]
 
 
 def test_set_is_atomic_preserves_other_settings_and_retry_survives_reopen(bound):

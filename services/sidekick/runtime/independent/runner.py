@@ -101,7 +101,7 @@ def _discover_model_catalog(context, include_capabilities, *, available_models=N
             "source": source,
             "status": ("listed" if source == "provider_api" and ids else
                        "unavailable" if source == "unavailable" or not ids else
-                       "stale" if source in {"curated_fallback", "metadata_registry", "local_catalog"} else "unknown"),
+                       "stale" if source == "stale_provider_cache" else "unknown"),
             "modelIds": listed_ids,
             "checkedAt": provenance.get("checkedAt"),
         })

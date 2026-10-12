@@ -313,6 +313,38 @@ def test_model_catalog_resolves_codex_models_before_the_shared_cache_builder(mon
     assert raw["groups"][0]["models"] == [{"id": "stale-local-model"}]
 
 
+def test_curated_fallback_provider_models_are_selectable_candidates_not_stale_api_evidence():
+    from types import SimpleNamespace
+    from runtime.independent.scoped_models import _provider_model_catalog
+
+    scope = Scope(backend_profile_id="00000000-0000-0000-0000-000000000001",
+                  space_id="00000000-0000-0000-0000-000000000002", browser_profile_id="browser-a")
+    raw = {"groups": [{"provider_id": "minimax", "provider": "MiniMax", "models": [
+        {"id": "MiniMax-M3", "label": "MiniMax M3"}]}]}
+
+    def curated_ids(provider, *, source_out):
+        if provider == "openai-codex":
+            source_out["source"] = "unavailable"
+            return []
+        assert provider == "minimax"
+        source_out["source"] = "curated_fallback"
+        return ["MiniMax-M3"]
+
+    result = _discover_model_catalog(SimpleNamespace(scope=scope), False,
+        available_models=lambda: raw,
+        configuration=lambda: {"providers": {"minimax": {"api_key": "synthetic-test-value"}}},
+        providers=lambda: {"providers": [{"id": "minimax", "has_key": True}]},
+        provider_model_ids=curated_ids)
+    evidence = result["providerModelCatalog"]["providers"][0]
+    assert evidence["source"] == "curated_fallback"
+    assert evidence["status"] == "unknown"
+    assert evidence["modelIds"] == ["MiniMax-M3"]
+    model = _provider_model_catalog(scope, result, result["groups"])["providers"][0]["models"][0]
+    assert model["listed"] == {"status": "fallback", "source": "curated_fallback", "freshness": "unknown"}
+    assert model["qualification"]["independent"] == {
+        "status": "unknown", "available": False, "reasonCode": "curated_fallback_unverified"}
+
+
 def test_provider_model_catalog_marks_only_api_listed_ids_current():
     from runtime.independent.scoped_models import _provider_model_catalog
 
@@ -321,19 +353,27 @@ def test_provider_model_catalog_marks_only_api_listed_ids_current():
     catalog = {"providerModelCatalog": {"checkedAt": "2026-10-12T00:00:00Z", "freshness": "unknown",
         "providers": [{"providerId": "api-provider", "source": "provider_api", "status": "listed",
                        "modelIds": ["model-live"]},
-                      {"providerId": "fallback-provider", "source": "curated_fallback", "status": "stale",
+                      {"providerId": "fallback-provider", "source": "curated_fallback", "status": "unknown",
+                       "modelIds": ["model-fallback"]},
+                      {"providerId": "stale-provider", "source": "stale_provider_cache", "status": "stale",
                        "modelIds": ["model-old"]}]}}
     groups = [
         {"provider_id": "api-provider", "provider": "API", "configured": True, "models": [
             {"id": "model-live", "label": "Live", "nativeAvailability": {"available": True, "reasonCode": None}}]},
         {"provider_id": "fallback-provider", "provider": "Fallback", "configured": True, "models": [
+            {"id": "model-fallback", "label": "Fallback candidate", "nativeAvailability": {"available": True, "reasonCode": None}}]},
+        {"provider_id": "stale-provider", "provider": "Stale", "configured": True, "models": [
             {"id": "model-old", "label": "Old", "nativeAvailability": {"available": True, "reasonCode": None}}]},
     ]
     result = _provider_model_catalog(scope, catalog, groups)
     live = result["providers"][0]["models"][0]
-    stale = result["providers"][1]["models"][0]
+    fallback = result["providers"][1]["models"][0]
+    stale = result["providers"][2]["models"][0]
     assert live["listed"] == {"status": "current", "source": "provider_api", "freshness": "unknown"}
     assert live["qualification"]["independent"] == {"status": "available", "available": True, "reasonCode": None}
+    assert fallback["listed"] == {"status": "fallback", "source": "curated_fallback", "freshness": "unknown"}
+    assert fallback["qualification"]["independent"] == {
+        "status": "unknown", "available": False, "reasonCode": "curated_fallback_unverified"}
     assert stale["listed"]["status"] == "stale"
     assert stale["qualification"]["independent"]["status"] == "unknown"
     assert live["features"]["tools"] == {"status": "unknown", "value": None, "source": "unknown"}

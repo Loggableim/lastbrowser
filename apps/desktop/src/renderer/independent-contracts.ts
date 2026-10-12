@@ -199,7 +199,7 @@ export type ScopedModelProvider = Readonly<{id:string;display_name:string;has_ke
 export type ProviderModelCatalog = Readonly<{ schemaVersion: 1; scope: IndependentScope; providers: readonly Readonly<{
   providerId: string; label: string; configured: boolean;
   discovery: Readonly<{ status: 'listed' | 'stale' | 'unavailable' | 'unknown'; source: string; checkedAt: string | null; freshness: string }>;
-  models: readonly Readonly<{ id: string; label: string; listed: Readonly<{ status: 'current' | 'configured' | 'stale' | 'unavailable' | 'unknown'; source: string; freshness: string }>;
+  models: readonly Readonly<{ id: string; label: string; listed: Readonly<{ status: 'current' | 'configured' | 'fallback' | 'stale' | 'unavailable' | 'unknown'; source: string; freshness: string }>;
     features: Readonly<{ contextLength: Readonly<{ status: string; value: number | null; source: string }>;
       tools: Readonly<{ status: string; value: boolean | null; source: string }>;
       vision: Readonly<{ status: string; value: boolean | null; source: string }>;

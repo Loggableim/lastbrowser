@@ -7,7 +7,7 @@ export type ModelPickerOptionGroup = Readonly<{
   providerId: string;
   configured: boolean;
   disabledReason?: 'unavailable' | 'notConfigured';
-  models: readonly Readonly<{ id: string; label: string; listingStatus?: 'current' | 'configured'; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability }>[];
+  models: readonly Readonly<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability }>[];
 }>;
 
 export function isModelCatalogResponseCurrent(capturedScopeKey: string, activeScopeKey: string): boolean {
@@ -26,7 +26,8 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
     && providerCatalog.scope.spaceId === selection.scope.spaceId;
   const currentModels = providerCatalog && catalogScopeMatches
     ? new Map(providerCatalog.providers.map(provider => [provider.providerId, new Map(provider.models.filter(model =>
-      model.listed.status === 'current' || model.listed.status === 'configured').map(model => [model.id, model.listed.status as 'current' | 'configured']))]))
+      model.listed.status === 'current' || model.listed.status === 'configured' || model.listed.status === 'fallback')
+      .map(model => [model.id, model.listed.status as 'current' | 'configured' | 'fallback']))]))
     : null;
   const providers = new Map((selection.providers ?? []).map(provider => [provider.id, provider]));
   return (selection.groups ?? [])

@@ -138,6 +138,43 @@ def test_recent_catalog_expiry_forces_fresh_discovery(bound, monkeypatch):
     assert len(manager.calls) == 2
 
 
+def test_recent_catalog_rejects_stale_resolved_binding_and_space_policy(bound):
+    from runtime.independent.scoped_models import probe_catalog
+
+    _, store, resolver, manager, scope = bound
+    resolved = resolver.resolve(scope)
+    probe_catalog(manager, scope, resolved=resolved)
+    binding = resolved.binding
+    store.bind_space(binding.model_copy(update={"revision": binding.revision + 1}),
+        expected_revision=binding.revision)
+    with pytest.raises(PolicyDenied, match="provider_connection_changed"):
+        probe_catalog(manager, scope, resolved=resolved)
+    probe_catalog(manager, scope)
+    assert len(manager.calls) == 2
+
+    current = resolver.resolve(scope)
+    config = current.space.load_config()
+    config["model"] = {"provider": "local-a", "default": "model-b"}
+    current.space.save_config(config)
+    probe_catalog(manager, scope)
+    assert len(manager.calls) == 3
+
+
+def test_recent_catalog_invalidates_opencode_device_and_cli_credentials(bound):
+    from runtime.independent.scoped_models import probe_catalog
+
+    _, _, resolver, manager, scope = bound
+    home = resolver.resolve(scope).profile_home
+    probe_catalog(manager, scope)
+    (home / "opencode-device.json").write_text('{"opencode-go":{"access_token":"rotated"}}', "utf-8")
+    probe_catalog(manager, scope)
+    cli_auth = home / "opencode-data" / "opencode" / "auth.json"
+    cli_auth.parent.mkdir(parents=True)
+    cli_auth.write_text('{"opencode-go":{"key":"changed"}}', "utf-8")
+    probe_catalog(manager, scope)
+    assert len(manager.calls) == 3
+
+
 def select(bound, **changes):
     _, store, resolver, manager, scope = bound
     return handle_model_selection(store, resolver, manager, scope,

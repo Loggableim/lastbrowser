@@ -45,7 +45,8 @@ def _catalog_cache_state(manager):
 def _catalog_credential_state(home):
     """Include token rotation even when the account identity stays the same."""
     digest = hashlib.sha256()
-    for relative in ("auth.json", "auth/google_oauth.json", ".claude/.credentials.json"):
+    for relative in ("auth.json", "auth/google_oauth.json", ".claude/.credentials.json",
+                     "opencode-device.json", "opencode-data/opencode/auth.json"):
         path = home / relative
         if not path.resolve().is_relative_to(home.resolve()):
             raise PolicyDenied("capability_credentials_escape_profile")
@@ -57,6 +58,22 @@ def _catalog_credential_state(home):
         else:
             digest.update(b"<missing>")
     return digest.hexdigest()
+
+
+def _catalog_space_state(resolved):
+    return hashlib.sha256(canonical_json(resolved.space.load_config()).encode()).hexdigest()
+
+
+def _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state):
+    from .capabilities import evidence_digest
+    # A caller may have resolved the binding before another request changed it.
+    current = manager.resolver.resolve(scope, authenticated_profile_name=resolved.profile.name)
+    if (current.profile != resolved.profile or current.binding != resolved.binding
+            or current.profile_home != resolved.profile_home or current.space_root != resolved.space_root
+            or _catalog_space_state(current) != space_state
+            or provider_configuration_digest(current.profile_home) != digest
+            or (evidence_digest(current.profile_home), _catalog_credential_state(current.profile_home)) != fingerprint):
+        raise PolicyDenied("provider_connection_changed")
 
 
 def _text(value, maximum=512):
@@ -167,12 +184,12 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
 def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=True) -> dict:
     """Reuse only a recent receipt for this exact binding and credential state."""
     from .capabilities import evidence_digest
-
     resolved = resolved or manager.resolver.resolve(scope)
     selection, digest = provider_selection(resolved)
+    space_state = _catalog_space_state(resolved)
     fingerprint = (evidence_digest(resolved.profile_home), _catalog_credential_state(resolved.profile_home))
     key = (getattr(manager, "generation", None), scope.key, resolved.binding.partition_key, resolved.binding.revision,
-           bool(include_capabilities), digest, fingerprint)
+           bool(include_capabilities), digest, fingerprint, space_state)
     cache, inflight, lock = _catalog_cache_state(manager)
     with lock:
         receipt = cache.get(key)
@@ -186,15 +203,11 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
                 pending = Future()
                 inflight[key] = pending
     if cached is not None:
-        if provider_configuration_digest(resolved.profile_home) != digest or (
-                evidence_digest(resolved.profile_home), _catalog_credential_state(resolved.profile_home)) != fingerprint:
-            raise PolicyDenied("provider_connection_changed")
+        _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
         return cached
     if not owner:
         result = copy.deepcopy(pending.result())
-        if provider_configuration_digest(resolved.profile_home) != digest or (
-                evidence_digest(resolved.profile_home), _catalog_credential_state(resolved.profile_home)) != fingerprint:
-            raise PolicyDenied("provider_connection_changed")
+        _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
         return result
 
     provider = selection or ProviderSelection(provider_config_ref=digest, model="__catalog__", provider="")
@@ -202,9 +215,7 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
         context = manager.make_context(scope, provider, permissions=PermissionScope(allowed_effects=()), allow_virtual_for_catalog=True, interactive=True)
         result = manager.run_interactive(context, {"mode": "model_catalog", "includeCapabilities": include_capabilities,
                                                    "providerConfigurationDigest": digest})
-        if provider_configuration_digest(resolved.profile_home) != digest or (
-                evidence_digest(resolved.profile_home), _catalog_credential_state(resolved.profile_home)) != fingerprint:
-            raise PolicyDenied("provider_connection_changed")
+        _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
         if not isinstance(result, dict) or result.get("providerConfigurationDigest") != digest or not isinstance(result.get("groups"), list):
             raise PolicyDenied("invalid_model_catalog")
         with lock:

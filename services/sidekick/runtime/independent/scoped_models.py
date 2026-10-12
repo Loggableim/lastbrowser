@@ -406,10 +406,12 @@ def _provider_model_catalog(scope, catalog, groups):
                     },
                     "qualification": {
                         "independent": {"status": (
-                            "available" if (is_current or is_explicitly_configured) and availability.get("available") is True else
-                            "unavailable" if is_current or is_explicitly_configured else "unknown"),
-                            "available": bool((is_current or is_explicitly_configured) and availability.get("available") is True),
-                            "reasonCode": availability.get("reasonCode") if is_current or is_explicitly_configured else "catalog_not_currently_listed"},
+                            "unknown" if is_explicitly_configured else
+                            "available" if is_current and availability.get("available") is True else
+                            "unavailable" if is_current else "unknown"),
+                            "available": bool(not is_explicitly_configured and is_current and availability.get("available") is True),
+                            "reasonCode": ("explicit_configuration_unverified" if is_explicitly_configured else
+                                           availability.get("reasonCode") if is_current else "catalog_not_currently_listed")},
                     },
                     "liveTest": {"status": "not_run"},
                 })

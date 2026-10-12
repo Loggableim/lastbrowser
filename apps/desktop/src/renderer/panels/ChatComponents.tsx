@@ -430,7 +430,7 @@ export type ChatComposerProps = {
   mode: ComposerMode;
   model: string;
   /** Selectable models, grouped by provider. The current model remains visible when empty. */
-  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; qualification?:ProviderChatEvidence }> }>;
+  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured'; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; qualification?:ProviderChatEvidence }> }>;
   /** True when a loaded catalog exists but every provider/model pair is still unqualified. */
   emptyQualifiedCatalog?: boolean;
   noActiveModels?: boolean;
@@ -604,8 +604,8 @@ export function ChatComposer({
                 {manualModelPickerOptions(modelOptions).map((group) => (
                   <optgroup key={group.providerId || group.provider} label={group.provider} disabled={group.configured===false}>
                     {group.models.map((m) => (
-                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={m.supportsIndependent===false||!canSelectNativeModel(group.providerId,m.nativeAvailability)}>
-                        {m.label} · {group.provider}
+                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={m.supportsIndependent===false||!canSelectNativeModel(group.providerId,m.nativeAvailability)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                        {m.label}{m.listingStatus === 'configured' ? ' · configured · unverified' : ''} · {group.provider}
                       </option>
                     ))}
                   </optgroup>

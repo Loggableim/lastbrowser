@@ -2,6 +2,8 @@ import type { DesktopCatalog, LegacyDesktopLocaleId as DesktopLocaleId } from '.
 
 export const sidekickUxTranslations: Record<DesktopLocaleId, Partial<DesktopCatalog>> = {
   en: {
+    'chat.header.moreActions': 'More chat actions',
+    'chat.header.status.unknown': 'Status unknown', 'chat.header.status.ready': 'Sidekick ready', 'chat.header.status.starting': 'Sidekick starting', 'chat.header.status.unavailable': 'Sidekick unavailable',
     'chat.chooseModelManually': 'Choose model manually', 'chat.chooseModelShort': 'More', 'chat.modelSearch': 'Search models', 'chat.modelProviderUnavailable': 'Unavailable in this build', 'chat.modelProviderNotConfigured': 'Configure this provider in Settings first', 'chat.modelIndependentUnsupported': 'Not available for independent chat', 'chat.modelUnavailableInSpace': 'Unavailable in this Space', 'chat.modelFallbackSubscriptionUsed': 'The chosen model requires a subscription. Replying with {model}.', 'chat.noManualModels': 'No models match this search.',
     'goal.judgeUnavailable': 'Goal evaluation is waiting for the judge provider. The last response is saved for re-evaluation. Restore the provider, then use /goal resume.',
     'chat.interruptedPendingTurn': 'The previous chat turn was interrupted before it could resume. Your message is preserved; resend it to continue.',
@@ -72,6 +74,8 @@ export const sidekickUxTranslations: Record<DesktopLocaleId, Partial<DesktopCata
     'settings.panels.appearance.viTestApply': 'Apply palette', 'settings.panels.appearance.viTestPreview': 'Preview palette'
   },
   de: {
+    'chat.header.moreActions': 'Weitere Chat-Aktionen',
+    'chat.header.status.unknown': 'Status unbekannt', 'chat.header.status.ready': 'Sidekick bereit', 'chat.header.status.starting': 'Sidekick startet', 'chat.header.status.unavailable': 'Sidekick nicht verfügbar',
     'chat.chooseModelManually': 'Modell manuell wählen', 'chat.chooseModelShort': 'Weitere', 'chat.modelSearch': 'Modelle suchen', 'chat.modelProviderUnavailable': 'In dieser Version nicht verfügbar', 'chat.modelProviderNotConfigured': 'Richte diesen Anbieter zuerst in den Einstellungen ein', 'chat.modelIndependentUnsupported': 'Für unabhängige Chats nicht verfügbar', 'chat.modelUnavailableInSpace': 'In diesem Space nicht verfügbar', 'chat.modelFallbackSubscriptionUsed': 'Das gewählte Modell erfordert ein Abonnement. Die Antwort kommt von {model}.', 'chat.noManualModels': 'Keine passenden Modelle gefunden.',
     'goal.judgeUnavailable': 'Die Zielbewertung wartet auf den Prüf-Provider. Die letzte Antwort wurde für eine erneute Bewertung gespeichert. Stelle den Provider wieder her und nutze dann /goal resume.',
     'chat.interruptedPendingTurn': 'Der vorherige Chat-Durchlauf wurde unterbrochen, bevor er fortgesetzt werden konnte. Deine Nachricht ist erhalten; sende sie erneut, um fortzufahren.',
@@ -142,6 +146,8 @@ export const sidekickUxTranslations: Record<DesktopLocaleId, Partial<DesktopCata
     'settings.panels.appearance.viTestApply': 'Palette übernehmen', 'settings.panels.appearance.viTestPreview': 'Palettenvorschau'
   },
   it: {
+    'chat.header.moreActions': 'Altre azioni chat',
+    'chat.header.status.unknown': 'Stato sconosciuto', 'chat.header.status.ready': 'Sidekick pronto', 'chat.header.status.starting': 'Avvio di Sidekick', 'chat.header.status.unavailable': 'Sidekick non disponibile',
     'chat.chooseModelManually': 'Scegli modello manualmente', 'chat.chooseModelShort': 'Altri', 'chat.modelSearch': 'Cerca modelli', 'chat.modelProviderUnavailable': 'Non disponibile in questa versione', 'chat.modelProviderNotConfigured': 'Configura prima il provider nelle impostazioni', 'chat.modelIndependentUnsupported': 'Non disponibile per chat indipendenti', 'chat.modelUnavailableInSpace': 'Non disponibile in questo Space', 'chat.modelFallbackSubscriptionUsed': 'Il modello scelto richiede un abbonamento. Risposta generata con {model}.', 'chat.noManualModels': 'Nessun modello corrisponde alla ricerca.',
     'goal.judgeUnavailable': 'La valutazione dell’obiettivo è in attesa del provider di verifica. L’ultima risposta è stata salvata per una nuova valutazione. Ripristina il provider, poi usa /goal resume.',
     'chat.interruptedPendingTurn': 'Il turno di chat precedente è stato interrotto prima di poter riprendere. Il tuo messaggio è conservato; invialo di nuovo per continuare.',
@@ -209,6 +215,8 @@ export const sidekickUxTranslations: Record<DesktopLocaleId, Partial<DesktopCata
     'settings.panels.appearance.viTestPreview': 'Anteprima palette'
   },
   es: {
+    'chat.header.moreActions': 'Más acciones del chat',
+    'chat.header.status.unknown': 'Estado desconocido', 'chat.header.status.ready': 'Sidekick listo', 'chat.header.status.starting': 'Sidekick iniciando', 'chat.header.status.unavailable': 'Sidekick no disponible',
     'chat.chooseModelManually': 'Elegir modelo manualmente', 'chat.chooseModelShort': 'Más', 'chat.modelSearch': 'Buscar modelos', 'chat.modelProviderUnavailable': 'No disponible en esta versión', 'chat.modelProviderNotConfigured': 'Configura primero este proveedor en Ajustes', 'chat.modelIndependentUnsupported': 'No disponible para chats independientes', 'chat.modelUnavailableInSpace': 'No disponible en este Space', 'chat.modelFallbackSubscriptionUsed': 'El modelo elegido requiere una suscripción. Respuesta generada con {model}.', 'chat.noManualModels': 'No hay modelos que coincidan.',
     'goal.judgeUnavailable': 'La evaluación del objetivo espera al proveedor evaluador. La última respuesta se guardó para volver a evaluarla. Restablece el proveedor y usa /goal resume.',
     'chat.interruptedPendingTurn': 'El turno de chat anterior se interrumpió antes de poder reanudarse. Tu mensaje se conserva; vuelve a enviarlo para continuar.',
@@ -270,6 +278,8 @@ export const sidekickUxTranslations: Record<DesktopLocaleId, Partial<DesktopCata
     'settings.panels.appearance.viTestApply': 'Aplicar paleta', 'settings.panels.appearance.viTestPreview': 'Vista previa de la paleta'
   },
   fr: {
+    'chat.header.moreActions': 'Autres actions du chat',
+    'chat.header.status.unknown': 'État inconnu', 'chat.header.status.ready': 'Sidekick prêt', 'chat.header.status.starting': 'Démarrage de Sidekick', 'chat.header.status.unavailable': 'Sidekick indisponible',
     'chat.chooseModelManually': 'Choisir un modèle manuellement', 'chat.chooseModelShort': 'Plus', 'chat.modelSearch': 'Rechercher des modèles', 'chat.modelProviderUnavailable': 'Indisponible dans cette version', 'chat.modelProviderNotConfigured': 'Configurez d’abord ce fournisseur dans les paramètres', 'chat.modelIndependentUnsupported': 'Indisponible pour les chats indépendants', 'chat.modelUnavailableInSpace': 'Indisponible dans ce Space', 'chat.modelFallbackSubscriptionUsed': 'Le modèle choisi nécessite un abonnement. Réponse générée avec {model}.', 'chat.noManualModels': 'Aucun modèle ne correspond.',
     'goal.judgeUnavailable': 'L’évaluation de l’objectif attend le fournisseur de vérification. La dernière réponse est enregistrée pour une nouvelle évaluation. Rétablissez le fournisseur, puis utilisez /goal resume.',
     'chat.interruptedPendingTurn': 'Le tour de chat précédent a été interrompu avant de pouvoir reprendre. Votre message est conservé ; renvoyez-le pour continuer.',
@@ -312,6 +322,8 @@ export const sidekickUxTranslations: Record<DesktopLocaleId, Partial<DesktopCata
     'downloads.title': 'Téléchargements', 'downloads.active': '{count} actifs', 'downloads.empty': 'Aucun téléchargement.', 'downloads.savedTo': 'Enregistré dans {path}', 'downloads.cancelled': 'Annulé', 'downloads.interrupted': 'Interrompu', 'downloads.remove': 'Retirer de la liste', 'downloads.restoreHint': 'Cliquer pour restaurer • Faire glisser pour déplacer', 'downloads.pillActive': 'Téléchargements ({count} actifs)', 'downloads.pillCompleted': 'Téléchargements ({count} terminés)', 'downloads.close': 'Fermer les téléchargements', 'downloads.undock': 'Détacher dans une fenêtre déplaçable', 'downloads.dockTabs': 'Ancrer sous la barre des onglets', 'downloads.dockSidekick': 'Ancrer à côté de Sidekick', 'downloads.dockTopLeft': 'Ancrer à gauche dans la barre supérieure', 'downloads.dockTopRight': 'Ancrer à droite dans la barre supérieure', 'downloads.float': 'Fenêtre flottante', 'downloads.dockDropdown': 'Revenir au menu déroulant de la barre', 'downloads.minimize': 'Réduire', 'downloads.clearCompleted': 'Effacer les téléchargements terminés', 'downloads.drag': 'Déplacer', 'settings.panels.appearance.viTestApply': 'Appliquer la palette', 'settings.panels.appearance.viTestPreview': 'Aperçu de la palette'
   },
   'pt-BR': {
+    'chat.header.moreActions': 'Mais ações do chat',
+    'chat.header.status.unknown': 'Status desconhecido', 'chat.header.status.ready': 'Sidekick pronto', 'chat.header.status.starting': 'Sidekick iniciando', 'chat.header.status.unavailable': 'Sidekick indisponível',
     'sidebar.pinnedApps.add': 'Adicionar app fixado', 'sidebar.pinnedApps.addShort': 'Adicionar',
     'chat.chooseModelManually': 'Escolher modelo manualmente', 'chat.chooseModelShort': 'Mais', 'chat.modelSearch': 'Buscar modelos', 'chat.modelProviderUnavailable': 'Indisponível nesta versão', 'chat.modelProviderNotConfigured': 'Configure este provedor primeiro nas Configurações', 'chat.modelIndependentUnsupported': 'Indisponível para chats independentes', 'chat.modelUnavailableInSpace': 'Indisponível neste Space', 'chat.modelFallbackSubscriptionUsed': 'O modelo escolhido exige uma assinatura. Resposta gerada com {model}.', 'chat.noManualModels': 'Nenhum modelo corresponde à busca.',
     'goal.judgeUnavailable': 'A avaliação da meta está aguardando o provedor avaliador. A última resposta foi salva para nova avaliação. Restaure o provedor e use /goal resume.',
@@ -325,6 +337,8 @@ export const sidekickUxTranslations: Record<DesktopLocaleId, Partial<DesktopCata
     'downloads.title': 'Downloads', 'downloads.active': '{count} ativos', 'downloads.empty': 'Nenhum download.', 'downloads.savedTo': 'Salvo em {path}', 'downloads.cancelled': 'Cancelado', 'downloads.cancel': 'Cancelar download', 'downloads.interrupted': 'Interrompido', 'downloads.remove': 'Remover da lista', 'downloads.restoreHint': 'Clique para restaurar • Arraste para mover', 'downloads.pillActive': 'Downloads ({count} ativos)', 'downloads.pillCompleted': 'Downloads ({count} concluídos)', 'downloads.close': 'Fechar downloads', 'downloads.undock': 'Desencaixar como janela móvel', 'downloads.dockTabs': 'Encaixar abaixo da barra de abas', 'downloads.dockSidekick': 'Encaixar ao lado do Sidekick', 'downloads.dockTopLeft': 'Encaixar à esquerda na barra superior', 'downloads.dockTopRight': 'Encaixar à direita na barra superior', 'downloads.float': 'Janela flutuante', 'downloads.dockDropdown': 'Voltar ao menu suspenso da barra', 'downloads.minimize': 'Minimizar', 'downloads.clearCompleted': 'Limpar concluídos', 'downloads.drag': 'Mover', 'settings.panels.appearance.viTestApply': 'Aplicar paleta', 'settings.panels.appearance.viTestPreview': 'Pré-visualização da paleta'
   },
   ru: {
+    'chat.header.moreActions': 'Другие действия чата',
+    'chat.header.status.unknown': 'Статус неизвестен', 'chat.header.status.ready': 'Sidekick готов', 'chat.header.status.starting': 'Sidekick запускается', 'chat.header.status.unavailable': 'Sidekick недоступен',
     'sidebar.pinnedApps.add': 'Добавить закреплённое приложение', 'sidebar.pinnedApps.addShort': 'Добавить',
     'chat.chooseModelManually': 'Выбрать модель вручную', 'chat.chooseModelShort': 'Ещё', 'chat.modelSearch': 'Поиск моделей', 'chat.modelProviderUnavailable': 'Недоступно в этой сборке', 'chat.modelProviderNotConfigured': 'Сначала настройте провайдера в параметрах', 'chat.modelIndependentUnsupported': 'Недоступно для независимых чатов', 'chat.modelUnavailableInSpace': 'Недоступно в этом Space', 'chat.modelFallbackSubscriptionUsed': 'Для выбранной модели нужна подписка. Ответ подготовлен с помощью {model}.' , 'chat.noManualModels': 'Модели не найдены.',
     'goal.judgeUnavailable': 'Оценка цели ожидает провайдера-проверяющего. Последний ответ сохранён для повторной оценки. Восстановите провайдера, затем выполните /goal resume.',

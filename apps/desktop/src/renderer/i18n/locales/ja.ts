@@ -6,6 +6,11 @@ function group<P extends string, T extends Record<string, string>>(prefix: P, va
 }
 
 export const desktopJaOverrides = {
+  'chat.header.moreActions': 'チャットのその他の操作',
+  'chat.header.status.unknown': '状態不明',
+  'chat.header.status.ready': 'Sidekick 利用可能',
+  'chat.header.status.starting': 'Sidekick 起動中',
+  'chat.header.status.unavailable': 'Sidekick 利用不可',
   'app.title': 'LastBrowser',
   'whatsNew.title': '更新内容',
   'whatsNew.intro': '今回の更新で変更された内容です。',

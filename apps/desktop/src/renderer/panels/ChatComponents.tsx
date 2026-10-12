@@ -25,6 +25,7 @@ import {
   Layers,
   ListFilter,
   Loader2,
+  MoreHorizontal,
   Plus,
   Send,
   Sparkles,
@@ -567,6 +568,7 @@ export function ChatComposer({
     <form className="chat-composer" onSubmit={submit}>
       <div className="composer-toolbar">
         <div className="composer-toolbar-group composer-command-group">
+          <img className="composer-sidekick" src={brandAssets.sidekickAvatar} alt="" aria-hidden="true" />
           {commandContext&&onCommandAction&&<button type="button" className="composer-command-button" title={commandCopy.menu} aria-label={commandCopy.menu}
             onClick={()=>{setSlashFilter('');setShowSlashDropdown(current=>!current);}}>/</button>}
           <div className="composer-mode" role="group" aria-label={`${t('chat.action')} / ${t('chat.plan')}`}>
@@ -580,37 +582,6 @@ export function ChatComposer({
             </button>
           </div>
         </div>
-        <div className="composer-toolbar-group composer-context-group">
-          <button
-            type="button"
-            className="composer-tab-btn"
-            onClick={() => {
-              if (isTabsActive) {
-                onText(text.replace(/@tabs\s*/gi, '').trim());
-              } else {
-                onText(text ? `@tabs ${text}` : '@tabs ');
-              }
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              border: 'none',
-              background: isTabsActive ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.06)',
-              color: isTabsActive ? '#38bdf8' : 'rgba(232, 242, 255, 0.65)',
-              padding: '3px 8px',
-              borderRadius: '6px',
-              fontSize: '11px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            title={`@tabs · ${t('browser.chrome.tabs')}`}
-          >
-            <Layers size={13} />
-            <span>@tabs</span>
-          </button>
-        </div>
         <div className="composer-toolbar-group composer-model-group">
           <label className="composer-model composer-current-model" title={`${model || 'default'} · ${modelProvider || 'current'}`}>
               <Cpu size={13} />
@@ -620,16 +591,15 @@ export function ChatComposer({
                 value={AI_ORCHESTRATION_ENABLED && automaticPolicy?.active?'__lastbrowser_auto_policy__':selectedModelVisible?qualifyModelForProvider(model, modelProvider):''}
                 disabled={!ready || running}
                 onChange={(event) => onModelChange(event.target.value)}
-                style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}
               >
                 {AI_ORCHESTRATION_ENABLED&&automaticPolicy&&<option value="__lastbrowser_auto_policy__" disabled={!automaticPolicy.available || !ready || running}>AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
                 {!selectedModelVisible && <option value="" disabled>
                   {noActiveModels ? t('settings.panels.providers.noActiveModels') : t('chat.noManualModels')}
                 </option>}
                 {manualModelPickerOptions(modelOptions).map((group) => (
-                  <optgroup key={group.providerId || group.provider} label={group.provider} disabled={group.configured===false} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
+                  <optgroup key={group.providerId || group.provider} label={group.provider} disabled={group.configured===false}>
                     {group.models.map((m) => (
-                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={m.supportsIndependent===false||!canSelectNativeModel(group.providerId,m.nativeAvailability)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={m.supportsIndependent===false||!canSelectNativeModel(group.providerId,m.nativeAvailability)}>
                         {m.label} · {group.provider}
                       </option>
                     ))}
@@ -637,33 +607,6 @@ export function ChatComposer({
                 ))}
               </select>
           </label>
-          <span className={`composer-model-qualification ${displayedModelQualified?'qualified':'untested'}`} role="status"
-            title={`${displayedModelQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')} · ${qualificationScope}`}>
-            {displayedModelQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
-          </span>
-          {antigravityCatalogRelevant&&(antigravityCatalogUnavailable||antigravityCatalogUnknown||antigravityCatalogReady)&&<span className={`composer-model-qualification ${antigravityCatalogReady?'qualified':'untested'}`} role="status">
-            {t(antigravityCatalogUnavailable?'settings.panels.providers.antigravityCatalogUnavailableShort'
-              :antigravityCatalogUnknown?'settings.panels.providers.antigravityCatalogUnknownShort'
-                :'settings.panels.providers.antigravityCatalogReadyShort')}
-          </span>}
-          <button ref={manualModelTrigger} type="button" className="composer-command-button composer-model-trigger" aria-expanded={showManualModels}
-            aria-label={t('chat.chooseModelManually')} title={t('chat.chooseModelManually')}
-            aria-controls="composer-manual-models" onClick={()=>setShowManualModels(open=>!open)}>
-            <ListFilter size={14} aria-hidden="true" />
-            <span>{t('chat.chooseModelShort')}</span>
-          </button>
-          <details className="composer-reasoning-disclosure">
-            <summary title={reasoningHelp} aria-label={t('chat.reasoningEffort')} data-testid="composer-reasoning-toggle">
-              {t('chat.reasoningEffort')}
-            </summary>
-            <ReasoningEffortPicker
-              value={reasoningEffort}
-              efforts={reasoningEfforts}
-              capabilityState={reasoningCapabilityState}
-              disabled={!ready || running}
-              onChange={onReasoningEffort}
-            />
-          </details>
         </div>
       </div>
       {modelCatalogError&&<div className="composer-model-notice" role="alert">
@@ -733,6 +676,65 @@ export function ChatComposer({
             if (event.key === 'Escape') setShowSlashDropdown(false);
           }}
         />
+      </div>
+        <div className="composer-toolbar-group composer-context-group">
+          <button
+            type="button"
+            className="composer-tab-btn"
+            onClick={() => {
+              if (isTabsActive) {
+                onText(text.replace(/@tabs\s*/gi, '').trim());
+              } else {
+                onText(text ? `@tabs ${text}` : '@tabs ');
+              }
+            }}
+            aria-pressed={isTabsActive}
+            title={`@tabs · ${t('browser.chrome.tabs')}`}
+          >
+            <Layers size={13} />
+            <span>{t('browser.chrome.tabs')}</span>
+          </button>
+        </div>
+          <details className="composer-more" onKeyDown={event=>{
+            if(event.key==='Escape'){
+              event.currentTarget.open=false;
+              event.currentTarget.querySelector('summary')?.focus();
+            }
+          }}>
+            <summary aria-label={t('chat.chooseModelShort')}><MoreHorizontal size={16} aria-hidden="true" /><span>{t('chat.chooseModelShort')}</span></summary>
+            <div className="composer-more-content">
+          <span className={`composer-model-qualification ${displayedModelQualified?'qualified':'untested'}`} role="status"
+            title={`${displayedModelQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')} · ${qualificationScope}`}>
+            {displayedModelQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
+          </span>
+          {antigravityCatalogRelevant&&(antigravityCatalogUnavailable||antigravityCatalogUnknown||antigravityCatalogReady)&&<span className={`composer-model-qualification ${antigravityCatalogReady?'qualified':'untested'}`} role="status">
+            {t(antigravityCatalogUnavailable?'settings.panels.providers.antigravityCatalogUnavailableShort'
+              :antigravityCatalogUnknown?'settings.panels.providers.antigravityCatalogUnknownShort'
+                :'settings.panels.providers.antigravityCatalogReadyShort')}
+          </span>}
+          <button ref={manualModelTrigger} type="button" className="composer-command-button composer-model-trigger" aria-expanded={showManualModels}
+            aria-label={t('chat.chooseModelManually')} title={t('chat.chooseModelManually')}
+            aria-controls="composer-manual-models" onClick={()=>setShowManualModels(open=>!open)}>
+            <ListFilter size={14} aria-hidden="true" />
+            <span>{t('chat.chooseModelShort')}</span>
+          </button>
+          <details className="composer-reasoning-disclosure">
+            <summary title={reasoningHelp} aria-label={t('chat.reasoningEffort')} data-testid="composer-reasoning-toggle">
+              {t('chat.reasoningEffort')}
+            </summary>
+            <ReasoningEffortPicker
+              value={reasoningEffort}
+              efforts={reasoningEfforts}
+              capabilityState={reasoningCapabilityState}
+              disabled={!ready || running}
+              onChange={onReasoningEffort}
+            />
+          </details>
+          <div className="composer-scope" aria-label={`${profile} · ${workspaceLabel(workspace)}`}>
+            <span>{profile}</span><span>{workspaceLabel(workspace)}</span>
+          </div>
+            </div>
+          </details>
         {running ? (
           <button type="button" className="composer-send stop" onClick={onStop} aria-label={t('chat.stop')}>
             <StopCircle size={17} />
@@ -742,16 +744,6 @@ export function ChatComposer({
             <Send size={17} />
           </button>
         )}
-      </div>
-      <div className="composer-chips">
-        {isTabsActive && (
-          <span style={{ color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.3)', background: 'rgba(56, 189, 248, 0.1)' }}>
-            @tabs · {t('browser.chrome.tabs')}
-          </span>
-        )}
-        <span>{profile}</span>
-        <span>{workspaceLabel(workspace)}</span>
-      </div>
     </form>
   );
 }

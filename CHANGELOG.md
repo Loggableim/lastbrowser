@@ -5,6 +5,20 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.56] - 2026-10-12
+
+### Features and fixes
+- Add the redesigned start page with locally bundled speed-dial icons and selectable wallpapers that persist per profile and workspace.
+- Add the revised normal and Zen chat composer and a compact chat header with its existing actions preserved.
+- Share the profile- and Space-scoped provider model catalog across Settings and chat. Distinguish configured or fallback models from API-verified, chat-qualified models.
+- Keep Sidekick import detection inside the selected isolated profile and disable AI actions when no model is available.
+- Separate the left navigation from the window title bar and show a visible fallback while the first browser frame is pending.
+
+### Known limits
+- The startup fallback does not establish the cause of the previously observed black first launch or prove it is resolved on a separate VM.
+- The previous v0.1.55 VM report recorded delayed Quickchat Stop and first backend text; those paths require a new test on the final 0.1.56 package.
+- Source, package, signed release and VM results are recorded separately. The private unsigned preview is not the public release artifact.
+
 ## [0.1.55] - 2026-10-11
 
 ### Features and fixes

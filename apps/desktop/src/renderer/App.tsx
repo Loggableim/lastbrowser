@@ -1157,6 +1157,8 @@ function AppContent(): JSX.Element {
   const composerTextRef = useRef('');
   const composerRevisionRef = useRef(0);
   const nativeChatSubmissionGateRef = useRef(new ChatDraftSubmissionGate());
+  const activeNativeSubmissionRef = useRef<ChatDraftSubmission | null>(null);
+  const preflightStopRequestedSubmissionRef = useRef<ChatDraftSubmission | null>(null);
   const setComposerText = (text: string): void => {
     composerTextRef.current = text;
     composerRevisionRef.current += 1;
@@ -3838,6 +3840,8 @@ function AppContent(): JSX.Element {
     const gate = nativeChatSubmissionGateRef.current;
     const submission = gate.begin(composerTextRef.current, composerRevisionRef.current + 1, contextKey());
     if (!submission) return false;
+    activeNativeSubmissionRef.current = submission;
+    setChatRunState('starting');
     setComposerText('');
     // Echo the submitted message before scope/catalog IPC can block. The
     // submission gate already reserves this turn synchronously.
@@ -3850,6 +3854,9 @@ function AppContent(): JSX.Element {
       accepted = await startNativeChatTurn(message, displayText, continuation, reasoningEffort, submission);
       return accepted;
     } finally {
+      if (activeNativeSubmissionRef.current === submission) activeNativeSubmissionRef.current = null;
+      if (preflightStopRequestedSubmissionRef.current === submission) preflightStopRequestedSubmissionRef.current = null;
+      if (chatUiOwnershipRef.current.activeTurnId === null && activeStreamIdRef.current === null) setChatRunState('idle');
       if (!accepted) {
         if (submission.definitelyRejected && submission.contextKey === contextKey()) {
           setChatMessages(current => current.filter(item => item !== visibleUserMessage));
@@ -3891,7 +3898,7 @@ function AppContent(): JSX.Element {
 
     const persistentGoalCommand = parsePersistentGoalCommand(trimmed);
     const chatIsBusy = sidekickBusy || chatRunState === 'starting' || chatRunState === 'streaming';
-    if (!continuation && chatIsBusy) {
+    if (!continuation && chatIsBusy && !submission) {
       if (persistentGoalCommand && shouldDispatchPersistentGoalControlWhileBusy(trimmed, true)) {
         await runPersistentGoalControlDuringChat(persistentGoalCommand.args, displayText);
       } else if (persistentGoalCommand) {
@@ -3924,6 +3931,10 @@ function AppContent(): JSX.Element {
       }
     }
     if (browserCommand) {
+      if (submission && preflightStopRequestedSubmissionRef.current === submission) {
+        submission.definitelyRejected = false;
+        return false;
+      }
       const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
       if (!submission) {
         setChatMessages((current) => [...current, visibleUserMessage]);
@@ -3943,7 +3954,15 @@ function AppContent(): JSX.Element {
     try {
       chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName });
     } catch (error) {
+      if (submission && preflightStopRequestedSubmissionRef.current === submission) {
+        submission.definitelyRejected = false;
+        return false;
+      }
       setChatError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+    if (submission && preflightStopRequestedSubmissionRef.current === submission) {
+      submission.definitelyRejected = false;
       return false;
     }
     const createGuardedStartInput = (groundingContext?: TeamworkGroundingContext) => ({
@@ -4266,8 +4285,10 @@ function AppContent(): JSX.Element {
 
   async function stopNativeChat(): Promise<void> {
     if (!activeStreamIdRef.current && chatRunState === 'starting') {
-      nativeStopRequestedOwnerRef.current = chatUiOwnershipRef.current.activeTurnId;
-      if (nativeStopRequestedOwnerRef.current !== null) setChatRunState('cancelling');
+      const activeOwner = chatUiOwnershipRef.current.activeTurnId;
+      if (activeOwner !== null) nativeStopRequestedOwnerRef.current = activeOwner;
+      else preflightStopRequestedSubmissionRef.current = activeNativeSubmissionRef.current;
+      if (activeOwner !== null || preflightStopRequestedSubmissionRef.current !== null) setChatRunState('cancelling');
       return;
     }
     if (isIndependentOwnedSession(activeSession)) {

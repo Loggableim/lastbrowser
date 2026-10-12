@@ -15,13 +15,16 @@ startup investigation; this change does not touch `apps/desktop/src/main/`.
 ## Source changes in this follow-up
 
 - Standard chat records Stop against the active UI turn while start acceptance
-  has no stream ID. It avoids the transport call if Stop precedes it. If the
+  has no stream ID. The Stop control appears while model preflight is pending
+  and binds to that submitted draft. It avoids the transport call if Stop precedes it. If the
   backend accepted the turn already, the renderer sends a scoped cancel as soon
   as it receives the stream ID and waits for the terminal stream event.
 - The native backend settles a cancelled, registered turn before worker launch,
   preserving its accepted user message and sending `cancel` and `stream_end`
-  without spawning a child. The existing worker path still handles a later
-  cancellation after launch.
+  without spawning a child. For the Root path, terminal events wait for verified
+  writer-lease release. If pending-state cleanup fails, it reports a bounded
+  `native_chat_cleanup_unconfirmed` error after lease release instead of a
+  successful cancel. The existing worker path handles a later cancellation.
 - Terminal cancellation removes an empty assistant placeholder while retaining
   partial answer text. Quickchat applies this on explicit Stop and native
   cancel events. Child-history recovery now offers one action for multiple
@@ -44,7 +47,7 @@ single child-history recovery action. Final local gates before commit:
 | `npm run verify:store` | 39 PASS, 2 WARN, 0 FAIL; no final signed package supplied |
 | `npm --workspace apps/desktop run build` | Passed, 0 TypeScript/Vite errors |
 | `python -m compileall -q services/sidekick` | Passed |
-| Scoped Python prelaunch cancellation and cleanup | 2 passed |
+| Scoped Python prelaunch cancellation and cleanup | 3 passed |
 
 This change has **source-only** verification. The private draft package still
 contains `1a37f9d1`; it must not be described as this follow-up's package.

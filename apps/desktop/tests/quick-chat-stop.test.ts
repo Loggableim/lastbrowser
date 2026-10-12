@@ -15,7 +15,7 @@ describe('Quickchat early Stop target', () => {
     expect(stop).not.toContain('resetQuickChat(');
     expect(stop).not.toContain('setQuickChatId(');
     expect(stop).not.toContain('updateQuickChatMessagesForScope(bindingScopeKey, [])');
-    expect(stop).toContain('finishLiveChatMessage(current)');
+    expect(stop).toContain('finishStoppedLiveChatMessage(current)');
   });
   it('waits for the pending follow-up and never stops the preceding stream', async () => {
     let acknowledge!: (value: { streamId: string }) => void;

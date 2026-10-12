@@ -221,9 +221,12 @@ export function ChatTranscript({
         <p className="child-run-identity">{childRunLabels[locale==='pt-BR'?'pt':locale].children} · {group.binding.parentTurnId}</p>
         <ChildRunBubbles state={group} locale={locale==='pt-BR'?'pt':locale} onResync={identity=>onChildResync?.(identity.parentTurnId)} renderContent={content=><ChatMessageBody content={content}/>}/>
       </section>)}
-      {(childHistoryUnavailable||childHistoryResyncNeeded)&&<p className="chat-status-message" role="status">{childRunLabels[locale==='pt-BR'?'pt':locale][childHistoryUnavailable?'stale':'overflow']}</p>}
-      {(childHistoryUnavailable||childHistoryResyncNeeded)&&childParentTurns.filter(turn=>!childGroups.some(group=>group.binding.parentTurnId===turn)).map(turn=><button key={turn} type="button" className="secondary-action compact" onClick={()=>onChildResync?.(turn)}>
-        {childRunLabels[locale==='pt-BR'?'pt':locale].resync}</button>)}
+      {(childHistoryUnavailable||childHistoryResyncNeeded)&&<p className="chat-status-message" role="status">
+        {childRunLabels[locale==='pt-BR'?'pt':locale][childHistoryUnavailable?'stale':'overflow']}
+        {childParentTurns.some(turn=>!childGroups.some(group=>group.binding.parentTurnId===turn))&&
+          <button type="button" className="secondary-action compact" onClick={()=>onChildResync?.('')}>
+            {childRunLabels[locale==='pt-BR'?'pt':locale].resync}</button>}
+      </p>}
       {pendingUserMessage && !pendingUserMessageAlreadyInTranscript && (
         <article className="chat-message user pending">
           <div className="message-avatar message-avatar--user"><img src={brandAssets.sidekickAvatar} alt="" /></div>

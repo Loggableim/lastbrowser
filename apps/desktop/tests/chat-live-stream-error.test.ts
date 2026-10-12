@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyLiveChatDelta,
   finishLiveChatMessageWithError,
+  finishStoppedLiveChatMessage,
   readNativeChatStreamError,
 } from '../src/renderer/chat-live-stream.js';
 
@@ -39,5 +40,18 @@ describe('native chat stream errors', () => {
       progress: undefined,
       streaming: false,
     }]);
+  });
+
+  it('removes a stopped placeholder and preserves actual partial answers', () => {
+    const messages = [
+      { role: 'user', content: 'Question' },
+      { role: 'assistant', content: 'Working on it...', pending: true, streaming: true, chatStreamId: 'stopped' },
+      { role: 'assistant', content: 'Partial answer', pending: true, streaming: true, chatStreamId: 'other' },
+    ];
+    expect(finishStoppedLiveChatMessage(messages, 'stopped')).toEqual([messages[0], messages[2]]);
+    expect(finishStoppedLiveChatMessage(messages.slice(0, 2))).toEqual([messages[0]]);
+    expect(finishStoppedLiveChatMessage([
+      { role: 'assistant', content: 'Partial answer', pending: true, streaming: true },
+    ])).toEqual([{ role: 'assistant', content: 'Partial answer', pending: false, streaming: false, progress: undefined }]);
   });
 });

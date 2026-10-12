@@ -348,6 +348,36 @@ def fail_unstarted_native_chat(context, *, materialize_pending=True, goal_claim_
     return True
 
 
+def cancel_unstarted_native_chat(context, *, materialize_pending=True) -> bool:
+    """Settle a cancelled accepted turn before any child process is launched."""
+    with _lock:
+        entry = _active.get(context.stream_id)
+        if entry is None or entry.context != context or not entry.cancelled.is_set() or entry.handle is not None:
+            return False
+    if not abandon_unstarted_native_chat(context):
+        return False
+    from web.api import config
+    try:
+        _cleanup_saved_pending(context, materialize_pending=materialize_pending)
+    finally:
+        _invalidate_owned_cache(context)
+        with config.STREAMS_LOCK:
+            channel = config.STREAMS.get(context.stream_id)
+        if channel is not None:
+            channel.put_nowait(("cancel", {"session_id": context.session_id, "stream_id": context.stream_id,
+                "processExited": True, "writerGeneration": context.writer_generation, "nativeChat": True}))
+            channel.put_nowait(("stream_end", {"session_id": context.session_id, "stream_id": context.stream_id,
+                "processExited": True, "writerGeneration": context.writer_generation, "nativeChat": True}))
+            config.retain_completed_chat_stream(context.stream_id)
+        with config.STREAMS_LOCK:
+            for values in (config.STREAMS, config.CANCEL_FLAGS, config.STREAM_PARTIAL_TEXT,
+                config.STREAM_REASONING_TEXT, config.STREAM_LIVE_TOOL_CALLS, config.STREAM_GOAL_RELATED,
+                config.STREAM_GOAL_CLAIMS):
+                values.pop(context.stream_id, None)
+        config.unregister_active_run(context.stream_id)
+    return True
+
+
 def publish_settled_goal_continuation(context) -> bool:
     """Root calls after actual exit, AUTO receipt cleanup and writer release.
 
@@ -565,6 +595,11 @@ def run_native_chat(context: NativeChatContext, args, kwargs, *, python_executab
             _cleanup_saved_pending(context,materialize_pending=kwargs.get("goal_claim_turn") is None and "native_goal_retry" not in kwargs)
             put("error", {"error":"native_chat_start_failed", "session_id":context.session_id,
                 "diagnostic":diagnostic})
+    if entry.cancelled.is_set():
+        if not cancel_unstarted_native_chat(context,
+            materialize_pending=kwargs.get("goal_claim_turn") is None and "native_goal_retry" not in kwargs):
+            raise RuntimeError("Prelaunch native chat cancellation could not be confirmed")
+        return 0
     try:
         return relay_native_chat(context, args, kwargs, put, cancelled=entry.cancelled,
             on_started=started, on_exit=exited, on_start_failed=start_failed, rpc_handler=rpc_handler,

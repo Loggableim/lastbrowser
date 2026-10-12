@@ -62,7 +62,7 @@ import { bindWebviewReadiness, isWebviewReady } from './webview-readiness.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createAccessAuthGateConsumer, isVerifiedAccessAuthLogin } from './access-auth-gate.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
-import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
+import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishStoppedLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
 import { applyLiveTeamworkUpdate, beginLiveTeamworkTurn, bindLiveChatAssistantStream, readTeamworkStreamUpdate } from './teamwork-live-stream.js';
 import { ChatUiOwnership } from './chat-ui-ownership.js';
 import { playChatCompletionSound } from './notification-sound.js';
@@ -1246,6 +1246,7 @@ function AppContent(): JSX.Element {
   const [hasActiveDownloads, setHasActiveDownloads] = useState(false);
   const [sidekickBusy, setSidekickBusy] = useState(false);
   const chatUiOwnershipRef = useRef(new ChatUiOwnership());
+  const nativeStopRequestedOwnerRef = useRef<number | null>(null);
   const beginChatUiTurn = (sessionId?: string | null): number => {
     const ownerId = chatUiOwnershipRef.current.begin(sessionId);
     setSidekickBusy(true);
@@ -1369,7 +1370,8 @@ function AppContent(): JSX.Element {
       return;
     }
     if (event.event === 'stream_end' || event.event === 'done' || event.event === 'cancel') {
-      if (quickChatBindingScopeKeyRef.current) updateQuickChatMessagesForScope(quickChatBindingScopeKeyRef.current, current => finishLiveChatMessage(current));
+      if (quickChatBindingScopeKeyRef.current) updateQuickChatMessagesForScope(quickChatBindingScopeKeyRef.current,
+        current => event.event === 'cancel' ? finishStoppedLiveChatMessage(current) : finishLiveChatMessage(current));
       quickChatBusyRef.current = false;
       setQuickChatBusy(false);
       return;
@@ -3993,6 +3995,7 @@ function AppContent(): JSX.Element {
     const uiTurnOwner = beginChatUiTurn(turnContext.sessionId || null);
     if (turnContext.sessionId) bindChatUiTurnSession(uiTurnOwner, turnContext.sessionId);
     let acceptedStreamId: string | null = null;
+    const stoppedBeforeAcceptance = new Error('Native chat stopped before acceptance');
     setChatRunState('starting');
     const activeTurnIsCurrent = (): boolean => {
       return chatUiOwnershipRef.current.isActive(uiTurnOwner)
@@ -4051,12 +4054,17 @@ function AppContent(): JSX.Element {
       const guardedStart = await startGuardedNativeChat(
         createGuardedStartInput(teamworkGroundingContext),
         (payload) => {
+          if (nativeStopRequestedOwnerRef.current === uiTurnOwner) throw stoppedBeforeAcceptance;
           if (submission) submission.definitelyRejected = false;
           return window.lastbrowser.sidekick.startChat(payload);
         }
       );
       if (!guardedStart.ok) {
         if (guardedStart.reason === 'transport_error') {
+          if (guardedStart.error === stoppedBeforeAcceptance) {
+            if (submission) submission.definitelyRejected = false;
+            return false;
+          }
           if (submission) submission.definitelyRejected = isDefiniteChatStartRejection(guardedStart.error);
           throw guardedStart.error;
         }
@@ -4107,7 +4115,16 @@ function AppContent(): JSX.Element {
       if (turnContextStillCurrentAfterStream) {
         updateActiveStreamId(response.streamId);
         if (!submission) setComposerText('');
-        setChatRunState('streaming');
+        setChatRunState(nativeStopRequestedOwnerRef.current === uiTurnOwner ? 'cancelling' : 'streaming');
+      }
+      if (nativeStopRequestedOwnerRef.current === uiTurnOwner) {
+        try {
+          await requestNativeChatControl(window.lastbrowser.sidekick.controlChat,
+            { sessionId: response.sessionId, streamId: response.streamId, command: 'cancel',
+              workspacePath: turnContext.spacePath, browserProfileId: turnContext.profileId }, chatModelSelection.scope);
+        } catch (error) {
+          if (activeTurnIsCurrent()) setChatError(error instanceof Error ? error.message : String(error));
+        }
       }
       // Do not delay the SSE subscription on draft persistence. The draft is
       // already captured by startChat; clearing it can finish in the background.
@@ -4152,8 +4169,8 @@ function AppContent(): JSX.Element {
           setChatMessages((current) => finishLiveChatMessageWithError(current, streamResult.streamError!));
           setMessages((current) => finishLiveChatMessageWithError(current, streamResult.streamError!));
         } else if (streamResult.cancelled) {
-          setChatMessages((current) => finishLiveChatMessage(current, response.streamId));
-          setMessages((current) => finishLiveChatMessage(current, response.streamId));
+          setChatMessages((current) => finishStoppedLiveChatMessage(current, response.streamId));
+          setMessages((current) => finishStoppedLiveChatMessage(current, response.streamId));
         } else {
           setChatMessages((current) => current.map((item) => (
             item.pending && item.chatStreamId === response.streamId
@@ -4224,6 +4241,11 @@ function AppContent(): JSX.Element {
         setChatRunState('error');
       }
     } finally {
+      if (nativeStopRequestedOwnerRef.current === uiTurnOwner) {
+        nativeStopRequestedOwnerRef.current = null;
+        setChatMessages((current) => finishStoppedLiveChatMessage(current, acceptedStreamId ?? undefined));
+        setMessages((current) => finishStoppedLiveChatMessage(current, acceptedStreamId ?? undefined));
+      }
       const turnIsCurrentAfterCompletion = activeTurnIsCurrent();
       traceRendererChat('chat-finished', { ownsContext: turnIsCurrentAfterCompletion, failed: turnFailed });
       if (chatUiOwnershipRef.current.finish(uiTurnOwner)) setSidekickBusy(false);
@@ -4243,6 +4265,11 @@ function AppContent(): JSX.Element {
   }
 
   async function stopNativeChat(): Promise<void> {
+    if (!activeStreamIdRef.current && chatRunState === 'starting') {
+      nativeStopRequestedOwnerRef.current = chatUiOwnershipRef.current.activeTurnId;
+      if (nativeStopRequestedOwnerRef.current !== null) setChatRunState('cancelling');
+      return;
+    }
     if (isIndependentOwnedSession(activeSession)) {
       const marker = readIndependentSessionRun(activeSession);
       if (!marker || marker.scope.browserProfileId !== activeProfileIdRef.current) { setChatError(t('spaceAssistant.stale')); return; }
@@ -4255,9 +4282,9 @@ function AppContent(): JSX.Element {
       if (sessionId) await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
       return;
     }
-    if (!activeStreamId) return;
-    const streamId = activeStreamId;
-    const sessionId = activeSessionId;
+    if (!activeStreamIdRef.current) return;
+    const streamId = activeStreamIdRef.current;
+    const sessionId = activeSessionIdRef.current;
     const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName };
     const uiTurnOwner = chatUiOwnershipRef.current.ownerForStream(streamId);
     setChatRunState('cancelling');
@@ -4651,7 +4678,7 @@ function AppContent(): JSX.Element {
     quickChatBusyRef.current = false;
     setQuickChatBusy(false);
     const bindingScopeKey = pendingStart?.scopeKey ?? quickChatBindingScopeKeyRef.current;
-    if (bindingScopeKey) updateQuickChatMessagesForScope(bindingScopeKey, current => finishLiveChatMessage(current));
+    if (bindingScopeKey) updateQuickChatMessagesForScope(bindingScopeKey, current => finishStoppedLiveChatMessage(current));
     const stopPromise = window.lastbrowser.quickChat.stop({
       quickChatId: binding.quickChatId, streamId: binding.streamId, scope: binding.scope
     });

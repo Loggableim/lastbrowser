@@ -288,6 +288,13 @@ export function finishLiveChatMessage<T extends LiveChatMessage>(messages: T[], 
   });
 }
 
+/** A cancelled turn has no answer bubble unless actual answer text arrived. */
+export function finishStoppedLiveChatMessage<T extends LiveChatMessage>(messages: T[], streamId?: string): T[] {
+  return finishLiveChatMessage(messages, streamId).filter((message) =>
+    !(message.role === 'assistant' && message.content === 'Working on it...'
+      && (!streamId || message.chatStreamId === streamId)));
+}
+
 /** Read actionable provider errors from native chat SSE payload variants. */
 export function readNativeChatStreamError(data: unknown): string {
   if (typeof data === 'string' && data.trim()) return data.trim();

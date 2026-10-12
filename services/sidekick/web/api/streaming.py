@@ -2644,6 +2644,7 @@ def _run_agent_streaming(
     When ephemeral=True, session mutations are skipped — used by /btw to get
     a streaming answer without persisting to the parent session.
     """
+    _worker_phase_start = time.monotonic()
     q = STREAMS.get(stream_id)
     if q is None:
         # A worker can be scheduled after its channel was removed (or before
@@ -3804,6 +3805,10 @@ def _run_agent_streaming(
             if 'gateway_session_key' in _agent_params:
                 _agent_kwargs['gateway_session_key'] = session_id
 
+            if getattr(s, 'space_scope', None):
+                logger.info("native_chat_worker_phase stream=%s stage=agent_setup elapsed_ms=%.1f",
+                    stream_id, (time.monotonic() - _worker_phase_start) * 1000)
+
             # ── Agent cache: reuse across messages in the same session ──
             # Mirrors gateway _agent_cache.  Keeps _user_turn_count alive so
             # injectionFrequency: "first-turn" actually suppresses after turn 1.
@@ -3901,6 +3906,10 @@ def _run_agent_streaming(
                                 pass
                             logger.debug('[webui] Evicted LRU agent from cache: %s', evicted_sid)
                     logger.debug('[webui] Created new agent for session %s', session_id)
+
+            if getattr(s, 'space_scope', None):
+                logger.info("native_chat_worker_phase stream=%s stage=agent_ready elapsed_ms=%.1f",
+                    stream_id, (time.monotonic() - _worker_phase_start) * 1000)
 
             # Child binding comes only from this server-saved parent turn.
             from runtime.independent.child_runtime import capture_native_parent
@@ -4171,6 +4180,9 @@ def _run_agent_streaming(
                 workspace_system_msg += plan_instruction
 
             user_message = _build_native_multimodal_message(workspace_ctx, msg_text, attachments, workspace, cfg=_cfg)
+            if getattr(s, 'space_scope', None):
+                logger.info("native_chat_worker_phase stream=%s stage=conversation_start elapsed_ms=%.1f",
+                    stream_id, (time.monotonic() - _worker_phase_start) * 1000)
             result = agent.run_conversation(
                 user_message=user_message,
                 system_message=workspace_system_msg,

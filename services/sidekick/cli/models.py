@@ -85,6 +85,8 @@ VERCEL_AI_GATEWAY_MODELS: list[tuple[str, str]] = [
 ]
 
 _ai_gateway_catalog_cache: list[tuple[str, str]] | None = None
+_ai_gateway_catalog_source: str | None = None
+_ai_gateway_catalog_checked_at: str | None = None
 
 
 def _codex_curated_models() -> list[str]:
@@ -597,10 +599,12 @@ def fetch_ai_gateway_models(
     source_out: Optional[dict[str, Any]] = None,
 ) -> list[tuple[str, str]]:
     """Return the curated AI Gateway picker list, refreshed from the live catalog when possible."""
-    global _ai_gateway_catalog_cache
+    global _ai_gateway_catalog_cache, _ai_gateway_catalog_source, _ai_gateway_catalog_checked_at
 
     if _ai_gateway_catalog_cache is not None and not force_refresh:
-        if source_out is not None: source_out["source"] = "unknown"
+        if source_out is not None:
+            source_out["source"] = _ai_gateway_catalog_source or "unknown"
+            source_out["checkedAt"] = _ai_gateway_catalog_checked_at
         return list(_ai_gateway_catalog_cache)
 
     from runtime._compat.shim_constants import AI_GATEWAY_BASE_URL
@@ -616,12 +620,16 @@ def fetch_ai_gateway_models(
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             payload = json.loads(resp.read().decode())
     except Exception:
-        if source_out is not None: source_out["source"] = "curated_fallback" if not _ai_gateway_catalog_cache else "unknown"
+        if source_out is not None:
+            source_out["source"] = "stale_provider_cache" if _ai_gateway_catalog_cache else "curated_fallback"
+            source_out["checkedAt"] = _ai_gateway_catalog_checked_at
         return list(_ai_gateway_catalog_cache or fallback)
 
     live_items = payload.get("data", [])
     if not isinstance(live_items, list):
-        if source_out is not None: source_out["source"] = "curated_fallback" if not _ai_gateway_catalog_cache else "unknown"
+        if source_out is not None:
+            source_out["source"] = "stale_provider_cache" if _ai_gateway_catalog_cache else "curated_fallback"
+            source_out["checkedAt"] = _ai_gateway_catalog_checked_at
         return list(_ai_gateway_catalog_cache or fallback)
 
     live_by_id: dict[str, dict[str, Any]] = {}
@@ -642,7 +650,9 @@ def fetch_ai_gateway_models(
         curated.append((preferred_id, desc))
 
     if not curated:
-        if source_out is not None: source_out["source"] = "curated_fallback" if not _ai_gateway_catalog_cache else "unknown"
+        if source_out is not None:
+            source_out["source"] = "stale_provider_cache" if _ai_gateway_catalog_cache else "curated_fallback"
+            source_out["checkedAt"] = _ai_gateway_catalog_checked_at
         return list(_ai_gateway_catalog_cache or fallback)
 
     # If the live catalog offers a free Moonshot model, auto-promote it to
@@ -664,7 +674,11 @@ def fetch_ai_gateway_models(
         curated[0] = (first_id, "recommended")
 
     _ai_gateway_catalog_cache = curated
-    if source_out is not None: source_out["source"] = "provider_api"
+    _ai_gateway_catalog_source = "provider_api"
+    _ai_gateway_catalog_checked_at = datetime.now(timezone.utc).isoformat()
+    if source_out is not None:
+        source_out["source"] = _ai_gateway_catalog_source
+        source_out["checkedAt"] = _ai_gateway_catalog_checked_at
     return list(curated)
 
 
@@ -1533,6 +1547,8 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False,
         live = fetch_ai_gateway_models(force_refresh=force_refresh, source_out=details)
         if live:
             source = details.get("source", "unknown")
+            if source_out is not None and details.get("checkedAt"):
+                source_out["checkedAt"] = details["checkedAt"]
             return result([mid for mid, _ in live], source)
     if normalized == "ollama-cloud":
         details = {}

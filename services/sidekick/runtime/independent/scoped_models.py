@@ -134,6 +134,18 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
             continue
         clean = {"provider_id": pid, "provider": _text(group.get("provider"), 256) or pid,
                  "configured": connections.get(pid, False), "models": []}
+        explicit_model_ids = set()
+        provider_config = configured_providers.get(pid) if isinstance(configured_providers, dict) else None
+        if isinstance(provider_config, dict):
+            configured_models = provider_config.get("models")
+            if isinstance(configured_models, dict):
+                explicit_model_ids.update(str(mid) for mid in configured_models if isinstance(mid, str) and mid)
+            elif isinstance(configured_models, list):
+                explicit_model_ids.update(str(mid) for mid in configured_models if isinstance(mid, str) and mid)
+        if isinstance(model_config, dict) and _text(model_config.get("provider"), 128) == pid:
+            configured_default = _text(model_config.get("default"), 256)
+            if configured_default:
+                explicit_model_ids.add(configured_default)
         for bucket in ("models", "extra_models"):
             models = []
             for model in group.get(bucket, []) if isinstance(group.get(bucket), list) else []:
@@ -149,6 +161,8 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
                     model_id = model_id[len(prefix):]
                 clean_model = {"id": model_id, "label": _text(model.get("label"), 256) or model_id,
                                "supportsIndependent": pid != "google-gemini-cli" and model_id not in _VIRTUAL}
+                if model_id in explicit_model_ids or model.get("modelSource") == "explicit_config":
+                    clean_model["modelSource"] = "explicit_config"
                 from .scope_binding import configured_context_length
                 length = model.get("context_length")
                 length_source = model.get("context_length_source")
@@ -366,7 +380,8 @@ def _provider_model_catalog(scope, catalog, groups):
                 model_id = entry["id"]
                 is_current = model_id in current_ids
                 availability = entry.get("nativeAvailability") if isinstance(entry.get("nativeAvailability"), dict) else {}
-                source_state = "current" if is_current else "stale" if observed.get("status") == "stale" or source == "stale_provider_cache" else (
+                is_explicitly_configured = entry.get("modelSource") == "explicit_config"
+                source_state = "current" if is_current else "configured" if is_explicitly_configured else "stale" if observed.get("status") == "stale" or source == "stale_provider_cache" else (
                     "unavailable" if observed.get("status") == "unavailable" else "unknown")
                 reasoning_source = entry.get("reasoning_effort_source")
                 reasoning_known = reasoning_source in {"live_catalog", "local_catalog", "official_model_docs", "catalog", "provided_catalog"}
@@ -378,7 +393,8 @@ def _provider_model_catalog(scope, catalog, groups):
                 models.append({
                     "id": model_id,
                     "label": entry.get("label", model_id),
-                    "listed": {"status": source_state, "source": source, "freshness": "stale" if source_state == "stale" else "unknown"},
+                    "listed": {"status": source_state, "source": "explicit_config" if is_explicitly_configured else source,
+                               "freshness": "stale" if source_state == "stale" else "unknown"},
                     "features": {
                         "contextLength": {"status": "known" if context_known else "unknown",
                                           "value": context if context_known else None, "source": context_source},
@@ -390,10 +406,10 @@ def _provider_model_catalog(scope, catalog, groups):
                     },
                     "qualification": {
                         "independent": {"status": (
-                            "available" if is_current and availability.get("available") is True else
-                            "unavailable" if is_current else "unknown"),
-                            "available": bool(is_current and availability.get("available") is True),
-                            "reasonCode": availability.get("reasonCode") if is_current else "catalog_not_currently_listed"},
+                            "available" if (is_current or is_explicitly_configured) and availability.get("available") is True else
+                            "unavailable" if is_current or is_explicitly_configured else "unknown"),
+                            "available": bool((is_current or is_explicitly_configured) and availability.get("available") is True),
+                            "reasonCode": availability.get("reasonCode") if is_current or is_explicitly_configured else "catalog_not_currently_listed"},
                     },
                     "liveTest": {"status": "not_run"},
                 })

@@ -193,13 +193,13 @@ export type NativeModelResolution = Readonly<{ schemaVersion: 1; scope: Independ
   requested: Readonly<{ provider: string; model: string }>; effective: Readonly<{ provider: string; model: string }>;
   fallbackApplied: boolean; fallbackReasonCode: 'ollama_subscription_required' | null; fallbackAttempts: 0 | 1 }>;
 export type ScopedModelEntry = Readonly<{ id: string; label: string; supportsIndependent: boolean; reasoning_efforts?: readonly string[];
-  nativeAvailability?: NativeModelAvailability }>;
+  modelSource?: 'explicit_config'; nativeAvailability?: NativeModelAvailability }>;
 export type ScopedModelGroup = Readonly<{ provider: string; provider_id: string; configured: boolean; models: readonly ScopedModelEntry[]; extra_models?: readonly ScopedModelEntry[] }>;
 export type ScopedModelProvider = Readonly<{id:string;display_name:string;has_key:boolean;oauth_connected:boolean;auth_state:string;provider_available:boolean;models:readonly string[]}>;
 export type ProviderModelCatalog = Readonly<{ schemaVersion: 1; scope: IndependentScope; providers: readonly Readonly<{
   providerId: string; label: string; configured: boolean;
   discovery: Readonly<{ status: 'listed' | 'stale' | 'unavailable' | 'unknown'; source: string; checkedAt: string | null; freshness: string }>;
-  models: readonly Readonly<{ id: string; label: string; listed: Readonly<{ status: 'current' | 'stale' | 'unavailable' | 'unknown'; source: string; freshness: string }>;
+  models: readonly Readonly<{ id: string; label: string; listed: Readonly<{ status: 'current' | 'configured' | 'stale' | 'unavailable' | 'unknown'; source: string; freshness: string }>;
     features: Readonly<{ contextLength: Readonly<{ status: string; value: number | null; source: string }>;
       tools: Readonly<{ status: string; value: boolean | null; source: string }>;
       vision: Readonly<{ status: string; value: boolean | null; source: string }>;

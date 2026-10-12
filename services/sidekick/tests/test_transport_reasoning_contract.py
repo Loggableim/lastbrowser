@@ -39,7 +39,7 @@ def test_codex_model_catalog_uses_the_bound_runtime_credential_pool(monkeypatch)
         return {"api_key": "synthetic-bound-profile-token"}
     monkeypatch.setattr("cli.runtime_provider.resolve_runtime_provider", resolve_runtime_provider)
     monkeypatch.setattr(codex_models, "get_codex_model_ids",
-                        lambda *, access_token: ["gpt-bound-fixture"] if access_token == "synthetic-bound-profile-token" else [])
+                        lambda *, access_token, source_out=None: ["gpt-bound-fixture"] if access_token == "synthetic-bound-profile-token" else [])
 
     assert provider_model_ids("openai-codex") == ["gpt-bound-fixture"]
     assert resolved == ["openai-codex"]

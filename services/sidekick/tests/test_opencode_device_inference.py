@@ -1,9 +1,21 @@
 """Device inference routing contracts; no network or model calls."""
+import importlib.util
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+
+
+def _canonical_ai_agent():
+    # The CLI can register a compatibility shim under the run_agent module
+    # name during other tests. Load the in-tree implementation explicitly.
+    source = Path(__file__).resolve().parents[1] / "run_agent.py"
+    spec = importlib.util.spec_from_file_location("_opencode_device_test_run_agent", source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.AIAgent
 
 
 @pytest.fixture
@@ -46,7 +58,7 @@ def test_device_catalog_never_falls_back_to_hardcoded_model(device):
 
 
 def test_refresh_uses_real_chat_session_and_updates_sdk_headers(device):
-    from run_agent import AIAgent
+    AIAgent = _canonical_ai_agent()
     agent = AIAgent.__new__(AIAgent)
     agent.provider, agent.model, agent.api_mode = "opencode-go", "configured-model", "chat_completions"
     agent.session_id = "chat-session"
@@ -59,7 +71,7 @@ def test_refresh_uses_real_chat_session_and_updates_sdk_headers(device):
 
 
 def test_refresh_rejects_changed_protocol_before_rebuilding_sdk(device):
-    from run_agent import AIAgent
+    AIAgent = _canonical_ai_agent()
     agent = AIAgent.__new__(AIAgent)
     agent.provider, agent.model, agent.api_mode, agent.session_id = "opencode-go", "configured-model", "anthropic_messages", "chat-session"
     agent._replace_primary_openai_client = Mock()

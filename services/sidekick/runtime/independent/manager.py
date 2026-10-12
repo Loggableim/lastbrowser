@@ -698,7 +698,10 @@ class RunManager:
                 ComputeAdmission.release(run.run_id)
                 continue
             except (PolicyDenied, RevisionConflict, GatewayError, WorkerError, ScopeError) as exc:
-                self._fail(run.run_id, getattr(exc, "code", "admission_failed"))
+                if isinstance(exc, PolicyDenied) and exc.code == "scope_permissions_changed":
+                    self._interrupt(run.run_id, exc.code)
+                else:
+                    self._fail(run.run_id, getattr(exc, "code", "admission_failed"))
 
     def _run_worker(self, run_id: str):
         context = self.store.get_run_context(run_id)
@@ -758,7 +761,10 @@ class RunManager:
                         self._leave_compute(run_id)
                         self.store.transition_run(run_id, "interrupted" if result.get("interrupted") else "completed", expected_revision=current.state_revision, expected_control_epoch=current.control_epoch, result_ref=artifact, reason_code="model_interrupted" if result.get("interrupted") else None)
         except (PolicyDenied, GatewayError, StoreError, WorkerError, OSError, ScopeError) as exc:
-            self._fail(run_id, getattr(exc, "code", str(exc) if isinstance(exc, WorkerError) else "run_failed"))
+            if isinstance(exc, PolicyDenied) and exc.code == "scope_permissions_changed":
+                self._interrupt(run_id, exc.code)
+            else:
+                self._fail(run_id, getattr(exc, "code", str(exc) if isinstance(exc, WorkerError) else "run_failed"))
         except Exception:
             self._fail(run_id, "run_internal_error")
         finally:

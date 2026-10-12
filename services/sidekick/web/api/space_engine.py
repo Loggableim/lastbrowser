@@ -61,6 +61,9 @@ def _spaces_root() -> Path:
     configured = os.getenv("SIDEKICK_WEBUI_SPACES_DIR") or os.getenv(_SPACES_ROOT_KEY, "")
     if configured:
         return Path(configured).expanduser().resolve()
+    from web.api.profiles import get_request_profile_name
+    if get_request_profile_name() is not None:
+        return Path(get_active_webui_home()).expanduser().resolve() / "spaces"
     if SPACES_ROOT != _DEFAULT_SPACES_ROOT:
         return SPACES_ROOT
     try:
@@ -73,6 +76,9 @@ def _old_root() -> Path:
     configured = os.getenv("SIDEKICK_WEBUI_WORKSPACES_DIR") or os.getenv(_OLD_WORKSPACES_KEY, "")
     if configured:
         return Path(configured).expanduser().resolve()
+    from web.api.profiles import get_request_profile_name
+    if get_request_profile_name() is not None:
+        return Path(get_active_webui_home()).expanduser().resolve() / "workspaces"
     if _OLD_ROOT != _DEFAULT_OLD_ROOT:
         return _OLD_ROOT
     try:

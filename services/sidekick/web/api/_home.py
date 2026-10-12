@@ -31,7 +31,16 @@ def get_active_webui_home() -> Path:
     existing environment-based fallback for startup code and standalone use.
     """
     try:
-        from web.api.profiles import get_active_profile_home, get_active_profile_name
+        from web.api.profiles import (
+            get_active_profile_home,
+            get_active_profile_name,
+            get_profile_home,
+            get_request_profile_name,
+        )
+
+        request_profile = get_request_profile_name()
+        if request_profile is not None:
+            return Path(get_profile_home(request_profile)).expanduser().resolve()
 
         active_profile = str(get_active_profile_name() or "").strip()
         if active_profile and active_profile != "default":

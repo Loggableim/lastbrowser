@@ -241,6 +241,11 @@ def get_active_profile_name() -> str:
     return _active_profile
 
 
+def get_request_profile_name() -> str | None:
+    """Return the explicit request scope, including the root-profile alias."""
+    return _request_profile.get()
+
+
 def set_request_profile(name: str | None) -> Token[str | None]:
     """Set the per-request profile context and return its reset token.
 

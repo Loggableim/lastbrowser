@@ -180,6 +180,8 @@ def test_successful_turn_persists_evidence_and_rehydrates_consistently(tmp_path,
     assert session is not None
 
     stream_id = "stream_turn_1"
+    session.active_stream_id = stream_id
+    session.save()
     channel = StreamChannel()
     sub_q = channel.subscribe()
     with STREAMS_LOCK:
@@ -335,6 +337,8 @@ def test_two_different_models_in_successive_turns(tmp_path, monkeypatch):
 
     # --- Turn 1: OpenAI gpt-4o ---
     stream_1 = "stream_turn_1"
+    session.active_stream_id = stream_1
+    session.save()
     channel_1 = StreamChannel()
     sub_q_1 = channel_1.subscribe()
     with STREAMS_LOCK:
@@ -362,6 +366,9 @@ def test_two_different_models_in_successive_turns(tmp_path, monkeypatch):
 
     # --- Turn 2: Anthropic claude-3-5-sonnet ---
     stream_2 = "stream_turn_2"
+    next_session = Session.load(session_id)
+    next_session.active_stream_id = stream_2
+    next_session.save()
     channel_2 = StreamChannel()
     sub_q_2 = channel_2.subscribe()
     with STREAMS_LOCK:

@@ -60,6 +60,39 @@ def _write_indexed_session(profile: str, session_id: str, title: str, workspace:
         clear_request_profile(token)
 
 
+def test_root_request_home_ignores_process_active_named_profile(monkeypatch, tmp_path):
+    from web.api._home import get_active_webui_home
+    from web.api import profiles
+
+    base = tmp_path / "home"
+    monkeypatch.setenv("SIDEKICK_HOME", str(base))
+    monkeypatch.setattr(profiles, "_DEFAULT_SIDEKICK_HOME", base.resolve())
+    monkeypatch.setenv("SIDEKICK_HOME", str(base / "profiles" / "work"))
+
+    token = profiles.set_request_profile("default")
+    try:
+        assert get_active_webui_home() == base.resolve()
+    finally:
+        profiles.clear_request_profile(token)
+
+
+def test_request_space_roots_ignore_process_profile_hints(monkeypatch, tmp_path):
+    from web.api import profiles, space_engine
+
+    base = tmp_path / "home"
+    monkeypatch.setenv("SIDEKICK_HOME", str(base))
+    monkeypatch.setattr(profiles, "_DEFAULT_SIDEKICK_HOME", base.resolve())
+    monkeypatch.setattr(space_engine, "SPACES_ROOT", base / "spaces")
+    monkeypatch.setattr(space_engine, "_OLD_ROOT", base / "workspaces")
+
+    token = profiles.set_request_profile("work")
+    try:
+        assert space_engine._spaces_root() == base.resolve() / "profiles" / "work" / "spaces"
+        assert space_engine._old_root() == base.resolve() / "profiles" / "work" / "workspaces"
+    finally:
+        profiles.clear_request_profile(token)
+
+
 def test_desktop_session_scope_survives_create_rename_reload_and_lists_by_profile_and_space(
     monkeypatch, tmp_path
 ):
@@ -71,6 +104,10 @@ def test_desktop_session_scope_survives_create_rename_reload_and_lists_by_profil
 
     profiles.refresh_profile_base_home_from_env()
     space_engine._invalidate_space_cache()
+    # A previous profile switch can leave these process-global path hints on
+    # the root profile. Requests still have to resolve their own cookie scope.
+    monkeypatch.setattr(space_engine, "SPACES_ROOT", profiles.get_profile_home("default") / "spaces")
+    monkeypatch.setattr(space_engine, "_OLD_ROOT", profiles.get_profile_home("default") / "workspaces")
 
     default_alpha = tmp_path / "projects" / "default-alpha"
     default_beta = tmp_path / "projects" / "default-beta"

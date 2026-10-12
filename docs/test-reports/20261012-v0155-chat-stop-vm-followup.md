@@ -58,3 +58,29 @@ this follow-up. VM acceptance remains **NOT ACCEPTED** until a new exact-head
 package and authorized VM retest prove first paint, early Stop, Quickchat
 terminal UI, and the complete chat flow. The prior baseline lacks first-text
 timing, so it cannot support an end-to-end latency improvement claim.
+
+## PR #74 integration and release decision (2026-10-12)
+
+PR #74 (`37c975cc`) was added after the source-only follow-up above. It echoes
+Quickchat's submitted message before model discovery and preserves actual
+partial text and reasoning when Stop ends a stream. The independent review
+found two source issues in that head: Stop was hidden during discovery, and a
+provider response whose literal text was `Working on it...` could be removed
+as if it were the UI placeholder. The integration follow-up makes Quickchat
+busy during discovery, exposes Stop for the captured scope, rolls back the
+unsent echo on preflight Stop, and clears placeholder text only while the
+assistant message is pending. A literal streamed response is retained.
+
+Combined local gates after these fixes: `npm test` passed 243/243 files and
+2190/2190 tests; `npm run verify:store` passed 39 checks with 2 warnings and
+0 failures; the desktop build and Python compileall both passed. These are
+source results, pending independent review of the exact integration head.
+
+The user's v0.1.55 release decision defers the first-paint black client area
+to a known issue. The installed unsigned `1a37f9d1` VM candidate remains
+**NOT ACCEPTED**; this decision does not turn its first-paint result into a
+pass. A roughly 105-second first-text observation on that candidate has no
+comparable earlier baseline, and PR #74's later source-build observation of
+about 66 seconds to first text does not prove an improvement. The precise
+pre-conversation delay and live release behavior remain unverified. Newly
+found bugs after release are tracked for v0.1.56.

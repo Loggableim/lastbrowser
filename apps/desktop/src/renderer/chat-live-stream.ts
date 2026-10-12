@@ -291,9 +291,9 @@ export function finishLiveChatMessage<T extends LiveChatMessage>(messages: T[], 
 /** A stopped placeholder is UI state, never an assistant answer. Keep real partial output. */
 export function finishStoppedLiveChatMessage<T extends LiveChatMessage>(messages: T[], streamId?: string): T[] {
   return messages.flatMap(message => {
-    if (message.role !== 'assistant' || !(message.pending || message.streaming || message.content === 'Working on it...')
+    if (message.role !== 'assistant' || !(message.pending || message.streaming)
       || (streamId && message.chatStreamId !== streamId)) return [message];
-    const content = message.content === 'Working on it...' ? '' : message.content;
+    const content = message.pending && message.content === 'Working on it...' ? '' : message.content;
     if (!content?.trim() && !message.reasoning?.trim()) return [];
     return [{ ...message, content, pending: false, streaming: false, progress: undefined }];
   });

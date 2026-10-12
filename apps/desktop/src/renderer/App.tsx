@@ -1118,6 +1118,7 @@ function AppContent(): JSX.Element {
   const quickChatMessagesByScopeRef = useRef(new Map<string, DesktopChatMessage[]>());
   const [quickChatBusy, setQuickChatBusy] = useState(false);
   const quickChatBusyRef = useRef(false);
+  const quickChatBusyScopeKeyRef = useRef<string | null>(null);
   const [quickChatError, setQuickChatError] = useState('');
   const quickChatErrorScopeKeyRef = useRef<string | null>(null);
   const quickChatErrorsByScopeRef = useRef(new Map<string, string>());
@@ -4548,17 +4549,21 @@ function AppContent(): JSX.Element {
     const generation = quickChatGenerationRef.current;
     const stopEpoch = quickChatStopEpochRef.current;
     quickChatStopPendingRef.current = true;
+    setQuickChatBusy(true);
     const chatId = quickChatIdRef.current;
     const browserProfileId = activeProfileIdRef.current;
     const workspacePath = activeSpacePathRef.current || null;
     const backendProfileName = activeBackendProfileNameRef.current || undefined;
     const capturedScopeKey = `${browserProfileId}::${workspacePath || ''}::${backendProfileName || ''}`;
+    quickChatBusyScopeKeyRef.current = capturedScopeKey;
     // Echo before scope/catalog IPC so discovery cannot delay send feedback.
     const visibleUserMessage: DesktopChatMessage = { role: 'user', content: prompt };
     const previousTranscriptScopeKey = quickChatTranscriptScopeKeyRef.current;
     quickChatTranscriptScopeKeyRef.current = capturedScopeKey;
     updateQuickChatMessagesForScope(capturedScopeKey, current => [...current, visibleUserMessage]);
     const rejectPreflight = (): false => {
+      setQuickChatBusy(false);
+      if (quickChatBusyScopeKeyRef.current === capturedScopeKey) quickChatBusyScopeKeyRef.current = null;
       updateQuickChatMessagesForScope(capturedScopeKey, current => current.filter(item => item !== visibleUserMessage));
       if (quickChatTranscriptScopeKeyRef.current === capturedScopeKey) {
         quickChatTranscriptScopeKeyRef.current = previousTranscriptScopeKey;
@@ -4684,7 +4689,12 @@ function AppContent(): JSX.Element {
     if (quickChatResetPendingRef.current) return;
     const generation = quickChatGenerationRef.current;
     quickChatStopEpochRef.current += 1;
-    if (quickChatStopPendingRef.current && !quickChatBusyRef.current && !quickChatAwaitingStartRef.current) return;
+    if (quickChatStopPendingRef.current && !quickChatBusyRef.current && !quickChatAwaitingStartRef.current) {
+      // The optimistic echo is still waiting for model discovery. Its send
+      // path observes stopEpoch and removes only that unsent turn.
+      setQuickChatBusy(false);
+      return;
+    }
     const pendingStart = quickChatStartPromiseRef.current;
     // A follow-up still carries the preceding turn's binding until its start
     // acknowledgement arrives. Stop that new turn, never reset the chat.
@@ -5717,7 +5727,7 @@ function AppContent(): JSX.Element {
                 modelProvider={copilotModelSelection.provider}
                 messages={selectScopedQuickChatValue(quickChatMessages, quickChatTranscriptScopeKeyRef.current,
                   createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), [])}
-                busy={selectScopedQuickChatValue(quickChatBusy, quickChatBindingScopeKeyRef.current ?? quickChatStartPromiseRef.current?.scopeKey ?? null,
+                busy={selectScopedQuickChatValue(quickChatBusy, quickChatBusyScopeKeyRef.current ?? quickChatBindingScopeKeyRef.current ?? quickChatStartPromiseRef.current?.scopeKey ?? null,
                   createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), false)}
                 error={selectScopedQuickChatValue(quickChatError, quickChatErrorScopeKeyRef.current,
                   createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), '')}

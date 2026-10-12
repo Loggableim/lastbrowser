@@ -48,7 +48,7 @@ import { isMultiAgentModelSelection, isProviderModelSelected, parseProviderModel
 import { chooseActiveModel, isModelActive, useActiveModelRevision } from '../active-model-selection.js';
 import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
-import { isModelCatalogResponseCurrent } from '../model-picker-options.js';
+import { isModelCatalogCacheCurrent, isModelCatalogResponseCurrent } from '../model-picker-options.js';
 import { quickChatModelGateCopy, quickChatModelGateReason } from '../quick-chat-model-gate.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
@@ -196,6 +196,7 @@ export function CopilotSplitView({
   const [modelCapabilitiesLoaded, setModelCapabilitiesLoaded] = useState(false);
   const [modelCatalogFailureScopeKey, setModelCatalogFailureScopeKey] = useState<string | null>(null);
   const modelCatalogLoadedScopeKeyRef = useRef<string | null>(null);
+  const modelCatalogCacheScopeKeyRef = useRef<string | null>(null);
   const modelCatalogFailureScopeKeyRef = useRef<string | null>(null);
   const [teamworkEnabled, setTeamworkEnabled] = useState(false);
   const [smartTrackEnabled, setSmartTrackEnabled] = useState(true);
@@ -244,15 +245,19 @@ export function CopilotSplitView({
   useEffect(() => {
     let alive = true;
     const generation = orchestrationScopeGenerationRef.current;
-    setModelList(AVAILABLE_MODELS);
-    setModelCapabilitiesLoaded(false);
+    const hasCachedCatalogForScope = isModelCatalogCacheCurrent(modelCatalogCacheScopeKeyRef.current, orchestrationScopeKey);
+    if (!hasCachedCatalogForScope) {
+      setModelList(AVAILABLE_MODELS);
+      setModelCapabilitiesLoaded(false);
+      modelCatalogCacheScopeKeyRef.current = null;
+    }
     modelCatalogLoadedScopeKeyRef.current = null;
     modelCatalogFailureScopeKeyRef.current = null;
     setModelCatalogFailureScopeKey(null);
     async function loadLiveModels() {
       try {
         if (!window?.lastbrowser?.sidekick?.requestWebui) {
-          setModelList(AVAILABLE_MODELS);
+          if (!hasCachedCatalogForScope) setModelList(AVAILABLE_MODELS);
           modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
           setModelCatalogFailureScopeKey(orchestrationScopeKey);
           return;
@@ -264,8 +269,10 @@ export function CopilotSplitView({
         })) as { groups?: Array<{ provider_id?: string; provider?: string; account?: string; configured?: boolean; models?: Array<any>; extra_models?: Array<any> }> } | null;
         if (!alive || generation !== orchestrationScopeGenerationRef.current || orchestrationScopeKeyRef.current !== orchestrationScopeKey) return;
         if (!res || !Array.isArray(res.groups)) {
-          setModelList(AVAILABLE_MODELS);
-          setModelCapabilitiesLoaded(false);
+          if (!hasCachedCatalogForScope) {
+            setModelList(AVAILABLE_MODELS);
+            setModelCapabilitiesLoaded(false);
+          }
           modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
           setModelCatalogFailureScopeKey(orchestrationScopeKey);
           return;
@@ -348,6 +355,7 @@ export function CopilotSplitView({
         ];
         setModelList(nextModelList);
         setModelCapabilitiesLoaded(true);
+        modelCatalogCacheScopeKeyRef.current = orchestrationScopeKey;
         modelCatalogLoadedScopeKeyRef.current = orchestrationScopeKey;
         modelCatalogFailureScopeKeyRef.current = null;
         setModelCatalogFailureScopeKey(null);
@@ -356,8 +364,10 @@ export function CopilotSplitView({
         // must not imply that a provider is configured or currently available.
         if (alive && generation === orchestrationScopeGenerationRef.current
           && isModelCatalogResponseCurrent(orchestrationScopeKey, orchestrationScopeKeyRef.current)) {
-          setModelList(AVAILABLE_MODELS);
-          setModelCapabilitiesLoaded(false);
+          if (!hasCachedCatalogForScope) {
+            setModelList(AVAILABLE_MODELS);
+            setModelCapabilitiesLoaded(false);
+          }
           modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
           setModelCatalogFailureScopeKey(orchestrationScopeKey);
         }

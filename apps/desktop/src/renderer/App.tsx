@@ -1184,6 +1184,16 @@ function AppContent(): JSX.Element {
     { profile: activeProfileId, workspacePath: activeSpacePath,
       backendProfileName: explicitBackendProfileBySpace[`${activeProfileId}::${activeSpacePath || ''}`] }
   ), [assistantSelectionRequestScope, assistantSelection?.backendProfileName, explicitBackendProfileBySpace, activeProfileId, activeSpacePath]);
+  const startupModelScopeSelectionRef = useRef<{
+    browserProfileId: string;
+    workspacePath: string | null;
+    backendProfileName?: string;
+  }>({ browserProfileId: activeProfileId, workspacePath: activeSpacePath || null });
+  startupModelScopeSelectionRef.current = {
+    browserProfileId: activeProfileId,
+    workspacePath: activeSpacePath || null,
+    ...(activeBackendProfileName ? { backendProfileName: activeBackendProfileName } : {})
+  };
   const [isDetachedWindow, setIsDetachedWindow] = useState(false);
   useEffect(() => {
     if (isDetachedWindow || !window.lastbrowser?.adblock) return;
@@ -2045,7 +2055,11 @@ function AppContent(): JSX.Element {
   const refreshStartupModelDiscovery = useCallback(async (requestRevision = startupModelRequestRevisionRef.current): Promise<void> => {
     if (startupModelDiscoverySettledRef.current) return;
     try {
-      const catalog = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' });
+      const catalog = await window.lastbrowser.sidekick.requestWebui({
+        method: 'GET',
+        path: '/api/models',
+        scopeSelection: startupModelScopeSelectionRef.current
+      });
       if (requestRevision !== startupModelRequestRevisionRef.current) return;
       if (!isValidStartupModelCatalog(catalog)) throw new Error('Model catalog response was invalid.');
       startupModelDiscoverySettledRef.current = true;

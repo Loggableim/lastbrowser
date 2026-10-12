@@ -17,6 +17,14 @@ function deferred<T>() {
 }
 
 describe('startup readiness App and Main IPC integration contract', () => {
+  it('binds startup model discovery to the current saved Space selection', () => {
+    const app = readFileSync(appPath, 'utf8');
+
+    expect(app).toContain('startupModelScopeSelectionRef.current = {');
+    expect(app).toContain('workspacePath: activeSpacePath || null');
+    expect(app).toMatch(/requestWebui\(\{\s*method: 'GET',\s*path: '\/api\/models',\s*scopeSelection: startupModelScopeSelectionRef\.current\s*\}\)/);
+  });
+
   it('wires Main policy through preload and consumes it in the real App shell gate', () => {
     const main = readFileSync(mainPath, 'utf8');
     const preload = readFileSync(preloadPath, 'utf8');

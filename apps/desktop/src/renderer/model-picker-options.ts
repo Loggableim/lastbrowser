@@ -14,6 +14,10 @@ export function isModelCatalogResponseCurrent(capturedScopeKey: string, activeSc
   return capturedScopeKey === activeScopeKey;
 }
 
+export function isModelCatalogCacheCurrent(cachedScopeKey: string | null, activeScopeKey: string): boolean {
+  return cachedScopeKey !== null && cachedScopeKey === activeScopeKey;
+}
+
 export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { catalog_status?: Record<string, string> }): ModelPickerOptionGroup[] {
   const catalogStatus = (selection as { catalog_status?: Record<string, string> }).catalog_status;
   const providers = new Map((selection.providers ?? []).map(provider => [provider.id, provider]));

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { canSelectNativeModel, isModelCatalogResponseCurrent, manualModelPickerOptions, mapScopedModelPickerOptions } from '../src/renderer/model-picker-options.js';
+import { canSelectNativeModel, isModelCatalogCacheCurrent, isModelCatalogResponseCurrent, manualModelPickerOptions, mapScopedModelPickerOptions } from '../src/renderer/model-picker-options.js';
 import { quickChatModelGateReason } from '../src/renderer/quick-chat-model-gate.js';
 import {
   isProviderModelSelected,
@@ -41,6 +41,9 @@ describe('provider-aware model selection', () => {
     const scopeB = JSON.stringify({ browserProfileId: 'profile', workspacePath: 'C:/space-b', backendProfileName: 'backend-b' });
     expect(isModelCatalogResponseCurrent(scopeA, scopeB)).toBe(false);
     expect(isModelCatalogResponseCurrent(scopeB, scopeB)).toBe(true);
+    expect(isModelCatalogCacheCurrent(scopeB, scopeB)).toBe(true);
+    expect(isModelCatalogCacheCurrent(scopeA, scopeB)).toBe(false);
+    expect(isModelCatalogCacheCurrent(null, scopeB)).toBe(false);
   });
   it('blocks an A-selected model in B with an empty catalog, then permits a valid B catalog selection', () => {
     const scopeA = JSON.stringify({ browserProfileId: 'profile', workspacePath: 'C:/space-a', backendProfileName: 'backend-a' });
@@ -59,6 +62,8 @@ describe('provider-aware model selection', () => {
     expect(validBReason).toBeNull();
     expect(submitted).toBe(1);
     const component = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8').replace(/\r\n/g, '\n');
+    expect(component).toContain('const hasCachedCatalogForScope = isModelCatalogCacheCurrent(modelCatalogCacheScopeKeyRef.current, orchestrationScopeKey);');
+    expect(component).toContain('if (!hasCachedCatalogForScope) {');
     expect(component).toContain('if (!trimmed || busy || sendPendingRef.current || modelGateReason !== null) return;');
     expect(component).toContain('disabled={!inputText.trim() || modelGateReason !== null}');
     expect(component.indexOf('modelGateReason !== null) return;')).toBeLessThan(component.indexOf('onSendMessage(trimmed'));

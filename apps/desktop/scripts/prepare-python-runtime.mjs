@@ -23,7 +23,7 @@ export function pythonRuntimeExecutablePath(home, platform = process.platform) {
 }
 
 export function posixPythonLauncherScript() {
-  return '#!/bin/sh\nexec python3 "$@"\n';
+  return '#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nexec ./bin/python3 "$@"\n';
 }
 
 export function resolveWheelhouseDir(env = process.env) {
@@ -269,17 +269,53 @@ function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function writePosixLauncher() {
+  const launcher = join(pythonRuntimeDir, 'python3');
+  writeFileSync(launcher, posixPythonLauncherScript());
+  chmodSync(launcher, 0o755);
+  return launcher;
+}
+
 function preparePosixPythonCommand() {
   const detected = spawnSync('python3', ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' });
   const executable = detected.stdout?.trim();
   if (detected.status !== 0 || !executable || !existsSync(executable)) {
     throw new Error('No python3 runtime found. Install Python 3 and ensure python3 is on PATH.');
   }
-  mkdirSync(pythonRuntimeDir, { recursive: true });
-  const launcher = join(pythonRuntimeDir, 'python3');
-  writeFileSync(launcher, posixPythonLauncherScript());
-  chmodSync(launcher, 0o755);
-  console.log(`[prepare:python] Linux runtime command ready: ${launcher} -> python3 (${executable})`);
+
+  const venvPython = join(pythonRuntimeDir, 'bin', 'python3');
+  const desired = {
+    sourcePythonHome: executable,
+    sourceVersion: pythonVersion(executable),
+    runtimeSchema: 6
+  };
+  if (isPreparedRuntimeCompatible(readMarker(), desired, existsSync(venvPython))) {
+    const launcher = writePosixLauncher();
+    console.log(`[prepare:python] Linux runtime already prepared: ${launcher} -> ${venvPython}`);
+    return;
+  }
+
+  if (existsSync(pythonRuntimeDir) && !replaceRuntimeTreeIfUnused(pythonRuntimeDir)) {
+    throw new Error(
+      `Could not replace the Python runtime at ${pythonRuntimeDir} — a process is holding it.\n` +
+      'Close Lastbrowser (and any shell inside that directory) and retry.'
+    );
+  }
+
+  console.log(`[prepare:python] Creating Linux venv at ${pythonRuntimeDir} from ${executable}`);
+  run(executable, ['-m', 'venv', pythonRuntimeDir]);
+  const wheelhouseDir = resolveWheelhouseDir();
+  const pipArgs = ['-m', 'pip', 'install', '--no-cache-dir', '--no-compile'];
+  if (existsSync(wheelhouseDir)) pipArgs.push('--find-links', wheelhouseDir);
+  pipArgs.push('-r', requirementsPath, resolve(repoRoot, 'services', 'sidekick'));
+  run(venvPython, pipArgs);
+  run(venvPython, [
+    '-c',
+    'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, yaml; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
+  ]);
+  writeFileSync(markerPath, `${JSON.stringify(desired, null, 2)}\n`, 'utf8');
+  const launcher = writePosixLauncher();
+  console.log(`[prepare:python] Linux runtime command ready: ${launcher} -> ${venvPython}`);
 }
 
 function resolvePythonHome() {

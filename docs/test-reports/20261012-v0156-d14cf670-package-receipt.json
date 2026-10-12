@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "purpose": "private unsigned v0.1.56 VM preview",
+  "sourceCommit": "d14cf6705dcdeb4a2c65c6acba9af0f321205538",
+  "integratedBaseCommit": "04593080169462375cfa6209bcb70e148ad242d8",
+  "pullRequest": "https://github.com/Loggableim/lastbrowser/pull/72",
+  "unsigned": true,
+  "published": false,
+  "portable": {
+    "name": "Lastbrowser-0.1.56-x64-portable.exe",
+    "bytes": 170691368,
+    "sha256": "ac5f50d00c44d866b1b756ffb437dbc0b9a298fd0831d2445993024252c5f8a1"
+  },
+  "appAsar": {
+    "name": "app.asar",
+    "bytes": 75234230,
+    "sha256": "b24b721a1f04616d096e73fcbae63b971dd86308ba87ffa09b0fe7b92e8be8ca"
+  },
+  "asarManifest": {
+    "entries": 7339,
+    "sha256OfSortedPaths": "68858ea71259a2b533a92dec86d8459996f8dcb56ccc6eba3c6b5abe66d4a0ea",
+    "desktopPackageVersion": "0.1.56",
+    "desktopPackageMain": "dist/main/main.js",
+    "wallpaperEntries": [
+      "\\dist\\renderer\\launchpad-wallpaper.jpg",
+      "\\dist\\renderer\\wallpapers\\cyberpunk-street.jpg",
+      "\\dist\\renderer\\wallpapers\\misty-forest.jpg",
+      "\\dist\\renderer\\wallpapers\\nordic-arch.jpg",
+      "\\dist\\renderer\\wallpapers\\sapphire-nebula.jpg",
+      "\\dist\\renderer\\wallpapers\\temple-evening.jpg"
+    ]
+  },
+  "packageJsonInsideAsar": {
+    "bytes": 600,
+    "sha256": "5b8e6cf8f39ebf8d988294374b836811751c51c1996f6910b0e8bfb9183d0d60"
+  },
+  "resourceHashes": {
+    "name": "resource-hashes.json",
+    "bytes": 1454414,
+    "sha256": "4b52d7e193548c872a1455f8fd4386955aadc70c0e5d5a9afc2e0c2a468b85ea"
+  },
+  "previewResult": {
+    "name": "preview-result.json",
+    "bytes": 184,
+    "sha256": "08b6c73474c2d554c5ce12356ade1c9be48845b63320aef88008f1ebffda4c5a"
+  },
+  "buildVariant": {
+    "schemaVersion": 1,
+    "variant": "offline-test",
+    "appVersion": "0.1.56"
+  }
+}

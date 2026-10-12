@@ -10,7 +10,8 @@ import {
   findAvailablePort,
   findDevelopmentResourcesDir,
   resolveServiceLayout,
-  resolveExistingRuntimeDirectory
+  resolveExistingRuntimeDirectory,
+  sidecarPythonExecutableName
 } from '../src/main/services.js';
 
 describe('sidecar service layout', () => {
@@ -55,7 +56,7 @@ describe('sidecar service layout', () => {
   });
 
   it('keeps services inside the packaged resources directory', () => {
-    const layout = resolveServiceLayout('D:/Lastbrowser/resources', undefined, {});
+    const layout = resolveServiceLayout('D:/Lastbrowser/resources', undefined, {}, 'win32');
 
     expect(layout.sidekickDir).toBe('D:\\Lastbrowser\\resources\\services\\sidekick');
     expect(layout.webuiDir).toBe('D:\\Lastbrowser\\resources\\services\\sidekick');
@@ -83,6 +84,24 @@ describe('sidecar service layout', () => {
     }
   });
 
+  it('uses python3 on Linux and keeps the Windows python.exe path', () => {
+    expect(sidecarPythonExecutableName('win32')).toBe('python.exe');
+    expect(sidecarPythonExecutableName('linux')).toBe('python3');
+
+    const resourcesRoot = mkdtempResourceRoot();
+    const python3 = path.join(resourcesRoot, 'runtime', 'python', 'python3');
+    mkdirSync(path.dirname(python3), { recursive: true });
+    writeFileSync(python3, '');
+    try {
+      expect(resolveServiceLayout(resourcesRoot, undefined, {}, 'linux').pythonExe).toBe(python3);
+      expect(resolveServiceLayout(path.join(resourcesRoot, 'absent'), undefined, {}, 'linux').pythonExe).toBe('python3');
+      expect(resolveServiceLayout(path.join(resourcesRoot, 'absent'), undefined, {}, 'win32').pythonExe)
+        .toBe(path.join(resourcesRoot, 'absent', 'runtime', 'python', 'python.exe'));
+    } finally {
+      rmSync(resourcesRoot, { recursive: true, force: true });
+    }
+  });
+
   it('respects an explicit public Python override for development and portable installs', () => {
     const layout = resolveServiceLayout('D:/Lastbrowser/resources', undefined, {
       LASTBROWSER_WEBUI_PYTHON: 'D:/Portable/Python/python.exe'
@@ -98,7 +117,7 @@ describe('sidecar service layout', () => {
     writeFileSync(pythonExe, '');
 
     try {
-      const layout = resolveServiceLayout(resourcesRoot, undefined, {});
+      const layout = resolveServiceLayout(resourcesRoot, undefined, {}, 'win32');
       expect(layout.pythonExe).toBe(pythonExe);
     } finally {
       rmSync(resourcesRoot, { recursive: true, force: true });

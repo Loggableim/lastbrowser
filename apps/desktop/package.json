@@ -23,7 +23,8 @@
     "sync:sidekick": "node -e \"console.log('[sync:sidekick] Sidekick is integrated directly in-tree.')\"",
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
     "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
-    "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never"
+    "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
+    "package:linux": "npm run prepare:python && npm run build && electron-builder --linux tar.gz"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",
@@ -67,8 +68,7 @@
       "!dist/*smoke*.png",
       "package.json",
       "node_modules/node-pty/**/*",
-      "!node_modules/node-pty/prebuilds/darwin-*/**/*",
-      "!node_modules/node-pty/prebuilds/linux-*/**/*"
+      "!node_modules/node-pty/prebuilds/darwin-*/**/*"
     ],
     "asarUnpack": [
       "node_modules/node-pty/**/*"
@@ -173,6 +173,13 @@
     },
     "portable": {
       "artifactName": "Lastbrowser-${version}-${arch}-portable.${ext}"
+    },
+    "linux": {
+      "target": [
+        "tar.gz"
+      ],
+      "category": "Network",
+      "artifactName": "Lastbrowser-${version}-${arch}.tar.gz"
     },
     "publish": [
       {

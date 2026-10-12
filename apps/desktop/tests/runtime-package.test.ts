@@ -4,6 +4,8 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   isPreparedRuntimeCompatible,
+  posixPythonLauncherScript,
+  pythonRuntimeExecutableName,
   replaceRuntimeTreeIfUnused,
   resolveWheelhouseDir,
   verifyWheelhouse
@@ -15,6 +17,11 @@ describe('desktop runtime packaging', () => {
 
     expect(packageJson.scripts['prepare:python']).toBe('node scripts/prepare-python-runtime.mjs');
     expect(packageJson.scripts['package:win']).toContain('npm run prepare:python');
+    expect(packageJson.scripts['package:win']).toContain('--win nsis portable');
+    expect(packageJson.scripts['package:linux']).toBe('npm run prepare:python && npm run build && electron-builder --linux tar.gz');
+    expect(packageJson.build.linux.target).toEqual(['tar.gz']);
+    expect(packageJson.build.files).not.toContain('!node_modules/node-pty/prebuilds/linux-*/**/*');
+    expect(packageJson.build.files).toContain('!node_modules/node-pty/prebuilds/darwin-*/**/*');
   });
 
   it('ships the prepared Python runtime as an Electron resource', () => {
@@ -60,6 +67,12 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).not.toContain('marker.packageVersion === desired.packageVersion');
     const sidekickPyproject = readFileSync(path.resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'pyproject.toml'), 'utf8');
     expect(sidekickPyproject).toContain('exclude = ["tests", "tests.*"]');
+  });
+
+  it('selects python.exe on Windows and python3 on Linux', () => {
+    expect(pythonRuntimeExecutableName('win32')).toBe('python.exe');
+    expect(pythonRuntimeExecutableName('linux')).toBe('python3');
+    expect(posixPythonLauncherScript()).toBe('#!/bin/sh\nexec python3 "$@"\n');
   });
 
   it('reuses an unchanged Python runtime across app version bumps', () => {

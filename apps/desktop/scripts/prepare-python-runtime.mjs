@@ -1,4 +1,4 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,21 @@ const runtimeDir = resolve(desktopDir, 'runtime');
 const pythonRuntimeDir = resolve(runtimeDir, 'python');
 const markerPath = join(pythonRuntimeDir, '.lastbrowser-runtime.json');
 const requirementsPath = resolve(scriptDir, 'requirements-runtime.txt');
+
+export function pythonRuntimeExecutableName(platform = process.platform) {
+  return platform === 'win32' ? 'python.exe' : 'python3';
+}
+
+export function pythonRuntimeExecutablePath(home, platform = process.platform) {
+  const name = pythonRuntimeExecutableName(platform);
+  const direct = join(home, name);
+  if (platform === 'win32' || existsSync(direct)) return direct;
+  return join(home, 'bin', name);
+}
+
+export function posixPythonLauncherScript() {
+  return '#!/bin/sh\nexec python3 "$@"\n';
+}
 
 export function resolveWheelhouseDir(env = process.env) {
   const explicit = env.LASTBROWSER_WHEELHOUSE?.trim();
@@ -38,6 +53,10 @@ export function verifyWheelhouse(wheelhouseDir) {
 
 function main() {
   assertInside(desktopDir, pythonRuntimeDir);
+  if (process.platform !== 'win32') {
+    preparePosixPythonCommand();
+    return;
+  }
   const isOnline = process.argv.includes('--online');
   const isDownloadOnly = process.argv.includes('--download-wheels');
   const wheelhouseDir = resolveWheelhouseDir();
@@ -248,6 +267,19 @@ function isPathInside(root, candidate, platform) {
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function preparePosixPythonCommand() {
+  const detected = spawnSync('python3', ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' });
+  const executable = detected.stdout?.trim();
+  if (detected.status !== 0 || !executable || !existsSync(executable)) {
+    throw new Error('No python3 runtime found. Install Python 3 and ensure python3 is on PATH.');
+  }
+  mkdirSync(pythonRuntimeDir, { recursive: true });
+  const launcher = join(pythonRuntimeDir, 'python3');
+  writeFileSync(launcher, posixPythonLauncherScript());
+  chmodSync(launcher, 0o755);
+  console.log(`[prepare:python] Linux runtime command ready: ${launcher} -> python3 (${executable})`);
 }
 
 function resolvePythonHome() {

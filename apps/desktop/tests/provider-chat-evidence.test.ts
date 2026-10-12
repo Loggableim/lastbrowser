@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clearProviderChatEvidence, getProviderChatEvidence, getQualifiedProviderModels, isProviderModelQualified, recordCompletedChatEvidence, setProviderChatEvidenceRuntime } from '../src/renderer/provider-chat-evidence.js';
+import { completedChatProviderEvidence, clearProviderChatEvidence, getProviderChatEvidence, getQualifiedProviderModels, isProviderModelQualified, recordCompletedChatEvidence, setProviderChatEvidenceRuntime } from '../src/renderer/provider-chat-evidence.js';
 import { providerVerification } from '../src/renderer/provider-verification.js';
 
 function memoryStorage(): Storage {
@@ -13,6 +13,20 @@ function memoryStorage(): Storage {
     get length() { return values.size; },
   };
 }
+
+it.each(['xiaomi', 'openai-codex', 'opencode-go'])('qualifies a real completed %s event without dropping backend identity', (provider) => {
+  const storage = memoryStorage();
+  setProviderChatEvidenceRuntime('runtime-current', 'build-current');
+  const proof = completedChatProviderEvidence({ provider_id: provider, model_id: 'model-tested',
+    successful_chat: true, runtime_generation: 'runtime-current', provider_config_generation: 'config-current' });
+  const turn = { startAccepted: true, completed: true, browserProfileId: 'default', backendProfileName: 'default',
+    runtimeGeneration: 'runtime-current', appBuildId: 'build-current', providerEvidence: proof };
+  expect(recordCompletedChatEvidence(turn, storage, 20)).toBe(true);
+  expect(isProviderModelQualified(provider, 'model-tested', 'default', 'default', storage, 21)).toBe(true);
+  expect(recordCompletedChatEvidence({ ...turn, cancelled: true }, storage, 22)).toBe(false);
+  expect(recordCompletedChatEvidence({ ...turn, providerEvidence: completedChatProviderEvidence({ ...proof,
+    runtime_generation: 'stale-runtime' }) }, storage, 22)).toBe(false);
+});
 
 describe('provider chat evidence', () => {
   it('records only a completed non-error response for the exact provider and model', () => {

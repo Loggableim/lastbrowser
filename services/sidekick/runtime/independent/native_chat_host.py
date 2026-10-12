@@ -65,6 +65,7 @@ def _start_diagnostic(*, stage: str, exc: BaseException, process=None, handle=No
 
 
 def build_native_environment(context: NativeChatContext, *, runtime_env=None) -> dict[str, str]:
+    from web.api.runtime_identity import RUNTIME_GENERATION
     if runtime_env is None:
         from web.api.profiles import get_profile_runtime_env
         runtime_env = get_profile_runtime_env(Path(context.profile_home))
@@ -89,6 +90,10 @@ def build_native_environment(context: NativeChatContext, *, runtime_env=None) ->
         # Existing auth fences disallow shared-root/ambient CLI credentials.
         "LASTBROWSER_INDEPENDENT_WORKER": "1", "LASTBROWSER_INDEPENDENT_PURPOSE": "native_chat",
         "LASTBROWSER_NATIVE_GENERATION": context.writer_generation,
+        # Completion proofs belong to the owning desktop runtime. Without
+        # this, each worker invents an unrelated generation and valid chats
+        # can never qualify their provider/model in the renderer.
+        "LASTBROWSER_RUNTIME_GENERATION": RUNTIME_GENERATION,
         "LASTBROWSER_BACKEND_PROFILE_ID": context.scope.backend_profile_id,
         "LASTBROWSER_BROWSER_PROFILE_ID": context.scope.browser_profile_id,
         "LASTBROWSER_SPACE_ID": context.scope.space_id, "LASTBROWSER_PARTITION_KEY": context.partition_key,

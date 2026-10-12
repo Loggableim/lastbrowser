@@ -126,6 +126,10 @@ def test_context_requires_actual_lease_and_exact_turn(tmp_path, monkeypatch):
         assert env["CUSTOM_API_KEY"] == "fixture-a"
         assert "OPENAI_API_KEY" not in env and "LASTBROWSER_CDP_PORT" not in env
         assert "LASTBROWSER_BRIDGE_TOKEN" not in env
+        from web.api.runtime_identity import RUNTIME_GENERATION
+        assert env["LASTBROWSER_RUNTIME_GENERATION"] == RUNTIME_GENERATION
+        isolated = build_native_environment(context, runtime_env={"LASTBROWSER_RUNTIME_GENERATION": "foreign"})
+        assert isolated["LASTBROWSER_RUNTIME_GENERATION"] == RUNTIME_GENERATION
         store.release_lease(context.writer_lease_id, owner_generation=context.writer_generation)
         with pytest.raises(PermissionError): verify_native_context(context)
     finally: store.close()

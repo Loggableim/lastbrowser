@@ -242,6 +242,37 @@ def test_anthropic_gateway_returns_sdk_base_matching_captured_request_authority(
     assert connection["base_url"] == "https://opencode.ai/inference/anthropic"
 
 
+@pytest.mark.parametrize("family,package,mode", [
+    ("openai", "aisdk:@ai-sdk/openai-compatible", "chat_completions"),
+    ("anthropic", "aisdk:@ai-sdk/anthropic", "anthropic_messages"),
+])
+def test_go_subscription_gateway_catalog_and_sdk_base(home, family, package, mode):
+    value = config()
+    entry = value["providers"]["opencode-go"]
+    entry["package"] = package
+    base = f"https://opencode.ai/inference/go/{family}/v1"
+    entry["settings"]["baseURL"] = base
+    device._write(home, {"opencode-go": device._token_record(tokens()) | {"config": value}})
+    assert device.discovered_models("opencode-go") == ["synthetic-model"]
+    connection = device.resolve_connection("opencode-go", "synthetic-model", "session")
+    assert connection["api_mode"] == mode
+    assert connection["base_url"] == (base[:-3] if family == "anthropic" else base)
+    assert device._config_diagnostic(value, "opencode-go")["gateway_paths"] == [f"/inference/go/{family}/v1"]
+
+
+@pytest.mark.parametrize("base", [
+    "https://opencode.ai/inference/go/openai/v1/other",
+    "https://opencode.ai/inference/go/openai/v1?redirect=other",
+    "https://opencode.ai.evil.invalid/inference/go/openai/v1",
+])
+def test_go_gateway_rejects_near_matches(home, base):
+    value = config()
+    value["providers"]["opencode-go"]["settings"]["baseURL"] = base
+    device._write(home, {"opencode-go": device._token_record(tokens()) | {"config": value}})
+    with pytest.raises(device.DeviceError, match="unsupported_workspace_gateway"):
+        device.resolve_connection("opencode-go", "synthetic-model", "session")
+
+
 def test_native_opencode_runtime_package_and_wire_model_id_are_supported(home):
     value = config()
     entry = value["providers"]["opencode-go"]

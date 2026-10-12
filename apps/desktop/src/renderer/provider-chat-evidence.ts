@@ -1,3 +1,18 @@
+import { useSyncExternalStore } from 'react';
+
+let evidenceRevision = 0;
+const evidenceListeners = new Set<() => void>();
+function evidenceChanged(): void {
+  evidenceRevision += 1;
+  for (const listener of evidenceListeners) listener();
+}
+export function useProviderChatEvidenceRevision(): number {
+  return useSyncExternalStore(listener => {
+    evidenceListeners.add(listener);
+    return () => { evidenceListeners.delete(listener); };
+  }, () => evidenceRevision, () => 0);
+}
+
 export type ProviderChatEvidence = {
   providerId: string;
   modelId: string;
@@ -31,6 +46,18 @@ export type CompletedChatEvidenceInput = {
 const STORAGE_KEY = 'lastbrowser.providerChatEvidence.v3';
 const CONFIG_GENERATION_KEY = 'lastbrowser.providerConfigGeneration.v1';
 const MAX_QUALIFICATION_AGE_MS = 24 * 60 * 60 * 1000;
+/** Preserve the backend identity alongside the actual completed-chat proof. */
+export function completedChatProviderEvidence(raw: unknown): NonNullable<CompletedChatEvidenceInput['providerEvidence']> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const proof = raw as Record<string, unknown>;
+  return {
+    provider_id: typeof proof.provider_id === 'string' ? proof.provider_id : undefined,
+    model_id: typeof proof.model_id === 'string' ? proof.model_id : undefined,
+    successful_chat: proof.successful_chat === true,
+    runtime_generation: typeof proof.runtime_generation === 'string' ? proof.runtime_generation : undefined,
+    provider_config_generation: typeof proof.provider_config_generation === 'string' ? proof.provider_config_generation : undefined,
+  };
+}
 let activeRuntimeGeneration = '';
 let activeAppBuildId = '';
 
@@ -115,6 +142,7 @@ export function recordProviderChatSuccess(
       backendConfigGeneration, recordedAt,
     };
     storage.setItem(STORAGE_KEY, JSON.stringify(all));
+    evidenceChanged();
   } catch { /* Evidence storage is best-effort and never blocks chat. */ }
 }
 
@@ -171,5 +199,6 @@ export function clearProviderChatEvidence(providerId: string, storage: Pick<Stor
     storage.setItem(STORAGE_KEY, JSON.stringify(remaining));
     const generations = JSON.parse(storage.getItem(CONFIG_GENERATION_KEY) || '{}') as Record<string, unknown>;
     storage.setItem(CONFIG_GENERATION_KEY, JSON.stringify({ ...generations, [provider]: randomGeneration() }));
+    evidenceChanged();
   } catch { /* Clearing a qualification marker must not block editing provider settings. */ }
 }

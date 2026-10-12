@@ -37,7 +37,7 @@ import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
 import { saveSpaceModel } from '../space-models.js';
 import { isMultiAgentModelSelection, parseProviderModelId, resolveLiteralCatalogModelSelection, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
-import { getProviderModelEvidence, isProviderModelQualified } from '../provider-chat-evidence.js';
+import { getProviderModelEvidence, isProviderModelQualified, useProviderChatEvidenceRevision } from '../provider-chat-evidence.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { IndependentAssistantClient } from '../independent-assistant-client.js';
 import { assistantScopeKey, sameAssistantScope, newIndependentRequestId, type ScopedModelSelection, type NativeModelAvailability } from '../independent-contracts.js';
@@ -152,6 +152,7 @@ export function NativeChatMain({
 }: NativeChatMainProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
   const activeModelRevision = useActiveModelRevision();
+  const providerEvidenceRevision = useProviderChatEvidenceRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const independentRun = isIndependentOwnedSession(activeSession) ? readIndependentSessionRun(activeSession) : null;
   const independentRunState = useSpaceAssistantStore(state => {
@@ -350,7 +351,7 @@ export function NativeChatMain({
         label: evidence ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
     });
     return models.length ? [{ ...group, models }] : [];
-  }), [modelCatalog, activeBrowserProfileId, activeBackendProfileName, activeSession?.profile, isAntigravityCatalogUnverified, t, activeModelRevision, showUntestedBetas]);
+  }), [modelCatalog, activeBrowserProfileId, activeBackendProfileName, activeSession?.profile, isAntigravityCatalogUnverified, t, activeModelRevision, showUntestedBetas, providerEvidenceRevision]);
   const requestedDefaultGroup = modelCatalog.find(group => group.providerId === requestedChatDefault.provider
     && group.models.some(entry => entry.id === requestedChatDefault.model));
   const requestedLunaInCatalog = modelCatalogLoaded && Boolean(requestedDefaultGroup);

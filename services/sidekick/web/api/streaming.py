@@ -4178,6 +4178,12 @@ def _run_agent_streaming(
                 task_id=session_id,
                 persist_user_message=msg_text,
             )
+            # cancel_stream already persisted the user turn, partial output and
+            # cancellation marker. A provider can unwind later with no reply;
+            # that result must not overwrite cancellation with a provider error
+            # (or overwrite a newer turn started after the eager lock release).
+            if cancel_event.is_set():
+                return
             # ── Ephemeral mode (/btw): deliver answer, skip persistence, cleanup ──
             if ephemeral:
                 _answer = ''
@@ -4204,6 +4210,10 @@ def _run_agent_streaming(
             if _ckpt_thread is not None:
                 _ckpt_thread.join(timeout=15)
             with _agent_lock:
+                # cancel_stream writes under this same lock. Recheck ownership
+                # here: the earlier guard ran before the checkpoint join.
+                if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                    return
                 _result_messages = result.get('messages') or _previous_context_messages
                 _next_context_messages = _restore_reasoning_metadata(
                     _previous_context_messages,
@@ -4928,6 +4938,10 @@ def _run_agent_streaming(
                 pass
 
     except Exception as e:
+        # A stopped provider may raise while unwinding. Its exception is not
+        # a new error turn and must not trigger credential repair or retry.
+        if cancel_event.is_set():
+            return
         try:
             from web.api.kanban_orchestration import clear_webui_kanban_orchestration
             clear_webui_kanban_orchestration()
@@ -4962,6 +4976,8 @@ def _run_agent_streaming(
             )
         elif _exc_is_auth:
             if not _self_healed:
+                if cancel_event.is_set():
+                    return
                 # ── Credential self-heal on 401 (#1401) ──
                 _heal_rt = _attempt_credential_self_heal(
                     resolved_provider or '', session_id, _agent_lock,
@@ -5000,6 +5016,8 @@ def _run_agent_streaming(
                     # Retry the conversation
                     _token_sent = False
                     try:
+                        if cancel_event.is_set():
+                            return
                         _heal_result = _heal_agent.run_conversation(
                             user_message=user_message,
                             system_message=workspace_system_msg,
@@ -5015,6 +5033,8 @@ def _run_agent_streaming(
                                 _ckpt_thread.join(timeout=15)
                             _lock_ctx = _agent_lock if _agent_lock is not None else contextlib.nullcontext()
                             with _lock_ctx:
+                                if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                                    return
                                 _result_messages = _heal_result.get('messages') or _previous_context_messages
                                 _next_context_messages = _restore_reasoning_metadata(
                                     _previous_context_messages, _result_messages,
@@ -5056,6 +5076,8 @@ def _run_agent_streaming(
             # API calls so the LLM never sees its own error as prior context on the next turn.
             _lock_ctx = _agent_lock if _agent_lock is not None else contextlib.nullcontext()
             with _lock_ctx:
+                if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                    return
                 _materialize_pending_user_turn_before_error(
                     s,
                     internal_goal_continuation=goal_claim_turn is not None,
@@ -5090,7 +5112,8 @@ def _run_agent_streaming(
                         )
                     except Exception:
                         logger.debug("Failed to append interrupted turn journal event", exc_info=True)
-        put('apperror', _error_payload)
+        if not cancel_event.is_set():
+            put('apperror', _error_payload)
     finally:
         # Stop the periodic checkpoint thread before the final recovery path.
         # The checkpoint thread also uses the per-session lock; joining it first
@@ -5099,7 +5122,8 @@ def _run_agent_streaming(
             _checkpoint_stop.set()
         if _ckpt_thread is not None:
             _ckpt_thread.join(timeout=15)
-        if (s is not None
+        if (not cancel_event.is_set()
+                and s is not None
                 and getattr(s, 'active_stream_id', None) == stream_id
                 and getattr(s, 'pending_user_message', None)):
             update_active_run(stream_id, phase="finalizing")

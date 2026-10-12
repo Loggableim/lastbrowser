@@ -175,6 +175,17 @@ def test_recent_catalog_invalidates_opencode_device_and_cli_credentials(bound):
     assert len(manager.calls) == 3
 
 
+def test_recent_catalog_accepts_valid_yaml_dates(bound):
+    from runtime.independent.scoped_models import probe_catalog
+
+    _, _, resolver, manager, scope = bound
+    path = resolver.resolve(scope).space.config_path
+    path.write_text(path.read_text("utf-8") + "\ngmail:\n  last_sync: 2026-10-12\n", "utf-8")
+    probe_catalog(manager, scope)
+    probe_catalog(manager, scope)
+    assert len(manager.calls) == 1
+
+
 def select(bound, **changes):
     _, store, resolver, manager, scope = bound
     return handle_model_selection(store, resolver, manager, scope,

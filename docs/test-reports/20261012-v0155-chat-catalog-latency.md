@@ -17,7 +17,7 @@ measurements on this PR.
 `probe_catalog` now keeps only a five-second discovery receipt on the owning
 profile manager. The key includes runner generation, exact Scope, partition and
 binding revision, capability mode, provider configuration digest, native Space
-configuration, stable auth identity, and exact credential-file digest. A cache
+source bytes, stable auth identity, and exact credential-file digest. A cache
 hit resolves the Scope again and checks its current binding, Space policy,
 configuration, and credential state. Concurrent callers share one in-flight discovery. A
 failed or invalid response is not cached; scope, account, token, provider
@@ -41,10 +41,11 @@ A delayed catalog fixture (150 ms injected in discovery) ran the same model
 selection `get` operation twice: cold 371.0 ms, immediate warm 28.5 ms on this
 host. This proves the second operation avoided a second worker discovery in
 that fixture; it is not a predicted VM or provider latency. The focused suite
-passed 24 tests, with one packaged-worker test excluded because this host's
+passed 25 tests, with one packaged-worker test excluded because this host's
 isolated Python 3.14 child lacks `pydantic`. New cases cover provider-config
 change, browser/Space scope change, credential change and token rotation,
 OpenCode device/CLI credentials, runner generation, expiry, stale resolved binding, Space policy change,
+valid YAML dates,
 concurrent singleflight, and failed discovery retry.
 
 The broader `test_native_chat_parent.py` invocation gave 3 pass and 5 timeout

@@ -61,7 +61,13 @@ def _catalog_credential_state(home):
 
 
 def _catalog_space_state(resolved):
-    return hashlib.sha256(canonical_json(resolved.space.load_config()).encode()).hexdigest()
+    # Hash the source bytes: valid YAML may contain dates or other values that
+    # the JSON serializer does not accept, while a policy edit still changes
+    # the exact bytes that the next worker reads.
+    path = resolved.space.config_path
+    if not path.resolve().is_relative_to(resolved.space_root):
+        raise PolicyDenied("space_configuration_escaped")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state):

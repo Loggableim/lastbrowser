@@ -24,9 +24,11 @@ import pytest
 
 @pytest.fixture
 def tmp_path(request: pytest.FixtureRequest) -> Path:
-    """Return an isolated, repository-local temporary directory."""
+    """Return an isolated test directory, repository-local by default."""
 
-    root = Path(__file__).resolve().parent.parent / ".test-tmp"
+    configured_root = os.environ.get("SIDEKICK_TEST_TMP_ROOT")
+    root = (Path(configured_root).expanduser().resolve() if configured_root
+            else Path(__file__).resolve().parent.parent / ".test-tmp")
     digest = hashlib.sha256(request.node.nodeid.encode("utf-8")).hexdigest()[:16]
     # A deterministic node-id path is unsafe on Windows: a locked SQLite
     # handle can make cleanup fail, causing a later invocation to reuse stale

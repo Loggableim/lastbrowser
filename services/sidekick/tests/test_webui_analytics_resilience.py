@@ -40,7 +40,7 @@ def test_usage_analytics_short_circuits_oversized_state_db(monkeypatch, tmp_path
     from cli import web_server
 
     state_path = tmp_path / "home" / "state.db"
-    state_path.parent.mkdir(parents=True)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
     with state_path.open("wb") as handle:
         handle.truncate(1_073_741_825)
 

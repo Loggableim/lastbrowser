@@ -221,9 +221,14 @@ def test_legacy_browser_goal_namespace_is_migrated_without_becoming_storage_owne
         else None,
     )
 
-    owner = space_engine.get_workspace(space_engine.DEFAULT_SPACE_SLUG)
-    assert owner is not None
-    owner.sessions_dir.mkdir(parents=True, exist_ok=True)
+    owner_token = profiles.set_request_profile("default")
+    try:
+        owner = space_engine.get_workspace(space_engine.DEFAULT_SPACE_SLUG)
+        assert owner is not None
+        owner_sessions_dir = owner.sessions_dir
+    finally:
+        profiles.clear_request_profile(owner_token)
+    owner_sessions_dir.mkdir(parents=True, exist_ok=True)
     legacy_slug = "lbws-0123456789abcdef0123456789abcdef"
     profile_token = profiles.set_request_profile("default")
     try:
@@ -245,8 +250,8 @@ def test_legacy_browser_goal_namespace_is_migrated_without_becoming_storage_owne
         "created_at": 1_800_000_000,
         "updated_at": 1_800_000_000,
     }
-    (owner.sessions_dir / "legacy-goal-session.json").write_text(json.dumps(row), encoding="utf-8")
-    (owner.sessions_dir / "_index.json").write_text(
+    (owner_sessions_dir / "legacy-goal-session.json").write_text(json.dumps(row), encoding="utf-8")
+    (owner_sessions_dir / "_index.json").write_text(
         json.dumps([{key: value for key, value in row.items() if key != "messages"}]),
         encoding="utf-8",
     )
@@ -273,7 +278,7 @@ def test_legacy_browser_goal_namespace_is_migrated_without_becoming_storage_owne
         profile_home=profile_home,
         space_slug=space_engine.DEFAULT_SPACE_SLUG,
     ) is None
-    persisted = json.loads((owner.sessions_dir / "legacy-goal-session.json").read_text(encoding="utf-8"))
+    persisted = json.loads((owner_sessions_dir / "legacy-goal-session.json").read_text(encoding="utf-8"))
     assert persisted["workspace_slug"] == space_engine.DEFAULT_SPACE_SLUG
     assert persisted["goal_space_slug"] == legacy_slug
 

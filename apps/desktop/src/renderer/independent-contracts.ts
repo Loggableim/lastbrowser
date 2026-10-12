@@ -205,8 +205,7 @@ export type ProviderModelCatalog = Readonly<{ schemaVersion: 1; scope: Independe
       vision: Readonly<{ status: string; value: boolean | null; source: string }>;
       reasoningEfforts: Readonly<{ status: string; value: readonly string[] | null; source: string }> }>;
     qualification: Readonly<{ independent: Readonly<{ status: string; available: boolean; reasonCode: string | null }> }>;
-    liveTest: Readonly<{ status: string }> }>[];
-}> }>;
+    liveTest: Readonly<{ status: string }> }>[] }>[] }>;
 export type ScopedModelSelection = Readonly<{ schemaVersion: 1; scope: IndependentScope; revision: number; model: string; provider: string; configured: boolean;
   supportsIndependent: boolean; reasonCode?: string; groups?: readonly ScopedModelGroup[];providers?:readonly ScopedModelProvider[];providerModelCatalog?:ProviderModelCatalog }>;
 export type LocalAiBootstrapRequest=Readonly<{action:'status'}>|Readonly<{action:'start'|'retry';clientRequestId:string}>|Readonly<{action:'cancel';jobId:string;clientRequestId:string}>;

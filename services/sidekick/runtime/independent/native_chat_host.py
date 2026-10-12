@@ -13,7 +13,7 @@ from typing import Callable
 
 from .native_chat_protocol import NativeChatContext, encode_turn, verify_native_context
 from .contracts import canonical_json
-from .scope import canonical_path
+from .scope import runtime_interpreter
 from .worker_host import WorkerHandle, WorkerError, _SYSTEM_ENV, _RESERVED_ENV
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,7 @@ class NativeChatHandle(WorkerHandle):
 class NativeChatHost:
     def __init__(self, context: NativeChatContext, *, python_executable=None):
         self.context = NativeChatContext.model_validate_json(canonical_json(context))
-        self.python_executable = canonical_path(python_executable or sys.executable)
+        self.python_executable = runtime_interpreter(python_executable or sys.executable)
         self.sidekick_root = Path(__file__).resolve().parents[2]
 
     def start(self, args, kwargs, *, runtime_env=None, before_stop=None) -> NativeChatHandle:

@@ -4562,6 +4562,8 @@ def _run_agent_streaming(
                     _grill_auto = _bound_native_sdk_bridge()
                     if _grill_auto is not None:
                         _grill_auto.mark_visible_delta()
+                if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                    return
                 s.active_stream_id = None
                 s.pending_user_message = None
                 s.pending_attachments = []
@@ -4732,7 +4734,7 @@ def _run_agent_streaming(
                             )
                         except Exception:
                             logger.debug("Failed to append assistant_started turn journal event", exc_info=True)
-                if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                if cancel_event.is_set():
                     return
                 s.save()
                 if not ephemeral and not quickchat:

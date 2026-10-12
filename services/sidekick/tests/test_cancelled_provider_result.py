@@ -122,3 +122,36 @@ def test_stop_during_credential_refresh_prevents_second_provider_request(refresh
     assert namespace["probe"](stopped, SimpleNamespace(active_stream_id="stream"), "stream") is None
     namespace["_attempt_credential_self_heal"] = lambda *_: {"token": "fresh"}
     assert namespace["probe"](Event(), SimpleNamespace(active_stream_id="stream"), "stream") == "retry-provider"
+
+
+def test_success_can_save_after_clearing_its_active_stream_id():
+    """A completed turn clears ownership before save; Stop still vetoes save."""
+    source = Path(__file__).parents[1] / "web" / "api" / "streaming.py"
+    worker = next(node for node in ast.parse(source.read_text(encoding="utf-8")).body
+                  if isinstance(node, ast.FunctionDef) and node.name == "_run_agent_streaming")
+    success_lock = next(node for node in ast.walk(worker)
+                        if isinstance(node, ast.With)
+                        and len(node.items) == 1
+                        and isinstance(node.items[0].context_expr, ast.Name)
+                        and node.items[0].context_expr.id == "_agent_lock"
+                        and any(isinstance(item, ast.Assign)
+                                and any(isinstance(target, ast.Attribute) and target.attr == "active_stream_id"
+                                        for target in item.targets)
+                                for item in node.body))
+    save_index = next(index for index, item in enumerate(success_lock.body)
+                      if isinstance(item, ast.Expr) and isinstance(item.value, ast.Call)
+                      and isinstance(item.value.func, ast.Attribute)
+                      and item.value.func.attr == "save")
+    guard = success_lock.body[save_index - 1]
+    assert isinstance(guard, ast.If)
+    probe = ast.FunctionDef(name="probe", args=ast.arguments(
+        posonlyargs=[], args=[ast.arg(arg="cancel_event")], kwonlyargs=[],
+        kw_defaults=[], defaults=[]),
+        body=[guard, ast.parse("return 'saved'").body[0]], decorator_list=[])
+    namespace = {}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[probe], type_ignores=[])),
+                 str(source), "exec"), namespace)
+    assert namespace["probe"](Event()) == "saved"
+    stopped = Event()
+    stopped.set()
+    assert namespace["probe"](stopped) is None

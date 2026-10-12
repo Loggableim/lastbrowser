@@ -14,6 +14,7 @@ The source commits were applied onto the diagnosis head without merging their ol
 - SQLite statement caching is disabled for the shared state connection. The new concurrent metadata-read regression passed.
 - PR #65's late-result guard was insufficient: a provider exception could enter self-heal/error persistence after Stop, and Stop could race the result between the early guard and the session lock. The integration checks cancellation before exception retry and rechecks cancellation plus stream ownership under the session lock before success, self-heal, and error writes. Final recovery skips cancelled streams. A deterministic test exercises cancellation while result persistence waits for that lock.
 - The independent [PR #70 review](https://github.com/Loggableim/lastbrowser/pull/70) identified another P1 path: a normal but empty auth result could start self-heal while Stop waited for the session lock. The follow-up rechecks Stop and stream ownership before and after credential refresh, before retrying the provider, after retry, and before terminal writes. A test makes Stop fire during the credential refresh on both normal-return and raised-error paths.
+- The follow-up review also caught a regression in the new final save guard: normal completion clears `active_stream_id` before saving. The ownership check now runs before that clear, and the final save guard checks Stop without rejecting a successfully completed turn. A regression test covers both normal completion and Stop at that point.
 
 ## Source verification
 
@@ -23,7 +24,7 @@ The source commits were applied onto the diagnosis head without merging their ol
 | `npm run verify:store` | PASS: 39 checks, 2 warnings, 0 failures |
 | `npm --workspace apps/desktop run build` | PASS: TypeScript and Vite |
 | `python -m compileall -q services/sidekick` | PASS |
-| Targeted Python cancellation, OpenCode, and concurrent metadata tests | PASS: 38 tests; `PYTHONPATH=services/sidekick` for subprocess import resolution |
+| Targeted Python cancellation, OpenCode, and concurrent metadata tests | PASS: 39 tests; `PYTHONPATH=services/sidekick` for subprocess import resolution |
 | Renderer provider evidence test | PASS: 6 tests |
 | `git diff --check` | PASS |
 

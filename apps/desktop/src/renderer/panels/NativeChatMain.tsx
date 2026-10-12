@@ -72,7 +72,6 @@ import { NativeGrillControls } from '../components/NativeGrillControls.js';
 import { NativeChatBrowserActivity } from '../components/NativeChatBrowserView.js';
 import { hasCurrentTurnBrowserUse } from '../chat-browser-use.js';
 import { nativeGrillCopy } from '../i18n/native-grill-copy.js';
-import { requestNativeChatModelCatalog } from '../native-chat-model-catalog.js';
 
 const noCommandCapabilities:CommandCapabilities={plan:false,grill_me:false,boost:false,goal:false,gquota:false,plugins:false};
 const REQUESTED_CHAT_DEFAULT = { provider: 'openai-codex', model: 'gpt-6-luna' } as const;
@@ -175,13 +174,21 @@ export function NativeChatMain({
   const workspace = activeSession?.workspace || activeSpacePath || 'default';
   const setSelectedModel = useChatStore((state) => state.setSelectedModel);
   const setSelectedModelProvider = useChatStore((state) => state.setSelectedModelProvider);
-  const modelViewKey = JSON.stringify([activeBrowserProfileId, activeSpacePath]);
+  const modelViewKey = JSON.stringify([activeBrowserProfileId, activeSpacePath,
+    activeBackendProfileName || (activeSession as any)?.profile || 'default']);
   const modelViewKeyRef = useRef(modelViewKey); modelViewKeyRef.current = modelViewKey;
   const modelClient = useMemo(() => new IndependentAssistantClient(window.lastbrowser.independent), []);
   const [scopedModel, setScopedModel] = useState<{ viewKey: string; selection: ScopedModelSelection } | null>(null);
   const spaceModelSelection = scopedModel?.viewKey === modelViewKey ? scopedModel.selection : null;
+  const [optimisticChoice, setOptimisticChoice] = useState<{ viewKey: string; model: string; provider: string; sequence: number } | null>(null);
+  const latestChoiceRef = useRef<typeof optimisticChoice>(null);
+  const persistedSelectionRef = useRef<typeof scopedModel>(null);
+  const choiceSequenceRef = useRef(0);
+  const choiceMutationActiveRef = useRef(false);
+  const pendingChoice = optimisticChoice?.viewKey === modelViewKey ? optimisticChoice : null;
+  if (latestChoiceRef.current && latestChoiceRef.current.viewKey !== modelViewKey) latestChoiceRef.current = null;
   const [catalogDefaultModel, setCatalogDefaultModel] = useState('');
-  const model = resolvePreferredChatModel(
+  const model = pendingChoice?.model || resolvePreferredChatModel(
     spaceModelSelection?.model,
     spaceModelSelection ? '' : activeSession?.model,
     catalogDefaultModel,
@@ -196,47 +203,41 @@ export function NativeChatMain({
   }, [activeSessionId, reasoningPreferenceKey]);
 
   // Discovery runs in the captured profile worker. No global model default is written.
-  const [modelCatalog, setModelCatalog] = useState<Array<{ provider: string; providerId: string; configured: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts: string[];supportsIndependent:boolean; nativeAvailability?: NativeModelAvailability }> }>>([]);
-  const [modelCatalogLoaded, setModelCatalogLoaded] = useState(false);
-  const [modelCatalogError, setModelCatalogError] = useState(false);
+  type CatalogGroup = { provider: string; providerId: string; configured: boolean; disabledReason?: string; models: Array<{ id: string; label: string; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability }> };
+  const [catalogSnapshot, setCatalogSnapshot] = useState<{ viewKey: string; phase: 'loading' | 'ready' | 'error'; groups: CatalogGroup[] }>({ viewKey: modelViewKey, phase: 'loading', groups: [] });
+  const modelCatalog = catalogSnapshot.viewKey === modelViewKey ? catalogSnapshot.groups : [];
+  const modelCatalogLoaded = catalogSnapshot.viewKey === modelViewKey && catalogSnapshot.phase === 'ready';
+  const modelCatalogError = catalogSnapshot.viewKey === modelViewKey && catalogSnapshot.phase === 'error';
+  const modelCatalogLoading = ready && !modelCatalogLoaded && !modelCatalogError;
   const [catalogStatus, setCatalogStatus] = useState<Record<string, string>>({});
   const [modelCatalogRetry, setModelCatalogRetry] = useState(0);
   const [requestedChatDefault] = useState(readRequestedChatDefault);
   useEffect(() => {
     try { window.localStorage.setItem(CHAT_DEFAULT_PREFERENCE_KEY, JSON.stringify(requestedChatDefault)); } catch {}
   }, [requestedChatDefault]);
-  const modelProvider = spaceModelSelection?.provider
+  const modelProvider = pendingChoice?.provider || spaceModelSelection?.provider
     || resolveCatalogModelSelection(activeSession?.model || model, modelCatalog).provider
     || modelCatalog.find((group) => group.models.some((entry) => entry.id === model))?.providerId
     || '';
   useEffect(() => {
     if (!ready) return;
     let alive = true;
-    setModelCatalogError(false);
-    setModelCatalogLoaded(false); setModelCatalog([]); setScopedModel(null); setCatalogDefaultModel('');
+    setCatalogSnapshot({ viewKey: modelViewKey, phase: 'loading', groups: [] });
+    setScopedModel(null); setCatalogDefaultModel('');
     const load = async () => {
       try {
         const resolved = await modelClient.request({ schemaVersion: 1, operation: 'resolveScope', payload: {
           browserProfileId: activeBrowserProfileId, workspacePath: activeSpacePath || null
         }, backendProfileName: activeBackendProfileName || (activeSession as any)?.profile || undefined });
         if (!resolved.ok) throw new Error(resolved.error.message);
-        const [result, liveModelsRes] = await Promise.all([
-          modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: { action: 'get' } }),
-          window.lastbrowser?.sidekick?.requestWebui
-            ? requestNativeChatModelCatalog(window.lastbrowser.sidekick.requestWebui, {
-              browserProfileId: activeBrowserProfileId,
-              workspacePath: activeSpacePath || null,
-              ...(activeBackendProfileName ? { backendProfileName: activeBackendProfileName } : {})
-            }).catch(() => null)
-            : Promise.resolve(null)
-        ]);
+        const result = await modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope,
+          payload: { action: 'get', includeCatalog: true } });
         if (!result.ok) throw new Error(result.error.message);
         if (!alive) return;
         let data = result.value;
         if (!data.groups) throw new Error('Model catalog is missing.');
         const statusMap: Record<string, string> = {
-          ...((data as any).catalog_status || {}),
-          ...((liveModelsRes as any)?.catalog_status || {})
+          ...((data as any).catalog_status || {})
         };
         const reportedAntigravityStatus = String(statusMap.antigravity || '').trim().toLowerCase();
         statusMap.antigravity = 'unavailable';
@@ -274,7 +275,10 @@ export function NativeChatMain({
         } else if (!(AI_ORCHESTRATION_ENABLED && isMultiAgentModelSelection(selectionForView)) && !activeChoice.choice) {
           selectionForView = { ...selectionForView, model: '', provider: '', configured: false };
         }
-        setScopedModel({ viewKey: modelViewKey, selection: selectionForView });
+        if (!latestChoiceRef.current || latestChoiceRef.current.viewKey !== modelViewKey) {
+          persistedSelectionRef.current = { viewKey: modelViewKey, selection: selectionForView };
+          setScopedModel({ viewKey: modelViewKey, selection: selectionForView });
+        }
         const isSelectedAntigravity = selectionForView.provider === 'antigravity';
         const selectedModelQualified = Boolean(selectionForView.provider && selectionForView.model
           && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)
@@ -282,16 +286,13 @@ export function NativeChatMain({
             activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage));
         setCatalogDefaultModel((selectedModelQualified && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) ? selectionForView.model : '');
         if (selectedModelQualified && selectionForView.model && activeSpacePath && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) saveSpaceModel(activeSpacePath, selectionForView.model, window.localStorage, selectionForView.provider);
-        setModelCatalog(isAntigravityCatalogUnverified
+        setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: isAntigravityCatalogUnverified
           ? rawParsed.filter(group => !isRetiredProvider(group.providerId))
-          : rawParsed);
-        setModelCatalogLoaded(true);
+          : rawParsed });
       } catch {
         if (alive) {
           setCatalogDefaultModel('');
-          setModelCatalog([]);
-          setModelCatalogLoaded(false);
-          setModelCatalogError(true);
+          setCatalogSnapshot({ viewKey: modelViewKey, phase: 'error', groups: [] });
           setCatalogStatus({ antigravity: 'unknown' });
         }
       }
@@ -313,22 +314,71 @@ export function NativeChatMain({
     const nextModel = candidate.model, provider = candidate.provider ?? '';
     if (nextModel === model && provider === modelProvider) return;
     const capturedKey = modelViewKey;
-    void modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: spaceModelSelection.scope, payload: {
-      action: 'set', model: nextModel, provider, expectedRevision: spaceModelSelection.revision, clientRequestId: newIndependentRequestId()
-    } }).then(result => {
-        if (!result.ok) throw new Error(result.error.message);
-        if (modelViewKeyRef.current !== capturedKey) return;
-        setScopedModel({ viewKey: capturedKey, selection: result.value });
-        if (activeSpacePath) {
-          saveSpaceModel(activeSpacePath, nextModel, window.localStorage, provider);
+    const desired = { viewKey: capturedKey, model: nextModel, provider, sequence: ++choiceSequenceRef.current };
+    latestChoiceRef.current = desired;
+    setOptimisticChoice(desired);
+    setStatusMessage(`${t('chat.model')}: ${nextModel} · ${t('common.loading')}`);
+    if (choiceMutationActiveRef.current) return;
+    choiceMutationActiveRef.current = true;
+    void (async () => {
+      try {
+        while (latestChoiceRef.current) {
+          const target = latestChoiceRef.current;
+          const base = persistedSelectionRef.current;
+          if (modelViewKeyRef.current !== target.viewKey) {
+            if (latestChoiceRef.current?.sequence === target.sequence) latestChoiceRef.current = null;
+            continue;
+          }
+          if (!base || base.viewKey !== target.viewKey) break;
+          if (base.selection.model === target.model && base.selection.provider === target.provider) {
+            latestChoiceRef.current = null;
+            setOptimisticChoice(null);
+            setStatusMessage(`${t('chat.model')}: ${target.model}`);
+            break;
+          }
+          try {
+            const result = await modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: base.selection.scope, payload: {
+              action: 'set', model: target.model, provider: target.provider,
+              expectedRevision: base.selection.revision, clientRequestId: newIndependentRequestId()
+            } });
+            if (!result.ok) throw new Error(result.error.message);
+            if (modelViewKeyRef.current !== target.viewKey) continue;
+            persistedSelectionRef.current = { viewKey: target.viewKey, selection: result.value };
+            setScopedModel({ viewKey: target.viewKey, selection: result.value });
+            if (latestChoiceRef.current?.sequence !== target.sequence) continue;
+            latestChoiceRef.current = null;
+            setOptimisticChoice(null);
+            if (activeSpacePath) saveSpaceModel(activeSpacePath, target.model, window.localStorage, target.provider);
+            setSelectedModel(target.model);
+            setSelectedModelProvider(target.provider);
+            setStatusMessage(`${t('chat.model')}: ${target.model}`);
+          } catch (error) {
+            if (modelViewKeyRef.current !== target.viewKey) continue;
+            let refreshed: Awaited<ReturnType<typeof modelClient.request<'modelSelection'>>> | null = null;
+            try {
+              refreshed = await modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: base.selection.scope,
+                payload: { action: 'get' } });
+            } catch {
+              // A failed write with no readable confirmation must keep sending blocked.
+            }
+            if (modelViewKeyRef.current !== target.viewKey) continue;
+            if (refreshed?.ok) {
+              persistedSelectionRef.current = { viewKey: target.viewKey, selection: refreshed.value };
+              setScopedModel({ viewKey: target.viewKey, selection: refreshed.value });
+              if (latestChoiceRef.current?.sequence !== target.sequence) continue;
+            } else {
+              setCatalogSnapshot({ viewKey: target.viewKey, phase: 'error', groups: [] });
+            }
+            latestChoiceRef.current = null;
+            setOptimisticChoice(null);
+            setStatusMessage(`${t('common.error')}: ${error instanceof Error ? error.message : String(error)}`);
+            break;
+          }
         }
-        setSelectedModel(nextModel);
-        setSelectedModelProvider(provider);
-        setStatusMessage(`${t('chat.model')}: ${nextModel}`);
-      })
-      .catch((error: unknown) => {
-        if (modelViewKeyRef.current === capturedKey) setStatusMessage(`${t('common.error')}: ${error instanceof Error ? error.message : String(error)}`);
-      });
+      } finally {
+        choiceMutationActiveRef.current = false;
+      }
+    })();
   }, [activeSpacePath, activeBrowserProfileId, activeBackendProfileName, activeSession?.profile, model, modelCatalog, modelProvider,
     setSelectedModel, setSelectedModelProvider, spaceModelSelection, modelViewKey, modelClient, showUntestedBetas, t]);
 
@@ -376,6 +426,9 @@ export function NativeChatMain({
     && (currentModelPair.provider || modelProvider) && currentModelPair.model
     && isProviderModelQualified(currentModelPair.provider || modelProvider, currentModelPair.model, activeBrowserProfileId,
       activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage));
+  const selectableModels = visibleModelCatalog.flatMap(group => group.configured && group.providerId
+    ? group.models.filter(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)) : []);
+  const emptyQualifiedCatalog = modelCatalogLoaded && selectableModels.length > 0 && selectableModels.every(entry => !entry.qualified);
   const sessionReasoningEffort = resolveSessionReasoningEffort(activeSession?.reasoning_selection, model, modelProvider);
   useEffect(() => {
     if (!activeSessionId || activeSession?.session_id !== activeSessionId || sessionReasoningEffort === null
@@ -427,11 +480,12 @@ export function NativeChatMain({
   const multiAgentSelection = isMultiAgentModelSelection({ model, provider: modelProvider });
   const multiAgentBetaBlocked = (!AI_ORCHESTRATION_ENABLED || !showUntestedBetas)
     && (multiAgentSelection || Boolean(automaticSelected && currentPolicy?.response.policy.orchestrator));
-  const betaSelectionBlocked = automaticSelected
+  const betaSelectionBlocked = modelCatalogLoaded && (automaticSelected
     ? unqualifiedAutoModels || Boolean(currentPolicy?.response.policy.orchestrator && !showUntestedBetas)
     : multiAgentSelection ? multiAgentBetaBlocked : !modelPairAvailable
       || !isModelActive(window.localStorage, { browserProfileId: activeBrowserProfileId,
-        backendProfileName: activeBackendProfileName || (activeSession as any)?.profile || 'default' }, modelProvider, model);
+        backendProfileName: activeBackendProfileName || (activeSession as any)?.profile || 'default' }, modelProvider, model)
+      || (!showUntestedBetas && !modelQualified));
   const automaticAvailable=currentPolicy?canExecuteAutomaticPolicy(currentPolicy.response):false;
   const automaticBlocked=Boolean(automaticSelected&&!automaticAvailable);
   const availableCommands=writerProtected?noCommandCapabilities:currentModeGate?.response.capabilities??commandCapabilities;
@@ -582,6 +636,9 @@ export function NativeChatMain({
   // Wrap onSend to synthesize @tabs context and enqueue when busy instead of losing the message
   const handleSend = async (text: string, queuedEffort?: string): Promise<void> => {
     if (writerProtected) { setStatusMessage(t('spaceAssistant.writerProtected')); return; }
+    if (pendingChoice) { setStatusMessage(`${t('chat.model')}: ${pendingChoice.model} · ${t('common.loading')}`); return; }
+    if (modelCatalogLoading) { setStatusMessage(t('settings.panels.providers.loadingModels')); return; }
+    if (modelCatalogError) { setStatusMessage(t('chat.modelCatalogUnavailable')); return; }
     if(automaticBlocked||policyPending===policyOperationKey){setStatusMessage(modelPolicyReason(locale,currentPolicy?.response.executionAvailability.reasonCode));return;}
     const requestedEffort = queuedEffort === undefined ? effectiveReasoningEffort : queuedEffort;
     const sendEffort = modelReasoningEfforts.includes(requestedEffort) ? requestedEffort : '';
@@ -883,7 +940,7 @@ export function NativeChatMain({
       <ChatComposer
         automaticPolicy={{active:automaticSelected,available:automaticAvailable,qualified:automaticModelsQualified,
           allowedModels:automaticAllowedModels}}
-        sendBlocked={automaticBlocked||policyPending===policyOperationKey||betaSelectionBlocked}
+        sendBlocked={automaticBlocked||policyPending===policyOperationKey||betaSelectionBlocked||modelCatalogLoading||modelCatalogError||Boolean(pendingChoice)}
         betaSelectionBlocked={betaSelectionBlocked}
         multiAgentBetaBlocked={multiAgentBetaBlocked}
         modelQualified={automaticSelected?automaticModelsQualified:modelQualified}
@@ -903,11 +960,13 @@ export function NativeChatMain({
         modelProvider={modelProvider}
         modelProviderLabel={modelProviderLabel}
         modelOptions={visibleModelCatalog}
+        emptyQualifiedCatalog={emptyQualifiedCatalog}
         noActiveModels={modelCatalogLoaded && !visibleModelCatalog.some(group => group.configured && group.providerId
           && group.models.some(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)))}
         onOpenModelSettings={onOpenModelSettings}
         requestedLunaInCatalog={modelCatalogLoaded ? requestedLunaInCatalog : undefined}
         modelCatalogError={modelCatalogError}
+        modelCatalogLoading={modelCatalogLoading}
         antigravityCatalogUnavailable={modelCatalogLoaded && isAntigravityCatalogUnavailable}
         antigravityCatalogUnknown={(modelCatalogLoaded || modelCatalogError) && isAntigravityCatalogUnknown}
         antigravityCatalogReady={modelCatalogLoaded && String(catalogStatus.antigravity || '').toLowerCase() === 'ready'}

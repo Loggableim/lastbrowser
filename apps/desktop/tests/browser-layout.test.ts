@@ -22,8 +22,8 @@ describe('browser shell layout', () => {
     const guardedStart = readRendererFile('guarded-native-chat-start.ts');
 
     expect(composer).toContain('onChange={(event) => onModelChange(event.target.value)}');
-    expect(chatMain).toContain('saveSpaceModel(activeSpacePath, nextModel, window.localStorage, provider)');
-    expect(chatMain).toContain('setSelectedModelProvider(provider)');
+    expect(chatMain).toContain('saveSpaceModel(activeSpacePath, target.model, window.localStorage, target.provider)');
+    expect(chatMain).toContain('setSelectedModelProvider(target.provider)');
     expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName })');
     expect(chatMain).toContain("operation: 'modelSelection'");
     expect(app).toContain('prepareGuardedNativeChatStart(createGuardedStartInput())');

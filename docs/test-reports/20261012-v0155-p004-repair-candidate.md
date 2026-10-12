@@ -91,3 +91,13 @@ The new files are for targeted validation of startup Space binding and
 same-Space catalog refresh. Do not repeat the prior MiMo inference or interpret
 its prior failure as fixed by these changes. Preserve the earlier candidate's
 P004 FAIL as bound to `ca564a91`; no full P004 PASS is claimed for this build.
+
+The four named assets were uploaded to the existing private draft
+[v0.1.54 + v0.1.55 VM-Testkandidaten (NICHT VEROEFFENTLICHEN)](https://github.com/Loggableim/lastbrowser/releases/tag/untagged-db01e8964de38692c212).
+GitHub confirmed `isDraft: true`; its byte sizes and SHA-256 values match the
+local files above. The artifacts remain unsigned and are not published.
+
+- [Setup download](https://github.com/Loggableim/lastbrowser/releases/download/untagged-db01e8964de38692c212/Lastbrowser-0.1.55-UNSIGNED-VMTEST-151df72c-x64-setup.exe)
+- [Portable download](https://github.com/Loggableim/lastbrowser/releases/download/untagged-db01e8964de38692c212/Lastbrowser-0.1.55-UNSIGNED-VMTEST-151df72c-x64-portable.exe)
+- [Resource hash manifest](https://github.com/Loggableim/lastbrowser/releases/download/untagged-db01e8964de38692c212/Lastbrowser-0.1.55-UNSIGNED-VMTEST-151df72c-resource-hashes.json)
+- [Offline preview receipt](https://github.com/Loggableim/lastbrowser/releases/download/untagged-db01e8964de38692c212/Lastbrowser-0.1.55-UNSIGNED-VMTEST-151df72c-preview-result.json)

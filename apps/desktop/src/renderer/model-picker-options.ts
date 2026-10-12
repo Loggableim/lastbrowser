@@ -25,7 +25,8 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
     && providerCatalog.scope.backendProfileId === selection.scope.backendProfileId
     && providerCatalog.scope.spaceId === selection.scope.spaceId;
   const currentModels = providerCatalog && catalogScopeMatches
-    ? new Map(providerCatalog.providers.map(provider => [provider.providerId, new Set(provider.models.filter(model => model.listed.status === 'current').map(model => model.id))]))
+    ? new Map(providerCatalog.providers.map(provider => [provider.providerId, new Set(provider.models.filter(model =>
+      model.listed.status === 'current' || model.listed.status === 'configured').map(model => model.id))]))
     : null;
   const providers = new Map((selection.providers ?? []).map(provider => [provider.id, provider]));
   return (selection.groups ?? [])

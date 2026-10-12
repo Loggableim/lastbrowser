@@ -340,6 +340,39 @@ def test_provider_model_catalog_marks_only_api_listed_ids_current():
     assert live["liveTest"] == {"status": "not_run"}
 
 
+def test_ai_gateway_cached_api_catalog_keeps_its_source_and_observation(monkeypatch):
+    from datetime import datetime, timezone
+    from cli import models
+
+    checked_at = datetime(2026, 10, 12, tzinfo=timezone.utc).isoformat()
+    monkeypatch.setattr(models, "_ai_gateway_catalog_cache", [("controlled-model", "recommended")])
+    monkeypatch.setattr(models, "_ai_gateway_catalog_source", "provider_api")
+    monkeypatch.setattr(models, "_ai_gateway_catalog_checked_at", checked_at)
+    source = {}
+    assert models.provider_model_ids("ai-gateway", source_out=source) == ["controlled-model"]
+    assert source == {"source": "provider_api", "checkedAt": checked_at}
+
+
+def test_explicit_provider_model_allowlist_is_selectable_but_not_claimed_as_api_listed():
+    from runtime.independent.scoped_models import _provider_model_catalog, public_catalog
+
+    scope = Scope(backend_profile_id="00000000-0000-0000-0000-000000000001",
+                  space_id="00000000-0000-0000-0000-000000000002", browser_profile_id="browser-a")
+    normalized = public_catalog({"groups": [{"provider_id": "custom-provider", "provider": "Custom", "models": [
+        {"id": "configured-model", "label": "Configured"}]}]}, {"providers": []},
+        {"providers": {"custom-provider": {"models": ["configured-model"]}}})
+    assert normalized["groups"][0]["models"][0]["modelSource"] == "explicit_config"
+    catalog = {"providerModelCatalog": {"providers": [{"providerId": "custom-provider", "source": "curated_fallback",
+        "status": "stale", "modelIds": ["curated-model"]}]}}
+    groups = [{"provider_id": "custom-provider", "provider": "Custom", "configured": True, "models": [
+        {"id": "configured-model", "label": "Configured", "modelSource": "explicit_config",
+         "nativeAvailability": {"available": True, "reasonCode": None}}]}]
+    model = _provider_model_catalog(scope, catalog, groups)["providers"][0]["models"][0]
+    assert model["listed"] == {"status": "configured", "source": "explicit_config", "freshness": "unknown"}
+    assert model["qualification"]["independent"]["available"] is True
+    assert model["liveTest"]["status"] == "not_run"
+
+
 def test_capability_catalog_reuses_capture_and_rejects_stale_evidence(monkeypatch):
     import threading
     from pathlib import Path

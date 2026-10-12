@@ -150,7 +150,7 @@ describe('provider-aware model selection', () => {
     expect(groups[0].models.find(model=>model.id==='legacy-only')?.supportsIndependent).toBe(false);
     expect(manualModelPickerOptions(groups).find(group=>group.providerId==='configured')?.models.find(model=>model.id==='legacy-only')?.supportsIndependent).toBe(false);
   });
-  it('uses only current models from the scope-matched shared provider catalog', () => {
+  it('uses current API listings and explicit configured models from the scope-matched catalog', () => {
     const scope = { backendProfileId: 'p', spaceId: 's', browserProfileId: 'b' };
     const selection = { schemaVersion: 1 as const, scope, revision: 5, model: 'current', provider: 'provider', configured: true, supportsIndependent: true,
       groups: [{ provider: 'Provider', provider_id: 'provider', configured: true, models: [
@@ -162,11 +162,11 @@ describe('provider-aware model selection', () => {
           { id: 'current', label: 'Current', listed: { status: 'current', source: 'provider_api', freshness: 'unknown' },
             features: { contextLength: { status: 'unknown', value: null, source: 'unknown' }, tools: { status: 'unknown', value: null, source: 'unknown' }, vision: { status: 'unknown', value: null, source: 'unknown' }, reasoningEfforts: { status: 'unknown', value: null, source: 'unknown' } },
             qualification: { independent: { status: 'available', available: true, reasonCode: null } }, liveTest: { status: 'not_run' } },
-          { id: 'fallback', label: 'Fallback', listed: { status: 'stale', source: 'curated_fallback', freshness: 'stale' },
+        { id: 'fallback', label: 'Fallback', listed: { status: 'configured', source: 'explicit_config', freshness: 'unknown' },
             features: { contextLength: { status: 'unknown', value: null, source: 'unknown' }, tools: { status: 'unknown', value: null, source: 'unknown' }, vision: { status: 'unknown', value: null, source: 'unknown' }, reasoningEfforts: { status: 'unknown', value: null, source: 'unknown' } },
             qualification: { independent: { status: 'unknown', available: false, reasonCode: 'catalog_not_currently_listed' } }, liveTest: { status: 'not_run' } }
         ] }] } };
-    expect(mapScopedModelPickerOptions(selection).flatMap(group => group.models.map(model => model.id))).toEqual(['current']);
+    expect(mapScopedModelPickerOptions(selection).flatMap(group => group.models.map(model => model.id))).toEqual(['current', 'fallback']);
     expect(mapScopedModelPickerOptions({ ...selection, providerModelCatalog: { ...selection.providerModelCatalog, scope: { ...scope, spaceId: 'other-space' } } })
       .flatMap(group => group.models.map(model => model.id))).toEqual(['current', 'fallback']);
   });

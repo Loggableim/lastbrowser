@@ -21,7 +21,7 @@ describe('retired provider in legacy profile', () => {
     expect(normalizeSetupState({ provider: 'antigravity', model: 'legacy-model', cloudSetupComplete: true })).toMatchObject({ provider: '', model: '' });
   });
   it('filters a stale ready catalog as well as unavailable catalogs', () => {
-    const catalog: any = { scope: {}, revision: 1, catalog_status: { antigravity: 'ready' }, groups: [
+    const catalog: any = { scope: { backendProfileId: 'p', spaceId: 's', browserProfileId: 'b' }, revision: 1, catalog_status: { antigravity: 'ready' }, groups: [
       { provider_id: 'antigravity', provider: 'Antigravity', configured: true, models: [{ id: 'legacy-model', label: 'Legacy' }] },
       { provider_id: 'custom:antigravity-google', provider: 'Antigravity (Google)', configured: true, models: [{ id: 'legacy-model', label: 'Legacy' }] },
       { provider_id: 'openai', provider: 'OpenAI', configured: true, models: [{ id: 'gpt-5.5', label: 'GPT' }] }

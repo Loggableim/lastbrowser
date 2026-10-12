@@ -392,7 +392,9 @@ const decoders: { [K in IndependentOperation]: (value: unknown) => IndependentOp
           && text(provider.providerId) && text(provider.label) && boolean(provider.configured) && isIndependentRecord(provider.discovery)
           && oneOf(provider.discovery.status, ['listed', 'stale', 'unavailable', 'unknown']) && text(provider.discovery.source)
           && nullable(provider.discovery.checkedAt, timestamp) && text(provider.discovery.freshness) && Array.isArray(provider.models)))) return false;
-    if (v.providerModelCatalog && !sameAssistantScope(v.providerModelCatalog.scope as ScopedModelSelection['scope'], v.scope as ScopedModelSelection['scope'])) return false;
+    if (v.providerModelCatalog && isIndependentRecord(v.providerModelCatalog)
+      && (!isIndependentScope(v.providerModelCatalog.scope)
+        || !sameAssistantScope(v.providerModelCatalog.scope, v.scope as ScopedModelSelection['scope']))) return false;
     return (v.groups ?? []).every(group => [...group.models, ...(group.extra_models ?? [])].every(entry => {
       const availability = entry.nativeAvailability;
       return availability === undefined || availability.provider === group.provider_id && availability.model === entry.id

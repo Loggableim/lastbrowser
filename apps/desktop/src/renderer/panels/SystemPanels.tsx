@@ -2403,13 +2403,17 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     }
     void (async () => {
       try {
-        const resolved = await window.lastbrowser.independent.request({ schemaVersion: 1, operation: 'resolveScope',
+        const catalogClient = new IndependentAssistantClient(window.lastbrowser.independent);
+        const resolvedResult = await catalogClient.request({ schemaVersion: 1, operation: 'resolveScope',
           payload: { browserProfileId: activeProfileId, workspacePath: activeSpacePath || null }, backendProfileName: activeBackendProfileName });
-        if (!resolved.ok || resolved.value.scope.browserProfileId !== activeProfileId) throw Error('provider_catalog_scope_unavailable');
-        const result = await window.lastbrowser.independent.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope,
+        if (!resolvedResult.ok) throw Error('provider_catalog_scope_unavailable');
+        const resolved = resolvedResult.value;
+        if (resolved.scope.browserProfileId !== activeProfileId) throw Error('provider_catalog_scope_unavailable');
+        const catalogResult = await catalogClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.scope,
           payload: { action: 'get', includeCatalog: true } });
-        if (!result.ok || !sameAssistantScope(result.value.scope, resolved.value.scope)) throw Error('provider_catalog_unavailable');
-        if (active) setCatalogState({ key: providerCatalogKey, selection: result.value, loading: false, error: '' });
+        if (!catalogResult.ok) throw Error('provider_catalog_unavailable');
+        if (!sameAssistantScope(catalogResult.value.scope, resolved.scope)) throw Error('provider_catalog_unavailable');
+        if (active) setCatalogState({ key: providerCatalogKey, selection: catalogResult.value, loading: false, error: '' });
       } catch (cause) {
         if (active) setCatalogState({ key: providerCatalogKey, selection: null, loading: false, error: cause instanceof Error ? cause.message : 'provider_catalog_unavailable' });
       }

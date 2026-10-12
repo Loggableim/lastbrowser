@@ -1,5 +1,5 @@
 /**
- * Lastbrowser Client-Side Language Router
+ * LastBrowser Client-Side Language Router
  * Runs synchronously in <head> to prevent FOUC / layout shift
  */
 (function() {

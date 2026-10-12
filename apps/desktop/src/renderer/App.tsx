@@ -111,6 +111,7 @@ import {
   getSavedMemoryEstimateMb,
   type ClosedTab
 } from './tabs.js';
+import { resolveShellBack, resolveShellForward } from './shell-history.js';
 import { brandAssets, sidebarIconForPanel } from './brand.js';
 import { categoryLabels, modelNote, providerPresentation, tierLabels } from './provider-presentation.js';
 import {
@@ -1424,6 +1425,8 @@ function AppContent(): JSX.Element {
   const createSessionRequestRef = useRef(0);
   const browserFrameRef = useRef<HTMLDivElement | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
+  /** Page Back left when the start page has no webview history entry, per tab. */
+  const shellForwardUrlRef = useRef<Map<string, string>>(new Map());
   const zoomShortcutHandlersRef = useRef<BrowserZoomShortcutHandlers | null>(null);
   const [activeZoomFactor, setActiveZoomFactor] = useState(1);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
@@ -1851,18 +1854,10 @@ function AppContent(): JSX.Element {
           setActivePanel('browser');
           break;
         case 'history-back':
-          try {
-            webviewRef.current?.goBack();
-          } catch {
-            // ignore
-          }
+          goBackInBrowser();
           break;
         case 'history-forward':
-          try {
-            webviewRef.current?.goForward();
-          } catch {
-            // ignore
-          }
+          goForwardInBrowser();
           break;
         case 'toggle-fullscreen':
           void window.lastbrowser.window?.toggleFullScreen?.();
@@ -2591,12 +2586,73 @@ function AppContent(): JSX.Element {
     };
   }, [activeSessionId, refreshWorkspace, status?.sidekick, workspacePanelCollapsed, workspacePath, workspaceRefreshNonce]);
 
-  function navigate(url: string): void {
+  function navigate(url: string, options?: { keepShellForward?: boolean; tabId?: string }): void {
+    const tabId = options?.tabId ?? activeTab.id;
     const normalized = normalizeNavigationInput(url, searchEngineId);
-    setTabs((current) => updateTabUrl(current, activeTab.id, normalized));
+    if (!options?.keepShellForward) shellForwardUrlRef.current.delete(tabId);
+    setTabs((current) => updateTabUrl(current, tabId, normalized));
     setBrowserMode(isAiBrowserHomeUrl(normalized) ? 'home' : 'web');
     setBrowserLoadError('');
     setActivePanel('browser');
+  }
+
+  function webviewHistoryFlag(method: 'canGoBack' | 'canGoForward'): boolean {
+    const view = webviewRef.current;
+    if (!view) return false;
+    try {
+      return Boolean(view[method]());
+    } catch {
+      return false;
+    }
+  }
+
+  function goBackInBrowser(): void {
+    const tabId = activeTabIdRef.current;
+    const tab = useTabStore.getState().tabs.find((item) => item.id === tabId);
+    if (!tab) return;
+    const step = resolveShellBack({
+      canGoBack: webviewHistoryFlag('canGoBack'),
+      currentUrl: tab.url,
+      startUrl: browserStartUrl
+    });
+    if (step.kind === 'webview-back') {
+      // If this step lands on the start page, Forward still has a page to restore.
+      shellForwardUrlRef.current.set(tab.id, tab.url);
+      try {
+        webviewRef.current?.goBack();
+      } catch {
+        // The guest can detach while the shortcut is in flight.
+      }
+      return;
+    }
+    if (step.kind === 'show-start') {
+      shellForwardUrlRef.current.set(tab.id, tab.url);
+      navigate(browserStartUrl, { keepShellForward: true, tabId: tab.id });
+    }
+  }
+
+  function goForwardInBrowser(): void {
+    const tabId = activeTabIdRef.current;
+    const tab = useTabStore.getState().tabs.find((item) => item.id === tabId);
+    if (!tab) return;
+    const step = resolveShellForward({
+      canGoForward: webviewHistoryFlag('canGoForward'),
+      onStartPage: isAiBrowserHomeUrl(tab.url),
+      pendingUrl: shellForwardUrlRef.current.get(tab.id) ?? null,
+      startUrl: browserStartUrl
+    });
+    if (step.kind === 'restore-page') {
+      shellForwardUrlRef.current.delete(tab.id);
+      navigate(step.url, { keepShellForward: true, tabId: tab.id });
+      return;
+    }
+    if (step.kind === 'webview-forward') {
+      try {
+        webviewRef.current?.goForward();
+      } catch {
+        // The guest can detach while the shortcut is in flight.
+      }
+    }
   }
 
   function submitNavigation(event: FormEvent): void {
@@ -5278,8 +5334,8 @@ function AppContent(): JSX.Element {
         <>
           <ModernTitlebar
             isLoading={activeTab.isLoading}
-            onGoBack={() => webviewRef.current?.goBack()}
-            onGoForward={() => webviewRef.current?.goForward()}
+            onGoBack={goBackInBrowser}
+            onGoForward={goForwardInBrowser}
             onReloadOrStop={() => {
               if (activeTab.isLoading) {
                 try {
@@ -5891,8 +5947,8 @@ function AppContent(): JSX.Element {
               onMouseDown={handleTopbarMouseDown}
             >
               <div className="traffic-actions">
-                <button type="button" aria-label="Back" onClick={() => webviewRef.current?.goBack()}><ChevronLeft size={17} /></button>
-                <button type="button" aria-label="Forward" onClick={() => webviewRef.current?.goForward()}><ChevronRight size={17} /></button>
+                <button type="button" aria-label="Back" onClick={goBackInBrowser}><ChevronLeft size={17} /></button>
+                <button type="button" aria-label="Forward" onClick={goForwardInBrowser}><ChevronRight size={17} /></button>
                 <button
                   type="button"
                   aria-label={activeTab.isLoading ? 'Stop loading' : 'Reload'}

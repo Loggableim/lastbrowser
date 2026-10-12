@@ -381,7 +381,7 @@ describe('provider-aware model selection', () => {
     expect(app).toContain("includeCatalog: true");
     expect(app).toContain('const copilotModelSelection = resolvePreferredChatModelSelection({');
     expect(copilot).toContain('const activeModelId = modelName || selectedModel;');
-    expect(chat).toContain('setModelCatalogError(true)');
+    expect(chat).toContain("setCatalogSnapshot({ viewKey: modelViewKey, phase: 'error', groups: [] })");
     expect(chat).toContain("t('chat.retryModels')");
   });
 

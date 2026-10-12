@@ -432,6 +432,7 @@ export type ChatComposerProps = {
   noActiveModels?: boolean;
   onOpenModelSettings?: () => void;
   modelCatalogError?: boolean;
+  modelCatalogLoading?: boolean;
   antigravityCatalogUnavailable?: boolean;
   antigravityCatalogUnknown?: boolean;
   antigravityCatalogReady?: boolean;
@@ -486,6 +487,7 @@ export function ChatComposer({
   noActiveModels = false,
   onOpenModelSettings,
   modelCatalogError=false,
+  modelCatalogLoading=false,
   antigravityCatalogUnavailable=false,
   antigravityCatalogUnknown=false,
   antigravityCatalogReady=false,
@@ -624,7 +626,7 @@ export function ChatComposer({
               >
                 {AI_ORCHESTRATION_ENABLED&&automaticPolicy&&<option value="__lastbrowser_auto_policy__" disabled={!automaticPolicy.available || !ready || running}>AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
                 {!selectedModelVisible && <option value="" disabled>
-                  {noActiveModels ? t('settings.panels.providers.noActiveModels') : t('chat.noManualModels')}
+                  {modelCatalogLoading ? t('settings.panels.providers.loadingModels') : noActiveModels ? t('settings.panels.providers.noActiveModels') : t('chat.noManualModels')}
                 </option>}
                 {manualModelPickerOptions(modelOptions).map((group) => (
                   <optgroup key={group.providerId || group.provider} label={group.provider} disabled={group.configured===false} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
@@ -666,6 +668,7 @@ export function ChatComposer({
           </details>
         </div>
       </div>
+      {modelCatalogLoading&&<div className="composer-model-notice" role="status">{t('settings.panels.providers.loadingModels')}</div>}
       {modelCatalogError&&<div className="composer-model-notice" role="alert">
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
@@ -678,7 +681,7 @@ export function ChatComposer({
         <span role="status">{t('settings.panels.providers.betaCatalogEmpty')}</span>
         <ProviderBetaCatalogToggle />
       </div>}
-      {betaSelectionBlocked&&!emptyQualifiedCatalog&&<div className="composer-model-notice" role="status">{multiAgentBetaBlocked
+      {betaSelectionBlocked&&!modelCatalogLoading&&!modelCatalogError&&!emptyQualifiedCatalog&&<div className="composer-model-notice" role="status">{multiAgentBetaBlocked
         ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</div>}
       {showManualModels&&<section id="composer-manual-models" className="composer-manual-models" role="region" aria-label={t('chat.chooseModelManually')}
         onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}}>

@@ -37,6 +37,7 @@ const models = {A:{model:'model-a',provider:'controlled-provider',revision:1,con
 const modelGroups=[{provider:'Controlled provider',provider_id:'controlled-provider',configured:true,models:['model-a','model-b'].map(id=>({id,label:id,supportsIndependent:true,contextLength:8192}))},{provider:'Local',provider_id:'custom:local',configured:true,models:[{id:'gemma4:31b',label:'Literal local model',supportsIndependent:true,contextLength:8192,reasoning_efforts:['low','high']}],extra_models:[{id:'extra-local-model',label:'Extra local model',supportsIndependent:true,contextLength:8192,reasoning_efforts:['medium']}]},{provider:'Offline provider',provider_id:'offline-provider',configured:false,models:[{id:'offline-model',label:'Unavailable model',supportsIndependent:true,contextLength:8192}]},{provider:'Orchestration',provider_id:'',configured:true,models:[{id:'teamwork',label:'Teamwork',supportsIndependent:false},{id:'smart-track',label:'Smart Track',supportsIndependent:false},{id:'smart-track-low',label:'Smart Track Low',supportsIndependent:false},{id:'smart-track-medium',label:'Smart Track Medium',supportsIndependent:false},{id:'smart-track-high',label:'Smart Track High',supportsIndependent:false}]}];
 const scopedModelGroups=name=>modelGroups.map(group=>({...group,models:group.models.map(entry=>({...entry,...(group.provider_id?{nativeAvailability:{schemaVersion:1,supported:true,available:true,reasonCode:null,provider:group.provider_id,model:entry.id,scope:scopes[name],selectionRevision:models[name].revision}}:{})})),...(group.extra_models?{extra_models:group.extra_models.map(entry=>({...entry,nativeAvailability:{schemaVersion:1,supported:true,available:true,reasonCode:null,provider:group.provider_id,model:entry.id,scope:scopes[name],selectionRevision:models[name].revision}}))}:{})}));
 const queues = { A:[], B:[] }, sequences={A:0,B:0}, calls=[];
+const modelFaults={getDelay:0,setDelay:0,failGet:false,failNextSet:false};
 const question = revision => ({schemaVersion:1,kind:'question',basedOnRevision:revision,topic:'purpose',prompt:'What should this Space help with?',options:[{id:'research',label:'Research'},{id:'work',label:'Work'},{id:'personal',label:'Personal'}],allowFreeText:true,selection:'single',understood:[],profilePatch:{}});
 const permissions = {revision:1,browserOrigins:[],networkOrigins:[],connectorBindings:[],allowedWorkspaceRoots:[],allowedEffects:[],rawCdp:false,terminal:false,desktop:false};
 const permissionStates={A:{...permissions,networkOrigins:['https://network.controlled.invalid'],allowedWorkspaceRoots:['C:\\controlled\\a'],allowedEffects:['send']},B:structuredClone(permissions)},delays={preview:0,permission:0};
@@ -66,6 +67,14 @@ const transport={request:async request=>{
     case 'localAiBootstrap': return {ok:true,value:{schemaVersion:1,installKey:'router-lfm2.5-230m-qad-q4_0-v1',revision:0,state:'idle',jobId:null,attempt:0,downloadedBytes:0,verifiedBytes:0,totalBytes:149091630,artifactId:'LiquidAI/LFM2.5-230M-GGUF:LFM2.5-230M-QAD-Q4_0',artifactRevision:'b27f8147d98080b0d6f063ff41de6e381ea9a530',sha256:'e75f83268de11b2a1bcfab5f3b5c5c0c97569ddbbc0990aad88437e45b8ba292',licenseLabel:'LFM Open License v1.0',licenseUrl:'https://huggingface.co/LiquidAI/LFM2.5-230M-GGUF/blob/b27f8147d98080b0d6f063ff41de6e381ea9a530/LICENSE',commercialThresholdUsd:10000000,executionUnavailable:true,errorCode:null,updatedAt:at()}};
     case 'resolveScope': {const label=request.payload.workspacePath.endsWith('a')?'A':'B';return {ok:true,value:{schemaVersion:1,scope:scopes[label],spaceName:'Space '+label,workspacePath:request.payload.workspacePath,bindingRevision:1,setupStatus:'confirmed'}};}
     case 'modelSelection': {
+      if(payload.action==='get'){
+        if(modelFaults.getDelay)await new Promise(resolve=>setTimeout(resolve,modelFaults.getDelay));
+        if(modelFaults.failGet)return {ok:false,error:{message:'Controlled model discovery failed'}};
+      }
+      if(payload.action==='set'){
+        if(modelFaults.setDelay)await new Promise(resolve=>setTimeout(resolve,modelFaults.setDelay));
+        if(modelFaults.failNextSet){modelFaults.failNextSet=false;return {ok:false,error:{message:'Controlled model save failed'}};}
+      }
       const model=models[name];if(payload.action==='set'){assertRevision(payload,model.revision);traceOrder.push('space-model:'+payload.model);model.model=payload.model;model.provider=payload.provider;model.revision++;}
       return {ok:true,value:{schemaVersion:1,scope:state.scope,...copy(model),configured:model.configured!==false,supportsIndependent:model.model!=='teamwork',...(model.model==='teamwork'?{reasonCode:'independent_orchestration_not_supported'}:{}),groups:copy(scopedModelGroups(name)),providers:[{id:'offline-provider',display_name:'Offline provider',has_key:false,oauth_connected:false,auth_state:'not_configured',provider_available:false,models:[]}]}};
     }
@@ -275,12 +284,12 @@ function Fixture(){
  {local&&<LocalAiSetupPane key={name} browserProfileId="controlled" workspacePath={selection.workspacePath} ready={true}/>}
  </main></DesktopI18nProvider>;
 }
-window.__independentSmoke={scopes,snapshots,models,connections,bindings,definitions,permissionStates,delays,calls,navigation,nativeCalls,guardedChatStarts,nativeModes,nativeSessions,nativeChildren,activateNative:()=>activateNative(),betaEnabled:()=>readShowUntestedProviderBetas(),resetBeta:()=>setShowUntestedProviderBetas(false),closeAssistant:()=>closeAssistant(),childDelta:(name,index,delta,foreign=false)=>{const child=nativeChildren[name][index];const event={...copy(child),kind:'answer_delta',sequence:child.watermark+1,payload:{delta},at:at()};delete event.messages;if(foreign)event.scope=scopes[name==='A'?'B':'A'];else{child.messages[0].content+=delta;child.watermark++;child.revision++;}for(const listener of nativeListeners)listener({streamId:child.parentTurnId,event:'subagent_event',data:{childEvent:event}});},locale:value=>chooseLocale(value),showNative:()=>showNative(),showStart:()=>showStart(),select:name=>choose(name),entry:name=>copy(useSpaceAssistantStore.getState().entries[assistantScopeKey(scopes[name])]),poll:name=>controller.poll(scopes[name]),load:name=>controller.load(scopes[name]),dispose:()=>controller.dispose(),foreign:()=>{foreign=true},delta:(name,delta,stale=false)=>{
+window.__independentSmoke={scopes,snapshots,models,connections,bindings,definitions,permissionStates,delays,calls,navigation,nativeCalls,guardedChatStarts,nativeModes,nativeSessions,nativeChildren,activateNative:()=>activateNative(),betaEnabled:()=>readShowUntestedProviderBetas(),enableBeta:()=>setShowUntestedProviderBetas(true),resetBeta:()=>setShowUntestedProviderBetas(false),closeAssistant:()=>closeAssistant(),childDelta:(name,index,delta,foreign=false)=>{const child=nativeChildren[name][index];const event={...copy(child),kind:'answer_delta',sequence:child.watermark+1,payload:{delta},at:at()};delete event.messages;if(foreign)event.scope=scopes[name==='A'?'B':'A'];else{child.messages[0].content+=delta;child.watermark++;child.revision++;}for(const listener of nativeListeners)listener({streamId:child.parentTurnId,event:'subagent_event',data:{childEvent:event}});},locale:value=>chooseLocale(value),showNative:()=>showNative(),showStart:()=>showStart(),select:name=>choose(name),entry:name=>copy(useSpaceAssistantStore.getState().entries[assistantScopeKey(scopes[name])]),poll:name=>controller.poll(scopes[name]),load:name=>controller.load(scopes[name]),dispose:()=>controller.dispose(),foreign:()=>{foreign=true},delta:(name,delta,stale=false)=>{
  const state=snapshots[name],assistant=state.messages.findLast(m=>m.role==='assistant'),user=state.messages.find(m=>m.role==='user'&&m.turnId===assistant?.turnId);
  if(!stale&&assistant?.pending)assistant.content+=delta;
  queues[name].push({schemaVersion:1,eventId:id(),scope:scopes[name],seq:++sequences[name],at:at(),kind:'assistant',payload:{conversationId:state.conversationId,turnId:assistant.turnId,requestId:user.clientRequestId,delta,revision:stale?state.revision-1:state.revision}});
 }};
-Object.assign(window.__independentSmoke,{browserFlows,browserFaults,nativeGoalFaults,nativeGoalRevisions,nativePolicies,autoAvailability,traceOrder,localState,localScans,localRuntime,runtimeFaults,showLocal:()=>showLocal(),showAssistant:()=>showAssistant(),showNativeAgain:()=>showNative(),refreshNative:()=>refreshNative(),controlRecovery:()=>{
+Object.assign(window.__independentSmoke,{browserFlows,browserFaults,nativeGoalFaults,nativeGoalRevisions,nativePolicies,autoAvailability,traceOrder,modelFaults,localState,localScans,localRuntime,runtimeFaults,showLocal:()=>showLocal(),showAssistant:()=>showAssistant(),showNativeAgain:()=>showNative(),refreshNative:()=>refreshNative(),controlRecovery:()=>{
   useNativeChatControls.setState({records:{}});nativeSessions.A.native_controls={schemaVersion:1,scope:scopes.A,sessionId:nativeSessions.A.session_id,streamId:'native-a',writerGeneration:id(),processExited:false,status:'running',pendingControls:[]};
   const snapshot=nativeSessions.A.native_controls;snapshot.pendingControls=[{schemaVersion:1,type:'approval',requestId:'approval-exact-a',scope:scopes.A,sessionId:nativeSessions.A.session_id,streamId:'native-a',writerGeneration:snapshot.writerGeneration,data:{command:'controlled write',description:'Controlled approval'}},{schemaVersion:1,type:'clarify',requestId:'question-exact-a',scope:scopes.A,sessionId:nativeSessions.A.session_id,streamId:'native-a',writerGeneration:snapshot.writerGeneration,data:{question:'Which controlled file?',choices_offered:['First','Second']}}];refreshNative();
 }});
@@ -303,11 +312,11 @@ async function parent() {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-independent-renderer-'));
   try {
     require('esbuild').buildSync({ stdin: { contents: fixture, loader: 'tsx', resolveDir: path.join(root, 'apps/desktop') },
-      bundle: true, platform: 'browser', format: 'iife', target: 'chrome130', loader:{'.woff2':'dataurl'}, outfile: path.join(temp, 'fixture.js') });
+      bundle: true, platform: 'browser', format: 'iife', target: 'chrome130', define:{'import.meta.env.VITE_ENABLE_AI_ORCHESTRATION':'"false"'}, loader:{'.woff2':'dataurl'}, outfile: path.join(temp, 'fixture.js') });
     for(const file of ['lastbrowser-logo.png','sidekick-avatar.png'])fs.copyFileSync(path.join(root,'brand/assets',file),path.join(temp,file));
     fs.writeFileSync(path.join(temp, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:"><link rel="stylesheet" href="fixture.css"><style>:root{--bg:#10141b;--bg-primary:#10141b;--bg-secondary:#18212d;--bg-tertiary:#202c3a;--text:#edf3fa;--text-primary:#edf3fa;--text-secondary:#b8c5d5;--border:#35445a;--border-color:#35445a;--accent:#82b6ff;--accent-color:#82b6ff}body{margin:0;background:#10141b;color:#edf3fa;font:15px system-ui}main{padding:24px}main>.space-assistant{position:absolute;right:24px;top:24px;height:calc(100vh - 48px);width:520px}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style></head><body><div id="root"></div><script src="fixture.js"></script></body></html>');
     const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
-    const selectedMode=['--ux-only','--child-only','--goal-only','--model-picker-only','--local-ai-only'].find(mode=>process.argv.includes(mode));
+    const selectedMode=['--ux-only','--child-only','--goal-only','--model-picker-only','--local-ai-only','--chatux-only'].find(mode=>process.argv.includes(mode));
     const child = spawn(require('electron'), [__filename, '--electron-child', temp, ...(selectedMode?[selectedMode]:[])], { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let stderr = '', stdout = '';
     child.stdout.on('data', value => { stdout += value.toString(); });
@@ -369,6 +378,51 @@ async function electronChild(temp, mode='') {
         assert.equal(await run(`window.__independentSmoke.calls.filter(c=>c.operation==='localAi'||c.operation==='localAiHardwareInventory').length`),0);
         assert(await run(`document.querySelector('.local-ai-setup').textContent.length>0`));
         log('local-ai-test-build-boundary:passed',{bundledStoreAndInferenceUnavailable:true,noActionsOrTransport:true,externalProvidersRemainSeparate:true});
+        await run(`window.__independentSmoke.dispose()`);clearTimeout(timeout);window.destroy();app.quit();return;
+      }
+      if(mode==='--chatux-only'){
+        await run(`window.__independentSmoke.select('A')`);
+        await until(`document.querySelector('.space-assistant-space-name')?.textContent==='Space A'`, 'Fixture did not return to A before chat entry');
+        await run(`window.__independentSmoke.modelFaults.getDelay=300;window.__independentSmoke.showNative()`);
+        await until(`!!document.querySelector('.chat-composer .composer-model-notice[role=status]')`, 'New chat did not show catalog loading before picker interaction');
+        assert.equal(await run(`document.querySelector('.chat-composer').textContent.includes('No provider and model pair has a current successful chat qualification')`),false);
+        await until(`document.querySelector('.composer-model select')?.value==='@controlled-provider:model-a'`, 'New chat did not discover its scoped models without opening picker');
+        assert.equal(await run(`!!document.querySelector('.composer-beta-catalog-opt-in')`),true,'Only a loaded, genuinely unqualified catalog shows beta opt-in');
+        assert.equal(await run(`window.__independentSmoke.calls.some(c=>c.operation==='modelSelection'&&c.payload.action==='get'&&c.payload.includeCatalog===true&&c.scope.spaceId===window.__independentSmoke.scopes.A.spaceId)`),true);
+        await run(`window.__independentSmoke.modelFaults.getDelay=350;window.__independentSmoke.select('B')`);
+        await until(`!!document.querySelector('.chat-composer .composer-model-notice[role=status]')`, 'Scope change did not enter loading state');
+        await run(`window.__independentSmoke.select('A')`);
+        await until(`document.querySelector('.composer-model select')?.value==='@controlled-provider:model-a'&&!document.querySelector('.chat-composer .composer-model-notice[role=status]')`, 'Delayed B response replaced A catalog');
+        await run(`window.__independentSmoke.modelFaults.getDelay=0;window.__independentSmoke.modelFaults.failGet=true;window.__independentSmoke.remountNative()`);
+        await until(`!!document.querySelector('.chat-composer .composer-model-notice[role=alert]')`, 'Discovery failure was not distinct from empty qualification');
+        assert.equal(await run(`document.querySelector('.chat-composer').textContent.includes('No provider and model pair has a current successful chat qualification')`),false);
+        await run(`window.__independentSmoke.modelFaults.failGet=false;document.querySelector('.chat-composer .composer-model-notice[role=alert] button').click()`);
+        await until(`document.querySelector('.composer-model select')?.value==='@controlled-provider:model-a'&&!document.querySelector('.chat-composer .composer-model-notice[role=alert]')`, 'Retry did not recover scoped catalog');
+        await run(`window.__independentSmoke.enableBeta();window.__independentSmoke.modelFaults.setDelay=350`);
+        await input('.chat-composer textarea','Chosen model must be C');
+        await run(`(()=>{const picker=document.querySelector('.composer-model select');picker.value='@controlled-provider:model-b';picker.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+        await until(`document.querySelector('.composer-model select')?.value==='@controlled-provider:model-b'`, 'First choice was not visible immediately');
+        assert.equal(await run(`document.querySelector('.chat-composer button[type=submit]').disabled`),true,'Send remained available during model persistence');
+        await run(`(()=>{const picker=document.querySelector('.composer-model select');picker.value='@custom:local:gemma4:31b';picker.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+        await until(`document.querySelector('.composer-model select')?.value==='@custom:local:gemma4:31b'`, 'Latest choice was not visible immediately');
+        assert.equal(await run(`window.__independentSmoke.guardedChatStarts.length`),0);
+        await until(`window.__independentSmoke.models.A.model==='gemma4:31b'&&!document.querySelector('.chat-status-message')?.textContent.includes('Loading')`, 'Latest choice did not persist after delayed predecessor');
+        await until(`!document.querySelector('.chat-composer button[type=submit]').disabled`, 'Send stayed blocked after latest choice persisted');
+        await run(`document.querySelector('.chat-composer button[type=submit]').click()`);
+        await until(`window.__independentSmoke.navigation.sent.length===1`, 'Send did not use confirmed latest model');
+        assert.equal(await run(`window.__independentSmoke.guardedChatStarts[0].model`),'gemma4:31b');
+        assert.equal(await run(`window.__independentSmoke.guardedChatStarts[0].modelProvider`),'custom:local');
+        await run(`window.__independentSmoke.modelFaults.failNextSet=true;window.__independentSmoke.modelFaults.setDelay=80`);
+        await run(`(()=>{const picker=document.querySelector('.composer-model select');picker.value='@controlled-provider:model-a';picker.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+        await until(`document.querySelector('.composer-model select')?.value==='@controlled-provider:model-a'`, 'Failed choice lacked immediate feedback');
+        await until(`document.querySelector('.composer-model select')?.value==='@custom:local:gemma4:31b'&&document.querySelector('.chat-status-message')?.textContent.includes('Error')`, 'Failed save did not restore confirmed model');
+        await run(`window.__independentSmoke.modelFaults.failGet=true;window.__independentSmoke.modelFaults.failNextSet=true`);
+        await run(`(()=>{const picker=document.querySelector('.composer-model select');picker.value='@controlled-provider:model-a';picker.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+        await until(`!!document.querySelector('.chat-composer .composer-model-notice[role=alert]')`, 'Unverifiable save did not block sending');
+        assert.equal(await run(`document.querySelector('.chat-composer button[type=submit]').disabled`),true);
+        await run(`window.__independentSmoke.modelFaults.failGet=false;document.querySelector('.chat-composer .composer-model-notice[role=alert] button').click()`);
+        await until(`document.querySelector('.composer-model select')?.value==='@custom:local:gemma4:31b'&&!document.querySelector('.chat-composer .composer-model-notice[role=alert]')`, 'Save uncertainty did not recover from scoped reload');
+        log('chatux-initial-discovery-and-choice:passed',{entryWithoutPicker:true,loadingDistinct:true,scopeResponseIgnored:true,errorRetry:true,optimisticChoice:true,serializedLatestChoice:true,sendUsesConfirmedChoice:true,failureRestoresConfirmedChoice:true,unverifiableSaveBlocksSend:true,controlledTransportOnly:true});
         await run(`window.__independentSmoke.dispose()`);clearTimeout(timeout);window.destroy();app.quit();return;
       }
       if(mode==='--model-picker-only'){
@@ -1069,5 +1123,5 @@ async function electronChild(temp, mode='') {
     clearTimeout(timeout);window.destroy();app.quit();
   } catch (error) { log('failed', { message:error.message, stack:error.stack });clearTimeout(timeout);window?.destroy();app.exit(1); }
 }
-if (process.argv.includes('--electron-child')) void electronChild(process.argv[process.argv.indexOf('--electron-child')+1],process.argv.slice(process.argv.indexOf('--electron-child')+2).find(value=>['--ux-only','--child-only','--goal-only','--model-picker-only','--local-ai-only'].includes(value))||'');
+if (process.argv.includes('--electron-child')) void electronChild(process.argv[process.argv.indexOf('--electron-child')+1],process.argv.slice(process.argv.indexOf('--electron-child')+2).find(value=>['--ux-only','--child-only','--goal-only','--model-picker-only','--local-ai-only','--chatux-only'].includes(value))||'');
 else void parent().catch(error=>{process.stderr.write(error.stack+'\n');process.exitCode=1;});

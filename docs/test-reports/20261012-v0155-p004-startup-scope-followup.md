@@ -24,7 +24,7 @@ Self-review checked that native chat uses the same profile/Space scope shape as 
 
 ## User screenshot follow-up
 
-The user subsequently supplied a screenshot showing a rendered Lastbrowser startup screen, the explicit `Browser locked` password form, and `Checking session protection …`. The screenshot is not bound to a candidate hash or profile, so it cannot establish which build/profile produced it. It does establish that this captured instance is not a black or absent renderer. In the current renderer state mapping, a required locked session remains `pending` until a verified status or successful unlock, which explains the phase label alongside the visible password form. No password was entered. This screenshot does not prove that the user's ordinary-profile instance is the temporary-profile probe or that unlock succeeds.
+The user clarified that the screenshot shows the normal locked-browser gate before they entered their password; session protection was not hanging. This captured instance has a visible renderer and an expected password prompt, but the screenshot is not bound to a candidate hash or profile and does not prove unlock success. No password was entered. Separately, the user reported that typing `las` in Windows Search no longer suggests Lastbrowser. Read-only checks found `C:\Users\logga\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\LastBrowser.lnk`, whose target `C:\Users\logga\AppData\Local\Programs\Lastbrowser\Lastbrowser.exe` exists, and the current-user uninstall registration `LastBrowser 0.1.55`. These confirm shortcut and uninstall registration presence but do not explain why Windows Search is not showing the app suggestion.
 
 ## Gates
 
@@ -53,5 +53,5 @@ The remote GitHub draft digest and size match all four uploaded artifacts. The e
 
 - The scope change is source/gate verified; the next VM run must check whether the three rejections stop and identify any remaining caller from sanitized logs.
 - The prior VM's black first-start symptom remains a separate report; the newer user screenshot shows a visible, locked startup gate but is not bound to that VM candidate. No source-level black-renderer cause is established. New lifecycle traces are intended to distinguish load failure, renderer exit/unresponsiveness, and first-frame completion in the next run.
-- Password unlock success and the user's exact installed build/profile are not verified by the screenshot. The `Checking session protection …` text is currently consistent with the fail-closed locked-session state; the visible password prompt is actionable if the user has their access password.
+- Password unlock success and the screenshot's exact installed build/profile are not verified. The Windows Search suggestion issue remains unresolved despite the valid Start Menu shortcut and uninstall registration; no Windows indexing or settings changes were made.
 - MiMo inference/no-response, full QuickChat and Standardchat acceptance, Stop, OpenCode live login/inference, and the rest of P004 remain not verified. No public release or VM PASS is claimed.

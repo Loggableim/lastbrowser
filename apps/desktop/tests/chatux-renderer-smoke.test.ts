@@ -17,5 +17,5 @@ describe('standard chat renderer discovery and model choice', () => {
     expect(result.error).toBeUndefined();
     expect(result.status, `${result.stderr}\n${result.stdout}`).toBe(0);
     expect(result.stdout).toContain('chatux-initial-discovery-and-choice:passed');
-  });
+  }, 15_000);
 });

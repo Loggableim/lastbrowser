@@ -3,20 +3,6 @@ import { ChatDraftSubmissionGate, isDefiniteChatStartRejection } from '../src/re
 import { hasCurrentTurnBrowserUse } from '../src/renderer/chat-browser-use.js';
 
 describe('optimistic chat submission', () => {
-  it('retains Stop across a delayed start acknowledgement without restoring or admitting a duplicate', async () => {
-    const gate = new ChatDraftSubmissionGate();
-    const turn = gate.begin('request', 1, 'scope')!;
-    let acknowledge!: () => void;
-    const pending = new Promise<void>(resolve => { acknowledge = resolve; });
-    const accepted = pending.then(() => turn.cancelled);
-    gate.cancel();
-    expect(gate.restore(turn, 1, 'scope')).toBeNull();
-    expect(gate.begin('duplicate', 1, 'scope')).toBeNull();
-    acknowledge();
-    expect(await accepted).toBe(true);
-    gate.finish(turn);
-    expect(gate.begin('new request', 2, 'scope')?.cancelled).toBe(false);
-  });
   it('reserves synchronously and prevents repeated Enter before async start returns', () => {
     const gate = new ChatDraftSubmissionGate();
     const turn = gate.begin('  exact draft\n', 1, 'scope');
@@ -32,6 +18,13 @@ describe('optimistic chat submission', () => {
     expect(gate.restore(turn, 2, 'scope')).toBeNull();
     expect(gate.restore(turn, 1, 'other-session')).toBeNull();
     turn.definitelyRejected = false;
+    expect(gate.restore(turn, 1, 'scope')).toBeNull();
+  });
+  it('does not restore a draft the user explicitly stopped before acceptance', () => {
+    const gate = new ChatDraftSubmissionGate();
+    const turn = gate.begin('stopped draft', 1, 'scope')!;
+    turn.stoppedBeforeAcceptance = true;
+    expect(turn.definitelyRejected).toBe(true);
     expect(gate.restore(turn, 1, 'scope')).toBeNull();
   });
   it.each(['route handler did not start a response in time', 'HTTP 504 timeout', 'socket disconnected', 'unknown IPC failure'])(

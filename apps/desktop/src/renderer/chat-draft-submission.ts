@@ -3,7 +3,7 @@ export type ChatDraftSubmission = {
   revision: number;
   contextKey: string;
   definitelyRejected: boolean;
-  cancelled: boolean;
+  stoppedBeforeAcceptance?: boolean;
 };
 
 /** Synchronous reservation protects the awaits before React can render busy. */
@@ -12,22 +12,18 @@ export class ChatDraftSubmissionGate {
 
   begin(draft: string, revision: number, contextKey: string): ChatDraftSubmission | null {
     if (this.active) return null;
-    const submission = { draft, revision, contextKey, definitelyRejected: true, cancelled: false };
+    const submission = { draft, revision, contextKey, definitelyRejected: true };
     this.active = submission;
     return submission;
   }
 
   restore(submission: ChatDraftSubmission, revision: number, contextKey: string): string | null {
-    return this.active === submission && !submission.cancelled && submission.definitelyRejected
+    return this.active === submission && submission.definitelyRejected && !submission.stoppedBeforeAcceptance
       && submission.revision === revision && submission.contextKey === contextKey ? submission.draft : null;
   }
 
   finish(submission: ChatDraftSubmission): void {
     if (this.active === submission) this.active = null;
-  }
-
-  cancel(): void {
-    if (this.active) this.active.cancelled = true;
   }
 }
 

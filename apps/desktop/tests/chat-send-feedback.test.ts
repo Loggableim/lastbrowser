@@ -17,6 +17,9 @@ function harness(ambiguous = false) {
     activeSessionIdRef: { current: 's' }, activeProfileIdRef: { current: 'p' },
     activeSpacePathRef: { current: 'w' }, activeBackendProfileNameRef: { current: 'b' },
     nativeChatSubmissionGateRef: { current: new ChatDraftSubmissionGate() },
+    activeNativeSubmissionRef: { current: null }, preflightStopRequestedSubmissionRef: { current: null },
+    chatUiOwnershipRef: { current: { activeTurnId: null } }, activeStreamIdRef: { current: null },
+    setChatRunState: (value: string) => { context.chatRunState = value; },
     composerTextRef: { current: 'hello' }, composerRevisionRef: { current: 0 },
     setComposerText: (value: string) => { draft = value; context.composerRevisionRef.current++; },
     setChatMessages: (update: any) => { chat = update(chat); },
@@ -36,10 +39,12 @@ describe('immediate standard-chat send feedback', () => {
     const h = harness(); const pending = h.send('hello');
     expect(h.state().chat).toEqual([{ role: 'user', content: 'hello' }]);
     expect(h.state().draft).toBe('');
+    expect(h.context.chatRunState).toBe('starting');
     expect(await h.send('hello')).toBe(false);
     expect(h.state().starts).toBe(1);
     h.finish(true); await pending;
     expect(h.state().chat).toHaveLength(1);
+    expect(h.context.chatRunState).toBe('idle');
   });
   it('removes rejected echo and restores untouched draft', async () => {
     const h = harness(); const pending = h.send('hello'); h.finish(false); await pending;
@@ -54,5 +59,13 @@ describe('immediate standard-chat send feedback', () => {
   it('keeps an ambiguous transport outcome visible without restoring a duplicate-sendable draft', async () => {
     const h = harness(true); const pending = h.send('hello'); h.finish(false); await pending;
     expect(h.state().chat).toHaveLength(1); expect(h.state().draft).toBe('');
+  });
+  it('removes a never accepted stopped turn while keeping its cleared composer', async () => {
+    const h = harness(); const pending = h.send('hello');
+    h.context.activeNativeSubmissionRef.current.stoppedBeforeAcceptance = true;
+    h.finish(false); await pending;
+    expect(h.state().chat).toEqual([]);
+    expect(h.state().legacy).toEqual([]);
+    expect(h.state().draft).toBe('');
   });
 });

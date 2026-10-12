@@ -74,4 +74,8 @@ export class ChatUiOwnership {
   get activeSessionId(): string | null {
     return this.activeOwnerId === null ? null : this.owners.get(this.activeOwnerId)?.sessionId ?? null;
   }
+
+  get activeTurnId(): number | null {
+    return this.activeOwnerId;
+  }
 }

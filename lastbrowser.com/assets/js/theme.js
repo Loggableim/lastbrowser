@@ -1,5 +1,5 @@
 /**
- * Lastbrowser Theme Switcher
+ * LastBrowser Theme Switcher
  * Supports Dark/Light mode with persistence in localStorage
  */
 (function() {

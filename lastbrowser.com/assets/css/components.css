@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Lastbrowser Web Platform - Component Library
+   LastBrowser Web Platform - Component Library
    Modular, performant, responsive components
    ========================================================================== */
 
@@ -818,6 +818,27 @@ footer {
   flex-wrap: wrap;
   gap: 16px;
   font-size: 13px;
+}
+
+.footer-social-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.footer-social-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text, #e8edf7);
+}
+
+.footer-social-links svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  fill: currentColor;
 }
 
 .footer-contact-highlight {

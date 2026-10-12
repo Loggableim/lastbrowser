@@ -1,5 +1,5 @@
 /**
- * Lastbrowser Web Platform - Main Application Logic
+ * LastBrowser Web Platform - Main Application Logic
  * Zero Telemetry · High Performance · 100% Local-First
  */
 
@@ -173,7 +173,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (isMac || isLinux) {
       if (osNotice) {
-        osNotice.innerHTML = 'Hinweis: Du besuchst uns von ' + (isMac ? 'macOS' : 'Linux') + '. Lastbrowser ist aktuell nativ optimiert für <strong>Windows 10 & 11 (64-Bit)</strong>.';
+        osNotice.innerHTML = 'Hinweis: Du besuchst uns von ' + (isMac ? 'macOS' : 'Linux') + '. LastBrowser ist aktuell nativ optimiert für <strong>Windows 10 & 11 (64-Bit)</strong>.';
       }
     }
   }

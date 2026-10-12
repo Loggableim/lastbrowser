@@ -440,6 +440,11 @@ function createWindow(): BrowserWindow {
     });
   };
   window.webContents.on('dom-ready', () => logRendererLifecycle('dom-ready'));
+  window.webContents.on('console-message', (details) => {
+    if (details.message === '[lastbrowser react-root-committed]' && details.frame === window.webContents.mainFrame) {
+      logRendererLifecycle('react-root-committed');
+    }
+  });
   window.webContents.on('did-start-loading', () => logRendererLifecycle('did-start-loading'));
   window.webContents.on('did-stop-loading', () => logRendererLifecycle('did-stop-loading'));
   window.webContents.on('did-finish-load', () => logRendererLifecycle('did-finish-load'));

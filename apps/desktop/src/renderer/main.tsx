@@ -1,6 +1,7 @@
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
+import { BootCommitted } from './boot-fallback.js';
 
 interface RootErrorBoundaryProps {
   children: ReactNode;
@@ -133,5 +134,6 @@ createRoot(document.getElementById('root')!).render(
     <RootErrorBoundary>
       <App />
     </RootErrorBoundary>
+    <BootCommitted />
   </React.StrictMode>
 );

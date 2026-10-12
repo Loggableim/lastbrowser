@@ -31,3 +31,7 @@ Use only the downloadable private Draft assets whose filename contains `d14cf670
 | Send/Stop/error | In an authorized configured test account, exercise Send, Stop, and a controlled error; verify the 0.1.55 chat-stop baseline from `04593080` and the v0.1.56 chat UX. | Exact provider/account, action, result, and logs. No live claim without execution. |
 
 Do not infer a VM pass from this handoff. No second VM controller, signing, merge, Store submission, or public release is requested by this report.
+
+## VM intake status (12 October 2026, 13:49 CEST)
+
+ARGUS reported that Edge stopped the unsigned Draft Portable download because of low download reputation. The executable was not saved, hashed, or started on the VM; the matrix above has no v0.1.56 VM runtime result. The file identity and authenticated Draft receipt retrieval above were checked on the build host only. The same exact Portable remains available in the private Draft and in the build-host worktree under `output/dist-preview-2026-10-12T11-28-09-017Z-5e17cdb9/Lastbrowser-0.1.56-x64-portable.exe`; this local path is not a VM download. The pending action is an approved transfer/security review for that exact 170,691,368-byte file with SHA-256 `ac5f50d00c44d866b1b756ffb437dbc0b9a298fd0831d2445993024252c5f8a1`, followed by ARGUS's own hash and launch checks. No reputation warning or policy should be bypassed.

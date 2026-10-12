@@ -369,7 +369,8 @@ def test_explicit_provider_model_allowlist_is_selectable_but_not_claimed_as_api_
          "nativeAvailability": {"available": True, "reasonCode": None}}]}]
     model = _provider_model_catalog(scope, catalog, groups)["providers"][0]["models"][0]
     assert model["listed"] == {"status": "configured", "source": "explicit_config", "freshness": "unknown"}
-    assert model["qualification"]["independent"]["available"] is True
+    assert model["qualification"]["independent"] == {
+        "status": "unknown", "available": False, "reasonCode": "explicit_configuration_unverified"}
     assert model["liveTest"]["status"] == "not_run"
 
 

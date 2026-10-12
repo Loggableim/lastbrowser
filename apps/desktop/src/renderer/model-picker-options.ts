@@ -7,7 +7,7 @@ export type ModelPickerOptionGroup = Readonly<{
   providerId: string;
   configured: boolean;
   disabledReason?: 'unavailable' | 'notConfigured';
-  models: readonly Readonly<{ id: string; label: string; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability }>[];
+  models: readonly Readonly<{ id: string; label: string; listingStatus?: 'current' | 'configured'; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability }>[];
 }>;
 
 export function isModelCatalogResponseCurrent(capturedScopeKey: string, activeScopeKey: string): boolean {
@@ -25,8 +25,8 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
     && providerCatalog.scope.backendProfileId === selection.scope.backendProfileId
     && providerCatalog.scope.spaceId === selection.scope.spaceId;
   const currentModels = providerCatalog && catalogScopeMatches
-    ? new Map(providerCatalog.providers.map(provider => [provider.providerId, new Set(provider.models.filter(model =>
-      model.listed.status === 'current' || model.listed.status === 'configured').map(model => model.id))]))
+    ? new Map(providerCatalog.providers.map(provider => [provider.providerId, new Map(provider.models.filter(model =>
+      model.listed.status === 'current' || model.listed.status === 'configured').map(model => [model.id, model.listed.status as 'current' | 'configured']))]))
     : null;
   const providers = new Map((selection.providers ?? []).map(provider => [provider.id, provider]));
   return (selection.groups ?? [])
@@ -49,10 +49,11 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
         .filter(entry => !currentModels || currentModels.get(group.provider_id)?.has(entry.id))
         .map(entry => {
           const availability = entry.nativeAvailability;
+          const listingStatus = currentModels?.get(group.provider_id)?.get(entry.id);
           const identityMatches = !availability || nativeModelAvailabilityMatchesIdentity(availability, {
             provider: group.provider_id, model: entry.id, scope: selection.scope, selectionRevision: selection.revision
           });
-          return { id: entry.id, label: entry.label, reasoningEfforts: [...(entry.reasoning_efforts ?? [])], supportsIndependent: entry.supportsIndependent,
+          return { id: entry.id, label: entry.label, ...(listingStatus ? { listingStatus } : {}), reasoningEfforts: [...(entry.reasoning_efforts ?? [])], supportsIndependent: entry.supportsIndependent,
             ...(availability ? { nativeAvailability: identityMatches ? availability : { ...availability, supported: false, available: false, reasonCode: 'binding_mismatch' as const } } : {}) };
         });
       return { provider: group.provider, providerId: group.provider_id, configured: group.configured,

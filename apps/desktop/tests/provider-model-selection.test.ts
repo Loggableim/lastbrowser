@@ -166,7 +166,9 @@ describe('provider-aware model selection', () => {
             features: { contextLength: { status: 'unknown', value: null, source: 'unknown' }, tools: { status: 'unknown', value: null, source: 'unknown' }, vision: { status: 'unknown', value: null, source: 'unknown' }, reasoningEfforts: { status: 'unknown', value: null, source: 'unknown' } },
             qualification: { independent: { status: 'unknown', available: false, reasonCode: 'catalog_not_currently_listed' } }, liveTest: { status: 'not_run' } }
         ] }] } };
-    expect(mapScopedModelPickerOptions(selection).flatMap(group => group.models.map(model => model.id))).toEqual(['current', 'fallback']);
+    const mapped = mapScopedModelPickerOptions(selection);
+    expect(mapped.flatMap(group => group.models.map(model => model.id))).toEqual(['current', 'fallback']);
+    expect(mapped[0].models.map(model => model.listingStatus)).toEqual(['current', 'configured']);
     expect(mapScopedModelPickerOptions({ ...selection, providerModelCatalog: { ...selection.providerModelCatalog, scope: { ...scope, spaceId: 'other-space' } } })
       .flatMap(group => group.models.map(model => model.id))).toEqual(['current', 'fallback']);
   });

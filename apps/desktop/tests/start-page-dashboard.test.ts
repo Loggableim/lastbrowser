@@ -14,8 +14,23 @@ import {
 import { browserStartSpaceCopy,browserStartHistoryCopy } from '../src/renderer/i18n/browser-start-space-copy.js';
 import { desktopLocaleIds } from '../src/renderer/i18n/keys.js';
 import type { GlobalActivitySpace } from '../src/renderer/independent-contracts.js';
+import { START_PAGE_WALLPAPERS, parseStartPageWallpaperPreference, startPageWallpaperStorageKey } from '../src/renderer/panels/startpage-wallpaper.js';
 
 describe('startpage atmospheric dashboard helpers', () => {
+  it('ships six offline wallpapers and keeps preferences separate by browser, backend and Space', () => {
+    expect(START_PAGE_WALLPAPERS).toHaveLength(6);
+    for (const wallpaper of START_PAGE_WALLPAPERS) {
+      expect(wallpaper.path).toMatch(/^\.\/(?:wallpapers\/)?[\w-]+\.jpg$/);
+      expect(fs.existsSync(path.resolve(__dirname, '../../../brand/assets', wallpaper.path))).toBe(true);
+    }
+    const key = startPageWallpaperStorageKey('profile-a', 'backend-a', 'space-a');
+    expect(key).not.toBe(startPageWallpaperStorageKey('profile-b', 'backend-a', 'space-a'));
+    expect(key).not.toBe(startPageWallpaperStorageKey('profile-a', 'backend-b', 'space-a'));
+    expect(key).not.toBe(startPageWallpaperStorageKey('profile-a', 'backend-a', 'space-b'));
+    expect(parseStartPageWallpaperPreference(JSON.stringify({ wallpaperId: 'nordic-arch', dim: 99, blur: -5 })))
+      .toEqual({ wallpaperId: 'nordic-arch', dim: 80, blur: 0 });
+    expect(parseStartPageWallpaperPreference('{broken').wallpaperId).toBe('liquid-obsidian');
+  });
   it('shows only fresh validated agent counts and never derives them from tabs', () => {
     const now = 100_000;
     expect(currentActiveAgentCount(undefined, now)).toBeNull();

@@ -286,7 +286,7 @@ import { mergeSessionListSnapshot, resolveSessionBackendProfile, resolveSessionL
 import { createAndLoadScopedSession } from './scoped-session-creation.js';
 import { usePanelStore, type SidebarMode } from './stores/usePanelStore.js';
 import { useChatStore } from './stores/useChatStore.js';
-import { recordCompletedChatEvidence, setProviderChatEvidenceRuntime } from './provider-chat-evidence.js';
+import { completedChatProviderEvidence, recordCompletedChatEvidence, setProviderChatEvidenceRuntime } from './provider-chat-evidence.js';
 import { saveChatReasoningEffort } from './chat-reasoning-effort.js';
 import { isQuickChatAction, type QuickActionChip } from './quick-actions.js';
 import { loadSpaceModelSelection, removeSpaceModel, saveSpaceModel } from './space-models.js';
@@ -3448,11 +3448,7 @@ function AppContent(): JSX.Element {
         const payload = isRecord(event.data) ? event.data : {};
         const usage = normalizeNativeChatTurnUsage(payload.usage);
         const proof = isRecord(payload.provider_evidence) ? payload.provider_evidence : null;
-        providerEvidence = proof ? {
-          provider_id: typeof proof.provider_id === 'string' ? proof.provider_id : undefined,
-          model_id: typeof proof.model_id === 'string' ? proof.model_id : undefined,
-          successful_chat: proof.successful_chat === true,
-        } : null;
+        providerEvidence = completedChatProviderEvidence(proof);
         if (usage && isOwningContextCurrent()) setLastChatTurnUsage({ sessionId, usage });
         return;
       }

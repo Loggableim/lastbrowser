@@ -31,6 +31,18 @@ export type CompletedChatEvidenceInput = {
 const STORAGE_KEY = 'lastbrowser.providerChatEvidence.v3';
 const CONFIG_GENERATION_KEY = 'lastbrowser.providerConfigGeneration.v1';
 const MAX_QUALIFICATION_AGE_MS = 24 * 60 * 60 * 1000;
+/** Preserve the backend identity alongside the actual completed-chat proof. */
+export function completedChatProviderEvidence(raw: unknown): NonNullable<CompletedChatEvidenceInput['providerEvidence']> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const proof = raw as Record<string, unknown>;
+  return {
+    provider_id: typeof proof.provider_id === 'string' ? proof.provider_id : undefined,
+    model_id: typeof proof.model_id === 'string' ? proof.model_id : undefined,
+    successful_chat: proof.successful_chat === true,
+    runtime_generation: typeof proof.runtime_generation === 'string' ? proof.runtime_generation : undefined,
+    provider_config_generation: typeof proof.provider_config_generation === 'string' ? proof.provider_config_generation : undefined,
+  };
+}
 let activeRuntimeGeneration = '';
 let activeAppBuildId = '';
 

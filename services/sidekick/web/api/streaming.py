@@ -4178,6 +4178,12 @@ def _run_agent_streaming(
                 task_id=session_id,
                 persist_user_message=msg_text,
             )
+            # cancel_stream already persisted the user turn, partial output and
+            # cancellation marker. A provider can unwind later with no reply;
+            # that result must not overwrite cancellation with a provider error
+            # (or overwrite a newer turn started after the eager lock release).
+            if cancel_event.is_set():
+                return
             # ── Ephemeral mode (/btw): deliver answer, skip persistence, cleanup ──
             if ephemeral:
                 _answer = ''

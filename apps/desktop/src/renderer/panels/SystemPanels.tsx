@@ -2392,6 +2392,30 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
   const modelsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models', scopeSelection: activeProviderScope }),
     [ready, activeProfileId, activeSpacePath, activeBackendProfileName], ready);
+  const [catalogState, setCatalogState] = useState<{ key: string; selection: import('../independent-contracts.js').ScopedModelSelection | null; loading: boolean; error: string }>({ key: '', selection: null, loading: false, error: '' });
+  const providerCatalogKey = JSON.stringify([activeProfileId, activeSpacePath || null, activeBackendProfileName || null]);
+  useEffect(() => {
+    let active = true;
+    setCatalogState({ key: providerCatalogKey, selection: null, loading: ready, error: '' });
+    if (!ready || !activeBackendProfileName) {
+      if (ready) setCatalogState({ key: providerCatalogKey, selection: null, loading: false, error: 'provider_catalog_scope_unavailable' });
+      return () => { active = false; };
+    }
+    void (async () => {
+      try {
+        const resolved = await window.lastbrowser.independent.request({ schemaVersion: 1, operation: 'resolveScope',
+          payload: { browserProfileId: activeProfileId, workspacePath: activeSpacePath || null }, backendProfileName: activeBackendProfileName });
+        if (!resolved.ok || resolved.value.scope.browserProfileId !== activeProfileId) throw Error('provider_catalog_scope_unavailable');
+        const result = await window.lastbrowser.independent.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope,
+          payload: { action: 'get', includeCatalog: true } });
+        if (!result.ok || !sameAssistantScope(result.value.scope, resolved.value.scope)) throw Error('provider_catalog_unavailable');
+        if (active) setCatalogState({ key: providerCatalogKey, selection: result.value, loading: false, error: '' });
+      } catch (cause) {
+        if (active) setCatalogState({ key: providerCatalogKey, selection: null, loading: false, error: cause instanceof Error ? cause.message : 'provider_catalog_unavailable' });
+      }
+    })();
+    return () => { active = false; };
+  }, [ready, activeProfileId, activeSpacePath, activeBackendProfileName, providerCatalogKey]);
   const providerAuthState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection: activeProviderScope }),
     [ready, activeProfileId, activeSpacePath, activeBackendProfileName], ready);
   const authState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/auth/status' }), [ready], ready);
@@ -2709,7 +2733,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const isAntigravityUnknown = !isAntigravityReady && !isAntigravityUnavailable;
   const isAntigravityUnverified = !isAntigravityReady;
   const rawModelGroups: AnyRecord[] = arrayFrom(modelsState.data, ['groups']) as AnyRecord[];
-  const allModelGroups: AnyRecord[] = rawModelGroups.filter((group) =>
+  const sharedCatalogSelection = catalogState.key === providerCatalogKey ? catalogState.selection : null;
+  const catalogMappedGroups = sharedCatalogSelection ? mapScopedModelPickerOptions(sharedCatalogSelection).map(group => ({
+    provider_id: group.providerId, provider: group.provider, configured: group.configured,
+    models: group.models.map(model => ({ id: model.id, label: model.label, supportsIndependent: model.supportsIndependent })), extra_models: []
+  })) as AnyRecord[] : null;
+  const allModelGroups: AnyRecord[] = (catalogMappedGroups ?? rawModelGroups).filter((group) =>
     !isRetiredProvider(group.provider_id || group.provider_id_canonical || group.provider));
   const modelGroups: AnyRecord[] = (showUntestedBetas ? allModelGroups : allModelGroups.flatMap((group) => {
     const providerId = settingsText(group.provider_id || group.provider_id_canonical, '');
@@ -4659,13 +4688,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 </>;
                     if (tab === 'models') return <>                {selectedProvider.id === 'local-ai' && <LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||''])} browserProfileId={activeProfileId} workspacePath={activeSpacePath} backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible />}
                 <SettingsCard title={t('settings.panels.providers.modelCatalog')} description={t('settings.panels.providers.modelCatalogDescription')}>
-                  {!modelGroups.length && !modelsState.loading && !modelsState.error && <p role="status">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
+                  {(catalogState.key !== providerCatalogKey || catalogState.loading) && <p role="status">{t('settings.panels.providers.loadingModels')}</p>}
+                  {catalogState.key === providerCatalogKey && catalogState.error && <div role="alert" className="workspace-error">{catalogState.error}</div>}
+                  {sharedCatalogSelection && !modelGroups.length && <p role="status">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
 
-                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
-                  {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
-                  {!modelsState.loading && !modelsState.error && (
+                  {sharedCatalogSelection && (
                     <div className="settings-model-summary">
-                      <span className="settings-badge">{t('settings.panels.providers.default')}: {settingsText(modelsState.data?.default_model, '—')}{settingsText(modelsState.data?.default_model) && !defaultModelQualified ? ` · ${t('settings.panels.providers.betaSavedChoice')}` : ''}</span>
+                      <span className="settings-badge">{t('settings.panels.providers.default')}: {defaultModel || '—'}{defaultModel && !defaultModelQualified ? ` · ${t('settings.panels.providers.betaSavedChoice')}` : ''}</span>
                       <span className="settings-badge">{t('settings.panels.providers.activeProvider')}: {activeProvider || '—'}</span>
                       <span className="settings-badge">{t('settings.panels.providers.groups')}: {modelGroups.length}</span>
                     </div>
@@ -4673,13 +4702,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 </SettingsCard>
 
                 <SettingsCard title={t('settings.panels.providers.activeModels')} description={t('settings.panels.providers.activeModelsDescription')}>
-                  {modelsState.loading && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
-                  {modelsState.error && <div className="workspace-error">{modelsState.error}</div>}
-                  {!modelsState.loading && !modelsState.error && !allModelGroups.some(group =>
+                  {(catalogState.key !== providerCatalogKey || catalogState.loading) && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
+                  {catalogState.key === providerCatalogKey && catalogState.error && <div role="alert" className="workspace-error">{catalogState.error}</div>}
+                  {sharedCatalogSelection && !allModelGroups.some(group =>
                     (Array.isArray(group.models) && group.models.length > 0)
                     || (Array.isArray(group.extra_models) && group.extra_models.length > 0))
                     && <p role="status">{t('settings.panels.providers.noScannedModels')}</p>}
-                  {!modelsState.loading && !modelsState.error && allModelGroups.map(group => {
+                  {sharedCatalogSelection && allModelGroups.map(group => {
                     const providerId = settingsText(group.provider_id || group.provider_id_canonical, '').trim();
                     if (selectedProvider.id === 'local-ai'
                       ? providerPresentation(providerId).category !== 'local'

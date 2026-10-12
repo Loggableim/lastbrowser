@@ -250,7 +250,12 @@ def test_public_catalog_uses_exact_provider_context_and_leaves_unknown_unbounded
 
 
 def test_model_catalog_account_evidence_is_independent_of_capability_inventory():
+    from types import SimpleNamespace
+
     calls = []
+    scope = Scope(backend_profile_id="00000000-0000-0000-0000-000000000001",
+                  space_id="00000000-0000-0000-0000-000000000002", browser_profile_id="browser-a")
+    context = SimpleNamespace(scope=scope)
     raw = {"groups": [{"provider_id": "xiaomi", "models": [{"id": "mimo-v2.6-flash"}]}]}
     accounts = {"providers": [{"id": "xiaomi", "has_key": True}]}
     def providers():
@@ -260,10 +265,10 @@ def test_model_catalog_account_evidence_is_independent_of_capability_inventory()
         calls.append("capabilities")
         return {"items": []}
 
-    basic = _discover_model_catalog(object(), False, available_models=lambda: raw,
+    basic = _discover_model_catalog(context, False, available_models=lambda: raw,
                                     configuration=lambda: {}, providers=providers,
                                     capability_inventory=capabilities, provider_model_ids=lambda _provider: [])
-    expanded = _discover_model_catalog(object(), True, available_models=lambda: raw,
+    expanded = _discover_model_catalog(context, True, available_models=lambda: raw,
                                        configuration=lambda: {}, providers=providers,
                                        capability_inventory=capabilities, provider_model_ids=lambda _provider: [])
     assert basic["providers"] == expanded["providers"] == [{
@@ -273,10 +278,14 @@ def test_model_catalog_account_evidence_is_independent_of_capability_inventory()
     }]
     assert "capabilityInventory" not in basic
     assert expanded["capabilityInventory"] == {"items": []}
+    assert basic["providerModelCatalog"]["scope"] == scope.model_dump(mode="json", by_alias=True)
+    assert basic["providerModelCatalog"]["freshness"] == "unknown"
+    assert basic["providerModelCatalog"]["providers"][0]["source"] == "unknown"
     assert calls == ["accounts", "accounts", "capabilities"]
 
 
 def test_model_catalog_resolves_codex_models_before_the_shared_cache_builder(monkeypatch):
+    from types import SimpleNamespace
     from cli.codex_models import _MODEL_CONTEXT_WINDOWS
 
     _MODEL_CONTEXT_WINDOWS.clear()
@@ -292,7 +301,9 @@ def test_model_catalog_resolves_codex_models_before_the_shared_cache_builder(mon
         order.append("shared-cache")
         return raw
 
-    result = _discover_model_catalog(object(), False, available_models=cached_models,
+    scope = Scope(backend_profile_id="00000000-0000-0000-0000-000000000001",
+                  space_id="00000000-0000-0000-0000-000000000002", browser_profile_id="browser-a")
+    result = _discover_model_catalog(SimpleNamespace(scope=scope), False, available_models=cached_models,
                                      configuration=lambda: {}, providers=lambda: {"providers": []},
                                      provider_model_ids=account_bound_ids)
     codex = next(group for group in result["groups"] if group["provider_id"] == "openai-codex")
@@ -300,6 +311,33 @@ def test_model_catalog_resolves_codex_models_before_the_shared_cache_builder(mon
     assert [row["id"] for row in codex["models"]] == ["gpt-6-luna"]
     assert codex["models"][0]["contextLength"] == 272000
     assert raw["groups"][0]["models"] == [{"id": "stale-local-model"}]
+
+
+def test_provider_model_catalog_marks_only_api_listed_ids_current():
+    from runtime.independent.scoped_models import _provider_model_catalog
+
+    scope = Scope(backend_profile_id="00000000-0000-0000-0000-000000000001",
+                  space_id="00000000-0000-0000-0000-000000000002", browser_profile_id="browser-a")
+    catalog = {"providerModelCatalog": {"checkedAt": "2026-10-12T00:00:00Z", "freshness": "unknown",
+        "providers": [{"providerId": "api-provider", "source": "provider_api", "status": "listed",
+                       "modelIds": ["model-live"]},
+                      {"providerId": "fallback-provider", "source": "curated_fallback", "status": "stale",
+                       "modelIds": ["model-old"]}]}}
+    groups = [
+        {"provider_id": "api-provider", "provider": "API", "configured": True, "models": [
+            {"id": "model-live", "label": "Live", "nativeAvailability": {"available": True, "reasonCode": None}}]},
+        {"provider_id": "fallback-provider", "provider": "Fallback", "configured": True, "models": [
+            {"id": "model-old", "label": "Old", "nativeAvailability": {"available": True, "reasonCode": None}}]},
+    ]
+    result = _provider_model_catalog(scope, catalog, groups)
+    live = result["providers"][0]["models"][0]
+    stale = result["providers"][1]["models"][0]
+    assert live["listed"] == {"status": "current", "source": "provider_api", "freshness": "unknown"}
+    assert live["qualification"]["independent"] == {"status": "available", "available": True, "reasonCode": None}
+    assert stale["listed"]["status"] == "stale"
+    assert stale["qualification"]["independent"]["status"] == "unknown"
+    assert live["features"]["tools"] == {"status": "unknown", "value": None, "source": "unknown"}
+    assert live["liveTest"] == {"status": "not_run"}
 
 
 def test_capability_catalog_reuses_capture_and_rejects_stale_evidence(monkeypatch):

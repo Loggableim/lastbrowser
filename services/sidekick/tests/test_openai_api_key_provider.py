@@ -191,7 +191,9 @@ def test_openai_model_discovery_uses_resolved_key_and_model_endpoint(monkeypatch
         lambda key, base_url, **kwargs: calls.append((key, base_url, kwargs)) or ["gpt-live-test"],
     )
 
-    assert models.provider_model_ids("openai") == ["gpt-live-test"]
+    source = {}
+    assert models.provider_model_ids("openai", source_out=source) == ["gpt-live-test"]
+    assert source == {"source": "provider_api"}
     assert calls == [(
         "config-openai-test-key",
         "https://configured-openai.example/v1",

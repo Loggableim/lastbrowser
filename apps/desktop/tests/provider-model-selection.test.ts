@@ -150,6 +150,26 @@ describe('provider-aware model selection', () => {
     expect(groups[0].models.find(model=>model.id==='legacy-only')?.supportsIndependent).toBe(false);
     expect(manualModelPickerOptions(groups).find(group=>group.providerId==='configured')?.models.find(model=>model.id==='legacy-only')?.supportsIndependent).toBe(false);
   });
+  it('uses only current models from the scope-matched shared provider catalog', () => {
+    const scope = { backendProfileId: 'p', spaceId: 's', browserProfileId: 'b' };
+    const selection = { schemaVersion: 1 as const, scope, revision: 5, model: 'current', provider: 'provider', configured: true, supportsIndependent: true,
+      groups: [{ provider: 'Provider', provider_id: 'provider', configured: true, models: [
+        { id: 'current', label: 'Current', supportsIndependent: true },
+        { id: 'fallback', label: 'Fallback', supportsIndependent: true }
+      ] }],
+      providerModelCatalog: { schemaVersion: 1 as const, scope, providers: [{ providerId: 'provider', label: 'Provider', configured: true,
+        discovery: { status: 'listed' as const, source: 'provider_api', checkedAt: null, freshness: 'unknown' }, models: [
+          { id: 'current', label: 'Current', listed: { status: 'current', source: 'provider_api', freshness: 'unknown' },
+            features: { contextLength: { status: 'unknown', value: null, source: 'unknown' }, tools: { status: 'unknown', value: null, source: 'unknown' }, vision: { status: 'unknown', value: null, source: 'unknown' }, reasoningEfforts: { status: 'unknown', value: null, source: 'unknown' } },
+            qualification: { independent: { status: 'available', available: true, reasonCode: null } }, liveTest: { status: 'not_run' } },
+          { id: 'fallback', label: 'Fallback', listed: { status: 'stale', source: 'curated_fallback', freshness: 'stale' },
+            features: { contextLength: { status: 'unknown', value: null, source: 'unknown' }, tools: { status: 'unknown', value: null, source: 'unknown' }, vision: { status: 'unknown', value: null, source: 'unknown' }, reasoningEfforts: { status: 'unknown', value: null, source: 'unknown' } },
+            qualification: { independent: { status: 'unknown', available: false, reasonCode: 'catalog_not_currently_listed' } }, liveTest: { status: 'not_run' } }
+        ] }] } };
+    expect(mapScopedModelPickerOptions(selection).flatMap(group => group.models.map(model => model.id))).toEqual(['current']);
+    expect(mapScopedModelPickerOptions({ ...selection, providerModelCatalog: { ...selection.providerModelCatalog, scope: { ...scope, spaceId: 'other-space' } } })
+      .flatMap(group => group.models.map(model => model.id))).toEqual(['current', 'fallback']);
+  });
   it('fails closed on provider models without native availability and preserves only explicitly supported pairs', () => {
     const scope = { backendProfileId: 'p', spaceId: 's', browserProfileId: 'b' };
     const available = { schemaVersion: 1 as const, supported: true, available: true, reasonCode: null, provider: 'provider', model: 'ready', scope, selectionRevision: 4 };

@@ -1,0 +1,27 @@
+[
+  {
+    "file": "Lastbrowser.exe",
+    "sha256": "BADC59944F302A4B3EEF4E22DED325A34117EE73D09809168BDB23C9E1A22A21",
+    "matchesPayload": true
+  },
+  {
+    "file": "resources/app.asar",
+    "sha256": "9E1333D37A52AAE67D012C9A77F79708394DCB27B8B9466014DD6F052F7E5920",
+    "matchesPayload": true
+  },
+  {
+    "file": "resources/services/sidekick-source.json",
+    "sha256": "B78375E6B68F0DD61443170C33008DB097AB84023087DC8FE9182DE182AE61E5",
+    "matchesPayload": true
+  },
+  {
+    "file": "resources/services/sidekick/web/static/manifest.json",
+    "sha256": "04BBF71D871F2B7BFA975AF2DA81024054C22792D34FE44E2119A08304A1ECD4",
+    "matchesPayload": true
+  },
+  {
+    "file": "resources/runtime/python/python.exe",
+    "sha256": "4D6F5F81A4BCA11191C4C7C6B43632694D0A4CE74E068619D8FDC161D469859A",
+    "matchesPayload": true
+  }
+]

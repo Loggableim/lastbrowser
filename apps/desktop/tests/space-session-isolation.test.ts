@@ -32,7 +32,7 @@ describe('Space Session & Partition Isolation', () => {
     const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
     const startContract = fs.readFileSync(path.resolve(__dirname, '../src/renderer/guarded-native-chat-start.ts'), 'utf8');
 
-    expect(appTsx).toMatch(/startGuardedNativeChat\(\s*createGuardedStartInput\(teamworkGroundingContext\),\s*\(payload\) => \{\s*if \(submission\) submission.definitelyRejected = false;\s*return window\.lastbrowser\.sidekick\.startChat\(payload\);/);
+    expect(appTsx).toMatch(/startGuardedNativeChat\(\s*createGuardedStartInput\(teamworkGroundingContext\),\s*\(payload\) => \{\s*if \(nativeStopRequestedOwnerRef\.current === uiTurnOwner\) throw stoppedBeforeAcceptance;\s*if \(submission\) submission.definitelyRejected = false;\s*return window\.lastbrowser\.sidekick\.startChat\(payload\);/);
     expect(startContract).toContain('profile: input.captured.profileId');
     expect(startContract).toContain('workspace: input.captured.spacePath');
     expect(startContract).toContain('backendProfileName: input.captured.backendProfileName');

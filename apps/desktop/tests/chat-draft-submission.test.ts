@@ -20,6 +20,13 @@ describe('optimistic chat submission', () => {
     turn.definitelyRejected = false;
     expect(gate.restore(turn, 1, 'scope')).toBeNull();
   });
+  it('does not restore a draft the user explicitly stopped before acceptance', () => {
+    const gate = new ChatDraftSubmissionGate();
+    const turn = gate.begin('stopped draft', 1, 'scope')!;
+    turn.stoppedBeforeAcceptance = true;
+    expect(turn.definitelyRejected).toBe(true);
+    expect(gate.restore(turn, 1, 'scope')).toBeNull();
+  });
   it.each(['route handler did not start a response in time', 'HTTP 504 timeout', 'socket disconnected', 'unknown IPC failure'])(
     'does not make an ambiguous start sendable again: %s', error => {
       expect(isDefiniteChatStartRejection(new Error(error))).toBe(false);

@@ -31,4 +31,13 @@ describe('chat child-history recovery UI', () => {
       expect(html).not.toContain('internal-turn-id');
     },
   );
+
+  it('offers one recovery action when several child turns need a refresh', () => {
+    const html = renderToStaticMarkup(React.createElement(ChatTranscript, {
+      ...props, childHistoryUnavailable: true,
+      childParentTurns: ['turn-a', 'turn-b', 'turn-c'],
+    }));
+    expect((html.match(/<button/g) || [])).toHaveLength(1);
+    expect(html).not.toContain('turn-a');
+  });
 });

@@ -288,6 +288,17 @@ export function finishLiveChatMessage<T extends LiveChatMessage>(messages: T[], 
   });
 }
 
+/** A stopped placeholder is UI state, never an assistant answer. Keep real partial output. */
+export function finishStoppedLiveChatMessage<T extends LiveChatMessage>(messages: T[], streamId?: string): T[] {
+  return messages.flatMap(message => {
+    if (message.role !== 'assistant' || !(message.pending || message.streaming)
+      || (streamId && message.chatStreamId !== streamId)) return [message];
+    const content = message.pending && message.content === 'Working on it...' ? '' : message.content;
+    if (!content?.trim() && !message.reasoning?.trim()) return [];
+    return [{ ...message, content, pending: false, streaming: false, progress: undefined }];
+  });
+}
+
 /** Read actionable provider errors from native chat SSE payload variants. */
 export function readNativeChatStreamError(data: unknown): string {
   if (typeof data === 'string' && data.trim()) return data.trim();

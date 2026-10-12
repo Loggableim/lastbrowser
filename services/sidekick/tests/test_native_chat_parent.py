@@ -152,6 +152,68 @@ def test_thread_start_abandon_cannot_settle_a_running_worker(tmp_path):
     finally: store.close()
 
 
+def test_cancel_before_worker_launch_settles_without_spawning(tmp_path, monkeypatch):
+    context, store = fixture_context(tmp_path, "a")
+    channel = config.create_stream_channel()
+    with config.STREAMS_LOCK: config.STREAMS[context.stream_id] = channel
+    def unexpected_spawn(*_args, **_kwargs):
+        raise AssertionError("A cancelled turn must not spawn a worker")
+    monkeypatch.setattr(native_chats, "relay_native_chat", unexpected_spawn)
+    try:
+        native_chats.register_native_chat(context)
+        assert native_chats.control_native_chat(context.session_id, context.stream_id,
+            actor=context.profile_name, scope=context.scope, command="cancel")
+        assert native_chats.run_native_chat(context, *turn(context), defer_terminal=True) == 0
+        assert native_chats.native_chat_exit_confirmed(context)
+        saved = json.loads((Path(context.sessions_dir) / (context.session_id + ".json")).read_text())
+        assert saved["active_stream_id"] is None
+        assert saved["messages"][-1]["content"] == "READ OWN FILE"
+        assert not native_chats.finalize_native_chat(context)
+        replay = config.get_chat_stream_channel(context.stream_id).subscribe()
+        assert replay.empty()  # No terminal before Root releases its writer.
+        store.release_lease(context.writer_lease_id, owner_generation=context.writer_generation)
+        assert native_chats.finalize_native_chat(context)
+        rows = []
+        while not replay.empty(): rows.append(replay.get_nowait())
+        assert any(event == "cancel" and data.get("processExited") is True for event, data in rows)
+        assert [data for event, data in rows if event == "stream_end"][-1]["processExited"] is True
+        assert not store.list_leases()
+    finally:
+        store.close()
+        with config.STREAMS_LOCK:
+            config.STREAMS.pop(context.stream_id, None); config.RECENT_CHAT_STREAMS.pop(context.stream_id, None)
+
+
+def test_prelaunch_cancel_cleanup_failure_reports_error_after_writer_release(tmp_path, monkeypatch):
+    context, store = fixture_context(tmp_path, "a")
+    channel = config.create_stream_channel()
+    with config.STREAMS_LOCK: config.STREAMS[context.stream_id] = channel
+    monkeypatch.setattr(native_chats, "_cleanup_saved_pending", lambda *_args, **_kwargs:
+        (_ for _ in ()).throw(RuntimeError("private cleanup detail")))
+    monkeypatch.setattr(native_chats, "relay_native_chat", lambda *_args, **_kwargs:
+        (_ for _ in ()).throw(AssertionError("worker spawned after cancellation")))
+    try:
+        native_chats.register_native_chat(context)
+        assert native_chats.control_native_chat(context.session_id, context.stream_id,
+            actor=context.profile_name, scope=context.scope, command="cancel")
+        assert native_chats.run_native_chat(context, *turn(context), defer_terminal=True) == 0
+        replay = config.get_chat_stream_channel(context.stream_id).subscribe()
+        assert replay.empty()
+        assert not native_chats.finalize_native_chat(context)
+        store.release_lease(context.writer_lease_id, owner_generation=context.writer_generation)
+        assert native_chats.finalize_native_chat(context)
+        rows = []
+        while not replay.empty(): rows.append(replay.get_nowait())
+        assert not any(event == "cancel" for event, _ in rows)
+        assert any(event == "error" and data.get("error_code") == "native_chat_cleanup_unconfirmed" for event, data in rows)
+        assert [data for event, data in rows if event == "stream_end"][-1]["processExited"] is True
+        assert "private cleanup detail" not in repr(rows)
+    finally:
+        store.close()
+        with config.STREAMS_LOCK:
+            config.STREAMS.pop(context.stream_id, None); config.RECENT_CHAT_STREAMS.pop(context.stream_id, None)
+
+
 def test_prelaunch_failure_cleanup_uses_captured_path_and_preserves_full_history(tmp_path,monkeypatch):
     context,store=fixture_context(tmp_path,"a")
     path=Path(context.sessions_dir)/(context.session_id+".json")

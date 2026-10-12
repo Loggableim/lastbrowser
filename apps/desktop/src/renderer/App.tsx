@@ -5570,6 +5570,8 @@ function AppContent(): JSX.Element {
                   profiles={profiles}
                   activeProfileId={activeProfileId}
                   activeBackendProfileName={activeBackendProfileName}
+                  activityScope={assistantSelection?.scope}
+                  activityController={assistantController}
                   onSelectProfile={switchProfile}
                   onCreateProfile={createProfileEntry}
                   onRenameProfile={renameProfileEntry}
@@ -5946,6 +5948,8 @@ function AppContent(): JSX.Element {
               profiles={profiles}
               activeProfileId={activeProfileId}
               activeBackendProfileName={activeBackendProfileName}
+              activityScope={assistantSelection?.scope}
+              activityController={assistantController}
               onSelectProfile={switchProfile}
               onCreateProfile={createProfileEntry}
               onRenameProfile={renameProfileEntry}
@@ -6164,6 +6168,8 @@ function BrowserMain({
   profiles,
   activeProfileId,
   activeBackendProfileName,
+  activityScope,
+  activityController,
   onSelectProfile,
   onCreateProfile,
   onRenameProfile,
@@ -6253,6 +6259,8 @@ function BrowserMain({
   profiles: BrowserProfile[];
   activeProfileId: string;
   activeBackendProfileName?: string;
+  activityScope?: IndependentScope;
+  activityController?: IndependentAssistantController;
   onSelectProfile: (profileId: string) => void;
   onCreateProfile: (name: string) => void;
   onRenameProfile: (profileId: string, name: string) => void;
@@ -7045,8 +7053,9 @@ function BrowserMain({
         botName={botName}
         spaces={spaces}
         activeSpacePath={activeSpacePath}
-        activeProfileId={activeProfile.id}
-        activeSpaceTabs={tabs}
+        activeProfileId={activeProfileId}
+        activityScope={activityScope}
+        activityController={activityController}
         focusSearchOnMount={activeTab.id === pageTabId && focusSearchOnMount}
         onSearchFocusConsumed={onSearchFocusConsumed}
         onSelectSpace={(path) => { activatePane(); onSelectSpace(path); }}

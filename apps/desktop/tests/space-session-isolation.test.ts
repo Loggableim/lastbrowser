@@ -231,7 +231,7 @@ describe('Space Session & Partition Isolation', () => {
       expect(startPageTsx).toContain('activeSpacePath');
       expect(startPageTsx).toContain('onSelectSpace');
       expect(startPageTsx).toContain('onAddSpace');
-      expect(startPageTsx).toContain('Neuer Space');
+      expect(startPageTsx).toContain("t('browser.startPage.newSpace')");
     });
 
     it('verifies handleSpaceSelect mutes background audio on space switch', () => {

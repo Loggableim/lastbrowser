@@ -14,12 +14,11 @@ describe('speed dial items', () => {
     expect(domains).toContain('openai.com');
   });
 
-  it('ensures each speed dial item has valid URLs and accents', () => {
+  it('ensures each speed dial item has a valid destination and icon fallback', () => {
     for (const item of DEFAULT_SPEED_DIAL_ITEMS) {
       expect(item.url).toMatch(/^https:\/\//);
       expect(item.label).toBeTruthy();
       expect(item.iconText).toBeTruthy();
-      expect(item.accent).toMatch(/^#[0-9a-fA-F]{6}$/);
     }
   });
 });

@@ -46,15 +46,15 @@ describe('GitHub release auto-update flow', () => {
     expect(distScript).toContain("publish: null");
   });
 
-  it('uses the 0.1.55 VM candidate version and excludes the unqualified b11377 runtime', () => {
+  it('keeps the 0.1.56 preview package versions aligned and excludes the unqualified b11377 runtime', () => {
     const root = readJson(rootPackagePath);
     const desktop = readJson(desktopPackagePath);
     const lock = readJson(path.join(repoRoot, 'package-lock.json'));
-    expect(root.version).toBe('0.1.55');
-    expect(desktop.version).toBe('0.1.55');
-    expect(lock.version).toBe('0.1.55');
-    expect(lock.packages[''].version).toBe('0.1.55');
-    expect(lock.packages['apps/desktop'].version).toBe('0.1.55');
+    expect(root.version).toBe('0.1.56');
+    expect(desktop.version).toBe('0.1.56');
+    expect(lock.version).toBe('0.1.56');
+    expect(lock.packages[''].version).toBe('0.1.56');
+    expect(lock.packages['apps/desktop'].version).toBe('0.1.56');
     expect(desktop.build.extraResources).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ from: 'runtime/local-ai/b11377-cpu', to: 'apps/desktop/runtime/local-ai/b11377-cpu' })
     ]));

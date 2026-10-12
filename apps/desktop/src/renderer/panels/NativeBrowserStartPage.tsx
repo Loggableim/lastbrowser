@@ -13,19 +13,20 @@ import {
   Bot,
   Layers,
   Plus,
-  Check,
   X,
   ShieldCheck
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import type { BrowserBookmark } from '../bookmarks.js';
 import type { BrowserVisit } from '../history.js';
-import { normalizeNavigationInput, type BrowserTab } from '../tabs.js';
+import { normalizeNavigationInput } from '../tabs.js';
 import { spaceDisplayName, type SpaceSummary } from '../shell-state.js';
-import { getSpaceTabCount } from '../tab-sessions.js';
 import { useDesktopI18n } from '../i18n.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
 import { browserStartSpaceCopy, browserStartHistoryCopy } from '../i18n/browser-start-space-copy.js';
+import type { IndependentScope, GlobalActivitySpace } from '../independent-contracts.js';
+import type { IndependentAssistantController } from '../independent-assistant-controller.js';
+import './startpage-luminous.css';
 
 export interface SpeedDialItem {
   id: string;
@@ -34,18 +35,17 @@ export interface SpeedDialItem {
   url: string;
   category: string;
   iconText: string;
-  accent: string;
 }
 
 export const DEFAULT_SPEED_DIAL_ITEMS: SpeedDialItem[] = [
-  { id: 'github', label: 'GitHub', domain: 'github.com', url: 'https://github.com', category: 'Developer', iconText: 'GH', accent: '#3b82f6' },
-  { id: 'google', label: 'Google', domain: 'google.com', url: 'https://www.google.com', category: 'Search', iconText: 'G', accent: '#4285f4' },
-  { id: 'wikipedia', label: 'Wikipedia', domain: 'wikipedia.org', url: 'https://en.wikipedia.org', category: 'Knowledge', iconText: 'W', accent: '#a3a3a3' },
-  { id: 'youtube', label: 'YouTube', domain: 'youtube.com', url: 'https://www.youtube.com', category: 'Video', iconText: 'YT', accent: '#ef4444' },
-  { id: 'reddit', label: 'Reddit', domain: 'reddit.com', url: 'https://www.reddit.com', category: 'Community', iconText: 'RD', accent: '#f97316' },
-  { id: 'hackernews', label: 'Hacker News', domain: 'news.ycombinator.com', url: 'https://news.ycombinator.com', category: 'Tech News', iconText: 'HN', accent: '#ff6600' },
-  { id: 'huggingface', label: 'Hugging Face', domain: 'huggingface.co', url: 'https://huggingface.co', category: 'AI Models', iconText: 'HF', accent: '#fbbf24' },
-  { id: 'openai', label: 'OpenAI', domain: 'openai.com', url: 'https://openai.com', category: 'AI Research', iconText: 'OA', accent: '#10b981' }
+  { id: 'github', label: 'GitHub', domain: 'github.com', url: 'https://github.com', category: 'Developer', iconText: 'GH' },
+  { id: 'google', label: 'Google', domain: 'google.com', url: 'https://www.google.com', category: 'Search', iconText: 'G' },
+  { id: 'wikipedia', label: 'Wikipedia', domain: 'wikipedia.org', url: 'https://en.wikipedia.org', category: 'Knowledge', iconText: 'W' },
+  { id: 'youtube', label: 'YouTube', domain: 'youtube.com', url: 'https://www.youtube.com', category: 'Video', iconText: 'YT' },
+  { id: 'reddit', label: 'Reddit', domain: 'reddit.com', url: 'https://www.reddit.com', category: 'Community', iconText: 'RD' },
+  { id: 'hackernews', label: 'Hacker News', domain: 'news.ycombinator.com', url: 'https://news.ycombinator.com', category: 'Tech News', iconText: 'HN' },
+  { id: 'huggingface', label: 'Hugging Face', domain: 'huggingface.co', url: 'https://huggingface.co', category: 'AI Models', iconText: 'HF' },
+  { id: 'openai', label: 'OpenAI', domain: 'openai.com', url: 'https://openai.com', category: 'AI Research', iconText: 'OA' }
 ];
 
 export interface DashboardGreeting {
@@ -112,24 +112,27 @@ export interface NativeBrowserStartPageProps {
   spaces?: SpaceSummary[];
   activeSpacePath?: string;
   activeProfileId?: string;
-  activeSpaceTabs?: BrowserTab[];
+  activityScope?: IndependentScope | null;
+  activityController?: IndependentAssistantController;
   onSelectSpace?: (spacePath: string) => void;
   onAddSpace?: (path: string, name: string) => void;
   focusSearchOnMount?: boolean;
   onSearchFocusConsumed?: () => void;
 }
 
-export function getStartPageSpaceTabCount(
-  spacePath: string,
-  activeSpacePath: string,
-  activeSpaceTabs: BrowserTab[],
-  activeProfileId: string,
-  storage: Storage = window.localStorage
-): number {
-  if (spacePath === activeSpacePath) {
-    return activeSpaceTabs.filter((tab) => !tab.incognito).length;
-  }
-  return getSpaceTabCount(activeProfileId, spacePath, storage);
+export function currentActiveAgentCount(sample: { count: number; observedAt: number } | undefined, now = Date.now()): number | null {
+  if (!sample || !Number.isSafeInteger(sample.count) || sample.count < 0 || !Number.isFinite(sample.observedAt)
+    || sample.observedAt > now || now - sample.observedAt >= 15_000) return null;
+  return sample.count;
+}
+export function liveSpaceAgentCount(space: GlobalActivitySpace, now = Date.now()): number | null {
+  const activity = space.activity;
+  const observedAt = Date.parse(activity.observedAt);
+  if (activity.sourceState !== 'live' || activity.nativeChatObservation?.sourceState !== 'live'
+    || !Number.isFinite(observedAt) || observedAt > now || now - observedAt >= 15_000) return null;
+  const runs = activity.runs.filter(run => !['completed', 'cancelled', 'failed', 'interrupted'].includes(run.state));
+  const runSessions = new Set(runs.map(run => run.targetSessionId).filter(Boolean));
+  return runs.length + activity.activeChats.filter(chat => !runSessions.has(chat.sessionId)).length;
 }
 /** Keep Unicode names distinct while excluding path separators and controls. */
 export function startPageSpaceWorkspacePath(name:string):string {
@@ -147,7 +150,8 @@ export function NativeBrowserStartPage({
   spaces = [],
   activeSpacePath = '',
   activeProfileId = 'default',
-  activeSpaceTabs = [],
+  activityScope,
+  activityController,
   onSelectSpace,
   onAddSpace,
   focusSearchOnMount = false,
@@ -160,6 +164,7 @@ export function NativeBrowserStartPage({
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
+  const [activeAgentCounts, setActiveAgentCounts] = useState<Record<string, { count: number; observedAt: number }>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const displayedSpaces = useMemo(() => {
@@ -195,6 +200,38 @@ export function NativeBrowserStartPage({
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!activityScope || !activityController || activityScope.browserProfileId !== activeProfileId) {
+      setActiveAgentCounts({});
+      return;
+    }
+    let mounted = true;
+    let pending = false;
+    const refresh = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const response = await activityController.request({ schemaVersion: 1, operation: 'globalActivity', scope: activityScope, payload: {} });
+        if (!mounted) return;
+        const counts: Record<string, { count: number; observedAt: number }> = {};
+        if (response.ok && response.value.backendProfileId === activityScope.backendProfileId) {
+          const now = Date.now();
+          for (const space of response.value.spaces) {
+            if (space.scope.browserProfileId !== activeProfileId || space.scope.backendProfileId !== activityScope.backendProfileId) continue;
+            const count = liveSpaceAgentCount(space, now);
+            if (count !== null) counts[space.workspacePath || ''] = { count, observedAt: now };
+          }
+        }
+        setActiveAgentCounts(counts);
+      } catch {
+        if (mounted) setActiveAgentCounts({});
+      } finally { pending = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 5_000);
+    return () => { mounted = false; window.clearInterval(timer); };
+  }, [activityScope?.backendProfileId, activityScope?.spaceId, activityScope?.browserProfileId, activityController, activeProfileId]);
 
   useEffect(() => {
     if (!focusSearchOnMount) return;
@@ -249,7 +286,7 @@ export function NativeBrowserStartPage({
   }
 
   return (
-    <section className="browser-main browser-start-page" data-testid="browser-start-dashboard">
+    <section className="browser-main browser-start-page luminous-launchpad" data-testid="browser-start-dashboard" style={{ '--launchpad-wallpaper': 'url("../launchpad-wallpaper.jpg")' } as React.CSSProperties}>
       {/* 9.4 Atmospheric Hero Dashboard with Live Clock and Greeting */}
       <div className="browser-start-hero startpage-dashboard-hero">
         <div className="browser-start-brand">
@@ -342,7 +379,7 @@ export function NativeBrowserStartPage({
             </div>
             <div>
               <span className="eyebrow">{t('browser.startPage.isolatedWorkspaces')}</span>
-              <h2 className="startpage-section-title">{t('browser.startPage.spacesSessions')}</h2>
+              <h2 className="startpage-section-title">{t('sidebar.space.spaces')}</h2>
             </div>
           </div>
           <div className="startpage-section-actions">
@@ -366,13 +403,7 @@ export function NativeBrowserStartPage({
           {displayedSpaces.map((space) => {
             const isActive = isSpaceActive(space);
             const name = spaceDisplayName(space);
-            const tabCount = getStartPageSpaceTabCount(
-              space.path,
-              activeSpacePath,
-              activeSpaceTabs,
-              activeProfileId || 'default'
-            );
-            const avatarChar = space.emoji || (space.path === '' ? '🏠' : name.charAt(0).toUpperCase());
+            const agentCount = currentActiveAgentCount(activeAgentCounts?.[space.path]);
 
             return (
               <div
@@ -389,51 +420,16 @@ export function NativeBrowserStartPage({
                 }}
                 title={`${t('sidebar.space.switch')}: ${name} · ${t('browser.startPage.spaceIsolationTooltip')}`}
               >
-                <div className="startpage-space-card-top">
-                  <div className="startpage-space-avatar">
-                    {avatarChar}
-                  </div>
-                  {isActive ? (
-                    <span className="startpage-space-badge active">
-                      <Check size={11} />
-                      <span>{t('agentPanels.active')}</span>
-                    </span>
-                  ) : (
-                    <span className="startpage-space-badge inactive">
-                      <span>{t('sidebar.space.switch')}</span>
-                    </span>
-                  )}
-                </div>
-
                 <div className="startpage-space-card-body">
                   <h3 className="startpage-space-name">{name}</h3>
-                  <div className="startpage-space-meta">
-                    <span className="startpage-space-tabs-count">
-                      {tabCount === 0 ? spaceCopy.noTabs : spaceCopy.tabCount(tabCount)}
-                    </span>
-                    <span className="startpage-space-dot">•</span>
-                    <span className="startpage-space-session-tag">{spaceCopy.session}</span>
-                  </div>
+                  <span className="startpage-space-agents" data-testid="space-agent-count">
+                    {agentCount === null ? spaceCopy.agentsUnavailable : spaceCopy.activeAgents(agentCount)}
+                  </span>
                 </div>
               </div>
             );
           })}
 
-          {/* "+ Neuer Space" Card */}
-          <button
-            type="button"
-            className="startpage-space-card startpage-space-add-card"
-            onClick={() => setIsCreatingSpace(true)}
-            title={t('browser.startPage.createSpaceTitle')}
-          >
-            <div className="startpage-add-icon-box">
-              <Plus size={20} />
-            </div>
-            <div className="startpage-add-card-text">
-              <span className="startpage-add-title">{t('browser.startPage.newSpace')}</span>
-              <span className="startpage-add-sub">{t('browser.startPage.isolatedWorkspaces')}</span>
-            </div>
-          </button>
         </div>
 
         {/* Modal / Dialog for New Space */}
@@ -517,15 +513,9 @@ export function NativeBrowserStartPage({
               onClick={() => onNavigate(item.url)}
               title={`${item.label} (${item.url})`}
             >
-              <div
-                className="speed-dial-tile-icon"
-                style={{
-                  background: `linear-gradient(135deg, ${item.accent}22, ${item.accent}44)`,
-                  borderColor: `${item.accent}66`,
-                  color: item.accent
-                }}
-              >
-                {item.iconText}
+              <div className="speed-dial-tile-icon">
+                <span className="speed-dial-fallback">{item.iconText}</span>
+                <img src={`https://${item.domain}/favicon.ico`} alt="" width="26" height="26" loading="lazy" onLoad={(event) => { if (event.currentTarget.previousElementSibling instanceof HTMLElement) event.currentTarget.previousElementSibling.style.display = 'none'; }} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
               </div>
               <div className="speed-dial-tile-info">
                 <strong className="speed-dial-tile-label">{item.label}</strong>

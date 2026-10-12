@@ -8,34 +8,34 @@ import {
   DASHBOARD_QUICK_ACTIONS,
   DEFAULT_SPEED_DIAL_ITEMS,
   startPageSpaceWorkspacePath,
-  getStartPageSpaceTabCount
+  currentActiveAgentCount,
+  liveSpaceAgentCount
 } from '../src/renderer/panels/NativeBrowserStartPage.js';
 import { browserStartSpaceCopy,browserStartHistoryCopy } from '../src/renderer/i18n/browser-start-space-copy.js';
 import { desktopLocaleIds } from '../src/renderer/i18n/keys.js';
-import { saveSpaceTabs } from '../src/renderer/tab-sessions.js';
+import type { GlobalActivitySpace } from '../src/renderer/independent-contracts.js';
 
 describe('startpage atmospheric dashboard helpers', () => {
-  it('counts the live tabs for the active Space and persisted tabs for other Spaces', () => {
-    const values = new Map<string, string>();
-    const storage = {
-      getItem: (key: string) => values.get(key) ?? null,
-      setItem: (key: string, value: string) => values.set(key, value)
-    } as unknown as Storage;
-    saveSpaceTabs('profile', 'workspaces/saved', {
-      tabs: [
-        { id: 'saved-1', url: 'https://example.com', title: 'Saved one', pinned: false },
-        { id: 'saved-2', url: 'https://example.org', title: 'Saved two', pinned: false }
-      ],
-      activeTabId: 'saved-1'
-    }, storage);
-    const liveTabs = [
-      { id: 'live-1', url: 'https://one.example', title: 'One', pinned: false },
-      { id: 'live-2', url: 'https://two.example', title: 'Two', pinned: false },
-      { id: 'private', url: 'https://private.example', title: 'Private', pinned: false, incognito: true }
-    ];
-
-    expect(getStartPageSpaceTabCount('', '', liveTabs, 'profile', storage)).toBe(2);
-    expect(getStartPageSpaceTabCount('workspaces/saved', '', liveTabs, 'profile', storage)).toBe(2);
+  it('shows only fresh validated agent counts and never derives them from tabs', () => {
+    const now = 100_000;
+    expect(currentActiveAgentCount(undefined, now)).toBeNull();
+    expect(currentActiveAgentCount({ count: 2, observedAt: now - 14_999 }, now)).toBe(2);
+    expect(currentActiveAgentCount({ count: 0, observedAt: now }, now)).toBe(0);
+    expect(currentActiveAgentCount({ count: 2, observedAt: now - 15_000 }, now)).toBeNull();
+    expect(currentActiveAgentCount({ count: -1, observedAt: now }, now)).toBeNull();
+    const source = fs.readFileSync(path.resolve(__dirname, '../src/renderer/panels/NativeBrowserStartPage.tsx'), 'utf8');
+    expect(source).not.toContain('getStartPageSpaceTabCount');
+    expect(source).not.toContain('startpage-space-tabs-count');
+  });
+  it('counts current real runs without counting their chat stream twice', () => {
+    const now = Date.now();
+    const space = { activity: { sourceState: 'live', observedAt: new Date(now).toISOString(),
+      nativeChatObservation: { sourceState: 'live' },
+      runs: [{ state: 'running', targetSessionId: 'session-a' }, { state: 'completed', targetSessionId: 'session-b' }],
+      activeChats: [{ sessionId: 'session-a' }, { sessionId: 'session-c' }] } } as unknown as GlobalActivitySpace;
+    expect(liveSpaceAgentCount(space, now)).toBe(2);
+    expect(liveSpaceAgentCount({ ...space, activity: { ...space.activity, sourceState: 'stale' } }, now)).toBeNull();
+    expect(liveSpaceAgentCount({ ...space, activity: { ...space.activity, observedAt: new Date(now - 15_000).toISOString() } }, now)).toBeNull();
   });
 
   it('keeps different Japanese Space names distinct and excludes traversal separators',()=>{

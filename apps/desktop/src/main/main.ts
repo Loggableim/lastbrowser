@@ -160,6 +160,7 @@ import { registerWindowControlIpc } from './window-controls.js';
 import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTerminalIds, closeAllTerminals } from './terminal-process.js';
 import { createAppTray, setupMinimizeToTray, type TrayController } from './tray.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
+import { appendWindowsFirstPaintSwitches, installWindowsFirstPaintNudge } from './windows-presentation.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
 import { registerBrowserShortcuts } from './shortcuts.js';
 import { openAuthConnectWindow, cleanOAuthUserAgent, sanitizeSecChUa, isStreamingLoginUrl } from './auth-window.js';
@@ -228,6 +229,7 @@ export function dispatchOpenUrl(targetUrl: string): void {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow(createMainWindowOptions(mainDir));
+  installWindowsFirstPaintNudge(mainWindow);
 
   mainWindow.on('maximize', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -798,6 +800,10 @@ app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 // Enable Widevine DRM feature flag in Chromium
 app.commandLine.appendSwitch('enable-features', 'WidevineCdm');
+// Before ready: a frameless window that Windows reports as covered never
+// presents its first frame, so the client area stays the dark background
+// color until a reload. See windows-presentation.ts.
+appendWindowsFirstPaintSwitches(app.commandLine);
 
 app.setName('Lastbrowser');
 

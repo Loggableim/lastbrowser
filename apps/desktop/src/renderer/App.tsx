@@ -3837,12 +3837,22 @@ function AppContent(): JSX.Element {
     const submission = gate.begin(composerTextRef.current, composerRevisionRef.current + 1, contextKey());
     if (!submission) return false;
     setComposerText('');
+    // Echo the submitted message before scope/catalog IPC can block. The
+    // submission gate already reserves this turn synchronously.
+    const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
+    const visibleLegacyMessage = { id: crypto.randomUUID(), role: 'user' as const, content: displayText };
+    setChatMessages(current => [...current, visibleUserMessage]);
+    setMessages(current => [...current, visibleLegacyMessage]);
     let accepted = false;
     try {
       accepted = await startNativeChatTurn(message, displayText, continuation, reasoningEffort, submission);
       return accepted;
     } finally {
       if (!accepted) {
+        if (submission.definitelyRejected && submission.contextKey === contextKey()) {
+          setChatMessages(current => current.filter(item => item !== visibleUserMessage));
+          setMessages(current => current.filter(item => item !== visibleLegacyMessage));
+        }
         const restored = gate.restore(submission, composerRevisionRef.current, contextKey());
         if (restored !== null) setComposerText(restored);
       }
@@ -3913,8 +3923,10 @@ function AppContent(): JSX.Element {
     }
     if (browserCommand) {
       const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
-      setChatMessages((current) => [...current, visibleUserMessage]);
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', content: displayText }]);
+      if (!submission) {
+        setChatMessages((current) => [...current, visibleUserMessage]);
+        setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', content: displayText }]);
+      }
       if (!submission) setComposerText('');
 
       const result = await executeBrowserAction(browserCommand);
@@ -3970,12 +3982,12 @@ function AppContent(): JSX.Element {
     setLastChatTurnUsage(null);
     setChatMessages((current) => [
       ...current,
-      visibleUserMessage,
+      ...(!submission ? [visibleUserMessage] : []),
       { role: 'assistant', content: 'Working on it...', pending: true }
     ]);
     setMessages((current) => [
       ...current,
-      { id: crypto.randomUUID(), role: 'user', content: displayText },
+      ...(!submission ? [{ id: crypto.randomUUID(), role: 'user' as const, content: displayText }] : []),
       { id: crypto.randomUUID(), role: 'assistant', content: 'Working on it...', pending: true }
     ]);
     const uiTurnOwner = beginChatUiTurn(turnContext.sessionId || null);

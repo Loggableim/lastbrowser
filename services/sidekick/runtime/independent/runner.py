@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -42,21 +43,104 @@ def _discover_model_catalog(context, include_capabilities, *, available_models=N
     # one profile, so this uses only that profile's Sidekick OAuth state.
     if provider_model_ids is None:
         from cli.models import provider_model_ids as provider_model_ids
+    codex_provenance = {}
     try:
-        codex_ids = [mid for mid in (provider_model_ids("openai-codex") or []) if isinstance(mid, str) and mid]
+        try:
+            codex_discovered = provider_model_ids("openai-codex", source_out=codex_provenance) or []
+        except TypeError:
+            codex_discovered = provider_model_ids("openai-codex") or []
+        codex_ids = [mid for mid in codex_discovered if isinstance(mid, str) and mid]
     except Exception:
         codex_ids = []
+        codex_provenance["source"] = "unavailable"
     raw = copy.deepcopy(available_models())
-    if codex_ids and isinstance(raw, dict) and isinstance(raw.get("groups"), list):
-        codex_group = next((group for group in raw["groups"]
-                            if isinstance(group, dict) and group.get("provider_id") == "openai-codex"), None)
-        if codex_group is None:
-            codex_group = {"provider_id": "openai-codex", "provider": "OpenAI Codex", "models": []}
-            raw["groups"].append(codex_group)
-        codex_group["models"] = [{"id": model_id, "label": model_id} for model_id in codex_ids]
-
+    # Keep provider-list evidence separate from the legacy UI catalog. The
+    # latter may contain curated fallback IDs and must not imply a live list.
+    evidence = []
+    additions = {}
+    seen_providers = set()
+    if codex_provenance.get("source", "unknown") in {"provider_api", "unknown"}:
+        seen_providers.add("openai-codex")
+        codex_listed_ids = codex_provenance.get("verifiedModelIds", codex_ids)
+        codex_listed_ids = [mid for mid in codex_listed_ids if isinstance(mid, str) and mid]
+        evidence.append({"providerId": "openai-codex", "source": codex_provenance.get("source", "unknown"),
+                         "status": "listed" if codex_provenance.get("source") == "provider_api" and codex_ids else "unknown",
+                         "modelIds": codex_listed_ids, "checkedAt": codex_provenance.get("checkedAt")})
+        if codex_provenance.get("source") == "provider_api": additions["openai-codex"] = codex_listed_ids or codex_ids
+    for group in raw.get("groups", []) if isinstance(raw, dict) else []:
+        if not isinstance(group, dict):
+            continue
+        provider_id = str(group.get("provider_id") or "").strip()
+        if not provider_id or provider_id in seen_providers:
+            continue
+        seen_providers.add(provider_id)
+        provenance = {}
+        try:
+            if provider_id == "openai-codex":
+                discovered = codex_ids
+                provenance.update(codex_provenance)
+            else:
+                try:
+                    discovered = provider_model_ids(provider_id, source_out=provenance) or []
+                except TypeError:
+                    # Keep test doubles and older injected adapters compatible.
+                    discovered = provider_model_ids(provider_id) or []
+            ids = list(dict.fromkeys(item for item in discovered if isinstance(item, str) and item))
+        except Exception:
+            ids = []
+            provenance["source"] = "unavailable"
+        source = provenance.get("source", "unknown")
+        listed_ids = provenance.get("verifiedModelIds", ids)
+        if not isinstance(listed_ids, list):
+            listed_ids = []
+        listed_ids = list(dict.fromkeys(item for item in listed_ids if isinstance(item, str) and item))
+        if source == "provider_api":
+            additions[provider_id] = listed_ids or ids
+        evidence.append({
+            "providerId": provider_id,
+            "source": source,
+            "status": ("listed" if source == "provider_api" and ids else
+                       "unavailable" if source == "unavailable" or not ids else
+                       "stale" if source in {"curated_fallback", "metadata_registry", "local_catalog"} else "unknown"),
+            "modelIds": listed_ids,
+            "checkedAt": provenance.get("checkedAt"),
+        })
+    if isinstance(raw, dict) and isinstance(raw.get("groups"), list):
+        codex_source = codex_provenance.get("source", "unknown")
+        codex_group = None
+        if codex_source in {"provider_api", "unknown"}:
+            codex_group = next((group for group in raw["groups"]
+                                if isinstance(group, dict) and group.get("provider_id") == "openai-codex"), None)
+            if codex_group is None:
+                codex_group = {"provider_id": "openai-codex", "provider": "OpenAI Codex", "models": []}
+                raw["groups"].append(codex_group)
+            selected_codex_ids = additions.get("openai-codex", codex_ids)
+            codex_group["models"] = [{"id": model_id, "label": model_id} for model_id in selected_codex_ids]
+        for provider_id, model_ids in additions.items():
+            group = next((group for group in raw["groups"]
+                          if isinstance(group, dict) and group.get("provider_id") == provider_id), None)
+            if group is None:
+                group = {"provider_id": provider_id, "provider": provider_id, "models": []}
+                raw["groups"].append(group)
+            group.setdefault("models", [])
+            existing = {str(row.get("id")) for row in group["models"] if isinstance(row, dict)}
+            group["models"].extend({"id": model_id, "label": model_id} for model_id in model_ids if model_id not in existing)
     config = configuration()
     result = public_catalog(raw, providers(), config)
+    # Keep a known provider group visible even when its returned list is empty;
+    # the scoped response can then explain unavailable/unknown discovery.
+    for provider_id in seen_providers:
+        if provider_id and not any(group.get("provider_id") == provider_id for group in result.get("groups", []) if isinstance(group, dict)):
+            raw_group = next((group for group in raw.get("groups", []) if isinstance(group, dict) and group.get("provider_id") == provider_id), {})
+            result["groups"].insert(0, {"provider_id": provider_id, "provider": raw_group.get("provider", provider_id),
+                                        "configured": False, "models": []})
+    result["providerModelCatalog"] = {
+        "schemaVersion": 1,
+        "scope": context.scope.model_dump(mode="json", by_alias=True),
+        "checkedAt": datetime.now(timezone.utc).isoformat(),
+        "freshness": "unknown",
+        "providers": evidence,
+    }
     if include_capabilities:
         if capability_inventory is None:
             from .capabilities import public_inventory as capability_inventory

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+from datetime import datetime, timezone
 import urllib.request
 import urllib.error
 import time
@@ -69,6 +70,7 @@ OPENROUTER_MODELS: list[tuple[str, str]] = [
 ]
 
 _openrouter_catalog_cache: list[tuple[str, str]] | None = None
+_openrouter_catalog_source: str | None = None
 
 # Providers retained in the static catalog solely for migration/status
 # compatibility must not become selectable through offline model fallbacks.
@@ -492,11 +494,14 @@ def fetch_openrouter_models(
     timeout: float = 8.0,
     *,
     force_refresh: bool = False,
+    source_out: Optional[dict[str, Any]] = None,
 ) -> list[tuple[str, str]]:
     """Return the curated OpenRouter picker list, refreshed from the live catalog when possible."""
-    global _openrouter_catalog_cache
+    global _openrouter_catalog_cache, _openrouter_catalog_source
 
     if _openrouter_catalog_cache is not None and not force_refresh:
+        if source_out is not None:
+            source_out["source"] = _openrouter_catalog_source or "unknown"
         return list(_openrouter_catalog_cache)
 
     # Prefer the remotely-hosted catalog manifest; fall back to the in-repo
@@ -519,10 +524,14 @@ def fetch_openrouter_models(
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             payload = json.loads(resp.read().decode())
     except Exception:
+        if source_out is not None:
+            source_out["source"] = "curated_fallback"
         return list(_openrouter_catalog_cache or fallback)
 
     live_items = payload.get("data", [])
     if not isinstance(live_items, list):
+        if source_out is not None:
+            source_out["source"] = "curated_fallback"
         return list(_openrouter_catalog_cache or fallback)
 
     live_by_id: dict[str, dict[str, Any]] = {}
@@ -548,17 +557,25 @@ def fetch_openrouter_models(
         curated.append((preferred_id, desc))
 
     if not curated:
+        if source_out is not None:
+            source_out["source"] = "curated_fallback"
         return list(_openrouter_catalog_cache or fallback)
 
     first_id, _ = curated[0]
     curated[0] = (first_id, "recommended")
     _openrouter_catalog_cache = curated
+    _openrouter_catalog_source = "provider_api"
+    if source_out is not None:
+        source_out["source"] = "provider_api"
     return list(curated)
 
 
-def model_ids(*, force_refresh: bool = False) -> list[str]:
+def model_ids(*, force_refresh: bool = False, source_out: Optional[dict[str, Any]] = None) -> list[str]:
     """Return just the OpenRouter model-id strings."""
-    return [mid for mid, _ in fetch_openrouter_models(force_refresh=force_refresh)]
+    ids = [mid for mid, _ in fetch_openrouter_models(force_refresh=force_refresh, source_out=source_out)]
+    if source_out is not None and not ids:
+        source_out.setdefault("source", "unavailable")
+    return ids
 
 
 
@@ -577,11 +594,13 @@ def fetch_ai_gateway_models(
     timeout: float = 8.0,
     *,
     force_refresh: bool = False,
+    source_out: Optional[dict[str, Any]] = None,
 ) -> list[tuple[str, str]]:
     """Return the curated AI Gateway picker list, refreshed from the live catalog when possible."""
     global _ai_gateway_catalog_cache
 
     if _ai_gateway_catalog_cache is not None and not force_refresh:
+        if source_out is not None: source_out["source"] = "unknown"
         return list(_ai_gateway_catalog_cache)
 
     from runtime._compat.shim_constants import AI_GATEWAY_BASE_URL
@@ -597,10 +616,12 @@ def fetch_ai_gateway_models(
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             payload = json.loads(resp.read().decode())
     except Exception:
+        if source_out is not None: source_out["source"] = "curated_fallback" if not _ai_gateway_catalog_cache else "unknown"
         return list(_ai_gateway_catalog_cache or fallback)
 
     live_items = payload.get("data", [])
     if not isinstance(live_items, list):
+        if source_out is not None: source_out["source"] = "curated_fallback" if not _ai_gateway_catalog_cache else "unknown"
         return list(_ai_gateway_catalog_cache or fallback)
 
     live_by_id: dict[str, dict[str, Any]] = {}
@@ -621,6 +642,7 @@ def fetch_ai_gateway_models(
         curated.append((preferred_id, desc))
 
     if not curated:
+        if source_out is not None: source_out["source"] = "curated_fallback" if not _ai_gateway_catalog_cache else "unknown"
         return list(_ai_gateway_catalog_cache or fallback)
 
     # If the live catalog offers a free Moonshot model, auto-promote it to
@@ -642,6 +664,7 @@ def fetch_ai_gateway_models(
         curated[0] = (first_id, "recommended")
 
     _ai_gateway_catalog_cache = curated
+    if source_out is not None: source_out["source"] = "provider_api"
     return list(curated)
 
 
@@ -1416,7 +1439,8 @@ def _merge_with_models_dev(provider: str, curated: list[str]) -> list[str]:
     return merged
 
 
-def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) -> list[str]:
+def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False,
+                       source_out: Optional[dict[str, Any]] = None) -> list[str]:
     """Return the best known model catalog for a provider.
 
     Tries live API endpoints for providers that support them (Codex),
@@ -1432,20 +1456,30 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
     callers receive an empty list and must report the provider catalog as
     unavailable.
     """
+    def result(ids, source):
+        # Optional, non-secret provenance for the scoped catalog contract.
+        # Existing callers keep the legacy list-only behavior.
+        if source_out is not None:
+            source_out["source"] = source
+        return ids
+
     normalized = normalize_provider(provider)
     if normalized in {"opencode-zen", "opencode-go"}:
         from cli.opencode_device import has_credentials, discovered_models
         if has_credentials(normalized):
-            return discovered_models(normalized)
+            ids = discovered_models(normalized)
+            return result(ids, "provider_api" if ids else "unavailable")
     if normalized == "antigravity":
         # Do not advertise a static or CLI-global catalog as account-bound.
-        return []
+        return result([], "unavailable")
     if normalized == "google-gemini-cli":
         # Legacy account tokens no longer enable consumer subscription
         # inference, so do not advertise stale Google Code Assist models.
-        return []
+        return result([], "unavailable")
     if normalized == "openrouter":
-        return model_ids(force_refresh=force_refresh)
+        details: dict[str, Any] = {}
+        ids = model_ids(force_refresh=force_refresh, source_out=details)
+        return result(ids, details.get("source", "unavailable"))
     if normalized == "openai-codex":
         from cli.codex_models import get_codex_model_ids
 
@@ -1463,16 +1497,20 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
             access_token = creds.get("api_key")
         except Exception:
             access_token = None
-        return get_codex_model_ids(access_token=access_token)
+        details: dict[str, str] = {}
+        ids = get_codex_model_ids(access_token=access_token, source_out=details)
+        if source_out is not None:
+            source_out["verifiedModelIds"] = details.get("verifiedModelIds", [])
+        return result(ids, details.get("source", "unavailable"))
     if normalized in {"copilot", "copilot-acp"}:
         try:
             live = _fetch_github_models(_resolve_copilot_catalog_api_key())
             if live:
-                return live
+                return result(live, "provider_api")
         except Exception:
             pass
         if normalized == "copilot-acp":
-            return list(_PROVIDER_MODELS.get("copilot", []))
+            return result(list(_PROVIDER_MODELS.get("copilot", [])), "curated_fallback")
     if normalized == "stepfun":
         try:
             from cli.auth import resolve_api_key_provider_credentials
@@ -1483,22 +1521,28 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
             if api_key and base_url:
                 live = fetch_api_models(api_key, base_url)
                 if live:
-                    return live
+                    return result(live, "provider_api")
         except Exception:
             pass
     if normalized == "anthropic":
         live = _fetch_anthropic_models()
         if live:
-            return live
+            return result(live, "provider_api")
     if normalized == "ai-gateway":
-        live = _fetch_ai_gateway_models()
+        details: dict[str, Any] = {}
+        live = fetch_ai_gateway_models(force_refresh=force_refresh, source_out=details)
         if live:
-            return live
+            source = details.get("source", "unknown")
+            return result([mid for mid, _ in live], source)
     if normalized == "ollama-cloud":
-        live = fetch_ollama_cloud_models(force_refresh=force_refresh)
+        details = {}
+        live = fetch_ollama_cloud_models(force_refresh=force_refresh, source_out=details)
         if live:
-            return live
-        return list(_PROVIDER_MODELS.get("ollama-cloud", []))
+            source = details.get("source", "unknown")
+            if source_out is not None and details.get("checkedAt"):
+                source_out["checkedAt"] = details["checkedAt"]
+            return result(live, source)
+        return result(list(_PROVIDER_MODELS.get("ollama-cloud", [])), details.get("source", "curated_fallback"))
     if normalized == "openai":
         # Use the same provider-scoped credential resolver as inference. This
         # covers env/.env and provider-scoped config keys without borrowing an
@@ -1519,13 +1563,13 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
                     or base
                 )
             if not api_key or not base:
-                return []
+                return result([], "unavailable")
             # Do not forward an OpenAI credential through an HTTP redirect to
             # a different host, even when the configured endpoint redirects.
             live = fetch_api_models(api_key, base, allow_redirects=False)
-            return live or []
+            return result(live or [], "provider_api" if live else "unavailable")
         except Exception:
-            return []
+            return result([], "unavailable")
     if normalized == "gmi":
         try:
             from cli.auth import resolve_api_key_provider_credentials
@@ -1536,7 +1580,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
             if api_key and base_url:
                 live = fetch_api_models(api_key, base_url)
                 if live:
-                    return live
+                    return result(live, "provider_api")
         except Exception:
             pass
     if normalized == "alibaba":
@@ -1597,7 +1641,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
                         break
                 model_ids = sorted(model_id_set, key=str.lower)
                 if model_ids:
-                    return model_ids
+                    return result(model_ids, "provider_api")
         except Exception:
             pass
     if normalized == "custom":
@@ -1611,7 +1655,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
             )
             live = fetch_api_models(api_key, base_url)
             if live:
-                return live
+                return result(live, "provider_api")
     # Bedrock uses live discovery keyed by the resolved AWS region so that
     # EU/AP users see eu.*/ap.* model IDs instead of the static us.* list.
     # Note: early return intentionally skips _MODELS_DEV_PREFERRED merge
@@ -1621,7 +1665,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
             from runtime.bedrock_adapter import bedrock_model_ids_or_none
             ids = bedrock_model_ids_or_none()
             if ids is not None:
-                return ids
+                return result(ids, "provider_api")
         except Exception:
             pass
 
@@ -1645,17 +1689,18 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
             if api_key:
                 live = _p.fetch_models(api_key=api_key)
                 if live:
-                    return live
+                    return result(live, "provider_api")
             # Use profile's fallback_models if defined
             if _p.fallback_models:
-                return list(_p.fallback_models)
+                return result(list(_p.fallback_models), "curated_fallback")
     except Exception:
         pass
 
     curated_static = list(_PROVIDER_MODELS.get(normalized, []))
     if normalized in _MODELS_DEV_PREFERRED:
-        return _merge_with_models_dev(normalized, curated_static)
-    return curated_static
+        merged = _merge_with_models_dev(normalized, curated_static)
+        return result(merged, "metadata_registry" if set(merged) != set(curated_static) else "curated_fallback")
+    return result(curated_static, "curated_fallback" if curated_static else "unavailable")
 
 
 def _fetch_anthropic_models(timeout: float = 5.0) -> Optional[list[str]]:
@@ -2799,6 +2844,7 @@ def fetch_ollama_cloud_models(
     base_url: Optional[str] = None,
     *,
     force_refresh: bool = False,
+    source_out: Optional[dict[str, Any]] = None,
 ) -> list[str]:
     """Fetch Ollama Cloud models, preferring the live availability catalog.
 
@@ -2845,10 +2891,13 @@ def fetch_ollama_cloud_models(
     if not force_refresh:
         cached = _load_ollama_cloud_cache(scope=cache_scope)
         if cached is not None:
+            if source_out is not None:
+                source_out.update(source="provider_api", checkedAt=datetime.fromtimestamp(cached.get("cached_at", 0), timezone.utc).isoformat())
             return cached["models"]
 
     # Never send an Ollama Cloud key to a custom, insecure or ambiguous origin.
     if api_key and not is_official_ollama_cloud_url(base_url):
+        if source_out is not None: source_out["source"] = "unavailable"
         return []
 
     if api_key:
@@ -2859,6 +2908,7 @@ def fetch_ollama_cloud_models(
             live_result = live_probe.get("models")
             if live_probe.get("status_code") in (401, 403):
                 _invalidate_ollama_cloud_cache_scope(cache_scope)
+                if source_out is not None: source_out["source"] = "unavailable"
                 return []
         else:
             # Preserve lightweight test/custom integrations that wrap the
@@ -2874,11 +2924,17 @@ def fetch_ollama_cloud_models(
             result.extend(m for m in live_models if m not in preferred_set)
             if result:
                 _save_ollama_cloud_cache(result, scope=cache_scope)
+                if source_out is not None:
+                    source_out.update(source="provider_api", checkedAt=datetime.now(timezone.utc).isoformat())
             return result
 
         # On outage use only a previously account-scoped live snapshot. Never
         # promote models.dev or the static catalog to account availability.
         stale = _load_ollama_cloud_cache(ignore_ttl=True, scope=cache_scope)
+        if source_out is not None:
+            source_out["source"] = "stale_provider_cache" if stale is not None else "unavailable"
+            if stale is not None:
+                source_out["checkedAt"] = datetime.fromtimestamp(stale.get("cached_at", 0), timezone.utc).isoformat()
         return stale["models"] if stale is not None else []
 
     # No credential: the known catalog helps with setup and is explicitly only
@@ -2894,6 +2950,7 @@ def fetch_ollama_cloud_models(
             result = preferred + [m for m in normalized if m not in set(preferred)]
     except Exception:
         pass
+    if source_out is not None: source_out["source"] = "curated_fallback"
     return result
 
 

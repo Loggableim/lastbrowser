@@ -20,6 +20,13 @@ export function isModelCatalogCacheCurrent(cachedScopeKey: string | null, active
 
 export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { catalog_status?: Record<string, string> }): ModelPickerOptionGroup[] {
   const catalogStatus = (selection as { catalog_status?: Record<string, string> }).catalog_status;
+  const providerCatalog = selection.providerModelCatalog;
+  const catalogScopeMatches = providerCatalog?.scope.browserProfileId === selection.scope.browserProfileId
+    && providerCatalog.scope.backendProfileId === selection.scope.backendProfileId
+    && providerCatalog.scope.spaceId === selection.scope.spaceId;
+  const currentModels = providerCatalog && catalogScopeMatches
+    ? new Map(providerCatalog.providers.map(provider => [provider.providerId, new Set(provider.models.filter(model => model.listed.status === 'current').map(model => model.id))]))
+    : null;
   const providers = new Map((selection.providers ?? []).map(provider => [provider.id, provider]));
   return (selection.groups ?? [])
     .filter(group => {
@@ -38,6 +45,7 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
     .map(group => {
       const provider = providers.get(group.provider_id);
       const models = [...new Map([...group.models, ...(group.extra_models ?? [])].map(entry => [entry.id, entry])).values()]
+        .filter(entry => !currentModels || currentModels.get(group.provider_id)?.has(entry.id))
         .map(entry => {
           const availability = entry.nativeAvailability;
           const identityMatches = !availability || nativeModelAvailabilityMatchesIdentity(availability, {

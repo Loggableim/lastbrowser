@@ -151,23 +151,31 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
                                "supportsIndependent": pid != "google-gemini-cli" and model_id not in _VIRTUAL}
                 from .scope_binding import configured_context_length
                 length = model.get("context_length")
+                length_source = model.get("context_length_source")
+                if length_source not in {"live_catalog", "local_catalog", "official_model_docs", "catalog",
+                                         "provided_catalog", "models_dev", "explicit_config"}:
+                    length_source = "unknown"
                 if type(length) is not int or not 1 <= length <= 16000000:
                     length = configured_context_length(configuration, model_id, pid)
+                    length_source = "explicit_config" if length is not None else "unknown"
                 if length is None and pid == "openai-codex":
                     # Codex OAuth context comes only from that account's own
                     # live catalog, never the public OpenAI API model catalog.
                     from cli.codex_models import get_codex_model_context_length
                     length = get_codex_model_context_length(model_id)
+                    length_source = "local_catalog" if length is not None else "unknown"
                 elif length is None:
                     # Provider-scoped exact metadata from the bundled models.dev
                     # registry. Unknown pairs remain without a context limit.
                     try:
                         from runtime.models_dev import lookup_models_dev_context
                         length = lookup_models_dev_context(pid, model_id)
+                        length_source = "models_dev" if length is not None else "unknown"
                     except Exception:
                         length = None
                 if length is not None:
                     clean_model["contextLength"] = length
+                    clean_model["contextLengthSource"] = length_source
                 for source, public in (("supportsVision", "supportsVision"), ("supportsTools", "supportsTools"),
                                        ("supports_vision", "supportsVision"), ("supports_tools", "supportsTools")):
                     if type(model.get(source)) is bool and public not in clean_model:
@@ -337,6 +345,70 @@ def _catalog_with_native_availability(scope, revision, catalog, *, profile_home=
     return groups
 
 
+def _provider_model_catalog(scope, catalog, groups):
+    evidence = {row.get("providerId"): row for row in catalog.get("providerModelCatalog", {}).get("providers", [])
+                if isinstance(row, dict) and isinstance(row.get("providerId"), str)}
+    providers = []
+    for group in groups:
+        if not isinstance(group, dict) or not group.get("provider_id"):
+            continue
+        provider_id = group["provider_id"]
+        observed = evidence.get(provider_id, {})
+        source = observed.get("source", "unknown")
+        current_ids = set(observed.get("modelIds", [])) if source == "provider_api" else set()
+        current_ids.update(value[len(f"@{provider_id}:"):] for value in tuple(current_ids)
+                          if isinstance(value, str) and value.startswith(f"@{provider_id}:"))
+        models = []
+        for bucket in ("models", "extra_models"):
+            for entry in group.get(bucket, []) if isinstance(group.get(bucket), list) else []:
+                if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
+                    continue
+                model_id = entry["id"]
+                is_current = model_id in current_ids
+                availability = entry.get("nativeAvailability") if isinstance(entry.get("nativeAvailability"), dict) else {}
+                source_state = "current" if is_current else "stale" if observed.get("status") == "stale" or source == "stale_provider_cache" else (
+                    "unavailable" if observed.get("status") == "unavailable" else "unknown")
+                reasoning_source = entry.get("reasoning_effort_source")
+                reasoning_known = reasoning_source in {"live_catalog", "local_catalog", "official_model_docs", "catalog", "provided_catalog"}
+                context = entry.get("contextLength")
+                context_source = entry.get("contextLengthSource", "unknown")
+                context_known = type(context) is int and context_source in {
+                    "live_catalog", "local_catalog", "official_model_docs", "catalog", "provided_catalog",
+                    "models_dev", "explicit_config"}
+                models.append({
+                    "id": model_id,
+                    "label": entry.get("label", model_id),
+                    "listed": {"status": source_state, "source": source, "freshness": "stale" if source_state == "stale" else "unknown"},
+                    "features": {
+                        "contextLength": {"status": "known" if context_known else "unknown",
+                                          "value": context if context_known else None, "source": context_source},
+                        "tools": {"status": "unknown", "value": None, "source": "unknown"},
+                        "vision": {"status": "unknown", "value": None, "source": "unknown"},
+                        "reasoningEfforts": {"status": "known" if reasoning_known else "unknown",
+                                             "value": entry.get("reasoning_efforts", []) if reasoning_known else None,
+                                             "source": reasoning_source if reasoning_known else "unknown"},
+                    },
+                    "qualification": {
+                        "independent": {"status": (
+                            "available" if is_current and availability.get("available") is True else
+                            "unavailable" if is_current else "unknown"),
+                            "available": bool(is_current and availability.get("available") is True),
+                            "reasonCode": availability.get("reasonCode") if is_current else "catalog_not_currently_listed"},
+                    },
+                    "liveTest": {"status": "not_run"},
+                })
+        providers.append({
+            "providerId": provider_id,
+            "label": group.get("provider", provider_id),
+            "configured": group.get("configured") is True,
+            "discovery": {"status": observed.get("status", "unknown"), "source": source,
+                          "checkedAt": observed.get("checkedAt") or catalog.get("providerModelCatalog", {}).get("checkedAt"),
+                          "freshness": "stale" if source == "stale_provider_cache" else catalog.get("providerModelCatalog", {}).get("freshness", "unknown")},
+            "models": models,
+        })
+    return {"schemaVersion": 1, "scope": scope.model_dump(mode="json", by_alias=True), "providers": providers}
+
+
 def _response(scope, revision, model, provider, catalog, *, profile_home=None, account_id=None):
     group, entry = _entry(catalog, model, provider)
     configured = bool(model and group and group.get("configured"))
@@ -344,13 +416,15 @@ def _response(scope, revision, model, provider, catalog, *, profile_home=None, a
     reason = "independent_orchestration_not_supported" if model in _VIRTUAL else (
         "provider_unavailable" if provider == "google-gemini-cli" else
         "model_not_in_bound_catalog" if model and not entry else "provider_not_configured" if not configured else None)
+    groups = _catalog_with_native_availability(scope, revision, catalog,
+        profile_home=profile_home, account_id=account_id)
     return {"schemaVersion": 1, "scope": scope.model_dump(mode="json", by_alias=True), "revision": revision,
             "model": model, "provider": provider, "configured": configured, "supportsIndependent": supported,
             "nativeAvailability": _native_availability(scope, revision, catalog, provider, model,
                 profile_home=profile_home, account_id=account_id),
             **({"reasonCode": reason} if reason else {}),
-            "groups": _catalog_with_native_availability(scope, revision, catalog,
-                profile_home=profile_home, account_id=account_id),
+            "groups": groups,
+            "providerModelCatalog": _provider_model_catalog(scope, catalog, groups),
             "providers": catalog.get("providers", [])}
 
 

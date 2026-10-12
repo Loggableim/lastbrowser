@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import os
 
@@ -257,7 +257,7 @@ def _read_cache_models(codex_home: Path) -> List[str]:
     return deduped
 
 
-def get_codex_model_ids(access_token: Optional[str] = None) -> List[str]:
+def get_codex_model_ids(access_token: Optional[str] = None, *, source_out: Optional[dict[str, Any]] = None) -> List[str]:
     """Return available Codex model IDs, trying API first, then local sources.
     
     Resolution order: API (live, if token provided) > config.toml default >
@@ -271,6 +271,9 @@ def get_codex_model_ids(access_token: Optional[str] = None) -> List[str]:
     if access_token:
         api_models = _fetch_models_from_api(access_token)
         if api_models:
+            if source_out is not None:
+                source_out["source"] = "provider_api"
+                source_out["verifiedModelIds"] = list(api_models)
             return _add_forward_compat_models(api_models)
 
     # Fall back to local sources
@@ -278,7 +281,8 @@ def get_codex_model_ids(access_token: Optional[str] = None) -> List[str]:
     if default_model:
         ordered.append(default_model)
 
-    for model_id in _read_cache_models(codex_home):
+    cached_models = _read_cache_models(codex_home)
+    for model_id in cached_models:
         if model_id not in ordered:
             ordered.append(model_id)
 
@@ -286,4 +290,8 @@ def get_codex_model_ids(access_token: Optional[str] = None) -> List[str]:
         if model_id not in ordered:
             ordered.append(model_id)
 
-    return _add_forward_compat_models(ordered)
+    result = _add_forward_compat_models(ordered)
+    if source_out is not None:
+        source_out["source"] = "local_catalog" if default_model or cached_models else (
+            "curated_fallback" if result else "unavailable")
+    return result

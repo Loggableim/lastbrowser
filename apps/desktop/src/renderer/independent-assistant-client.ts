@@ -386,7 +386,13 @@ const decoders: { [K in IndependentOperation]: (value: unknown) => IndependentOp
   modelSelection: decode((v): v is ScopedModelSelection => {
     if (!versioned(v) || !isIndependentScope(v.scope) || !revision(v.revision) || !text(v.model) || !text(v.provider)
       || !boolean(v.configured) || !boolean(v.supportsIndependent) || !optional(v.reasonCode, ref)
-      || !optional(v.groups, values => list(values, isModelGroup)) || !optional(v.providers, values => list(values, isModelProvider))) return false;
+      || !optional(v.groups, values => list(values, isModelGroup)) || !optional(v.providers, values => list(values, isModelProvider))
+      || !optional(v.providerModelCatalog, value => isIndependentRecord(value) && value.schemaVersion === 1
+        && isIndependentScope(value.scope) && Array.isArray(value.providers) && value.providers.every(provider => isIndependentRecord(provider)
+          && text(provider.providerId) && text(provider.label) && boolean(provider.configured) && isIndependentRecord(provider.discovery)
+          && oneOf(provider.discovery.status, ['listed', 'stale', 'unavailable', 'unknown']) && text(provider.discovery.source)
+          && nullable(provider.discovery.checkedAt, timestamp) && text(provider.discovery.freshness) && Array.isArray(provider.models)))) return false;
+    if (v.providerModelCatalog && !sameAssistantScope(v.providerModelCatalog.scope as ScopedModelSelection['scope'], v.scope as ScopedModelSelection['scope'])) return false;
     return (v.groups ?? []).every(group => [...group.models, ...(group.extra_models ?? [])].every(entry => {
       const availability = entry.nativeAvailability;
       return availability === undefined || availability.provider === group.provider_id && availability.model === entry.id

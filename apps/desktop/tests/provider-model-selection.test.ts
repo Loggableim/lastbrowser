@@ -155,22 +155,26 @@ describe('provider-aware model selection', () => {
     const selection = { schemaVersion: 1 as const, scope, revision: 5, model: 'current', provider: 'provider', configured: true, supportsIndependent: true,
       groups: [{ provider: 'Provider', provider_id: 'provider', configured: true, models: [
         { id: 'current', label: 'Current', supportsIndependent: true },
-        { id: 'fallback', label: 'Fallback', supportsIndependent: true }
+        { id: 'fallback', label: 'Configured', supportsIndependent: true },
+        { id: 'curated-candidate', label: 'Curated candidate', supportsIndependent: true }
       ] }],
       providerModelCatalog: { schemaVersion: 1 as const, scope, providers: [{ providerId: 'provider', label: 'Provider', configured: true,
         discovery: { status: 'listed' as const, source: 'provider_api', checkedAt: null, freshness: 'unknown' }, models: [
           { id: 'current', label: 'Current', listed: { status: 'current', source: 'provider_api', freshness: 'unknown' },
             features: { contextLength: { status: 'unknown', value: null, source: 'unknown' }, tools: { status: 'unknown', value: null, source: 'unknown' }, vision: { status: 'unknown', value: null, source: 'unknown' }, reasoningEfforts: { status: 'unknown', value: null, source: 'unknown' } },
             qualification: { independent: { status: 'available', available: true, reasonCode: null } }, liveTest: { status: 'not_run' } },
-        { id: 'fallback', label: 'Fallback', listed: { status: 'configured', source: 'explicit_config', freshness: 'unknown' },
+        { id: 'fallback', label: 'Configured', listed: { status: 'configured', source: 'explicit_config', freshness: 'unknown' },
             features: { contextLength: { status: 'unknown', value: null, source: 'unknown' }, tools: { status: 'unknown', value: null, source: 'unknown' }, vision: { status: 'unknown', value: null, source: 'unknown' }, reasoningEfforts: { status: 'unknown', value: null, source: 'unknown' } },
-            qualification: { independent: { status: 'unknown', available: false, reasonCode: 'catalog_not_currently_listed' } }, liveTest: { status: 'not_run' } }
+            qualification: { independent: { status: 'unknown', available: false, reasonCode: 'explicit_configuration_unverified' } }, liveTest: { status: 'not_run' } },
+        { id: 'curated-candidate', label: 'Curated candidate', listed: { status: 'fallback', source: 'curated_fallback', freshness: 'unknown' },
+            features: { contextLength: { status: 'unknown', value: null, source: 'unknown' }, tools: { status: 'unknown', value: null, source: 'unknown' }, vision: { status: 'unknown', value: null, source: 'unknown' }, reasoningEfforts: { status: 'unknown', value: null, source: 'unknown' } },
+            qualification: { independent: { status: 'unknown', available: false, reasonCode: 'curated_fallback_unverified' } }, liveTest: { status: 'not_run' } }
         ] }] } };
     const mapped = mapScopedModelPickerOptions(selection);
-    expect(mapped.flatMap(group => group.models.map(model => model.id))).toEqual(['current', 'fallback']);
-    expect(mapped[0].models.map(model => model.listingStatus)).toEqual(['current', 'configured']);
+    expect(mapped.flatMap(group => group.models.map(model => model.id))).toEqual(['current', 'fallback', 'curated-candidate']);
+    expect(mapped[0].models.map(model => model.listingStatus)).toEqual(['current', 'configured', 'fallback']);
     expect(mapScopedModelPickerOptions({ ...selection, providerModelCatalog: { ...selection.providerModelCatalog, scope: { ...scope, spaceId: 'other-space' } } })
-      .flatMap(group => group.models.map(model => model.id))).toEqual(['current', 'fallback']);
+      .flatMap(group => group.models.map(model => model.id))).toEqual(['current', 'fallback', 'curated-candidate']);
   });
   it('fails closed on provider models without native availability and preserves only explicitly supported pairs', () => {
     const scope = { backendProfileId: 'p', spaceId: 's', browserProfileId: 'b' };

@@ -207,7 +207,7 @@ export function NativeChatMain({
   }, [activeSessionId, reasoningPreferenceKey]);
 
   // Discovery runs in the captured profile worker. No global model default is written.
-  type CatalogGroup = { provider: string; providerId: string; configured: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured'; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability }> };
+  type CatalogGroup = { provider: string; providerId: string; configured: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability }> };
   const [catalogSnapshot, setCatalogSnapshot] = useState<{ viewKey: string; phase: 'loading' | 'ready' | 'error'; groups: CatalogGroup[] }>({ viewKey: modelViewKey, phase: 'loading', groups: [] });
   const modelCatalog = catalogSnapshot.viewKey === modelViewKey ? catalogSnapshot.groups : [];
   const modelCatalogLoaded = catalogSnapshot.viewKey === modelViewKey && catalogSnapshot.phase === 'ready';

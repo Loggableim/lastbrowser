@@ -2740,7 +2740,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const sharedCatalogSelection = catalogState.key === providerCatalogKey ? catalogState.selection : null;
   const catalogMappedGroups = sharedCatalogSelection ? mapScopedModelPickerOptions(sharedCatalogSelection).map(group => ({
     provider_id: group.providerId, provider: group.provider, configured: group.configured,
-    models: group.models.map(model => ({ id: model.id, label: model.label, supportsIndependent: model.supportsIndependent })), extra_models: []
+    models: group.models.map(model => ({ id: model.id, label: model.label, listingStatus: model.listingStatus, supportsIndependent: model.supportsIndependent })), extra_models: []
   })) as AnyRecord[] : null;
   const allModelGroups: AnyRecord[] = (catalogMappedGroups ?? rawModelGroups).filter((group) =>
     !isRetiredProvider(group.provider_id || group.provider_id_canonical || group.provider));
@@ -2753,7 +2753,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     const providerId = settingsText(group.provider_id || group.provider_id_canonical, '');
     const modelId = settingsText(model.id || model.name || model.label, '');
     const qualified = isProviderModelQualified(providerId, modelId, activeProfileId, activeBackendProfileName || 'default', window.localStorage);
-    return showUntestedBetas && !qualified ? { ...model, label: `${settingsText(model.label || model.name || model.id)} · ${t('settings.panels.providers.betaUntested')}` } : model;
+    const label = settingsText(model.label || model.name || model.id);
+    if (model.listingStatus === 'fallback') return { ...model, label: `${label} · ${t('settings.panels.providers.catalogFallbackUnverified')}` };
+    return showUntestedBetas && !qualified ? { ...model, label: `${label} · ${t('settings.panels.providers.betaUntested')}` } : model;
   }) }));
   const storedActiveProvider = settingsText(modelsState.data?.active_provider, settingsText(settings.provider || settings.model_provider));
   const activeProvider = isRetiredProvider(storedActiveProvider) ? '' : storedActiveProvider;

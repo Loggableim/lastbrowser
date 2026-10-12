@@ -381,7 +381,10 @@ def _provider_model_catalog(scope, catalog, groups):
                 is_current = model_id in current_ids
                 availability = entry.get("nativeAvailability") if isinstance(entry.get("nativeAvailability"), dict) else {}
                 is_explicitly_configured = entry.get("modelSource") == "explicit_config"
-                source_state = "current" if is_current else "configured" if is_explicitly_configured else "stale" if observed.get("status") == "stale" or source == "stale_provider_cache" else (
+                fallback_sources = {"curated_fallback", "metadata_registry", "local_catalog"}
+                is_fallback_candidate = not is_current and model_id in set(observed.get("modelIds", [])) and source in fallback_sources
+                is_explicit_only = is_explicitly_configured and not is_current
+                source_state = "current" if is_current else "configured" if is_explicit_only else "fallback" if is_fallback_candidate else "stale" if observed.get("status") == "stale" or source == "stale_provider_cache" else (
                     "unavailable" if observed.get("status") == "unavailable" else "unknown")
                 reasoning_source = entry.get("reasoning_effort_source")
                 reasoning_known = reasoning_source in {"live_catalog", "local_catalog", "official_model_docs", "catalog", "provided_catalog"}
@@ -393,7 +396,7 @@ def _provider_model_catalog(scope, catalog, groups):
                 models.append({
                     "id": model_id,
                     "label": entry.get("label", model_id),
-                    "listed": {"status": source_state, "source": "explicit_config" if is_explicitly_configured else source,
+                    "listed": {"status": source_state, "source": "provider_api" if is_current else "explicit_config" if is_explicitly_configured else source,
                                "freshness": "stale" if source_state == "stale" else "unknown"},
                     "features": {
                         "contextLength": {"status": "known" if context_known else "unknown",
@@ -406,11 +409,12 @@ def _provider_model_catalog(scope, catalog, groups):
                     },
                     "qualification": {
                         "independent": {"status": (
-                            "unknown" if is_explicitly_configured else
+                            "unknown" if is_explicit_only or is_fallback_candidate else
                             "available" if is_current and availability.get("available") is True else
                             "unavailable" if is_current else "unknown"),
-                            "available": bool(not is_explicitly_configured and is_current and availability.get("available") is True),
-                            "reasonCode": ("explicit_configuration_unverified" if is_explicitly_configured else
+                            "available": bool(not is_explicit_only and not is_fallback_candidate and is_current and availability.get("available") is True),
+                            "reasonCode": ("explicit_configuration_unverified" if is_explicit_only else
+                                           "curated_fallback_unverified" if is_fallback_candidate else
                                            availability.get("reasonCode") if is_current else "catalog_not_currently_listed")},
                     },
                     "liveTest": {"status": "not_run"},

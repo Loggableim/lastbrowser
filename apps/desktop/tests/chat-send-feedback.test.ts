@@ -60,4 +60,12 @@ describe('immediate standard-chat send feedback', () => {
     const h = harness(true); const pending = h.send('hello'); h.finish(false); await pending;
     expect(h.state().chat).toHaveLength(1); expect(h.state().draft).toBe('');
   });
+  it('removes a never accepted stopped turn while keeping its cleared composer', async () => {
+    const h = harness(); const pending = h.send('hello');
+    h.context.activeNativeSubmissionRef.current.stoppedBeforeAcceptance = true;
+    h.finish(false); await pending;
+    expect(h.state().chat).toEqual([]);
+    expect(h.state().legacy).toEqual([]);
+    expect(h.state().draft).toBe('');
+  });
 });

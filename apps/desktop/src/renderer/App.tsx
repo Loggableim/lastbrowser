@@ -3932,7 +3932,7 @@ function AppContent(): JSX.Element {
     }
     if (browserCommand) {
       if (submission && preflightStopRequestedSubmissionRef.current === submission) {
-        submission.definitelyRejected = false;
+        submission.stoppedBeforeAcceptance = true;
         return false;
       }
       const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
@@ -3955,14 +3955,14 @@ function AppContent(): JSX.Element {
       chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName });
     } catch (error) {
       if (submission && preflightStopRequestedSubmissionRef.current === submission) {
-        submission.definitelyRejected = false;
+        submission.stoppedBeforeAcceptance = true;
         return false;
       }
       setChatError(error instanceof Error ? error.message : String(error));
       return false;
     }
     if (submission && preflightStopRequestedSubmissionRef.current === submission) {
-      submission.definitelyRejected = false;
+      submission.stoppedBeforeAcceptance = true;
       return false;
     }
     const createGuardedStartInput = (groundingContext?: TeamworkGroundingContext) => ({
@@ -4081,7 +4081,7 @@ function AppContent(): JSX.Element {
       if (!guardedStart.ok) {
         if (guardedStart.reason === 'transport_error') {
           if (guardedStart.error === stoppedBeforeAcceptance) {
-            if (submission) submission.definitelyRejected = false;
+            if (submission) submission.stoppedBeforeAcceptance = true;
             return false;
           }
           if (submission) submission.definitelyRejected = isDefiniteChatStartRejection(guardedStart.error);

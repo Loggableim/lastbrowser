@@ -16,7 +16,9 @@ startup investigation; this change does not touch `apps/desktop/src/main/`.
 
 - Standard chat records Stop against the active UI turn while start acceptance
   has no stream ID. The Stop control appears while model preflight is pending
-  and binds to that submitted draft. It avoids the transport call if Stop precedes it. If the
+  and binds to that submitted draft. A Stop before backend acceptance removes
+  the optimistic echo and keeps the explicitly cleared composer empty. It
+  avoids the transport call if Stop precedes it. If the
   backend accepted the turn already, the renderer sends a scoped cancel as soon
   as it receives the stream ID and waits for the terminal stream event.
 - The native backend settles a cancelled, registered turn before worker launch,
@@ -43,7 +45,7 @@ single child-history recovery action. Final local gates before commit:
 
 | Gate | Result |
 |---|---|
-| `npm test` | 241/241 suites, 2180/2180 tests passed |
+| `npm test` | 241/241 suites, 2182/2182 tests passed |
 | `npm run verify:store` | 39 PASS, 2 WARN, 0 FAIL; no final signed package supplied |
 | `npm --workspace apps/desktop run build` | Passed, 0 TypeScript/Vite errors |
 | `python -m compileall -q services/sidekick` | Passed |

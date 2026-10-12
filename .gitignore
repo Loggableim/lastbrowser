@@ -15,6 +15,8 @@ release/
 apps/desktop/runtime/
 /python/
 /venv/
+.venv
+services/sidekick/.venv
 *.BACKUP*
 llama/models/
 llama/bin/

@@ -87,3 +87,38 @@ def test_cancel_between_provider_guard_and_session_lock_cannot_persist():
 
     assert namespace["probe"](Event(), SimpleNamespace(active_stream_id="old-stream"),
                               "old-stream", Lock(), Event()) == "persist-result"
+
+
+@pytest.mark.parametrize("refresh_path", [0, 1])
+def test_stop_during_credential_refresh_prevents_second_provider_request(refresh_path):
+    """Both silent-return and raised-auth refreshes must recheck Stop after IO."""
+    source = Path(__file__).parents[1] / "web" / "api" / "streaming.py"
+    worker = next(node for node in ast.parse(source.read_text(encoding="utf-8")).body
+                  if isinstance(node, ast.FunctionDef) and node.name == "_run_agent_streaming")
+    refresh_pairs = []
+    for parent in ast.walk(worker):
+        body = getattr(parent, "body", None)
+        if not isinstance(body, list):
+            continue
+        for index, node in enumerate(body[:-1]):
+            if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+                    and isinstance(node.value.func, ast.Name)
+                    and node.value.func.id == "_attempt_credential_self_heal"):
+                guard = body[index + 1]
+                if isinstance(guard, ast.If) and "cancel_event.is_set()" in ast.unparse(guard.test):
+                    refresh_pairs.append((node, guard))
+    assert len(refresh_pairs) == 2
+    refresh, guard = refresh_pairs[refresh_path]
+    probe = ast.FunctionDef(name="probe", args=ast.arguments(
+        posonlyargs=[], args=[ast.arg(arg=name) for name in ("cancel_event", "s", "stream_id")],
+        kwonlyargs=[], kw_defaults=[], defaults=[]),
+        body=[refresh, guard, ast.parse("return 'retry-provider'").body[0]], decorator_list=[])
+    namespace = {"resolved_provider": "test", "session_id": "session", "_agent_lock": Lock()}
+    module = ast.fix_missing_locations(ast.Module(body=[probe], type_ignores=[]))
+    exec(compile(module, str(source), "exec"), namespace)
+
+    stopped = Event()
+    namespace["_attempt_credential_self_heal"] = lambda *_: (stopped.set(), {"token": "fresh"})[1]
+    assert namespace["probe"](stopped, SimpleNamespace(active_stream_id="stream"), "stream") is None
+    namespace["_attempt_credential_self_heal"] = lambda *_: {"token": "fresh"}
+    assert namespace["probe"](Event(), SimpleNamespace(active_stream_id="stream"), "stream") == "retry-provider"

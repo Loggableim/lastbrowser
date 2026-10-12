@@ -4253,6 +4253,8 @@ def _run_agent_streaming(
                 )
                 # _token_sent tracks whether on_token() was called (any streamed text)
                 if not _assistant_added and not _token_sent:
+                    if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                        return
                     _last_err = getattr(agent, '_last_error', None) or result.get('error') or ''
                     _err_str = str(_last_err) if _last_err else ''
                     _classification = _classify_provider_error(
@@ -4270,10 +4272,17 @@ def _run_agent_streaming(
                         # ── Credential self-heal on 401 (#1401) ──
                         # Before emitting the error, try re-reading credentials
                         # and retrying once with a fresh agent.
+                        if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                            return
                         _heal_result = None
                         _heal_rt = _attempt_credential_self_heal(
                             resolved_provider or '', session_id, _agent_lock,
                         )
+                        # The credential read can block while Stop sets the flag.
+                        # We still own the session lock here; release it without
+                        # starting another provider request so Stop can persist.
+                        if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                            return
                         if _heal_rt is not None:
                             logger.info('[webui] self-heal: retrying stream after credential refresh')
                             # Rebuild runtime variables from the refreshed resolve
@@ -4307,6 +4316,8 @@ def _run_agent_streaming(
                             _self_healed = True
                             _token_sent = False
                             try:
+                                if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                                    return
                                 _heal_result = agent.run_conversation(
                                     user_message=user_message,
                                     system_message=workspace_system_msg,
@@ -4323,6 +4334,8 @@ def _run_agent_streaming(
                                     '[webui] self-heal: retry also failed: %s', _retry_exc,
                                 )
                                 _heal_ok = False
+                            if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                                return
                             if _heal_ok and _heal_result is not None:
                                 # Retry succeeded — replace result and skip error
                                 result = _heal_result
@@ -4380,6 +4393,8 @@ def _run_agent_streaming(
                         # fall through to normal post-result persistence below.
                         pass
                     else:
+                        if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                            return
                         _error_payload = _provider_error_payload(
                             _err_str or f'{_err_label}.',
                             _err_type,
@@ -4717,6 +4732,8 @@ def _run_agent_streaming(
                             )
                         except Exception:
                             logger.debug("Failed to append assistant_started turn journal event", exc_info=True)
+                if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
+                    return
                 s.save()
                 if not ephemeral and not quickchat:
                     try:
@@ -4982,6 +4999,8 @@ def _run_agent_streaming(
                 _heal_rt = _attempt_credential_self_heal(
                     resolved_provider or '', session_id, _agent_lock,
                 )
+                if cancel_event.is_set() or (s is not None and getattr(s, 'active_stream_id', None) != stream_id):
+                    return
                 if _heal_rt is not None:
                     logger.info('[webui] self-heal (except path): retrying stream after credential refresh')
                     _self_healed = True

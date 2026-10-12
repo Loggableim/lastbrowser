@@ -72,7 +72,7 @@ describe('desktop runtime packaging', () => {
   it('selects python.exe on Windows and python3 on Linux', () => {
     expect(pythonRuntimeExecutableName('win32')).toBe('python.exe');
     expect(pythonRuntimeExecutableName('linux')).toBe('python3');
-    expect(posixPythonLauncherScript()).toBe('#!/bin/sh\nexec python3 "$@"\n');
+    expect(posixPythonLauncherScript()).toBe('#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nexec ./bin/python3 "$@"\n');
   });
 
   it('reuses an unchanged Python runtime across app version bumps', () => {

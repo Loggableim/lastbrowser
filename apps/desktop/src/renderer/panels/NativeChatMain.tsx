@@ -72,6 +72,7 @@ import { NativeGrillControls } from '../components/NativeGrillControls.js';
 import { NativeChatBrowserActivity } from '../components/NativeChatBrowserView.js';
 import { hasCurrentTurnBrowserUse } from '../chat-browser-use.js';
 import { nativeGrillCopy } from '../i18n/native-grill-copy.js';
+import { requestNativeChatModelCatalog } from '../native-chat-model-catalog.js';
 
 const noCommandCapabilities:CommandCapabilities={plan:false,grill_me:false,boost:false,goal:false,gquota:false,plugins:false};
 const REQUESTED_CHAT_DEFAULT = { provider: 'openai-codex', model: 'gpt-6-luna' } as const;
@@ -221,7 +222,11 @@ export function NativeChatMain({
         const [result, liveModelsRes] = await Promise.all([
           modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: { action: 'get' } }),
           window.lastbrowser?.sidekick?.requestWebui
-            ? window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' }).catch(() => null)
+            ? requestNativeChatModelCatalog(window.lastbrowser.sidekick.requestWebui, {
+              browserProfileId: activeBrowserProfileId,
+              workspacePath: activeSpacePath || null,
+              ...(activeBackendProfileName ? { backendProfileName: activeBackendProfileName } : {})
+            }).catch(() => null)
             : Promise.resolve(null)
         ]);
         if (!result.ok) throw new Error(result.error.message);

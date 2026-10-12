@@ -430,6 +430,29 @@ function createWindow(): BrowserWindow {
   const window = new BrowserWindow(createMainWindowOptions(mainDir));
   mainWindow = window;
 
+  const rendererStartedAt = Date.now();
+  const logRendererLifecycle = (event: string, detail?: Record<string, unknown>): void => {
+    console.info('[lastbrowser startup-renderer]', {
+      event,
+      elapsedMs: Date.now() - rendererStartedAt,
+      mainFrameLoading: window.webContents.isLoadingMainFrame(),
+      ...detail
+    });
+  };
+  window.webContents.on('dom-ready', () => logRendererLifecycle('dom-ready'));
+  window.webContents.on('did-start-loading', () => logRendererLifecycle('did-start-loading'));
+  window.webContents.on('did-stop-loading', () => logRendererLifecycle('did-stop-loading'));
+  window.webContents.on('did-finish-load', () => logRendererLifecycle('did-finish-load'));
+  window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
+    if (isMainFrame) logRendererLifecycle('did-fail-load', { errorCode, errorDescription });
+  });
+  window.webContents.on('render-process-gone', (_event, details) => {
+    logRendererLifecycle('render-process-gone', { reason: details.reason, exitCode: details.exitCode });
+  });
+  window.webContents.on('unresponsive', () => logRendererLifecycle('unresponsive'));
+  window.webContents.on('responsive', () => logRendererLifecycle('responsive'));
+  window.once('ready-to-show', () => logRendererLifecycle('ready-to-show'));
+
   window.webContents.on('did-start-loading', () => openUrlLifecycle.onWindowLoading(window));
   window.webContents.on('did-finish-load', () => {
     // Let preload, React, and the browser tab event subscription mount first.

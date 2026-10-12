@@ -16695,6 +16695,7 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
    intentionally extend beyond the narrow sidebar's 48px layout column. */
 .sidekick-sidebar.slim .sidekick-dock-inner {
   width: 100%;
+  height: calc(100vh - var(--titlebar-height, 42px));
   overflow: visible;
 }
 

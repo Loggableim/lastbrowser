@@ -35,17 +35,18 @@ export interface SpeedDialItem {
   url: string;
   category: string;
   iconText: string;
+  iconPath: string;
 }
 
 export const DEFAULT_SPEED_DIAL_ITEMS: SpeedDialItem[] = [
-  { id: 'github', label: 'GitHub', domain: 'github.com', url: 'https://github.com', category: 'Developer', iconText: 'GH' },
-  { id: 'google', label: 'Google', domain: 'google.com', url: 'https://www.google.com', category: 'Search', iconText: 'G' },
-  { id: 'wikipedia', label: 'Wikipedia', domain: 'wikipedia.org', url: 'https://en.wikipedia.org', category: 'Knowledge', iconText: 'W' },
-  { id: 'youtube', label: 'YouTube', domain: 'youtube.com', url: 'https://www.youtube.com', category: 'Video', iconText: 'YT' },
-  { id: 'reddit', label: 'Reddit', domain: 'reddit.com', url: 'https://www.reddit.com', category: 'Community', iconText: 'RD' },
-  { id: 'hackernews', label: 'Hacker News', domain: 'news.ycombinator.com', url: 'https://news.ycombinator.com', category: 'Tech News', iconText: 'HN' },
-  { id: 'huggingface', label: 'Hugging Face', domain: 'huggingface.co', url: 'https://huggingface.co', category: 'AI Models', iconText: 'HF' },
-  { id: 'openai', label: 'OpenAI', domain: 'openai.com', url: 'https://openai.com', category: 'AI Research', iconText: 'OA' }
+  { id: 'github', label: 'GitHub', domain: 'github.com', url: 'https://github.com', category: 'Developer', iconText: 'GH', iconPath: './speed-dial/github.ico' },
+  { id: 'google', label: 'Google', domain: 'google.com', url: 'https://www.google.com', category: 'Search', iconText: 'G', iconPath: './speed-dial/google.ico' },
+  { id: 'wikipedia', label: 'Wikipedia', domain: 'wikipedia.org', url: 'https://en.wikipedia.org', category: 'Knowledge', iconText: 'W', iconPath: './speed-dial/wikipedia.ico' },
+  { id: 'youtube', label: 'YouTube', domain: 'youtube.com', url: 'https://www.youtube.com', category: 'Video', iconText: 'YT', iconPath: './speed-dial/youtube.ico' },
+  { id: 'reddit', label: 'Reddit', domain: 'reddit.com', url: 'https://www.reddit.com', category: 'Community', iconText: 'RD', iconPath: './speed-dial/reddit.png' },
+  { id: 'hackernews', label: 'Hacker News', domain: 'news.ycombinator.com', url: 'https://news.ycombinator.com', category: 'Tech News', iconText: 'HN', iconPath: './speed-dial/hackernews.ico' },
+  { id: 'huggingface', label: 'Hugging Face', domain: 'huggingface.co', url: 'https://huggingface.co', category: 'AI Models', iconText: 'HF', iconPath: './speed-dial/huggingface.ico' },
+  { id: 'openai', label: 'OpenAI', domain: 'openai.com', url: 'https://openai.com', category: 'AI Research', iconText: 'OA', iconPath: './speed-dial/openai.svg' }
 ];
 
 export interface DashboardGreeting {
@@ -107,6 +108,8 @@ export interface NativeBrowserStartPageProps {
   visits: BrowserVisit[];
   onNavigate: (url: string) => void;
   onAskAi?: (prompt: string) => void;
+  aiConnected?: boolean;
+  onOpenModelSettings?: () => void;
   onOpenCommandPalette?: () => void;
   botName?: string;
   spaces?: SpaceSummary[];
@@ -145,6 +148,8 @@ export function NativeBrowserStartPage({
   visits,
   onNavigate,
   onAskAi,
+  aiConnected = false,
+  onOpenModelSettings,
   onOpenCommandPalette,
   botName = 'Nova',
   spaces = [],
@@ -261,10 +266,8 @@ export function NativeBrowserStartPage({
   function handleAskAi(): void {
     const value = query.trim();
     if (!value) return;
-    if (onAskAi) {
+    if (aiConnected && onAskAi) {
       onAskAi(value);
-    } else {
-      onNavigate(`https://www.google.com/search?q=${encodeURIComponent(value)}`);
     }
   }
 
@@ -278,6 +281,7 @@ export function NativeBrowserStartPage({
       return;
     }
 
+    if (!aiConnected) return;
     if (onAskAi) {
       onAskAi(action.prompt);
     } else {
@@ -328,7 +332,7 @@ export function NativeBrowserStartPage({
         <input
           ref={searchInputRef}
           value={query}
-          placeholder={t('browser.startPage.searchPlaceholder', { botName: effectiveBotName })}
+          placeholder={aiConnected ? t('browser.startPage.searchPlaceholder', { botName: effectiveBotName }) : t('browser.chrome.searchPlaceholder')}
           onChange={(event) => setQuery(event.target.value)}
           data-testid="dashboard-search-input"
         />
@@ -336,7 +340,7 @@ export function NativeBrowserStartPage({
           <button
             type="button"
             className="secondary-action compact startpage-ask-ai-btn"
-            disabled={!query.trim()}
+            disabled={!query.trim() || !aiConnected}
             onClick={handleAskAi}
             title={t('browser.startPage.askNovaTitle')}
           >
@@ -362,12 +366,19 @@ export function NativeBrowserStartPage({
             type="button"
             className="startpage-chip-btn"
             onClick={() => handleQuickAction(action)}
+            disabled={!aiConnected && action.id !== 'palette'}
             title={action.prompt}
           >
             <span className="chip-icon">{action.icon}</span>
             <span className="chip-label">{t(action.labelKey)}</span>
           </button>
         ))}
+        {!aiConnected && (
+          <span className="startpage-ai-unavailable" role="status">
+            {t('spaceAssistant.notReady')}
+            {onOpenModelSettings && <button type="button" onClick={onOpenModelSettings}>{t('spaceAssistant.connectInSettings')}</button>}
+          </span>
+        )}
       </div>
 
       {/* ── Space-Hub / Workspaces Overview ──────────────────────────────── */}
@@ -515,7 +526,7 @@ export function NativeBrowserStartPage({
             >
               <div className="speed-dial-tile-icon">
                 <span className="speed-dial-fallback">{item.iconText}</span>
-                <img src={`https://${item.domain}/favicon.ico`} alt="" width="26" height="26" loading="lazy" onLoad={(event) => { if (event.currentTarget.previousElementSibling instanceof HTMLElement) event.currentTarget.previousElementSibling.style.display = 'none'; }} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
+                <img src={item.iconPath} alt="" width="26" height="26" loading="lazy" onLoad={(event) => { if (event.currentTarget.previousElementSibling instanceof HTMLElement) event.currentTarget.previousElementSibling.style.display = 'none'; }} onError={(event) => { event.currentTarget.style.display = 'none'; }} />
               </div>
               <div className="speed-dial-tile-info">
                 <strong className="speed-dial-tile-label">{item.label}</strong>

@@ -88,8 +88,14 @@ export type MigrationIpcDeps = {
   getWebuiUrl: () => string;
   getHomePath: () => string;
   getAppDataPath: () => string;
+  isIsolatedProfile?: () => boolean;
   fsDeps?: SidekickMigrationDeps;
 };
+
+const noStandaloneInstall = (): StandaloneInstallReport => ({
+  found: false,
+  components: { spaces: false, supermemory: false, profiles: false, config: false }
+});
 
 /**
  * Register the migration IPC channels. The heavy lifting (copying files)
@@ -98,10 +104,14 @@ export type MigrationIpcDeps = {
  */
 export function registerSidekickMigrationIpc(ipc: IpcHandleApi, deps: MigrationIpcDeps): void {
   ipc.handle('lastbrowser:sidekick:detectExistingInstall', () => {
+    if (deps.isIsolatedProfile?.()) return noStandaloneInstall();
     const candidatePaths = [deps.getHomePath(), deps.getAppDataPath()];
     return detectStandaloneSidekickInstall(candidatePaths, deps.fsDeps);
   });
   ipc.handle('lastbrowser:sidekick:migrateStandalone', async (_event: unknown, request: unknown) => {
+    if (deps.isIsolatedProfile?.()) {
+      return { copied: [], skipped: [], errors: ['Standalone migration is disabled for this isolated profile.'] } satisfies StandaloneMigrationReport;
+    }
     const payload = (request || {}) as Partial<StandaloneMigrationRequest>;
     if (typeof payload.source_home !== 'string' || !payload.source_home) {
       return { copied: [], skipped: [], errors: ['A source home directory is required.'] } satisfies StandaloneMigrationReport;
@@ -137,6 +147,7 @@ export function registerDefaultSidekickMigrationIpc(ipc: typeof ipcMain, getWebu
   registerSidekickMigrationIpc(ipc, {
     getWebuiUrl,
     getHomePath: () => app.getPath('home'),
-    getAppDataPath: () => process.env.APPDATA || app.getPath('appData')
+    getAppDataPath: () => process.env.APPDATA || app.getPath('appData'),
+    isIsolatedProfile: () => process.argv.includes('--lastbrowser-isolated-profile')
   });
 }

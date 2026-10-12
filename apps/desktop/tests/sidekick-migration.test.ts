@@ -101,6 +101,26 @@ describe('registerSidekickMigrationIpc', () => {
     expect(report.homeDir).toBe('C:/Users/test/.sidekick');
   });
 
+  it('does not inspect or import personal paths for an isolated profile', async () => {
+    const { ipc, handlers } = captureIpc();
+    const existsSync = vi.fn(() => true);
+    registerSidekickMigrationIpc(ipc as any, {
+      getWebuiUrl: () => { throw new Error('backend must not be called'); },
+      getHomePath: () => { throw new Error('home must not be inspected'); },
+      getAppDataPath: () => { throw new Error('appdata must not be inspected'); },
+      isIsolatedProfile: () => true,
+      fsDeps: { existsSync, join: (...parts: string[]) => parts.join('/') }
+    });
+
+    expect(handlers.get('lastbrowser:sidekick:detectExistingInstall')!()).toMatchObject({ found: false });
+    const migration = await handlers.get('lastbrowser:sidekick:migrateStandalone')!(null, {
+      source_home: 'C:/Users/test/.sidekick', items: { spaces: true }
+    }) as any;
+    expect(migration.copied).toEqual([]);
+    expect(migration.errors).toHaveLength(1);
+    expect(existsSync).not.toHaveBeenCalled();
+  });
+
   it('migration handler rejects a missing source home without calling the backend', async () => {
     const { ipc, handlers } = captureIpc();
     registerSidekickMigrationIpc(ipc as any, {

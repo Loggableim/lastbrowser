@@ -54,6 +54,27 @@
 .luminous-launchpad .startpage-greeting { font-size: clamp(25px, 2.5vw, 36px); }
 .luminous-launchpad .startpage-search-bar { border-color: color-mix(in srgb, var(--lb-accent) 35%, transparent); }
 .luminous-launchpad .browser-start-search input { font-weight: 500; }
+.luminous-launchpad .startpage-chip-btn:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+  transform: none;
+}
+.luminous-launchpad .startpage-ai-unavailable {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--lb-muted);
+  font-size: 12px;
+}
+.luminous-launchpad .startpage-ai-unavailable button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--lb-accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
 .luminous-launchpad .startpage-chip-btn,
 .luminous-launchpad .startpage-palette-trigger,
 .luminous-launchpad .startpage-add-space-btn { border-radius: 8px; }

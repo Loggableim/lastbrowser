@@ -7065,6 +7065,12 @@ function BrowserMain({
           usePanelStore.getState().setCopilotOpen(true);
           void onSendChat(prompt);
         }}
+        aiConnected={serviceStatus?.sidekick === 'ready' && onboardingStatus?.system?.chat_ready === true}
+        onOpenModelSettings={() => {
+          activatePane();
+          usePanelStore.getState().setActiveContextItem('providers');
+          usePanelStore.getState().setActivePanel('settings');
+        }}
         onOpenCommandPalette={() => { activatePane(); usePanelStore.getState().setCommandPaletteOpen(true); }}
       />
     );

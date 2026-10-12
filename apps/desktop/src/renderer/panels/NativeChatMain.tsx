@@ -11,9 +11,10 @@ import { isRetiredProvider } from '../retired-providers.js';
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, EyeOff, Plus, Settings } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, MoreHorizontal, Plus, Settings } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import { canCallSidekickApi } from '../runtime-readiness.js';
+import { resolveChatHeaderStatus } from '../chat-header-status.js';
 import { partitionChatMessages } from '../chat-display.js';
 import { useChatQueue, CompressButton, QueueIndicator } from '../NativeCompressQueue.js';
 import { ChatTranscript, ChatComposer } from './ChatComponents.js';
@@ -162,8 +163,11 @@ export function NativeChatMain({
   const writerProtected = isIndependentWriterProtected(activeSession);
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
   const ready = canCallSidekickApi(serviceStatus);
+  const headerStatus = resolveChatHeaderStatus(serviceStatus);
   const [showDeveloperTools, setShowDeveloperTools] = useState(false);
   const [showControlCenter, setShowControlCenter] = useState(false);
+  const [showHeaderActions, setShowHeaderActions] = useState(false);
+  const headerActionsRef = useRef<HTMLDivElement>(null);
   const [statusMessage, setStatusMessage] = useState('');
   const { queue, enqueue, dequeue, clearQueue, removeAt } = useChatQueue();
   const { visible: visibleMessages, developer: developerMessages } = useMemo(
@@ -822,14 +826,28 @@ export function NativeChatMain({
   const goalControlsSession=currentGoalGate&&activeSession?{...activeSession,goal:currentGoalGate.status.goal}:currentModeGate?.response.session??activeSession;
   const showGoalControls=shouldRenderPersistentGoalControls(goalControlsSession,commandContext,goalEditorViewKey,modeViewKey);
 
+  useEffect(() => {
+    if (!showHeaderActions) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !headerActionsRef.current?.contains(event.target)) setShowHeaderActions(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setShowHeaderActions(false); headerActionsRef.current?.querySelector<HTMLButtonElement>('[data-header-menu-trigger]')?.focus(); }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => { document.removeEventListener('pointerdown', onPointerDown); document.removeEventListener('keydown', onKeyDown); };
+  }, [showHeaderActions]);
+
   return (
     <section ref={chatSection} className="browser-main native-chat-main">
       <div className="native-chat-header">
         <div className="native-chat-title">
           <img src={brandAssets.sidekickAvatar} alt="" />
-          <div>
-            <span>{activeSessionId ? shortSessionId(activeSessionId) : t('chat.newSession')}</span>
-            <h1>{activeSession ? sessionTitle(activeSession) : 'Sidekick'}</h1>
+          <div className="native-chat-title-copy">
+            <h1>{activeSession ? sessionTitle(activeSession) : t('chat.newSession')}</h1>
+            <span className="native-chat-space-context">{activeSession ? ((activeSession.workspace || activeSpacePath).split(/[\\/]/).filter(Boolean).at(-1) || t('chat.workspace')) : t('chat.kicker')}</span>
+            {activeSessionId && <span className="native-chat-session-id">{shortSessionId(activeSessionId)}</span>}
           </div>
         </div>
         <div className="native-chat-header-actions">
@@ -838,11 +856,11 @@ export function NativeChatMain({
             className="secondary-action compact new-chat-btn"
             onClick={onCreateSession}
             title={`${t('chat.newSession')} (+)`}
+            aria-label={t('chat.newSession')}
           >
             <Plus size={14} />
             <span>{t('chat.newSession')}</span>
           </button>
-          <CompressButton activeSessionId={activeSessionId} ready={ready && !writerProtected} onResult={setStatusMessage} />
           <QueueIndicator queue={queue} onDrain={() => {
             if (running || writerProtected) { setStatusMessage(t('spaceAssistant.writerProtected')); return; }
               const msg = dequeue();
@@ -850,24 +868,30 @@ export function NativeChatMain({
           }} onClear={clearQueue} onRemoveAt={removeAt} busy={running || writerProtected} />
           <button
             type="button"
-            className="secondary-action compact"
+            className="secondary-action compact native-chat-settings-action"
             onClick={() => setShowControlCenter(true)}
             title={t('settings.title')}
+            aria-label={t('settings.title')}
           >
             <Settings size={14} />
             <span>{t('settings.title')}</span>
           </button>
-          <button
-            type="button"
-            className={`secondary-action compact developer-toggle ${showDeveloperTools ? 'active' : ''}`}
-            onClick={() => setShowDeveloperTools((current) => !current)}
-          >
-            {showDeveloperTools ? <Eye size={14} /> : <EyeOff size={14} />}
-            <span>{t('settings.panels.system.developerApiTools')}</span>
-          </button>
-          <div className={`native-chat-status ${ready ? 'ready' : 'starting'}`}>
-            <span className={ready ? 'status-dot ready' : 'status-dot'} />
-            <span>{t(ready ? 'common.online' : 'common.starting')}</span>
+          <div className="native-chat-menu-anchor" ref={headerActionsRef}>
+            <button type="button" className="secondary-action compact native-chat-menu-trigger" data-header-menu-trigger
+              aria-label={t('chat.header.moreActions')} aria-expanded={showHeaderActions} aria-controls="native-chat-actions-menu"
+              title={t('chat.header.moreActions')} onClick={() => setShowHeaderActions((current) => !current)}>
+              <MoreHorizontal size={16} /><ChevronDown size={12} />
+            </button>
+            {showHeaderActions && <div id="native-chat-actions-menu" className="native-chat-actions-menu" role="group" aria-label={t('chat.header.moreActions')}>
+              <div className="native-chat-menu-action"><CompressButton activeSessionId={activeSessionId} ready={ready && !writerProtected} onResult={(message) => { setStatusMessage(message); setShowHeaderActions(false); }} /></div>
+              <button type="button" aria-pressed={showDeveloperTools} onClick={() => { setShowDeveloperTools((current) => !current); setShowHeaderActions(false); }}>
+                {showDeveloperTools ? <Eye size={15} /> : <EyeOff size={15} />}<span>{t('settings.panels.system.developerApiTools')}</span>
+              </button>
+            </div>}
+          </div>
+          <div className={`native-chat-status ${headerStatus}`} role="status" aria-live="polite" title={t(`chat.header.status.${headerStatus}`)}>
+            <span className={`status-dot ${headerStatus}`} aria-hidden="true" />
+            <span>{t(`chat.header.status.${headerStatus}`)}</span>
           </div>
         </div>
       </div>

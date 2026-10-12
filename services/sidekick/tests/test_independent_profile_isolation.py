@@ -449,6 +449,30 @@ def test_auth_store_noop_save_preserves_bytes_timestamp_and_mtime(tmp_path, monk
     assert store_path.stat().st_mtime_ns == before_mtime
 
 
+def test_worker_host_keeps_venv_interpreter_symlink(tmp_path):
+    """Isolated workers must keep the venv symlink so python -I sees pyvenv.cfg."""
+    import subprocess
+    from runtime.independent.scope import ScopeError, canonical_path, runtime_interpreter
+
+    venv = tmp_path / "runtime-python"
+    subprocess.check_call([sys.executable, "-m", "venv", "--without-pip", str(venv)], stdout=subprocess.DEVNULL)
+    link = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python3")
+    assert link.exists()
+    kept = runtime_interpreter(link)
+    assert kept == link.parent.resolve() / link.name
+    if link.is_symlink():
+        assert kept != link.resolve()
+        assert canonical_path(link) == link.resolve()
+    prefix = subprocess.check_output([str(kept), "-I", "-c", "import sys; print(sys.prefix)"], text=True).strip()
+    assert Path(prefix) == venv.resolve()
+    context = profile_context(tmp_path, "interpreter")
+    host = WorkerHost(context, python_executable=link)
+    assert host.python_executable == kept
+    missing = tmp_path / "missing-python"
+    with pytest.raises(ScopeError):
+        runtime_interpreter(missing)
+
+
 def test_auth_store_real_credential_change_still_persists_new_timestamp(tmp_path, monkeypatch):
     from cli import auth
     store_path = tmp_path / "private-profile" / "auth.json"

@@ -370,3 +370,158 @@
     max-width: 8rem;
   }
 }
+
+/* v0.1.56 composer: one field, a compact top row, and the actions below it. */
+.chat-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px 8px;
+  padding: 12px;
+  border-color: var(--lb-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--lb-surface-panel) 88%, var(--lb-bg-alt));
+  color: var(--lb-text);
+}
+
+.chat-composer .composer-toolbar,
+.chat-composer .composer-input-row { display: contents; }
+.chat-composer .composer-command-group { grid-column: 1; order: 1; flex-wrap: nowrap; }
+.chat-composer .composer-model-group { grid-column: 2 / -1; order: 1; justify-content: flex-end; }
+.chat-composer > .composer-model-notice,
+.chat-composer > .composer-manual-models { grid-column: 1 / -1; order: 2; }
+.chat-composer .composer-input-row > .chat-command-menu { grid-column: 1 / -1; order: 2; }
+.chat-composer .composer-input-row textarea {
+  grid-column: 1 / -1;
+  order: 3;
+  width: 100%;
+  min-height: 108px;
+  padding: 10px 4px;
+  color: var(--lb-text);
+  background: transparent;
+  outline-offset: 3px;
+}
+.chat-composer .composer-input-row textarea:focus-visible,
+.chat-composer button:focus-visible,
+.chat-composer select:focus-visible,
+.chat-composer summary:focus-visible {
+  outline: 2px solid var(--lb-accent);
+  outline-offset: 2px;
+}
+.chat-composer .composer-context-group { grid-column: 1; order: 4; }
+.chat-composer .composer-more { grid-column: 2; order: 4; position: relative; }
+.chat-composer .composer-send { grid-column: 4; order: 4; border-color: var(--lb-accent-border); border-radius: 8px; background: var(--lb-accent); color: var(--lb-accent-text); }
+.chat-composer .composer-send.stop { background: var(--lb-accent-soft); color: var(--lb-text); }
+.chat-composer .composer-sidekick { width: 23px; height: 23px; object-fit: contain; flex: 0 0 auto; }
+.chat-composer .composer-mode { padding: 2px; border-radius: 7px; background: var(--lb-bg-alt); }
+.chat-composer .composer-mode button { border-radius: 5px; }
+.chat-composer .composer-mode button.active { background: var(--lb-accent-soft); color: var(--lb-accent); }
+.chat-composer .composer-tab-btn,
+.chat-composer .composer-more > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  padding: 6px 9px;
+  border: 1px solid var(--lb-border);
+  border-radius: 7px;
+  background: var(--lb-bg-alt);
+  color: var(--lb-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.chat-composer .composer-more > summary::-webkit-details-marker { display: none; }
+.chat-composer .composer-tab-btn[aria-pressed='true'] { color: var(--lb-accent); border-color: var(--lb-accent-border); background: var(--lb-accent-soft); }
+.chat-composer .composer-current-model { flex: 0 1 260px; color: var(--lb-text); border-color: var(--lb-border); background: var(--lb-bg-alt); }
+.chat-composer .composer-current-model:hover { border-color: var(--lb-accent-border); background: var(--lb-accent-soft); }
+.chat-composer .composer-current-model select { width: min(30vw, 235px); max-width: 100%; color: var(--lb-text); background: var(--lb-bg-alt); }
+.chat-composer .composer-current-model select option,
+.chat-composer .composer-current-model select optgroup { color: var(--lb-text) !important; background: var(--lb-bg-alt) !important; }
+.chat-composer .composer-more-content {
+  position: absolute;
+  z-index: 4;
+  right: 0;
+  bottom: calc(100% + 8px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: min(320px, calc(100vw - 48px));
+  max-height: min(65vh, 360px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--lb-border);
+  border-radius: 9px;
+  background: var(--lb-surface-strong);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--lb-bg) 55%, transparent);
+}
+.chat-composer .composer-more-content .composer-reasoning-disclosure { flex: 1 1 100%; }
+.chat-composer .composer-more-content .composer-reasoning-effort > span { display: none; }
+.chat-composer .composer-more-content .composer-model-qualification {
+  color: var(--lb-muted);
+  border-color: var(--lb-border);
+  background: var(--lb-bg-alt);
+}
+.chat-composer .composer-more-content .composer-model-qualification.qualified {
+  color: var(--lb-accent);
+  border-color: var(--lb-accent-border);
+  background: var(--lb-accent-soft);
+}
+.chat-composer .composer-scope { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; color: var(--lb-muted); font-size: 11px; }
+.chat-composer .composer-scope span { overflow-wrap: anywhere; }
+
+.app-shell.zen-mode .chat-composer {
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  row-gap: 12px;
+  background: color-mix(in srgb, var(--lb-surface-panel) 78%, var(--lb-bg-alt));
+}
+.app-shell.zen-mode .chat-composer .composer-input-row textarea { order: 1; min-height: 132px; }
+.app-shell.zen-mode .chat-composer .composer-command-group { grid-column: 1; order: 3; }
+.app-shell.zen-mode .chat-composer .composer-context-group { grid-column: 2; order: 3; }
+.app-shell.zen-mode .chat-composer .composer-model-group { grid-column: 3; order: 3; min-width: 0; }
+.app-shell.zen-mode .chat-composer .composer-current-model { flex: 1 1 auto; }
+.app-shell.zen-mode .chat-composer .composer-current-model select { width: 100%; }
+.app-shell.zen-mode .chat-composer .composer-more { grid-column: 4; order: 3; }
+.app-shell.zen-mode .chat-composer .composer-send { grid-column: 5; order: 3; }
+.app-shell.zen-mode .chat-composer .composer-sidekick { width: 19px; height: 19px; }
+
+@media (max-width: 640px) {
+  .chat-composer,
+  .app-shell.zen-mode .chat-composer { grid-template-columns: minmax(0, 1fr) auto auto; width: calc(100% - 20px); }
+  .chat-composer .composer-command-group,
+  .app-shell.zen-mode .chat-composer .composer-command-group { grid-column: 1; order: 1; }
+  .chat-composer .composer-model-group,
+  .app-shell.zen-mode .chat-composer .composer-model-group { grid-column: 2 / -1; order: 1; min-width: 0; }
+  .chat-composer .composer-input-row textarea,
+  .app-shell.zen-mode .chat-composer .composer-input-row textarea { order: 3; min-height: 110px; }
+  .chat-composer .composer-context-group,
+  .app-shell.zen-mode .chat-composer .composer-context-group { grid-column: 1; order: 4; }
+  .chat-composer .composer-more,
+  .app-shell.zen-mode .chat-composer .composer-more { grid-column: 2; order: 4; }
+  .chat-composer .composer-send,
+  .app-shell.zen-mode .chat-composer .composer-send { grid-column: 3; order: 4; }
+  .chat-composer .composer-current-model select { width: min(30vw, 180px); }
+}
+
+@media (max-width: 440px) {
+  .chat-composer .composer-sidekick { display: none; }
+  .chat-composer .composer-mode button { padding-inline: 5px; }
+  .chat-composer .composer-tab-btn span { display: none; }
+  .chat-composer .composer-tab-btn { min-width: 38px; justify-content: center; }
+}
+
+@media (max-width: 640px) {
+  .app-shell.zen-mode .chat-composer .composer-input-row textarea { order: 1; }
+  .app-shell.zen-mode .chat-composer .composer-command-group { grid-column: 1; order: 3; }
+  .app-shell.zen-mode .chat-composer .composer-context-group { grid-column: 2; order: 3; }
+  .app-shell.zen-mode .chat-composer .composer-model-group { grid-column: 1; order: 4; justify-content: flex-start; }
+  .app-shell.zen-mode .chat-composer .composer-more { grid-column: 2; order: 4; }
+  .app-shell.zen-mode .chat-composer .composer-send { grid-column: 3; order: 4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-composer .composer-current-model,
+  .chat-composer .composer-current-model select { transition: none; }
+}

@@ -32,6 +32,28 @@ def canonical_path(value: str | Path, *, must_exist: bool = True) -> Path:
     return resolved
 
 
+def runtime_interpreter(value: str | Path) -> Path:
+    """Absolute interpreter path that keeps a virtualenv symlink.
+
+    ``canonical_path`` follows the final symlink. A venv ``bin/python3``
+    points at the system interpreter; ``python -I`` then ignores
+    ``pyvenv.cfg`` and the shipped site-packages.
+    """
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    if path.name in {"", ".", ".."}:
+        return canonical_path(path)
+    try:
+        parent = path.parent.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ScopeError("Configured path is not available") from exc
+    candidate = parent / path.name
+    if not candidate.exists():
+        raise ScopeError("Configured path is not available")
+    return candidate
+
+
 def same_path(left: str | Path, right: str | Path) -> bool:
     left_path, right_path = canonical_path(left), canonical_path(right)
     if os.path.normcase(str(left_path)) == os.path.normcase(str(right_path)):

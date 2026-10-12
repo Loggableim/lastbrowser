@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal, X, Loader2, Sparkles, Stethoscope, HelpCircle, Activity } from 'lucide-react';
 import { canCallSidekickApi } from '../runtime-readiness.js';
+import { reconcileStoredTerminal } from '../terminal-session.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 export type TerminalMode = 'shell' | 'tui';
@@ -49,7 +50,7 @@ export function NativeTerminalMain({
   const [activeMode, setActiveMode] = useState<TerminalMode>(loadTerminalMode);
   const [lines, setLines] = useState<string[]>([]);
   const [input, setInput] = useState('');
-  const [cwd, setCwd] = useState(loadTerminalCwd() || workspacePath || 'C:\\');
+  const [cwd, setCwd] = useState(loadTerminalCwd() || workspacePath || '');
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
   const bufferRef = useRef<string[]>([]);
@@ -62,6 +63,26 @@ export function NativeTerminalMain({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [lines]);
+
+  // A stored id from a previous app launch has no PTY. Showing it leaves
+  // the panel on "Starting terminal session..." with nowhere to type.
+  useEffect(() => {
+    let cancelled = false;
+    const stored = loadActiveTerminalId();
+    if (!stored) return;
+    window.lastbrowser.terminal.list().then((ids) => {
+      if (cancelled) return;
+      const live = reconcileStoredTerminal(stored, ids);
+      if (live) return;
+      setTermId('');
+      saveActiveTerminalId('');
+    }).catch(() => {
+      if (cancelled) return;
+      setTermId('');
+      saveActiveTerminalId('');
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -87,6 +87,16 @@ describe('terminal-process', () => {
     expect(options.env.LASTBROWSER_PYTHON_EXE).toBe('C:\\Python\\python.exe');
   });
 
+  it('starts an interactive shell on unix', () => {
+    if (process.platform === 'win32') return;
+    const onData = vi.fn();
+    const result = startTerminal('/tmp', onData);
+    expect(result.error).toBeUndefined();
+    const [file, args] = vi.mocked(nodePty.spawn).mock.calls[0];
+    expect(file).toBe(process.env.SHELL || '/bin/bash');
+    expect(args).toEqual(['-i']);
+  });
+
   it('writes data and receives output from terminal', () => {
     const onData = vi.fn();
     const { id } = startTerminal('C:\\workspace', onData);

@@ -21,7 +21,7 @@ if __package__ in {None, ""}:
     __package__ = "runtime.independent"
 
 from .contracts import RunContext, canonical_json
-from .scope import canonical_path
+from .scope import canonical_path, runtime_interpreter
 
 MAX_LINE_BYTES = 1024 * 1024
 MAX_EVENTS = 128
@@ -318,7 +318,7 @@ class WorkerHost:
         # Revalidation creates a detached immutable model even if the parent
         # constructed it through unchecked model_copy.
         self.context = RunContext.model_validate_json(canonical_json(context))
-        self.python_executable = canonical_path(python_executable or sys.executable)
+        self.python_executable = runtime_interpreter(python_executable or sys.executable)
         self.sidekick_root = Path(__file__).resolve().parents[2]
 
     def start(self, *, entry_module: str = "runtime.independent.runner", payload: dict[str, Any] | None = None, runtime_env: dict[str, str] | None = None) -> WorkerHandle:

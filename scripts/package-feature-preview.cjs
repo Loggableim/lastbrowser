@@ -4,10 +4,14 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const desktop = path.join(root, 'apps', 'desktop');
-const output = path.join(root, 'output', `feature-preview-${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}`);
+const outputRoot = process.env.LASTBROWSER_PREVIEW_OUTPUT_ROOT
+  ? path.resolve(process.env.LASTBROWSER_PREVIEW_OUTPUT_ROOT)
+  : path.join(root, 'output');
+const output = path.join(outputRoot, `feature-preview-${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}`);
 const electronDist = path.join(root, 'node_modules', 'electron', 'dist');
 if (!fs.existsSync(path.join(electronDist, 'electron.exe'))) throw new Error('Installed Castlabs Electron is required.');
 if (!fs.existsSync(path.join(desktop, 'dist', 'renderer', 'index.html'))) throw new Error('Build desktop first.');
+fs.mkdirSync(outputRoot, { recursive: true });
 fs.mkdirSync(output, { recursive: false });
 const blocked = [];
 for (const protocol of ['http', 'https']) {

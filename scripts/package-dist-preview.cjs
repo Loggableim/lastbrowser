@@ -20,7 +20,10 @@ if (!fs.existsSync(path.join(prepackaged, 'Lastbrowser.exe'))) {
 }
 
 const previewName = path.basename(previewDir).replace(/^feature-preview-/, 'dist-preview-');
-const output = path.join(root, 'output', previewName);
+const outputRoot = process.env.LASTBROWSER_PREVIEW_OUTPUT_ROOT
+  ? path.resolve(process.env.LASTBROWSER_PREVIEW_OUTPUT_ROOT)
+  : path.join(root, 'output');
+const output = path.join(outputRoot, previewName);
 const manifest = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8'));
 const variantMarkerPath = path.join(prepackaged, 'resources', 'lastbrowser-build-variant.json');
 let variantMarker;

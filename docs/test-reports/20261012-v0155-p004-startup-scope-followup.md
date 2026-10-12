@@ -22,6 +22,10 @@ Self-review checked that native chat uses the same profile/Space scope shape as 
 - No matching Windows Application Error/WER, AppLocker, Code Integrity, or Defender event, Lastbrowser crash dump, or post-install app log was found. Existing profile/runtime timestamps predated the install. No private file content was copied or posted.
 - One launch of that already-installed executable with a new temporary `--user-data-dir` created a responsive main process with a `Lastbrowser` window handle/title and a bundled Python child. The existing profile was not used. The local Computer Use interface exposed no native app windows for screenshot capture, so this proves process/window creation only, not visible rendering. The user-reported ordinary-profile start failure remains uncorrelated to a crash cause.
 
+## User screenshot follow-up
+
+The user subsequently supplied a screenshot showing a rendered Lastbrowser startup screen, the explicit `Browser locked` password form, and `Checking session protection …`. The screenshot is not bound to a candidate hash or profile, so it cannot establish which build/profile produced it. It does establish that this captured instance is not a black or absent renderer. In the current renderer state mapping, a required locked session remains `pending` until a verified status or successful unlock, which explains the phase label alongside the visible password form. No password was entered. This screenshot does not prove that the user's ordinary-profile instance is the temporary-profile probe or that unlock succeeds.
+
 ## Gates
 
 - Focused scope checks: 16 tests passed.
@@ -48,5 +52,6 @@ The remote GitHub draft digest and size match all four uploaded artifacts. The e
 ## Open results
 
 - The scope change is source/gate verified; the next VM run must check whether the three rejections stop and identify any remaining caller from sanitized logs.
-- The black first-start symptom and local ordinary-profile start failure remain unproven at source level. New lifecycle traces are intended to distinguish load failure, renderer exit/unresponsiveness, and first-frame completion in the next run.
+- The prior VM's black first-start symptom remains a separate report; the newer user screenshot shows a visible, locked startup gate but is not bound to that VM candidate. No source-level black-renderer cause is established. New lifecycle traces are intended to distinguish load failure, renderer exit/unresponsiveness, and first-frame completion in the next run.
+- Password unlock success and the user's exact installed build/profile are not verified by the screenshot. The `Checking session protection …` text is currently consistent with the fail-closed locked-session state; the visible password prompt is actionable if the user has their access password.
 - MiMo inference/no-response, full QuickChat and Standardchat acceptance, Stop, OpenCode live login/inference, and the rest of P004 remain not verified. No public release or VM PASS is claimed.

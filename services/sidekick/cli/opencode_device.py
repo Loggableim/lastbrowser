@@ -269,7 +269,7 @@ def _config_diagnostic(config, provider_id):
             settings = row.get(name, {})
             if isinstance(settings, dict) and isinstance(settings.get("baseURL"), str):
                 parsed = urllib.parse.urlsplit(settings["baseURL"])
-                if parsed.netloc == "opencode.ai" and parsed.path in {"/inference/openai/v1", "/inference/anthropic/v1", "/inference/google/v1beta"}:
+                if parsed.netloc == "opencode.ai" and parsed.path in {"/inference/openai/v1", "/inference/anthropic/v1", "/inference/google/v1beta", "/inference/go/openai/v1", "/inference/go/anthropic/v1"}:
                     routes.add(parsed.path)
     return {"provider_match": True, "field_names": sorted(model_fields), "packages": sorted(packages), "gateway_paths": sorted(routes)}
 
@@ -389,7 +389,10 @@ def _validated_connection(credential, provider_id, model, session_id):
     mode = modes.get(package)
     parsed = urllib.parse.urlsplit(base)
     family = "anthropic" if mode == "anthropic_messages" else "openai"
-    if not mode or parsed.scheme != "https" or parsed.netloc != "opencode.ai" or parsed.path.rstrip("/") != f"/inference/{family}/v1" or parsed.query or parsed.fragment:
+    allowed_paths = {f"/inference/{family}/v1"}
+    if provider_id == "opencode-go":
+        allowed_paths.add(f"/inference/go/{family}/v1")
+    if not mode or parsed.scheme != "https" or parsed.netloc != "opencode.ai" or parsed.path.rstrip("/") not in allowed_paths or parsed.query or parsed.fragment:
         raise DeviceError("unsupported_workspace_gateway")
     supplied_headers = {**entry.get("headers", {}), **model_config.get("headers", {})}
     headers = {}

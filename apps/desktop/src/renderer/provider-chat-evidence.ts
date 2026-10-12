@@ -1,3 +1,18 @@
+import { useSyncExternalStore } from 'react';
+
+let evidenceRevision = 0;
+const evidenceListeners = new Set<() => void>();
+function evidenceChanged(): void {
+  evidenceRevision += 1;
+  for (const listener of evidenceListeners) listener();
+}
+export function useProviderChatEvidenceRevision(): number {
+  return useSyncExternalStore(listener => {
+    evidenceListeners.add(listener);
+    return () => { evidenceListeners.delete(listener); };
+  }, () => evidenceRevision, () => 0);
+}
+
 export type ProviderChatEvidence = {
   providerId: string;
   modelId: string;
@@ -127,6 +142,7 @@ export function recordProviderChatSuccess(
       backendConfigGeneration, recordedAt,
     };
     storage.setItem(STORAGE_KEY, JSON.stringify(all));
+    evidenceChanged();
   } catch { /* Evidence storage is best-effort and never blocks chat. */ }
 }
 
@@ -183,5 +199,6 @@ export function clearProviderChatEvidence(providerId: string, storage: Pick<Stor
     storage.setItem(STORAGE_KEY, JSON.stringify(remaining));
     const generations = JSON.parse(storage.getItem(CONFIG_GENERATION_KEY) || '{}') as Record<string, unknown>;
     storage.setItem(CONFIG_GENERATION_KEY, JSON.stringify({ ...generations, [provider]: randomGeneration() }));
+    evidenceChanged();
   } catch { /* Clearing a qualification marker must not block editing provider settings. */ }
 }

@@ -111,6 +111,11 @@ class SessionDB:
             self._conn = sqlite3.connect(
                 str(self.db_path),
                 check_same_thread=False,
+                # Web requests share this connection across worker threads.
+                # The Python statement cache can reuse a statement while a
+                # different thread is binding/fetching it, corrupting reads.
+                # Let serialized SQLite prepare each statement independently.
+                cached_statements=0,
                 timeout=1.0,
                 isolation_level=None,
             )

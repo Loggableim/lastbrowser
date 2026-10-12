@@ -12177,6 +12177,7 @@ def _run_agent_streaming_with_native_writer(*args, native_chat_writer=None, nati
                                           native_chat_session=None, **kwargs):
     """Retain the saved chat owner until all streaming cleanup has finished."""
     if native_chat_context is not None:
+        native_start = time.monotonic()
         from web.api.native_chats import run_native_chat, native_chat_exit_confirmed, fail_unstarted_native_chat
         broker = None
         entered_worker = False
@@ -12230,6 +12231,8 @@ def _run_agent_streaming_with_native_writer(*args, native_chat_writer=None, nati
             else:
                 from runtime.independent.native_sdk_broker import NativeSdkSessionBroker
                 broker = NativeSdkSessionBroker(native_chat_context, native_chat_session, execution_policy=kwargs.get("execution_policy"))
+            logger.info("native_chat_phase stream=%s stage=broker_ready elapsed_ms=%.1f",
+                native_chat_context.stream_id, (time.monotonic() - native_start) * 1000)
             resolved = broker.service.manager.resolver.resolve(native_chat_context.scope,
                 authenticated_profile_name=native_chat_context.profile_name)
             space_config = resolved.space.load_config()

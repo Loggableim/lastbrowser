@@ -62,6 +62,82 @@ def get(bound):
     return handle_model_selection(store, resolver, manager, scope, {"action": "get"})
 
 
+def test_recent_catalog_reuses_same_scope_and_invalidates_provider_configuration(bound):
+    import time
+    from runtime.independent.scoped_models import probe_catalog
+
+    _, _, resolver, manager, scope = bound
+    manager.after_discovery = lambda _context: time.sleep(.15)
+    started = time.monotonic()
+    first = get(bound)
+    cold_seconds = time.monotonic() - started
+    started = time.monotonic()
+    cached = get(bound)
+    warm_seconds = time.monotonic() - started
+    assert first["groups"] and cached["groups"]
+    assert len(manager.calls) == 1
+    assert cold_seconds >= .15 and warm_seconds < cold_seconds
+    print(f"controlled_catalog_cold_ms={cold_seconds * 1000:.1f} warm_ms={warm_seconds * 1000:.1f}")
+
+    (resolver.resolve(scope).profile_home / ".env").write_text("PROVIDER_REVISION=changed\n", "utf-8")
+    probe_catalog(manager, scope)
+    assert len(manager.calls) == 2
+
+
+def test_recent_catalog_isolated_by_scope_and_credentials(bound):
+    from runtime.independent.scoped_models import probe_catalog
+
+    hub, _, resolver, manager, scope = bound
+    probe_catalog(manager, scope)
+    second = Scope.model_validate(hub.bind("default", {"workspacePath": str(hub.base_home.parent / "work"),
+        "browserProfileId": "browser-b", "partitionKey": "persist:controlled-b"})["scope"])
+    probe_catalog(manager, second)
+    assert len(manager.calls) == 2
+    (resolver.resolve(scope).profile_home / "auth.json").write_text('{"provider_identity":"changed"}', "utf-8")
+    probe_catalog(manager, scope)
+    assert len(manager.calls) == 3
+    (resolver.resolve(scope).profile_home / "auth.json").write_text('{"provider_identity":"changed", "token_refresh":"rotated"}', "utf-8")
+    probe_catalog(manager, scope)
+    assert len(manager.calls) == 4
+    manager.generation = "next-runner-generation"
+    probe_catalog(manager, scope)
+    assert len(manager.calls) == 5
+
+
+def test_recent_catalog_singleflight_and_failed_fetch_is_not_cached(bound):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    from runtime.independent.scoped_models import probe_catalog
+
+    _, _, _, manager, scope = bound
+    manager.after_discovery = lambda _context: time.sleep(.15)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda _: probe_catalog(manager, scope), range(8)))
+    assert len(manager.calls) == 1
+    assert all(result == results[0] for result in results)
+
+    # A changed provider configuration makes this a fresh key. Failed reads
+    # must release waiters and permit a later retry instead of caching failure.
+    profile_home = manager.resolver.resolve(scope).profile_home
+    (profile_home / ".env").write_text("PROVIDER_REVISION=failed-once\n", "utf-8")
+    manager.after_discovery = lambda _context: (_ for _ in ()).throw(RuntimeError("controlled catalog failure"))
+    with pytest.raises(RuntimeError, match="controlled catalog failure"):
+        probe_catalog(manager, scope)
+    manager.after_discovery = None
+    probe_catalog(manager, scope)
+    assert len(manager.calls) == 3
+
+
+def test_recent_catalog_expiry_forces_fresh_discovery(bound, monkeypatch):
+    from runtime.independent import scoped_models
+
+    _, _, _, manager, scope = bound
+    scoped_models.probe_catalog(manager, scope)
+    monkeypatch.setattr(scoped_models, "_CATALOG_REUSE_SECONDS", 0)
+    scoped_models.probe_catalog(manager, scope)
+    assert len(manager.calls) == 2
+
+
 def select(bound, **changes):
     _, store, resolver, manager, scope = bound
     return handle_model_selection(store, resolver, manager, scope,

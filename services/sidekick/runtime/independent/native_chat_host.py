@@ -1,6 +1,7 @@
 """Parent-owned native chat process; writer release is deliberately external."""
 from __future__ import annotations
 import os
+import logging
 import queue
 import re
 import subprocess
@@ -14,6 +15,8 @@ from .native_chat_protocol import NativeChatContext, encode_turn, verify_native_
 from .contracts import canonical_json
 from .scope import canonical_path
 from .worker_host import WorkerHandle, WorkerError, _SYSTEM_ENV, _RESERVED_ENV
+
+logger = logging.getLogger(__name__)
 
 
 class NativeChatStartError(WorkerError):
@@ -199,6 +202,10 @@ def relay_native_chat(context, args, kwargs, put: Callable, *, cancelled=None,
     writer release and in-memory session invalidation after this function.
     rpc_handler(context, method, payload) must use the Parent AUTO/compute pool.
     """
+    phase_start = time.monotonic()
+    ready_logged = False
+    first_event_logged = False
+    first_text_logged = False
     try:
         host = NativeChatHost(context, python_executable=python_executable)
     except Exception as exc:
@@ -210,6 +217,8 @@ def relay_native_chat(context, args, kwargs, put: Callable, *, cancelled=None,
     except NativeChatStartError as exc:
         if on_start_failed: on_start_failed(exc.diagnostic)
         raise
+    logger.info("native_chat_phase stream=%s stage=spawn_sent elapsed_ms=%.1f",
+        context.stream_id, (time.monotonic() - phase_start) * 1000)
     sequence = 0
     goal_result = None
     judge_retry = kwargs.get("native_goal_retry")
@@ -273,6 +282,14 @@ def relay_native_chat(context, args, kwargs, put: Callable, *, cancelled=None,
                 break
             context.validate_envelope(message)
             if message.get("kind") == "native_event":
+                if not first_event_logged:
+                    first_event_logged = True
+                    logger.info("native_chat_phase stream=%s stage=first_worker_event elapsed_ms=%.1f",
+                        context.stream_id, (time.monotonic() - phase_start) * 1000)
+                if message.get("event") == "token" and not first_text_logged:
+                    first_text_logged = True
+                    logger.info("native_chat_phase stream=%s stage=first_text elapsed_ms=%.1f",
+                        context.stream_id, (time.monotonic() - phase_start) * 1000)
                 if type(message.get("sequence")) is not int or message["sequence"] != sequence + 1:
                     raise WorkerError("native_chat_sequence_gap")
                 sequence += 1
@@ -303,6 +320,13 @@ def relay_native_chat(context, args, kwargs, put: Callable, *, cancelled=None,
                 rpc_pending.add(request_id)
                 rpc_work.put_nowait(message)
             elif message.get("kind") in {"control_ack", "worker_ready", "worker_finished", "worker_fault"}:
+                if message["kind"] == "worker_ready" and not ready_logged:
+                    ready_logged = True
+                    logger.info("native_chat_phase stream=%s stage=worker_ready elapsed_ms=%.1f",
+                        context.stream_id, (time.monotonic() - phase_start) * 1000)
+                elif message["kind"] == "worker_finished":
+                    logger.info("native_chat_phase stream=%s stage=worker_finished elapsed_ms=%.1f",
+                        context.stream_id, (time.monotonic() - phase_start) * 1000)
                 put(message["kind"], {key: value for key, value in message.items() if key != "kind"})
             else:
                 raise WorkerError("native_chat_unknown_message")

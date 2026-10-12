@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "purpose": "private unsigned v0.1.56 integrated Windows test candidate",
+  "sourceCommit": "cb69bb928414751c0b3892f7e50daff9a231b853",
+  "integratedBaseCommit": "04593080169462375cfa6209bcb70e148ad242d8",
+  "pullRequest": "https://github.com/Loggableim/lastbrowser/pull/72",
+  "unsigned": true,
+  "published": false,
+  "setup": {
+    "name": "Lastbrowser-0.1.56-x64-setup.exe",
+    "bytes": 171046210,
+    "sha256": "9d511bb4169da7bbcd0bb81c99912168b022139212183b5a266edbb4cc99a487"
+  },
+  "portable": {
+    "name": "Lastbrowser-0.1.56-x64-portable.exe",
+    "bytes": 170691960,
+    "sha256": "847937799fbcefd51f8aa8bc289c736139dc007a20a5ecb1301431ef0f35ae3b"
+  },
+  "appAsar": {
+    "name": "app.asar",
+    "bytes": 75244987,
+    "sha256": "a1f34062799ef9f18d38271b5f177e450d15f9001d44bb771d3bc2d279acd391"
+  },
+  "asarManifest": {
+    "entries": 7339,
+    "sha256OfSortedPaths": "9e3491d32ec02880738635f74c17430bbab8752a96d42b4ed48100aa232aea0c",
+    "desktopPackageVersion": "0.1.56",
+    "desktopPackageMain": "dist/main/main.js",
+    "wallpaperEntries": [
+      "\\dist\\renderer\\launchpad-wallpaper.jpg",
+      "\\dist\\renderer\\wallpapers\\cyberpunk-street.jpg",
+      "\\dist\\renderer\\wallpapers\\misty-forest.jpg",
+      "\\dist\\renderer\\wallpapers\\nordic-arch.jpg",
+      "\\dist\\renderer\\wallpapers\\sapphire-nebula.jpg",
+      "\\dist\\renderer\\wallpapers\\temple-evening.jpg"
+    ]
+  },
+  "packageJsonInsideAsar": {
+    "bytes": 600,
+    "sha256": "5b8e6cf8f39ebf8d988294374b836811751c51c1996f6910b0e8bfb9183d0d60"
+  },
+  "resourceHashes": {
+    "name": "resource-hashes.json",
+    "bytes": 1454414,
+    "sha256": "581fb19dfe9d8a77153842bcef845ebead63414f361fd3fc6ed0917e5aa49b0c",
+    "entries": 10251
+  },
+  "previewResult": {
+    "name": "preview-result.json",
+    "bytes": 184,
+    "sha256": "abf24ec94970570af779224db11a32d8216a21622c2b7bf5ea8efcab4e0aa073",
+    "createdAt": "2026-10-12T13:32:54.109Z",
+    "artifacts": [],
+    "resourceFiles": 10251,
+    "blocked": [],
+    "unsigned": true,
+    "published": false,
+    "fullAcceptanceVerified": false
+  },
+  "buildVariant": {
+    "schemaVersion": 1,
+    "variant": "offline-test",
+    "appVersion": "0.1.56"
+  },
+  "bundledPython": {
+    "name": "python.exe",
+    "bytes": 104952,
+    "sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a"
+  }
+}

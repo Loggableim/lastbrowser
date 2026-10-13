@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>lastbrowser</id>
+    <version>0.1.56</version>
+    <title>LastBrowser</title>
+    <authors>LastBrowser</authors>
+    <owners>lastbrowser</owners>
+    <projectUrl>https://lastbrowser.com</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>LastBrowser for Windows with vertical tabs, Spaces and an optional AI Sidekick. Lizenz: Proprietary/Freeware, Lizenz offen.</description>
+    <summary>Windows browser with vertical tabs and Spaces.</summary>
+    <tags>browser chromium vertical-tabs privacy</tags>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

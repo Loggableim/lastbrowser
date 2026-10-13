@@ -11,7 +11,10 @@ def test_explicit_integration_flag(monkeypatch):
     assert not constants.is_lastbrowser_integrated()
 
 
-def test_shipped_manifest_detects_integration(monkeypatch, tmp_path):
+def test_shipped_manifest_detects_integration(monkeypatch, tmp_path_factory):
+    # Repository-local .test-tmp is intentionally excluded from production
+    # autodetection. Model a shipped layout in pytest's external temp root.
+    tmp_path = tmp_path_factory.mktemp("shipped-integration")
     monkeypatch.delenv("LASTBROWSER_INTEGRATED", raising=False)
     for name in ("LASTBROWSER_HOME", "LASTBROWSER_WEBUI_AGENT_DIR",
                  "LASTBROWSER_BRIDGE_TOKEN", "LASTBROWSER_SIDEKICK_DIR",
@@ -21,7 +24,7 @@ def test_shipped_manifest_detects_integration(monkeypatch, tmp_path):
     constants_path.parent.mkdir(parents=True)
     monkeypatch.setattr(constants, "__file__", str(constants_path))
     assert not constants.is_lastbrowser_integrated()
-    (tmp_path / "services" / "sidekick-source.json").write_text('{}')
+    (tmp_path / "services" / "sidekick-source.json").write_text('{"mode": "in-tree-monorepo"}')
     assert constants.is_lastbrowser_integrated()
 
 

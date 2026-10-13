@@ -164,13 +164,12 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
       expect(source).toContain('extensionScopes[ext.id]');
     });
 
-    it('validates MCP JSON configuration, rejects malformed input and registers external servers', () => {
+    it('wires the MCP editor and save action through the MCP state model', () => {
       const source = readRendererFile('components/UnifiedExtensionHub.tsx');
-      expect(source).toContain('handleApplyMcpConfig');
-      expect(source).toContain('lastbrowser.mcp_config.v1');
-      expect(source).toContain('JSON.parse(mcpConfigJson)');
-      expect(source).toContain('Ungültiges JSON-Format');
-      expect(source).toContain('mcp-ext-');
+      expect(source).toContain('const handleApplyMcpConfig = () => { void mcpModel.save(); }');
+      expect(source).toContain('onClick={handleApplyMcpConfig}');
+      expect(source).toContain('mcpModel.setEditor(e.target.value)');
+      expect(source).toContain('mcpModel.toggle');
     });
   });
 });

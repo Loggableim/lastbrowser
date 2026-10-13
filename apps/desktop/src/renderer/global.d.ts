@@ -109,6 +109,8 @@ type LastbrowserUpdateStatus = {
   percent: number | null;
   lastCheckedAt: string | null;
   message: string | null;
+  startupCheck?: boolean;
+  installError?: string | null;
 };
 
 type LastbrowserUpdatePreferences = {

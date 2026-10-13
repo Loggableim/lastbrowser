@@ -51,6 +51,14 @@ def _load_canonical_run_agent():
 
 
 def isolated_python():
+    # Source-only CI may use an explicitly provisioned isolated test runtime.
+    # This override is not evidence that the shipped runtime is complete.
+    configured = os.environ.get("LASTBROWSER_TEST_PYTHON_PATH")
+    if configured:
+        selected = Path(configured)
+        if not selected.is_file():
+            raise RuntimeError("Configured isolated test Python does not exist")
+        return selected
     # -I deliberately does not inherit dev user-site dependencies. Exercise
     # the exact offline runtime the desktop ships when it is present.
     shipped = Path(__file__).resolve().parents[3] / "apps" / "desktop" / "runtime" / "python" / "python.exe"
@@ -408,10 +416,11 @@ def test_actual_windows_child_gh_sentinel_and_owned_auth_pool(tmp_path, independ
         assert auth.read_bytes() == before
 
 
-def test_catalog_token_exchange_refresh_and_ambient_keychain_are_denied(monkeypatch):
+def test_catalog_token_exchange_refresh_and_ambient_keychain_are_denied(monkeypatch, tmp_path):
     from cli import copilot_auth
     from runtime import anthropic_adapter, credential_pool
     from web.api import config
+    monkeypatch.setenv("SIDEKICK_HOME", str(tmp_path / "catalog-profile"))
     monkeypatch.setenv("LASTBROWSER_INDEPENDENT_WORKER", "1")
     monkeypatch.setenv("LASTBROWSER_INDEPENDENT_PURPOSE", "model_catalog")
     monkeypatch.setattr(anthropic_adapter.platform, "system", lambda: "Darwin")

@@ -9,6 +9,7 @@ import type {
 } from 'electron';
 import { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { isOAuthUrl, openAuthConnectWindow, openExternalUrl } from './auth-window.js';
+import { searchEngineById } from './browser-search.js';
 import { preserveContextSelectionScript } from './selection-context-menu.js';
 
 export const browserOpenTabChannel = 'lastbrowser:browser:openTab';
@@ -35,6 +36,7 @@ export type BrowserContextMenuActions = {
   assistantName?: string;
   locale?: string;
   searchEngine?: { label: string; search: (query: string) => string };
+  searchEngineId?: string;
 };
 
 export type ContextMenuLocale = 'en' | 'de' | 'es' | 'fr' | 'it' | 'pt-BR' | 'ru' | 'ja';
@@ -204,6 +206,10 @@ export function buildBrowserContextMenuTemplate(
   const assistantName = actions.assistantName?.trim() || 'Nova';
   const labels = resolveContextMenuLabels(actions.locale);
   const linkUrl = params.linkURL?.trim();
+  const searchEngine = actions.searchEngine ?? (() => {
+    const engine = actions.searchEngineId ? searchEngineById(actions.searchEngineId) : null;
+    return engine ? { label: engine.label, search: (query: string) => engine.template.replace('%s', encodeURIComponent(query)) } : undefined;
+  })();
 
   if (params.selectionText?.trim()) {
     const raw = params.selectionText.trim();
@@ -214,8 +220,8 @@ export function buildBrowserContextMenuTemplate(
         click: () => actions.deepResearch?.({ selectionText: raw, pageUrl: params.pageURL })
       },
       {
-        label: selectionSearchLabel(actions.locale, actions.searchEngine?.label || 'Google'),
-        click: () => actions.openLinkInNewTab(actions.searchEngine?.search(raw) || `https://www.google.com/search?q=${encodeURIComponent(raw)}`)
+        label: selectionSearchLabel(actions.locale, searchEngine?.label || 'Google'),
+        click: () => actions.openLinkInNewTab(searchEngine?.search(raw) || `https://www.google.com/search?q=${encodeURIComponent(raw)}`)
       },
       { type: 'separator' }
     );
@@ -308,7 +314,8 @@ export function registerBrowserContextMenu({
   getWindow,
   getAssistantName,
   getLocale,
-  getSearchEngine
+  getSearchEngine,
+  getSearchEngineId
 }: {
   app: App;
   Menu: MenuLike;
@@ -318,16 +325,26 @@ export function registerBrowserContextMenu({
   getAssistantName?: () => string;
   getLocale?: () => string;
   getSearchEngine?: () => { label: string; search: (query: string) => string };
+  getSearchEngineId?: () => string;
 }): void {
   app.on('web-contents-created', (_event, contents) => {
     installWindowOpenBridge(contents, getWindow, shell);
     contents.on('dom-ready', () => {
-      for (const frame of contents.mainFrame.framesInSubtree) {
+      for (const frame of contents.mainFrame?.framesInSubtree ?? []) {
         void frame.executeJavaScript(preserveContextSelectionScript).catch(() => {});
       }
     });
-    contents.on('context-menu', (_contextEvent, params) => {
-      const template = buildBrowserContextMenuTemplate(params, {
+    contents.on('context-menu', async (_contextEvent, params) => {
+      let effectiveParams = params;
+      if (!params.selectionText?.trim() && !params.isEditable) {
+        try {
+          const selectionText = await contents.executeJavaScript('window.getSelection()?.toString() || ""');
+          if (selectionText.trim()) effectiveParams = { ...params, selectionText };
+        } catch {
+          // The frame may navigate or close before the native menu opens.
+        }
+      }
+      const template = buildBrowserContextMenuTemplate(effectiveParams, {
         canGoBack: contents.canGoBack(),
         canGoForward: contents.canGoForward(),
         goBack: () => contents.goBack(),
@@ -346,7 +363,8 @@ export function registerBrowserContextMenu({
         deepResearch: (payload) => getWindow()?.webContents.send(browserDeepResearchChannel, payload),
         assistantName: getAssistantName?.() || 'Nova',
         locale: getLocale?.(),
-        searchEngine: getSearchEngine?.()
+        searchEngine: getSearchEngine?.(),
+        searchEngineId: getSearchEngineId?.()
       });
       Menu.buildFromTemplate(template).popup({ window: getWindow() ?? undefined });
     });

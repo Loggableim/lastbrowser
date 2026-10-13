@@ -992,6 +992,12 @@ def resolve_runtime_provider(
     """
     requested_provider = resolve_requested_provider(requested)
 
+    if requested_provider == "lastbrowser-local":
+        # The application-owned loopback runtime has its own credential and
+        # catalog. Explicit/cloud keys and endpoints must never override it.
+        from web.api.local_inference import connection
+        return connection(target_model)
+
     from runtime.retired_providers import is_retired_provider
     model_cfg = _get_model_config()
     configured_provider = str(model_cfg.get("provider") or "").strip().lower()

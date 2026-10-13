@@ -209,6 +209,7 @@ import { withSidekickWebuiReady } from './sidekick-readiness.js';
 import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTerminalIds, closeAllTerminals } from './terminal-process.js';
 import { createAppTray, setupMinimizeToTray, type TrayController } from './tray.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
+import { appendWindowsFirstPaintSwitches, installWindowsFirstPaintNudge } from './windows-presentation.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
 import { defaultSearchEngineId, searchEngineById } from './browser-search.js';
 import { registerBrowserShortcuts } from './shortcuts.js';
@@ -428,6 +429,7 @@ export function dispatchOpenUrl(targetUrl: string): void {
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow(createMainWindowOptions(mainDir));
+  installWindowsFirstPaintNudge(window);
   mainWindow = window;
 
   const rendererStartedAt = Date.now();
@@ -1387,6 +1389,7 @@ if (isCdpEnabled() && !process.argv.some((a) => a.startsWith('--remote-debugging
 }
 // Enable Widevine DRM feature flag in Chromium
 app.commandLine.appendSwitch('enable-features', 'WidevineCdm');
+appendWindowsFirstPaintSwitches(app.commandLine);
 
 app.setName('Lastbrowser');
 
@@ -1439,7 +1442,7 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     app,
     getWindow: () => mainWindow
   });
-  services = new SidecarServices(resolveServiceLayout(appResourcesDir()));
+  services = new SidecarServices(resolveServiceLayout(appResourcesDir(), undefined, process.env, process.platform, app.isPackaged));
   independentController = new IndependentController({
     userDataDir: app.getPath('userData'),
     isShell: isTrustedShell,

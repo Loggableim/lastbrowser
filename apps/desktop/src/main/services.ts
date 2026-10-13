@@ -98,23 +98,38 @@ export function resolveExistingRuntimeDirectory(directory: string): string {
   return directory;
 }
 
+export function sidecarPythonExecutableName(platform: NodeJS.Platform | string = process.platform): string {
+  return platform === 'win32' ? 'python.exe' : 'python3';
+}
+
 export function resolveServiceLayout(
   resourcesDir: string,
   runtimeRoot = defaultRuntimeRoot(),
-  env: Partial<Record<'LASTBROWSER_WEBUI_PYTHON' | 'HERMES_WEBUI_PYTHON', string>> = process.env
+  env: Partial<Record<'LASTBROWSER_WEBUI_PYTHON' | 'HERMES_WEBUI_PYTHON', string>> = process.env,
+  platform: NodeJS.Platform | string = process.platform,
+  isPackaged = false
 ): ServiceLayout {
   const normalizedResources = path.normalize(resourcesDir);
   const runtimeDir = resolveExistingRuntimeDirectory(path.join(runtimeRoot, 'runtime'));
   const servicesDir = path.join(normalizedResources, 'services');
   const bundledSidekickDir = path.join(servicesDir, 'sidekick');
   const webuiDir = bundledSidekickDir;
-  const resourcesPythonExe = path.join(normalizedResources, 'runtime', 'python', 'python.exe');
-  const workspacePythonExe = path.join(normalizedResources, 'apps', 'desktop', 'runtime', 'python', 'python.exe');
+  const pythonName = sidecarPythonExecutableName(platform);
+  const resourcesPythonExe = path.join(normalizedResources, 'runtime', 'python', pythonName);
+  const workspacePythonExe = path.join(normalizedResources, 'apps', 'desktop', 'runtime', 'python', pythonName);
   const bundledPythonExe = existsSync(resourcesPythonExe)
     ? resourcesPythonExe
     : existsSync(workspacePythonExe)
       ? workspacePythonExe
-      : resourcesPythonExe;
+      : platform === 'win32'
+        ? resourcesPythonExe
+        : pythonName;
+  if (platform === 'linux' && isPackaged && !existsSync(resourcesPythonExe)) {
+    throw new Error(`Packaged Linux Sidekick runtime is missing: ${resourcesPythonExe}`);
+  }
+  const pythonExe = platform === 'linux' && isPackaged
+    ? resourcesPythonExe
+    : env.LASTBROWSER_WEBUI_PYTHON || env.HERMES_WEBUI_PYTHON || bundledPythonExe;
 
   const bundledEntry = path.join(bundledSidekickDir, 'cli', 'web_server.py');
   // `services/sidekick` is the tracked source of truth. Ignore any legacy
@@ -131,7 +146,7 @@ export function resolveServiceLayout(
     // The in-tree monorepo is launched as `uvicorn cli.web_server:app`.
     webuiServer: sidekickEntry,
     webuiMode: 'monorepo',
-    pythonExe: env.LASTBROWSER_WEBUI_PYTHON || env.HERMES_WEBUI_PYTHON || bundledPythonExe,
+    pythonExe,
     bridgeToken: randomBytes(24).toString('hex')
   };
 }

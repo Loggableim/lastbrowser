@@ -422,8 +422,9 @@ describe('provider-aware model selection', () => {
     expect(guard).toBeGreaterThan(selectionRead);
     expect(transport).toBeGreaterThan(guard);
     expect(app).toContain('const configuredChatModel = chatModelSelection.model || undefined;');
-    expect(startContract).toContain('model: input.selection.model || undefined');
-    expect(startContract).toContain('modelProvider: input.selection.provider || undefined');
+    expect(startContract).toContain("const pair = { model: input.selection.model ?? '', provider: input.selection.provider ?? '' }");
+    expect(startContract).toContain('model: pair.model || undefined');
+    expect(startContract).toContain('modelProvider: pair.provider || undefined');
     expect(startContract).toContain('profile: input.captured.profileId');
     expect(startContract).toContain('workspace: input.captured.spacePath');
     expect(startContract).toContain('backendProfileName: input.captured.backendProfileName');

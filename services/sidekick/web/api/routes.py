@@ -11754,15 +11754,15 @@ def _handle_mcp_servers_list(handler):
 def _handle_mcp_servers_save(handler, body):
     """POST /api/mcp/servers"""
     try:
-        from runtime.mcp_client import get_mcp_manager, resolve_default_mcp_config_path
-        cfg_path = resolve_default_mcp_config_path()
-        cfg_path.parent.mkdir(parents=True, exist_ok=True)
-        raw_config = body.get("mcpServers") or body.get("servers") or body
-        cfg_data = {"mcpServers": raw_config} if not ("mcpServers" in body or "servers" in body) else body
-        cfg_path.write_text(json.dumps(cfg_data, indent=2), encoding="utf-8")
-        mgr = get_mcp_manager()
-        mgr.load_config(cfg_path)
-        return j(handler, {"ok": True, "config_path": str(cfg_path), "server_count": len(mgr.configs)})
+        import copy
+        from web.api.mcp_config_contract import normalize_mcp_config
+        cfg_data = copy.deepcopy(get_config())
+        existing = cfg_data.get("mcp_servers", {})
+        servers = normalize_mcp_config(body, existing if isinstance(existing, dict) else {}, _MASKED_PLACEHOLDER)
+        cfg_data["mcp_servers"] = servers
+        _save_yaml_config_file(_get_config_path(), cfg_data)
+        reload_config()
+        return j(handler, {"ok": True, "server_count": len(servers), "reload_required": True})
     except Exception as e:
         logger.exception("MCP servers save failed")
         return bad(handler, f"MCP servers save failed: {e}")
@@ -11787,21 +11787,41 @@ def _handle_mcp_tools_list(handler):
 
 def _handle_mcp_tool_call(handler, body):
     """POST /api/mcp/tools/call"""
-    import asyncio
-    server_name = (body.get("server") or body.get("server_name") or "").strip()
-    tool_name = (body.get("tool") or body.get("tool_name") or "").strip()
-    arguments = body.get("arguments") or body.get("args") or {}
+    if not isinstance(body, dict):
+        return bad(handler, "MCP tool call must be an object")
+    server_name = body.get("server") or body.get("server_name") or ""
+    tool_name = body.get("tool") or body.get("tool_name") or ""
+    if not isinstance(server_name, str) or not isinstance(tool_name, str):
+        return bad(handler, "server and tool must be strings")
+    server_name = server_name.strip()
+    tool_name = tool_name.strip()
+    arguments = body.get("arguments", body.get("args", {}))
     if not server_name or not tool_name:
         return bad(handler, "server and tool are required")
+    if not isinstance(arguments, dict):
+        return bad(handler, "MCP tool arguments must be an object")
 
     try:
-        from runtime.mcp_client import get_mcp_manager
-        mgr = get_mcp_manager()
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(mgr.call_tool(server_name, tool_name, arguments))
-        finally:
-            loop.close()
+        config = get_config()
+        servers = config.get("mcp_servers", {})
+        server_config = servers.get(server_name) if isinstance(servers, dict) else None
+        if not isinstance(server_config, dict) or not _parse_mcp_enabled(server_config.get("enabled", True)):
+            return bad(handler, f"MCP server '{server_name}' is not configured or disabled")
+
+        from tools.registry import registry
+        entry = registry.get_entry(tool_name)
+        if entry is None or entry.toolset != f"mcp-{server_name}":
+            return bad(handler, f"MCP tool '{tool_name}' is not registered for server '{server_name}'")
+        if entry.check_fn is not None and not entry.check_fn():
+            return bad(handler, f"MCP tool '{tool_name}' is unavailable")
+        result = registry.dispatch(tool_name, arguments)
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except (TypeError, ValueError):
+                pass
+        if isinstance(result, dict) and result.get("error"):
+            return bad(handler, str(result["error"]))
         return j(handler, {"ok": True, "result": result})
     except Exception as e:
         logger.exception("MCP tool call failed")
@@ -11810,89 +11830,57 @@ def _handle_mcp_tool_call(handler, body):
 
 
 def _handle_hybrid_search(handler, body):
-    """POST /api/memory/hybrid/search â€” hybrid search across local + supermemory"""
-    import uuid
+    """Search active local notes and documents in the local memory engine."""
+    if not isinstance(body, dict):
+        return bad(handler, "Memory search request must be an object")
+    query = body.get("query", body.get("q"))
+    if not isinstance(query, str) or not query.strip():
+        return bad(handler, "Query is required")
+    query = query.strip()
 
-    q = body.get("q", "").strip()
-    limit = int(body.get("limit", 15))
-    if not q:
-        return bad(handler, "Query 'q' is required")
+    raw_limit = body.get("limit", 15)
+    if isinstance(raw_limit, bool):
+        return bad(handler, "Limit must be a positive integer")
+    try:
+        limit = int(raw_limit)
+    except (TypeError, ValueError, OverflowError):
+        return bad(handler, "Limit must be a positive integer")
+    if limit <= 0 or (isinstance(raw_limit, float) and not raw_limit.is_integer()):
+        return bad(handler, "Limit must be a positive integer")
 
-    results = []
-
-    # 1. Local search: search the active space's MEMORY.md notes
     try:
         from web.api.space_engine import resolve_active_space
-        memory_file = resolve_active_space().memory_dir / "MEMORY.md"
+        memory_dir = resolve_active_space().memory_dir
     except Exception:
         try:
             from web.api.profiles import get_active_profile_home
-            home = get_active_profile_home()
+            memory_dir = get_active_profile_home() / "memories"
         except Exception:
-            home = get_webui_home()
-        memory_file = home / "MEMORY.md"
-    if memory_file.exists():
-        try:
-            text = memory_file.read_text(encoding="utf-8")
-            lines = text.split("\n")
-            for line in lines:
-                if q.lower() in line.lower():
-                    # Extract category tag if present
-                    tag = "Allgemein"
-                    import re as _re
-                    m = _re.search(r"#tag:\s*([\w\-]+)", line, _re.IGNORECASE)
-                    if m:
-                        tag = m.group(1)
-                    results.append({
-                        "id": f"local-{uuid.uuid4().hex[:8]}",
-                        "source": "local",
-                        "score": 9.0,
-                        "category": tag,
-                        "content": line.strip(),
-                    })
-        except Exception:
-            logger.exception("Local memory search failed")
+            memory_dir = get_webui_home() / "memories"
 
-    # 2. Supermemory search
-    client = _get_supermemory_client()
-    if client is not None:
-        try:
-            sm_result = client.search.memories(q=q, limit=limit)
-            if hasattr(sm_result, "model_dump"):
-                sm_data = sm_result.model_dump()
-            elif hasattr(sm_result, "dict"):
-                sm_data = sm_result.dict()
-            else:
-                sm_data = sm_result
+    try:
+        from runtime.supermemory_engine import get_supermemory_engine
+        from web.api.memory_search import merge_memory_hits, search_local_notes
 
-            # Navigate to the actual items
-            raw_items = sm_data.get("data", sm_data.get("memories", sm_data.get("results", [])))
-            if isinstance(raw_items, list):
-                for item in raw_items:
-                    content = item.get("content") or item.get("text") or item.get("snippet", "")
-                    score = item.get("score") or item.get("relevance") or 0.5
-                    tags = item.get("metadata", {}).get("tags", [])
-                    category = tags[0] if isinstance(tags, list) and tags else "Allgemein"
-                    item_id = item.get("id") or item.get("_id") or uuid.uuid4().hex[:8]
-                    results.append({
-                        "id": f"sm-{str(item_id)[:8]}",
-                        "source": "supermemory",
-                        "score": float(score) if score else 0.5,
-                        "category": category,
-                        "content": content,
-                    })
-        except Exception:
-            logger.exception("Hybrid: Supermemory search failed")
+        redact = globals().get("_redact_text", lambda value: value)
+        local_hits = search_local_notes(memory_dir, query)
+        for hit in local_hits:
+            hit["content"] = redact(hit["content"])
 
-    # Deduplicate by content, sort by score desc
-    seen = {}
-    for r in results:
-        key = r["content"][:100]  # compare first 100 chars
-        if key not in seen or r["score"] > seen[key]["score"]:
-            seen[key] = r
-    sorted_results = sorted(seen.values(), key=lambda x: x["score"], reverse=True)[:limit]
-
-    return j(handler, {"hits": sorted_results})
+        documents = get_supermemory_engine().search(query, limit=limit)
+        document_hits = []
+        for document in documents:
+            hit = dict(document)
+            hit["source"] = "supermemory"
+            hit["id"] = str(hit.get("id", ""))
+            hit["content"] = redact(str(hit.get("content", "")))
+            hit["category"] = hit.get("category") or "Allgemein"
+            document_hits.append(hit)
+        hits = merge_memory_hits(local_hits, document_hits, limit)
+        return j(handler, {"ok": True, "results": hits, "hits": hits})
+    except Exception as exc:
+        logger.exception("Hybrid memory search failed")
+        return bad(handler, str(exc))
 def _handle_supermemory_list(handler, parsed):
     """GET /api/memory/supermemory/list"""
     from urllib.parse import parse_qs
@@ -16005,34 +15993,28 @@ def _handle_skill_disable(handler, body):
 
 
 def _handle_memory_write(handler, body):
-    try:
-        require(body, "section", "content")
-    except ValueError as e:
-        return bad(handler, str(e))
+    if not isinstance(body, dict):
+        return bad(handler, "Memory write request must be an object")
+    section = body.get("section")
+    content = body.get("content")
+    if not isinstance(section, str) or section not in {"memory", "user"}:
+        return bad(handler, 'section must be "memory" or "user"')
+    if not isinstance(content, str):
+        return bad(handler, "content must be a string")
+
     try:
         from web.api.space_engine import resolve_active_space
-
-        space = resolve_active_space()
-        mem_dir = space.memory_dir
+        mem_dir = resolve_active_space().memory_dir
     except Exception:
         try:
             from web.api.profiles import get_active_profile_home
-
             mem_dir = get_active_profile_home() / "memories"
         except Exception:
             mem_dir = get_webui_home() / "memories"
     mem_dir.mkdir(parents=True, exist_ok=True)
-    section = body["section"]
-    if section == "memory":
-        target = mem_dir / "MEMORY.md"
-    elif section == "user":
-        target = mem_dir / "USER.md"
-    else:
-        return bad(handler, 'section must be "memory" or "user"')
-    target.write_text(body["content"], encoding="utf-8")
+    target = mem_dir / ("MEMORY.md" if section == "memory" else "USER.md")
+    target.write_text(content, encoding="utf-8")
     return j(handler, {"ok": True, "section": section, "path": str(target)})
-
-
 def _normalize_message_for_import_refresh(message: object) -> object:
     """Normalize message payloads for import refresh prefix checks.
 
@@ -16602,6 +16584,11 @@ def _handle_mcp_tools_list(handler):
 
 def _handle_mcp_servers_list(handler):
     """List configured MCP servers with safe, read-only runtime visibility."""
+    try:
+        from tools.mcp_tool import _MCP_AVAILABLE
+        runtime_available = bool(_MCP_AVAILABLE)
+    except ImportError:
+        runtime_available = False
     cfg = get_config()
     servers = cfg.get("mcp_servers", {})
     if not isinstance(servers, dict):
@@ -16613,8 +16600,10 @@ def _handle_mcp_servers_list(handler):
     ]
     return j(handler, {
         "servers": result,
+        "config": {"mcpServers": _mask_secrets(servers)},
+        "runtime_available": runtime_available,
         "toggle_supported": True,
-        "reload_required": False,
+        "reload_required": True,
     })
 
 
@@ -16661,39 +16650,59 @@ def _handle_mcp_server_update(handler, name, body):
     """Add or update an MCP server."""
     from urllib.parse import unquote
     name = unquote(name)
-    if not name:
+    if not name or not isinstance(body, dict):
         return bad(handler, "name is required")
-    # Validate: must have url (http) or command (stdio)
     cfg = get_config()
     servers = cfg.get("mcp_servers", {})
     if not isinstance(servers, dict):
         servers = {}
     existing_cfg = servers.get(name, {})
     server_cfg = dict(existing_cfg) if isinstance(existing_cfg, dict) else {}
-    if body.get("url"):
-        server_cfg["url"] = body["url"].strip()
+
+    submitted_url = body.get("url")
+    submitted_command = body.get("command")
+    if submitted_url and submitted_command:
+        return bad(handler, "MCP server requires either url or command, not both")
+    if submitted_url is not None:
+        if not isinstance(submitted_url, str) or not submitted_url.strip():
+            return bad(handler, "url must be a non-empty string")
+        server_cfg["url"] = submitted_url.strip()
         server_cfg.pop("command", None)
         server_cfg.pop("args", None)
         server_cfg.pop("env", None)
-        if body.get("headers"):
-            server_cfg["headers"] = _strip_masked_values(body["headers"], existing_cfg.get("headers", {}))
-    elif body.get("command"):
-        server_cfg["command"] = body["command"].strip()
+        if "headers" in body:
+            server_cfg["headers"] = body["headers"]
+    elif submitted_command is not None:
+        if not isinstance(submitted_command, str) or not submitted_command.strip():
+            return bad(handler, "command must be a non-empty string")
+        server_cfg["command"] = submitted_command.strip()
         server_cfg.pop("url", None)
         server_cfg.pop("headers", None)
-        if body.get("args"):
-            server_cfg["args"] = body["args"] if isinstance(body["args"], list) else [body["args"]]
-        if body.get("env"):
-            server_cfg["env"] = _strip_masked_values(body["env"], existing_cfg.get("env", {}))
     elif not existing_cfg:
         return bad(handler, "url or command is required")
+    if "args" in body:
+        args = body["args"]
+        if isinstance(args, str):
+            args = [args]
+        if not isinstance(args, list) or any(not isinstance(arg, str) for arg in args):
+            return bad(handler, "args must be an array of strings")
+        if "command" not in server_cfg:
+            return bad(handler, "args are only supported for stdio MCP servers")
+        server_cfg["args"] = args
+    if "env" in body:
+        server_cfg["env"] = body["env"]
+    if "headers" in body:
+        server_cfg["headers"] = body["headers"]
     if "enabled" in body:
         server_cfg["enabled"] = _parse_mcp_enabled(body["enabled"])
-    if body.get("timeout") is not None:
-        try:
-            server_cfg["timeout"] = int(body["timeout"])
-        except (ValueError, TypeError):
-            pass
+    for key in ("timeout", "connect_timeout"):
+        if key in body:
+            server_cfg[key] = body[key]
+    try:
+        from web.api.mcp_config_contract import normalize_mcp_config
+        server_cfg = normalize_mcp_config({"servers": {name: server_cfg}}, {name: existing_cfg}, _MASKED_PLACEHOLDER)[name]
+    except (TypeError, ValueError) as exc:
+        return bad(handler, str(exc))
     servers[name] = server_cfg
     cfg["mcp_servers"] = servers
     _save_yaml_config_file(_get_config_path(), cfg)

@@ -19,6 +19,8 @@ export type LastbrowserUpdateStatus = {
   percent: number | null;
   lastCheckedAt: string | null;
   message: string | null;
+  startupCheck?: boolean;
+  installError?: string | null;
 };
 
 type UpdateInfoLike = {
@@ -49,7 +51,7 @@ export type UpdaterLike = EventEmitter & {
 export type UpdateController = {
   getStatus: () => LastbrowserUpdateStatus;
   setPreferences: (preferences: { automaticUpdatesEnabled: boolean; channel: UpdateChannel }) => void;
-  checkForUpdates: () => Promise<LastbrowserUpdateStatus>;
+  checkForUpdates: (startupCheck?: boolean) => Promise<LastbrowserUpdateStatus>;
   downloadUpdate: () => Promise<LastbrowserUpdateStatus>;
   quitAndInstall: () => LastbrowserUpdateStatus;
 };
@@ -58,6 +60,7 @@ export type UpdateControllerOptions = {
   updater: UpdaterLike;
   isPackaged: boolean;
   currentVersion: string;
+  unsupportedReason?: string;
   forceDevUpdates?: boolean;
   offlineTestBuild?: boolean;
   allowPrerelease?: boolean;
@@ -70,7 +73,8 @@ export type UpdateControllerOptions = {
 export function createUpdateController(options: UpdateControllerOptions): UpdateController {
   const { updater } = options;
   const offlineTestBuild = options.offlineTestBuild === true;
-  const enabled = !offlineTestBuild && (options.isPackaged || options.forceDevUpdates === true);
+  const unsupportedReason = options.unsupportedReason?.trim() || null;
+  const enabled = !offlineTestBuild && !unsupportedReason && (options.isPackaged || options.forceDevUpdates === true);
   let automaticUpdatesEnabled = enabled && options.automaticUpdatesEnabled !== false;
   let channel: UpdateChannel = options.updateChannel === 'preview'
     || (options.updateChannel === undefined && options.allowPrerelease === true) ? 'preview' : 'stable';
@@ -83,9 +87,11 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     availableVersion: null,
     percent: null,
     lastCheckedAt: null,
+    startupCheck: false,
+    installError: null,
     message: offlineTestBuild
       ? 'Updates are unavailable in offline test builds.'
-      : enabled ? null : 'Auto updates are available only in packaged Lastbrowser builds.'
+      : unsupportedReason ?? (enabled ? null : 'Auto updates are available only in packaged Lastbrowser builds.')
   };
 
   updater.autoDownload = automaticUpdatesEnabled;
@@ -183,7 +189,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
   return {
     getStatus: () => ({ ...status }),
     setPreferences: applyPreferences,
-    async checkForUpdates(): Promise<LastbrowserUpdateStatus> {
+    async checkForUpdates(startupCheck = false): Promise<LastbrowserUpdateStatus> {
       if (!enabled) return { ...status };
       if (hasPendingUpdate()) return { ...status };
       if (checkInFlight) {
@@ -192,6 +198,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
       }
       publish({
         state: 'checking',
+        startupCheck,
         lastCheckedAt: new Date().toISOString(),
         message: 'Checking for Lastbrowser updates.'
       });
@@ -237,10 +244,11 @@ export function createUpdateController(options: UpdateControllerOptions): Update
       // `isForceRunAfter = true` relaunches the app when the install finishes.
       try {
         installing = true;
+        publish({ installError: null });
         updater.quitAndInstall(true, true);
       } catch (error) {
         installing = false;
-        publish({ message: error instanceof Error ? error.message : String(error) });
+        publish({ message: error instanceof Error ? error.message : String(error), installError: error instanceof Error ? error.message : String(error) });
       }
       return { ...status };
     }

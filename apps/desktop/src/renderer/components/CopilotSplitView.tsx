@@ -1006,6 +1006,8 @@ export function CopilotSplitView({
             </div>
             <h4>{t('copilot.emptyTitle', { botName })}</h4>
             <p>{t('copilot.emptyDescription')}</p>
+            <p>{t('copilot.quickChatDescription')}</p>
+            <span className="copilot-quick-chat-label">{botName} · {t('copilot.quickChat')}</span>
 
             {quickActions && quickActions.length > 0 && (
               <div className="copilot-starter-chips">

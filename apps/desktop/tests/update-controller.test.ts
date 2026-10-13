@@ -307,11 +307,16 @@ describe('update controller', () => {
   it('never uses the EXE updater for unsupported distribution channels', async () => {
     const updater = fakeUpdater();
     const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '1.0.0', unsupportedReason: 'Updated by Microsoft Store' });
+    expect(updater.autoDownload).toBe(false);
+    expect(updater.autoInstallOnAppQuit).toBe(false);
     updater.emit('update-downloaded', { version: '1.1.0' });
+    updater.emit('update-available', { version: '1.2.0' });
+    updater.emit('error', new Error('updater should stay idle'));
     await controller.checkForUpdates();
+    await controller.downloadUpdate();
     controller.quitAndInstall();
-    expect(controller.getStatus().state).toBe('disabled');
-    expect(updater.checkCalls + updater.quitCalls).toBe(0);
+    expect(controller.getStatus()).toMatchObject({ state: 'disabled', message: 'Updated by Microsoft Store' });
+    expect(updater.checkCalls + updater.downloadCalls + updater.quitCalls).toBe(0);
   });
 
   it('surfaces updater errors as status instead of throwing into the app shell', async () => {

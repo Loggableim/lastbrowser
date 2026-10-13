@@ -1,12 +1,17 @@
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   isPreparedRuntimeCompatible,
+  posixPythonLauncherScript,
+  pythonRuntimeExecutableName,
   replaceRuntimeTreeIfUnused,
+  resolveLinuxWheelhouseDir,
   resolveWheelhouseDir,
-  verifyWheelhouse
+  verifyLinuxWheelhouse,
+  verifyWheelhouse,
+  writeLinuxWheelhouseManifest
 } from '../scripts/prepare-python-runtime.mjs';
 
 describe('desktop runtime packaging', () => {
@@ -15,6 +20,17 @@ describe('desktop runtime packaging', () => {
 
     expect(packageJson.scripts['prepare:python']).toBe('node scripts/prepare-python-runtime.mjs');
     expect(packageJson.scripts['package:win']).toContain('npm run prepare:python');
+    expect(packageJson.scripts['package:win']).toContain('--win nsis portable');
+    expect(packageJson.scripts['package:linux']).toContain('npm run prepare:python && npm run build && electron-builder --linux tar.gz AppImage');
+    expect(packageJson.build.linux.target).toContain('AppImage');
+    expect(packageJson.scripts['package:linux']).toContain('node scripts/write-linux-checksums.mjs');
+    expect(packageJson.scripts['smoke:linux:fresh-profile']).toBe('node scripts/smoke-linux-fresh-profile.mjs');
+    expect(packageJson.build.linux.target).toEqual(['tar.gz', 'AppImage']);
+    expect(packageJson.build.linux.icon).toBe('../../brand/assets/app-icon-256.png');
+    expect(packageJson.build.linux.artifactName).toBe('Lastbrowser-${version}-${arch}.${ext}');
+    expect(packageJson.build.files).toContain('!node_modules/node-pty/prebuilds/darwin-*/**/*');
+    expect(packageJson.build.win.files).toContain('!node_modules/node-pty/prebuilds/linux-*/**/*');
+    expect(packageJson.build.linux.files).toContain('!node_modules/node-pty/prebuilds/win32-*/**/*');
   });
 
   it('ships the prepared Python runtime as an Electron resource', () => {
@@ -56,10 +72,39 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).toContain("'anthropic>=0.39.0'");
     expect(prepareScript).toContain('import anthropic');
     expect(prepareScript).toContain("'--no-compile'");
-    expect(prepareScript).toContain('runtimeSchema: 6');
+    expect(prepareScript).toContain('runtimeSchema: isLinux ? 7 : 6');
+    expect(prepareScript).toContain("'--no-index', '--find-links', wheelhouseDir");
+    expect(prepareScript).toContain("import anthropic, requests, uvicorn, yaml");
+    expect(prepareScript).toContain("--no-build-isolation");
     expect(prepareScript).not.toContain('marker.packageVersion === desired.packageVersion');
     const sidekickPyproject = readFileSync(path.resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'pyproject.toml'), 'utf8');
     expect(sidekickPyproject).toContain('exclude = ["tests", "tests.*"]');
+  });
+
+  it('selects python.exe on Windows and python3 on Linux', () => {
+    expect(pythonRuntimeExecutableName('win32')).toBe('python.exe');
+    expect(pythonRuntimeExecutableName('linux')).toBe('python3');
+    expect(posixPythonLauncherScript()).toBe('#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nexec ./bin/python3 "$@"\n');
+  });
+
+  it('uses a separate Linux x64 wheelhouse unless an explicit Linux path is supplied', () => {
+    expect(resolveLinuxWheelhouseDir({})).toBe(path.resolve('runtime/wheelhouse-linux-x64'));
+    expect(resolveLinuxWheelhouseDir({ LASTBROWSER_LINUX_WHEELHOUSE: 'C:/wheelhouse/linux-x64' }))
+      .toBe(path.resolve('C:/wheelhouse/linux-x64'));
+  });
+
+  it('verifies Linux wheelhouse hashes before using offline wheels', () => {
+    const wheelhouse = mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-linux-wheelhouse-'));
+    const wheelFile = path.join(wheelhouse, 'uvicorn-0.54.0-py3-none-any.whl');
+    writeFileSync(wheelFile, 'fixture wheel bytes');
+    try {
+      writeLinuxWheelhouseManifest(wheelhouse);
+      expect(verifyLinuxWheelhouse(wheelhouse)).toEqual(['uvicorn-0.54.0-py3-none-any.whl']);
+      writeFileSync(wheelFile, 'changed wheel bytes');
+      expect(() => verifyLinuxWheelhouse(wheelhouse)).toThrow(/checksum mismatch/);
+    } finally {
+      rmSync(wheelhouse, { recursive: true, force: true });
+    }
   });
 
   it('reuses an unchanged Python runtime across app version bumps', () => {
@@ -79,6 +124,7 @@ describe('desktop runtime packaging', () => {
     expect(isPreparedRuntimeCompatible(marker, desired, true)).toBe(true);
     expect(isPreparedRuntimeCompatible(marker, { ...desired, runtimeSchema: 7 }, true)).toBe(false);
     expect(isPreparedRuntimeCompatible(marker, desired, false)).toBe(false);
+    expect(isPreparedRuntimeCompatible(marker, desired, true, false)).toBe(false);
   });
 
   it('runs browser smoke against the local source Electron and requires an explicit opt-in for installed builds', () => {
@@ -92,6 +138,17 @@ describe('desktop runtime packaging', () => {
     expect(installedGuard).toBeGreaterThan(mainStart);
     expect(installedGuard).toBeLessThan(profileCreation);
     expect(smokeScript).toContain(".modern-titlebar .profile-switcher, .browser-titlebar .profile-switcher");
+  });
+
+  it('has a reproducible packaged Linux fresh-profile Sidekick smoke', () => {
+    const smoke = readFileSync(path.resolve(process.cwd(), 'scripts/smoke-linux-fresh-profile.mjs'), 'utf8').replace(/\r\n/g, '\n');
+    expect(smoke).toContain("`--user-data-dir=${profileDir}`");
+    expect(smoke).toContain("import fastapi, uvicorn");
+    expect(smoke).toContain('http://127.0.0.1:8788/health');
+    expect(smoke).toContain("env.LASTBROWSER_WEBUI_PYTHON = '/usr/bin/python3'");
+    expect(smoke).toContain("env.HERMES_WEBUI_PYTHON = '/usr/bin/python3'");
+    const requirements = readFileSync(path.resolve(process.cwd(), 'scripts/requirements-runtime.txt'), 'utf8');
+    expect(requirements).toContain('uvicorn[standard]==');
   });
 
   it('does not remove the runtime when a Windows process is using its executable tree', () => {

@@ -180,7 +180,11 @@ describe('GitHub release auto-update flow', () => {
     expect(workflow).toContain('python -m pip install --disable-pip-version-check -e ".[web,all,dev]"');
     expect(workflow).toContain('python -m compileall -q services/sidekick');
     expect(workflow).toContain('python -m pytest');
-    expect(workflow).toContain("'^refs/tags/v(\\d+)\\.(\\d+)\\.(\\d+)$'");
+    expect(workflow).toContain("'^refs/tags/v(\\d+\\.\\d+\\.\\d+)(?:-beta\\.(\\d+))?$'");
+    expect(workflow).toContain("beta releases start at the 0.1.57 line");
+    expect(workflow).toContain('--config.publish.channel=${{ steps.release-channel.outputs.channel }}');
+    expect(workflow).toContain('beta.yml');
+    expect(workflow).toContain('prerelease: ${{ needs.windows.outputs.prerelease }}');
     expect(workflow).toContain('does not match desktop package version');
     expect(validationIndex).toBeGreaterThan(-1);
     expect(validationIndex).toBeLessThan(buildIndex);

@@ -11,6 +11,9 @@ jobs:
   windows:
     name: Windows installer, Authenticode, and VMP signing
     runs-on: windows-latest
+    outputs:
+      metadata: ${{ steps.release-channel.outputs.metadata }}
+      prerelease: ${{ steps.release-channel.outputs.prerelease }}
     permissions:
       contents: read
 
@@ -21,18 +24,30 @@ jobs:
           persist-credentials: false
 
       - name: Require a version-matched release tag
+        id: release-channel
         shell: pwsh
         env:
           RELEASE_REF: ${{ github.ref }}
         run: |
-          if ($env:RELEASE_REF -notmatch '^refs/tags/v(\d+)\.(\d+)\.(\d+)$') {
-            throw "Refusing release: workflow must run from a vX.Y.Z tag, got '$env:RELEASE_REF'."
+          if ($env:RELEASE_REF -notmatch '^refs/tags/v(\d+\.\d+\.\d+)(?:-beta\.(\d+))?$') {
+            throw "Refusing release: expected vX.Y.Z or v0.1.57-beta.N, got '$env:RELEASE_REF'."
           }
-          $tagVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3])"
+          $baseVersion = $Matches[1]
+          $betaSequence = $Matches[2]
+          $isBeta = -not [string]::IsNullOrWhiteSpace($betaSequence)
+          $tagVersion = if ($isBeta) { "$baseVersion-beta.$betaSequence" } else { $baseVersion }
           $package = Get-Content 'apps/desktop/package.json' -Raw | ConvertFrom-Json
           if ($tagVersion -ne $package.version) {
             throw "Refusing release: tag version v$tagVersion does not match desktop package version $($package.version)."
           }
+          if ($isBeta -and [version]$baseVersion -lt [version]'0.1.57') {
+            throw "Refusing beta release: beta releases start at the 0.1.57 line, got '$env:RELEASE_REF'."
+          }
+          $channel = if ($isBeta) { 'beta' } else { 'latest' }
+          $metadataFile = if ($isBeta) { 'beta.yml' } else { 'latest.yml' }
+          "channel=$channel" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "prerelease=$($isBeta.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "metadata=$metadataFile" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Require signing credentials before release setup
         shell: pwsh
@@ -141,7 +156,7 @@ jobs:
           }
 
       - name: Package Windows installers with VMP signing
-        run: npm --workspace apps/desktop exec -- electron-builder --win nsis portable --publish never
+        run: npm --workspace apps/desktop exec -- electron-builder --win nsis portable --publish never --config.publish.channel=${{ steps.release-channel.outputs.channel }} --config.publish.releaseType=${{ steps.release-channel.outputs.prerelease == 'true' && 'prerelease' || 'release' }}
         env:
           EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
           EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -177,7 +192,7 @@ jobs:
           timestamp-digest: SHA256
 
       - name: Refresh signed installer checksum and differential blockmap
-        run: node scripts/refresh-signed-release-metadata.mjs apps/desktop/release node_modules/app-builder-bin/win/x64/app-builder.exe
+        run: node scripts/refresh-signed-release-metadata.mjs apps/desktop/release node_modules/app-builder-bin/win/x64/app-builder.exe ${{ steps.release-channel.outputs.metadata }}
 
       - name: Verify Authenticode Signature
         shell: powershell
@@ -219,7 +234,7 @@ jobs:
           path: |
             apps/desktop/release/*.exe
             apps/desktop/release/*.blockmap
-            apps/desktop/release/latest.yml
+            apps/desktop/release/${{ steps.release-channel.outputs.metadata }}
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
@@ -244,8 +259,8 @@ jobs:
           files: |
             release-assets/*.exe
             release-assets/*.blockmap
-            release-assets/latest.yml
+            release-assets/${{ needs.windows.outputs.metadata }}
           draft: false
-          prerelease: false
+          prerelease: ${{ needs.windows.outputs.prerelease }}
           generate_release_notes: true
           token: ${{ secrets.GITHUB_TOKEN }}

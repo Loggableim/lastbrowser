@@ -7,10 +7,14 @@ import yaml from 'js-yaml';
 
 const releaseDir = path.resolve(process.argv[2] || 'apps/desktop/release');
 const appBuilder = path.resolve(process.argv[3] || 'node_modules/app-builder-bin/win/x64/app-builder.exe');
-const metadataPath = path.join(releaseDir, 'latest.yml');
+const metadataFile = process.argv[4] || 'latest.yml';
+if (!/^(latest|beta)\.yml$/.test(metadataFile)) throw new Error(`Unsupported update metadata file: ${metadataFile}`);
+const metadataPath = path.join(releaseDir, metadataFile);
+const channel = metadataFile === 'beta.yml' ? 'beta' : 'latest';
 const metadata = yaml.load(await readFile(metadataPath, 'utf8'));
 if (!metadata || typeof metadata !== 'object' || !Array.isArray(metadata.files)
-  || typeof metadata.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(metadata.version)) {
+  || typeof metadata.version !== 'string' || !/^\d+\.\d+\.\d+(?:-beta\.\d+)?$/.test(metadata.version)
+  || (channel === 'beta') !== metadata.version.includes('-beta.')) {
   throw new Error(`Invalid electron-updater metadata: ${metadataPath}`);
 }
 
@@ -27,7 +31,7 @@ if (initialUrls.some((url) => url !== setupName && url !== portableName)
   || initialUrls.filter((url) => url === setupName).length !== 1
   || initialUrls.filter((url) => url === portableName).length > 1
   || (metadata.path != null && metadata.path !== setupName)) {
-  throw new Error(`latest.yml must reference ${setupName} as its update path and contain no unexpected executable entries`);
+  throw new Error(`${metadataFile} must reference ${setupName} as its update path and contain no unexpected executable entries`);
 }
 
 const setupPath = path.join(releaseDir, setupName);
@@ -72,4 +76,4 @@ if (verifiedUrls.length !== expectedFiles.length || expectedFiles.some((expected
   throw new Error('Signed setup/portable checksum, size, and update-path metadata verification failed');
 }
 if ((await stat(blockmapPath)).size === 0) throw new Error('Generated differential blockmap is empty');
-console.log(`Refreshed signed-release metadata for ${setupName} and ${portableName}`);
+console.log(`Refreshed ${metadataFile} for ${setupName} and ${portableName}`);

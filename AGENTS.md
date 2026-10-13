@@ -85,3 +85,13 @@ When two or more autonomous agents work simultaneously:
 - **Stream A (Desktop UI & Renderer):** Owns `apps/desktop/src/renderer/`.
 - **Stream B (Engine, Backend, Web, Release):** Owns `services/sidekick/`, `apps/desktop/src/main/`, `lastbrowser.com/`, `assets/store/`, `docs/`, `scripts/`.
 - Agents must never cross boundary lines into another active agent's workspace without coordination.
+
+---
+
+## 6. Linux desktop validation
+
+- Run desktop tests with `npm --workspace apps/desktop run test:run`; `npm test` starts Vitest watch mode.
+- Build Linux packages on a Linux x64 host. First populate the pinned runtime wheelhouse with `npm --workspace apps/desktop run prepare:python:online`, then `npm --workspace apps/desktop run package:linux` uses that wheelhouse offline and produces tar.gz, AppImage, and `SHA256SUMS`.
+- Run `npm --workspace apps/desktop run smoke:linux:fresh-profile -- apps/desktop/release/Lastbrowser-0.1.56-x64.tar.gz` on Linux x64 against the exact package to verify the bundled FastAPI/uvicorn runtime and fresh-profile Sidekick health.
+- Do not publish a Linux download URL, checksum, or signature until the package has been built and validated from the approved release head. `SHA256SUMS.gpg-command` is a signing instruction only; signing requires the release owner's key.
+- `npm run verify:store` is the Windows Store preflight and requires Windows PowerShell; it is not a Linux package check.

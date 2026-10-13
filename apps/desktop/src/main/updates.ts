@@ -141,7 +141,7 @@ export function startAutoUpdateChecks(): void {
     autoCheckPreferenceTimer = null;
     if (!autoCheckPreferenceReceived) {
       autoCheckPreferenceReceived = true;
-      if (preferences.automaticUpdatesEnabled) scheduleAutoUpdateCheck(6000);
+      if (preferences.automaticUpdatesEnabled) scheduleAutoUpdateCheck(6000, true);
     }
   }, 15000);
 }
@@ -214,12 +214,12 @@ function scheduleAutoUpdateRetry(): void {
   scheduleAutoUpdateCheck(retryDelay);
 }
 
-function scheduleAutoUpdateCheck(delay: number): void {
+function scheduleAutoUpdateCheck(delay: number, startupCheck = false): void {
   if (!controller || !autoCheckPreferenceReceived || !preferences.automaticUpdatesEnabled || autoCheckTimer) return;
   autoCheckTimer = windowDelay(() => {
     autoCheckTimer = null;
     if (!preferences.automaticUpdatesEnabled) return;
-    void controller?.checkForUpdates().then((status) => {
+    void controller?.checkForUpdates(startupCheck).then((status) => {
       if (status.state === 'error') scheduleAutoUpdateRetry();
       else if (['idle', 'disabled', 'not-available'].includes(status.state) && !autoCheckTimer) scheduleAutoUpdateCheck(AUTO_CHECK_INTERVAL);
     }).catch((err) => {

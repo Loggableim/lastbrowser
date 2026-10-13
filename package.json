@@ -10,6 +10,8 @@
     "test:run": "npm --workspace apps/desktop run test:run",
     "prepare:python:online": "npm --workspace apps/desktop run prepare:python:online",
     "package:win": "npm --workspace apps/desktop run package:win",
+    "package:linux": "npm --workspace apps/desktop run package:linux",
+    "smoke:linux:fresh-profile": "npm --workspace apps/desktop run smoke:linux:fresh-profile --",
     "release:win": "npm --workspace apps/desktop run package:win:publish",
     "verify:store": "powershell -ExecutionPolicy Bypass -File scripts/verify-store-readiness.ps1"
   },

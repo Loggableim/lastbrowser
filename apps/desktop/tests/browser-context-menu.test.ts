@@ -319,8 +319,7 @@ describe('selection search', () => {
     ['bing', 'Bing', 'https://www.bing.com/search?q='],
     ['brave', 'Brave Search', 'https://search.brave.com/search?q='],
     ['startpage', 'Startpage', 'https://www.startpage.com/sp/search?query='],
-    ['ecosia', 'Ecosia', 'https://www.ecosia.org/search?q='],
-    ['wikipedia', 'Wikipedia', 'https://en.wikipedia.org/w/index.php?search=']
+    ['ecosia', 'Ecosia', 'https://www.ecosia.org/search?q=']
   ])('uses the current %s engine and encodes the selected text', (searchEngineId, label, prefix) => {
     const openLinkInNewTab = vi.fn();
     const template = buildBrowserContextMenuTemplate({ linkURL: '', pageURL: 'https://example.com', selectionText: ' C++ & Größe? ', isEditable: false, editFlags: {} }, {
@@ -361,9 +360,10 @@ describe('native context menu selection fallback', () => {
     });
     appHandlers['web-contents-created']({}, contents);
     handlers['dom-ready']();
-    expect(executeJavaScript).toHaveBeenCalledOnce();
+    expect(executeJavaScript).not.toHaveBeenCalled();
     engine = 'bing';
     await handlers['context-menu']({}, { selectionText: '', linkURL: '', pageURL: 'https://example.com', isEditable: false, editFlags: {} });
+    expect(executeJavaScript).toHaveBeenCalledOnce();
     expect(popup).toHaveBeenCalledOnce();
     built.find(item => item.label === 'Suche mit Bing').click();
     expect(send).toHaveBeenCalledWith(browserOpenTabChannel, 'https://www.bing.com/search?q=' + encodeURIComponent('C++ & Größe?'));

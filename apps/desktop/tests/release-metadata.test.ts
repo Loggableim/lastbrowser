@@ -7,21 +7,23 @@ import { describe, expect, it } from 'vitest';
 import yaml from 'js-yaml';
 
 describe('signed release metadata refresh', () => {
-  it('rebuilds differential metadata from the exact signed installer bytes', () => {
+  it.each(['latest', 'beta'] as const)('rebuilds %s differential metadata from exact signed installer bytes', (channel) => {
     const repoRoot = path.resolve(process.cwd(), '..', '..');
     const appBuilder = path.join(repoRoot, 'node_modules', 'app-builder-bin', 'win', 'x64', 'app-builder.exe');
     const script = path.join(repoRoot, 'scripts', 'refresh-signed-release-metadata.mjs');
     const releaseDir = mkdtempSync(path.join(tmpdir(), 'lastbrowser-release-metadata-'));
-    const installerName = 'Lastbrowser-0.1.35-x64-setup.exe';
-    const portableName = 'Lastbrowser-0.1.35-x64-portable.exe';
+    const version = channel === 'beta' ? '0.1.57-beta.1' : '0.1.35';
+    const installerName = `Lastbrowser-${version}-x64-setup.exe`;
+    const portableName = `Lastbrowser-${version}-x64-portable.exe`;
     const installerBytes = Buffer.from('signed installer fixture');
     const portableBytes = Buffer.from('signed portable fixture');
     try {
       mkdirSync(releaseDir, { recursive: true });
       writeFileSync(path.join(releaseDir, installerName), installerBytes);
       writeFileSync(path.join(releaseDir, portableName), portableBytes);
-      writeFileSync(path.join(releaseDir, 'latest.yml'), yaml.dump({
-        version: '0.1.35',
+      const metadataFile = `${channel}.yml`;
+      writeFileSync(path.join(releaseDir, metadataFile), yaml.dump({
+        version,
         files: [
           { url: installerName, sha512: 'stale', size: 1 },
           { url: portableName, sha512: 'stale', size: 1 }
@@ -31,9 +33,9 @@ describe('signed release metadata refresh', () => {
         releaseDate: '2026-09-27T00:00:00.000Z'
       }));
 
-      execFileSync(process.execPath, [script, releaseDir, appBuilder], { cwd: repoRoot, stdio: 'pipe' });
+      execFileSync(process.execPath, [script, releaseDir, appBuilder, metadataFile], { cwd: repoRoot, stdio: 'pipe' });
 
-      const metadata = yaml.load(readFileSync(path.join(releaseDir, 'latest.yml'), 'utf8')) as {
+      const metadata = yaml.load(readFileSync(path.join(releaseDir, metadataFile), 'utf8')) as {
         sha512: string;
         files: Array<{ url: string; sha512: string; size: number }>;
       };

@@ -111,6 +111,7 @@ import {
   getSavedMemoryEstimateMb,
   type ClosedTab
 } from './tabs.js';
+import { resolveShellBack, resolveShellForward } from './shell-history.js';
 import { brandAssets, sidebarIconForPanel } from './brand.js';
 import { categoryLabels, modelNote, providerPresentation, tierLabels } from './provider-presentation.js';
 import {
@@ -1146,6 +1147,7 @@ function AppContent(): JSX.Element {
   });
   const [lastChatTurnUsage, setLastChatTurnUsage] = useState<{ sessionId: string; usage: NativeChatTurnUsage } | null>(null);
   const [nativeModelResolutionNotice, setNativeModelResolutionNotice] = useState<{ sessionId: string; profileId: string; spacePath: string; backendProfileName: string | null; resolution: NativeModelResolution } | null>(null);
+  const [inactiveModelFallbackNotice, setInactiveModelFallbackNotice] = useState<{ sessionId: string; profileId: string; spacePath: string; backendProfileName: string | null } | null>(null);
   const [chatError, setChatError] = useState('');
   const [chatRunState, setChatRunState] = useState<ChatRunState>('idle');
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
@@ -1424,6 +1426,8 @@ function AppContent(): JSX.Element {
   const createSessionRequestRef = useRef(0);
   const browserFrameRef = useRef<HTMLDivElement | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
+  /** Page Back left when the start page has no webview history entry, per tab. */
+  const shellForwardUrlRef = useRef<Map<string, string>>(new Map());
   const zoomShortcutHandlersRef = useRef<BrowserZoomShortcutHandlers | null>(null);
   const [activeZoomFactor, setActiveZoomFactor] = useState(1);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
@@ -1851,18 +1855,10 @@ function AppContent(): JSX.Element {
           setActivePanel('browser');
           break;
         case 'history-back':
-          try {
-            webviewRef.current?.goBack();
-          } catch {
-            // ignore
-          }
+          goBackInBrowser();
           break;
         case 'history-forward':
-          try {
-            webviewRef.current?.goForward();
-          } catch {
-            // ignore
-          }
+          goForwardInBrowser();
           break;
         case 'toggle-fullscreen':
           void window.lastbrowser.window?.toggleFullScreen?.();
@@ -2591,12 +2587,73 @@ function AppContent(): JSX.Element {
     };
   }, [activeSessionId, refreshWorkspace, status?.sidekick, workspacePanelCollapsed, workspacePath, workspaceRefreshNonce]);
 
-  function navigate(url: string): void {
+  function navigate(url: string, options?: { keepShellForward?: boolean; tabId?: string }): void {
+    const tabId = options?.tabId ?? activeTab.id;
     const normalized = normalizeNavigationInput(url, searchEngineId);
-    setTabs((current) => updateTabUrl(current, activeTab.id, normalized));
+    if (!options?.keepShellForward) shellForwardUrlRef.current.delete(tabId);
+    setTabs((current) => updateTabUrl(current, tabId, normalized));
     setBrowserMode(isAiBrowserHomeUrl(normalized) ? 'home' : 'web');
     setBrowserLoadError('');
     setActivePanel('browser');
+  }
+
+  function webviewHistoryFlag(method: 'canGoBack' | 'canGoForward'): boolean {
+    const view = webviewRef.current;
+    if (!view) return false;
+    try {
+      return Boolean(view[method]());
+    } catch {
+      return false;
+    }
+  }
+
+  function goBackInBrowser(): void {
+    const tabId = activeTabIdRef.current;
+    const tab = useTabStore.getState().tabs.find((item) => item.id === tabId);
+    if (!tab) return;
+    const step = resolveShellBack({
+      canGoBack: webviewHistoryFlag('canGoBack'),
+      currentUrl: tab.url,
+      startUrl: browserStartUrl
+    });
+    if (step.kind === 'webview-back') {
+      // If this step lands on the start page, Forward still has a page to restore.
+      shellForwardUrlRef.current.set(tab.id, tab.url);
+      try {
+        webviewRef.current?.goBack();
+      } catch {
+        // The guest can detach while the shortcut is in flight.
+      }
+      return;
+    }
+    if (step.kind === 'show-start') {
+      shellForwardUrlRef.current.set(tab.id, tab.url);
+      navigate(browserStartUrl, { keepShellForward: true, tabId: tab.id });
+    }
+  }
+
+  function goForwardInBrowser(): void {
+    const tabId = activeTabIdRef.current;
+    const tab = useTabStore.getState().tabs.find((item) => item.id === tabId);
+    if (!tab) return;
+    const step = resolveShellForward({
+      canGoForward: webviewHistoryFlag('canGoForward'),
+      onStartPage: isAiBrowserHomeUrl(tab.url),
+      pendingUrl: shellForwardUrlRef.current.get(tab.id) ?? null,
+      startUrl: browserStartUrl
+    });
+    if (step.kind === 'restore-page') {
+      shellForwardUrlRef.current.delete(tab.id);
+      navigate(step.url, { keepShellForward: true, tabId: tab.id });
+      return;
+    }
+    if (step.kind === 'webview-forward') {
+      try {
+        webviewRef.current?.goForward();
+      } catch {
+        // The guest can detach while the shortcut is in flight.
+      }
+    }
   }
 
   function submitNavigation(event: FormEvent): void {
@@ -3994,7 +4051,7 @@ function AppContent(): JSX.Element {
     if (!initialStart.ok) {
       if (initialStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
       else if (initialStart.reason === 'no_active_models') setChatError(t('settings.panels.providers.noActiveModels'));
-      else if (initialStart.reason === 'model_inactive') setChatError(t('settings.panels.providers.activeModelFallback'));
+      else if (initialStart.reason === 'model_inactive') setChatError(t('chat.modelUnavailableInSpace'));
       else if (initialStart.reason === 'model_unavailable') setChatError(t('chat.modelUnavailableInSpace'));
       else if (initialStart.reason === 'model_unqualified') setChatError(t('settings.panels.providers.betaCatalogEmpty'));
       return false;
@@ -4067,6 +4124,7 @@ function AppContent(): JSX.Element {
       }
 
       setNativeModelResolutionNotice(null);
+      setInactiveModelFallbackNotice(null);
       // Resolve the model explicitly. The setup state is often empty (the
       // wizard may have been skipped), and sending nothing made the backend
       // pick a stale catalog entry. The shared operation rechecks beta
@@ -4092,7 +4150,7 @@ function AppContent(): JSX.Element {
         unsubscribeEarly();
         if (guardedStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
         else if (guardedStart.reason === 'no_active_models') setChatError(t('settings.panels.providers.noActiveModels'));
-        else if (guardedStart.reason === 'model_inactive') setChatError(t('settings.panels.providers.activeModelFallback'));
+        else if (guardedStart.reason === 'model_inactive') setChatError(t('chat.modelUnavailableInSpace'));
         else if (guardedStart.reason === 'model_unavailable') setChatError(t('chat.modelUnavailableInSpace'));
         else if (guardedStart.reason === 'model_unqualified') setChatError(t('settings.panels.providers.betaCatalogEmpty'));
         return false;
@@ -4107,6 +4165,10 @@ function AppContent(): JSX.Element {
         spacePath: activeSpacePathRef.current
       }, response.sessionId);
       const turnContextStillCurrentAfterStream = currentTurnContext !== null;
+      if (currentTurnContext && guardedStart.inactiveModelFallback) {
+        setInactiveModelFallbackNotice({ sessionId: response.sessionId, profileId: currentTurnContext.profileId,
+          spacePath: currentTurnContext.spacePath, backendProfileName: turnBackendProfileName || null });
+      }
       traceRendererChat('chat-started', {
         hasStreamId: true,
         ownsContext: turnContextStillCurrentAfterStream
@@ -5278,8 +5340,8 @@ function AppContent(): JSX.Element {
         <>
           <ModernTitlebar
             isLoading={activeTab.isLoading}
-            onGoBack={() => webviewRef.current?.goBack()}
-            onGoForward={() => webviewRef.current?.goForward()}
+            onGoBack={goBackInBrowser}
+            onGoForward={goForwardInBrowser}
             onReloadOrStop={() => {
               if (activeTab.isLoading) {
                 try {
@@ -5648,6 +5710,7 @@ function AppContent(): JSX.Element {
                   onDeleteProfile={deleteProfileEntry}
                   lastChatTurnUsage={lastChatTurnUsage}
                   nativeModelResolutionNotice={nativeModelResolutionNotice}
+                  inactiveModelFallbackNotice={inactiveModelFallbackNotice}
                   webviewStartupReady={windowStartupReady}
                   onTransferredWebviewReady={handleTransferredWebviewReady}
                   pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
@@ -5891,8 +5954,8 @@ function AppContent(): JSX.Element {
               onMouseDown={handleTopbarMouseDown}
             >
               <div className="traffic-actions">
-                <button type="button" aria-label="Back" onClick={() => webviewRef.current?.goBack()}><ChevronLeft size={17} /></button>
-                <button type="button" aria-label="Forward" onClick={() => webviewRef.current?.goForward()}><ChevronRight size={17} /></button>
+                <button type="button" aria-label="Back" onClick={goBackInBrowser}><ChevronLeft size={17} /></button>
+                <button type="button" aria-label="Forward" onClick={goForwardInBrowser}><ChevronRight size={17} /></button>
                 <button
                   type="button"
                   aria-label={activeTab.isLoading ? 'Stop loading' : 'Reload'}
@@ -6026,6 +6089,7 @@ function AppContent(): JSX.Element {
               onDeleteProfile={deleteProfileEntry}
               lastChatTurnUsage={lastChatTurnUsage}
               nativeModelResolutionNotice={nativeModelResolutionNotice}
+              inactiveModelFallbackNotice={inactiveModelFallbackNotice}
               webviewStartupReady={windowStartupReady}
               onTransferredWebviewReady={handleTransferredWebviewReady}
               pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
@@ -6313,7 +6377,8 @@ function BrowserMain({
   botName = 'Nova',
   desktopSettings = null,
   lastChatTurnUsage = null,
-  nativeModelResolutionNotice = null
+  nativeModelResolutionNotice = null,
+  inactiveModelFallbackNotice = null
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -6405,12 +6470,18 @@ function BrowserMain({
   desktopSettings?: DesktopSettingsRecord | null;
   lastChatTurnUsage?: { sessionId: string; usage: NativeChatTurnUsage } | null;
   nativeModelResolutionNotice?: { sessionId: string; profileId: string; spacePath: string; backendProfileName: string | null; resolution: NativeModelResolution } | null;
+  inactiveModelFallbackNotice?: { sessionId: string; profileId: string; spacePath: string; backendProfileName: string | null } | null;
 }): JSX.Element {
   const { t } = useDesktopI18n();
-  const modelFallbackNotice = nativeModelResolutionNotice && nativeModelResolutionNotice.sessionId === activeSessionId
+  const subscriptionFallbackNotice = nativeModelResolutionNotice && nativeModelResolutionNotice.sessionId === activeSessionId
     && nativeModelResolutionNotice.profileId === activeProfileId && nativeModelResolutionNotice.spacePath === activeSpacePath
     && nativeModelResolutionNotice.backendProfileName === (activeBackendProfileName ?? null)
     ? t('chat.modelFallbackSubscriptionUsed', { model: nativeModelResolutionNotice.resolution.effective.model }) : null;
+  const inactiveFallbackNotice = inactiveModelFallbackNotice && inactiveModelFallbackNotice.sessionId === activeSessionId
+    && inactiveModelFallbackNotice.profileId === activeProfileId && inactiveModelFallbackNotice.spacePath === activeSpacePath
+    && inactiveModelFallbackNotice.backendProfileName === (activeBackendProfileName ?? null)
+    ? t('settings.panels.providers.activeModelFallback') : null;
+  const modelFallbackNotice = subscriptionFallbackNotice ?? inactiveFallbackNotice;
   const browserWebviewStyle = {
     width: '100%',
     height: '100%',
@@ -7235,7 +7306,7 @@ function BrowserMain({
           </PanelErrorBoundary>
         );
       case 'settings':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} profiles={profiles} activeProfileId={activeProfileId} activeSpacePath={activeSpacePath} activeBackendProfileName={activeBackendProfileName || activeSession?.profile || null} activeSessionId={activeSessionId} onSelectProfile={onSelectProfile} onCreateProfile={onCreateProfile} onRenameProfile={onRenameProfile} onDeleteProfile={onDeleteProfile} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} profiles={profiles} activeProfileId={activeProfileId} activeSpacePath={activeSpacePath} activeBackendProfileName={activeBackendProfileName || activeSession?.profile || null} activeSessionId={activeSessionId} onSelectProfile={onSelectProfile} onCreateProfile={onCreateProfile} onRenameProfile={onRenameProfile} onDeleteProfile={onDeleteProfile} onClose={() => usePanelStore.getState().setActivePanel('browser')} /></PanelErrorBoundary>;
       case 'terminal':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:

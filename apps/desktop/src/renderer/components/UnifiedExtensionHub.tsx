@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, FormEvent } from 'react';
+import React, { useState, useEffect, useMemo, useSyncExternalStore, FormEvent } from 'react';
 import {
   Puzzle,
   Sparkles,
@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { usePanelStore } from '../stores/usePanelStore.js';
 import type { ExtensionRecord, ExtensionPreset } from '../../main/extensions.js';
+import { McpHubStateModel } from './mcp-hub-state.js';
 
 export type McpPermissionType =
   | 'read_only'
@@ -156,36 +157,41 @@ export function UnifiedExtensionHub({
   const [feedback, setFeedback] = useState<{ text: string; error?: boolean } | null>(null);
 
   // Pillar 2 (MCP Skills) state
-  const [skills, setSkills] = useState<McpSkillItem[]>(() => {
+  const [builtinSkills, setBuiltinSkills] = useState<McpSkillItem[]>(() => {
     try {
-      const stored = localStorage.getItem('lastbrowser.mcp_skills.v1');
-      if (stored) return JSON.parse(stored);
+      const stored: unknown = JSON.parse(localStorage.getItem('lastbrowser.mcp_skills.v1') || 'null');
+      if (Array.isArray(stored)) {
+        const savedBuiltins = stored.filter((item): item is McpSkillItem => item && typeof item === 'object'
+          && (item as McpSkillItem).type === 'builtin');
+        if (savedBuiltins.length) return savedBuiltins;
+      }
     } catch {}
     return BUILTIN_MCP_SKILLS;
   });
+  const [mcpModel] = useState(() => new McpHubStateModel(window.lastbrowser.mcp));
+  const mcp = useSyncExternalStore(mcpModel.subscribe, mcpModel.getSnapshot);
+  const skills = useMemo<McpSkillItem[]>(() => [
+    ...builtinSkills,
+    ...mcp.servers.map((server): McpSkillItem => {
+      const name = String(server.name || '');
+      const transport = server.transport === 'stdio' ? 'stdio' : 'sse';
+      return {
+        id: `mcp-ext-${name}`,
+        name: `MCP: ${name}`,
+        description: `${server.status === 'active' ? 'Verbunden' : server.enabled === false ? 'Deaktiviert' : 'Konfiguriert'} · Bekannte Werkzeuge: ${Number(server.tool_count || 0)}`,
+        category: 'system',
+        icon: transport === 'stdio' ? '⚙️' : '🌐',
+        workspaceScope: 'all',
+        permissions: [],
+        autoApprove: false,
+        enabled: server.enabled === true,
+        type: 'mcp_server',
+        serverType: transport
+      };
+    })
+  ], [builtinSkills, mcp.servers]);
   const [skillSearch, setSkillSearch] = useState('');
   const [skillWorkspaceFilter, setSkillWorkspaceFilter] = useState<'all' | 'coding' | 'recherche' | 'design'>('all');
-
-  const DEFAULT_MCP_CONFIG = `{
-  "mcpServers": {
-    "git": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-git"]
-    },
-    "memory": {
-      "command": "python",
-      "args": ["-m", "sidekick.runtime.mcp_memory"]
-    }
-  }
-}`;
-
-  const [mcpConfigJson, setMcpConfigJson] = useState<string>(() => {
-    try {
-      const stored = localStorage.getItem('lastbrowser.mcp_config.v1');
-      if (stored) return stored;
-    } catch {}
-    return DEFAULT_MCP_CONFIG;
-  });
 
   const [extensionScopes, setExtensionScopes] = useState<Record<string, 'all' | 'coding' | 'recherche' | 'design'>>(() => {
     try {
@@ -225,12 +231,18 @@ export function UnifiedExtensionHub({
   useEffect(() => {
     if (open) {
       void loadExtensionData();
+      void mcpModel.load();
     }
-  }, [open]);
+    return mcpModel.dispose;
+  }, [open, mcpModel]);
 
   // Persist skills state
   const updateSkill = (id: string, updates: Partial<McpSkillItem>) => {
-    setSkills((prev) => {
+    if (id.startsWith('mcp-ext-') && typeof updates.enabled === 'boolean') {
+      void mcpModel.toggle(id.slice('mcp-ext-'.length), updates.enabled);
+      return;
+    }
+    setBuiltinSkills((prev) => {
       const next = prev.map((s) => (s.id === id ? { ...s, ...updates } : s));
       try {
         localStorage.setItem('lastbrowser.mcp_skills.v1', JSON.stringify(next));
@@ -254,62 +266,13 @@ export function UnifiedExtensionHub({
     });
   };
 
-  const handleApplyMcpConfig = () => {
+  const handleApplyMcpConfig = () => { void mcpModel.save(); };
+  const importLegacyMcpDraft = () => {
     try {
-      const parsed = JSON.parse(mcpConfigJson);
-      if (!parsed || typeof parsed !== 'object') {
-        notify('JSON-Konfiguration muss ein valides Objekt sein', true);
-        return;
-      }
-      try {
-        localStorage.setItem('lastbrowser.mcp_config.v1', mcpConfigJson);
-      } catch {}
-
-      const servers = (parsed.mcpServers || parsed.servers) as Record<string, any> | undefined;
-      let registeredCount = 0;
-      if (servers && typeof servers === 'object') {
-        setSkills((prev) => {
-          const next = [...prev];
-          for (const [serverKey, config] of Object.entries(servers)) {
-            const skillId = `mcp-ext-${serverKey}`;
-            const existingIdx = next.findIndex((s) => s.id === skillId);
-            const serverConf = (config && typeof config === 'object') ? config : {};
-            const isStdio = Boolean(serverConf.command);
-            const permissions: McpPermissionType[] = isStdio
-              ? ['terminal_execute', 'filesystem_write']
-              : ['network_outbound', 'read_only'];
-            const newSkill: McpSkillItem = {
-              id: skillId,
-              name: `MCP: ${serverKey}`,
-              description: `Externer ${isStdio ? 'stdio' : 'sse'} Server (${serverConf.command || serverConf.url || 'custom'}).`,
-              category: 'system',
-              icon: isStdio ? '⚙️' : '🌐',
-              workspaceScope: 'coding',
-              permissions,
-              autoApprove: false,
-              enabled: existingIdx >= 0 ? next[existingIdx].enabled : true,
-              type: 'mcp_server',
-              serverType: isStdio ? 'stdio' : 'sse',
-              endpoint: serverConf.url || serverConf.command
-            };
-            if (existingIdx >= 0) {
-              next[existingIdx] = { ...next[existingIdx], ...newSkill };
-            } else {
-              next.push(newSkill);
-            }
-            registeredCount++;
-          }
-          try {
-            localStorage.setItem('lastbrowser.mcp_skills.v1', JSON.stringify(next));
-          } catch {}
-          return next;
-        });
-      }
-
-      notify(`mcp_servers.json erfolgreich validiert & ${registeredCount} MCP-Server registriert!`);
-    } catch (err) {
-      notify(`Ungültiges JSON-Format: ${err instanceof Error ? err.message : String(err)}`, true);
-    }
+      const draft = localStorage.getItem('lastbrowser.mcp_config.v1');
+      if (draft) mcpModel.setEditor(draft);
+      else notify('Kein älterer lokaler MCP-Entwurf vorhanden.');
+    } catch { notify('Lokaler MCP-Entwurf konnte nicht gelesen werden.', true); }
   };
 
   // Preset install
@@ -481,7 +444,7 @@ export function UnifiedExtensionHub({
           >
             <Cpu size={16} />
             <span>Nova AI Skills & Tools (MCP)</span>
-            <span className="hub-tab-badge green">{skills.filter((s) => s.enabled).length}</span>
+            <span className="hub-tab-badge green">{mcp.servers.filter((server) => server.active === true).length}</span>
           </button>
         </nav>
 
@@ -665,6 +628,12 @@ export function UnifiedExtensionHub({
         {/* ── PILLAR 2: NOVA AI SKILLS & TOOLS (MCP) ── */}
         {activePillar === 'skills' && (
           <div className="hub-content-pane skills-pane">
+            <div aria-live="polite">
+              {mcp.error && <p className="hub-feedback-banner error" role="alert">{mcp.error}</p>}
+              {mcp.notice && <p role="status">{mcp.notice}</p>}
+              {mcp.busy && <p role="status">MCP-Konfiguration wird geladen oder gespeichert …</p>}
+              {mcp.runtimeAvailable === false && <p role="status">MCP-Laufzeit nicht verfügbar. Server lassen sich konfigurieren, aber derzeit nicht verbinden.</p>}
+            </div>
             {/* Filter & Search Bar */}
             <div className="hub-skills-filterbar">
               <div className="skills-search-wrap">
@@ -709,24 +678,32 @@ export function UnifiedExtensionHub({
                 <div className="mcp-config-head">
                   <div>
                     <strong>Model Context Protocol (MCP) Server Konfiguration</strong>
-                    <p>Definiere externe stdio- und sse-Server (vollständig kompatibel zum Claude Desktop Ökosystem).</p>
+                    <p>Externe stdio- und HTTP-Server konfigurieren. Änderungen erfordern einen Neustart von Nova. Maskierte Zugangsdaten bleiben beim Speichern erhalten.</p>
                   </div>
                   <button
                     type="button"
                     className="save-mcp-btn"
                     onClick={handleApplyMcpConfig}
+                    disabled={!mcp.loaded || mcp.busy}
                   >
                     <Check size={14} />
                     <span>Konfiguration anwenden</span>
                   </button>
                 </div>
                 <textarea
+                  aria-label="MCP-Serverkonfiguration"
                   className="mcp-json-editor"
-                  value={mcpConfigJson}
-                  onChange={(e) => setMcpConfigJson(e.target.value)}
+                  value={mcp.editor}
+                  onChange={(e) => mcpModel.setEditor(e.target.value)}
                   rows={8}
                   spellCheck={false}
                 />
+                <p role="status">{mcp.editor === mcp.savedEditor ? 'Aktuell gespeicherte Konfiguration' : 'Ungespeicherter Entwurf'}</p>
+                <div className="native-card-actions">
+                  <button type="button" onClick={mcpModel.resetEditor} disabled={mcp.busy}>Entwurf verwerfen</button>
+                  <button type="button" onClick={() => void mcpModel.load()} disabled={mcp.busy}>Serverstatus aktualisieren</button>
+                  <button type="button" onClick={importLegacyMcpDraft} disabled={mcp.busy}>Älteren lokalen Entwurf laden</button>
+                </div>
               </div>
             )}
 

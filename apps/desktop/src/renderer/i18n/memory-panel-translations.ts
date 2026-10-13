@@ -1,6 +1,23 @@
 import type { DesktopLocaleId, DesktopTranslationKey } from './keys.js';
 
 export const memoryPanelTranslations: Record<DesktopLocaleId, Partial<Record<DesktopTranslationKey, string>>> = {
+"ja": {
+"memory.localStorage": "ローカルのメモとドキュメント",
+"memory.documentCount": "ローカルに保存されたドキュメント: {count}",
+"memory.storageUnavailable": "ドキュメントストレージを利用できません",
+"memory.keywordSearch": "ローカルのキーワード検索",
+"memory.searchMode": "検索モード: {mode}",
+"memory.unsavedChanges": "未保存の変更",
+"memory.saved": "保存しました",
+"memory.documentTitle": "ドキュメントのタイトル",
+"memory.documentContent": "ドキュメントの内容",
+"memory.clearSearch": "ドキュメントを表示",
+"memory.searchResults": "検索結果",
+"memory.documentLibrary": "ドキュメントライブラリ",
+"memory.noResults": "検索結果はありません。",
+"memory.localHit": "ローカルメモ · メモエディターで編集",
+"memory.documentHit": "保存済みドキュメント",
+},
 "en": {
 "memory.localStorage": "Local notes and documents",
 "memory.documentCount": "{count} documents stored locally",

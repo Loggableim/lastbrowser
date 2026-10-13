@@ -29,8 +29,9 @@ describe('browser shell layout', () => {
     expect(app).toContain('prepareGuardedNativeChatStart(createGuardedStartInput())');
     expect(app).toContain('return window.lastbrowser.sidekick.startChat(payload);');
     expect(app).toContain('if (submission) submission.definitelyRejected = false;');
-    expect(guardedStart).toContain('model: input.selection.model || undefined');
-    expect(guardedStart).toContain('modelProvider: input.selection.provider || undefined');
+    expect(guardedStart).toContain("const pair = { model: input.selection.model ?? '', provider: input.selection.provider ?? '' }");
+    expect(guardedStart).toContain('model: pair.model || undefined');
+    expect(guardedStart).toContain('modelProvider: pair.provider || undefined');
   });
 
   it('uses the WebUI-style shell grid with expanded CD navigation', () => {
@@ -236,7 +237,7 @@ describe('browser shell layout', () => {
     expect(source).toContain('<NativeMemoryMain');
     expect(source).toContain('<NativeInsightsMain');
     expect(source).toContain('<NativeLogsMain');
-    expect(source).toContain('<NativeMailMain');
+    expect(source).toContain('<NativeGmailMain');
     expect(source).toContain('<NativeDiscordMain');
     expect(source).toContain('<NativeAppstoreMain');
     expect(source).toContain('<NativeSettingsMain');
@@ -371,10 +372,10 @@ describe('browser shell layout', () => {
     expect(source).toContain('<NativeProfilesMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeMemoryMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeLogsMain activeContextItem={activeContextItem}');
-    expect(source).toContain('<NativeMailMain workspace={activeSpacePath}');
+    expect(source).toContain('<NativeGmailMain activeContextItem={activeContextItem} serviceStatus={serviceStatus}');
     expect(source).toContain('<NativeDiscordMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeAppstoreMain');
-    expect(source).toContain('<NativeSettingsMain workspacePath={activeSpacePath} activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus}');
     expect(restPanels).toContain('agent-terminal');
     expect(restPanels).toContain('memory-editor');
     expect(restPanels).toContain('skill-linked-files');

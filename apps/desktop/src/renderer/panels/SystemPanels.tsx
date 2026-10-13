@@ -84,6 +84,7 @@ import { isModelActive, setModelActive, useActiveModelRevision } from '../active
 import { parseProviderModelId } from '../provider-model-selection.js';
 import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { canExecuteAutomaticPolicy, readObservedDecisionFromSession, requestModelPolicy, type ModelPolicyDraft, type ModelPolicyResponse } from '../model-policy-client.js';
+import { settingsEscapeAction } from '../settings-dismiss.js';
 import { modelPolicyCopy, modelPolicyReason } from '../i18n/model-policy-copy.js';
 import { modelPolicySettingsCopy } from '../i18n/model-policy-settings-copy.js';
 import { newIndependentRequestId, sameAssistantScope } from '../independent-contracts.js';
@@ -2380,7 +2381,7 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
   </SettingsCard>;
 }
 
-export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void }): JSX.Element {
+export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile, onClose }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void; onClose?: () => void }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
   useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
@@ -2463,6 +2464,41 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   xiaomiScopeRef.current = xiaomiScope;
   const xiaomiCurrentContextRef = useRef({ browserProfileId: activeProfileId, workspacePath: activeSpacePath || null, backendProfileName: activeBackendProfileName || undefined });
   xiaomiCurrentContextRef.current = { browserProfileId: activeProfileId, workspacePath: activeSpacePath || null, backendProfileName: activeBackendProfileName || undefined };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      const store = usePanelStore.getState();
+      const foreignModal = Array.from(document.querySelectorAll('[aria-modal="true"]')).some((node) => !node.closest('.settings-main'));
+      const menuOpen = Boolean(document.querySelector('[role="menu"]'));
+      const action = settingsEscapeAction({
+        settingsOpen: true,
+        commandPaletteOpen: store.commandPaletteOpen,
+        findOpen: store.findOpen && Boolean(document.querySelector('.find-bar')),
+        blockingOverlayOpen: store.downloadsOpen || store.permissionsOpen || store.extensionHubOpen || foreignModal || menuOpen,
+        nestedDialogOpen: Boolean(ollamaModalProviderId) || openRouterModalOpen || xiaomiModalOpen
+      });
+      if (action === 'ignore') return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (action === 'close-nested') {
+        if (ollamaModalProviderId) setOllamaModalProviderId(null);
+        if (openRouterModalOpen) setOpenRouterModalOpen(false);
+        if (xiaomiModalOpen) {
+          xiaomiGenerationRef.current += 1;
+          setXiaomiModalOpen(false);
+          setXiaomiKey('');
+          setXiaomiTesting(false);
+          setXiaomiSaving(false);
+          setXiaomiLoading(false);
+        }
+        return;
+      }
+      onClose?.();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [ollamaModalProviderId, openRouterModalOpen, xiaomiModalOpen, onClose]);
   useEffect(() => {
     if (!xiaomiModalOpen || !xiaomiScope) return;
     const stillBound = activeProfileId === xiaomiScope.browserProfileId && (activeSpacePath || null) === xiaomiScope.workspacePath
@@ -3493,6 +3529,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         loading={settingsState.loading}
         ready={ready}
         onRefresh={refreshSettingsData}
+        onClose={onClose}
+        closeLabel={t('browser.chrome.close')}
       />
       <ErrorLine error={settingsState.error || authState.error || pluginsState.error} />
 

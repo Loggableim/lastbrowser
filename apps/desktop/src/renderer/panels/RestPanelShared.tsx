@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, X } from 'lucide-react';
 import { canCallSidekickApi } from '../runtime-readiness.js';
 
 export type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
@@ -131,7 +131,9 @@ export function NativeHeader({
   detail,
   loading,
   ready,
-  onRefresh
+  onRefresh,
+  onClose,
+  closeLabel
 }: {
   icon: React.ReactNode;
   title: string;
@@ -140,6 +142,8 @@ export function NativeHeader({
   loading?: boolean;
   ready: boolean;
   onRefresh?: () => Promise<void>;
+  onClose?: () => void;
+  closeLabel?: string;
 }): JSX.Element {
   return (
     <header className="native-rest-header">
@@ -160,6 +164,12 @@ export function NativeHeader({
           <button type="button" className="secondary-action compact" onClick={() => void onRefresh()} disabled={!ready || loading}>
             {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
             <span>Refresh</span>
+          </button>
+        )}
+        {onClose && (
+          <button type="button" className="secondary-action compact" onClick={onClose} aria-label={closeLabel || 'Close'}>
+            <X size={15} />
+            <span>{closeLabel || 'Close'}</span>
           </button>
         )}
       </div>

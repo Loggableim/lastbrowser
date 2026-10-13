@@ -1,7 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal, X, Loader2, Sparkles, Stethoscope, HelpCircle, Activity } from 'lucide-react';
 import { canCallSidekickApi } from '../runtime-readiness.js';
-import { reconcileStoredTerminal } from '../terminal-session.js';
+import {
+  reconcileStoredTerminal,
+  terminalPanelPhase,
+  terminalPlatformFromUserAgent,
+  terminalShellCopy,
+  terminalStartupLine
+} from '../terminal-session.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 export type TerminalMode = 'shell' | 'tui';
@@ -45,7 +51,10 @@ export function NativeTerminalMain({
   workspacePath: string;
 }): JSX.Element {
   const ready = canCallSidekickApi(serviceStatus);
-  const [termId, setTermId] = useState(loadActiveTerminalId);
+  const shellCopy = terminalShellCopy(terminalPlatformFromUserAgent(navigator.userAgent));
+  const storedIdRef = useRef(loadActiveTerminalId());
+  const [liveIds, setLiveIds] = useState<readonly string[] | null>(null);
+  const [termId, setTermId] = useState('');
   const [mode, setMode] = useState<TerminalMode>(loadTerminalMode);
   const [activeMode, setActiveMode] = useState<TerminalMode>(loadTerminalMode);
   const [lines, setLines] = useState<string[]>([]);
@@ -56,6 +65,7 @@ export function NativeTerminalMain({
   const bufferRef = useRef<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const disposerRef = useRef<(() => void) | null>(null);
+  const termIdRef = useRef('');
 
   // Scroll to bottom on new output
   useEffect(() => {
@@ -64,35 +74,9 @@ export function NativeTerminalMain({
     }
   }, [lines]);
 
-  // A stored id from a previous app launch has no PTY. Showing it leaves
-  // the panel on "Starting terminal session..." with nowhere to type.
   useEffect(() => {
-    let cancelled = false;
-    const stored = loadActiveTerminalId();
-    if (!stored) return;
-    window.lastbrowser.terminal.list().then((ids) => {
-      if (cancelled) return;
-      const live = reconcileStoredTerminal(stored, ids);
-      if (live) return;
-      setTermId('');
-      saveActiveTerminalId('');
-    }).catch(() => {
-      if (cancelled) return;
-      setTermId('');
-      saveActiveTerminalId('');
-    });
-    return () => { cancelled = true; };
-  }, []);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (disposerRef.current) disposerRef.current();
-      if (termId) {
-        window.lastbrowser.terminal.close(termId).catch(() => {});
-      }
-    };
-  }, []);
+    termIdRef.current = termId;
+  }, [termId]);
 
   const appendOutput = useCallback((text: string) => {
     const cleaned = cleanAnsi(text);
@@ -102,6 +86,49 @@ export function NativeTerminalMain({
       bufferRef.current = bufferRef.current.slice(bufferRef.current.length - MAX_LINES);
     }
     setLines([...bufferRef.current]);
+  }, []);
+
+  const attachOutput = useCallback((id: string) => {
+    if (disposerRef.current) disposerRef.current();
+    disposerRef.current = window.lastbrowser.terminal.onData((event) => {
+      if (event.id === id) appendOutput(event.data);
+    });
+  }, [appendOutput]);
+
+  // A stored id from a previous visit has no output subscription. Showing it
+  // immediately leaves the panel on "Starting terminal session...".
+  useEffect(() => {
+    let cancelled = false;
+    const stored = storedIdRef.current;
+    window.lastbrowser.terminal.list().then((ids) => {
+      if (cancelled) return;
+      setLiveIds(ids);
+      const live = reconcileStoredTerminal(stored, ids);
+      if (!live) {
+        setTermId('');
+        saveActiveTerminalId('');
+        return;
+      }
+      setTermId(live);
+      attachOutput(live);
+    }).catch(() => {
+      if (cancelled) return;
+      setLiveIds([]);
+      setTermId('');
+      saveActiveTerminalId('');
+    });
+    return () => { cancelled = true; };
+  }, [attachOutput]);
+
+  // Cleanup on unmount. Close the session that is actually open.
+  useEffect(() => {
+    return () => {
+      if (disposerRef.current) disposerRef.current();
+      const id = termIdRef.current;
+      if (!id) return;
+      saveActiveTerminalId('');
+      window.lastbrowser.terminal.close(id).catch(() => {});
+    };
   }, []);
 
   const startTerm = useCallback(async (selectedMode: TerminalMode = mode) => {
@@ -132,14 +159,7 @@ export function NativeTerminalMain({
       saveTerminalMode(selectedMode);
       bufferRef.current = [];
       setLines([]);
-
-      // Subscribe to data events
-      if (disposerRef.current) disposerRef.current();
-      disposerRef.current = window.lastbrowser.terminal.onData((event) => {
-        if (event.id === newId) {
-          appendOutput(event.data);
-        }
-      });
+      attachOutput(newId);
 
       // Send initial newline in shell mode to trigger prompt
       if (selectedMode === 'shell') {
@@ -153,7 +173,7 @@ export function NativeTerminalMain({
       setError(err instanceof Error ? err.message : String(err));
       setStarting(false);
     }
-  }, [cwd, termId, mode, appendOutput]);
+  }, [cwd, termId, mode, attachOutput]);
 
   function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
@@ -176,6 +196,8 @@ export function NativeTerminalMain({
     window.lastbrowser.terminal.close(termId).catch(() => {});
     setTermId('');
     saveActiveTerminalId('');
+    storedIdRef.current = '';
+    setLiveIds([]);
     bufferRef.current = [];
     setLines([]);
     if (disposerRef.current) { disposerRef.current(); disposerRef.current = null; }
@@ -189,12 +211,16 @@ export function NativeTerminalMain({
           <div>
             <span className="eyebrow">Terminal & CLI</span>
             <h1>Native Terminal & Sidekick CLI</h1>
-            <p>ConPTY Terminal mit integrierten 38+ Sidekick-Befehlen und Sidekick TUI</p>
+            <p>{shellCopy.headerDetail}</p>
           </div>
         </div>
       </header>
 
-      {!termId && (
+      {!termId && terminalPanelPhase(storedIdRef.current, liveIds) === 'pending' && (
+        <p className="terminal-line terminal-welcome">Checking the previous session…</p>
+      )}
+
+      {!termId && terminalPanelPhase(storedIdRef.current, liveIds) === 'form' && (
         <form className="terminal-start-form" onSubmit={(e) => { e.preventDefault(); void startTerm(); }}>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <button
@@ -203,7 +229,7 @@ export function NativeTerminalMain({
               onClick={() => { setMode('shell'); saveTerminalMode('shell'); }}
             >
               <Terminal size={14} style={{ marginRight: '6px' }} />
-              PowerShell Shell (CLI-Integration)
+              {shellCopy.shellButton}
             </button>
             <button
               type="button"
@@ -217,18 +243,18 @@ export function NativeTerminalMain({
 
           <label>
             <span>Working directory</span>
-            <input value={cwd} onChange={(e) => setCwd(e.target.value)} placeholder="C:\path\to\workspace" />
+            <input value={cwd} onChange={(e) => setCwd(e.target.value)} placeholder={shellCopy.cwdPlaceholder} />
           </label>
 
           <p style={{ fontSize: '12px', color: 'var(--muted, #888)', margin: '4px 0 12px 0' }}>
             {mode === 'shell'
-              ? 'Startet ConPTY mit direktem Zugriff auf alle 38+ CLI-Subcommands (sidekick doctor, sidekick status, etc.).'
-              : 'Startet die grafische Sidekick-Terminal-Benutzeroberfläche (TUI) direkt im PTY.'}
+              ? shellCopy.shellHint
+              : 'Startet die Sidekick-Terminal-Benutzeroberfläche (TUI) direkt in der Sitzung.'}
           </p>
 
           <button type="submit" className="primary-action compact" disabled={starting || !cwd.trim()}>
             {starting ? <Loader2 size={15} className="spin" /> : <Terminal size={15} />}
-            <span>{starting ? 'Starting…' : mode === 'tui' ? 'Launch Sidekick TUI' : 'Open Shell Terminal'}</span>
+            <span>{starting ? 'Starting…' : mode === 'tui' ? 'Launch Sidekick TUI' : shellCopy.openLabel}</span>
           </button>
           {error && <div className="workspace-error">{error}</div>}
         </form>
@@ -239,7 +265,7 @@ export function NativeTerminalMain({
           <div className="terminal-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span className="terminal-label" style={{ fontWeight: 600 }}>
-                {activeMode === 'tui' ? 'Sidekick TUI' : 'PowerShell'} — {cwd}
+                {activeMode === 'tui' ? 'Sidekick TUI' : shellCopy.sessionLabel} — {cwd}
               </span>
               <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
                 {activeMode === 'tui' ? 'TUI Mode' : 'CLI Alias: sidekick'}
@@ -291,7 +317,9 @@ export function NativeTerminalMain({
             {lines.map((line, i) => (
               <div key={i} className="terminal-line">{line || '\u00A0'}</div>
             ))}
-            {!lines.length && <div className="terminal-line terminal-welcome">Starting terminal session...</div>}
+            {terminalStartupLine(starting, lines.length) && (
+              <div className="terminal-line terminal-welcome">{terminalStartupLine(starting, lines.length)}</div>
+            )}
           </div>
 
           <form className="terminal-input-form" onSubmit={handleSubmit}>

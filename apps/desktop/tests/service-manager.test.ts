@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { mkdirSync, rmSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -94,9 +95,45 @@ describe('sidecar service layout', () => {
     writeFileSync(python3, '');
     try {
       expect(resolveServiceLayout(resourcesRoot, undefined, {}, 'linux').pythonExe).toBe(python3);
-      expect(resolveServiceLayout(path.join(resourcesRoot, 'absent'), undefined, {}, 'linux').pythonExe).toBe('python3');
-      expect(resolveServiceLayout(path.join(resourcesRoot, 'absent'), undefined, {}, 'win32').pythonExe)
-        .toBe(path.join(resourcesRoot, 'absent', 'runtime', 'python', 'python.exe'));
+      const absent = path.join(resourcesRoot, 'absent');
+      expect(resolveServiceLayout(absent, undefined, {}, 'linux').pythonExe)
+        .toBe(path.join(absent, 'runtime', 'python', 'python3'));
+      expect(resolveServiceLayout(absent, undefined, {}, 'win32').pythonExe)
+        .toBe(path.join(absent, 'runtime', 'python', 'python.exe'));
+    } finally {
+      rmSync(resourcesRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('starts a fresh Linux profile through the bundled launcher, not system python3', () => {
+    const resourcesRoot = mkdtempResourceRoot();
+    const profileRoot = path.join(resourcesRoot, 'fresh-profile');
+    const runtimePython = path.join(resourcesRoot, 'runtime', 'python');
+    const launcher = path.join(runtimePython, 'python3');
+    const venvPython = path.join(runtimePython, 'bin', 'python3');
+    const marker = path.join(runtimePython, 'spawned.txt');
+    mkdirSync(path.dirname(venvPython), { recursive: true });
+    mkdirSync(profileRoot, { recursive: true });
+    writeFileSync(launcher, '#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nexec ./bin/python3 "$@"\n');
+    writeFileSync(
+      venvPython,
+      '#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nprintf "%s\\n" "$(pwd)/python3" > ../spawned.txt\ncase "$(pwd)/python3" in\n  /usr/bin/python3|/usr/bin/python) exit 3 ;;\nesac\nexit 0\n'
+    );
+    chmodSync(launcher, 0o755);
+    chmodSync(venvPython, 0o755);
+
+    try {
+      const layout = resolveServiceLayout(resourcesRoot, profileRoot, {}, 'linux');
+      expect(existsSync(path.join(profileRoot, 'runtime', 'state.db'))).toBe(false);
+      expect(layout.runtimeDir).toBe(path.join(profileRoot, 'runtime'));
+      expect(layout.pythonExe).toBe(launcher);
+      expect(path.isAbsolute(layout.pythonExe)).toBe(true);
+
+      const started = spawnSync(layout.pythonExe, ['-m', 'uvicorn', 'cli.web_server:app', '--host', '127.0.0.1', '--port', '8787'], {
+        encoding: 'utf8'
+      });
+      expect(started.status).toBe(0);
+      expect(readFileSync(marker, 'utf8').trim()).toBe(venvPython);
     } finally {
       rmSync(resourcesRoot, { recursive: true, force: true });
     }

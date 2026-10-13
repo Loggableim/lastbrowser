@@ -1,4 +1,5 @@
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,12 @@ export function resolveWheelhouseDir(env = process.env) {
   return resolve(runtimeDir, 'wheelhouse');
 }
 
+export function resolveLinuxWheelhouseDir(env = process.env) {
+  const explicit = env.LASTBROWSER_LINUX_WHEELHOUSE?.trim();
+  if (explicit) return resolve(explicit);
+  return resolve(runtimeDir, 'wheelhouse-linux-x64');
+}
+
 export function verifyWheelhouse(wheelhouseDir) {
   if (!existsSync(wheelhouseDir)) {
     throw new Error(
@@ -49,6 +56,44 @@ export function verifyWheelhouse(wheelhouseDir) {
     );
   }
   return wheels;
+}
+
+export function writeLinuxWheelhouseManifest(wheelhouseDir) {
+  const wheels = readdirSync(wheelhouseDir).filter((file) => file.endsWith('.whl')).sort();
+  if (!wheels.length) throw new Error(`[prepare:python] No Linux wheels found in ${wheelhouseDir}.`);
+  const manifest = {
+    schemaVersion: 1,
+    wheels: wheels.map((file) => ({
+      file,
+      sha256: createHash('sha256').update(readFileSync(join(wheelhouseDir, file))).digest('hex')
+    }))
+  };
+  writeFileSync(join(wheelhouseDir, 'SHA256SUMS.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  return manifest.wheels;
+}
+
+export function verifyLinuxWheelhouse(wheelhouseDir) {
+  if (!existsSync(wheelhouseDir)) {
+    throw new Error(`[prepare:python] Linux wheelhouse is missing: ${wheelhouseDir}. Run "npm run prepare:python:online" on Linux x64 first.`);
+  }
+  const manifestPath = join(wheelhouseDir, 'SHA256SUMS.json');
+  if (!existsSync(manifestPath)) {
+    throw new Error(`[prepare:python] Linux wheelhouse checksum manifest is missing: ${manifestPath}. Run "npm run prepare:python:online" on Linux x64 to regenerate it.`);
+  }
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const wheelFiles = readdirSync(wheelhouseDir).filter((file) => file.endsWith('.whl')).sort();
+  const entries = Array.isArray(manifest?.wheels) ? manifest.wheels : [];
+  if (manifest?.schemaVersion !== 1 || !wheelFiles.length
+    || JSON.stringify(entries.map((entry) => entry.file).sort()) !== JSON.stringify(wheelFiles)) {
+    throw new Error(`[prepare:python] Linux wheelhouse contents do not match ${manifestPath}.`);
+  }
+  for (const entry of entries) {
+    if (!/^[a-f0-9]{64}$/.test(entry.sha256)
+      || createHash('sha256').update(readFileSync(join(wheelhouseDir, entry.file))).digest('hex') !== entry.sha256) {
+      throw new Error(`[prepare:python] Linux wheel checksum mismatch: ${entry.file}`);
+    }
+  }
+  return wheelFiles;
 }
 
 function main() {
@@ -284,16 +329,34 @@ function preparePosixPythonCommand() {
   }
 
   const venvPython = join(pythonRuntimeDir, 'bin', 'python3');
+  const isLinux = process.platform === 'linux';
+  const wheelhouseDir = isLinux ? resolveLinuxWheelhouseDir() : resolveWheelhouseDir();
+  const isOnline = process.argv.includes('--online');
+  const isDownloadOnly = process.argv.includes('--download-wheels');
+  if (isLinux && (isOnline || isDownloadOnly)) {
+    mkdirSync(wheelhouseDir, { recursive: true });
+    console.log(`[prepare:python] Downloading Linux x64 wheels from ${requirementsPath} -> ${wheelhouseDir}`);
+    run(executable, ['-m', 'pip', 'download', '--only-binary=:all:', '--dest', wheelhouseDir, '-r', requirementsPath]);
+    writeLinuxWheelhouseManifest(wheelhouseDir);
+    if (isDownloadOnly) {
+      console.log(`[prepare:python] Linux wheelhouse downloaded successfully at ${wheelhouseDir}`);
+      return;
+    }
+  }
+
   const desired = {
     sourcePythonHome: executable,
     sourceVersion: pythonVersion(executable),
-    runtimeSchema: 6
+    runtimeSchema: isLinux ? 7 : 6
   };
-  if (isPreparedRuntimeCompatible(readMarker(), desired, existsSync(venvPython))) {
+  const runtimeImportsReady = !isLinux || hasLinuxRuntimeImports(venvPython);
+  if (isPreparedRuntimeCompatible(readMarker(), desired, existsSync(venvPython), runtimeImportsReady)) {
     const launcher = writePosixLauncher();
     console.log(`[prepare:python] Linux runtime already prepared: ${launcher} -> ${venvPython}`);
     return;
   }
+
+  if (isLinux) verifyLinuxWheelhouse(wheelhouseDir);
 
   if (existsSync(pythonRuntimeDir) && !replaceRuntimeTreeIfUnused(pythonRuntimeDir)) {
     throw new Error(
@@ -304,14 +367,24 @@ function preparePosixPythonCommand() {
 
   console.log(`[prepare:python] Creating Linux venv at ${pythonRuntimeDir} from ${executable}`);
   run(executable, ['-m', 'venv', pythonRuntimeDir]);
-  const wheelhouseDir = resolveWheelhouseDir();
-  const pipArgs = ['-m', 'pip', 'install', '--no-cache-dir', '--no-compile'];
-  if (existsSync(wheelhouseDir)) pipArgs.push('--find-links', wheelhouseDir);
-  pipArgs.push('-r', requirementsPath, resolve(repoRoot, 'services', 'sidekick'));
-  run(venvPython, pipArgs);
+  if (isLinux) {
+    run(venvPython, [
+      '-m', 'pip', 'install', '--no-index', '--find-links', wheelhouseDir,
+      '--no-cache-dir', '--no-compile', '-r', requirementsPath
+    ]);
+    run(venvPython, [
+      '-m', 'pip', 'install', '--no-index', '--no-deps', '--no-build-isolation',
+      '--find-links', wheelhouseDir, resolve(repoRoot, 'services', 'sidekick')
+    ]);
+  } else {
+    const pipArgs = ['-m', 'pip', 'install', '--no-cache-dir', '--no-compile'];
+    if (existsSync(wheelhouseDir)) pipArgs.push('--find-links', wheelhouseDir);
+    pipArgs.push('-r', requirementsPath, resolve(repoRoot, 'services', 'sidekick'));
+    run(venvPython, pipArgs);
+  }
   run(venvPython, [
     '-c',
-    'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, yaml; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
+    'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, uvicorn, yaml; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
   ]);
   writeFileSync(markerPath, `${JSON.stringify(desired, null, 2)}\n`, 'utf8');
   const launcher = writePosixLauncher();
@@ -415,15 +488,25 @@ function readMarker() {
   }
 }
 
-export function isPreparedRuntimeCompatible(marker, desired, hasPythonExecutable) {
+export function isPreparedRuntimeCompatible(marker, desired, hasPythonExecutable, hasRuntimeImports = true) {
   return Boolean(
     hasPythonExecutable &&
+    hasRuntimeImports &&
     marker &&
     desired &&
     marker.sourcePythonHome === desired.sourcePythonHome &&
     marker.sourceVersion === desired.sourceVersion &&
     marker.runtimeSchema === desired.runtimeSchema
   );
+}
+
+function hasLinuxRuntimeImports(pythonExe) {
+  if (!existsSync(pythonExe)) return false;
+  const result = spawnSync(pythonExe, ['-c', 'import fastapi, uvicorn, requests, httpx, yaml'], {
+    encoding: 'utf8',
+    timeout: 15_000
+  });
+  return result.status === 0;
 }
 
 function pythonVersion(pythonExe) {

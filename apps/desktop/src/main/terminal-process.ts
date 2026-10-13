@@ -104,6 +104,7 @@ export function startTerminal(
     }
   } else {
     file = resolveShell();
+    if (process.platform !== 'win32') args = ['-i'];
     const isPowerShell = file.toLowerCase().includes('powershell') || file.toLowerCase().includes('pwsh');
     if (isPowerShell) {
       const aliasCommands = [

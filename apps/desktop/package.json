@@ -25,7 +25,7 @@
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
     "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
     "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
-    "package:linux": "npm run prepare:python && npm run build && electron-builder --linux tar.gz && node scripts/write-linux-checksums.mjs"
+    "package:linux": "npm run prepare:python && npm run build && electron-builder --linux tar.gz AppImage && node scripts/write-linux-checksums.mjs"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",

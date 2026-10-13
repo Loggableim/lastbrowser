@@ -10,6 +10,11 @@ export type TerminalMode = 'shell' | 'tui';
 export function NativeTerminalMain({ serviceStatus, activeSessionId, workspacePath }: {
   serviceStatus: ServiceStatus | null; activeSessionId: string | null; workspacePath: string;
 }): JSX.Element {
+  const isWindows = /Windows/i.test(navigator.userAgent);
+  const shellLabel = isWindows ? 'PowerShell' : 'Shell';
+  const shellDetail = isWindows
+    ? 'PowerShell und interaktiver Chat im aktuellen Space.'
+    : 'Interaktive System-Shell und Sidekick TUI im aktuellen Space.';
   const [mode, setMode] = useState<TerminalMode>('shell');
   const [termId, setTermId] = useState('');
   const [cwd, setCwd] = useState(workspacePath);
@@ -51,21 +56,22 @@ export function NativeTerminalMain({ serviceStatus, activeSessionId, workspacePa
       setStarting(false);
       const emulator = terminal.current;
       if (idRef.current && emulator) {
+        if (mode === 'shell' && !isWindows) await controller.write('\n');
         await window.lastbrowser.terminal.resize?.({ id: idRef.current, cols: emulator.cols, rows: emulator.rows });
         emulator.focus();
       }
     }
   }
   return <section className="browser-main native-rest-main">
-    <header className="native-rest-header"><div className="native-rest-title"><TerminalIcon size={21}/><div><span className="eyebrow">Terminal & CLI</span><h1>Terminal & Sidekick</h1><p>PowerShell und interaktiver Chat im aktuellen Space.</p></div></div></header>
+    <header className="native-rest-header"><div className="native-rest-title"><TerminalIcon size={21}/><div><span className="eyebrow">Terminal & CLI</span><h1>Terminal & Sidekick</h1><p>{shellDetail}</p></div></div></header>
     {!termId && <form className="terminal-start-form" onSubmit={(event) => { event.preventDefault(); void start(); }}>
-      <div className="native-card-actions"><button type="button" aria-pressed={mode === 'shell'} onClick={() => setMode('shell')}><TerminalIcon size={14}/>PowerShell</button><button type="button" aria-pressed={mode === 'tui'} onClick={() => setMode('tui')}><Sparkles size={14}/>Sidekick TUI</button></div>
+      <div className="native-card-actions"><button type="button" aria-pressed={mode === 'shell'} onClick={() => setMode('shell')}><TerminalIcon size={14}/>{shellLabel}</button><button type="button" aria-pressed={mode === 'tui'} onClick={() => setMode('tui')}><Sparkles size={14}/>Sidekick TUI</button></div>
       <label>Arbeitsverzeichnis<input value={cwd} onChange={(event) => setCwd(event.target.value)}/></label>
       <button type="submit" className="primary-action compact" disabled={starting || !cwd.trim() || (mode === 'tui' && serviceStatus?.webuiHealth !== 'ready')}>{starting && <Loader2 className="spin" size={14}/>} {starting ? 'Startet…' : 'Terminal öffnen'}</button>
     </form>}
     {error && <div className="workspace-error" role="status">{error}</div>}
     <div className="terminal-container" style={{ minHeight: 260, flex: 1 }}>
-      {termId && <div className="terminal-toolbar"><span>{mode === 'tui' ? 'Sidekick TUI' : 'PowerShell'} — {cwd}</span><button type="button" onClick={() => void session.current?.write('\x03')}>Ctrl+C</button><button type="button" aria-label="Terminal schließen" onClick={() => void session.current?.close()}><X size={14}/></button></div>}
+      {termId && <div className="terminal-toolbar"><span>{mode === 'tui' ? 'Sidekick TUI' : shellLabel} — {cwd}</span><button type="button" onClick={() => void session.current?.write('\x03')}>Ctrl+C</button><button type="button" aria-label="Terminal schließen" onClick={() => void session.current?.close()}><X size={14}/></button></div>}
       <div ref={host} className="terminal-emulator" style={{ flex: 1, minHeight: 240, padding: 8 }} />
     </div>
   </section>;

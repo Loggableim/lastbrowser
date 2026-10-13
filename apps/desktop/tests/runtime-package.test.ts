@@ -21,7 +21,7 @@ describe('desktop runtime packaging', () => {
     expect(packageJson.scripts['prepare:python']).toBe('node scripts/prepare-python-runtime.mjs');
     expect(packageJson.scripts['package:win']).toContain('npm run prepare:python');
     expect(packageJson.scripts['package:win']).toContain('--win nsis portable');
-    expect(packageJson.scripts['package:linux']).toContain('npm run prepare:python && npm run build && electron-builder --linux tar.gz');
+    expect(packageJson.scripts['package:linux']).toContain('npm run prepare:python && npm run build && electron-builder --linux tar.gz AppImage');
     expect(packageJson.build.linux.target).toContain('AppImage');
     expect(packageJson.scripts['package:linux']).toContain('node scripts/write-linux-checksums.mjs');
     expect(packageJson.scripts['smoke:linux:fresh-profile']).toBe('node scripts/smoke-linux-fresh-profile.mjs');

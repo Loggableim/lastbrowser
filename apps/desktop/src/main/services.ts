@@ -106,7 +106,8 @@ export function resolveServiceLayout(
   resourcesDir: string,
   runtimeRoot = defaultRuntimeRoot(),
   env: Partial<Record<'LASTBROWSER_WEBUI_PYTHON' | 'HERMES_WEBUI_PYTHON', string>> = process.env,
-  platform: NodeJS.Platform | string = process.platform
+  platform: NodeJS.Platform | string = process.platform,
+  isPackaged = false
 ): ServiceLayout {
   const normalizedResources = path.normalize(resourcesDir);
   const runtimeDir = resolveExistingRuntimeDirectory(path.join(runtimeRoot, 'runtime'));
@@ -123,6 +124,12 @@ export function resolveServiceLayout(
       : platform === 'win32'
         ? resourcesPythonExe
         : pythonName;
+  if (platform === 'linux' && isPackaged && !existsSync(resourcesPythonExe)) {
+    throw new Error(`Packaged Linux Sidekick runtime is missing: ${resourcesPythonExe}`);
+  }
+  const pythonExe = platform === 'linux' && isPackaged
+    ? resourcesPythonExe
+    : env.LASTBROWSER_WEBUI_PYTHON || env.HERMES_WEBUI_PYTHON || bundledPythonExe;
 
   const bundledEntry = path.join(bundledSidekickDir, 'cli', 'web_server.py');
   // `services/sidekick` is the tracked source of truth. Ignore any legacy
@@ -139,7 +146,7 @@ export function resolveServiceLayout(
     // The in-tree monorepo is launched as `uvicorn cli.web_server:app`.
     webuiServer: sidekickEntry,
     webuiMode: 'monorepo',
-    pythonExe: env.LASTBROWSER_WEBUI_PYTHON || env.HERMES_WEBUI_PYTHON || bundledPythonExe,
+    pythonExe,
     bridgeToken: randomBytes(24).toString('hex')
   };
 }

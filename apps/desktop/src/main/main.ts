@@ -1434,7 +1434,7 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     app,
     getWindow: () => mainWindow
   });
-  services = new SidecarServices(resolveServiceLayout(appResourcesDir()));
+  services = new SidecarServices(resolveServiceLayout(appResourcesDir(), undefined, process.env, process.platform, app.isPackaged));
   independentController = new IndependentController({
     userDataDir: app.getPath('userData'),
     isShell: isTrustedShell,

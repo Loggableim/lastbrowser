@@ -22,6 +22,7 @@
 <link rel="stylesheet" href="/assets/css/components.css">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 <link rel="stylesheet" href="/assets/css/docs.css">
+<link rel="stylesheet" href="/assets/css/roadmap-voting.css?v=2">
 <script src="/assets/js/theme.js"></script>
 </head>
 <body>
@@ -80,6 +81,14 @@
     <p>Verfolgen Sie anstehende Meilensteine, Features in Entwicklung und bereits veröffentlichte Neuerungen.</p>
   </div>
 
+  <section class="roadmap-voting-info" aria-label="Für Roadmap-Favoriten abstimmen">
+    <strong>Welche Funktionen wünschst du dir?</strong>
+    <p>Mit ↑ kannst du mehrere Favoriten unterstützen und deine Stimmen jederzeit zurücknehmen. Die Zähler zeigen die gemeinsam gespeicherten Stimmen aller Besucher.</p>
+    <p>Ohne Anmeldung: Beim ersten Abstimmen wird ein funktionales Cookie für bis zu ein Jahr gesetzt. Pro Browser ist eine Stimme je Eintrag möglich. Keine E-Mail-Adresse und kein Tracking; ein Gerätewechsel oder gelöschte Cookies werden nicht als dieselbe Person erkannt.</p>
+    <p>Die Abstimmung hilft uns bei der Priorisierung und ist keine Release-Zusage.</p>
+    <p data-vote-status role="status" aria-live="polite"></p>
+    <button type="button" data-vote-retry hidden>Erneut laden</button>
+  </section>
   <div class="kanban-board">
     <!-- Col 1: Geplant -->
     <div class="kanban-col">
@@ -89,15 +98,15 @@
       </div>
       <div class="kanban-items">
         <div class="kanban-card">
-          <h4>Visual Canvas Mode</h4>
+          <h4 data-roadmap-id="canvas">Visual Canvas Mode</h4>
           <p>Endloses Whiteboard für visuelles Mindmapping von Tabs, Notizen und KI-Zusammenfassungen.</p>
         </div>
         <div class="kanban-card">
-          <h4>Windows on ARM64 Nativ</h4>
+          <h4 data-roadmap-id="windows-arm64">Windows on ARM64 Nativ</h4>
           <p>Vollständige native ARM64 Binaries für Snapdragon X Elite Geräte mit optimierter Akkulaufzeit.</p>
         </div>
         <div class="kanban-card">
-          <h4>Enterprise Central Hub</h4>
+          <h4 data-roadmap-id="enterprise-hub">Enterprise Central Hub</h4>
           <p>Zentrales Administrations-Dashboard für Richtlinien-Rollout (GPO) und MCP-Server Flotten-Management.</p>
         </div>
       </div>
@@ -111,15 +120,15 @@
       </div>
       <div class="kanban-items">
         <div class="kanban-card">
-          <h4>Visueller MCP Server GUI Editor</h4>
+          <h4 data-roadmap-id="mcp-editor">Visueller MCP Server GUI Editor</h4>
           <p>Grafische Oberfläche zum Testen und Konfigurieren von Model Context Protocol Servern ohne manuelles JSON-Editieren.</p>
         </div>
         <div class="kanban-card">
-          <h4>Erweiterter Terminal Doctor</h4>
+          <h4 data-roadmap-id="terminal-doctor">Erweiterter Terminal Doctor</h4>
           <p>Tiefere Integration mit lokalen Python Virtual Environments und Docker Container Status.</p>
         </div>
         <div class="kanban-card">
-          <h4>Voice-To-Command</h4>
+          <h4 data-roadmap-id="voice-command">Voice-To-Command</h4>
           <p>Lokale Whisper-Spracherkennung für Sprachbefehle im Nova AI Chat ohne Cloud-Upload.</p>
         </div>
       </div>
@@ -133,7 +142,7 @@
       </div>
       <div class="kanban-items">
         <div class="kanban-card">
-          <h4>Composio MCP-Anbindung</h4>
+          <h4 data-roadmap-id="composio">Composio MCP-Anbindung</h4>
           <p>Optionale Anbindung im Extension &amp; Skills Hub. Standardmäßig deaktiviert; externe Konten werden vom Nutzer verbunden. In Vorbereitung, noch nicht als fertige Kontointegration freigegeben.</p>
         </div>
       </div>
@@ -141,42 +150,42 @@
   </div>
   <section aria-labelledby="planned-integrations" style="margin-top:40px;">
     <h2 id="planned-integrations">Geplante Anbindungen</h2>
-    <p>Diese 24 Anbindungen stehen auf unserer Roadmap. Sie werden schrittweise vorbereitet; daraus folgt keine Zusage für Version 0.1.57. Verfügbarkeit, Kontoeinrichtung und mögliche Anbietergebühren hängen vom jeweiligen Dienst ab. Community-Implementierungen werden vor einer möglichen Nutzung auf Sicherheit, Wartbarkeit und Funktionsumfang geprüft.</p>
+    <p>Diese 24 Anbindungen stehen auf unserer Roadmap. Sie werden schrittweise vorbereitet; daraus folgt keine Zusage für Version 0.1.57. Verfügbarkeit, Kontoeinrichtung und mögliche Anbietergebühren hängen vom jeweiligen Dienst ab.</p>
     <div class="kanban-board">
       <div class="kanban-col"><div class="kanban-header"><h3>Kommunikation &amp; Planung</h3></div><div class="kanban-items">
         <div class="kanban-card"><ul>
-          <li><strong>Gmail:</strong> Nachrichten zusammenfassen und Antworten entwerfen.</li>
-          <li><strong>Google Calendar:</strong> Termine und freie Zeitfenster planen.</li>
-          <li><strong>Slack:</strong> Diskussionen, Entscheidungen und Arbeitsaufträge verbinden.</li>
-          <li><strong>Outlook:</strong> E-Mails im Microsoft-Umfeld bearbeiten.</li>
-          <li><strong>Todoist:</strong> Aufgaben aus Chats und Webseiten erstellen.</li>
-          <li><strong>Discord:</strong> Community-Fragen und Feedback bündeln.</li>
+          <li><strong data-roadmap-id="gmail">Gmail:</strong> Nachrichten zusammenfassen und Antworten entwerfen.</li>
+          <li><strong data-roadmap-id="google-calendar">Google Calendar:</strong> Termine und freie Zeitfenster planen.</li>
+          <li><strong data-roadmap-id="slack">Slack:</strong> Diskussionen, Entscheidungen und Arbeitsaufträge verbinden.</li>
+          <li><strong data-roadmap-id="outlook">Outlook:</strong> E-Mails im Microsoft-Umfeld bearbeiten.</li>
+          <li><strong data-roadmap-id="todoist">Todoist:</strong> Aufgaben aus Chats und Webseiten erstellen.</li>
+          <li><strong data-roadmap-id="discord">Discord:</strong> Community-Fragen und Feedback bündeln.</li>
         </ul></div>
       </div></div>
       <div class="kanban-col"><div class="kanban-header"><h3>Wissen &amp; Inhalte</h3></div><div class="kanban-items">
         <div class="kanban-card"><ul>
-          <li><strong>Google Drive:</strong> Projektunterlagen finden und verwenden.</li>
-          <li><strong>Notion:</strong> Recherche und strukturiertes Wissen ablegen.</li>
-          <li><strong>OneDrive:</strong> Dateien und Dokumente einbeziehen.</li>
-          <li><strong>Google Docs:</strong> Recherche in Dokumente überführen.</li>
-          <li><strong>Google Sheets:</strong> Daten sammeln und vergleichen.</li>
-          <li><strong>Canva:</strong> Inhalte für visuelle Entwürfe nutzen.</li>
-          <li><strong>MarkItDown:</strong> Dokumente für die KI lesbar aufbereiten.</li>
-          <li><strong>YouTube-Transkripte:</strong> verfügbare Untertitel auswerten und Videos zusammenfassen.</li>
-          <li><strong>Excalidraw:</strong> bearbeitbare Diagramme aus Gesprächen erstellen.</li>
-          <li><strong>Zotero:</strong> Literatur, Quellen und Forschungsunterlagen einbeziehen.</li>
-          <li><strong>Nextcloud:</strong> selbst gehostete Dateien und Wissen anbinden.</li>
-          <li><strong>CoDesign:</strong> visuelle Entwürfe mit KI bearbeiten.</li>
+          <li><strong data-roadmap-id="google-drive">Google Drive:</strong> Projektunterlagen finden und verwenden.</li>
+          <li><strong data-roadmap-id="notion">Notion:</strong> Recherche und strukturiertes Wissen ablegen.</li>
+          <li><strong data-roadmap-id="onedrive">OneDrive:</strong> Dateien und Dokumente einbeziehen.</li>
+          <li><strong data-roadmap-id="google-docs">Google Docs:</strong> Recherche in Dokumente überführen.</li>
+          <li><strong data-roadmap-id="google-sheets">Google Sheets:</strong> Daten sammeln und vergleichen.</li>
+          <li><strong data-roadmap-id="canva">Canva:</strong> Inhalte für visuelle Entwürfe nutzen.</li>
+          <li><strong data-roadmap-id="markitdown">MarkItDown:</strong> Dokumente für die KI lesbar aufbereiten.</li>
+          <li><strong data-roadmap-id="youtube-transcripts">YouTube-Transkripte:</strong> verfügbare Untertitel auswerten und Videos zusammenfassen.</li>
+          <li><strong data-roadmap-id="excalidraw">Excalidraw:</strong> bearbeitbare Diagramme aus Gesprächen erstellen.</li>
+          <li><strong data-roadmap-id="zotero">Zotero:</strong> Literatur, Quellen und Forschungsunterlagen einbeziehen.</li>
+          <li><strong data-roadmap-id="nextcloud">Nextcloud:</strong> selbst gehostete Dateien und Wissen anbinden.</li>
+          <li><strong data-roadmap-id="codesign">CoDesign:</strong> visuelle Entwürfe mit KI bearbeiten.</li>
         </ul></div>
       </div></div>
       <div class="kanban-col"><div class="kanban-header"><h3>Recherche &amp; Automatisierung</h3></div><div class="kanban-items">
         <div class="kanban-card"><ul>
-          <li><strong>GitHub:</strong> Issues, Pull Requests und Releases einbeziehen.</li>
-          <li><strong>Firecrawl:</strong> Webseiten strukturiert auslesen.</li>
-          <li><strong>Brave Search:</strong> aktuelle Websuche mit Quellen.</li>
-          <li><strong>n8n:</strong> wiederkehrende Abläufe verbinden.</li>
-          <li><strong>Lokales Dateisystem:</strong> ausdrücklich freigegebene Ordner verwenden.</li>
-          <li><strong>Home Assistant:</strong> freigegebene Smart-Home-Geräte und deren Zustände einbeziehen.</li>
+          <li><strong data-roadmap-id="github">GitHub:</strong> Issues, Pull Requests und Releases einbeziehen.</li>
+          <li><strong data-roadmap-id="firecrawl">Firecrawl:</strong> Webseiten strukturiert auslesen.</li>
+          <li><strong data-roadmap-id="brave-search">Brave Search:</strong> aktuelle Websuche mit Quellen.</li>
+          <li><strong data-roadmap-id="n8n">n8n:</strong> wiederkehrende Abläufe verbinden.</li>
+          <li><strong data-roadmap-id="filesystem">Lokales Dateisystem:</strong> ausdrücklich freigegebene Ordner verwenden.</li>
+          <li><strong data-roadmap-id="home-assistant">Home Assistant:</strong> freigegebene Smart-Home-Geräte und deren Zustände einbeziehen.</li>
         </ul></div>
       </div></div>
     </div>
@@ -250,5 +259,6 @@
 </footer>
 
 <script src="/assets/js/app.js"></script>
+<script type="module" src="/assets/js/roadmap-voting.js?v=2"></script>
 </body>
 </html>

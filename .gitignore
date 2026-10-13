@@ -43,3 +43,5 @@ smoke-output/
 $payload/
 .playwright-cli/
 .permission-adblock-live-audit.mjs
+
+.wrangler/

@@ -6134,6 +6134,15 @@ html.theme-light .browser-start-search input {
   justify-content: center;
 }
 
+.search-engine-setup { margin: 0 0 24px; }
+.search-engine-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.search-engine-choice { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; background: rgba(255,255,255,.04); color: #f3f8ff; cursor: pointer; }
+.search-engine-choice:hover, .search-engine-choice.is-selected { border-color: #00b4d8; background: rgba(0,180,216,.12); }
+.search-engine-choice:focus-visible, .search-engine-more:focus-visible { outline: 2px solid #00b4d8; outline-offset: 2px; }
+.search-engine-more { margin-top: 12px; padding: 6px 0; border: 0; background: transparent; color: #7ee7f5; cursor: pointer; }
+.search-engine-more-choices { margin-top: 8px; }
+@media (max-width: 640px) { .search-engine-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 .first-run-ai-choice-card {
   width: min(100%, 620px);
   margin: auto;

@@ -270,4 +270,11 @@ export const desktopJaOverrides = {
   'settings.panels.plugins.nextPage': '次へ',
   'settings.panels.plugins.storeSearchDescription': '検索すると公式 Chrome ウェブストアが LastBrowser の新しいタブで開きます。',
   'settings.panels.plugins.storeSearch': 'Chrome ウェブストアを検索',
-  'settings.panels.plugins.searchStore': 'ストアを検索'} satisfies Record<DesktopTranslationKey, string>;
+  'settings.panels.plugins.searchStore': 'ストアを検索',
+  'searchEngineSetup.title': '既定の検索エンジンを選択',
+  'searchEngineSetup.description': 'アドレスバーで検索するときに使う検索エンジンを選択します。設定からいつでも変更できます。',
+  'searchEngineSetup.recommended': 'おすすめ',
+  'searchEngineSetup.more': 'その他',
+  'searchEngineSetup.selected': '選択中',
+  'searchEngineSetup.saveError': '検索エンジンを保存できませんでした。もう一度お試しください。'
+} satisfies Record<DesktopTranslationKey, string>;

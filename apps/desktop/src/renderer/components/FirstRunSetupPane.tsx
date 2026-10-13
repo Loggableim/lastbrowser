@@ -48,6 +48,8 @@ import {
   type PersonalityProfile
 } from '../provider-presentation.js';
 import { useDesktopI18n } from '../i18n.js';
+import { recommendedSearchEngines, moreSearchEngines } from '../../main/browser-search.js';
+import { useTabStore } from '../stores/useTabStore.js';
 import { localizedProviderRecommendation } from '../i18n/provider-recommendations.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
 import { providerVerification } from '../provider-verification.js';
@@ -133,6 +135,9 @@ export function FirstRunSetupPane({
   onDismiss
 }: FirstRunSetupPaneProps): React.JSX.Element {
   const { locale, t } = useDesktopI18n();
+  const searchEngineId = useTabStore((state) => state.searchEngineId);
+  const setSearchEngineId = useTabStore((state) => state.setSearchEngineId);
+  const [showMoreSearchEngines, setShowMoreSearchEngines] = useState(false);
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [flowError, setFlowError] = useState('');
   const providers = cloudProviderOptions(onboardingStatus);
@@ -633,6 +638,11 @@ export function FirstRunSetupPane({
     );
   }
 
+  const saveSearchEngineChoice = (id: string) => {
+    setSearchEngineId(id);
+    setFlowError('');
+  };
+
   return (
     <div className="first-run-fullscreen-wrap" role="dialog" aria-modal="true" aria-label="First-run setup">
       <aside className="first-run-fullscreen">
@@ -669,6 +679,32 @@ export function FirstRunSetupPane({
             <p>{browserOnly ? t('firstRun.noAiDescription') : t('firstRun.heroSubtitle')}</p>
           </div>
         </div>
+
+        <section className="setup-section-block search-engine-setup" aria-labelledby="search-engine-setup-title">
+          <div className="setup-section-header">
+            <span className="setup-step-number"><Globe size={14} /></span>
+            <div>
+              <h2 id="search-engine-setup-title">{t('searchEngineSetup.title')}</h2>
+              <p>{t('searchEngineSetup.description')}</p>
+            </div>
+          </div>
+          <div className="search-engine-choices" role="group" aria-label={t('searchEngineSetup.recommended')}>
+            {recommendedSearchEngines.map((engine) => (
+              <button key={engine.id} type="button" className={`search-engine-choice ${searchEngineId === engine.id ? 'is-selected' : ''}`} aria-pressed={searchEngineId === engine.id} onClick={() => saveSearchEngineChoice(engine.id)}>
+                <span>{engine.label}</span>{searchEngineId === engine.id && <Check size={16} aria-label={t('searchEngineSetup.selected')} />}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="search-engine-more" aria-expanded={showMoreSearchEngines} onClick={() => setShowMoreSearchEngines((shown) => !shown)}>{t('searchEngineSetup.more')}</button>
+          {showMoreSearchEngines && <div className="search-engine-choices search-engine-more-choices" role="group" aria-label={t('searchEngineSetup.more')}>
+            {moreSearchEngines.map((engine) => (
+              <button key={engine.id} type="button" className={`search-engine-choice ${searchEngineId === engine.id ? 'is-selected' : ''}`} aria-pressed={searchEngineId === engine.id} onClick={() => saveSearchEngineChoice(engine.id)}>
+                <span>{engine.label}</span>{searchEngineId === engine.id && <Check size={16} aria-label={t('searchEngineSetup.selected')} />}
+              </button>
+            ))}
+          </div>}
+          {flowError && <p role="alert" className="setup-error-banner">{flowError}</p>}
+        </section>
 
         {/* Standalone Sidekick migration card (only when an install was found) */}
         {standaloneReport?.found && (

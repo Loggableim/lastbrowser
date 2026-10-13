@@ -106,6 +106,8 @@ describe('A-027 release model choices', () => {
     const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
     expect(app).toContain('context.backendProfileName ?? activeBackendProfileNameRef.current ?? undefined');
     expect(app).toContain('backendProfileName });');
+    expect(app).not.toContain("reason === 'model_inactive') setChatError(t('settings.panels.providers.activeModelFallback'))");
+    expect(app).toContain("reason === 'model_inactive') setChatError(t('chat.modelUnavailableInSpace'))");
     const composer = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8');
     expect(composer).toContain('await submitQuickChatDraft({ gate: draftGateRef.current, draft: inputText,');
     expect(composer).toContain('current: () => ({ revision: draftRevisionRef.current, scope: draftScopeRef.current })');

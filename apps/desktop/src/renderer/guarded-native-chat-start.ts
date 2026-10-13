@@ -58,11 +58,11 @@ export type GuardedNativeChatStartBlockReason =
   | 'model_unavailable';
 
 export type PreparedNativeChatStart =
-  | Readonly<{ ok: true; payload: NativeChatStartPayload }>
+  | Readonly<{ ok: true; payload: NativeChatStartPayload; inactiveModelFallback: boolean }>
   | Readonly<{ ok: false; reason: GuardedNativeChatStartBlockReason }>;
 
 export type GuardedNativeChatStartResult =
-  | Readonly<{ ok: true; payload: NativeChatStartPayload; response: NativeChatStartResponse }>
+  | Readonly<{ ok: true; payload: NativeChatStartPayload; inactiveModelFallback: boolean; response: NativeChatStartResponse }>
   | Readonly<{ ok: false; reason: GuardedNativeChatStartBlockReason }>
   | Readonly<{ ok: false; reason: 'transport_error'; payload: NativeChatStartPayload; error: unknown }>;
 
@@ -79,6 +79,7 @@ export function prepareGuardedNativeChatStart(input: GuardedNativeChatStartInput
   }
 
   const pair = { model: input.selection.model ?? '', provider: input.selection.provider ?? '' };
+  let inactiveModelFallback = false;
   const multiAgent = isMultiAgentModelSelection(pair);
   if (multiAgent && (!AI_ORCHESTRATION_ENABLED || !input.allowUntestedBetas)) return { ok: false, reason: 'multi_agent_beta_required' };
   if (input.availableModels && !multiAgent) {
@@ -88,9 +89,12 @@ export function prepareGuardedNativeChatStart(input: GuardedNativeChatStartInput
     const scope = { browserProfileId: input.captured.profileId, backendProfileName: input.captured.backendProfileName };
     const active = candidates.filter(candidate => isModelActive(input.storage, scope, candidate.provider, candidate.model));
     if (!active.length) return { ok: false, reason: 'no_active_models' };
-    if (!isModelActive(input.storage, scope, pair.provider, pair.model)) return { ok: false, reason: 'model_inactive' };
-    if (!active.some(candidate => candidate.provider === pair.provider && candidate.model === pair.model)) {
-      return { ok: false, reason: 'model_unavailable' };
+    const selectedIsActive = active.some(candidate => candidate.provider === pair.provider && candidate.model === pair.model);
+    if (!selectedIsActive) {
+      if (isModelActive(input.storage, scope, pair.provider, pair.model)) return { ok: false, reason: 'model_unavailable' };
+      pair.provider = active[0].provider;
+      pair.model = active[0].model;
+      inactiveModelFallback = Boolean((input.selection.model ?? '').trim());
     }
   } else if (!multiAgent && !input.allowUntestedBetas
     && (!pair.provider || !pair.model || !isProviderModelQualified(
@@ -105,11 +109,12 @@ export function prepareGuardedNativeChatStart(input: GuardedNativeChatStartInput
 
   return {
     ok: true,
+    inactiveModelFallback,
     payload: {
       sessionId: input.captured.sessionId || null,
       message,
-      model: input.selection.model || undefined,
-      modelProvider: input.selection.provider || undefined,
+      model: pair.model || undefined,
+      modelProvider: pair.provider || undefined,
       profile: input.captured.profileId,
       workspace: input.captured.spacePath,
       ...(input.captured.backendProfileName.trim() ? { backendProfileName: input.captured.backendProfileName } : {}),
@@ -127,7 +132,7 @@ export async function startGuardedNativeChat(
   const prepared = prepareGuardedNativeChatStart(input);
   if (!prepared.ok) return prepared;
   try {
-    return { ok: true, payload: prepared.payload, response: await startChat(prepared.payload) };
+    return { ok: true, payload: prepared.payload, inactiveModelFallback: prepared.inactiveModelFallback, response: await startChat(prepared.payload) };
   } catch (error) {
     return { ok: false, reason: 'transport_error', payload: prepared.payload, error };
   }

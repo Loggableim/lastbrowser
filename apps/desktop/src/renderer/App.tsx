@@ -1147,6 +1147,7 @@ function AppContent(): JSX.Element {
   });
   const [lastChatTurnUsage, setLastChatTurnUsage] = useState<{ sessionId: string; usage: NativeChatTurnUsage } | null>(null);
   const [nativeModelResolutionNotice, setNativeModelResolutionNotice] = useState<{ sessionId: string; profileId: string; spacePath: string; backendProfileName: string | null; resolution: NativeModelResolution } | null>(null);
+  const [inactiveModelFallbackNotice, setInactiveModelFallbackNotice] = useState(false);
   const [chatError, setChatError] = useState('');
   const [chatRunState, setChatRunState] = useState<ChatRunState>('idle');
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
@@ -4050,7 +4051,7 @@ function AppContent(): JSX.Element {
     if (!initialStart.ok) {
       if (initialStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
       else if (initialStart.reason === 'no_active_models') setChatError(t('settings.panels.providers.noActiveModels'));
-      else if (initialStart.reason === 'model_inactive') setChatError(t('settings.panels.providers.activeModelFallback'));
+      else if (initialStart.reason === 'model_inactive') setChatError(t('chat.modelUnavailableInSpace'));
       else if (initialStart.reason === 'model_unavailable') setChatError(t('chat.modelUnavailableInSpace'));
       else if (initialStart.reason === 'model_unqualified') setChatError(t('settings.panels.providers.betaCatalogEmpty'));
       return false;
@@ -4148,13 +4149,14 @@ function AppContent(): JSX.Element {
         unsubscribeEarly();
         if (guardedStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
         else if (guardedStart.reason === 'no_active_models') setChatError(t('settings.panels.providers.noActiveModels'));
-        else if (guardedStart.reason === 'model_inactive') setChatError(t('settings.panels.providers.activeModelFallback'));
+        else if (guardedStart.reason === 'model_inactive') setChatError(t('chat.modelUnavailableInSpace'));
         else if (guardedStart.reason === 'model_unavailable') setChatError(t('chat.modelUnavailableInSpace'));
         else if (guardedStart.reason === 'model_unqualified') setChatError(t('settings.panels.providers.betaCatalogEmpty'));
         return false;
       }
       const response = guardedStart.response;
       if (!response?.streamId) throw new Error('Sidekick did not return a chat stream ID.');
+      setInactiveModelFallbackNotice(guardedStart.inactiveModelFallback);
       chatStartAccepted = true;
       if (reasoningEffort) saveChatReasoningEffort(response.sessionId, reasoningEffort, window.localStorage);
       const currentTurnContext = adoptCreatedTurnSession(turnContext, {
@@ -5702,6 +5704,7 @@ function AppContent(): JSX.Element {
                   onDeleteProfile={deleteProfileEntry}
                   lastChatTurnUsage={lastChatTurnUsage}
                   nativeModelResolutionNotice={nativeModelResolutionNotice}
+                  inactiveModelFallbackNotice={inactiveModelFallbackNotice}
                   webviewStartupReady={windowStartupReady}
                   onTransferredWebviewReady={handleTransferredWebviewReady}
                   pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
@@ -6078,6 +6081,7 @@ function AppContent(): JSX.Element {
               onDeleteProfile={deleteProfileEntry}
               lastChatTurnUsage={lastChatTurnUsage}
               nativeModelResolutionNotice={nativeModelResolutionNotice}
+              inactiveModelFallbackNotice={inactiveModelFallbackNotice}
               webviewStartupReady={windowStartupReady}
               onTransferredWebviewReady={handleTransferredWebviewReady}
               pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
@@ -6363,7 +6367,8 @@ function BrowserMain({
   botName = 'Nova',
   desktopSettings = null,
   lastChatTurnUsage = null,
-  nativeModelResolutionNotice = null
+  nativeModelResolutionNotice = null,
+  inactiveModelFallbackNotice = false
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -6453,12 +6458,15 @@ function BrowserMain({
   desktopSettings?: DesktopSettingsRecord | null;
   lastChatTurnUsage?: { sessionId: string; usage: NativeChatTurnUsage } | null;
   nativeModelResolutionNotice?: { sessionId: string; profileId: string; spacePath: string; backendProfileName: string | null; resolution: NativeModelResolution } | null;
+  inactiveModelFallbackNotice?: boolean;
 }): JSX.Element {
   const { t } = useDesktopI18n();
-  const modelFallbackNotice = nativeModelResolutionNotice && nativeModelResolutionNotice.sessionId === activeSessionId
+  const subscriptionFallbackNotice = nativeModelResolutionNotice && nativeModelResolutionNotice.sessionId === activeSessionId
     && nativeModelResolutionNotice.profileId === activeProfileId && nativeModelResolutionNotice.spacePath === activeSpacePath
     && nativeModelResolutionNotice.backendProfileName === (activeBackendProfileName ?? null)
     ? t('chat.modelFallbackSubscriptionUsed', { model: nativeModelResolutionNotice.resolution.effective.model }) : null;
+  const modelFallbackNotice = subscriptionFallbackNotice
+    ?? (inactiveModelFallbackNotice ? t('settings.panels.providers.activeModelFallback') : null);
   const browserWebviewStyle = {
     width: '100%',
     height: '100%',

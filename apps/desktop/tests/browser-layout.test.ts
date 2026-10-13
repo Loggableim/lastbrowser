@@ -29,8 +29,9 @@ describe('browser shell layout', () => {
     expect(app).toContain('prepareGuardedNativeChatStart(createGuardedStartInput())');
     expect(app).toContain('return window.lastbrowser.sidekick.startChat(payload);');
     expect(app).toContain('if (submission) submission.definitelyRejected = false;');
-    expect(guardedStart).toContain('model: input.selection.model || undefined');
-    expect(guardedStart).toContain('modelProvider: input.selection.provider || undefined');
+    expect(guardedStart).toContain("const pair = { model: input.selection.model ?? '', provider: input.selection.provider ?? '' }");
+    expect(guardedStart).toContain('model: pair.model || undefined');
+    expect(guardedStart).toContain('modelProvider: pair.provider || undefined');
   });
 
   it('uses the WebUI-style shell grid with expanded CD navigation', () => {

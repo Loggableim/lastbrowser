@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { startGuardedNativeChat, type GuardedNativeChatStartInput, type NativeChatStartPayload } from '../src/renderer/guarded-native-chat-start.js';
+import { prepareGuardedNativeChatStart, startGuardedNativeChat, type GuardedNativeChatStartInput, type NativeChatStartPayload } from '../src/renderer/guarded-native-chat-start.js';
 import { recordCompletedChatEvidence, setProviderChatEvidenceRuntime } from '../src/renderer/provider-chat-evidence.js';
+import { setModelActive } from '../src/renderer/active-model-selection.js';
 
 function memoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -11,6 +12,25 @@ function memoryStorage(): Storage {
     clear: () => { values.clear(); },
     key: (index) => Array.from(values.keys())[index] ?? null,
     get length() { return values.size; },
+  };
+}
+
+function catalogModel(provider: string, model: string) {
+  const scope = { backendProfileId: 'backend-id', spaceId: 'space-a', browserProfileId: 'profile-a' };
+  return {
+    id: model,
+    label: model,
+    supportsIndependent: true,
+    nativeAvailability: {
+      schemaVersion: 1 as const,
+      supported: true,
+      available: true,
+      reasonCode: null,
+      provider,
+      model,
+      scope,
+      selectionRevision: 1,
+    },
   };
 }
 
@@ -92,6 +112,48 @@ describe('guarded native chat start', () => {
     });
     expect(result).toMatchObject({ ok: false, reason: 'transport_error', error: new Error('controlled transport rejection') });
     expect(storage.getItem('lastbrowser.providerChatEvidence.v3')).toBeNull();
+  });
+
+  it('sends the next active catalog model when the saved pair is turned off', async () => {
+    const storage = memoryStorage();
+    setModelActive(storage, { browserProfileId: 'profile-a', backendProfileName: 'backend-a' }, 'provider-a', 'model-a', false);
+    const calls: NativeChatStartPayload[] = [];
+    const catalog = input(storage, {
+      availableModels: [
+        {
+          provider: 'Provider A',
+          provider_id: 'provider-a',
+          configured: true,
+          models: [catalogModel('provider-a', 'model-a'), catalogModel('provider-a', 'model-b')],
+        },
+      ],
+    });
+
+    const prepared = prepareGuardedNativeChatStart(catalog);
+    expect(prepared).toMatchObject({
+      ok: true,
+      inactiveModelFallback: true,
+      payload: { model: 'model-b', modelProvider: 'provider-a', message: 'exact test request' },
+    });
+
+    const started = await startGuardedNativeChat(catalog, async (payload) => {
+      calls.push(payload);
+      return { sessionId: 'session-a', streamId: 'stream-a' };
+    });
+    expect(started).toMatchObject({ ok: true, inactiveModelFallback: true, response: { streamId: 'stream-a' } });
+    expect(calls).toEqual([expect.objectContaining({ model: 'model-b', modelProvider: 'provider-a' })]);
+  });
+
+  it('keeps a saved active pair blocked when that pair is missing from the Space catalog', () => {
+    const storage = memoryStorage();
+    const prepared = prepareGuardedNativeChatStart(input(storage, {
+      selection: { scope: { backendProfileId: 'backend-id', spaceId: 'space-a', browserProfileId: 'profile-a' }, model: 'model-hidden', provider: 'provider-a' },
+      availableModels: [{
+        provider: 'Provider A', provider_id: 'provider-a', configured: true,
+        models: [catalogModel('provider-a', 'model-c')],
+      }],
+    }));
+    expect(prepared).toEqual({ ok: false, reason: 'model_unavailable' });
   });
 
   it('allows a previously qualified pair without beta opt-in', async () => {

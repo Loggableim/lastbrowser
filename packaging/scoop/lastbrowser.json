@@ -1,0 +1,24 @@
+{
+    "version": "0.1.56",
+    "description": "Windows browser with vertical tabs, Spaces and an optional AI Sidekick.",
+    "homepage": "https://lastbrowser.com",
+    "license": "Proprietary/Freeware, Lizenz offen",
+    "url": "https://REPLACE-AFTER-SIGNED-RELEASE.invalid/Lastbrowser-0.1.56-x64-setup.exe",
+    "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "checkver": {
+        "github": "https://github.com/Loggableim/lastbrowser"
+    },
+    "autoupdate": {
+        "url": "https://REPLACE-AFTER-SIGNED-RELEASE.invalid/Lastbrowser-$version-x64-setup.exe"
+    },
+    "installer": {
+        "args": [
+            "/S",
+            "/D=$dir"
+        ]
+    },
+    "uninstaller": {
+        "file": "$dir\\Uninstall LastBrowser.exe",
+        "args": "/S"
+    }
+}

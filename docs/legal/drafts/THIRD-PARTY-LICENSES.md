@@ -1,5 +1,7 @@
 # Third-Party Software & Dependency Licenses
 
+ENTWURF. Die Zählung und die Python-Pins stehen in `docs/legal/inventory/dependency-licenses.md`. Die Tabellen darunter sind die ältere Handliste und kein Beleg für fehlende Transitiven.
+
 This document details the licenses of third-party software libraries, runtimes, assets, and dependencies used in or distributed with LastBrowser.
 
 ---

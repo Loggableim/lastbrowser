@@ -1,0 +1,32 @@
+LASTBROWSER — プレス・メディア 基本情報HEET
+更新日： 13 October 2026
+ウェブサイト： https://lastbrowser.com/
+プレス窓口： Rainer Dominik, rainer@dominik.in
+
+一文で
+LastBrowserは、Webページ、分離された作業スペース、AIアシスタントを一つの画面にまとめた、ChromiumベースのWindows向けデスクトップブラウザーです。
+
+概要
+LastBrowserは作業の流れの中でWeb閲覧とAI支援を組み合わせます。Spacesでプロジェクトやログインを整理でき、Sidekickはコンテンツの閲覧、要約、編集を支援します。AI機能はプロバイダー、利用方法、ビルドによって異なります。Local-Firstではローカル保存と設定されたクラウド機能を区別します。
+
+基本情報
+- AIアシスタントを統合したデスクトップブラウザー
+- Technology: Chromium, Electron, integrated Sidekick engine.
+- Windows 10および11、x64
+- 縦型タブと分離されたSpaces
+- AI access: 選択したプロバイダーと利用可能なモデルによる
+- 外部AIサービスでは認証情報、契約、追加料金が必要な場合があります。
+- ソースコードとライセンス： https://github.com/Loggableim/lastbrowser
+- 現在のパッケージとチェックサム： https://lastbrowser.com/download/
+- 技術変更： https://lastbrowser.com/changelog/
+- 開発目標と公開投票： https://lastbrowser.com/roadmap/
+- プライバシー： https://lastbrowser.com/privacy/
+
+画像素材について
+このUI画像は既存のメディア素材で、古いラベルが含まれています。特定のリリースの機能を示すものではありません。
+クレジット： LastBrowser. 最新リリースの画像や利用方法についてはプレス窓口へお問い合わせください。
+
+編集上の注意
+Local-Firstはクラウドモデルや外部連携のオフライン動作を保証しません。
+ロードマップは開発目標であり、提供済み機能ではありません。
+製品テストではバージョン、プラットフォーム、AI設定を明記してください。

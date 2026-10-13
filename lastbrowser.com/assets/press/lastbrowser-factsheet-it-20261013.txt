@@ -1,0 +1,32 @@
+LASTBROWSER — STAMPA E MEDIA DATIHEET
+Aggiornato: 13 October 2026
+Sito web: https://lastbrowser.com/
+Contatto stampa: Rainer Dominik, rainer@dominik.in
+
+IN UNA FRASE
+LastBrowser è un browser desktop basato su Chromium per Windows che riunisce pagine web, aree di lavoro separate e un assistente IA in un’unica interfaccia.
+
+DESCRIZIONE
+LastBrowser combina navigazione e assistenza IA nel contesto di lavoro. Gli Spaces organizzano progetti e accessi; Sidekick aiuta a leggere, riassumere e lavorare con i contenuti. Le funzioni IA dipendono da provider, accesso e build. Local-First distingue l’archiviazione locale dalle funzioni cloud configurate intenzionalmente.
+
+DATI
+- Browser desktop con assistente IA integrato
+- Technology: Chromium, Electron, integrated Sidekick engine.
+- Windows 10 e 11, x64
+- Schede verticali e Spaces separati
+- AI access: Dipende dal provider e dal modello disponibile
+- I servizi IA esterni possono richiedere credenziali, abbonamenti o costi aggiuntivi.
+- Codice sorgente e licenza: https://github.com/Loggableim/lastbrowser
+- Pacchetti e checksum attuali: https://lastbrowser.com/download/
+- Modifiche tecniche: https://lastbrowser.com/changelog/
+- Obiettivi di sviluppo e votazioni pubbliche: https://lastbrowser.com/roadmap/
+- Privacy: https://lastbrowser.com/privacy/
+
+NOTE SUI MATERIALI
+Questa immagine dell’interfaccia proviene dai materiali esistenti e include etichette precedenti. Non documenta le funzioni di una specifica release.
+Credito: LastBrowser. Contattare la stampa per immagini aggiornate a una release e domande d’uso.
+
+NOTE EDITORIALI
+Local-First non garantisce l’uso offline di modelli cloud o integrazioni esterne.
+Le voci della roadmap sono obiettivi di sviluppo, non funzioni rilasciate.
+Indicare versione, piattaforma e configurazione IA nelle prove.

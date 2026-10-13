@@ -1,0 +1,10 @@
+LastBrowser Linux Release Signing <rainer@dominik.in>
+Primary fingerprint: BD10C633483A9B1159964F11762E4029184C95F4
+Signing subkey fingerprint: 9103068B3CD4943A6B9B0D1AE7BDEC7F5CB67F48
+Algorithm: Ed25519
+Created: 2026-10-13
+Primary key expires: 2029-10-13
+Signing subkey expires: 2027-10-13
+
+Public key: https://lastbrowser.com/assets/keys/lastbrowser-linux-release.asc
+This public key does not announce availability or approval of a Linux release.

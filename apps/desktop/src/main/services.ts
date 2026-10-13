@@ -116,13 +116,15 @@ export function resolveServiceLayout(
   const pythonName = sidecarPythonExecutableName(platform);
   const resourcesPythonExe = path.join(normalizedResources, 'runtime', 'python', pythonName);
   const workspacePythonExe = path.join(normalizedResources, 'apps', 'desktop', 'runtime', 'python', pythonName);
+  // A bare `python3` is `/usr/bin/python3` on Linux. That interpreter has no
+  // uvicorn, so a fresh profile would start and then die. Keep the absolute
+  // bundled path, the same way Windows keeps `python.exe`, and let a missing
+  // runtime fail on that path instead of the system interpreter.
   const bundledPythonExe = existsSync(resourcesPythonExe)
     ? resourcesPythonExe
     : existsSync(workspacePythonExe)
       ? workspacePythonExe
-      : platform === 'win32'
-        ? resourcesPythonExe
-        : pythonName;
+      : resourcesPythonExe;
 
   const bundledEntry = path.join(bundledSidekickDir, 'cli', 'web_server.py');
   // `services/sidekick` is the tracked source of truth. Ignore any legacy
